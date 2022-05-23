@@ -3,6 +3,8 @@ services:
   libreddit:
     container_name: libreddit
     image: spikecodes/libreddit
+    dns:
+      - ${DNS_IP}
     ports:
       - ${APP_PORT}:8080
     restart: unless-stopped
