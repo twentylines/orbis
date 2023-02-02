@@ -13,7 +13,7 @@ jest.mock('fs-extra');
 jest.mock('child_process');
 
 let db: DataSource | null = null;
-const TEST_SUITE = 'appshelpers';
+const TEST_SUITE = 'appshelperslegacy';
 
 beforeAll(async () => {
   db = await setupConnection(TEST_SUITE);

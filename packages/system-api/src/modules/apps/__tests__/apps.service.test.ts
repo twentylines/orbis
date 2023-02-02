@@ -13,7 +13,7 @@ jest.mock('fs-extra');
 jest.mock('child_process');
 
 let db: DataSource | null = null;
-const TEST_SUITE = 'appsservice';
+const TEST_SUITE = 'appsservicelegacy';
 
 beforeAll(async () => {
   db = await setupConnection(TEST_SUITE);
@@ -309,7 +309,7 @@ describe('Start app', () => {
   });
 
   it('Regenerate env file', async () => {
-    fs.writeFile(`/app/storage/app-data/${app1.id}/app.env`, 'TEST=test\nAPP_PORT=3000', () => {});
+    fs.writeFileSync(`/app/storage/app-data/${app1.id}/app.env`, 'TEST=test\nAPP_PORT=3000');
 
     await AppsService.startApp(app1.id);
 
