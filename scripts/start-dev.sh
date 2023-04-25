@@ -40,11 +40,10 @@ env_variables_json=$(cat <<EOF
   "demo_mode": false,
   "apps_repository": "${apps_repository}",
   "storage_path": "${ROOT_FOLDER}",
-  "repo_id": "$("${ROOT_FOLDER}"/scripts/git.sh get_hash "${apps_repository}")"
+  "repo_id": "$("${ROOT_FOLDER}"/scripts/git.sh get_hash ${apps_repository})"
 }
 EOF
 )
-
 
 ### --------------------------------
 ### Watcher and system-info
