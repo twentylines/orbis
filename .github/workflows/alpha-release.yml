@@ -115,10 +115,6 @@ jobs:
           name: cli
           path: cli
 
-      - name: Display structure of downloaded files
-        run: ls -R
-        working-directory: cli
-
       - name: Create alpha release
         id: create_release
         uses: actions/create-release@v1
