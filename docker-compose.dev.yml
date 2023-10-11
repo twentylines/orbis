@@ -46,7 +46,7 @@ services:
     ports:
       - 6379:6379
     volumes:
-      - ./data/redis:/data
+      - redisdata:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -107,3 +107,4 @@ networks:
 
 volumes:
   pgdata:
+  redisdata:
