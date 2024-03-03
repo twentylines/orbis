@@ -1,2 +1,3 @@
-export const ROOT_FOLDER = '/app';
-export const STORAGE_FOLDER = '/storage';
+export const APP_DIR = process.env.WORKER_APP_DIR || '/worker';
+export const DATA_DIR = '/data';
+export const APP_DATA_DIR = '/app-data';
