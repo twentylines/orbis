@@ -19,9 +19,24 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-# Check if in the correct directory
-if [[ "$(basename "$(pwd)")" != "runtipi" ]]; then
-  echo -e "${Red}You need to run this script from the runtipi directory!${ColorOff}"
+docker_version=$(docker -v)
+if [[ $docker_version =~ [0-9]+\.[0-9]+\.[0-9]+ ]]; then
+  version=${BASH_REMATCH[0]}
+
+  major_version=${version%%.*}
+
+  if [ "$major_version" -lt 28 ]; then
+    echo "Error: Docker version $version is lower than required version 28. Please update Docker to at least version 28."
+    exit 1
+  fi
+else
+  echo "Error: Could not determine Docker version"
+  exit 1
+fi
+
+# Check if runtipi-cli exists
+if [[ ! -f "runtipi-cli" ]]; then
+  echo -e "❌ ${Red}You need to run this script from the runtipi directory!${ColorOff}"
   exit 1
 fi
 
@@ -74,6 +89,8 @@ for app in apps/*; do
   sleep 3
 done
 
+read -p "🚨 Please go  to the Runtipi web interface and make sure all apps are stopped, then press enter to continue..." -r
+
 # Stop runtipi
 echo -e "\nStopping Runtipi...\n"
 
@@ -118,6 +135,10 @@ for app in migration-backups/apps/*; do
   fi
 done
 
+if [[ -f "migration-backups/user-config/tipi-compose.yml" ]]; then
+  mv migration-backups/user-config/tipi-compose.yml user-config/tipi-compose.yml
+fi
+
 # Start runtipi
 echo -e "\nMigration complete! Updating Runtipi to v4.0.0...\n"
 
@@ -145,3 +166,5 @@ fi
 
 chmod +x ./runtipi-cli
 sudo ./runtipi-cli start
+
+echo -e "🎉 Runtipi has been updated to v4.0.0! 🎉\nOnce you have confirmed everything is working, you can delete the migration-backups folder.\n"
