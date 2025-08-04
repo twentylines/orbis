@@ -36,7 +36,7 @@ export const Header = (props: HeaderProps) => {
         <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu">
           <span className="navbar-toggler-icon" />
         </button>
-        <Link to="/">
+        <Link to="/dashboard">
           <h1 className="navbar-brand d-none-navbar-horizontal pe-0 pe-md-3">
             <img
               alt="Runtipi logo"

@@ -21,7 +21,7 @@ export const GuestHeader = () => {
   return (
     <header className="text-white navbar navbar-expand-md navbar-dark navbar-overlap d-print-none" data-bs-theme="dark">
       <div className="container-xl">
-        <Link to="/">
+        <Link to="/dashboard">
           <h1 className="navbar-brand d-none-navbar-horizontal pe-0 pe-md-3">
             <img
               alt="Runtipi logo"
