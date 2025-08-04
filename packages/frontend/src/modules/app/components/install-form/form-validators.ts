@@ -95,12 +95,14 @@ const validateLocalSubdomain = (subdomain?: unknown): ValidationError | undefine
   return undefined;
 };
 
+export const hiddenTypes = ['random'];
+
 export const validateAppConfig = (values: Record<string, unknown>, fields: FormField[]) => {
   const { exposed, exposedLocal, openPort, domain, localSubdomain, port, ...config } = values;
 
   const errors: Record<string, ValidationError | undefined> = {};
 
-  for (const field of fields) {
+  for (const field of fields.filter((f) => !hiddenTypes.includes(f.type))) {
     const error = validateField(field, config[field.env_variable]);
 
     if (error) {

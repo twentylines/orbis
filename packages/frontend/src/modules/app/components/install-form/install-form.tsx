@@ -16,7 +16,7 @@ import { Controller, useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'react-tooltip';
-import { validateAppConfig } from './form-validators';
+import { hiddenTypes, validateAppConfig } from './form-validators';
 import { InstallFormField } from './install-form-field';
 
 interface IProps {
@@ -40,7 +40,6 @@ export type FormValues = {
   [key: string]: unknown;
 };
 
-const hiddenTypes = ['random'];
 const typeFilter = (field: FormField) => !hiddenTypes.includes(field.type);
 
 export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit, initialValues, loading, formId }) => {
@@ -153,7 +152,10 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
                     <>
                       {t('APP_INSTALL_FORM_EXPOSE_LOCAL')}
                       <Tooltip className="tooltip" anchorSelect=".expose-local-hint">
-                        {t('APP_INSTALL_FORM_EXPOSE_LOCAL_HINT', { domain: localDomain, appId: info.urn.split(':').join('-') })}
+                        {t('APP_INSTALL_FORM_EXPOSE_LOCAL_HINT', {
+                          domain: localDomain,
+                          appId: info.urn.split(':').join('-'),
+                        })}
                       </Tooltip>
                       <span className={clsx('ms-1 form-help expose-local-hint')}>?</span>
                     </>
@@ -256,7 +258,10 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
                   <>
                     {t('APP_INSTALL_FORM_OPEN_PORT')}
                     <Tooltip className="tooltip" anchorSelect=".open-port-hint">
-                      {t('APP_INSTALL_FORM_OPEN_PORT_HINT', { port: info.port, internalIp })}
+                      {t('APP_INSTALL_FORM_OPEN_PORT_HINT', {
+                        port: info.port,
+                        internalIp,
+                      })}
                     </Tooltip>
                     <span className={clsx('ms-1 form-help open-port-hint')}>?</span>
                   </>
