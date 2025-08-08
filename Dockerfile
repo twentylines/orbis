@@ -12,6 +12,7 @@ RUN apk add --no-cache curl python3 make g++ git
 WORKDIR /deps
 
 COPY ./pnpm-lock.yaml ./
+COPY ./pnpm-workspace.yaml ./
 RUN pnpm fetch
 
 # ---- RUNNER BASE ----
