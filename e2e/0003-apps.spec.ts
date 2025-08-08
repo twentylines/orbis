@@ -31,10 +31,7 @@ test('user can install and uninstall app', async ({ page, context }) => {
   await expect(page.getByText('Running')).toBeVisible({ timeout: 60000 });
 
   await page.getByTestId('app-details').getByRole('button', { name: 'Open' }).press('ArrowDown');
-  const [newPage] = await Promise.all([
-    context.waitForEvent('page'),
-    await page.getByRole('menuitem', { name: `${process.env.SERVER_IP}:8754` }).click(),
-  ]);
+  const [newPage] = await Promise.all([context.waitForEvent('page'), await page.getByRole('menuitem', { name: process.env.SERVER_IP }).click()]);
 
   await newPage.waitForLoadState();
   await expect(newPage.getByText('Welcome to nginx!')).toBeVisible();
@@ -49,7 +46,9 @@ test('user can install and uninstall app', async ({ page, context }) => {
   await expect(page.getByText('Stopping')).toBeVisible();
 
   // Uninstall app
-  await page.getByRole('button', { name: 'Remove' }).click();
+  await page.locator('button[name="more"]').press('ArrowDown');
+  await page.getByRole('menuitem', { name: 'Remove' }).click();
+
   await expect(page.getByText('Uninstall Nginx ?')).toBeVisible();
 
   await page.getByRole('button', { name: 'Uninstall' }).click();
