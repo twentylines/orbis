@@ -75,6 +75,12 @@ export class MarketplaceService {
     return store.getAppInfoFromAppStore(appUrn);
   }
 
+  async getAppInfoFromAppStoreOrInstalled(appUrn: AppUrn) {
+    const { store } = this.getStoreFromUrn(appUrn);
+
+    return store.getAppInfoFromAppStoreOrInstalled(appUrn);
+  }
+
   async getAvailableAppUrns(): Promise<AppUrn[]> {
     const allUrns: AppUrn[] = [];
     for (const store of this.stores.values()) {

@@ -68,6 +68,32 @@ export class AppStoreFilesManager {
     }
   }
 
+  public async getAppInfoFromAppStoreOrInstalled(appUrn: AppUrn) {
+    const appInfo = await this.getAppInfoFromAppStore(appUrn);
+    if (appInfo) {
+      return appInfo;
+    }
+
+    const { appInstalledDir } = this.getAppPaths(appUrn);
+
+    if (await this.filesystem.pathExists(path.join(appInstalledDir, 'config.json'))) {
+      const configFile = await this.filesystem.readTextFile(path.join(appInstalledDir, 'config.json'));
+
+      const config = JSON.parse(configFile ?? '{}');
+      const parsedConfig = appInfoSchema.safeParse({ ...config, urn: appUrn });
+
+      if (!parsedConfig.success) {
+        this.logger.debug(`App ${appUrn} installed config error:`);
+        this.logger.debug(parsedConfig.error);
+      }
+
+      if (parsedConfig.success && parsedConfig.data.available) {
+        const description = (await this.filesystem.readTextFile(path.join(appInstalledDir, 'metadata', 'description.md'))) ?? '';
+        return { ...parsedConfig.data, description };
+      }
+    }
+  }
+
   /**
    * Copy the app from the repo to the installed apps folder
    * @param appUrn - The app id
@@ -76,7 +102,12 @@ export class AppStoreFilesManager {
     const { appRepoDir, appDataDir, appInstalledDir } = this.getAppPaths(appUrn);
 
     if (!(await this.filesystem.pathExists(appRepoDir))) {
-      this.logger.error(`App ${appUrn} not found in repo ${this.storeConfig.slug}`);
+      if (await this.filesystem.pathExists(appInstalledDir)) {
+        this.logger.warn(`App ${appUrn} already installed, but not found in repo ${this.storeConfig.slug}. Using installed version.`);
+        return;
+      }
+
+      this.logger.warn(`App ${appUrn} not found in repo ${this.storeConfig.slug}`);
       throw new Error(`App ${appUrn} not found in repo ${this.storeConfig.slug}`);
     }
 

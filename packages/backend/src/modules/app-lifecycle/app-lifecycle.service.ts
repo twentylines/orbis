@@ -119,7 +119,7 @@ export class AppLifecycleService {
       throw new TranslatableError('APP_ERROR_DOMAIN_NOT_VALID', { domain });
     }
 
-    const appInfo = await this.marketplaceService.getAppInfoFromAppStore(appUrn);
+    const appInfo = await this.marketplaceService.getAppInfoFromAppStoreOrInstalled(appUrn);
 
     if (!appInfo) {
       throw new TranslatableError('APP_ERROR_APP_NOT_FOUND', { id: appUrn }, HttpStatus.NOT_FOUND);
