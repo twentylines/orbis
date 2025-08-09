@@ -55,7 +55,7 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
           <DropdownMenuContent>
             <DropdownMenuItem onClick={() => handleTabChange('backups')}>{t('APP_BACKUPS_TAB_TITLE')}</DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleTabChange('logs')}>{t('APP_LOGS_TAB_TITLE')}</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleTabChange('user-config')}>{t('USER_CONFIG_TAB_TITLE')}</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleTabChange('user-config')}>{t('APP_USER_CONFIG_TAB_TITLE')}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </TabsList>
