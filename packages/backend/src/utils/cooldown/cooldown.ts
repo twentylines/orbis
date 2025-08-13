@@ -11,6 +11,7 @@ export function Cooldown(ms: number) {
         const elapsed = now - lastCall;
         const waitMs = ms - elapsed;
         if (waitMs > 0) {
+          console.warn(`Cooldown active, waiting for ${waitMs}ms before executing the function.`);
           await wait(waitMs);
         }
         lastCall = Date.now();

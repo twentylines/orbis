@@ -35,7 +35,7 @@ export class AuthController {
   private async setSessionCookie(res: Response, sessionId: string, req: Request) {
     const host = req.headers['x-forwarded-host'] as string | undefined;
     const proto = req.headers['x-forwarded-proto'] as string | undefined;
-    const domain = await this.authService.getCookieDomain(host);
+    const domain = this.authService.getCookieDomain(host);
     const secure = Boolean(domain) && proto === 'https';
 
     this.logger.debug('Request headers', req.headers);

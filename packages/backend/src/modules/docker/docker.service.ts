@@ -78,7 +78,7 @@ export class DockerService {
    * @param {string} appUrn - App name
    * @param {string} command - Command to execute
    */
-  @Cooldown(1000)
+  @Cooldown(5000)
   public async composeApp(appUrn: AppUrn, command: string) {
     let { args, isCustomConfig } = await this.getBaseComposeArgsApp(appUrn);
     args.push(...command.split(' '));
