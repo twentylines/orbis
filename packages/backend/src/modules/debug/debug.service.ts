@@ -6,6 +6,7 @@ import * as argon2 from 'argon2';
 import crypto from 'node:crypto';
 import { createAppInStore } from '@/tests/utils/create-app-in-store';
 import { AppLifecycleService } from '../app-lifecycle/app-lifecycle.service';
+import { eq } from 'drizzle-orm';
 
 @Injectable()
 export class DebugService {
@@ -17,7 +18,7 @@ export class DebugService {
   public async seedDatabase() {
     // Clean up existing apps
     await this.db.delete(app).execute();
-    await this.db.delete(appStore).execute();
+    await this.db.delete(appStore).where(eq(appStore.slug, 'default')).execute();
 
     const hash = crypto.createHash('sha256');
     hash.update('https://example.com');

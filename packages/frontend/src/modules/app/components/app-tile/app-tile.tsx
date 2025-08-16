@@ -1,7 +1,7 @@
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { limitText } from '@/lib/helpers/text-helpers';
 import type { AppInfo, AppStatus as AppStatusType } from '@/types/app.types';
-import { IconAlertCircle, IconRotateClockwise } from '@tabler/icons-react';
+import { IconAlertCircle, IconDownload, IconRotateClockwise } from '@tabler/icons-react';
 import type React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'react-tooltip';
@@ -41,7 +41,9 @@ export const AppTile: React.FC<{
             <Tooltip className="tooltip" anchorSelect=".updateAvailable">
               {t('MY_APPS_UPDATE_AVAILABLE')}
             </Tooltip>
-            <span className="updateAvailable badge badge-dot bg-red badge-notification" />
+            <div className="updateAvailable ribbon bg-green ribbon-top">
+              <IconDownload size={20} />
+            </div>
           </>
         )}
         {pendingRestart && (

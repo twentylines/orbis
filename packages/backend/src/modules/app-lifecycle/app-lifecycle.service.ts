@@ -443,7 +443,6 @@ export class AppLifecycleService {
     return { requestId };
   }
 
-  @Cooldown(3000)
   public async updateApp(params: { appUrn: AppUrn; performBackup: boolean }) {
     const { appUrn, performBackup } = params;
     const app = await this.appRepository.getAppByUrn(appUrn);
@@ -506,13 +505,15 @@ export class AppLifecycleService {
     const apps = await this.appRepository.getApps();
     const runningApps = apps.filter((app) => app.status === 'running');
 
-    for (const app of runningApps) {
-      try {
-        const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-        await this.startApp({ appUrn, skipPull: true });
-      } catch (e) {
-        this.logger.error(`Failed to start app ${app.id}`, e);
+    (async () => {
+      for (const app of runningApps) {
+        try {
+          const appUrn = createAppUrn(app.appName, app.appStoreSlug);
+          await this.startApp({ appUrn, skipPull: true });
+        } catch (e) {
+          this.logger.error(`Failed to start app ${app.id}`, e);
+        }
       }
-    }
+    })();
   }
 }

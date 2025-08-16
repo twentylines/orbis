@@ -11,6 +11,7 @@ export const AppStatus: React.FC<{ lite?: boolean; status: AppStatusType }> = ({
 
   const classes = clsx('status-dot status-gray', {
     'status-dot-animated status-green': status === 'running',
+    'status-red': status === 'stopped',
   });
 
   if (status === 'missing') return null;

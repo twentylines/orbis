@@ -113,15 +113,25 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
     </DropdownMenuItem>
   );
   const RestartListItem = (
-    <DropdownMenuItem onClick={restartDisclosure.open} key="restart">
+    <DropdownMenuItem onClick={restartDisclosure.open} key="restart" className="configChanged">
       <IconRotateClockwise className="me-2" size={16} />
       {t('APP_ACTION_RESTART')}
-      {app?.pendingRestart && <span className="badge badge-warning ms-2">{t('MY_APPS_PENDING_RESTART')}</span>}
+      {app?.pendingRestart && (
+        <div>
+          <Tooltip className="tooltip" anchorSelect=".configChanged">
+            {t('MY_APPS_PENDING_RESTART')}
+          </Tooltip>
+          <span className="ms-2 badge bg-red" />
+        </div>
+      )}
     </DropdownMenuItem>
   );
   const UpdateListItem = (
-    <DropdownMenuItem onClick={updateDisclosure.open} key="update">
+    <DropdownMenuItem onClick={updateDisclosure.open} key="update" className="updateAvailable">
       <IconDownload className="me-2" size={16} />
+      <Tooltip className="tooltip" anchorSelect=".updateAvailable">
+        {t('MY_APPS_UPDATE_AVAILABLE')}
+      </Tooltip>
       <div>
         {t('APP_ACTION_UPDATE')}
         <span className="ms-2 badge bg-red" />
@@ -278,10 +288,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
             <DropdownMenuTrigger asChild>
               <Button name="more" className="more-button">
                 <IconDots size={14} />
-                <Tooltip className="tooltip" anchorSelect=".updateAvailable">
-                  {t('MY_APPS_UPDATE_AVAILABLE')}
-                </Tooltip>
-                {updateAvailable && <span className="updateAvailable badge badge-dot bg-red badge-notification" />}
+                {(updateAvailable || app?.pendingRestart) && <span className="badge badge-dot bg-red badge-notification" />}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
