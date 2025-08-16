@@ -19,6 +19,7 @@ import { AppLifecycleCommandFactory } from './app-lifecycle-command.factory';
 import { appFormSchema } from './dto/app-lifecycle.dto';
 import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
 import type { AsyncMutex } from '@/utils/mutex/async-mutex';
+import { Cooldown } from '@/utils/cooldown/cooldown';
 
 @Injectable()
 export class AppLifecycleService {
@@ -64,6 +65,7 @@ export class AppLifecycleService {
     return oldJSON !== newJSON;
   }
 
+  @Cooldown(3000)
   async startApp(params: { appUrn: AppUrn; skipPull?: boolean }) {
     const { appUrn, skipPull } = params;
     const app = await this.appRepository.getAppByUrn(appUrn);
@@ -441,6 +443,7 @@ export class AppLifecycleService {
     return { requestId };
   }
 
+  @Cooldown(3000)
   public async updateApp(params: { appUrn: AppUrn; performBackup: boolean }) {
     const { appUrn, performBackup } = params;
     const app = await this.appRepository.getAppByUrn(appUrn);
@@ -489,31 +492,27 @@ export class AppLifecycleService {
     const installedApps = await this.appsService.getInstalledApps();
     const availableUpdates = installedApps.filter(({ app, metadata }) => Number(app.version) < Number(metadata.latestVersion));
 
-    const updatePromises = availableUpdates.map(async ({ app }) => {
+    for (const { app } of availableUpdates) {
       try {
         const appUrn = createAppUrn(app.appName, app.appStoreSlug);
         await this.updateApp({ appUrn, performBackup: true });
       } catch (e) {
         this.logger.error(`Failed to update app ${app.id}`, e);
       }
-    });
-
-    await Promise.all(updatePromises);
+    }
   }
 
   async startAllApps() {
     const apps = await this.appRepository.getApps();
     const runningApps = apps.filter((app) => app.status === 'running');
 
-    const startPromises = runningApps.map(async (app) => {
+    for (const app of runningApps) {
       try {
         const appUrn = createAppUrn(app.appName, app.appStoreSlug);
         await this.startApp({ appUrn, skipPull: true });
       } catch (e) {
         this.logger.error(`Failed to start app ${app.id}`, e);
       }
-    });
-
-    await Promise.all(startPromises);
+    }
   }
 }
