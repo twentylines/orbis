@@ -11,6 +11,10 @@ vi.mock('fs', async () => {
   };
 });
 
+vi.mock('@/utils/cooldown/cooldown', () => ({
+  Cooldown: () => vi.fn().mockImplementation((fn) => fn),
+}));
+
 beforeEach(async () => {
   (fs as unknown as FsMock).__resetAllMocks();
 
