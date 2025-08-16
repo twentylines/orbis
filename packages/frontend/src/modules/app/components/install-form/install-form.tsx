@@ -82,7 +82,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
       toast.error(t(e.message, e.intlParams));
     },
     onSuccess: (data: GetRandomPortResponse) => {
-      setValue('port', data.port.toString());
+      setValue('port', data.port.toString(), { shouldDirty: true });
     },
   });
 
