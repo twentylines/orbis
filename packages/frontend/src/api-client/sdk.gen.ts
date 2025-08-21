@@ -127,6 +127,8 @@ import type {
   SetAllAppSubnetToNullResponses,
   StartAllAppsData,
   StartAllAppsResponses,
+  BackupAllAppsData,
+  BackupAllAppsResponses,
 } from './types.gen';
 import { client as _heyApiClient } from './client.gen';
 
@@ -674,6 +676,13 @@ export const setAllAppSubnetToNull = <ThrowOnError extends boolean = false>(opti
 export const startAllApps = <ThrowOnError extends boolean = false>(options?: Options<StartAllAppsData, ThrowOnError>) => {
   return (options?.client ?? _heyApiClient).post<StartAllAppsResponses, unknown, ThrowOnError>({
     url: '/api/debug/start-all-apps',
+    ...options,
+  });
+};
+
+export const backupAllApps = <ThrowOnError extends boolean = false>(options?: Options<BackupAllAppsData, ThrowOnError>) => {
+  return (options?.client ?? _heyApiClient).post<BackupAllAppsResponses, unknown, ThrowOnError>({
+    url: '/api/debug/backup-all-apps',
     ...options,
   });
 };

@@ -494,7 +494,7 @@ export class AppLifecycleService {
     for (const { app } of availableUpdates) {
       try {
         const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-        await this.updateApp({ appUrn, performBackup: true });
+        this.updateApp({ appUrn, performBackup: true });
       } catch (e) {
         this.logger.error(`Failed to update app ${app.id}`, e);
       }
@@ -509,7 +509,7 @@ export class AppLifecycleService {
       for (const app of runningApps) {
         try {
           const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-          await this.startApp({ appUrn, skipPull: true });
+          this.startApp({ appUrn, skipPull: true });
         } catch (e) {
           this.logger.error(`Failed to start app ${app.id}`, e);
         }

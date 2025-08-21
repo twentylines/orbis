@@ -64,6 +64,7 @@ import {
   setAllAppUpdateAvailable,
   setAllAppSubnetToNull,
   startAllApps,
+  backupAllApps,
 } from '../sdk.gen';
 import { queryOptions, type UseMutationOptions, type DefaultError, infiniteQueryOptions, type InfiniteData } from '@tanstack/react-query';
 import type {
@@ -146,6 +147,7 @@ import type {
   SetAllAppUpdateAvailableData,
   SetAllAppSubnetToNullData,
   StartAllAppsData,
+  BackupAllAppsData,
 } from '../types.gen';
 import { client as _heyApiClient } from '../client.gen';
 
@@ -1668,6 +1670,39 @@ export const startAllAppsMutation = (
   const mutationOptions: UseMutationOptions<unknown, DefaultError, Options<StartAllAppsData>> = {
     mutationFn: async (localOptions) => {
       const { data } = await startAllApps({
+        ...options,
+        ...localOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const backupAllAppsQueryKey = (options?: Options<BackupAllAppsData>) => createQueryKey('backupAllApps', options);
+
+export const backupAllAppsOptions = (options?: Options<BackupAllAppsData>) => {
+  return queryOptions({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await backupAllApps({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: backupAllAppsQueryKey(options),
+  });
+};
+
+export const backupAllAppsMutation = (
+  options?: Partial<Options<BackupAllAppsData>>,
+): UseMutationOptions<unknown, DefaultError, Options<BackupAllAppsData>> => {
+  const mutationOptions: UseMutationOptions<unknown, DefaultError, Options<BackupAllAppsData>> = {
+    mutationFn: async (localOptions) => {
+      const { data } = await backupAllApps({
         ...options,
         ...localOptions,
         throwOnError: true,

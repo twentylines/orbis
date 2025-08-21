@@ -1546,6 +1546,17 @@ export type StartAllAppsResponses = {
   201: unknown;
 };
 
+export type BackupAllAppsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/debug/backup-all-apps';
+};
+
+export type BackupAllAppsResponses = {
+  201: unknown;
+};
+
 export type ClientOptions = {
   baseUrl: string;
 };

@@ -44,4 +44,13 @@ export class DebugController {
 
     return this.debugService.startAllApps();
   }
+
+  @Post('backup-all-apps')
+  async backupAllApps() {
+    if (this.config.get('__prod__')) {
+      throw new ForbiddenException('Backing up all apps is not allowed in production mode.');
+    }
+
+    return this.debugService.backupAllApps();
+  }
 }

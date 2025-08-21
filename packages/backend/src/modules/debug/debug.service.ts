@@ -7,18 +7,20 @@ import crypto from 'node:crypto';
 import { createAppInStore } from '@/tests/utils/create-app-in-store';
 import { AppLifecycleService } from '../app-lifecycle/app-lifecycle.service';
 import { eq } from 'drizzle-orm';
+import { BackupsService } from '../backups/backups.service';
 
 @Injectable()
 export class DebugService {
   constructor(
     @Inject(DATABASE) private db: Database,
     private appLifecycleService: AppLifecycleService,
+    private backupService: BackupsService,
   ) {}
 
   public async seedDatabase() {
     // Clean up existing apps
     await this.db.delete(app).execute();
-    await this.db.delete(appStore).where(eq(appStore.slug, 'default')).execute();
+    await this.db.delete(appStore).where(eq(appStore.slug, 'default')).execute().catch();
 
     const hash = crypto.createHash('sha256');
     hash.update('https://example.com');
@@ -74,5 +76,9 @@ export class DebugService {
 
   public async startAllApps() {
     await this.appLifecycleService.startAllApps();
+  }
+
+  public async backupAllApps() {
+    await this.backupService.backupAllApps();
   }
 }

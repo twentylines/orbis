@@ -3,9 +3,10 @@ import { DebugController } from './debug.controller';
 import { DebugService } from './debug.service';
 import { DatabaseModule } from '@/core/database/database.module';
 import { AppLifecycleModule } from '../app-lifecycle/app-lifecycle.module';
+import { BackupsModule } from '../backups/backups.module';
 
 @Module({
-  imports: [DatabaseModule, AppLifecycleModule],
+  imports: [DatabaseModule, AppLifecycleModule, BackupsModule],
   controllers: [DebugController],
   providers: [DebugService],
   exports: [DebugService],

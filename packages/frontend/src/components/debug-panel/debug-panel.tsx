@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
+  backupAllAppsMutation,
   seedDatabaseMutation,
   setAllAppSubnetToNullMutation,
   setAllAppUpdateAvailableMutation,
@@ -91,6 +92,16 @@ export const DebugPanel = () => {
     },
   });
 
+  const backupAllApps = useMutation({
+    ...backupAllAppsMutation(),
+    onSuccess: () => {
+      toast.success('Backup of all apps started successfully!');
+    },
+    onError: () => {
+      toast.error('Failed to start backup of all apps');
+    },
+  });
+
   // Don't render anything if not in development mode
   if (!isDevelopment) {
     return null;
@@ -157,6 +168,9 @@ export const DebugPanel = () => {
             </button>
             <button type="button" onClick={() => versionMutation.mutate({})} disabled={versionMutation.isPending}>
               {versionMutation.isPending ? 'Setting...' : 'Set All Apps to Version 0'}
+            </button>
+            <button type="button" onClick={() => backupAllApps.mutate({})} disabled={backupAllApps.isPending}>
+              {backupAllApps.isPending ? 'Backing up...' : 'Launch a backup of all apps at the same time'}
             </button>
           </div>
         </div>

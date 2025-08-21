@@ -9,6 +9,7 @@ import { AppFilesManager } from '../apps/app-files-manager';
 import { AppsRepository } from '../apps/apps.repository';
 import { AppEventsQueue } from '../queue/entities/app-events';
 import { BackupManager } from './backup.manager';
+import { createAppUrn } from '@/common/helpers/app-helpers';
 
 @Injectable()
 export class BackupsService {
@@ -117,5 +118,21 @@ export class BackupsService {
     const { appUrn, filename } = params;
 
     await this.backupManager.deleteBackup(appUrn, filename);
+  }
+
+  async backupAllApps() {
+    const apps = await this.appsRepository.getApps();
+    const runningApps = apps.filter((app) => app.status === 'running');
+
+    (async () => {
+      for (const app of runningApps) {
+        try {
+          const appUrn = createAppUrn(app.appName, app.appStoreSlug);
+          this.backupApp({ appUrn });
+        } catch (e) {
+          this.logger.error(`Failed to backup app ${app.id}`, e);
+        }
+      }
+    })();
   }
 }

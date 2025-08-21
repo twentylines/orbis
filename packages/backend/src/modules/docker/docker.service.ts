@@ -8,7 +8,6 @@ import type { AppUrn } from '@runtipi/common/types';
 import * as Sentry from '@sentry/nestjs';
 import { AppFilesManager } from '../apps/app-files-manager';
 import { AppsService } from '../apps/apps.service';
-import { Cooldown } from '@/utils/cooldown/cooldown';
 
 @Injectable()
 export class DockerService {
@@ -91,11 +90,11 @@ export class DockerService {
 
     const exitCode = await new Promise((resolve) => {
       cmd.stdout.on('data', (data) => {
-        this.logger.info(`docker-compose: ${String(data).trim()}`);
+        this.logger.debug(`docker-compose: ${String(data).trim()}`);
         stdout.push(String(data).trim());
       });
       cmd.stderr.on('data', (data) => {
-        this.logger.info(`docker-compose: ${String(data).trim()}`);
+        this.logger.debug(`docker-compose: ${String(data).trim()}`);
         stderr.push(String(data).trim());
       });
       cmd.on('close', resolve);

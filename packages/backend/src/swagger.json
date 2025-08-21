@@ -1785,6 +1785,20 @@
           "Debug"
         ]
       }
+    },
+    "/api/debug/backup-all-apps": {
+      "post": {
+        "operationId": "backupAllApps",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Debug"
+        ]
+      }
     }
   },
   "info": {
