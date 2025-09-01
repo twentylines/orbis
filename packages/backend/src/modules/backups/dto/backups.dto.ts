@@ -36,3 +36,5 @@ export class DeleteAppBackupBodyDto extends createZodDto(
     filename: z.string(),
   }),
 ) {}
+
+export class BackupRequestDto extends createZodDto(z.object({ requestId: z.string().uuid() })) {}

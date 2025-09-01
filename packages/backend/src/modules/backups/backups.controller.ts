@@ -4,7 +4,7 @@ import { ApiQuery } from '@nestjs/swagger';
 import { ZodSerializerDto } from 'nestjs-zod';
 import { AuthGuard } from '../auth/auth.guard';
 import { BackupsService } from './backups.service';
-import { DeleteAppBackupBodyDto, GetAppBackupsDto, GetAppBackupsQueryDto, RestoreAppBackupDto } from './dto/backups.dto';
+import { BackupRequestDto, DeleteAppBackupBodyDto, GetAppBackupsDto, GetAppBackupsQueryDto, RestoreAppBackupDto } from './dto/backups.dto';
 
 @Injectable()
 @UseGuards(AuthGuard)
@@ -13,12 +13,12 @@ export class BackupsController {
   constructor(private readonly backupsService: BackupsService) {}
 
   @Post(':urn/backup')
-  async backupApp(@Param('urn') urn: string) {
+  async backupApp(@Param('urn') urn: string): Promise<BackupRequestDto> {
     return this.backupsService.backupApp({ appUrn: castAppUrn(urn) });
   }
 
   @Post(':urn/restore')
-  async restoreAppBackup(@Param('urn') urn: string, @Body() body: RestoreAppBackupDto) {
+  async restoreAppBackup(@Param('urn') urn: string, @Body() body: RestoreAppBackupDto): Promise<BackupRequestDto> {
     return this.backupsService.restoreApp({ appUrn: castAppUrn(urn), filename: body.filename });
   }
 

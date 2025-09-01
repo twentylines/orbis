@@ -583,6 +583,10 @@ export type UpdateAppBody = {
   performBackup: boolean;
 };
 
+export type BackupRequestDto = {
+  requestId: string;
+};
+
 export type RestoreAppBackupDto = {
   filename: string;
 };
@@ -1223,8 +1227,10 @@ export type BackupAppData = {
 };
 
 export type BackupAppResponses = {
-  201: unknown;
+  201: BackupRequestDto;
 };
+
+export type BackupAppResponse = BackupAppResponses[keyof BackupAppResponses];
 
 export type RestoreAppBackupData = {
   body: RestoreAppBackupDto;
@@ -1236,8 +1242,10 @@ export type RestoreAppBackupData = {
 };
 
 export type RestoreAppBackupResponses = {
-  201: unknown;
+  201: BackupRequestDto;
 };
+
+export type RestoreAppBackupResponse = RestoreAppBackupResponses[keyof RestoreAppBackupResponses];
 
 export type DeleteAppBackupData = {
   body: DeleteAppBackupBodyDto;

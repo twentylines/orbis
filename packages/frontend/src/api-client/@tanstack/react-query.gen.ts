@@ -126,7 +126,9 @@ import type {
   UpdateAppConfigResponse,
   UpdateAllAppsData,
   BackupAppData,
+  BackupAppResponse,
   RestoreAppBackupData,
+  RestoreAppBackupResponse,
   DeleteAppBackupData,
   GetAppBackupsData,
   GetAppBackupsResponse,
@@ -1148,8 +1150,10 @@ export const backupAppOptions = (options: Options<BackupAppData>) => {
   });
 };
 
-export const backupAppMutation = (options?: Partial<Options<BackupAppData>>): UseMutationOptions<unknown, DefaultError, Options<BackupAppData>> => {
-  const mutationOptions: UseMutationOptions<unknown, DefaultError, Options<BackupAppData>> = {
+export const backupAppMutation = (
+  options?: Partial<Options<BackupAppData>>,
+): UseMutationOptions<BackupAppResponse, DefaultError, Options<BackupAppData>> => {
+  const mutationOptions: UseMutationOptions<BackupAppResponse, DefaultError, Options<BackupAppData>> = {
     mutationFn: async (localOptions) => {
       const { data } = await backupApp({
         ...options,
@@ -1181,8 +1185,8 @@ export const restoreAppBackupOptions = (options: Options<RestoreAppBackupData>) 
 
 export const restoreAppBackupMutation = (
   options?: Partial<Options<RestoreAppBackupData>>,
-): UseMutationOptions<unknown, DefaultError, Options<RestoreAppBackupData>> => {
-  const mutationOptions: UseMutationOptions<unknown, DefaultError, Options<RestoreAppBackupData>> = {
+): UseMutationOptions<RestoreAppBackupResponse, DefaultError, Options<RestoreAppBackupData>> => {
+  const mutationOptions: UseMutationOptions<RestoreAppBackupResponse, DefaultError, Options<RestoreAppBackupData>> = {
     mutationFn: async (localOptions) => {
       const { data } = await restoreAppBackup({
         ...options,

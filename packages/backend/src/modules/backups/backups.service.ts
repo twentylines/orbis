@@ -59,8 +59,11 @@ export class BackupsService {
         await this.appsRepository.updateAppById(app.id, { status: 'stopped' });
       }
     });
+
+    return { requestId };
   }
 
+  @Cooldown(5000)
   public async restoreApp(params: { appUrn: AppUrn; filename: string }) {
     const { appUrn, filename } = params;
     const app = await this.appsRepository.getAppByUrn(appUrn);
@@ -96,6 +99,8 @@ export class BackupsService {
         await this.appsRepository.updateAppById(app.id, { status: 'stopped' });
       }
     });
+
+    return { requestId };
   }
 
   public async getAppBackups(params: { appUrn: AppUrn; page: number; pageSize: number }) {

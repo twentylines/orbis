@@ -1126,7 +1126,14 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRequestDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1159,7 +1166,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRequestDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -3630,6 +3644,18 @@
         },
         "required": [
           "performBackup"
+        ]
+      },
+      "BackupRequestDto": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "requestId"
         ]
       },
       "RestoreAppBackupDto": {
