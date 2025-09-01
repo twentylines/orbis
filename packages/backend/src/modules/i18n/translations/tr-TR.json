@@ -57,6 +57,7 @@
   "APP_ERROR_DOMAIN_REQUIRED_IF_EXPOSE_APP": "Uygulama dışarıdan erişime açılacaksa alan adı gereklidir",
   "APP_ERROR_INVALID_CONFIG": "{{id}} uygulaması geçersiz bir config.json dosyasına sahip",
   "APP_ERROR_PORT_ALREADY_IN_USE": "{{port}} portu, {{id}} uygulaması tarafından zaten kullanılıyor",
+  "APP_ERROR_EVENT_IN_PROGRESS": "{{id}} uygulaması için zaten devam eden bir etkinlik var. Lütfen bitmesini veya zaman aşımına uğramasını bekleyin.",
   "APP_INSTALL_FORM_CHOOSE_OPTION": "Bir seçenek seçin...",
   "APP_INSTALL_FORM_DISPLAY_ON_GUEST_DASHBOARD": "Misafir panosunda göster",
   "APP_INSTALL_FORM_DOMAIN_NAME": "Alan adı",
@@ -299,7 +300,7 @@
   "SERVER_ERROR_DUPLICATE_APP_STORE_NAME": "Aynı ada sahip bir uygulama mağazası zaten mevcut",
   "APP_STORE_CLONE_ERROR": "{{url}} adresindeki uygulama mağazası kopyalanırken hata oluştu. Geçerli bir git deposu mu?",
   "APP_STORE_CHOOSE_CATEGORY": "Bir kategori seçin",
-  "APP_STORE_CHOOSE_STORE": "Bir Uygulama Mağazası seçin",
+  "APP_STORE_CHOOSE_STORE": "Bir uygulama mağazası seç",
   "SETTINGS_ACTIONS_ALREADY_LATEST": "Zaten güncel",
   "SETTINGS_ACTIONS_CURRENT_VERSION": "Mevcut sürüm: {{version}}",
   "SETTINGS_ACTIONS_MAINTENANCE_SUBTITLE": "Kurulumunuzda gerçekleştirilecek yaygın işlemler",
@@ -419,8 +420,8 @@
   "APP_INSTALL_FORM_ERROR_LOCAL_SUBDOMAIN_INVALID": "Geçersiz alt alan adı",
   "APP_INSTALL_FORM_ERROR_LOCAL_SUBDOMAIN_FORMAT": "Alt alan adı geçerli değil (yalnızca küçük harfler, sayılar ve tirelere izin verilir. Maksimum uzunluk 63 karakterdir)",
   "APP_INSTALL_FORM_RANDOM": "Rastgele",
-  "APP_INSTALL_FORM_SHOW_PASSWORD": "Show password",
-  "APP_INSTALL_FORM_HIDE_PASSWORD": "Hide password",
-  "SAVE": "Save",
-  "USER_CONFIG_DOCKER_MERGE_DESCRIPTION": "This is a <a>docker merge</a> override file. It will be merged with the base <code>docker-compose</code> file of the app. You can find the base file in the <code>apps</code> folder."
+  "APP_INSTALL_FORM_SHOW_PASSWORD": "Şifreyi göster",
+  "APP_INSTALL_FORM_HIDE_PASSWORD": "Şifreyi gizle",
+  "SAVE": "Kaydet",
+  "USER_CONFIG_DOCKER_MERGE_DESCRIPTION": "Bu bir <a>docker birleştirme</a> geçersiz kılma dosyasıdır. Uygulamanın ana <code>docker-compose</code> dosyasıyla birleştirilecektir. Ana dosyayı <code>apps</code> klasöründe bulabilirsiniz."
 }
