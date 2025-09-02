@@ -60,7 +60,6 @@ export class SubnetManagerService {
   private async getAllocatedSubnets(): Promise<string[]> {
     const appSubnets = (await this.appsRepository.getApps().then((apps) => apps.map((app) => app.subnet))).filter((subnet) => subnet !== null);
 
-    await this.docker.pruneNetworks().catch(() => ({}));
     const networks = await this.docker.listNetworks();
     return networks
       .flatMap((network) => network.IPAM?.Config?.map((c) => c))

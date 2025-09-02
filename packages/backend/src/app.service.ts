@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { z } from 'zod';
 import { LATEST_RELEASE_URL } from './common/constants';
@@ -13,6 +13,8 @@ import { AppLifecycleService } from './modules/app-lifecycle/app-lifecycle.servi
 import { AppStoreService } from './modules/app-stores/app-store.service';
 import { MarketplaceService } from './modules/marketplace/marketplace.service';
 import { RepoEventsQueue } from './modules/queue/entities/repo-events';
+import { DOCKERODE } from './modules/docker/docker.module';
+import type Dockerode from 'dockerode';
 
 @Injectable()
 export class AppService {
@@ -26,11 +28,13 @@ export class AppService {
     private readonly marketplaceService: MarketplaceService,
     private readonly databaseService: DatabaseService,
     private readonly appLifecycleService: AppLifecycleService,
+    @Inject(DOCKERODE) private docker: Dockerode,
   ) {}
 
   public async bootstrap() {
     try {
       await this.databaseService.migrate();
+      await this.docker.pruneNetworks();
 
       const { version, userSettings, __prod__ } = this.configuration.getConfig();
       const config = this.configuration.getConfig();

@@ -19,7 +19,6 @@ import { AppLifecycleCommandFactory } from './app-lifecycle-command.factory';
 import { appFormSchema } from './dto/app-lifecycle.dto';
 import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
 import type { AsyncMutex } from '@/utils/mutex/async-mutex';
-import { Cooldown } from '@/utils/cooldown/cooldown';
 
 @Injectable()
 export class AppLifecycleService {
@@ -65,7 +64,6 @@ export class AppLifecycleService {
     return oldJSON !== newJSON;
   }
 
-  @Cooldown(3000)
   async startApp(params: { appUrn: AppUrn; skipPull?: boolean }) {
     const { appUrn, skipPull } = params;
     const app = await this.appRepository.getAppByUrn(appUrn);
@@ -245,7 +243,6 @@ export class AppLifecycleService {
   /**
    * Restart an app by its ID
    */
-  @Cooldown(3000)
   public async restartApp(params: { appUrn: AppUrn; skipPull?: boolean }) {
     const { appUrn, skipPull } = params;
     const app = await this.appRepository.getAppByUrn(appUrn);
