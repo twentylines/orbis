@@ -12,6 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
+import { DOCKERODE } from '@/modules/docker/docker.module';
 
 const server = setupServer();
 
@@ -33,8 +34,17 @@ describe('AppService', () => {
   });
 
   beforeEach(async () => {
+    const Dockerode = vi.fn();
     const moduleRef = await Test.createTestingModule({
-      providers: [AppService, FilesystemService],
+      providers: [
+        AppService,
+        FilesystemService,
+        {
+          provide: DOCKERODE,
+          useFactory: () => Dockerode,
+          inject: [],
+        },
+      ],
     })
       .useMocker(mock)
       .compile();
