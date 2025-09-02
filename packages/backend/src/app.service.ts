@@ -14,7 +14,7 @@ import { AppStoreService } from './modules/app-stores/app-store.service';
 import { MarketplaceService } from './modules/marketplace/marketplace.service';
 import { RepoEventsQueue } from './modules/queue/entities/repo-events';
 import { DOCKERODE } from './modules/docker/docker.module';
-import type Dockerode from 'dockerode';
+import Dockerode from 'dockerode';
 
 @Injectable()
 export class AppService {
@@ -70,7 +70,7 @@ export class AppService {
       await this.generateTlsCertificates({ localDomain: userSettings.localDomain });
 
       if (__prod__ && (buster !== version || version === 'nightly')) {
-        this.appLifecycleService.restartAllApps();
+        this.appLifecycleService.startAllApps();
       }
     } catch (e) {
       this.logger.error(e);

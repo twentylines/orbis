@@ -499,7 +499,7 @@ export class AppLifecycleService {
     }
   }
 
-  async restartAllApps() {
+  async startAllApps() {
     const apps = await this.appRepository.getApps();
     const runningApps = apps.filter((app) => app.status === 'running');
 
@@ -507,7 +507,7 @@ export class AppLifecycleService {
       for (const app of runningApps) {
         try {
           const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-          await this.restartApp({ appUrn, skipPull: true });
+          await this.startApp({ appUrn, skipPull: true });
         } catch (e) {
           this.logger.error(`Failed to start app ${app.id}`, e);
         }

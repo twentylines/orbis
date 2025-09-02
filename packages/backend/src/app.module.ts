@@ -32,6 +32,7 @@ import { SystemModule } from './modules/system/system.module';
 import { UserModule } from './modules/user/user.module';
 import { UserConfigModule } from './modules/user-config/user-config.module';
 import { MutexModule } from './utils/mutex/mutex.module';
+import { DockerModule } from './modules/docker/docker.module';
 
 const imports: (DynamicModule | typeof I18nModule)[] = [
   SentryModule.forRoot(),
@@ -56,6 +57,7 @@ const imports: (DynamicModule | typeof I18nModule)[] = [
   NetworkModule,
   UserConfigModule,
   MutexModule,
+  DockerModule,
 ];
 
 if (process.env.NODE_ENV === 'production') {

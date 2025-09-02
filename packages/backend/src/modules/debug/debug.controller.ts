@@ -36,13 +36,13 @@ export class DebugController {
     return this.debugService.setAllSubnetsToNull();
   }
 
-  @Post('restart-all-apps')
-  async restartAllApps() {
+  @Post('start-all-apps')
+  async startAllApps() {
     if (this.config.get('__prod__')) {
       throw new ForbiddenException('Starting all apps is not allowed in production mode.');
     }
 
-    return this.debugService.restartAllApps();
+    return this.debugService.startAllApps();
   }
 
   @Post('backup-all-apps')
