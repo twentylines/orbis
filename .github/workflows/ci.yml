@@ -6,23 +6,9 @@ on:
     branches:
       - develop
 
-env:
-  ROOT_FOLDER: /runtipi
-  JWT_SECRET: "secret"
-  ROOT_FOLDER_HOST: /runtipi
-  APPS_REPO_ID: repo-id
-  INTERNAL_IP: localhost
-  REDIS_HOST: redis
-  REDIS_PASSWORD: redis
-  APPS_REPO_URL: https://repo.github.com/
-  DOMAIN: localhost
-  LOCAL_DOMAIN: tipi.lan
-  TIPI_VERSION: 0.0.1
-  POSTGRES_HOST: localhost
-  POSTGRES_DBNAME: postgres
-  POSTGRES_USERNAME: postgres
-  POSTGRES_PASSWORD: postgres
-  POSTGRES_PORT: 5433
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   tests:
