@@ -9,15 +9,3 @@
 .trigger[data-state="active"]:hover {
   border-bottom-color: var(--tblr-card-bg);
 }
-
-/* // .trigger[data-state='active'] { */
-/* //   background-color: var(--tblr-card-bg); */
-/* //   color: var(--tblr-nav-tabs-link-active-color); */
-/* //   border-color: var(--tblr-nav-tabs-link-active-border-color); */
-/* //   border-bottom-color: var(--tblr-card-bg); */
-/* // */
-/* //   &:focus, */
-/* //   &:hover { */
-/* //     border-bottom-color: var(--tblr-card-bg); */
-/* //   } */
-/* // } */

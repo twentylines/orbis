@@ -14,9 +14,8 @@ describe('mergeArchitectureOverrides', () => {
     {
       name: 'db',
       image: 'mysql:latest',
-      environment: {
-        MYSQL_ROOT_PASSWORD: 'password',
-      },
+      internalPort: 3306,
+      environment: [{ key: 'MYSQL_ROOT_PASSWORD', value: 'password' }],
     },
   ];
 
@@ -50,9 +49,7 @@ describe('mergeArchitectureOverrides', () => {
           {
             name: 'app',
             image: 'app:arm64-latest',
-            environment: {
-              ENV_VAR: 'arm64-value',
-            },
+            environment: [{ key: 'ENV_VAR', value: 'arm64-value' }],
           },
         ],
       },
@@ -64,16 +61,13 @@ describe('mergeArchitectureOverrides', () => {
         image: 'app:arm64-latest', // Overridden
         isMain: true,
         internalPort: 80,
-        environment: {
-          ENV_VAR: 'arm64-value', // Added from override
-        },
+        environment: [{ key: 'ENV_VAR', value: 'arm64-value' }],
       },
       {
         name: 'db',
         image: 'mysql:latest',
-        environment: {
-          MYSQL_ROOT_PASSWORD: 'password',
-        },
+        internalPort: 3306,
+        environment: [{ key: 'MYSQL_ROOT_PASSWORD', value: 'password' }],
       },
     ];
 
@@ -89,9 +83,7 @@ describe('mergeArchitectureOverrides', () => {
           {
             name: 'app',
             image: 'app:amd64-latest',
-            environment: {
-              ENV_VAR: 'amd64-value',
-            },
+            environment: [{ key: 'ENV_VAR', value: 'amd64-value' }],
           },
         ],
       },
@@ -103,16 +95,15 @@ describe('mergeArchitectureOverrides', () => {
         image: 'app:amd64-latest', // Overridden
         isMain: true,
         internalPort: 80,
-        environment: {
-          ENV_VAR: 'amd64-value', // Added from override
-        },
+        environment: [
+          { key: 'ENV_VAR', value: 'amd64-value' }, // Added from override
+        ],
       },
       {
         name: 'db',
         image: 'mysql:latest',
-        environment: {
-          MYSQL_ROOT_PASSWORD: 'password',
-        },
+        internalPort: 3306,
+        environment: [{ key: 'MYSQL_ROOT_PASSWORD', value: 'password' }],
       },
     ];
 
@@ -125,6 +116,7 @@ describe('mergeArchitectureOverrides', () => {
       {
         name: 'app',
         image: 'app:latest',
+        internalPort: 80,
         volumes: [
           {
             hostPath: '/data',
@@ -155,6 +147,7 @@ describe('mergeArchitectureOverrides', () => {
       {
         name: 'app',
         image: 'app:latest',
+        internalPort: 80,
         volumes: [
           {
             hostPath: '/arm64-data',

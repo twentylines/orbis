@@ -60,7 +60,7 @@ export interface BuilderService {
   name: string;
   image: string;
   restart: 'always' | 'unless-stopped' | 'on-failure';
-  environment?: Record<string, string | number>;
+  environment?: Record<string, string | number | boolean>;
   command?: string | string[];
   volumes?: string[];
   ports?: string[];
@@ -278,12 +278,18 @@ export class ServiceBuilder {
    * @example
    * ```typescript
    * const service = new ServiceBuilder();
-   * service.setEnvironment({ key: 'value' });
+   * service.setEnvironment([{ key: 'NODE_ENV', value: 'production' }]);
    * ```
    */
-  setEnvironment(environment?: Record<string, string | number>) {
-    if (environment) {
-      this.service.environment = { ...this.service.environment, ...environment };
+  setEnvironment(environment?: Array<{ key: string; value: string | number | boolean }>) {
+    if (environment && environment.length > 0) {
+      if (!this.service.environment) {
+        this.service.environment = {};
+      }
+
+      for (const env of environment) {
+        this.service.environment[env.key] = env.value;
+      }
     }
     return this;
   }

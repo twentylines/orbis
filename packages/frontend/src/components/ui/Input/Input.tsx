@@ -1,3 +1,4 @@
+import './input.css';
 import clsx from 'clsx';
 import type React from 'react';
 
@@ -23,7 +24,7 @@ export const Input = ({ name, label, error, type = 'text', className, isInvalid,
       name={name}
       id={name}
       className={clsx('form-control', {
-        'is-invalid is-invalid-lite': error || isInvalid,
+        'is-invalid': error || isInvalid,
       })}
       {...rest}
     />
