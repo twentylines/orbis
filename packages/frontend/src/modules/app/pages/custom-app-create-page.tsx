@@ -30,7 +30,7 @@ export default () => {
       navigate(`/apps/${appName}`);
     },
     onError: (error: TranslatableError) => {
-      toast.error(t(error.message || 'CUSTOM_APP_CREATE_ERROR'));
+      toast.error(t(error.message || 'CUSTOM_APP_CREATE_ERROR', { ...error.intlParams }));
     },
   });
 
@@ -42,7 +42,7 @@ export default () => {
       return;
     }
 
-    createCustomApp.mutate({ body: { config: data, name: appName } });
+    createCustomApp.mutate({ body: { config: { ...data, schemaVersion: 2 }, name: appName } });
   };
 
   return (

@@ -1,6 +1,7 @@
 import {
   IconDots,
   IconDownload,
+  IconEdit,
   IconEraser,
   IconExternalLink,
   IconLock,
@@ -34,6 +35,7 @@ import { UpdateSettingsDialog } from '../../components/dialogs/update-settings-d
 import { useAppStatus } from '../../helpers/use-app-status';
 import { Tooltip } from 'react-tooltip';
 import { DropdownMenuSeparator } from '@/components/ui/DropdownMenu/DropdownMenu';
+import { useNavigate } from 'react-router';
 
 interface IProps {
   app?: AppDetails | null;
@@ -73,6 +75,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
 
   const { t } = useTranslation();
   const { setOptimisticStatus } = useAppStatus();
+  const navigate = useNavigate();
 
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   const updateAvailable = Number(app?.version ?? 0) < Number(metadata?.latestVersion || 0);
@@ -151,6 +154,17 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
     </DropdownMenuItem>
   );
 
+  const EditConfigListItem = (
+    <DropdownMenuItem
+      onClick={() => navigate(`/apps/${info.id}/edit`)}
+      key="edit-config"
+      disabled={app?.status !== 'stopped' && app?.status !== 'missing'}
+    >
+      <IconEdit className="me-2" size={16} />
+      {t('CUSTOM_APP_EDIT_CONFIG')}
+    </DropdownMenuItem>
+  );
+
   const StopButton = (
     <ActionButton key="stop" IconComponent={IconPlayerPause} onClick={stopDisclosure.open} title={t('APP_ACTION_STOP')} intent="default" />
   );
@@ -173,7 +187,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
               {sslPort !== 443 ? `:${sslPort}` : ''}
             </DropdownMenuItem>
           )}
-          {(app?.exposedLocal || !info.dynamic_config) && (
+          {app?.exposedLocal && (
             <DropdownMenuItem onClick={() => handleOpen('local_domain')}>
               <IconLock className="text-muted me-2" size={16} />
               {appLocalDomain}
@@ -193,6 +207,10 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
   const buttons: React.JSX.Element[] = [];
   const listItems: React.JSX.Element[] = [];
   const listItemsDestructive: React.JSX.Element[] = [];
+
+  if (info.urn.split(':')[1] === '_user') {
+    listItems.push(EditConfigListItem);
+  }
 
   switch (app?.status ?? 'missing') {
     case 'stopped':
@@ -233,6 +251,9 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       break;
     case 'missing':
       buttons.push(InstallButton);
+      if (info.urn.split(':')[1] === '_user') {
+        listItemsDestructive.push(RemoveListItem);
+      }
       break;
     default:
       break;
