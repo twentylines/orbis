@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/Input/Input';
 import type { TranslatableError } from '@/types/error.types';
 import { useState } from 'react';
 
+const RESERVED_APP_NAMES = ['create'];
+
 export default () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -21,7 +23,8 @@ export default () => {
     .min(1, t('CUSTOM_APP_NAME_REQUIRED'))
     .max(50, t('CUSTOM_APP_NAME_MAX_LENGTH'))
     .regex(/^[a-z0-9-]+$/, t('CUSTOM_APP_NAME_VALIDATION_HELP'))
-    .refine((name) => !name.startsWith('-') && !name.endsWith('-'), t('CUSTOM_APP_NAME_NO_HYPHEN_EDGES'));
+    .refine((name) => !name.startsWith('-') && !name.endsWith('-'), t('CUSTOM_APP_NAME_NO_HYPHEN_EDGES'))
+    .refine((name) => !RESERVED_APP_NAMES.includes(name.toLowerCase()), t('CUSTOM_APP_NAME_RESERVED'));
 
   const createCustomApp = useMutation({
     ...createCustomAppMutation(),

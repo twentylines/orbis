@@ -6,7 +6,7 @@ import { dynamicComposeSchemaArk } from '@runtipi/common/schemas';
 import { MultiServiceForm } from '@/components/multi-service-form/multi-service-form';
 import { Input } from '@/components/ui/Input/Input';
 import type { TranslatableError } from '@/types/error.types';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
 import { getAppComposeDiffOptions, updateCustomAppMutation } from '@/api-client/@tanstack/react-query.gen';
 import { type } from 'arktype';
@@ -41,6 +41,8 @@ export default function EditPageContent({ loaderData }: Route.ComponentProps) {
     initialData: loaderData?.composeDiff,
   });
 
+  const id = useId();
+
   useEffect(() => {
     if (currentConfig?.current) {
       const parsed = dynamicComposeSchemaArk.omit('schemaVersion')(JSON.parse(currentConfig.current));
@@ -52,14 +54,14 @@ export default function EditPageContent({ loaderData }: Route.ComponentProps) {
       }
 
       const servicesWithId = parsed.services.map((service) => ({
-        _id: crypto.randomUUID(),
+        _id: id + Math.random().toString(36).substring(2, 9),
         ...service,
       }));
 
       setServices(servicesWithId);
       setReady(true);
     }
-  }, [currentConfig, setServices, t]);
+  }, [currentConfig, setServices, t, id]);
 
   const updateCustomApp = useMutation({
     ...updateCustomAppMutation(),

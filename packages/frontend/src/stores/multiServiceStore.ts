@@ -51,7 +51,7 @@ const defaultServices: ServiceWithId[] = [
 ];
 
 function generateId(): string {
-  return `service-${window.crypto.randomUUID()}`;
+  return `service-${Math.random().toString(36).substring(2, 9)}`;
 }
 
 export const useMultiServiceStore = create<MultiServiceState>()((set, get) => ({
