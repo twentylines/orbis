@@ -72,14 +72,14 @@ schemas.forEach(({ name, serviceSchema, dynamicComposeSchema, safeParse }) => {
           expect(result.success).toBe(false);
         });
 
-        it('should require internalPort field', () => {
+        it('should not require internalPort field', () => {
           const service = {
             image: 'nginx:latest',
             name: 'web-server',
           };
 
           const result = safeParse(serviceSchema, service);
-          expect(result.success).toBe(false);
+          expect(result.success).toBe(true);
         });
       });
 
@@ -524,7 +524,6 @@ schemas.forEach(({ name, serviceSchema, dynamicComposeSchema, safeParse }) => {
                 // Third service with array-style depends_on
                 image: 'redis:alpine',
                 name: 'redis',
-                internalPort: 6379,
                 dependsOn: ['database'],
                 command: 'redis-server --appendonly yes',
                 volumes: [
@@ -803,7 +802,6 @@ schemas.forEach(({ name, serviceSchema, dynamicComposeSchema, safeParse }) => {
                       "database",
                     ],
                     "image": "redis:alpine",
-                    "internalPort": 6379,
                     "name": "redis",
                     "volumes": [
                       {

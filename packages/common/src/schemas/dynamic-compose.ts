@@ -7,7 +7,8 @@ export const serviceSchemaV2 = z.object({
   internalPort: z
     .number('CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID')
     .min(1, 'CUSTOM_APP_ERROR_INTERNAL_PORT_MIN')
-    .max(65535, 'CUSTOM_APP_ERROR_INTERNAL_PORT_MAX'),
+    .max(65535, 'CUSTOM_APP_ERROR_INTERNAL_PORT_MAX')
+    .optional(),
   isMain: z.boolean().optional(),
   networkMode: z.string().optional(),
   extraHosts: z.array(z.string('CUSTOM_APP_ERROR_EXTRA_HOST_INVALID')).optional(),

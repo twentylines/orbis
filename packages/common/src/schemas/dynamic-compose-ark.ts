@@ -4,7 +4,7 @@ export const serviceSchemaArk = type({
   // Required fields
   image: type('string').configure({ message: 'CUSTOM_APP_ERROR_IMAGE_REQUIRED' }),
   name: type('string').configure({ message: 'CUSTOM_APP_ERROR_NAME_REQUIRED' }),
-  internalPort: type('0 < number < 65536').configure({ message: 'CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID' }),
+  internalPort: type('0 < number < 65536').configure({ message: 'CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID' }).optional(),
 
   // Optional fields
   isMain: type('boolean').optional(),
