@@ -62,6 +62,11 @@ export const serviceSchemaV2 = z.object({
         readOnly: z.boolean().optional(),
         shared: z.boolean().optional(),
         private: z.boolean().optional(),
+        bind: z
+          .object({
+            propagation: z.enum(['rprivate', 'private', 'rshared', 'shared', 'rslave', 'slave']),
+          })
+          .optional(),
       }),
     )
     .optional(),
