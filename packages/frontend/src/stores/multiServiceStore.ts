@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { type } from 'arktype';
 import { dynamicComposeSchemaArk, type serviceSchemaArk } from '@runtipi/common/schemas';
 import toast from 'react-hot-toast';
-import { t } from 'i18next';
 
 type MultiServiceFormData = typeof dynamicComposeSchemaArk.infer;
 type ServiceFormData = typeof serviceSchemaArk.infer;
@@ -176,7 +175,7 @@ export const useMultiServiceStore = create<MultiServiceState>()((set, get) => ({
     }
 
     set({ services: servicesWithIds, isDirty: false });
-    toast.success(t('MULTI_SERVICE_JSON_UPDATE_SUCCESS'));
+    toast.success('Services updated from JSON');
   },
   resetToDefaults: () =>
     set({

@@ -1,4 +1,4 @@
-.add-link-button {
+.button-tile {
   background: none;
   padding-block: 0;
   color: inherit;
@@ -8,4 +8,10 @@
   cursor: pointer;
   outline: inherit;
   text-decoration: none;
+  padding: 0;
+}
+
+.button-tile:hover {
+  text-decoration: none;
+  color: inherit;
 }
