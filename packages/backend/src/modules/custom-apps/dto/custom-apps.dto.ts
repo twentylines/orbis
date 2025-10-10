@@ -9,7 +9,9 @@ export const createCustomAppSchema = type({
   config: dynamicComposeSchemaArk,
 });
 
-export class CreateCustomAppDto extends createArkDto(createCustomAppSchema, { name: 'CreateCustomAppDto' }) {}
+export class CreateCustomAppDto extends createArkDto(createCustomAppSchema, {
+  name: 'CreateCustomAppDto',
+}) {}
 
 export const createCustomAppResponseSchema = type({
   appUrn: 'string',
@@ -23,4 +25,14 @@ export const updateCustomAppSchema = type({
   config: dynamicComposeSchemaArk,
 });
 
-export class UpdateCustomAppDto extends createArkDto(updateCustomAppSchema, { name: 'UpdateCustomAppDto' }) {}
+export class UpdateCustomAppDto extends createArkDto(updateCustomAppSchema, {
+  name: 'UpdateCustomAppDto',
+}) {}
+
+export const updateAppMetadataDto = type({
+  data: 'string',
+});
+
+export class UpdateAppMetadataDto extends createArkDto(updateAppMetadataDto, {
+  name: 'UpdateAppMetadataDto',
+}) {}

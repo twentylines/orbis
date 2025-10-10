@@ -2,7 +2,7 @@ import { Body, Controller, Param, Patch, Post, UploadedFile, UseGuards, UseInter
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '../auth/auth.guard';
 import { CustomAppService } from './custom-apps.service';
-import { CreateCustomAppDto, CreateCustomAppResponseDto, UpdateCustomAppDto } from './dto/custom-apps.dto';
+import { CreateCustomAppDto, CreateCustomAppResponseDto, UpdateAppMetadataDto, UpdateCustomAppDto } from './dto/custom-apps.dto';
 import { ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { castAppUrn } from '@/common/helpers/app-helpers';
 
@@ -63,5 +63,12 @@ export class CustomAppController {
 
     await this.customAppService.uploadAppImage(castAppUrn(appUrn), file.buffer);
     return { success: true };
+  }
+
+  @Patch(':urn/metadata')
+  @UseGuards(AuthGuard)
+  @ApiResponse({})
+  async updateAppMetadata(@Param('urn') appUrn: string, @Body() body: UpdateAppMetadataDto) {
+    return await this.customAppService.updateAppMetadata(castAppUrn(appUrn), body.data);
   }
 }
