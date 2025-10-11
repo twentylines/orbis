@@ -10,7 +10,6 @@
 !turbo.json
 !patches/**
 
-!scripts/postinstall.sh
 !**/package.json
 !**/tsconfig.json
 !**/vite.config.ts

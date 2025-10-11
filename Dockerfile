@@ -1,4 +1,4 @@
-ARG BUN_VERSION="1.2"
+ARG BUN_VERSION="1.3.0"
 
 FROM oven/bun:${BUN_VERSION}-alpine AS node_base
 
@@ -45,7 +45,7 @@ COPY ./packages/common/package.json ./packages/common/package.json
 COPY ./packages/frontend/scripts ./packages/frontend/scripts
 COPY ./packages/frontend/public ./packages/frontend/public
 
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --verbose
 
 COPY ./turbo.json ./turbo.json
 COPY ./packages ./packages
