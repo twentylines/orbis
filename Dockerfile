@@ -39,7 +39,6 @@ WORKDIR /app
 
 COPY ./bun.lock ./
 COPY ./package.json ./
-COPY ./scripts/ ./scripts
 COPY ./packages/backend/package.json ./packages/backend/package.json
 COPY ./packages/frontend/package.json ./packages/frontend/package.json
 COPY ./packages/common/package.json ./packages/common/package.json
