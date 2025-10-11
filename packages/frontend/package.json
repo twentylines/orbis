@@ -4,6 +4,7 @@
   "version": "0.0.5",
   "type": "module",
   "scripts": {
+    "postinstall": "./scripts/postinstall.sh",
     "dev": "react-router dev",
     "bundle": "react-router build",
     "preview": "vite preview",
