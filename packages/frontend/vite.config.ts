@@ -1,13 +1,13 @@
-import path from 'node:path';
+import path from 'path';
 import { reactRouter } from '@react-router/dev/vite';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
-import { defineConfig } from 'vite';
+import { defineConfig, type PluginOption } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 const alias = {
   '@': path.resolve(__dirname, './src'),
 };
-const plugins = [reactRouter(), tsconfigPaths()];
+const plugins: PluginOption[] = [reactRouter(), tsconfigPaths()];
 
 const { NODE_ENV } = process.env;
 if (NODE_ENV === 'production') {
@@ -21,7 +21,7 @@ if (NODE_ENV === 'production') {
       },
       org: 'runtipi',
       project: 'runtipi-frontend',
-    }),
+    }) as PluginOption,
   );
 }
 
