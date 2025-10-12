@@ -23,6 +23,10 @@ export class CustomAppService {
   ) {}
 
   async createCustomApp(dto: CreateCustomAppDto): Promise<{ appUrn: AppUrn; appName: string; storeId: string }> {
+    if (this.configService.get('demoMode')) {
+      throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
+    }
+
     const { name, config } = dto;
 
     const appUrn = createAppUrn(name, APPS_FOLDER);
@@ -62,6 +66,10 @@ export class CustomAppService {
   }
 
   async updateCustomApp(appUrn: AppUrn, config: UpdateCustomAppDto['config']) {
+    if (this.configService.get('demoMode')) {
+      throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
+    }
+
     const existingApp = await this.appsRepository.getAppByUrn(appUrn);
     if (!existingApp) {
       throw new TranslatableError('CUSTOM_APP_ERROR_NOT_FOUND', { urn: appUrn }, HttpStatus.NOT_FOUND);
@@ -150,6 +158,10 @@ export class CustomAppService {
   }
 
   async uploadAppImage(appUrn: AppUrn, imageBuffer: Buffer): Promise<void> {
+    if (this.configService.get('demoMode')) {
+      throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
+    }
+
     const { appName, appStoreId } = extractAppUrn(appUrn);
 
     if (appStoreId !== APPS_FOLDER) {
@@ -191,6 +203,10 @@ export class CustomAppService {
   }
 
   public async updateAppMetadata(appUrn: AppUrn, description: string): Promise<void> {
+    if (this.configService.get('demoMode')) {
+      throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
+    }
+
     const { appName, appStoreId } = extractAppUrn(appUrn);
     const { dataDir } = this.configService.get('directories');
 
