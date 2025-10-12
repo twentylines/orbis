@@ -16,6 +16,7 @@ import { StepContent, Stepper, StepTrigger, StepTriggerList } from '@/components
 import { motion } from 'framer-motion';
 import { Alert, AlertDescription, AlertHeading, AlertIcon } from '@/components/ui/Alert/Alert';
 import { IconChevronRight, IconInfoCircle } from '@tabler/icons-react';
+import { ScrollArea } from '@/components/ui/ScrollArea';
 
 interface IProps {
   newVersion: string;
@@ -60,78 +61,80 @@ export const UpdateDialog: React.FC<IProps> = ({ info, newVersion, isOpen, onClo
         <DialogHeader>
           <DialogTitle>{t('APP_UPDATE_FORM_TITLE', { name: info.name })}</DialogTitle>
         </DialogHeader>
-        <DialogDescription>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={currentStep}>
-            <Stepper currentStep={currentStep}>
-              <StepTriggerList>
-                <StepTrigger step={0} title={t('APP_UPDATE_INFORMATION_TITLE')} onStepChange={setCurrentStep} />
-                <StepTrigger step={1} title={t('APP_UPDATE_CONFIGURATION_TITLE')} onStepChange={setCurrentStep} />
-                <StepTrigger step={2} title={t('APP_UPDATE_COMPOSE_TITLE')} onStepChange={setCurrentStep} />
-                <StepTrigger step={3} title={t('APP_UPDATE_BACKUP_TITLE')} onStepChange={setCurrentStep} />
-              </StepTriggerList>
-              <div className="mt-2">
-                <StepContent step={0}>
-                  <div className="text-muted">
-                    <Trans
-                      t={t}
-                      i18nKey="APP_UPDATE_INFORMATION_SUBTITLE"
-                      values={{
-                        version: newVersion,
-                        name: info.name,
-                      }}
-                      components={{ strong: <strong /> }}
-                    />
-                  </div>
-                </StepContent>
-                <StepContent step={1}>
-                  <div className="text-muted">{t('APP_UPDATE_CONFIGURATION_SUBTITLE')}</div>
-                  <CodeMirror
-                    value={configDiff?.new ?? ''}
-                    readOnly={true}
-                    height="400px"
-                    theme={copilot}
-                    className="mt-3"
-                    extensions={[
-                      unifiedMergeView({
-                        original: configDiff?.current ?? '',
-                        mergeControls: false,
-                      }),
-                    ]}
-                  />
-                </StepContent>
-                <StepContent step={2}>
-                  <div className="text-muted">{t('APP_UPDATE_COMPOSE_SUBTITLE')}</div>
-                  <CodeMirror
-                    value={composeDiff?.new ?? ''}
-                    readOnly={true}
-                    height="400px"
-                    theme={copilot}
-                    className="mt-3"
-                    extensions={[
-                      unifiedMergeView({
-                        original: composeDiff?.current ?? '',
-                        mergeControls: false,
-                      }),
-                    ]}
-                  />
-                  <Alert variant="info" className="mt-3">
-                    <AlertIcon>
-                      <IconInfoCircle stroke={2} />
-                    </AlertIcon>
-                    <div>
-                      <AlertHeading>{t('APP_UPDATE_COMPOSE_ALERT_TITLE')}</AlertHeading>
-                      <AlertDescription>{t('APP_UPDATE_COMPOSE_ALERT_SUBTITLE')}</AlertDescription>
+        <ScrollArea maxheight={500}>
+          <DialogDescription>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={currentStep}>
+              <Stepper currentStep={currentStep}>
+                <StepTriggerList>
+                  <StepTrigger step={0} title={t('APP_UPDATE_INFORMATION_TITLE')} onStepChange={setCurrentStep} />
+                  <StepTrigger step={1} title={t('APP_UPDATE_CONFIGURATION_TITLE')} onStepChange={setCurrentStep} />
+                  <StepTrigger step={2} title={t('APP_UPDATE_COMPOSE_TITLE')} onStepChange={setCurrentStep} />
+                  <StepTrigger step={3} title={t('APP_UPDATE_BACKUP_TITLE')} onStepChange={setCurrentStep} />
+                </StepTriggerList>
+                <div className="mt-2">
+                  <StepContent step={0}>
+                    <div className="text-muted">
+                      <Trans
+                        t={t}
+                        i18nKey="APP_UPDATE_INFORMATION_SUBTITLE"
+                        values={{
+                          version: newVersion,
+                          name: info.name,
+                        }}
+                        components={{ strong: <strong /> }}
+                      />
                     </div>
-                  </Alert>
-                </StepContent>
-                <StepContent step={3}>
-                  <div className="text-muted">{t('APP_UPDATE_BACKUP_SUBTITLE')}</div>
-                  <Switch checked={backupApp} onCheckedChange={setBackupApp} label={t('APP_UPDATE_FORM_BACKUP')} className="mt-3" />
-                </StepContent>
-              </div>
-            </Stepper>
-          </motion.div>
-        </DialogDescription>
+                  </StepContent>
+                  <StepContent step={1}>
+                    <div className="text-muted">{t('APP_UPDATE_CONFIGURATION_SUBTITLE')}</div>
+                    <CodeMirror
+                      value={configDiff?.new ?? ''}
+                      readOnly={true}
+                      height="400px"
+                      theme={copilot}
+                      className="mt-3"
+                      extensions={[
+                        unifiedMergeView({
+                          original: configDiff?.current ?? '',
+                          mergeControls: false,
+                        }),
+                      ]}
+                    />
+                  </StepContent>
+                  <StepContent step={2}>
+                    <div className="text-muted">{t('APP_UPDATE_COMPOSE_SUBTITLE')}</div>
+                    <CodeMirror
+                      value={composeDiff?.new ?? ''}
+                      readOnly={true}
+                      height="400px"
+                      theme={copilot}
+                      className="mt-3"
+                      extensions={[
+                        unifiedMergeView({
+                          original: composeDiff?.current ?? '',
+                          mergeControls: false,
+                        }),
+                      ]}
+                    />
+                    <Alert variant="info" className="mt-3">
+                      <AlertIcon>
+                        <IconInfoCircle stroke={2} />
+                      </AlertIcon>
+                      <div>
+                        <AlertHeading>{t('APP_UPDATE_COMPOSE_ALERT_TITLE')}</AlertHeading>
+                        <AlertDescription>{t('APP_UPDATE_COMPOSE_ALERT_SUBTITLE')}</AlertDescription>
+                      </div>
+                    </Alert>
+                  </StepContent>
+                  <StepContent step={3}>
+                    <div className="text-muted">{t('APP_UPDATE_BACKUP_SUBTITLE')}</div>
+                    <Switch checked={backupApp} onCheckedChange={setBackupApp} label={t('APP_UPDATE_FORM_BACKUP')} className="mt-3" />
+                  </StepContent>
+                </div>
+              </Stepper>
+            </motion.div>
+          </DialogDescription>
+        </ScrollArea>
         <DialogFooter>
           {currentStep > 0 && (
             <Button variant="link" onClick={() => setCurrentStep((s) => s - 1)} className="me-3">
