@@ -24,7 +24,7 @@ export class UserConfigService {
     return {
       dockerCompose: userComposeFile.content || null,
       appEnv: userEnvFile.content || null,
-      isEnabled: app.app?.userConfigEnabled || true,
+      isEnabled: app.app?.userConfigEnabled ?? true,
     };
   }
 
