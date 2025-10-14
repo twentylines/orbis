@@ -60,13 +60,13 @@ export const appInfoSchema = z.object({
   website: z.string().optional(),
   force_expose: z.boolean().optional().default(false),
   generate_vapid_keys: z.boolean().optional().default(false),
-  categories: z.enum(APP_CATEGORIES).array().default([]),
+  categories: z.enum(APP_CATEGORIES).array().default(['utilities']),
   url_suffix: z.string().optional(),
   form_fields: z.array(formFieldSchema).optional().default([]),
   https: z.boolean().optional().default(false),
   exposable: z.boolean().optional().default(false),
   no_gui: z.boolean().optional().default(false),
-  supported_architectures: z.enum(ARCHITECTURES).array().optional(),
+  supported_architectures: z.enum(ARCHITECTURES).array().default(['amd64', 'arm64']),
   uid: z.number().optional(),
   gid: z.number().optional(),
   dynamic_config: z.boolean().optional().default(false),
@@ -124,7 +124,7 @@ export const appInfoSchemaArk = type({
   categories: type
     .enumerated(...APP_CATEGORIES)
     .array()
-    .default(() => []),
+    .default(() => ['utilities']),
   url_suffix: 'string?',
   form_fields: formFieldSchemaArk.array().default(() => []),
   https: 'boolean = false',
@@ -133,7 +133,7 @@ export const appInfoSchemaArk = type({
   supported_architectures: type
     .enumerated(...ARCHITECTURES)
     .array()
-    .optional(),
+    .default(() => ['amd64', 'arm64']),
   uid: 'number?',
   gid: 'number?',
   dynamic_config: 'boolean = false',
