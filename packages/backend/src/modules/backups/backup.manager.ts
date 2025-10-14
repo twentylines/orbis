@@ -20,7 +20,7 @@ export class BackupManager {
 
   public backupApp = async (appUrn: AppUrn) => {
     const { dataDir } = this.config.get('directories');
-    const backupName = `${appUrn}-${new Date().getTime()}`;
+    const backupName = `${appUrn}-${Date.now()}`;
     const { appStoreId, appName } = extractAppUrn(appUrn);
 
     const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
@@ -79,7 +79,13 @@ export class BackupManager {
     }
 
     const { appStoreId, appName } = extractAppUrn(appUrn);
-    const archive = path.join(dataDir, 'backups', appStoreId, appName, filename);
+    const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
+
+    const archive = this.filesystem.getSafeFilePath(path.join(backupDir, filename));
+
+    if (!archive.startsWith(backupDir)) {
+      throw new Error('Invalid backup file path');
+    }
 
     this.logger.info('Restoring app from backup...');
 
@@ -130,12 +136,37 @@ export class BackupManager {
     const { dataDir } = this.config.get('directories');
 
     const { appName, appStoreId } = extractAppUrn(appUrn);
-
-    const backupPath = path.join(dataDir, 'backups', appStoreId, appName, filename);
+    const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
+    const backupPath = this.filesystem.getSafeFilePath(path.join(backupDir, filename));
 
     if (await this.filesystem.pathExists(backupPath)) {
       await this.filesystem.removeFile(backupPath);
     }
+  }
+
+  /**
+   * Clean up old backups based on retention policy
+   * @param appUrn - The app id
+   * @param maxBackups - Maximum number of backups to keep (0 means no limit)
+   */
+  public async cleanupOldBackups(appUrn: AppUrn, maxBackups: number) {
+    if (maxBackups === 0) {
+      return;
+    }
+
+    const backups = await this.listBackupsByAppId(appUrn);
+
+    if (backups.length <= maxBackups) {
+      return;
+    }
+
+    backups.sort((a, b) => b.date - a.date);
+
+    const backupsToDelete = backups.slice(maxBackups);
+    this.logger.info(`Cleaning up ${backupsToDelete.length} old backup(s) for ${appUrn}...`);
+
+    await Promise.all(backupsToDelete.map((backup) => this.deleteBackup(appUrn, backup.id)));
+    this.logger.info(`Cleanup completed for ${appUrn}`);
   }
 
   /**
@@ -178,5 +209,52 @@ export class BackupManager {
       this.logger.error(`Error listing backups for app ${appUrn}:`, error);
       return [];
     }
+  }
+
+  /**
+   * Get the file path for a backup
+   * @param appUrn - The app id
+   * @param filename - The filename of the backup
+   * @returns The backup file path
+   */
+  public async getBackupPath(appUrn: AppUrn, filename: string): Promise<string> {
+    const { dataDir } = this.config.get('directories');
+    const { appName, appStoreId } = extractAppUrn(appUrn);
+    const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
+
+    const backupPath = this.filesystem.getSafeFilePath(path.join(backupDir, filename));
+
+    if (!(await this.filesystem.pathExists(backupPath))) {
+      throw new Error('The backup file does not exist');
+    }
+
+    return backupPath;
+  }
+
+  /**
+   * Upload a backup file
+   * @param appUrn - The app id
+   * @param filename - The filename of the backup
+   * @param fileBuffer - The file buffer
+   */
+  public async uploadBackup(appUrn: AppUrn, filename: string, fileBuffer: Buffer): Promise<void> {
+    const { dataDir } = this.config.get('directories');
+    const { appName, appStoreId } = extractAppUrn(appUrn);
+    const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
+
+    const backupPath = this.filesystem.getSafeFilePath(path.join(backupDir, filename));
+
+    // Create backup directory if it doesn't exist
+    await this.filesystem.createDirectory(backupDir);
+
+    // Check if file already exists
+    if (await this.filesystem.pathExists(backupPath)) {
+      throw new Error('A backup with this filename already exists');
+    }
+
+    // Write the file
+    await this.filesystem.writeBinaryFile(backupPath, fileBuffer);
+
+    this.logger.info(`Backup uploaded successfully: ${filename}`);
   }
 }
