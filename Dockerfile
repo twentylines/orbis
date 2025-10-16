@@ -8,7 +8,7 @@ FROM node_base AS builder_base
 WORKDIR /deps
 
 ARG TARGETARCH
-ARG DOCKER_COMPOSE_VERSION="v2.39.2"
+ARG DOCKER_COMPOSE_VERSION="v2.40.0"
 ENV TARGETARCH=${TARGETARCH}
 
 RUN apk add --no-cache curl python3 make g++ git

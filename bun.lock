@@ -4,7 +4,7 @@
     "": {
       "name": "runtipi",
       "dependencies": {
-        "drizzle-orm": "^0.44.2",
+        "drizzle-orm": "^0.44.6",
         "zod": "^4.1.5",
       },
       "devDependencies": {
