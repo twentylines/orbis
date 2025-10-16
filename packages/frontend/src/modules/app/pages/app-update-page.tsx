@@ -12,7 +12,7 @@ import { motion } from 'framer-motion';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Trans, useTranslation } from 'react-i18next';
-import { IconChevronLeft, IconChevronRight, IconInfoCircle } from '@tabler/icons-react';
+import { IconArrowRight, IconChevronLeft, IconChevronRight, IconInfoCircle } from '@tabler/icons-react';
 import { Alert, AlertDescription, AlertHeading, AlertIcon } from '@/components/ui/Alert/Alert';
 import type { TranslatableError } from '@/types/error.types';
 import { redirect, useLocation, useNavigate, useParams } from 'react-router';
@@ -92,14 +92,9 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
           <div className="mt-3 mt-lg-0 ms-lg-3">
             <h2 className="mb-1">{t('APP_UPDATE_FORM_TITLE', { name: info.name })}</h2>
             <div className="d-flex flex-wrap align-items-center gap-2 text-muted">
-              <span className="badge bg-muted text-white">
-                {t('APP_DETAILS_VERSION')} {info.version}
-              </span>
-              {metadata.latestDockerVersion && (
-                <span className="badge bg-success text-white">
-                  {t('APP_ACTION_UPDATE')} {metadata.latestDockerVersion}
-                </span>
-              )}
+              <span className="badge bg-muted text-white">{info.version}</span>
+              <IconArrowRight size={16} />
+              <span className="badge bg-success text-white">{metadata.latestDockerVersion}</span>
             </div>
           </div>
         </div>
