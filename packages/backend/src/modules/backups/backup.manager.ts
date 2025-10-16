@@ -150,7 +150,7 @@ export class BackupManager {
    * @param maxBackups - Maximum number of backups to keep (0 means no limit)
    */
   public async cleanupOldBackups(appUrn: AppUrn, maxBackups: number) {
-    if (maxBackups === 0) {
+    if (!maxBackups) {
       return;
     }
 
