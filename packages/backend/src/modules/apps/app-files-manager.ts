@@ -49,8 +49,8 @@ export class AppFilesManager {
         const parsedConfig = appInfoSchemaArk({ ...config, urn: appUrn });
 
         if (parsedConfig instanceof type.errors) {
-          this.logger.debug(`App ${appUrn} config error:`);
-          this.logger.debug(parsedConfig.summary);
+          this.logger.error(`App ${appUrn} config error:`);
+          this.logger.error(parsedConfig.summary);
           return null;
         }
 
