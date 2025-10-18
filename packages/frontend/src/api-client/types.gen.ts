@@ -251,7 +251,7 @@ export type MyAppsDto = {
             version: string;
             gid?: number;
             min_tipi_version?: string;
-            port?: number;
+            port?: string | number;
             uid?: number;
             url_suffix?: string;
             website?: string;
@@ -330,7 +330,7 @@ export type GuestAppsDto = {
             version: string;
             gid?: number;
             min_tipi_version?: string;
-            port?: number;
+            port?: string | number;
             uid?: number;
             url_suffix?: string;
             website?: string;
@@ -393,7 +393,7 @@ export type GetAppDto = {
         version: string;
         gid?: number;
         min_tipi_version?: string;
-        port?: number;
+        port?: string | number;
         uid?: number;
         url_suffix?: string;
         website?: string;
@@ -588,8 +588,8 @@ export type CreateCustomAppDto = {
             image: string;
             name: string;
             addPorts?: Array<{
-                containerPort: number;
-                hostPort: number;
+                containerPort: string | number;
+                hostPort: string | number;
                 interface?: string;
                 tcp?: boolean;
                 udp?: boolean;
@@ -642,7 +642,7 @@ export type CreateCustomAppDto = {
                 timeout?: string;
             };
             hostname?: string;
-            internalPort?: number;
+            internalPort?: string | number;
             isMain?: boolean;
             logging?: {
                 driver: string;
@@ -697,8 +697,8 @@ export type CreateCustomAppDto = {
         overrides?: Array<{
             services: Array<{
                 addPorts?: Array<{
-                    containerPort: number;
-                    hostPort: number;
+                    containerPort: string | number;
+                    hostPort: string | number;
                     interface?: string;
                     tcp?: boolean;
                     udp?: boolean;
@@ -752,7 +752,7 @@ export type CreateCustomAppDto = {
                 };
                 hostname?: string;
                 image?: string;
-                internalPort?: number;
+                internalPort?: string | number;
                 isMain?: boolean;
                 logging?: {
                     driver: string;
@@ -824,8 +824,8 @@ export type UpdateCustomAppDto = {
             image: string;
             name: string;
             addPorts?: Array<{
-                containerPort: number;
-                hostPort: number;
+                containerPort: string | number;
+                hostPort: string | number;
                 interface?: string;
                 tcp?: boolean;
                 udp?: boolean;
@@ -878,7 +878,7 @@ export type UpdateCustomAppDto = {
                 timeout?: string;
             };
             hostname?: string;
-            internalPort?: number;
+            internalPort?: string | number;
             isMain?: boolean;
             logging?: {
                 driver: string;
@@ -933,8 +933,8 @@ export type UpdateCustomAppDto = {
         overrides?: Array<{
             services: Array<{
                 addPorts?: Array<{
-                    containerPort: number;
-                    hostPort: number;
+                    containerPort: string | number;
+                    hostPort: string | number;
                     interface?: string;
                     tcp?: boolean;
                     udp?: boolean;
@@ -988,7 +988,7 @@ export type UpdateCustomAppDto = {
                 };
                 hostname?: string;
                 image?: string;
-                internalPort?: number;
+                internalPort?: string | number;
                 isMain?: boolean;
                 logging?: {
                     driver: string;

@@ -44,7 +44,7 @@ export class AppHelpers {
     const { appName, appStoreId } = extractAppUrn(appUrn);
 
     // Default always present env variables
-    if (config.port) {
+    if (config.port || form.port) {
       envMap.set('APP_PORT', form.port ? String(form.port) : String(config.port));
     }
     envMap.set('APP_URN', appUrn);

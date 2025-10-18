@@ -9,7 +9,7 @@ import path from 'node:path';
 import { AppsRepository } from '../apps/apps.repository';
 import type { CreateCustomAppDto, UpdateCustomAppDto } from './dto/custom-apps.dto';
 import { getFrontmatter } from '@/utils/frontmatter/frontmatter';
-import { frontmatterSchema } from '@runtipi/common/schemas';
+import { frontmatterSchema, type AppInfo } from '@runtipi/common/schemas';
 
 const APPS_FOLDER = '_user';
 
@@ -117,7 +117,7 @@ export class CustomAppService {
     const infoPath = path.join(dataDir, 'apps', appStoreId, appName, 'config.json');
 
     const main = config.services.find((s) => s.isMain) ?? config.services[0];
-    const inferredPort = main?.internalPort ?? 80;
+    const inferredPort = typeof main?.internalPort === 'number' ? main.internalPort : undefined;
 
     // Create a minimal app.info file for custom apps
     const appInfo = {
@@ -138,7 +138,15 @@ export class CustomAppService {
       tipi_version: 1,
       version: '1.0.0',
       dynamic_config: true,
-    };
+      deprecated: false,
+      force_expose: false,
+      generate_vapid_keys: false,
+      form_fields: [],
+      https: false,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      force_pull: false,
+    } satisfies AppInfo;
 
     const descriptionPath = path.join(dataDir, 'apps', appStoreId, appName, 'metadata', 'description.md');
     const descriptionContent = `---\nname: ${name}\nshort_desc: User-created custom app\nversion: 1.0.0\n---\n\n# ${name}\n\nThis is a user-created custom application.\n`;
