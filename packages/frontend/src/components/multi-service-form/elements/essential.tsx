@@ -46,7 +46,7 @@ export const EssentialConfig = ({ register, errors, serviceIndex }: Props) => {
       </div>
       <div className="col-md-6">
         <Input
-          {...register(`services.${serviceIndex}.internalPort`, { valueAsNumber: true })}
+          {...register(`services.${serviceIndex}.internalPort`)}
           error={t(errors?.services?.[serviceIndex]?.internalPort?.message as string)}
           label={
             <>
@@ -56,7 +56,6 @@ export const EssentialConfig = ({ register, errors, serviceIndex }: Props) => {
               {t('MULTI_SERVICE_ESSENTIALS_INTERNAL_PORT')} <span className="ms-1 form-help my-internal-port">?</span>
             </>
           }
-          type="number"
           placeholder="8080"
         />
       </div>

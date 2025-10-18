@@ -4,7 +4,7 @@ export const serviceSchemaArk = type({
   // Required fields
   image: type('string').configure({ message: 'CUSTOM_APP_ERROR_IMAGE_REQUIRED' }),
   name: type('string').configure({ message: 'CUSTOM_APP_ERROR_NAME_REQUIRED' }),
-  internalPort: type('0 < number.integer < 65536').configure({ message: 'CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID' }).optional(),
+  internalPort: type('string | 0 < number.integer < 65536').configure({ message: 'CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID' }).optional(),
 
   // Optional fields
   isMain: type('boolean').optional(),
@@ -50,8 +50,8 @@ export const serviceSchemaArk = type({
   }).optional(),
   addToMainNetwork: type('boolean').optional(),
   addPorts: type({
-    containerPort: type('0 < number.integer < 65536').configure({ message: 'CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID' }),
-    hostPort: type('0 < number.integer < 65536').configure({ message: 'CUSTOM_APP_ERROR_HOST_PORT_INVALID' }),
+    containerPort: type('string | 0 < number.integer < 65536').configure({ message: 'CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID' }),
+    hostPort: type('string | 0 < number.integer < 65536').configure({ message: 'CUSTOM_APP_ERROR_HOST_PORT_INVALID' }),
     udp: type('boolean').optional(),
     tcp: type('boolean').optional(),
     interface: type('string').optional(),

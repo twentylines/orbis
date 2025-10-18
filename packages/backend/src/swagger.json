@@ -3124,9 +3124,16 @@
                       "type": "string"
                     },
                     "port": {
-                      "type": "number",
-                      "maximum": 65535,
-                      "minimum": 1
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number",
+                          "maximum": 65535,
+                          "minimum": 1
+                        }
+                      ]
                     },
                     "uid": {
                       "type": "number"
@@ -3508,9 +3515,16 @@
                       "type": "string"
                     },
                     "port": {
-                      "type": "number",
-                      "maximum": 65535,
-                      "minimum": 1
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number",
+                          "maximum": 65535,
+                          "minimum": 1
+                        }
+                      ]
                     },
                     "uid": {
                       "type": "number"
@@ -3801,9 +3815,16 @@
                 "type": "string"
               },
               "port": {
-                "type": "number",
-                "maximum": 65535,
-                "minimum": 1
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number",
+                    "maximum": 65535,
+                    "minimum": 1
+                  }
+                ]
               },
               "uid": {
                 "type": "number"
@@ -4661,16 +4682,34 @@
                         "type": "object",
                         "properties": {
                           "containerPort": {
-                            "type": "integer",
-                            "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID",
-                            "exclusiveMaximum": 65536,
-                            "exclusiveMinimum": 0
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID"
+                              },
+                              {
+                                "type": "integer",
+                                "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID",
+                                "exclusiveMaximum": 65536,
+                                "exclusiveMinimum": 0
+                              }
+                            ],
+                            "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID"
                           },
                           "hostPort": {
-                            "type": "integer",
-                            "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID",
-                            "exclusiveMaximum": 65536,
-                            "exclusiveMinimum": 0
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID"
+                              },
+                              {
+                                "type": "integer",
+                                "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID",
+                                "exclusiveMaximum": 65536,
+                                "exclusiveMinimum": 0
+                              }
+                            ],
+                            "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID"
                           },
                           "interface": {
                             "type": "string"
@@ -4971,10 +5010,19 @@
                       "type": "string"
                     },
                     "internalPort": {
-                      "type": "integer",
-                      "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID",
-                      "exclusiveMaximum": 65536,
-                      "exclusiveMinimum": 0
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID"
+                        },
+                        {
+                          "type": "integer",
+                          "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID",
+                          "exclusiveMaximum": 65536,
+                          "exclusiveMinimum": 0
+                        }
+                      ],
+                      "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID"
                     },
                     "isMain": {
                       "type": "boolean"
@@ -5222,16 +5270,34 @@
                               "type": "object",
                               "properties": {
                                 "containerPort": {
-                                  "type": "integer",
-                                  "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID",
-                                  "exclusiveMaximum": 65536,
-                                  "exclusiveMinimum": 0
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID"
+                                    },
+                                    {
+                                      "type": "integer",
+                                      "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID",
+                                      "exclusiveMaximum": 65536,
+                                      "exclusiveMinimum": 0
+                                    }
+                                  ],
+                                  "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID"
                                 },
                                 "hostPort": {
-                                  "type": "integer",
-                                  "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID",
-                                  "exclusiveMaximum": 65536,
-                                  "exclusiveMinimum": 0
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID"
+                                    },
+                                    {
+                                      "type": "integer",
+                                      "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID",
+                                      "exclusiveMaximum": 65536,
+                                      "exclusiveMinimum": 0
+                                    }
+                                  ],
+                                  "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID"
                                 },
                                 "interface": {
                                   "type": "string"
@@ -5536,10 +5602,19 @@
                             "message": "CUSTOM_APP_ERROR_IMAGE_REQUIRED"
                           },
                           "internalPort": {
-                            "type": "integer",
-                            "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID",
-                            "exclusiveMaximum": 65536,
-                            "exclusiveMinimum": 0
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID"
+                              },
+                              {
+                                "type": "integer",
+                                "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID",
+                                "exclusiveMaximum": 65536,
+                                "exclusiveMinimum": 0
+                              }
+                            ],
+                            "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID"
                           },
                           "isMain": {
                             "type": "boolean"
@@ -5857,16 +5932,34 @@
                         "type": "object",
                         "properties": {
                           "containerPort": {
-                            "type": "integer",
-                            "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID",
-                            "exclusiveMaximum": 65536,
-                            "exclusiveMinimum": 0
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID"
+                              },
+                              {
+                                "type": "integer",
+                                "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID",
+                                "exclusiveMaximum": 65536,
+                                "exclusiveMinimum": 0
+                              }
+                            ],
+                            "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID"
                           },
                           "hostPort": {
-                            "type": "integer",
-                            "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID",
-                            "exclusiveMaximum": 65536,
-                            "exclusiveMinimum": 0
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID"
+                              },
+                              {
+                                "type": "integer",
+                                "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID",
+                                "exclusiveMaximum": 65536,
+                                "exclusiveMinimum": 0
+                              }
+                            ],
+                            "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID"
                           },
                           "interface": {
                             "type": "string"
@@ -6167,10 +6260,19 @@
                       "type": "string"
                     },
                     "internalPort": {
-                      "type": "integer",
-                      "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID",
-                      "exclusiveMaximum": 65536,
-                      "exclusiveMinimum": 0
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID"
+                        },
+                        {
+                          "type": "integer",
+                          "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID",
+                          "exclusiveMaximum": 65536,
+                          "exclusiveMinimum": 0
+                        }
+                      ],
+                      "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID"
                     },
                     "isMain": {
                       "type": "boolean"
@@ -6418,16 +6520,34 @@
                               "type": "object",
                               "properties": {
                                 "containerPort": {
-                                  "type": "integer",
-                                  "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID",
-                                  "exclusiveMaximum": 65536,
-                                  "exclusiveMinimum": 0
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID"
+                                    },
+                                    {
+                                      "type": "integer",
+                                      "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID",
+                                      "exclusiveMaximum": 65536,
+                                      "exclusiveMinimum": 0
+                                    }
+                                  ],
+                                  "message": "CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID"
                                 },
                                 "hostPort": {
-                                  "type": "integer",
-                                  "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID",
-                                  "exclusiveMaximum": 65536,
-                                  "exclusiveMinimum": 0
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID"
+                                    },
+                                    {
+                                      "type": "integer",
+                                      "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID",
+                                      "exclusiveMaximum": 65536,
+                                      "exclusiveMinimum": 0
+                                    }
+                                  ],
+                                  "message": "CUSTOM_APP_ERROR_HOST_PORT_INVALID"
                                 },
                                 "interface": {
                                   "type": "string"
@@ -6732,10 +6852,19 @@
                             "message": "CUSTOM_APP_ERROR_IMAGE_REQUIRED"
                           },
                           "internalPort": {
-                            "type": "integer",
-                            "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID",
-                            "exclusiveMaximum": 65536,
-                            "exclusiveMinimum": 0
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID"
+                              },
+                              {
+                                "type": "integer",
+                                "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID",
+                                "exclusiveMaximum": 65536,
+                                "exclusiveMinimum": 0
+                              }
+                            ],
+                            "message": "CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID"
                           },
                           "isMain": {
                             "type": "boolean"
