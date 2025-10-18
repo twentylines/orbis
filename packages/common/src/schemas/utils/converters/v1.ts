@@ -4,7 +4,7 @@ import type { dynamicComposeSchema, serviceSchema } from '../../dynamic-compose.
 export const serviceSchemaV1 = z.object({
   image: z.string(),
   name: z.string(),
-  internalPort: z.number().or(z.string()).optional(),
+  internalPort: z.string().or(z.number()).optional(),
   isMain: z.boolean().optional(),
   networkMode: z.string().optional(),
   extraHosts: z.array(z.string()).optional(),
@@ -32,8 +32,8 @@ export const serviceSchemaV1 = z.object({
   addPorts: z
     .array(
       z.object({
-        containerPort: z.number().or(z.string()),
-        hostPort: z.number().or(z.string()),
+        containerPort: z.string().or(z.number()),
+        hostPort: z.string().or(z.number()),
         udp: z.boolean().optional(),
         tcp: z.boolean().optional(),
         interface: z.string().optional(),
@@ -142,11 +142,9 @@ export const dynamicComposeSchemaV1 = z.object({
 });
 
 const serviceV1ToLatest = (service: Partial<z.infer<typeof serviceSchemaV1>>): z.infer<typeof serviceSchema> => {
-  const { environment, internalPort, addPorts, ...rest } = service;
+  const { environment, addPorts, ...rest } = service;
 
   const newService: Partial<z.infer<typeof serviceSchema>> = { ...rest };
-
-  newService.internalPort = internalPort ? Number(internalPort) : undefined;
 
   if (environment) {
     newService.environment = Object.entries(environment || {}).map(([key, value]) => ({ key, value }));

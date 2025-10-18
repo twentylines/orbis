@@ -113,17 +113,6 @@ schemas.forEach(({ name, serviceSchema, dynamicComposeSchema, safeParse }) => {
             expect(result.success).toBe(false);
           }
         });
-
-        it('should reject non-numeric ports', () => {
-          const service = {
-            image: 'nginx:latest',
-            name: 'web-server',
-            internalPort: 'not-a-number',
-          };
-
-          const result = safeParse(serviceSchema, service);
-          expect(result.success).toBe(false);
-        });
       });
 
       describe('Environment Variables', () => {

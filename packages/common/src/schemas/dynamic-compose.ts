@@ -5,10 +5,13 @@ export const serviceSchemaV2 = z.object({
   image: z.string('CUSTOM_APP_ERROR_IMAGE_REQUIRED'),
   name: z.string('CUSTOM_APP_ERROR_NAME_REQUIRED'),
   internalPort: z
-    .number('CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID')
-    .min(1, 'CUSTOM_APP_ERROR_INTERNAL_PORT_MIN')
-    .max(65535, 'CUSTOM_APP_ERROR_INTERNAL_PORT_MAX')
-    .or(z.string('CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID'))
+    .union([
+      z
+        .number('CUSTOM_APP_ERROR_INTERNAL_PORT_INVALID')
+        .min(1, 'CUSTOM_APP_ERROR_INTERNAL_PORT_MIN')
+        .max(65535, 'CUSTOM_APP_ERROR_INTERNAL_PORT_MAX'),
+      z.string(),
+    ])
     .optional(),
   isMain: z.boolean().optional(),
   networkMode: z.string().optional(),
@@ -37,16 +40,17 @@ export const serviceSchemaV2 = z.object({
   addPorts: z
     .array(
       z.object({
-        containerPort: z
-          .number('CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID')
-          .min(1, 'CUSTOM_APP_ERROR_CONTAINER_PORT_MIN')
-          .max(65535, 'CUSTOM_APP_ERROR_CONTAINER_PORT_MAX')
-          .or(z.string('CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID')),
-        hostPort: z
-          .number('CUSTOM_APP_ERROR_HOST_PORT_INVALID')
-          .min(1, 'CUSTOM_APP_ERROR_HOST_PORT_MIN')
-          .max(65535, 'CUSTOM_APP_ERROR_HOST_PORT_MAX')
-          .or(z.string('CUSTOM_APP_ERROR_HOST_PORT_INVALID')),
+        containerPort: z.union([
+          z
+            .number('CUSTOM_APP_ERROR_CONTAINER_PORT_INVALID')
+            .min(1, 'CUSTOM_APP_ERROR_CONTAINER_PORT_MIN')
+            .max(65535, 'CUSTOM_APP_ERROR_CONTAINER_PORT_MAX'),
+          z.string(),
+        ]),
+        hostPort: z.union([
+          z.number('CUSTOM_APP_ERROR_HOST_PORT_INVALID').min(1, 'CUSTOM_APP_ERROR_HOST_PORT_MIN').max(65535, 'CUSTOM_APP_ERROR_HOST_PORT_MAX'),
+          z.string(),
+        ]),
         udp: z.boolean().optional(),
         tcp: z.boolean().optional(),
         interface: z.string().optional(),
