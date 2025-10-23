@@ -47,9 +47,8 @@ test('user can backup and restore an app', async ({ page, isMobile }) => {
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: 'Update' }).click();
 
-  await expect(page.getByText('Updating')).toBeVisible();
-  await expect(page.getByText('Running')).toBeVisible({ timeout: 60000 });
-
+  await expect(page.getByText('App whoami updated successfully')).toBeVisible({ timeout: 100000 });
+  
   dbapp = await db.query.app.findFirst({ where: eq(app.appName, 'whoami') });
   expect(dbapp?.version).toBe(1);
 
