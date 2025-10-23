@@ -50,7 +50,7 @@ test('user can backup and restore an app', async ({ page, isMobile }) => {
   await expect(page.getByText('App whoami updated successfully')).toBeVisible({ timeout: 100000 });
   
   dbapp = await db.query.app.findFirst({ where: eq(app.appName, 'whoami') });
-  expect(dbapp?.version).toBe(1);
+  await expect(dbapp?.version).toBe(1);
 
   if (isMobile) {
     await page.getByRole('button', { name: 'More' }).click();
@@ -66,10 +66,10 @@ test('user can backup and restore an app', async ({ page, isMobile }) => {
   await expect(page.getByText('Running')).toBeVisible({ timeout: 60000 });
 
   dbapp = await db.query.app.findFirst({ where: eq(app.appName, 'whoami') });
-  expect(dbapp?.version).toBe(0);
+  await expect(dbapp?.version).toBe(0);
   file = await readFile(path.join('apps', store.slug, 'whoami', 'config.json'));
   const restoredConfig = JSON.parse(file);
-  expect(restoredConfig.tipi_version).toBe(0);
+  await expect(restoredConfig.tipi_version).toBe(0);
 });
 
 test('user config is preserved when restoring from a backup', async ({ page, isMobile }) => {
