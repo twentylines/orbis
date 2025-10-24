@@ -251,7 +251,7 @@ export type MyAppsDto = {
             version: string;
             gid?: number;
             min_tipi_version?: string;
-            port?: string | number;
+            port?: number;
             uid?: number;
             url_suffix?: string;
             website?: string;
@@ -259,6 +259,7 @@ export type MyAppsDto = {
         metadata: {
             latestVersion: number;
             localSubdomain: string;
+            composeSchemaVersion?: number;
             hasCustomConfig?: boolean;
             latestDockerVersion?: string;
             minTipiVersion?: string | null;
@@ -330,7 +331,7 @@ export type GuestAppsDto = {
             version: string;
             gid?: number;
             min_tipi_version?: string;
-            port?: string | number;
+            port?: number;
             uid?: number;
             url_suffix?: string;
             website?: string;
@@ -338,6 +339,7 @@ export type GuestAppsDto = {
         metadata: {
             latestVersion: number;
             localSubdomain: string;
+            composeSchemaVersion?: number;
             hasCustomConfig?: boolean;
             latestDockerVersion?: string;
             minTipiVersion?: string | null;
@@ -393,7 +395,7 @@ export type GetAppDto = {
         version: string;
         gid?: number;
         min_tipi_version?: string;
-        port?: string | number;
+        port?: number;
         uid?: number;
         url_suffix?: string;
         website?: string;
@@ -401,6 +403,7 @@ export type GetAppDto = {
     metadata: {
         latestVersion: number;
         localSubdomain: string;
+        composeSchemaVersion?: number;
         hasCustomConfig?: boolean;
         latestDockerVersion?: string;
         minTipiVersion?: string | null;

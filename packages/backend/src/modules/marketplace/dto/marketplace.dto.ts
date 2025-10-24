@@ -8,6 +8,7 @@ const metadataSchema = type({
   latestVersion: 'number',
   minTipiVersion: type('string').or('null').optional(),
   latestDockerVersion: 'string?',
+  composeSchemaVersion: 'number?',
 });
 
 const searchAppQuerySchema = type({

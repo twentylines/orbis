@@ -7,13 +7,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { AppDetails, AppInfo, AppMetadata } from '@/types/app.types';
 import { extractAppUrn } from '@/utils/app-helpers';
 import type { AppUrn } from '@runtipi/common/types';
-import { IconAlertCircle, IconExternalLink } from '@tabler/icons-react';
+import { CURRENT_SCHEMA_VERSION } from '@runtipi/common/schemas';
+import { IconAlertCircle, IconAlertTriangle, IconExternalLink } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { Suspense, lazy } from 'react';
 import React from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
+import clsx from 'clsx';
 
 const AppDescriptionEditor = React.lazy(() =>
   import('../../components/app-description-editor/app-description-editor').then((module) => ({ default: module.AppDescriptionEditor })),
@@ -49,6 +51,7 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
   const [currentTab, setCurrentTab] = React.useState(params.get('tab') || metaTabId);
   const [isEditing, setIsEditing] = React.useState(false);
   const [meta, setMeta] = React.useState(info.description);
+  const schemaVersion = metadata?.composeSchemaVersion;
 
   const saveMetaMutation = useMutation({
     ...updateAppMetadataMutation(),
@@ -65,6 +68,8 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
     setCurrentTab(newTab);
     navigate(`?tab=${newTab}`, { replace: true });
   };
+
+  console.log(schemaVersion);
 
   return (
     <Tabs value={currentTab} orientation="vertical" style={{ marginTop: -1 }}>
@@ -105,6 +110,19 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
             </div>
           </Alert>
         )}
+        <Alert variant="warning" className={clsx('mb-4', { 'd-none': schemaVersion === undefined || schemaVersion >= CURRENT_SCHEMA_VERSION })}>
+          <AlertIcon>
+            <IconAlertTriangle stroke={2} />
+          </AlertIcon>
+          <div>
+            <AlertHeading>{t('APP_COMPOSE_SCHEMA_OUTDATED_ALERT_TITLE')}</AlertHeading>
+            <AlertDescription>
+              {t('APP_COMPOSE_SCHEMA_OUTDATED_ALERT_SUBTITLE', {
+                version: schemaVersion,
+              })}
+            </AlertDescription>
+          </div>
+        </Alert>
         <div className="card">
           {isUserApp && (
             <div className="card-header d-flex justify-content-between align-items-center">

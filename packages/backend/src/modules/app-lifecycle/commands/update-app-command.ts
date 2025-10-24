@@ -9,6 +9,7 @@ import type { ModuleRef } from '@nestjs/core';
 import type { AppUrn } from '@runtipi/common/types';
 import type Dockerode from 'dockerode';
 import { AppLifecycleCommand } from './command';
+import { parseComposeJson } from '@runtipi/common/schemas';
 
 export class UpdateAppCommand extends AppLifecycleCommand {
   constructor(
@@ -28,6 +29,14 @@ export class UpdateAppCommand extends AppLifecycleCommand {
     const backupManager = this.moduleRef.get(BackupManager, { strict: false });
 
     try {
+      const composeToInstall = await marketplaceService.getDockerComposeJson(appUrn);
+      parseComposeJson(composeToInstall.content);
+    } catch (err) {
+      logger.error(`Error parsing docker-compose.yml for app ${appUrn} from marketplace repository. Are you running the latest version of runtipi?`);
+      return this.handleAppError(err, appUrn, 'update_error');
+    }
+
+    try {
       if (this.performBackup) {
         await dockerService.composeApp(appUrn, 'stop');
         await backupManager.backupApp(appUrn);
@@ -40,7 +49,7 @@ export class UpdateAppCommand extends AppLifecycleCommand {
       try {
         await dockerService.composeApp(appUrn, 'up --detach --force-recreate --remove-orphans');
         await dockerService.composeApp(appUrn, 'down --rmi all --remove-orphans');
-      } catch (err) {
+      } catch (_) {
         logger.warn(`App ${appUrn} has likely a broken docker-compose.yml file. Continuing with update...`);
       }
 
