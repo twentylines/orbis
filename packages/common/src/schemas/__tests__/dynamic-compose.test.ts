@@ -982,5 +982,47 @@ schemas.forEach(({ name, serviceSchema, dynamicComposeSchema, safeParse }) => {
         }
       });
     });
+
+    describe('Schema Version Validation', () => {
+      it('should accept schema version 1 and convert to version 2', () => {
+        const compose = {
+          services: [
+            {
+              image: 'nginx:latest',
+              name: 'web',
+              internalPort: 80,
+              environment: {
+                TEST: 'value',
+              },
+            },
+          ],
+        };
+
+        const result = safeParse(dynamicComposeSchema, compose);
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect((result.data as { schemaVersion: number }).schemaVersion).toBe(2);
+        }
+      });
+
+      it('should accept schema version 2', () => {
+        const compose = {
+          schemaVersion: 2 as const,
+          services: [
+            {
+              image: 'nginx:latest',
+              name: 'web',
+              internalPort: 80,
+            },
+          ],
+        };
+
+        const result = safeParse(dynamicComposeSchema, compose);
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect((result.data as { schemaVersion: number }).schemaVersion).toBe(2);
+        }
+      });
+    });
   });
 });

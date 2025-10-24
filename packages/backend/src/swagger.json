@@ -3124,16 +3124,9 @@
                       "type": "string"
                     },
                     "port": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "number",
-                          "maximum": 65535,
-                          "minimum": 1
-                        }
-                      ]
+                      "type": "number",
+                      "maximum": 65535,
+                      "minimum": 1
                     },
                     "uid": {
                       "type": "number"
@@ -3179,6 +3172,9 @@
                     },
                     "localSubdomain": {
                       "type": "string"
+                    },
+                    "composeSchemaVersion": {
+                      "type": "number"
                     },
                     "hasCustomConfig": {
                       "type": "boolean"
@@ -3515,16 +3511,9 @@
                       "type": "string"
                     },
                     "port": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "number",
-                          "maximum": 65535,
-                          "minimum": 1
-                        }
-                      ]
+                      "type": "number",
+                      "maximum": 65535,
+                      "minimum": 1
                     },
                     "uid": {
                       "type": "number"
@@ -3570,6 +3559,9 @@
                     },
                     "localSubdomain": {
                       "type": "string"
+                    },
+                    "composeSchemaVersion": {
+                      "type": "number"
                     },
                     "hasCustomConfig": {
                       "type": "boolean"
@@ -3815,16 +3807,9 @@
                 "type": "string"
               },
               "port": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "number",
-                    "maximum": 65535,
-                    "minimum": 1
-                  }
-                ]
+                "type": "number",
+                "maximum": 65535,
+                "minimum": 1
               },
               "uid": {
                 "type": "number"
@@ -3870,6 +3855,9 @@
               },
               "localSubdomain": {
                 "type": "string"
+              },
+              "composeSchemaVersion": {
+                "type": "number"
               },
               "hasCustomConfig": {
                 "type": "boolean"

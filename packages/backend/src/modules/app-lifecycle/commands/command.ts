@@ -10,6 +10,7 @@ import type { ModuleRef } from '@nestjs/core';
 import { parseComposeJson } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import * as Sentry from '@sentry/nestjs';
+import { type } from 'arktype';
 import Dockerode from 'dockerode';
 import { ZodError } from 'zod';
 import { fromError } from 'zod-validation-error';
@@ -33,10 +34,10 @@ export class AppLifecycleCommand {
 
     logger.info('Pruned containers:', pruned.ContainersDeleted, 'Space reclaimed:', pruned.SpaceReclaimed / 1024 / 1024, 'MB');
 
-    const composeJson = await appFilesManager.getDockerComposeJson(appUrn);
-
+    let composeJson = await appFilesManager.getDockerComposeJson(appUrn);
     if (!composeJson.content) {
       await marketplaceService.copyAppFromRepoToInstalled(appUrn);
+      composeJson = await appFilesManager.getDockerComposeJson(appUrn);
     }
 
     try {
@@ -54,6 +55,12 @@ export class AppLifecycleCommand {
       await appFilesManager.writeDockerComposeYml(appUrn, composeFile);
     } catch (err) {
       logger.error(`Error generating docker-compose.yml file for app ${appUrn}`);
+
+      if (err instanceof type.errors) {
+        logger.error(err.summary);
+        logger.error('Report this issue to the appstore maintainer.');
+        throw new Error(`Error generating docker-compose.yml file for app ${appUrn}.\n${err.summary}\nReport this issue to the appstore maintainer.`);
+      }
 
       if (err instanceof ZodError) {
         logger.error(fromError(err).toString());

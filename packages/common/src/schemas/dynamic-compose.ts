@@ -1,6 +1,18 @@
 import { z } from 'zod';
 import { dynamicComposeSchemaV1 } from './utils/converters/v1.js';
 
+/**
+ * Minimum supported schema version
+ * Apps with schema version below this will be blocked from installation/update
+ */
+export const MIN_SCHEMA_VERSION = 1;
+
+/**
+ * Current schema version
+ * Apps below this version will show a deprecation warning
+ */
+export const CURRENT_SCHEMA_VERSION = 2;
+
 export const serviceSchemaV2 = z.object({
   image: z.string('CUSTOM_APP_ERROR_IMAGE_REQUIRED'),
   name: z.string('CUSTOM_APP_ERROR_NAME_REQUIRED'),
