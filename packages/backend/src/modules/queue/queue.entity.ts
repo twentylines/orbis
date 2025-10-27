@@ -18,33 +18,39 @@ export class Queue<T extends z.ZodType, R extends z.ZodType<{ success: boolean; 
   ) {}
 
   public onEvent(callback: (data: z.output<T> & { eventId: string }, reply: (response: z.input<R>) => Promise<void>) => Promise<void>) {
-    this.rabbit.createConsumer({ queue: this.queueName, concurrency: this.workers }, async (req, reply) => {
-      let rpcSuccess = false;
-      let rpcResultMessage = '';
+    try {
+      this.rabbit.createConsumer({ queue: this.queueName, concurrency: this.workers }, async (req, reply) => {
+        let rpcSuccess = false;
+        let rpcResultMessage = '';
 
-      try {
-        await callback(req.body, reply);
-        rpcSuccess = true;
-        rpcResultMessage = 'RPC processed successfully.';
-      } catch (error) {
-        this.logger.error('Error in consumer callback:', error);
-        await reply({ success: false, message: (error as Error)?.message });
-        rpcSuccess = false;
-        rpcResultMessage = error instanceof Error ? error.message : String(error);
-      } finally {
-        const eventToPublish = {
-          queueName: this.queueName,
-          requestData: req.body,
-          rpcStatus: rpcSuccess ? 'success' : 'failure',
-          rpcMessage: rpcResultMessage,
-          requestId: req.body.requestId,
-          timestamp: new Date().toISOString(),
-        };
+        try {
+          await callback(req.body, reply);
+          rpcSuccess = true;
+          rpcResultMessage = 'RPC processed successfully.';
+        } catch (error) {
+          this.logger.error('Error in consumer callback:', error);
+          await reply({ success: false, message: (error as Error)?.message });
+          rpcSuccess = false;
+          rpcResultMessage = error instanceof Error ? error.message : String(error);
+        } finally {
+          const eventToPublish = {
+            queueName: this.queueName,
+            requestData: req.body,
+            rpcStatus: rpcSuccess ? 'success' : 'failure',
+            rpcMessage: rpcResultMessage,
+            requestId: req.body.requestId,
+            timestamp: new Date().toISOString(),
+          };
 
-        const routingKey = `rpc.${rpcSuccess ? 'processed' : 'error'}.${this.queueName}`;
-        await this.publisher.publish(routingKey, eventToPublish);
-      }
-    });
+          const routingKey = `rpc.${rpcSuccess ? 'processed' : 'error'}.${this.queueName}`;
+          await this.publisher.publish(routingKey, eventToPublish);
+        }
+      });
+    } catch (error) {
+      this.logger.error(`Failed to create consumer for queue ${this.queueName}:`, error);
+      Sentry.captureException(error, { tags: { queueName: this.queueName, action: 'onEvent' } });
+      throw error;
+    }
   }
 
   async publish(event: z.input<T>): Promise<{ success: boolean; message: string } | z.infer<R>> {
