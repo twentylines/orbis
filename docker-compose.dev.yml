@@ -41,14 +41,11 @@ services:
 
   runtipi-queue:
     container_name: runtipi-queue
-    image: cloudamqp/lavinmq
-    healthcheck:
-      test: ["CMD-SHELL", "lavinmqctl status"]
-      interval: 5s
-      timeout: 10s
-      retries: 20
-      start_period: 5s
+    image: rabbitmq:4-alpine
     restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: tipi
+      RABBITMQ_DEFAULT_PASS: tipi
     networks:
       - tipi_main_network
 
@@ -60,7 +57,7 @@ services:
       runtipi-db:
         condition: service_healthy
       runtipi-queue:
-        condition: service_healthy
+        condition: service_started
     container_name: runtipi
     restart: unless-stopped
     healthcheck:
@@ -101,8 +98,8 @@ services:
       NODE_ENV: development
       ROOT_FOLDER_HOST: ${PWD}/.internal
       POSTGRES_PASSWORD: postgres
-      RABBITMQ_USERNAME: guest
-      RABBITMQ_PASSWORD: guest
+      RABBITMQ_USERNAME: tipi
+      RABBITMQ_PASSWORD: tipi
       RABBITMQ_HOST: runtipi-queue
       INTERNAL_IP: 127.0.0.1
       TIPI_VERSION: 3.10.0
@@ -150,3 +147,10 @@ networks:
 
 volumes:
   pgdata:
+
+configs:
+  lavinmq_config:
+    content: |
+      [main]
+      default_user = tipi
+      default_password = AtdKsskaTuE5gD+Sbr9bv0Fzruei6VxDDGzqzQxIV1GsY7PV

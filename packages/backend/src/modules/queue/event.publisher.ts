@@ -20,6 +20,7 @@ export class EventPublisher {
             exchange: this.eventExchange,
             type: 'topic',
             durable: true,
+            autoDelete: false,
           },
         ],
       });
