@@ -147,10 +147,3 @@ networks:
 
 volumes:
   pgdata:
-
-configs:
-  lavinmq_config:
-    content: |
-      [main]
-      default_user = tipi
-      default_password = AtdKsskaTuE5gD+Sbr9bv0Fzruei6VxDDGzqzQxIV1GsY7PV
