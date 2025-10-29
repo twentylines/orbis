@@ -41,8 +41,11 @@ services:
 
   runtipi-queue:
     container_name: runtipi-queue
-    image: cloudamqp/lavinmq
+    image: rabbitmq:4-alpine
     restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: tipi
+      RABBITMQ_DEFAULT_PASS: tipi
     networks:
       - tipi_main_network
 
@@ -92,8 +95,8 @@ services:
       NODE_ENV: production
       ROOT_FOLDER_HOST: ${PWD}/.internal
       POSTGRES_PASSWORD: postgres
-      RABBITMQ_USERNAME: guest
-      RABBITMQ_PASSWORD: guest
+      RABBITMQ_USERNAME: tipi
+      RABBITMQ_PASSWORD: tipi
       RABBITMQ_HOST: runtipi-queue
       INTERNAL_IP: 127.0.0.1
       TIPI_VERSION: 0.0.0
