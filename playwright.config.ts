@@ -6,7 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 // biome-ignore lint/style/noDefaultExport: needed for Playwright to work
 export default defineConfig({
-  globalSetup: require.resolve('./e2e/helpers/global-setup'),
+  globalSetup: './e2e/helpers/global-setup',
   testDir: './e2e',
   /* Run tests in files in parallel */
   fullyParallel: false,
