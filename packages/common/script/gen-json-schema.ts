@@ -6,7 +6,7 @@ import { dynamicComposeSchemaArk } from '../src/schemas/dynamic-compose-ark.js';
 import { dynamicComposeSchemaV1 } from '../src/schemas/utils/converters/v1.js';
 
 const dynamicCompose = z.toJSONSchema(dynamicComposeUnion, { unrepresentable: 'any' });
-const appInfo = z.toJSONSchema(appInfoSchema, { unrepresentable: 'any' });
+const appInfo = z.toJSONSchema(appInfoSchema.omit({ urn: true }), { unrepresentable: 'any', io: 'input' });
 
 const outDir = './json-schemas';
 

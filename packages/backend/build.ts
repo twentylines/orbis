@@ -1,9 +1,10 @@
 await Bun.build({
   entrypoints: ['./src/main.ts'],
   outdir: './dist',
+  format: 'esm',
   target: 'node',
   env: 'disable',
-  sourcemap: 'linked',
+  sourcemap: 'external',
   minify: {
     keepNames: true,
     whitespace: true,
