@@ -194,6 +194,7 @@ export type MyAppsDto = {
             exposed: boolean;
             exposedLocal: boolean;
             id: number;
+            ignoredVersion: number | null;
             isVisibleOnGuestDashboard: boolean;
             openPort: boolean;
             pendingRestart: boolean;
@@ -274,6 +275,7 @@ export type GuestAppsDto = {
             exposed: boolean;
             exposedLocal: boolean;
             id: number;
+            ignoredVersion: number | null;
             isVisibleOnGuestDashboard: boolean;
             openPort: boolean;
             pendingRestart: boolean;
@@ -413,6 +415,7 @@ export type GetAppDto = {
         exposed: boolean;
         exposedLocal: boolean;
         id: number;
+        ignoredVersion: number | null;
         isVisibleOnGuestDashboard: boolean;
         openPort: boolean;
         pendingRestart: boolean;
@@ -1377,6 +1380,32 @@ export type GetAppConfigDiffResponses = {
 };
 
 export type GetAppConfigDiffResponse = GetAppConfigDiffResponses[keyof GetAppConfigDiffResponses];
+
+export type IgnoreAppVersionData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/apps/{urn}/ignore-version';
+};
+
+export type IgnoreAppVersionResponses = {
+    200: unknown;
+};
+
+export type UnignoreAppVersionData = {
+    body?: never;
+    path: {
+        urn: string;
+    };
+    query?: never;
+    url: '/api/apps/{urn}/unignore-version';
+};
+
+export type UnignoreAppVersionResponses = {
+    200: unknown;
+};
 
 export type SearchAppsData = {
     body?: never;

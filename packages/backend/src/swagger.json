@@ -620,6 +620,52 @@
         ]
       }
     },
+    "/api/apps/{urn}/ignore-version": {
+      "patch": {
+        "operationId": "ignoreAppVersion",
+        "parameters": [
+          {
+            "name": "urn",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Apps"
+        ]
+      }
+    },
+    "/api/apps/{urn}/unignore-version": {
+      "patch": {
+        "operationId": "unignoreAppVersion",
+        "parameters": [
+          {
+            "name": "urn",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Apps"
+        ]
+      }
+    },
     "/api/marketplace/apps/search": {
       "get": {
         "operationId": "searchApps",
@@ -2854,6 +2900,16 @@
                     "id": {
                       "type": "number"
                     },
+                    "ignoredVersion": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "isVisibleOnGuestDashboard": {
                       "type": "boolean"
                     },
@@ -2921,6 +2977,7 @@
                     "exposed",
                     "exposedLocal",
                     "id",
+                    "ignoredVersion",
                     "isVisibleOnGuestDashboard",
                     "openPort",
                     "pendingRestart",
@@ -3241,6 +3298,16 @@
                     "id": {
                       "type": "number"
                     },
+                    "ignoredVersion": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "isVisibleOnGuestDashboard": {
                       "type": "boolean"
                     },
@@ -3308,6 +3375,7 @@
                     "exposed",
                     "exposedLocal",
                     "id",
+                    "ignoredVersion",
                     "isVisibleOnGuestDashboard",
                     "openPort",
                     "pendingRestart",
@@ -3905,6 +3973,16 @@
                   "id": {
                     "type": "number"
                   },
+                  "ignoredVersion": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "isVisibleOnGuestDashboard": {
                     "type": "boolean"
                   },
@@ -3972,6 +4050,7 @@
                   "exposed",
                   "exposedLocal",
                   "id",
+                  "ignoredVersion",
                   "isVisibleOnGuestDashboard",
                   "openPort",
                   "pendingRestart",

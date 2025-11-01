@@ -498,7 +498,9 @@ export class AppLifecycleService {
 
   async updateAllApps() {
     const installedApps = await this.appsService.getInstalledApps();
-    const availableUpdates = installedApps.filter(({ app, metadata }) => Number(app.version) < Number(metadata.latestVersion));
+    const availableUpdates = installedApps.filter(
+      ({ app, metadata }) => Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion,
+    );
 
     for (const { app } of availableUpdates) {
       try {
