@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "nest start --watch --preserveWatchOutput",
     "bundle": "rm -rf dist && bun build.ts",
-    "tsc": "tsc --noEmit",
+    "tsc": "npx tsgo --noEmit",
     "sentry:sourcemaps": "sentry-cli sourcemaps inject --org runtipi --project runtipi-backend ./dist && sentry-cli sourcemaps upload --org runtipi --project runtipi-backend ./dist",
     "test": "vitest --coverage --watch=false",
     "test:integration": "vitest --watch=false --config ./vitest.integration.config.mts",
@@ -91,6 +91,7 @@
     "@types/supertest": "^6.0.3",
     "@types/validator": "^13.15.0",
     "@types/web-push": "^3.6.4",
+    "@typescript/native-preview": "^7.0.0-dev.20251102.1",
     "@vercel/ncc": "^0.38.4",
     "@vitest/coverage-v8": "^4.0.6",
     "drizzle-kit": "^0.31.1",
