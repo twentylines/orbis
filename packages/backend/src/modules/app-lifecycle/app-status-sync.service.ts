@@ -93,8 +93,8 @@ export class AppStatusSyncService {
         const dockerStatus = dockerStatusMap.get(appUrn);
         let newStatus: AppStatus;
 
-        if (!dockerStatus || dockerStatus.total === 0) {
-          newStatus = 'missing';
+        if (!dockerStatus) {
+          newStatus = 'stopped';
         } else if (dockerStatus.running === dockerStatus.total) {
           newStatus = 'running';
         } else {
