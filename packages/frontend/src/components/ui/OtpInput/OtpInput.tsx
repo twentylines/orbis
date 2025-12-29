@@ -135,7 +135,8 @@ export const OtpInput = ({ value, valueLength, onChange, className }: Props) => 
   };
 
   return (
-    <div className="otp-group">
+    // biome-ignore lint/a11y/noAutofocus: Required for better UX
+    <div className="otp-group" autoFocus>
       {valueItems.map((digit, idx) => (
         <input
           aria-label={`digit-${idx}`}
