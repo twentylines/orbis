@@ -66,7 +66,7 @@ export const serviceSchemaArk = type({
     shared: type('boolean').optional(),
     private: type('boolean').optional(),
     bind: type({
-      propagation: type("'rprivate' | 'private' | 'rshared' | 'shared' | 'rslave' | 'slave'"),
+      propagation: "'rprivate' | 'private' | 'rshared' | 'shared' | 'rslave' | 'slave'",
     }).optional(),
   })
     .array()
@@ -145,6 +145,7 @@ export const serviceSchemaArk = type({
     .configure({ message: 'CUSTOM_APP_ERROR_LABEL_KEY_INVALID' })
     .optional(),
   dns: type('string | string[]').configure({ message: 'CUSTOM_APP_ERROR_DNS_INVALID' }).optional(),
+  restart: type("'no' | 'always' | 'on-failure' | 'unless-stopped'").optional(),
 });
 
 // dynamicComposeSchemaV2

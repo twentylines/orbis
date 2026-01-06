@@ -9,7 +9,8 @@ import type { ModuleRef } from '@nestjs/core';
 import type { AppUrn } from '@runtipi/common/types';
 import type Dockerode from 'dockerode';
 import { AppLifecycleCommand } from './command';
-import { parseComposeJson } from '@runtipi/common/schemas';
+import { dynamicComposeSchemaYaml } from '@runtipi/common/schemas';
+import { type } from 'arktype';
 
 export class UpdateAppCommand extends AppLifecycleCommand {
   constructor(
@@ -28,12 +29,12 @@ export class UpdateAppCommand extends AppLifecycleCommand {
     const appHelpers = this.moduleRef.get(AppHelpers, { strict: false });
     const backupManager = this.moduleRef.get(BackupManager, { strict: false });
 
-    try {
-      const composeToInstall = await marketplaceService.getDockerComposeJson(appUrn);
-      parseComposeJson(composeToInstall.content);
-    } catch (err) {
-      logger.error(`Error parsing docker-compose.yml for app ${appUrn} from marketplace repository. Are you running the latest version of runtipi?`);
-      return this.handleAppError(err, appUrn, 'update_error');
+    const composeToInstall = await marketplaceService.getDockerComposeJson(appUrn);
+    const compose = dynamicComposeSchemaYaml(composeToInstall.content);
+
+    if (compose instanceof type.errors) {
+      logger.error('Compose JSON validation errors:', compose.summary);
+      return this.handleAppError(compose.summary, appUrn, 'update_error');
     }
 
     try {
@@ -50,7 +51,7 @@ export class UpdateAppCommand extends AppLifecycleCommand {
         await dockerService.composeApp(appUrn, 'up --detach --force-recreate --remove-orphans');
         await dockerService.composeApp(appUrn, 'down --rmi all --remove-orphans');
       } catch (_) {
-        logger.warn(`App ${appUrn} has likely a broken docker-compose.yml file. Continuing with update...`);
+        logger.warn(`App ${appUrn} has likely a broken compose file. Continuing with update...`);
       }
 
       await appFilesManager.deleteAppFolder(appUrn);

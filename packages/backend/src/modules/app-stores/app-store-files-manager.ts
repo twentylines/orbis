@@ -1,11 +1,12 @@
 import path from 'node:path';
+import { APP_REL_COMPOSE_FILENAME } from '@/common/constants';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
 import { execAsync } from '@/common/helpers/exec-helpers';
 import type { ConfigurationService } from '@/core/config/configuration.service';
 import type { AppStore } from '@/core/database/drizzle/types';
 import type { FilesystemService } from '@/core/filesystem/filesystem.service';
 import type { LoggerService } from '@/core/logger/logger.service';
-import { appInfoSchema } from '@runtipi/common/schemas';
+import { appInfoSchema, convertLegacyToYaml } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
 
@@ -100,9 +101,25 @@ export class AppStoreFilesManager {
   public async getDockerComposeJson(appUrn: AppUrn) {
     const { appRepoDir } = this.getAppPaths(appUrn);
 
-    const dockerComposePath = path.join(appRepoDir, 'docker-compose.json');
+    const appYamlPath = path.join(appRepoDir, APP_REL_COMPOSE_FILENAME);
 
     let content = null;
+
+    try {
+      if (await this.filesystem.pathExists(appYamlPath)) {
+        content = await this.filesystem.readYamlFile(appYamlPath);
+      }
+    } catch (error) {
+      this.logger.error(`Error getting ${APP_REL_COMPOSE_FILENAME} for app ${appUrn} from repo ${this.storeConfig.slug}:`, error);
+    }
+
+    if (content && typeof content === 'object' && 'x-runtipi' in content) {
+      return { path: appYamlPath, content };
+    }
+
+    // Fallback to legacy docker-compose.json
+    const dockerComposePath = path.join(appRepoDir, 'docker-compose.json');
+
     try {
       if (await this.filesystem.pathExists(dockerComposePath)) {
         content = await this.filesystem.readJsonFile(dockerComposePath);
@@ -111,7 +128,7 @@ export class AppStoreFilesManager {
       this.logger.error(`Error getting docker-compose.json for app ${appUrn} from repo ${this.storeConfig.slug}:`, error);
     }
 
-    return { path: dockerComposePath, content };
+    return { path: dockerComposePath, content: convertLegacyToYaml(content) };
   }
 
   /**
