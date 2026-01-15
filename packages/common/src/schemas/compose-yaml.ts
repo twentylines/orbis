@@ -2,7 +2,7 @@ import { type } from 'arktype';
 
 const xRuntipiService = type({
   is_main: 'boolean?',
-  internal_port: 'number?',
+  internal_port: 'number | string?',
   add_to_main_network: 'boolean?',
 });
 

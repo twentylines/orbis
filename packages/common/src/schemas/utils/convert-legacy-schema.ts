@@ -123,8 +123,8 @@ const convertService = (service: Partial<Service>) => {
     : undefined;
 
   const xRuntipiMeta: Record<string, unknown> = {};
-  if (internalPort !== undefined) {
-    xRuntipiMeta.internal_port = Number(internalPort);
+  if (internalPort !== undefined && internalPort !== null) {
+    xRuntipiMeta.internal_port = internalPort;
   }
   if (addToMainNetwork !== undefined) {
     xRuntipiMeta.add_to_main_network = addToMainNetwork;

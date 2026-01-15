@@ -142,6 +142,7 @@ export class AppFilesManager {
         const compose = dynamicComposeSchemaYaml(convertLegacyToYaml(jsonContent));
 
         if (compose instanceof type.errors) {
+          this.logger.error(compose.summary);
           throw new Error(`Invalid docker-compose.json format for app ${appUrn}.`);
         }
 

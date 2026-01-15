@@ -4851,7 +4851,14 @@
                           "type": "boolean"
                         },
                         "internal_port": {
-                          "type": "number"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
                         },
                         "is_main": {
                           "type": "boolean"
@@ -4943,7 +4950,14 @@
                                     "type": "boolean"
                                   },
                                   "internal_port": {
-                                    "type": "number"
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "string"
+                                      }
+                                    ]
                                   },
                                   "is_main": {
                                     "type": "boolean"
@@ -5075,7 +5089,14 @@
                           "type": "boolean"
                         },
                         "internal_port": {
-                          "type": "number"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
                         },
                         "is_main": {
                           "type": "boolean"
@@ -5167,7 +5188,14 @@
                                     "type": "boolean"
                                   },
                                   "internal_port": {
-                                    "type": "number"
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "string"
+                                      }
+                                    ]
                                   },
                                   "is_main": {
                                     "type": "boolean"
