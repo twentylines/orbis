@@ -604,7 +604,7 @@ export type CreateCustomAppDto = {
                 ports?: Array<unknown>;
                 'x-runtipi'?: {
                     add_to_main_network?: boolean;
-                    internal_port?: number;
+                    internal_port?: number | string;
                     is_main?: boolean;
                 };
                 [key: string]: unknown | string | {
@@ -613,7 +613,7 @@ export type CreateCustomAppDto = {
                     [key: string]: unknown;
                 } | Array<string> | Array<unknown> | {
                     add_to_main_network?: boolean;
-                    internal_port?: number;
+                    internal_port?: number | string;
                     is_main?: boolean;
                 } | undefined;
             };
@@ -634,7 +634,7 @@ export type CreateCustomAppDto = {
                         ports?: Array<unknown>;
                         'x-runtipi'?: {
                             add_to_main_network?: boolean;
-                            internal_port?: number;
+                            internal_port?: number | string;
                             is_main?: boolean;
                         };
                         [key: string]: unknown | string | {
@@ -643,7 +643,7 @@ export type CreateCustomAppDto = {
                             [key: string]: unknown;
                         } | Array<string> | Array<unknown> | {
                             add_to_main_network?: boolean;
-                            internal_port?: number;
+                            internal_port?: number | string;
                             is_main?: boolean;
                         } | undefined;
                     };
@@ -665,7 +665,7 @@ export type CreateCustomAppDto = {
                 ports?: Array<unknown>;
                 'x-runtipi'?: {
                     add_to_main_network?: boolean;
-                    internal_port?: number;
+                    internal_port?: number | string;
                     is_main?: boolean;
                 };
                 [key: string]: unknown | string | {
@@ -674,7 +674,7 @@ export type CreateCustomAppDto = {
                     [key: string]: unknown;
                 } | Array<string> | Array<unknown> | {
                     add_to_main_network?: boolean;
-                    internal_port?: number;
+                    internal_port?: number | string;
                     is_main?: boolean;
                 } | undefined;
             };
@@ -694,7 +694,7 @@ export type CreateCustomAppDto = {
                         ports?: Array<unknown>;
                         'x-runtipi'?: {
                             add_to_main_network?: boolean;
-                            internal_port?: number;
+                            internal_port?: number | string;
                             is_main?: boolean;
                         };
                         [key: string]: unknown | string | {
@@ -703,7 +703,7 @@ export type CreateCustomAppDto = {
                             [key: string]: unknown;
                         } | Array<string> | Array<unknown> | {
                             add_to_main_network?: boolean;
-                            internal_port?: number;
+                            internal_port?: number | string;
                             is_main?: boolean;
                         } | undefined;
                     };
@@ -736,7 +736,7 @@ export type UpdateCustomAppDto = {
                 ports?: Array<unknown>;
                 'x-runtipi'?: {
                     add_to_main_network?: boolean;
-                    internal_port?: number;
+                    internal_port?: number | string;
                     is_main?: boolean;
                 };
                 [key: string]: unknown | string | {
@@ -745,7 +745,7 @@ export type UpdateCustomAppDto = {
                     [key: string]: unknown;
                 } | Array<string> | Array<unknown> | {
                     add_to_main_network?: boolean;
-                    internal_port?: number;
+                    internal_port?: number | string;
                     is_main?: boolean;
                 } | undefined;
             };
@@ -766,7 +766,7 @@ export type UpdateCustomAppDto = {
                         ports?: Array<unknown>;
                         'x-runtipi'?: {
                             add_to_main_network?: boolean;
-                            internal_port?: number;
+                            internal_port?: number | string;
                             is_main?: boolean;
                         };
                         [key: string]: unknown | string | {
@@ -775,7 +775,7 @@ export type UpdateCustomAppDto = {
                             [key: string]: unknown;
                         } | Array<string> | Array<unknown> | {
                             add_to_main_network?: boolean;
-                            internal_port?: number;
+                            internal_port?: number | string;
                             is_main?: boolean;
                         } | undefined;
                     };
@@ -797,7 +797,7 @@ export type UpdateCustomAppDto = {
                 ports?: Array<unknown>;
                 'x-runtipi'?: {
                     add_to_main_network?: boolean;
-                    internal_port?: number;
+                    internal_port?: number | string;
                     is_main?: boolean;
                 };
                 [key: string]: unknown | string | {
@@ -806,7 +806,7 @@ export type UpdateCustomAppDto = {
                     [key: string]: unknown;
                 } | Array<string> | Array<unknown> | {
                     add_to_main_network?: boolean;
-                    internal_port?: number;
+                    internal_port?: number | string;
                     is_main?: boolean;
                 } | undefined;
             };
@@ -826,7 +826,7 @@ export type UpdateCustomAppDto = {
                         ports?: Array<unknown>;
                         'x-runtipi'?: {
                             add_to_main_network?: boolean;
-                            internal_port?: number;
+                            internal_port?: number | string;
                             is_main?: boolean;
                         };
                         [key: string]: unknown | string | {
@@ -835,7 +835,7 @@ export type UpdateCustomAppDto = {
                             [key: string]: unknown;
                         } | Array<string> | Array<unknown> | {
                             add_to_main_network?: boolean;
-                            internal_port?: number;
+                            internal_port?: number | string;
                             is_main?: boolean;
                         } | undefined;
                     };
