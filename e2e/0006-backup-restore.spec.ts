@@ -52,15 +52,13 @@ test('user can backup and restore an app', async ({ page, isMobile }) => {
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('Review the new configuration of the app')).toBeVisible();
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.getByText('Review the changes in the docker-compose file')).toBeVisible();
-  await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('It is highly recommended to backup')).toBeVisible();
   await page.getByRole('button', { name: 'Update' }).click();
 
   await expect(page.getByText('App whoami updated successfully')).toBeVisible({ timeout: 100000 });
 
   dbapp = await db.query.app.findFirst({ where: eq(app.appName, 'whoami') });
-  await expect(dbapp?.version).toBe(1);
+  expect(dbapp?.version).toBe(1);
 
   if (isMobile) {
     await page.getByRole('button', { name: 'More' }).click();
