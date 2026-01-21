@@ -1,5 +1,4 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import * as yaml from 'yaml';
 import type { AppUrn } from '@runtipi/common/types';
 import { AppsRepository } from '../apps/apps.repository';
 import { TranslatableError } from '@/common/error/translatable-error';
@@ -21,13 +20,13 @@ export class UserConfigService {
     const app = await this.appsService.getApp(appUrn);
     const userComposeFile = await this.appFilesManager.getUserComposeFile(appUrn);
     const userEnvFile = await this.appFilesManager.getUserEnv(appUrn);
-    const sourceCompose = await this.appFilesManager.getSourceDockerComposeYaml(appUrn);
+    const sourceCompose = await this.appFilesManager.getGeneratedDockerComposeYaml(appUrn);
     const actualEnv = await this.appFilesManager.getAppEnv(appUrn);
 
     return {
       dockerCompose: userComposeFile.content || null,
       appEnv: userEnvFile.content || null,
-      sourceCompose: sourceCompose.content ? yaml.stringify(sourceCompose.content) : null,
+      sourceCompose: sourceCompose.content,
       actualEnv: actualEnv.content || null,
       isEnabled: app.app?.userConfigEnabled ?? true,
     };

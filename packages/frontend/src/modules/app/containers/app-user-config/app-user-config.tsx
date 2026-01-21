@@ -59,6 +59,18 @@ export const AppUserConfigEditors = ({
   const [activeTab, setActiveTab] = useState('docker-compose');
 
   const [dockerCompose, setDockerCompose] = useState(initialDockerCompose ?? '');
+
+  const placeholder = `# Add your docker-compose overrides here.
+# For example, to add a new environment variable to the main service:
+#
+# services:
+#   main:
+#     environment:
+#       - MY_VAR=my-value
+#
+# The overrides will be merged with the generated docker-compose.yml file.
+`;
+
   const appEnv = initialAppEnv ?? '';
   const [isEnabled, setIsEnabled] = useState(initialIsEnabled ?? true);
 
@@ -132,7 +144,7 @@ export const AppUserConfigEditors = ({
               </div>
               <CodeMirror
                 readOnly={!isEnabled}
-                value={dockerCompose}
+                value={dockerCompose || (isEnabled ? placeholder : '')}
                 height="400px"
                 extensions={[yaml()]}
                 onChange={(value) => setDockerCompose(value)}
