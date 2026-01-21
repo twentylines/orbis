@@ -27,3 +27,5 @@ export const pLimit = (concurrency: number) => {
 };
 
 export const notEmpty = <TValue>(value: TValue | null | undefined): value is TValue => value !== null && value !== undefined;
+
+export const sanitizeFilename = (filename: string) => filename.replace(/[^a-zA-Z0-9._:-]/g, '');

@@ -1,4 +1,5 @@
 import { castAppUrn } from '@/common/helpers/app-helpers';
+import { sanitizeFilename } from '@/common/helpers/file-helpers';
 import {
   BadRequestException,
   Body,
@@ -37,7 +38,13 @@ export class BackupsController {
   @Post(':urn/restore')
   @ApiResponse({ type: BackupRequestDto })
   async restoreAppBackup(@Param('urn') urn: string, @Body() body: RestoreAppBackupDto) {
-    const res = await this.backupsService.restoreApp({ appUrn: castAppUrn(urn), filename: body.filename });
+    const sanitizedFilename = sanitizeFilename(body.filename);
+
+    if (sanitizedFilename !== body.filename || !sanitizedFilename.endsWith('.tar.gz')) {
+      throw new BadRequestException('Invalid backup filename');
+    }
+
+    const res = await this.backupsService.restoreApp({ appUrn: castAppUrn(urn), filename: sanitizedFilename });
     return BackupRequestDto.parse(res, { reportOnly: true });
   }
 
@@ -51,13 +58,25 @@ export class BackupsController {
 
   @Delete(':urn')
   async deleteAppBackup(@Param('urn') urn: string, @Body() body: DeleteAppBackupBodyDto) {
-    return this.backupsService.deleteAppBackup({ appUrn: castAppUrn(urn), filename: body.filename });
+    const sanitizedFilename = sanitizeFilename(body.filename);
+
+    if (sanitizedFilename !== body.filename || !sanitizedFilename.endsWith('.tar.gz')) {
+      throw new BadRequestException('Invalid backup filename');
+    }
+
+    return this.backupsService.deleteAppBackup({ appUrn: castAppUrn(urn), filename: sanitizedFilename });
   }
 
   @Get(':urn/:filename/download')
   @ApiResponse({ status: 200, description: 'Backup file download' })
   async downloadBackup(@Param('urn') urn: string, @Param('filename') filename: string, @Res() res: Response) {
-    const filePath = await this.backupsService.getBackupFilePath({ appUrn: castAppUrn(urn), filename });
+    const sanitizedFilename = sanitizeFilename(filename);
+
+    if (sanitizedFilename !== filename || !sanitizedFilename.endsWith('.tar.gz')) {
+      throw new BadRequestException('Invalid backup filename');
+    }
+
+    const filePath = await this.backupsService.getBackupFilePath({ appUrn: castAppUrn(urn), filename: sanitizedFilename });
 
     res.set({
       'Content-Type': 'application/gzip',
@@ -87,13 +106,19 @@ export class BackupsController {
       throw new BadRequestException('No backup file provided');
     }
 
-    if (!file.originalname.endsWith('.tar.gz') && file.mimetype !== 'application/gzip' && file.mimetype !== 'application/x-gzip') {
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+
+    if (sanitizedFilename !== file.originalname) {
+      throw new BadRequestException('Invalid backup filename');
+    }
+
+    if (!sanitizedFilename.endsWith('.tar.gz') && file.mimetype !== 'application/gzip' && file.mimetype !== 'application/x-gzip') {
       throw new BadRequestException('File must be a .tar.gz backup file');
     }
 
     await this.backupsService.uploadBackup({
       appUrn: castAppUrn(urn),
-      filename: file.originalname,
+      filename: sanitizedFilename,
       fileBuffer: file.buffer,
     });
 

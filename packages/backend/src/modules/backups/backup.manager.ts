@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
+import { sanitizeFilename } from '@/common/helpers/file-helpers';
 import { ArchiveService } from '@/core/archive/archive.service';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
@@ -20,8 +21,8 @@ export class BackupManager {
 
   public backupApp = async (appUrn: AppUrn) => {
     const { dataDir } = this.config.get('directories');
-    const backupName = `${appUrn}-${Date.now()}`;
     const { appStoreId, appName } = extractAppUrn(appUrn);
+    const backupName = `${appName}-${appStoreId}-${Date.now()}`;
 
     const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
 
@@ -78,10 +79,16 @@ export class BackupManager {
       throw new Error('Failed to create temp directory');
     }
 
+    const sanitizedFilename = sanitizeFilename(filename);
+
+    if (sanitizedFilename !== filename || !sanitizedFilename.endsWith('.tar.gz')) {
+      throw new Error('Invalid backup filename');
+    }
+
     const { appStoreId, appName } = extractAppUrn(appUrn);
     const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
 
-    const archive = this.filesystem.getSafeFilePath(path.join(backupDir, filename));
+    const archive = this.filesystem.getSafeFilePath(path.join(backupDir, sanitizedFilename));
 
     if (!archive.startsWith(backupDir)) {
       throw new Error('Invalid backup file path');
@@ -135,9 +142,15 @@ export class BackupManager {
   public async deleteBackup(appUrn: AppUrn, filename: string) {
     const { dataDir } = this.config.get('directories');
 
+    const sanitizedFilename = sanitizeFilename(filename);
+
+    if (sanitizedFilename !== filename || !sanitizedFilename.endsWith('.tar.gz')) {
+      throw new Error('Invalid backup filename');
+    }
+
     const { appName, appStoreId } = extractAppUrn(appUrn);
     const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
-    const backupPath = this.filesystem.getSafeFilePath(path.join(backupDir, filename));
+    const backupPath = this.filesystem.getSafeFilePath(path.join(backupDir, sanitizedFilename));
 
     if (await this.filesystem.pathExists(backupPath)) {
       await this.filesystem.removeFile(backupPath);
@@ -222,7 +235,13 @@ export class BackupManager {
     const { appName, appStoreId } = extractAppUrn(appUrn);
     const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
 
-    const backupPath = this.filesystem.getSafeFilePath(path.join(backupDir, filename));
+    const sanitizedFilename = sanitizeFilename(filename);
+
+    if (sanitizedFilename !== filename || !sanitizedFilename.endsWith('.tar.gz')) {
+      throw new Error('Invalid backup filename');
+    }
+
+    const backupPath = this.filesystem.getSafeFilePath(path.join(backupDir, sanitizedFilename));
 
     if (!(await this.filesystem.pathExists(backupPath))) {
       throw new Error('The backup file does not exist');
@@ -242,7 +261,13 @@ export class BackupManager {
     const { appName, appStoreId } = extractAppUrn(appUrn);
     const backupDir = path.join(dataDir, 'backups', appStoreId, appName);
 
-    const backupPath = this.filesystem.getSafeFilePath(path.join(backupDir, filename));
+    const sanitizedFilename = sanitizeFilename(filename);
+
+    if (sanitizedFilename !== filename || !sanitizedFilename.endsWith('.tar.gz')) {
+      throw new Error('Invalid backup filename');
+    }
+
+    const backupPath = this.filesystem.getSafeFilePath(path.join(backupDir, sanitizedFilename));
 
     // Create backup directory if it doesn't exist
     await this.filesystem.createDirectory(backupDir);
@@ -255,6 +280,6 @@ export class BackupManager {
     // Write the file
     await this.filesystem.writeBinaryFile(backupPath, fileBuffer);
 
-    this.logger.info(`Backup uploaded successfully: ${filename}`);
+    this.logger.info(`Backup uploaded successfully: ${sanitizedFilename}`);
   }
 }
