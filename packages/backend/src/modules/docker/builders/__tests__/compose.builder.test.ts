@@ -185,13 +185,15 @@ services:
   });
 
   describe('Network configuration', () => {
-    it('should add app-specific network', () => {
+    it('should add app-specific network for multi-service apps', () => {
       const doc = `x-runtipi:
   schema-version: 2
 
 services:
   web:
     image: nginx:alpine
+  db:
+    image: postgres
 `;
 
       const parsed = yaml.parse(doc);
@@ -403,6 +405,8 @@ services:
     x-runtipi:
       is_main: true
       internal_port: 80
+  db:
+    image: postgres
 `;
 
       const parsed = yaml.parse(doc);
@@ -460,6 +464,8 @@ services:
       const doc = `services:
   web:
     image: nginx:alpine
+  db:
+    image: postgres
 `;
 
       const parsed = yaml.parse(doc);
@@ -467,6 +473,54 @@ services:
 
       const resultParsed = yaml.parse(result);
       expect(resultParsed.services.web.networks['nginx_store-id_network']).toBeDefined();
+    });
+
+    it('should NOT add internal app network for single-service apps', () => {
+      const doc = `services:
+  web:
+    image: nginx:alpine
+`;
+
+      const parsed = yaml.parse(doc);
+      const result = composeBuilder.getDockerCompose(parsed, { openPort: true, domain: 'hello.com', exposed: true }, urn, subnet);
+
+      const resultParsed = yaml.parse(result);
+      expect(resultParsed.services.web.networks['nginx_store-id_network']).toBeUndefined();
+      expect(resultParsed.networks['nginx_store-id_network']).toBeUndefined();
+    });
+
+    it('should still add tipi_main_network for single-service exposed apps', () => {
+      const doc = `services:
+  web:
+    image: nginx:alpine
+    x-runtipi:
+      is_main: true
+      internal_port: 80
+`;
+
+      const parsed = yaml.parse(doc);
+      const result = composeBuilder.getDockerCompose(parsed, { openPort: true, domain: 'hello.com', exposed: true }, urn, subnet);
+
+      const resultParsed = yaml.parse(result);
+      expect(resultParsed.services.web.networks.tipi_main_network).toBeDefined();
+      expect(resultParsed.services.web.networks['nginx_store-id_network']).toBeUndefined();
+    });
+
+    it('should add internal app network for multi-service apps', () => {
+      const doc = `services:
+  web:
+    image: nginx:alpine
+  db:
+    image: postgres
+`;
+
+      const parsed = yaml.parse(doc);
+      const result = composeBuilder.getDockerCompose(parsed, { openPort: true, domain: 'hello.com', exposed: true }, urn, subnet);
+
+      const resultParsed = yaml.parse(result);
+      expect(resultParsed.services.web.networks['nginx_store-id_network']).toBeDefined();
+      expect(resultParsed.services.db.networks['nginx_store-id_network']).toBeDefined();
+      expect(resultParsed.networks['nginx_store-id_network']).toBeDefined();
     });
 
     it('should clear ports when network_mode is set', () => {
