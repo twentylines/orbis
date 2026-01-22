@@ -10,7 +10,7 @@ const queueAppFormSchema = type({
   exposed: 'boolean?',
   exposedLocal: 'boolean?',
   openPort: type('boolean | undefined').optional(),
-  domain: 'string?',
+  domain: 'string | undefined?',
   isVisibleOnGuestDashboard: 'boolean?',
   enableAuth: 'boolean?',
   localSubdomain: localSubdomainSchema.optional(),
