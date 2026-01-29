@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { APP_GENERATED_COMPOSE_FILENAME, APP_REL_COMPOSE_FILENAME } from '@/common/constants';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
-import { execAsync } from '@/common/helpers/exec-helpers';
+import { execFileAsync } from '@/common/helpers/exec-helpers';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
@@ -189,7 +189,7 @@ export class AppFilesManager {
   public async setAppDataDirPermissions(appUrn: AppUrn) {
     const { appDataDir } = this.getAppPaths(appUrn);
 
-    await execAsync(`chmod -Rf a+rwx ${appDataDir}`).catch(() => {
+    await execFileAsync('chmod', ['-Rf', 'a+rwx', appDataDir]).catch(() => {
       this.logger.error(`Error setting permissions for app ${appUrn}`);
     });
   }

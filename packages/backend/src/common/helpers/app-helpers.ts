@@ -1,16 +1,36 @@
 import type { AppUrn } from '@runtipi/common/types';
 
-export const extractAppUrn = (id: AppUrn) => {
-  const separatorIndex = id.indexOf(':');
+export const validateAppUrn = (urn: string): AppUrn => {
+  const separatorIndex = urn.indexOf(':');
   if (separatorIndex === -1) {
-    throw new Error(`Invalid App URN: ${id}`);
+    throw new Error(`Invalid namespaced app id: ${urn}`);
   }
-  const appName = id.substring(0, separatorIndex);
-  const appStoreId = id.substring(separatorIndex + 1);
 
-  if (!appStoreId || !appName) {
-    throw new Error(`Invalid App URN: ${id}`);
+  const appName = urn.substring(0, separatorIndex);
+  const appStoreId = urn.substring(separatorIndex + 1);
+
+  const allowedCharsRegex = /^[a-zA-Z0-9_-]+$/;
+
+  if (!allowedCharsRegex.test(appName)) {
+    throw new Error(`Invalid app name: ${appName}. Only alphanumeric, hyphens, and underscores allowed.`);
   }
+
+  if (!allowedCharsRegex.test(appStoreId)) {
+    throw new Error(`Invalid app store id: ${appStoreId}. Only alphanumeric, hyphens, and underscores allowed.`);
+  }
+
+  if (!appName || !appStoreId) {
+    throw new Error(`Invalid App URN: ${urn}`);
+  }
+
+  return urn as AppUrn;
+};
+
+export const extractAppUrn = (id: AppUrn) => {
+  const validated = validateAppUrn(id);
+  const separatorIndex = validated.indexOf(':');
+  const appName = validated.substring(0, separatorIndex);
+  const appStoreId = validated.substring(separatorIndex + 1);
 
   return { appName, appStoreId };
 };
@@ -20,11 +40,5 @@ export const createAppUrn = (appName: string, appstore: string) => {
 };
 
 export const castAppUrn = (id: string): AppUrn => {
-  // Validate app URN
-  const separatorIndex = id.indexOf(':');
-  if (separatorIndex === -1) {
-    throw new Error(`Invalid namespaced app id: ${id}`);
-  }
-
-  return id as AppUrn;
+  return validateAppUrn(id);
 };

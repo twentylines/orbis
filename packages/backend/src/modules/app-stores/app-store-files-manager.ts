@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { APP_REL_COMPOSE_FILENAME } from '@/common/constants';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
-import { execAsync } from '@/common/helpers/exec-helpers';
+import { execFileAsync } from '@/common/helpers/exec-helpers';
 import type { ConfigurationService } from '@/core/config/configuration.service';
 import type { AppStore } from '@/core/database/drizzle/types';
 import type { FilesystemService } from '@/core/filesystem/filesystem.service';
@@ -292,7 +292,7 @@ export class AppStoreFilesManager {
 
     // Remove any .gitkeep files from the app-data folder at any level
     if (await this.filesystem.pathExists(path.join(appDataDir, 'data'))) {
-      await execAsync(`find ${appDataDir}/data -name .gitkeep -delete`).catch(() => {
+      await execFileAsync('find', [`${appDataDir}/data`, '-name', '.gitkeep', '-delete']).catch(() => {
         this.logger.error(`Error removing .gitkeep files from ${appDataDir}/data`);
       });
     }

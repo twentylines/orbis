@@ -1,14 +1,25 @@
-import { exec, spawn } from 'node:child_process';
-import type { SpawnOptionsWithoutStdio } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import type { ExecFileOptions, SpawnOptionsWithoutStdio } from 'node:child_process';
 import { promisify } from 'node:util';
 
-type ExecAsyncParams = [command: string];
+type ExecFileAsyncParams = [command: string, args?: string[], options?: ExecFileOptions];
 
 type ExecResult = { stdout: string; stderr: string };
 
-export const execAsync = async (...args: ExecAsyncParams): Promise<ExecResult> => {
+const promisifiedExecFile = promisify(execFile);
+
+export const execFileAsync = async (...args: ExecFileAsyncParams): Promise<ExecResult> => {
+  const [command, cmdArgs = [], options = {}] = args;
+
+  if (!command) {
+    throw new Error('Command cannot be empty');
+  }
+
   try {
-    const { stdout, stderr } = await promisify(exec)(...args);
+    const { stdout, stderr } = await promisifiedExecFile(command, cmdArgs, {
+      ...options,
+      encoding: 'utf-8',
+    });
 
     return { stdout, stderr };
   } catch (error) {

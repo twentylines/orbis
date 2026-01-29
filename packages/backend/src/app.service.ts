@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
-import { execAsync } from './common/helpers/exec-helpers';
+import { execFileAsync } from './common/helpers/exec-helpers';
 import { CacheService, ONE_DAY_IN_SECONDS } from './core/cache/cache.service';
 import { ConfigurationService } from './core/config/configuration.service';
 import { DatabaseService } from './core/database/database.service';
@@ -175,7 +175,7 @@ export class AppService {
       (await this.filesystem.pathExists(path.join(tlsFolder, 'key.pem')))
     ) {
       // Check if the certificate is still valid
-      const { stdout } = await execAsync(`openssl x509 -checkend 86400 -noout -in ${tlsFolder}/cert.pem`);
+      const { stdout } = await execFileAsync('openssl', ['x509', '-checkend', '86400', '-noout', '-in', `${tlsFolder}/cert.pem`]);
       if (stdout.includes('Certificate will not expire')) {
         this.logger.info(`TLS certificate for ${data.localDomain} already exists`);
         return;
@@ -198,9 +198,23 @@ export class AppService {
 
     try {
       this.logger.info(`Generating TLS certificate for ${data.localDomain}`);
-      const { stderr } = await execAsync(
-        `openssl req -x509 -newkey rsa:4096 -keyout ${dataDir}/traefik/tls/key.pem -out ${dataDir}/traefik/tls/cert.pem -days 365 -subj "${subject}" -addext "subjectAltName = ${subjectAltName}" -nodes`,
-      );
+      const { stderr } = await execFileAsync('openssl', [
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:4096',
+        '-keyout',
+        `${dataDir}/traefik/tls/key.pem`,
+        '-out',
+        `${dataDir}/traefik/tls/cert.pem`,
+        '-days',
+        '365',
+        '-subj',
+        subject,
+        '-addext',
+        `subjectAltName = ${subjectAltName}`,
+        '-nodes',
+      ]);
       if (
         !(await this.filesystem.pathExists(path.join(tlsFolder, 'cert.pem'))) ||
         !(await this.filesystem.pathExists(path.join(tlsFolder, 'key.pem')))
