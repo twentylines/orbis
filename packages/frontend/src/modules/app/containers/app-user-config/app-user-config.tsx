@@ -24,7 +24,6 @@ interface AppUserConfigProps {
   initialDockerCompose?: string;
   initialAppEnv?: string;
   initialSourceCompose?: string;
-  initialActualEnv?: string;
   initialIsEnabled?: boolean;
 }
 
@@ -41,20 +40,12 @@ export const AppUserConfig = (props: AppUserConfigProps) => {
       initialAppEnv={data.appEnv || ''}
       initialDockerCompose={data.dockerCompose || ''}
       initialSourceCompose={data.sourceCompose || ''}
-      initialActualEnv={data.actualEnv || ''}
       initialIsEnabled={data.isEnabled}
     />
   );
 };
 
-export const AppUserConfigEditors = ({
-  info,
-  initialAppEnv,
-  initialDockerCompose,
-  initialSourceCompose,
-  initialActualEnv,
-  initialIsEnabled,
-}: AppUserConfigProps) => {
+export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose, initialSourceCompose, initialIsEnabled }: AppUserConfigProps) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('docker-compose');
 
@@ -126,16 +117,11 @@ export const AppUserConfigEditors = ({
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="docker-compose">docker-compose.yml</TabsTrigger>
-              <TabsTrigger value="app-env">app.env</TabsTrigger>
               <TabsTrigger value="overrides">{t('USER_CONFIG_OVERRIDES_TAB_TITLE')}</TabsTrigger>
             </TabsList>
             <TabsContent value="docker-compose">
               <CodeMirror readOnly value={initialSourceCompose} height="400px" extensions={[yaml()]} theme={copilot} />
               <div className="mt-2 text-muted small">{t('USER_CONFIG_SOURCE_COMPOSE_DESCRIPTION')}</div>
-            </TabsContent>
-            <TabsContent value="app-env">
-              <CodeMirror readOnly value={initialActualEnv} height="400px" theme={copilot} />
-              <div className="mt-2 text-muted small">{t('USER_CONFIG_ACTUAL_ENV_DESCRIPTION')}</div>
             </TabsContent>
             <TabsContent value="overrides">
               <div className="d-flex mb-3 align-items-center justify-content-between">

@@ -578,7 +578,6 @@ export type EditLinkBodyDto = {
 };
 
 export type GetUserConfigDto = {
-    actualEnv: string | null;
     appEnv: string | null;
     dockerCompose: string | null;
     isEnabled: boolean;

@@ -21,13 +21,11 @@ export class UserConfigService {
     const userComposeFile = await this.appFilesManager.getUserComposeFile(appUrn);
     const userEnvFile = await this.appFilesManager.getUserEnv(appUrn);
     const sourceCompose = await this.appFilesManager.getGeneratedDockerComposeYaml(appUrn);
-    const actualEnv = await this.appFilesManager.getAppEnv(appUrn);
 
     return {
       dockerCompose: userComposeFile.content || null,
       appEnv: userEnvFile.content || null,
       sourceCompose: sourceCompose.content,
-      actualEnv: actualEnv.content || null,
       isEnabled: app.app?.userConfigEnabled ?? true,
     };
   }

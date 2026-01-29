@@ -5,7 +5,6 @@ const getUserConfigSchema = type({
   dockerCompose: 'string | null',
   appEnv: 'string | null',
   sourceCompose: 'string | null',
-  actualEnv: 'string | null',
   isEnabled: 'boolean',
 });
 

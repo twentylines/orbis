@@ -4720,16 +4720,6 @@
       "GetUserConfigDto": {
         "type": "object",
         "properties": {
-          "actualEnv": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "appEnv": {
             "anyOf": [
               {
@@ -4765,7 +4755,6 @@
           }
         },
         "required": [
-          "actualEnv",
           "appEnv",
           "dockerCompose",
           "isEnabled",
