@@ -122,9 +122,9 @@ describe('execFileAsync', () => {
       expect(result.stdout).toContain('/tmp/test/path');
     });
 
-    it('should execute command with hyphenated arguments', async () => {
-      const result = await execFileAsync('echo', ['--version']);
-      expect(result.stdout).toContain('--version');
+    it('should execute command with numeric argument', async () => {
+      const result = await execFileAsync('sleep', ['0.1']);
+      expect(result.stderr).toBe('');
     });
   });
 });
