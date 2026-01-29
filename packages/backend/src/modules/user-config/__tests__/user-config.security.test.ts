@@ -1,11 +1,12 @@
-import { mock, type Mock } from 'vitest-mock-extended';
+import { mock } from 'vitest-mock-extended';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { UserConfigController } from '../user-config.controller';
 import { UserConfigService } from '../user-config.service';
+import { fromPartial } from '@total-typescript/shoehorn';
 
 describe('UserConfigController Security', () => {
   let userConfigController: UserConfigController;
-  let userConfigService: Mock<UserConfigService>;
+  let userConfigService = mock<UserConfigService>();
 
   beforeAll(async () => {
     userConfigService = mock<UserConfigService>();
@@ -34,12 +35,14 @@ describe('UserConfigController Security', () => {
     });
 
     it('should accept valid URN', async () => {
-      userConfigService.getUserConfig.mockResolvedValue({
-        dockerCompose: 'version: "3.9"',
-        appEnv: 'KEY=value',
-        sourceCompose: 'version: "3.9"',
-        isEnabled: true,
-      });
+      userConfigService.getUserConfig.mockResolvedValue(
+        fromPartial({
+          dockerCompose: 'version: "3.9"',
+          appEnv: 'KEY=value',
+          sourceCompose: 'version: "3.9"',
+          isEnabled: true,
+        }),
+      );
 
       const result = await userConfigController.getUserConfig('test-app:my-store' as const);
 
@@ -47,12 +50,14 @@ describe('UserConfigController Security', () => {
     });
 
     it('should accept URN with hyphens', async () => {
-      userConfigService.getUserConfig.mockResolvedValue({
-        dockerCompose: 'version: "3.9"',
-        appEnv: 'KEY=value',
-        sourceCompose: 'version: "3.9"',
-        isEnabled: true,
-      });
+      userConfigService.getUserConfig.mockResolvedValue(
+        fromPartial({
+          dockerCompose: 'version: "3.9"',
+          appEnv: 'KEY=value',
+          sourceCompose: 'version: "3.9"',
+          isEnabled: true,
+        }),
+      );
 
       const result = await userConfigController.getUserConfig('test-app-name:my-store-id' as const);
 
@@ -60,12 +65,14 @@ describe('UserConfigController Security', () => {
     });
 
     it('should accept URN with underscores', async () => {
-      userConfigService.getUserConfig.mockResolvedValue({
-        dockerCompose: 'version: "3.9"',
-        appEnv: 'KEY=value',
-        sourceCompose: 'version: "3.9"',
-        isEnabled: true,
-      });
+      userConfigService.getUserConfig.mockResolvedValue(
+        fromPartial({
+          dockerCompose: 'version: "3.9"',
+          appEnv: 'KEY=value',
+          sourceCompose: 'version: "3.9"',
+          isEnabled: true,
+        }),
+      );
 
       const result = await userConfigController.getUserConfig('test_app_name:my_store_id' as const);
 
