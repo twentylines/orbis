@@ -40,12 +40,12 @@ export const installApp = async (page: Page, storeSlug: string, appId: string, o
   await expect(page.getByText('Expose app on local network')).toBeVisible();
 
   if (opts.visibleOnGuestDashboard) {
-    await page.getByLabel('isVisibleOnGuestDashboard').setChecked(true);
+    await page.getByRole('switch', { name: 'Display on guest dashboard' }).setChecked(true);
   }
 
   if (opts.domain) {
-    await page.getByLabel('exposed', { exact: true }).setChecked(true);
-    await page.getByRole('textbox', { name: 'domain' }).fill(opts.domain);
+    await page.getByRole('switch', { name: 'Expose app on the internet' }).setChecked(true);
+    await page.getByRole('textbox', { name: 'Domain name' }).fill(opts.domain);
   }
 
   await page.getByRole('button', { name: 'Install' }).click();

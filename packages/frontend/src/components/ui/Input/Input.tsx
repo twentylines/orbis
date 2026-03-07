@@ -23,7 +23,7 @@ export const Input = ({ name, label, error, type = 'text', className, isInvalid,
       )}
       <input
         suppressHydrationWarning
-        aria-label={name}
+        aria-label={label ? undefined : name}
         aria-invalid={hasError}
         aria-describedby={errorId}
         type={type}
