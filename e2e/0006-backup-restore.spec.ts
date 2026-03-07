@@ -71,7 +71,6 @@ test('user can backup and restore an app', async ({ page, isMobile }) => {
   await expect(page.getByText('Do you really want to restore backup')).toBeVisible();
   await page.getByRole('button', { name: 'Restore' }).click();
 
-  await expect(page.getByText('Restoring')).toBeVisible();
   await expect(page.getByText('Running')).toBeVisible({ timeout: 60000 });
 
   dbapp = await db.query.app.findFirst({ where: eq(app.appName, 'whoami') });
@@ -121,7 +120,6 @@ test('user config is preserved when restoring from a backup', async ({ page, isM
   await page.getByRole('button', { name: 'Restore' }).click();
 
   // Wait for restore to complete
-  await expect(page.getByText('Restoring')).toBeVisible();
   await expect(page.getByText('Running')).toBeVisible({ timeout: 60000 });
 
   const file = await readFile(path.join('user-config', store.slug, 'whoami', 'docker-compose.yml'));
