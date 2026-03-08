@@ -262,18 +262,17 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
 
   const buttons: React.JSX.Element[] = [];
   const listItems: React.JSX.Element[] = [];
+  const listItemsAdvanced: React.JSX.Element[] = [];
   const listItemsDestructive: React.JSX.Element[] = [];
-
-  listItems.push(EditConfigListItem);
-
-  if (app && (app.templateUrn || !isCustomApp)) {
-    listItems.push(SyncTemplateListItem);
-  }
 
   switch (app?.status ?? 'missing') {
     case 'stopped':
       buttons.push(StartButton);
       listItems.push(SettingsListItem);
+      listItemsAdvanced.push(EditConfigListItem);
+      if (app && (app.templateUrn || !isCustomApp)) {
+        listItemsAdvanced.push(SyncTemplateListItem);
+      }
       listItemsDestructive.push(ResetListItem);
       listItemsDestructive.push(RemoveListItem);
       if (updateAvailable && !versionIsIgnored) {
@@ -287,6 +286,10 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       buttons.push(StopButton);
       listItems.push(SettingsListItem);
       listItems.push(RestartListItem);
+      listItemsAdvanced.push(EditConfigListItem);
+      if (app && (app.templateUrn || !isCustomApp)) {
+        listItemsAdvanced.push(SyncTemplateListItem);
+      }
       listItemsDestructive.push(ResetListItem);
       listItemsDestructive.push(RemoveListItem);
 
@@ -376,6 +379,8 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuGroup>{listItems}</DropdownMenuGroup>
+              {listItemsAdvanced.length > 0 ? <DropdownMenuSeparator /> : null}
+              <DropdownMenuGroup>{listItemsAdvanced}</DropdownMenuGroup>
               {listItemsDestructive.length > 0 ? <DropdownMenuSeparator /> : null}
               <DropdownMenuGroup>{listItemsDestructive}</DropdownMenuGroup>
             </DropdownMenuContent>
