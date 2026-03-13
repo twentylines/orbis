@@ -25,7 +25,7 @@ import {
 import { ApiResponse } from '@nestjs/swagger';
 
 const AUTH_THROTTLE_TTL = 60_000;
-const AUTH_THROTTLE_LIMIT = 10;
+const AUTH_THROTTLE_LIMIT = 20;
 
 @Controller('auth')
 export class AuthController {

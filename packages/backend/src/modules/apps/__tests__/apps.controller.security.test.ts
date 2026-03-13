@@ -57,7 +57,7 @@ describe('AppsController guest dashboard security', () => {
           isVisibleOnGuestDashboard: true,
         }),
         info: createMockAppInfo({ categories: ['utilities'] }),
-        metadata: { latestVersion: 1, localSubdomain: 'guest-app' },
+        metadata: { latestVersion: 1, latestDockerVersion: '1.0.0', localSubdomain: 'guest-app' },
       },
     ]);
 
@@ -74,7 +74,7 @@ describe('AppsController guest dashboard security', () => {
           config: { appKey: 'super-secret', password: 'secret-password' },
         }),
         info: createMockAppInfo({ categories: ['utilities'] }),
-        metadata: { latestVersion: 1, localSubdomain: 'installed-app' },
+        metadata: { latestVersion: 1, latestDockerVersion: '1.0.0', localSubdomain: 'installed-app' },
       },
     ]);
 

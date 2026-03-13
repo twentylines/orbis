@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type MockProxy, mock } from 'vitest-mock-extended';
+import { fromAny } from '@total-typescript/shoehorn';
 
 describe('AppStoreService', () => {
   let appStoreService: AppStoreService;
@@ -31,8 +32,8 @@ describe('AppStoreService', () => {
 
   it('rejects deleting an unknown app store slug before removing any repo', async () => {
     appStoreRepository.getAllAppStores.mockResolvedValue([
-      { slug: 'primary', url: 'https://example.com/primary.git', hash: 'primary', name: 'Primary', enabled: true },
-      { slug: 'secondary', url: 'https://example.com/secondary.git', hash: 'secondary', name: 'Secondary', enabled: true },
+      fromAny({ slug: 'primary', url: 'https://example.com/primary.git', hash: 'primary', name: 'Primary', enabled: true }),
+      fromAny({ slug: 'secondary', url: 'https://example.com/secondary.git', hash: 'secondary', name: 'Secondary', enabled: true }),
     ]);
 
     await expect(appStoreService.deleteAppStore('..')).rejects.toBeInstanceOf(NotFoundException);

@@ -49,7 +49,7 @@ it('throttles repeated login attempts before they reach the controller', async (
     app.useGlobalPipes(new ArkValidationPipe());
     await app.init();
 
-    for (let index = 0; index < 10; index += 1) {
+    for (let index = 0; index < 20; index += 1) {
       const response = await request(app.getHttpServer()).post('/auth/login').send({ username: 'operator@example.com', password: 'password' });
 
       expect(response.status).toBe(201);
@@ -58,7 +58,7 @@ it('throttles repeated login attempts before they reach the controller', async (
     const throttledResponse = await request(app.getHttpServer()).post('/auth/login').send({ username: 'operator@example.com', password: 'password' });
 
     expect(throttledResponse.status).toBe(429);
-    expect(authService.login).toHaveBeenCalledTimes(10);
+    expect(authService.login).toHaveBeenCalledTimes(20);
   } finally {
     if (app) {
       await app.close();
