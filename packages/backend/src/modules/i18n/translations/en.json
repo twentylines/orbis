@@ -341,6 +341,7 @@
   "AUTH_ERROR_TOTP_INVALID_CODE": "Invalid 2FA code",
   "AUTH_ERROR_TOTP_NOT_ENABLED": "2FA is not enabled for this user",
   "AUTH_ERROR_TOTP_SESSION_NOT_FOUND": "2FA session not found",
+  "AUTH_ERROR_TOTP_TOO_MANY_ATTEMPTS": "Too many invalid 2FA attempts",
   "AUTH_ERROR_USER_ALREADY_EXISTS": "User already exists",
   "AUTH_ERROR_USER_NOT_FOUND": "User not found",
   "AUTH_FORM_EMAIL": "Email address",
