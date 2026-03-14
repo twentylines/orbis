@@ -308,7 +308,7 @@
   "APP_UPDATE_CONFIG_SUCCESS": "Настройки приложения успешно обновлены. Перезапустите приложение, чтобы применить изменения",
   "APP_UPDATE_ERROR_MIN_TIPI_VERSION": "Обновление приложения {{id}} требует Runtipi версии {{minVersion}} или выше. Пожалуйста, обновите ваш экземпляр.",
   "APP_UPDATE_INFORMATION_TITLE": "Информация",
-  "APP_UPDATE_INFORMATION_SUBTITLE": "Чтобы обновить {{name}} до версии <strong>{{version}}</strong>, выполните шаги по проверке и применению обновления.",
+  "APP_UPDATE_INFORMATION_SUBTITLE": "Чтобы обновить <name/> до версии <strong/>, выполните шаги по проверке и применению обновления.",
   "APP_UPDATE_CONFIGURATION_TITLE": "Конфигурация",
   "APP_UPDATE_CONFIGURATION_SUBTITLE": "Проверьте новую конфигурацию приложения.",
   "APP_UPDATE_COMPOSE_TITLE": "Compose файл",

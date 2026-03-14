@@ -126,11 +126,10 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                   <Trans
                     t={t}
                     i18nKey="APP_UPDATE_INFORMATION_SUBTITLE"
-                    values={{
-                      version: newVersionLabel,
-                      name: info.name,
+                    components={{
+                      name: <>{info.name}</>,
+                      strong: <strong>{newVersionLabel}</strong>,
                     }}
-                    components={{ strong: <strong /> }}
                   />
                 </div>
               </StepContent>
