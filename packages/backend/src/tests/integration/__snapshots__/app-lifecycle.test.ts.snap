@@ -78,53 +78,59 @@ exports[`App lifecycle > update all apps > should update multiple apps that have
 │     └─ app3/
 │        ├─ app.env
 │        └─ data/
-└─ data/
-   ├─ .env
-   ├─ apps/
-   │  └─ test/
-   │     ├─ app1/
-   │     │  ├─ config.json
-   │     │  ├─ data/
-   │     │  ├─ docker-compose.generated.yml
-   │     │  ├─ docker-compose.json
-   │     │  └─ metadata/
-   │     │     └─ description.md
-   │     ├─ app2/
-   │     │  ├─ config.json
-   │     │  ├─ data/
-   │     │  ├─ docker-compose.generated.yml
-   │     │  ├─ docker-compose.json
-   │     │  └─ metadata/
-   │     │     └─ description.md
-   │     └─ app3/
-   │        ├─ config.json
-   │        ├─ data/
-   │        ├─ docker-compose.generated.yml
-   │        ├─ docker-compose.json
-   │        └─ metadata/
-   │           └─ description.md
-   ├─ backups/
-   ├─ repos/
-   │  └─ test/
-   │     └─ apps/
-   │        ├─ app1/
-   │        │  ├─ config.json
-   │        │  ├─ data/
-   │        │  ├─ docker-compose.json
-   │        │  └─ metadata/
-   │        │     └─ description.md
-   │        ├─ app2/
-   │        │  ├─ config.json
-   │        │  ├─ data/
-   │        │  ├─ docker-compose.json
-   │        │  └─ metadata/
-   │        │     └─ description.md
-   │        └─ app3/
-   │           ├─ config.json
-   │           ├─ data/
-   │           ├─ docker-compose.json
-   │           └─ metadata/
-   │              └─ description.md
-   └─ state/
-      └─ seed"
+├─ data/
+│  ├─ .env
+│  ├─ apps/
+│  │  └─ test/
+│  │     ├─ app1/
+│  │     │  ├─ config.json
+│  │     │  ├─ data/
+│  │     │  ├─ docker-compose.generated.yml
+│  │     │  ├─ docker-compose.json
+│  │     │  └─ metadata/
+│  │     │     └─ description.md
+│  │     ├─ app2/
+│  │     │  ├─ config.json
+│  │     │  ├─ data/
+│  │     │  ├─ docker-compose.generated.yml
+│  │     │  ├─ docker-compose.json
+│  │     │  └─ metadata/
+│  │     │     └─ description.md
+│  │     └─ app3/
+│  │        ├─ config.json
+│  │        ├─ data/
+│  │        ├─ docker-compose.generated.yml
+│  │        ├─ docker-compose.json
+│  │        └─ metadata/
+│  │           └─ description.md
+│  ├─ backups/
+│  │  └─ test/
+│  │     ├─ app1/
+│  │     │  └─ app1-test-1774039074693.tar.gz
+│  │     └─ app3/
+│  │        └─ app3-test-1774039074698.tar.gz
+│  ├─ repos/
+│  │  └─ test/
+│  │     └─ apps/
+│  │        ├─ app1/
+│  │        │  ├─ config.json
+│  │        │  ├─ data/
+│  │        │  ├─ docker-compose.json
+│  │        │  └─ metadata/
+│  │        │     └─ description.md
+│  │        ├─ app2/
+│  │        │  ├─ config.json
+│  │        │  ├─ data/
+│  │        │  ├─ docker-compose.json
+│  │        │  └─ metadata/
+│  │        │     └─ description.md
+│  │        └─ app3/
+│  │           ├─ config.json
+│  │           ├─ data/
+│  │           ├─ docker-compose.json
+│  │           └─ metadata/
+│  │              └─ description.md
+│  └─ state/
+│     └─ seed
+└─ tmp/"
 `;
