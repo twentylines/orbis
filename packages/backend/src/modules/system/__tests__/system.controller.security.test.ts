@@ -47,11 +47,15 @@ describe('SystemController certificate security', () => {
     systemService.getLocalCertificate.mockReset();
   });
 
-  it('rejects unauthenticated certificate downloads', async () => {
+  it('allows unauthenticated certificate downloads', async () => {
+    systemService.getLocalCertificate.mockResolvedValue('test-certificate');
+
     const response = await request(app.getHttpServer()).get('/system/certificate');
 
-    expect(response.status).toBe(401);
-    expect(systemService.getLocalCertificate).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/x-pem-file');
+    expect(response.headers['content-disposition']).toBe('attachment; filename=cert.pem');
+    expect(response.text).toBe('test-certificate');
   });
 
   it('allows authenticated certificate downloads', async () => {
