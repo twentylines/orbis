@@ -3,7 +3,7 @@ import { TranslatableError } from '@/common/error/translatable-error';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Body, Controller, Get, Patch, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -190,6 +190,7 @@ export class AuthController {
   }
 
   @Get('/traefik')
+  @SkipThrottle()
   async traefik(@Req() req: Request, @Res() res: Response) {
     if (req.user) {
       this.logger.debug('User already logged in');

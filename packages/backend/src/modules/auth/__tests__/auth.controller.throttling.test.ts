@@ -65,3 +65,55 @@ it('throttles repeated login attempts before they reach the controller', async (
     }
   }
 });
+
+it('does not throttle repeated traefik auth checks', async () => {
+  let app: INestApplication | undefined;
+  const authService = mock<AuthService>();
+  const logger = mock<LoggerService>();
+  const config = mock<ConfigurationService>();
+
+  const moduleRef = await Test.createTestingModule({
+    imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }])],
+    controllers: [AuthController],
+    providers: [
+      AuthGuard,
+      {
+        provide: APP_GUARD,
+        useClass: ThrottlerGuard,
+      },
+      {
+        provide: AuthService,
+        useValue: authService,
+      },
+      {
+        provide: LoggerService,
+        useValue: logger,
+      },
+      {
+        provide: ConfigurationService,
+        useValue: config,
+      },
+    ],
+  }).compile();
+
+  try {
+    app = moduleRef.createNestApplication();
+    app.useGlobalPipes(new ArkValidationPipe());
+    await app.init();
+
+    for (let index = 0; index < 101; index += 1) {
+      const response = await request(app.getHttpServer())
+        .get('/auth/traefik')
+        .set('x-forwarded-uri', '/')
+        .set('x-forwarded-proto', 'https')
+        .set('x-forwarded-host', 'app.example.com');
+
+      expect(response.status).toBe(302);
+      expect(response.headers.location).toBe('https://example.com/login?redirect_url=https%3A%2F%2Fapp.example.com%2F&app=app');
+    }
+  } finally {
+    if (app) {
+      await app.close();
+    }
+  }
+});
