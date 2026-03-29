@@ -106,9 +106,9 @@ exports[`App lifecycle > update all apps > should update multiple apps that have
 │  ├─ backups/
 │  │  └─ test/
 │  │     ├─ app1/
-│  │     │  └─ app1-test-1774039074693.tar.gz
+│  │     │  └─ app1-test-TIMESTAMP.tar.gz
 │  │     └─ app3/
-│  │        └─ app3-test-1774039074698.tar.gz
+│  │        └─ app3-test-TIMESTAMP.tar.gz
 │  ├─ repos/
 │  │  └─ test/
 │  │     └─ apps/

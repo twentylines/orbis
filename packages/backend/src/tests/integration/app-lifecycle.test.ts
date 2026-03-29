@@ -355,7 +355,10 @@ describe('App lifecycle', () => {
       expect(app1?.status).toBe('running');
       expect(app2?.status).toBe('running');
       expect(app3?.status).toBe('running');
-      expect((fs as unknown as FsMock).tree()).toMatchSnapshot();
+
+      const tree = (fs as unknown as FsMock).tree().replace(/-\d+\.tar\.gz/g, '-TIMESTAMP.tar.gz');
+
+      expect(tree).toMatchSnapshot();
     });
   });
 
