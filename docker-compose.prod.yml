@@ -135,6 +135,7 @@ services:
       traefik.http.routers.dashboard-local.service: dashboard
       # Middlewares
       traefik.http.middlewares.runtipi.forwardauth.address: ${RUNTIPI_FORWARD_AUTH_URL:-http://runtipi:3000/api/auth/traefik}
+      traefik.http.middlewares.runtipi.forwardauth.authRequestHeaders: Cookie
 
 networks:
   tipi_main_network:

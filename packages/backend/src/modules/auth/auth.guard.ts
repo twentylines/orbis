@@ -4,15 +4,28 @@ import type { Request } from 'express';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
-const getHost = (value: string | undefined) => value?.split(',')[0]?.trim().split(':')[0]?.toLowerCase();
+const firstHeaderValue = (value: string | undefined) => value?.split(',')[0]?.trim();
 
-const requestHost = (request: Request) => getHost((request.headers['x-forwarded-host'] as string | undefined) ?? request.headers.host);
+const getRequestOrigin = (request: Request) => {
+  const host = firstHeaderValue((request.headers['x-forwarded-host'] as string) ?? request.headers.host)?.toLowerCase();
+  const proto = firstHeaderValue(request.headers['x-forwarded-proto'] as string)?.toLowerCase() ?? request.protocol;
 
-const headerHost = (value: string | undefined) => {
+  if (!host || !proto) {
+    return undefined;
+  }
+
+  try {
+    return new URL('/', `${proto}://${host}`).origin.toLowerCase();
+  } catch {
+    return undefined;
+  }
+};
+
+const headerOrigin = (value: string | undefined) => {
   if (!value) return undefined;
 
   try {
-    return new URL(value).hostname;
+    return new URL(value).origin.toLowerCase();
   } catch {
     return undefined;
   }
@@ -36,11 +49,11 @@ export class AuthGuard implements CanActivate {
     }
 
     if (request.authMethod === 'session' && UNSAFE_METHODS.has(request.method)) {
-      const host = requestHost(request);
-      const originHost = headerHost(request.headers.origin);
-      const refererHost = headerHost(request.headers.referer);
+      const requestOrigin = getRequestOrigin(request);
+      const origin = headerOrigin(request.headers.origin);
+      const refererOrigin = headerOrigin(request.headers.referer);
 
-      if (!host || (originHost !== host && refererHost !== host)) {
+      if (!requestOrigin || (origin !== requestOrigin && refererOrigin !== requestOrigin)) {
         throw new ForbiddenException('Invalid request origin');
       }
     }

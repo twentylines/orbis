@@ -6,6 +6,7 @@ import { AuthGuard } from '../auth.guard';
 
 const createContext = (request: {
   method: string;
+  protocol?: string;
   url: string;
   body: Record<string, string>;
   headers?: Record<string, string>;
@@ -27,9 +28,15 @@ describe('AuthGuard', () => {
       guard.canActivate(
         createContext({
           method: 'POST',
+          protocol: 'http',
           url: '/auth/reset-password',
           body: { newPassword: 'super-secret', totpCode: '123456' },
+          headers: {
+            host: 'example.com',
+            origin: 'http://example.com',
+          },
           user: { id: 1 },
+          authMethod: 'session',
         }),
       ),
     ).resolves.toBe(true);
@@ -60,10 +67,57 @@ describe('AuthGuard', () => {
       guard.canActivate(
         createContext({
           method: 'POST',
+          protocol: 'https',
           url: '/apps',
           body: {},
           headers: {
             host: 'Example.COM',
+            origin: 'https://example.com',
+          },
+          user: { id: 1 },
+          authMethod: 'session',
+        }),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('uses forwarded proto and host when comparing unsafe request origins', async () => {
+    const logger = mock<LoggerService>();
+    const guard = new AuthGuard(logger);
+
+    await expect(
+      guard.canActivate(
+        createContext({
+          method: 'POST',
+          protocol: 'https',
+          url: '/apps',
+          body: {},
+          headers: {
+            host: 'internal:3000',
+            origin: 'https://example.com',
+            'x-forwarded-host': 'example.com',
+            'x-forwarded-proto': 'https',
+          },
+          user: { id: 1 },
+          authMethod: 'session',
+        }),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('normalizes default ports before comparing unsafe request origins', async () => {
+    const logger = mock<LoggerService>();
+    const guard = new AuthGuard(logger);
+
+    await expect(
+      guard.canActivate(
+        createContext({
+          method: 'POST',
+          protocol: 'https',
+          url: '/apps',
+          body: {},
+          headers: {
+            host: 'example.com:443',
             origin: 'https://example.com',
           },
           user: { id: 1 },
@@ -81,11 +135,56 @@ describe('AuthGuard', () => {
       guard.canActivate(
         createContext({
           method: 'POST',
+          protocol: 'http',
           url: '/apps',
           body: {},
           headers: {
             host: 'example.com',
             origin: 'https://evil.com',
+          },
+          user: { id: 1 },
+          authMethod: 'session',
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects unsafe session requests from same host but different port', async () => {
+    const logger = mock<LoggerService>();
+    const guard = new AuthGuard(logger);
+
+    await expect(
+      guard.canActivate(
+        createContext({
+          method: 'POST',
+          protocol: 'http',
+          url: '/apps',
+          body: {},
+          headers: {
+            host: 'example.com',
+            origin: 'http://example.com:8443',
+          },
+          user: { id: 1 },
+          authMethod: 'session',
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects unsafe session requests from same host but different scheme', async () => {
+    const logger = mock<LoggerService>();
+    const guard = new AuthGuard(logger);
+
+    await expect(
+      guard.canActivate(
+        createContext({
+          method: 'POST',
+          url: '/apps',
+          body: {},
+          headers: {
+            host: 'example.com',
+            origin: 'http://example.com',
+            'x-forwarded-proto': 'https',
           },
           user: { id: 1 },
           authMethod: 'session',
