@@ -31,6 +31,11 @@ const AUTH_THROTTLE_TTL = 60_000;
 const AUTH_THROTTLE_LIMIT = 20;
 const FORWARD_AUTH_SESSION_EXPIRATION = SESSION_COOKIE_MAX_AGE / 1000;
 
+type ForwardAuthSession = {
+  sessionId: string;
+  host: string;
+};
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -45,21 +50,25 @@ export class AuthController {
     return host?.split(',')[0]?.trim().split(':')[0]?.toLowerCase();
   }
 
-  private isSafeForwardAuthRedirect(req: Request, redirectUrl?: string) {
+  private getForwardAuthRedirectHost(req: Request, redirectUrl?: string) {
     if (!redirectUrl) {
-      return false;
+      return null;
     }
 
     const host = this.getRequestHost(req);
     if (!host) {
-      return false;
+      return null;
     }
 
     try {
       const url = new URL(redirectUrl);
-      return ['http:', 'https:'].includes(url.protocol) && url.hostname.endsWith(`.${host}`);
+      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname.endsWith(`.${host}`)) {
+        return null;
+      }
+
+      return url.hostname.toLowerCase();
     } catch {
-      return false;
+      return null;
     }
   }
 
@@ -68,12 +77,15 @@ export class AuthController {
     const proto = req.headers['x-forwarded-proto'] as string | undefined;
     const secure = proto === 'https';
 
-    if (!domain || !this.isSafeForwardAuthRedirect(req, redirectUrl)) {
+    const redirectHost = this.getForwardAuthRedirectHost(req, redirectUrl);
+
+    if (!domain || !redirectHost) {
       return false;
     }
 
     const forwardAuthSessionId = crypto.randomUUID();
-    this.cache.set(`forward-auth:${forwardAuthSessionId}`, sessionId, FORWARD_AUTH_SESSION_EXPIRATION);
+    const forwardAuthSession: ForwardAuthSession = { sessionId, host: redirectHost };
+    this.cache.set(`forward-auth:${forwardAuthSessionId}`, JSON.stringify(forwardAuthSession), FORWARD_AUTH_SESSION_EXPIRATION);
 
     res.cookie(FORWARD_AUTH_COOKIE_NAME, forwardAuthSessionId, {
       httpOnly: true,

@@ -57,12 +57,14 @@ describe('AuthMiddleware', () => {
         [SESSION_COOKIE_NAME]: 'session-id',
         [FORWARD_AUTH_COOKIE_NAME]: 'forward-session-id',
       },
-      headers: {},
       path: '/auth/traefik',
+      headers: {
+        'x-forwarded-host': 'app.example.com',
+      },
     } as unknown as Request;
 
     cache.get.mockImplementation((key: string) => {
-      if (key === 'forward-auth:forward-session-id') return 'session-id';
+      if (key === 'forward-auth:forward-session-id') return JSON.stringify({ sessionId: 'session-id', host: 'app.example.com' });
       if (key === 'session:session-id') return '1';
       return undefined;
     });
@@ -74,6 +76,63 @@ describe('AuthMiddleware', () => {
     expect(cache.get).toHaveBeenCalledWith('session:session-id');
     expect(req.user).toEqual(user);
     expect(req.authMethod).toBe('forward-auth');
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('detects traefik auth requests from the original url when path is rewritten', async () => {
+    const req = {
+      cookies: {
+        [FORWARD_AUTH_COOKIE_NAME]: 'forward-session-id',
+      },
+      headers: {
+        'x-forwarded-host': 'app.example.com',
+      },
+      originalUrl: '/api/auth/traefik',
+      path: '/',
+      url: '/',
+    } as unknown as Request;
+
+    cache.get.mockImplementation((key: string) => {
+      if (key === 'forward-auth:forward-session-id') return JSON.stringify({ sessionId: 'session-id', host: 'app.example.com' });
+      if (key === 'session:session-id') return '1';
+      return undefined;
+    });
+    userRepository.getUserDtoById.mockResolvedValue(user);
+
+    await middleware.use(req, {} as Response, next);
+
+    expect(cache.get).toHaveBeenCalledWith('forward-auth:forward-session-id');
+    expect(cache.get).toHaveBeenCalledWith('session:session-id');
+    expect(req.user).toEqual(user);
+    expect(req.authMethod).toBe('forward-auth');
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('rejects forward-auth cookies issued for a different app host', async () => {
+    const req = {
+      cookies: {
+        [FORWARD_AUTH_COOKIE_NAME]: 'forward-session-id',
+      },
+      headers: {
+        'x-forwarded-host': 'other.example.com',
+      },
+      path: '/auth/traefik',
+    } as unknown as Request;
+
+    cache.get.mockImplementation((key: string) => {
+      if (key === 'forward-auth:forward-session-id') return JSON.stringify({ sessionId: 'session-id', host: 'app.example.com' });
+      if (key === 'session:session-id') return '1';
+      return undefined;
+    });
+    userRepository.getUserDtoById.mockResolvedValue(user);
+
+    await middleware.use(req, {} as Response, next);
+
+    expect(cache.get).toHaveBeenCalledWith('forward-auth:forward-session-id');
+    expect(cache.get).not.toHaveBeenCalledWith('session:session-id');
+    expect(req.user).toBeUndefined();
+    expect(req.authMethod).toBeUndefined();
+    expect(userRepository.getUserDtoById).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledOnce();
   });
 

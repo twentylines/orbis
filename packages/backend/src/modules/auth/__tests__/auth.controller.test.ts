@@ -135,7 +135,11 @@ describe('AuthController reset-password security', () => {
     expect(response.status).toBe(204);
     expect(response.headers['set-cookie']?.[0]).toContain(`${FORWARD_AUTH_COOKIE_NAME}=`);
     expect(response.headers['set-cookie']?.[0]).not.toContain(`${FORWARD_AUTH_COOKIE_NAME}=session-id`);
-    expect(cache.set).toHaveBeenCalledWith(expect.stringMatching(/^forward-auth:/), 'session-id', 86_400);
+    expect(cache.set).toHaveBeenCalledWith(
+      expect.stringMatching(/^forward-auth:/),
+      JSON.stringify({ sessionId: 'session-id', host: 'app.example.com' }),
+      86_400,
+    );
   });
 
   it('rejects forward-auth when the cookie domain is unavailable', async () => {

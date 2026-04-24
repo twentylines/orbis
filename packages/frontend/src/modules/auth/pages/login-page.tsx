@@ -13,7 +13,8 @@ import { TotpForm } from '../components/totp-form/totp-form';
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const isSafeRedirect = (url: string) => {
   try {
-    return new URL(url).hostname.endsWith(`.${window.location.hostname}`);
+    const redirectUrl = new URL(url);
+    return ['http:', 'https:'].includes(redirectUrl.protocol) && redirectUrl.hostname.endsWith(`.${window.location.hostname}`);
   } catch {
     return false;
   }
