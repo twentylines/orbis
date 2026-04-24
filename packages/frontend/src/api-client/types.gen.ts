@@ -125,29 +125,34 @@ export type LoadDto = {
 
 export type LoginBody = {
     password: string;
-    redirectUrl?: string;
     username: string;
+    redirectUrl?: string;
 };
 
 export type LoginDto = {
-    redirectUrl?: string;
     success: boolean;
+    redirectUrl?: string;
     totpSessionId?: string;
 };
 
 export type VerifyTotpBody = {
-    redirectUrl?: string;
     totpCode: string;
     totpSessionId: string;
+    redirectUrl?: string;
 };
 
 export type RegisterBody = {
     password: string;
     username: string;
+    redirectUrl?: string;
 };
 
 export type RegisterDto = {
     success: boolean;
+};
+
+export type ForwardAuthBody = {
+    redirectUrl: string;
 };
 
 export type ChangeUsernameBody = {
@@ -1002,6 +1007,17 @@ export type LogoutData = {
 };
 
 export type LogoutResponses = {
+    201: unknown;
+};
+
+export type ForwardAuthData = {
+    body: ForwardAuthBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/forward-auth';
+};
+
+export type ForwardAuthResponses = {
     201: unknown;
 };
 

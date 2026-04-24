@@ -2877,6 +2877,10 @@
           "success": {
             "type": "boolean"
           },
+          "redirectUrl": {
+            "type": "string",
+            "format": "uri"
+          },
           "totpSessionId": {
             "type": "string"
           }
