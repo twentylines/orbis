@@ -167,7 +167,7 @@ describe('AppService', () => {
       expect((fs as unknown as FsMock).tree()).toMatchSnapshot();
     });
 
-    it('should append extra trusted proxy IPs to traefik config', async () => {
+    it('should use only configured trusted proxy IPs in traefik config', async () => {
       const appDir = APP_DIR;
       const dataDir = DATA_DIR;
       const appDataDir = APP_DATA_DIR;
@@ -187,8 +187,32 @@ describe('AppService', () => {
       const output = await fs.promises.readFile(path.join(DATA_DIR, 'traefik', 'traefik.yml'), 'utf8');
       const parsed = YAML.parse(output);
       expect(parsed.entryPoints.web.forwardedHeaders.insecure).toBe(true);
-      expect(parsed.entryPoints.web.forwardedHeaders.trustedIPs).toEqual(['127.0.0.1/32', '203.0.113.10/32', '2001:db8::/32']);
-      expect(parsed.entryPoints.websecure.forwardedHeaders.trustedIPs).toEqual(['127.0.0.1/32', '203.0.113.10/32', '2001:db8::/32']);
+      expect(parsed.entryPoints.web.forwardedHeaders.trustedIPs).toEqual(['203.0.113.10/32', '2001:db8::/32']);
+      expect(parsed.entryPoints.websecure.forwardedHeaders.trustedIPs).toEqual(['203.0.113.10/32', '2001:db8::/32']);
+    });
+
+    it('should remove default trusted proxy IPs from traefik config when none are configured', async () => {
+      const appDir = APP_DIR;
+      const dataDir = DATA_DIR;
+      const appDataDir = APP_DATA_DIR;
+      const directories = { appDir, dataDir, appDataDir };
+      const fsMock = fs as unknown as FsMock;
+      fsMock.__applyMockFiles({
+        [path.join(APP_DIR, 'assets', 'traefik', 'traefik.yml')]: TRAEFIK_CONFIG,
+        [path.join(APP_DIR, 'assets', 'traefik', 'dynamic', 'dynamic.yml')]: '',
+      });
+      configurationService.getConfig.mockReturnValueOnce(fromPartial({ directories, userSettings: { persistTraefikConfig: false } }));
+      configurationService.get.calledWith('traefik').mockReturnValueOnce({
+        trustedProxyIps: [],
+      });
+
+      await appService.copyAssets();
+
+      const output = await fs.promises.readFile(path.join(DATA_DIR, 'traefik', 'traefik.yml'), 'utf8');
+      const parsed = YAML.parse(output);
+      expect(parsed.entryPoints.web.forwardedHeaders.insecure).toBe(true);
+      expect(parsed.entryPoints.web.forwardedHeaders.trustedIPs).toBeUndefined();
+      expect(parsed.entryPoints.websecure.forwardedHeaders).toBeUndefined();
     });
   });
 });

@@ -170,17 +170,25 @@ export class AppService {
     for (const entrypoint of ['web', 'websecure']) {
       parsed.entryPoints ??= {};
       parsed.entryPoints[entrypoint] ??= {};
+      const entryPoint = parsed.entryPoints[entrypoint];
 
-      const currentForwardedHeaders = parsed.entryPoints[entrypoint].forwardedHeaders;
-      if (!currentForwardedHeaders || typeof currentForwardedHeaders !== 'object' || Array.isArray(currentForwardedHeaders)) {
-        parsed.entryPoints[entrypoint].forwardedHeaders = {};
+      const currentForwardedHeaders = entryPoint.forwardedHeaders;
+      if (!trustedProxyIps.length) {
+        if (currentForwardedHeaders && typeof currentForwardedHeaders === 'object' && !Array.isArray(currentForwardedHeaders)) {
+          delete (currentForwardedHeaders as { trustedIPs?: string[] }).trustedIPs;
+          if (Object.keys(currentForwardedHeaders).length === 0) {
+            delete entryPoint.forwardedHeaders;
+          }
+        }
+        continue;
       }
 
-      const forwardedHeaders = parsed.entryPoints[entrypoint].forwardedHeaders as { trustedIPs?: string[] } & Record<string, unknown>;
-      const currentTrustedIps = forwardedHeaders.trustedIPs ?? [];
-      const trustedIPs = [...new Set([...currentTrustedIps, ...trustedProxyIps])];
+      if (!currentForwardedHeaders || typeof currentForwardedHeaders !== 'object' || Array.isArray(currentForwardedHeaders)) {
+        entryPoint.forwardedHeaders = {};
+      }
 
-      forwardedHeaders.trustedIPs = trustedIPs;
+      const forwardedHeaders = entryPoint.forwardedHeaders as { trustedIPs?: string[] } & Record<string, unknown>;
+      forwardedHeaders.trustedIPs = [...new Set(trustedProxyIps)];
     }
 
     await this.filesystem.writeTextFile(dest, YAML.stringify(parsed));

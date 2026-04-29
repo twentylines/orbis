@@ -192,4 +192,27 @@ describe('AuthGuard', () => {
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('includes a Cloudflare Tunnel hint when Cloudflare headers are present on invalid origins', async () => {
+    const logger = mock<LoggerService>();
+    const guard = new AuthGuard(logger);
+
+    await expect(
+      guard.canActivate(
+        createContext({
+          method: 'POST',
+          protocol: 'http',
+          url: '/apps',
+          body: {},
+          headers: {
+            host: 'example.com',
+            origin: 'https://example.com',
+            'cf-ray': '8f1234567890abcd-ZRH',
+          },
+          user: { id: 1 },
+          authMethod: 'session',
+        }),
+      ),
+    ).rejects.toThrow('Cloudflare headers were detected');
+  });
 });
