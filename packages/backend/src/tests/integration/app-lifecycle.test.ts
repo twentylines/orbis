@@ -47,6 +47,8 @@ import { StartAppHandler } from '@/modules/app-lifecycle/handlers/start-app.hand
 import { AppStatusSyncService } from '@/modules/app-lifecycle/app-status-sync.service';
 import { StatusManagerService } from '@/modules/app-lifecycle/services/status-manager.service';
 import { AppValidationService } from '@/modules/app-lifecycle/services/app-validation.service';
+import { BackupAppHandler } from '@/modules/app-lifecycle/handlers/backup-app.handler';
+import { RestoreAppHandler } from '@/modules/app-lifecycle/handlers/restore-app.handler';
 
 let db: TestDatabase;
 const DB_NAME = 'applifecycletest';
@@ -117,6 +119,8 @@ describe('App lifecycle', () => {
         AppStatusSyncService,
         StatusManagerService,
         AppValidationService,
+        BackupAppHandler,
+        RestoreAppHandler,
         {
           provide: APP_ASYNC_MUTEX,
           useValue: new AsyncMutex(),
