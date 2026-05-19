@@ -210,9 +210,9 @@ export class AppService {
 
     // If the certificate already exists, don't generate it again
     if (
-      (await this.filesystem.pathExists(path.join(tlsFolder, `${data.localDomain}.txt`))) &&
-      (await this.filesystem.pathExists(path.join(tlsFolder, 'cert.pem'))) &&
-      (await this.filesystem.pathExists(path.join(tlsFolder, 'key.pem')))
+      (await this.filesystem.isFile(path.join(tlsFolder, `${data.localDomain}.txt`))) &&
+      (await this.filesystem.isFile(path.join(tlsFolder, 'cert.pem'))) &&
+      (await this.filesystem.isFile(path.join(tlsFolder, 'key.pem')))
     ) {
       // Check if the certificate is still valid
       const { stdout } = await execFileAsync('openssl', ['x509', '-checkend', '86400', '-noout', '-in', `${tlsFolder}/cert.pem`]);
@@ -255,10 +255,7 @@ export class AppService {
         `subjectAltName = ${subjectAltName}`,
         '-nodes',
       ]);
-      if (
-        !(await this.filesystem.pathExists(path.join(tlsFolder, 'cert.pem'))) ||
-        !(await this.filesystem.pathExists(path.join(tlsFolder, 'key.pem')))
-      ) {
+      if (!(await this.filesystem.isFile(path.join(tlsFolder, 'cert.pem'))) || !(await this.filesystem.isFile(path.join(tlsFolder, 'key.pem')))) {
         this.logger.error(`Failed to generate TLS certificate for ${data.localDomain}`);
         this.logger.error(stderr);
       } else {

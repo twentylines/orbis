@@ -75,7 +75,7 @@ export class BackupManager {
 
     await this.filesystem.copyDirectory(appInstalledDir, path.join(tempDir, 'app'));
 
-    if (await this.filesystem.pathExists(userConfigDir)) {
+    if (await this.filesystem.isDirectory(userConfigDir)) {
       this.logger.info('Including user configuration in backup...');
       await this.filesystem.copyDirectory(userConfigDir, path.join(tempDir, 'user-config'));
     }
@@ -117,7 +117,7 @@ export class BackupManager {
     this.logger.info('Restoring app from backup...');
 
     // Verify the app has a backup
-    if (!(await this.filesystem.pathExists(archive))) {
+    if (!(await this.filesystem.isFile(archive))) {
       throw new Error('The backup file does not exist');
     }
 
@@ -145,7 +145,7 @@ export class BackupManager {
     await this.filesystem.copyDirectory(path.join(restoreDir, 'app-data'), appDataDir);
     await this.filesystem.copyDirectory(path.join(restoreDir, 'app'), appInstalledDir);
 
-    if (await this.filesystem.pathExists(path.join(restoreDir, 'user-config'))) {
+    if (await this.filesystem.isDirectory(path.join(restoreDir, 'user-config'))) {
       await this.filesystem.copyDirectory(path.join(restoreDir, 'user-config'), userConfigDir);
     }
 
@@ -209,7 +209,7 @@ export class BackupManager {
   public async listBackupsByAppId(appUrn: AppUrn) {
     const { backupDir: backupsDir } = this.getBackupPaths(appUrn);
 
-    if (!(await this.filesystem.pathExists(backupsDir))) {
+    if (!(await this.filesystem.isDirectory(backupsDir))) {
       return [];
     }
 
@@ -218,12 +218,18 @@ export class BackupManager {
 
       const backups = await Promise.all(
         list.map(async (backup) => {
-          const stats = await this.filesystem.getStats(path.join(backupsDir, backup));
+          const backupPath = path.join(backupsDir, backup);
+
+          if (!(await this.filesystem.isFile(backupPath))) {
+            return null;
+          }
+
+          const stats = await this.filesystem.getStats(backupPath);
           return { id: backup, size: stats.size, date: stats.mtime.getTime() };
         }),
       );
 
-      return backups;
+      return backups.filter((backup) => backup !== null);
     } catch (error) {
       this.logger.error(`Error listing backups for app ${appUrn}:`, error);
       return [];
@@ -239,7 +245,7 @@ export class BackupManager {
   public async getBackupPath(appUrn: AppUrn, filename: string): Promise<string> {
     const { backupPath } = this.getBackupFilePath(appUrn, filename);
 
-    if (!(await this.filesystem.pathExists(backupPath))) {
+    if (!(await this.filesystem.isFile(backupPath))) {
       throw new Error('The backup file does not exist');
     }
 
