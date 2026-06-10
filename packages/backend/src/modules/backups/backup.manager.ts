@@ -179,6 +179,10 @@ export class BackupManager {
 
   private validateRestoreArchiveEntries(entries: ArchiveEntry[]) {
     for (const entry of entries) {
+      if (entry.type !== '-' && entry.type !== 'd') {
+        throw new Error('Backup contains unsupported file types');
+      }
+
       const entryPath = this.normalizeArchiveEntryPath(entry.path);
 
       if (entryPath === '.') {
@@ -190,12 +194,6 @@ export class BackupManager {
       if (!rootName) {
         throw new Error('Backup contains unsupported file types');
       }
-
-      if (entry.type === '-' || entry.type === 'd') {
-        continue;
-      }
-
-      throw new Error('Backup contains unsupported file types');
     }
   }
 

@@ -131,6 +131,14 @@ describe('BackupManager restore security', () => {
     await expect(fs.promises.readFile(targetFile, 'utf8')).resolves.toBe('unchanged\n');
   });
 
+  it('rejects unsupported archive entry types even when the entry path is empty', async () => {
+    listTarGz.mockResolvedValue([{ path: '', type: 'l' }]);
+
+    await expect(backupManager.restoreApp(appUrn, 'backup.tar.gz')).rejects.toThrow('Backup contains unsupported file types');
+
+    expect(extractTarGz).not.toHaveBeenCalled();
+  });
+
   it('rejects restored app-data symlinks before extracting', async () => {
     const targetFile = path.join(dataDir, 'state', 'proof.txt');
     const liveFile = path.join(appDataDir, 'data', 'live.txt');

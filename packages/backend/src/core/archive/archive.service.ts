@@ -32,22 +32,23 @@ export class ArchiveService {
     const fileType = await spawnAsync('file', ['--brief', '--mime-type', sourceFile]);
     const mimeType = fileType.stdout.trim();
 
-    const args = mimeType === 'application/x-tar' ? ['-tvf', sourceFile] : ['-tzvf', sourceFile];
+    const verboseArgs = mimeType === 'application/x-tar' ? ['-tvf', sourceFile] : ['-tzvf', sourceFile];
+    const pathArgs = mimeType === 'application/x-tar' ? ['-tf', sourceFile] : ['-tzf', sourceFile];
 
-    this.logger.debug(`Listing archive with args: tar ${args.join(' ')}`);
-    const { stdout, stderr } = await spawnAsync('tar', args);
+    this.logger.debug(`Listing archive with args: tar ${verboseArgs.join(' ')}`);
+    const [verboseList, pathList] = await Promise.all([spawnAsync('tar', verboseArgs), spawnAsync('tar', pathArgs)]);
 
-    if (stderr.trim()) {
+    if (verboseList.stderr.trim() || pathList.stderr.trim()) {
       throw new Error('Invalid backup archive');
     }
 
-    return stdout
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => ({ path: this.getTarListPath(line), type: line[0] ?? '' }));
-  };
+    const verboseLines = verboseList.stdout.split('\n').filter(Boolean);
+    const paths = pathList.stdout.split('\n').filter(Boolean);
 
-  private getTarListPath(line: string) {
-    return line.split(/\s+/).slice(8).join(' ');
-  }
+    if (verboseLines.length !== paths.length) {
+      throw new Error('Invalid backup archive');
+    }
+
+    return paths.map((entryPath, index) => ({ path: entryPath, type: verboseLines[index]?.[0] ?? '' }));
+  };
 }
