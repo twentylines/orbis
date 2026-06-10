@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
 import { pLimit, sanitizeFilename } from '@/common/helpers/file-helpers';
-import { ArchiveService } from '@/core/archive/archive.service';
+import { ArchiveService, type ArchiveEntry } from '@/core/archive/archive.service';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
@@ -126,6 +126,8 @@ export class BackupManager {
     await this.filesystem.createDirectory(restoreDir);
 
     try {
+      this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(archive));
+
       this.logger.info('Extracting archive...');
       const { stderr, stdout } = await this.archiveManager.extractTarGz(archive, restoreDir);
       this.logger.debug('--- archiveManager.extractTarGz ---');
@@ -174,6 +176,42 @@ export class BackupManager {
       await this.filesystem.removeDirectory(restoreDir);
     }
   };
+
+  private validateRestoreArchiveEntries(entries: ArchiveEntry[]) {
+    for (const entry of entries) {
+      const entryPath = this.normalizeArchiveEntryPath(entry.path);
+
+      if (entryPath === '.') {
+        continue;
+      }
+
+      const rootName = entryPath.split('/')[0];
+
+      if (!rootName) {
+        throw new Error('Backup contains unsupported file types');
+      }
+
+      if (entry.type === '-' || entry.type === 'd') {
+        continue;
+      }
+
+      throw new Error('Backup contains unsupported file types');
+    }
+  }
+
+  private normalizeArchiveEntryPath(entryPath: string) {
+    if (path.posix.isAbsolute(entryPath)) {
+      throw new Error('Backup contains unsupported file types');
+    }
+
+    const normalizedPath = path.posix.normalize(entryPath.replace(/^(\.\/)+/, ''));
+
+    if (normalizedPath === '..' || normalizedPath.startsWith('../')) {
+      throw new Error('Backup contains unsupported file types');
+    }
+
+    return normalizedPath;
+  }
 
   private async validateRestoreDirectory(
     directory: string,

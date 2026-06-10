@@ -65,6 +65,7 @@ describe('BackupManager restore security', () => {
   let archivePath: string;
   let backupManager: BackupManager;
   let extractTarGz: ReturnType<typeof vi.fn>;
+  let listTarGz: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     await fs.promises.mkdir('/tmp', { recursive: true });
@@ -79,9 +80,14 @@ describe('BackupManager restore security', () => {
     const logger = createLogger();
     const filesystem = new FilesystemService(logger);
     extractTarGz = vi.fn();
+    listTarGz = vi.fn().mockResolvedValue([
+      { path: './app-data/', type: 'd' },
+      { path: './app/', type: 'd' },
+    ]);
 
     const archiveManager = {
       extractTarGz,
+      listTarGz,
     } as unknown as ArchiveService;
 
     const config = {
@@ -111,27 +117,21 @@ describe('BackupManager restore security', () => {
     }
   });
 
-  it('rejects restored backups containing symlinks before replacing live files', async () => {
+  it('rejects restored backups containing user-config symlinks before extracting', async () => {
     const targetFile = path.join(dataDir, 'state', 'proof.txt');
     await fs.promises.mkdir(path.dirname(targetFile), { recursive: true });
     await fs.promises.writeFile(targetFile, 'unchanged\n');
 
-    extractTarGz.mockImplementation(async (_archive: string, destinationDir: string) => {
-      await fs.promises.mkdir(path.join(destinationDir, 'app-data'), { recursive: true });
-      await fs.promises.mkdir(path.join(destinationDir, 'app'), { recursive: true });
-      await fs.promises.mkdir(path.join(destinationDir, 'user-config'), { recursive: true });
-      await fs.promises.symlink(targetFile, path.join(destinationDir, 'user-config', 'app.env'));
-
-      return { stdout: '', stderr: '' };
-    });
+    listTarGz.mockResolvedValue([{ path: './user-config/app.env', type: 'l' }]);
 
     await expect(backupManager.restoreApp(appUrn, 'backup.tar.gz')).rejects.toThrow('Backup contains unsupported file types');
 
+    expect(extractTarGz).not.toHaveBeenCalled();
     await expect(fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).resolves.toBe('EXISTING=true\n');
     await expect(fs.promises.readFile(targetFile, 'utf8')).resolves.toBe('unchanged\n');
   });
 
-  it('rejects restored app-data symlinks that point outside app-data', async () => {
+  it('rejects restored app-data symlinks before extracting', async () => {
     const targetFile = path.join(dataDir, 'state', 'proof.txt');
     const liveFile = path.join(appDataDir, 'data', 'live.txt');
     await fs.promises.mkdir(path.dirname(targetFile), { recursive: true });
@@ -139,27 +139,47 @@ describe('BackupManager restore security', () => {
     await fs.promises.writeFile(targetFile, 'unchanged\n');
     await fs.promises.writeFile(liveFile, 'live data\n');
 
-    extractTarGz.mockImplementation(async (_archive: string, destinationDir: string) => {
-      await fs.promises.mkdir(path.join(destinationDir, 'app-data'), { recursive: true });
-      await fs.promises.mkdir(path.join(destinationDir, 'app'), { recursive: true });
-      await fs.promises.symlink(targetFile, path.join(destinationDir, 'app-data', 'proof.txt'));
-
-      return { stdout: '', stderr: '' };
-    });
+    listTarGz.mockResolvedValue([{ path: './app-data/proof.txt', type: 'l' }]);
 
     await expect(backupManager.restoreApp(appUrn, 'backup.tar.gz')).rejects.toThrow('Backup contains unsupported file types');
 
+    expect(extractTarGz).not.toHaveBeenCalled();
     await expect(fs.promises.readFile(liveFile, 'utf8')).resolves.toBe('live data\n');
     await expect(fs.promises.readFile(targetFile, 'utf8')).resolves.toBe('unchanged\n');
   });
 
+  it('rejects restored backups containing app hardlinks before extracting', async () => {
+    listTarGz.mockResolvedValue([{ path: './app/docker-compose.yml', type: 'h' }]);
+
+    await expect(backupManager.restoreApp(appUrn, 'backup.tar.gz')).rejects.toThrow('Backup contains unsupported file types');
+
+    expect(extractTarGz).not.toHaveBeenCalled();
+  });
+
+  it('rejects restored backups containing paths outside the restore root before extracting', async () => {
+    listTarGz.mockResolvedValue([{ path: '../state/proof.txt', type: '-' }]);
+
+    await expect(backupManager.restoreApp(appUrn, 'backup.tar.gz')).rejects.toThrow('Backup contains unsupported file types');
+
+    expect(extractTarGz).not.toHaveBeenCalled();
+  });
+
   it('restores backups containing regular files and directories', async () => {
+    listTarGz.mockResolvedValue([
+      { path: './app-data/', type: 'd' },
+      { path: './app-data/data/', type: 'd' },
+      { path: './app-data/data/file.txt', type: '-' },
+      { path: './app/', type: 'd' },
+      { path: './app/docker-compose.yml', type: '-' },
+      { path: './user-config/', type: 'd' },
+      { path: './user-config/app.env', type: '-' },
+    ]);
+
     extractTarGz.mockImplementation(async (_archive: string, destinationDir: string) => {
       await fs.promises.mkdir(path.join(destinationDir, 'app-data', 'data'), { recursive: true });
       await fs.promises.mkdir(path.join(destinationDir, 'app'), { recursive: true });
       await fs.promises.mkdir(path.join(destinationDir, 'user-config'), { recursive: true });
       await fs.promises.writeFile(path.join(destinationDir, 'app-data', 'data', 'file.txt'), 'restored data\n');
-      await fs.promises.symlink('data/file.txt', path.join(destinationDir, 'app-data', 'file-link.txt'));
       await fs.promises.writeFile(path.join(destinationDir, 'app', 'docker-compose.yml'), 'services: {}\n');
       await fs.promises.writeFile(path.join(destinationDir, 'user-config', 'app.env'), 'RESTORED=true\n');
 
@@ -169,7 +189,6 @@ describe('BackupManager restore security', () => {
     await backupManager.restoreApp(appUrn, 'backup.tar.gz');
 
     await expect(fs.promises.readFile(path.join(appDataDir, 'data', 'file.txt'), 'utf8')).resolves.toBe('restored data\n');
-    await expect(fs.promises.readFile(path.join(appDataDir, 'file-link.txt'), 'utf8')).resolves.toBe('restored data\n');
     await expect(fs.promises.readFile(path.join(appInstalledDir, 'docker-compose.yml'), 'utf8')).resolves.toBe('services: {}\n');
     await expect(fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).resolves.toBe('RESTORED=true\n');
   });
