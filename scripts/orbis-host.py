@@ -187,6 +187,9 @@ def execute(root: Path, manifest: dict[str, str], context: str, action: str, con
         result = docker(context, command, root)
         if result.returncode:
             raise RuntimeError("Docker Compose could not stop the Orbis core; inspect it locally")
+        after = current_core(root, context)
+        if after.get("state") not in {"exited", "created"}:
+            raise RuntimeError("Orbis core did not stop; inspect it locally")
         return {"result": "stopped", "root": str(root)}
     if action == "start":
         command = compose_args(root) + ["up", "--detach", "--no-build", "--wait", "--pull", "never", "runtipi", "runtipi-reverse-proxy"]

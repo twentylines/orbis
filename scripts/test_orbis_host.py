@@ -87,6 +87,19 @@ class OrbisHostTests(unittest.TestCase):
                 HOST.execute(self.root, MANIFEST, "runtipi-test", "stop", str(self.root))
         self.assertFalse(any("stop" in call.args[1] for call in docker.call_args_list))
 
+    def test_stop_confirms_the_core_exited(self):
+        with mock.patch.object(HOST, "docker", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(
+            HOST, "current_core", return_value=HEALTHY
+        ):
+            HOST.execute(self.root, MANIFEST, "runtipi-test", "enroll", str(self.root))
+        with mock.patch.object(HOST, "docker", return_value=subprocess.CompletedProcess([], 0)) as docker, mock.patch.object(
+            HOST, "current_core", side_effect=[HEALTHY, {**HEALTHY, "state": "exited"}]
+        ):
+            result = HOST.execute(self.root, MANIFEST, "runtipi-test", "stop", str(self.root))
+        self.assertEqual(result["result"], "stopped")
+        stop = next(call.args[1] for call in docker.call_args_list if "stop" in call.args[1])
+        self.assertEqual(stop[-2:], ["runtipi-reverse-proxy", "runtipi"])
+
 
 if __name__ == "__main__":
     unittest.main()
