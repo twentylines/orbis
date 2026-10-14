@@ -3,9 +3,12 @@ import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
 import si from 'systeminformation';
+import { cpuUsage, parseHostCpuStat, type CpuSnapshot } from './host-cpu';
 
 @Injectable()
 export class SystemService {
+  private previousHostCpu: CpuSnapshot | null = null;
+
   constructor(
     private readonly logger: LoggerService,
     private readonly config: ConfigurationService,
@@ -50,14 +53,19 @@ export class SystemService {
   }
 
   public async getTelemetry() {
-    const [cpuResult, diskResult, networkResult, memoryResult] = await Promise.allSettled([
-      si.currentLoad(),
+    const [cpuStatResult, uptimeResult, diskResult, networkResult, memoryResult] = await Promise.allSettled([
+      this.filesystem.readTextFile('/host/proc/stat'),
+      this.filesystem.readTextFile('/host/proc/uptime'),
       si.fsSize(),
       si.networkStats(),
       this.filesystem.readTextFile('/host/proc/meminfo'),
     ]);
 
-    const cpu = cpuResult.status === 'fulfilled' ? cpuResult.value : null;
+    const hostCounters = cpuStatResult.status === 'fulfilled' && cpuStatResult.value ? parseHostCpuStat(cpuStatResult.value) : null;
+    const hostCpu = hostCounters?.has('cpu') ? cpuUsage(this.previousHostCpu, hostCounters) : null;
+    if (hostCounters?.has('cpu')) this.previousHostCpu = hostCounters;
+    const runtimeCpu = hostCpu ? null : await si.currentLoad().catch(() => null);
+    const uptime = uptimeResult.status === 'fulfilled' && uptimeResult.value ? Number(uptimeResult.value.split(/\s+/)[0]) : null;
     const disks = diskResult.status === 'fulfilled' ? diskResult.value : [];
     const networks = networkResult.status === 'fulfilled' ? networkResult.value : [];
     const memoryText = memoryResult.status === 'fulfilled' ? memoryResult.value : null;
@@ -74,10 +82,10 @@ export class SystemService {
     return {
       sampledAt: new Date().toISOString(),
       cpu: {
-        scope: 'runtime',
-        totalPercent: safe(cpu?.currentLoad),
-        perCorePercent: cpu?.cpus.map((core) => safe(core.load)) ?? [],
-        uptimeSeconds: safe(si.time().uptime),
+        scope: hostCpu ? 'host-proc' : 'runtime',
+        totalPercent: safe(hostCpu?.totalPercent ?? runtimeCpu?.currentLoad),
+        perCorePercent: hostCpu?.perCorePercent ?? runtimeCpu?.cpus.map((core) => safe(core.load)) ?? [],
+        uptimeSeconds: safe(uptime ?? si.time().uptime),
       },
       memory: {
         scope: 'host-proc',

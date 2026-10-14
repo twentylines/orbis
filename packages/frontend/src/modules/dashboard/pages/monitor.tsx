@@ -5,7 +5,7 @@ import './monitor.css';
 
 type Telemetry = {
   sampledAt: string;
-  cpu: { scope: 'runtime'; totalPercent: number | null; perCorePercent: (number | null)[]; uptimeSeconds: number | null };
+  cpu: { scope: 'host-proc' | 'runtime'; totalPercent: number | null; perCorePercent: (number | null)[]; uptimeSeconds: number | null };
   memory: {
     scope: 'host-proc';
     totalBytes: number | null;
@@ -157,8 +157,8 @@ export default function Monitor() {
         <Link to="/dashboard">Back to workspace</Link>
       </div>
       <p className="desktop-monitor-scope">
-        Current readings only. CPU, filesystems, and network describe the Orbis core container; memory reads the host mount at /host/proc/meminfo. No
-        history is inferred before collection starts.
+        Current readings only. CPU uses host /proc when available; memory reads the host mount. Filesystems and network describe the Orbis core
+        container. No history is inferred before collection starts.
       </p>
       <div className="desktop-monitor-live-status">
         <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} />
@@ -185,7 +185,7 @@ export default function Monitor() {
               <h2 id="telemetry-cpu-title">CPU</h2>
               <div className="desktop-telemetry-lead">
                 <strong>{percent(sample.cpu.totalPercent)}</strong>
-                <span>Runtime load</span>
+                <span>{sample.cpu.scope === 'host-proc' ? 'Host load' : 'Core container load'}</span>
               </div>
               <LiveChart points={history} field="cpu" max={100} label="CPU load" color="#d1a172" />
               {sample.cpu.perCorePercent.length ? (

@@ -89,6 +89,8 @@ services:
       - ./docker-compose.dev.yml:/data/docker-compose.yml
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /proc/meminfo:/host/proc/meminfo:ro
+      - /proc/stat:/host/proc/stat:ro
+      - /proc/uptime:/host/proc/uptime:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     networks:
