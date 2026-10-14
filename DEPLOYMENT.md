@@ -26,6 +26,8 @@ The `v0.1.0-beta.2` release also passed its gated CI and integration jobs. Its a
 
 This boot exposed a status delay: the inherited Whoami container was stopped, but the installed-apps API initially reported its persisted `running` state until Runtipi's scheduled status sync reconciled it. The source now runs that existing Docker reconciliation once during startup, before serving requests. In the disposable stack, Whoami was started through the authenticated API, then its container was stopped outside Orbis. The beta 2 API still returned `running`. A local image with the startup fix was then booted against the same test data; on its first healthy response the API returned `stopped`. This change is verified in the local arm64 build but is **not** part of the published beta 2 image.
 
+The `v0.1.0-beta.3` release passed its CI, integration, and publish jobs. The release manifest and anonymous GHCR OCI index agree on `sha256:fd601494a394c9dafb06cb7c37041f513823f030a9b1f4be0e643e1d6682522f`, with linux/amd64 and linux/arm64 entries. The published arm64 image was pulled by that digest and booted on the same stopped synthetic CLI data. The core and proxy became healthy and `/api/health` returned 200. This image includes the startup status fix. Its amd64 variant has been built and indexed but has not been booted in our isolated runtime.
+
 ## Isolated Linux test host
 
 Use a disposable Linux VM with its own Docker daemon and no production volumes, network, or Docker context. Runtipi v4.10.1 remains the compatibility base. The fork builds its own `runtipi` image from [Dockerfile](Dockerfile) through [docker-compose.prod.yml](docker-compose.prod.yml); the Compose file's `TIPI_VERSION` is set to `4.10.1` for app compatibility. Keep the source revision and resulting image digest together in test records.
@@ -50,6 +52,21 @@ Runtipi's own folders and database are the import format. The fork keeps the ori
 For a copied CLI v4.10.1 installation, `python3 scripts/orbis-release-plan.py /path/to/copied/runtipi /path/to/release-manifest.json` validates a reviewed Orbis digest manifest and asks Docker Compose to merge the existing stack, `user-config/tipi-compose.yml` when present, and a proposed Orbis core image override. It reports the image configured by those Compose files and checks that the candidate changes nothing beyond the core image/build identity. It does not inspect the running Docker container, print generated environment values, pull images, start containers, or write the override. This plan is a prerequisite for a migration rehearsal, not an installer.
 
 After taking a separate, verified snapshot of the copied installation, `python3 scripts/orbis-stage-release.py /path/to/copied/runtipi /path/to/release-manifest.json --write` stages the digest-pinned image in `orbis-compose.yml`. With no `--write`, it prints the plan only. It refuses to overwrite a custom `orbis-compose.yml` or a symlink and preserves `user-config/tipi-compose.yml`. The isolated stock CLI copy was staged with the published beta 1 manifest and the merged configuration remained valid. Staging does **not** pull or start an image, stop applications, snapshot Postgres, verify a running container, or roll back. Those steps remain required before a live installation.
+
+### Host command for an adopted installation
+
+`scripts/orbis-host.py` operates a CLI v4.10.1 installation **after** a manually rehearsed Orbis cutover. Its `status` command reports the observed core image and health against a reviewed manifest. `enroll` records a currently healthy, exact digest-pinned Orbis core and hashes the base Compose file, `.env`, user override when present, and generated Orbis override. `stop` stops only the core and reverse proxy. `start` uses the files in base → user → Orbis order, refuses builds and image pulls, waits for health, and never removes app containers as orphans. The selected Docker context and the resolved installation root must be explicit on mutating commands.
+
+For the disposable CLI copy used above, the command sequence was:
+
+```sh
+python3 scripts/orbis-host.py status ROOT RELEASE_MANIFEST --docker-context colima-runtipi-test
+python3 scripts/orbis-host.py enroll ROOT RELEASE_MANIFEST --docker-context colima-runtipi-test --confirm-root ROOT
+python3 scripts/orbis-host.py stop ROOT RELEASE_MANIFEST --docker-context colima-runtipi-test --confirm-root ROOT
+python3 scripts/orbis-host.py start ROOT RELEASE_MANIFEST --docker-context colima-runtipi-test --confirm-root ROOT
+```
+
+Replace `ROOT` with the exact resolved absolute root in each command. The published beta 3 image passed this enrolled stop/start cycle in the isolated VM; the final status again reported the expected digest and healthy core. The command refuses a changed Compose or environment file and will not enroll a stock core. It is not an installer, first cutover command, updater, snapshot tool, or rollback tool. A host service and guarded update workflow are still needed before the browser can apply releases or a real homelab can be replaced.
 
 ## Later Hades cutover
 
