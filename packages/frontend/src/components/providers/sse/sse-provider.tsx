@@ -6,14 +6,18 @@ import type { PropsWithChildren } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
+import { useConnectionStore } from '@/stores/connection-store';
 
 export const SSEProvider = ({ children }: PropsWithChildren) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const setConnectionStatus = useConnectionStore((state) => state.setStatus);
 
   useSSE({
     topic: 'app',
+    onOpen: () => setConnectionStatus('connected'),
+    onError: () => setConnectionStatus('reconnecting'),
     onEvent: ({ event, appUrn, error }) => {
       if (error) {
         console.error(error);

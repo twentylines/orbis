@@ -17,6 +17,12 @@ export class SystemController {
     return LoadDto.parse(res, { reportOnly: true });
   }
 
+  @UseGuards(AuthGuard)
+  @Get('/telemetry')
+  async telemetry() {
+    return this.systemService.getTelemetry();
+  }
+
   @Get('/certificate')
   async downloadLocalCertificate(@Res() res: Response) {
     const cert = await this.systemService.getLocalCertificate();

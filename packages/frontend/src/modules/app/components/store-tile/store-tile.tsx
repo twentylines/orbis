@@ -17,7 +17,7 @@ export const StoreTile: React.FC<{ app: AppInfoSimple; isLoading: boolean }> = (
 
   return (
     <Link aria-label={app.name} className="app-tile" to={`/app-store/${storeId}/${appId}`}>
-      <div key={app.id} className="d-flex overflow-hidden align-items-center py-2 ps-2">
+      <div key={app.id} className="d-flex overflow-hidden align-items-center catalogue-tile">
         <Skeleton loading={isLoading}>
           <AppLogo className="logo" urn={app.urn} placeholder={isLoading} />
         </Skeleton>

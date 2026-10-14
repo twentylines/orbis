@@ -48,7 +48,7 @@ COPY ./packages/common/package.json ./packages/common/package.json
 COPY ./packages/frontend/scripts ./packages/frontend/scripts
 COPY ./packages/frontend/public ./packages/frontend/public
 
-RUN bun install --frozen-lockfile --verbose
+RUN bun install --frozen-lockfile
 
 COPY ./turbo.json ./turbo.json
 COPY ./packages ./packages

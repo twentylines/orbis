@@ -11,9 +11,8 @@ interface AppContextValue extends AppContextDto {
 const AppContext = createContext<AppContextValue | null>(null);
 
 // Optimistically prefetch pages that are likely to be visited
-const prefetch = async (queryClient: QueryClient) => {
-  queryClient.ensureInfiniteQueryData(searchAppsInfiniteOptions());
-  queryClient.ensureQueryData(systemLoadOptions());
+const prefetch = (queryClient: QueryClient) => {
+  void Promise.allSettled([queryClient.ensureInfiniteQueryData(searchAppsInfiniteOptions()), queryClient.ensureQueryData(systemLoadOptions())]);
 };
 
 export const AppContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

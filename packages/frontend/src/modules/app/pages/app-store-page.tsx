@@ -13,7 +13,19 @@ import { CategorySelector } from '@/components/category-selector/category-select
 import { ActionBar } from '@/components/action-bar/action-bar';
 
 export const AppStorePageSuspense = () => {
-  return <div className="card px-3 pb-3" style={{ height: 4000 }} />;
+  return (
+    <div>
+      <span className="visually-hidden">Loading app catalogue</span>
+      <div className="desktop-catalogue-skeleton" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  );
 };
 
 export default () => {
@@ -115,10 +127,10 @@ export default () => {
           <CategorySelector initialValue={category} onSelect={setCategory} />
         </ActionBar.Right>
       </ActionBar>
-      <div className="card px-3 pb-3" style={{ borderTopRightRadius: 0, borderTopLeftRadius: 0 }}>
-        <div className="row row-cards">
+      <div className="desktop-catalogue">
+        <div className="desktop-catalogue-grid">
           {apps.map((app, index) => (
-            <div ref={index === apps.length - 1 ? lastElementRef : null} key={app.urn} className="cursor-pointer col-sm-6 col-lg-4 p-2 mt-4">
+            <div ref={index === apps.length - 1 ? lastElementRef : null} key={app.urn} className="desktop-catalogue-item">
               <StoreTile app={app} isLoading={isLoading} />
             </div>
           ))}

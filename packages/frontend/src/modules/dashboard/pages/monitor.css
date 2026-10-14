@@ -1,0 +1,266 @@
+.desktop-monitor .workspace-message {
+  padding: 20px;
+  border: 1px solid #bf836c;
+  border-radius: 12px;
+  background: #f9ebe4;
+  color: #653923;
+  margin-bottom: 20px;
+}
+.desktop-monitor .workspace-message button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-decoration: underline;
+  color: inherit;
+  font-weight: 700;
+}
+.desktop-monitor-time {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--desktop-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.desktop-monitor-live-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 16px;
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+.desktop-monitor-live-status strong {
+  color: var(--desktop-ink);
+  font-size: 12px;
+}
+.desktop-live-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #9ac9aa;
+  box-shadow: 0 0 0 4px rgba(154, 201, 170, 0.12);
+}
+.desktop-live-dot-stale {
+  background: #d1a172;
+  box-shadow: 0 0 0 4px rgba(209, 161, 114, 0.13);
+}
+.desktop-live-chart {
+  position: relative;
+  height: 138px;
+  margin: 5px 0 20px;
+  overflow: hidden;
+  border: 1px solid var(--desktop-line);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(167, 193, 176, 0.08), rgba(167, 193, 176, 0.015));
+}
+.desktop-live-chart svg {
+  position: absolute;
+  inset: 8px 9px 8px 46px;
+  width: calc(100% - 55px);
+  height: calc(100% - 16px);
+  overflow: visible;
+}
+.desktop-live-chart svg line {
+  stroke: var(--desktop-line);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.desktop-live-chart svg polyline {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.desktop-live-chart-grid {
+  position: absolute;
+  z-index: 1;
+  inset: 8px auto 8px 9px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.desktop-live-chart-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+.desktop-network-legend {
+  display: flex;
+  gap: 16px;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  margin: -15px 0 10px;
+}
+.desktop-network-charts {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 15px;
+}
+.desktop-network-charts .desktop-live-chart {
+  height: 87px;
+  margin: 0;
+}
+.desktop-monitor .workspace-meter {
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: rgba(63, 90, 70, 0.13);
+}
+.desktop-monitor .workspace-meter span {
+  display: block;
+  height: 100%;
+  background: #658872;
+  border-radius: inherit;
+}
+.desktop-telemetry-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: 16px;
+}
+.desktop-telemetry-grid > section {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 15px;
+  background: rgba(125, 145, 121, 0.06);
+}
+.desktop-telemetry-grid h2 {
+  font-size: 18px;
+  margin: 0 0 24px;
+}
+.desktop-telemetry-grid p {
+  color: var(--desktop-muted);
+}
+.desktop-telemetry-lead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 19px;
+}
+.desktop-telemetry-lead strong {
+  font-size: clamp(27px, 3vw, 38px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.desktop-telemetry-lead span,
+.desktop-telemetry-foot {
+  color: var(--desktop-muted);
+  font-size: 13px;
+}
+.desktop-core-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.desktop-core-grid > div {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+}
+.desktop-core-grid span,
+.desktop-core-grid strong {
+  display: block;
+  font-size: 12px;
+}
+.desktop-core-grid strong {
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+.desktop-core-grid .workspace-meter {
+  margin-top: 10px;
+}
+.desktop-telemetry-foot {
+  margin: 17px 0 0;
+}
+.desktop-telemetry-pair {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--desktop-line);
+  font-size: 13px;
+}
+.desktop-telemetry-pair span {
+  color: var(--desktop-muted);
+}
+.desktop-telemetry-pair strong {
+  font-variant-numeric: tabular-nums;
+}
+.desktop-telemetry-memory > .workspace-meter {
+  margin: 0 0 18px;
+}
+.desktop-telemetry-list {
+  display: grid;
+  gap: 10px;
+}
+.desktop-disk,
+.desktop-network {
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(125, 145, 121, 0.09);
+}
+.desktop-disk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 12px;
+}
+.desktop-disk strong,
+.desktop-network > strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.desktop-disk small,
+.desktop-network small {
+  display: block;
+  color: var(--desktop-muted);
+  font-size: 11px;
+}
+.desktop-disk > span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.desktop-disk .workspace-meter {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+.desktop-network .desktop-telemetry-pair:first-of-type {
+  margin-top: 9px;
+}
+.desktop-network small {
+  margin-top: 9px;
+}
+@media (max-width: 900px) {
+  .desktop-telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 650px) {
+  .desktop-monitor-live-status {
+    flex-wrap: wrap;
+  }
+  .desktop-telemetry-grid > section {
+    padding: 18px;
+  }
+  .desktop-core-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .desktop-disk {
+    grid-template-columns: 1fr;
+  }
+  .desktop-disk > span {
+    white-space: normal;
+  }
+}

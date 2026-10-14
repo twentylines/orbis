@@ -98,7 +98,7 @@ export default () => {
           }
         />
       ) : (
-        <div className="row row-cards" data-testid="apps-list">
+        <div className="row row-cards desktop-installed-grid" data-testid="apps-list">
           {installed.map(renderApp)}
           {customLinks.map(renderLink)}
           <ButtonTile

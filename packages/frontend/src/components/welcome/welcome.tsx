@@ -25,14 +25,13 @@ export const Welcome = ({ allowErrorMonitoring }: Props) => {
     <div className="page page-center">
       <div className="container container-tight py-4">
         <div className="text-center mb-4">
-          <img alt="Runtipi logo" src={getLogo(true)} height={50} width={50} style={{ maxWidth: '100%', height: 'auto' }} />
+          <img alt="Orbis logo" src={getLogo(true)} height={50} width={50} style={{ maxWidth: '100%', height: 'auto' }} />
         </div>
         <div className="card card-md">
           <div className="card-body">
-            <h2 className="h2 text-center mb-4">Thanks for using Runtipi</h2>
+            <h2 className="h2 text-center mb-4">Welcome to Orbis</h2>
             <p className="text-center mb-4">
-              Runtipi is a free and open source project that is developed and maintained by a small team. If it helps you in any way, please consider
-              supporting the project by{' '}
+              Orbis is built on the free and open source Runtipi project. Please consider supporting the Runtipi maintainers by{' '}
               <a target="_blank" href="https://github.com/runtipi/runtipi?sponsor=1" rel="noreferrer">
                 donating
               </a>{' '}
@@ -43,8 +42,7 @@ export const Welcome = ({ allowErrorMonitoring }: Props) => {
               .
               <br />
               <br />
-              If you can&apos;t do either of those, please consider enabling the opt-in anonymous error reporting feature. This will help us identify
-              and fix bugs faster.
+              Opt-in error reporting uses the inherited Runtipi integration. Reports from Orbis may reach the upstream service.
             </p>
             <div className="d-flex flex-column align-items-center">
               <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Enable error reporting" />

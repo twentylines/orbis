@@ -49,6 +49,64 @@ export class SystemService {
     };
   }
 
+  public async getTelemetry() {
+    const [cpuResult, diskResult, networkResult, memoryResult] = await Promise.allSettled([
+      si.currentLoad(),
+      si.fsSize(),
+      si.networkStats(),
+      this.filesystem.readTextFile('/host/proc/meminfo'),
+    ]);
+
+    const cpu = cpuResult.status === 'fulfilled' ? cpuResult.value : null;
+    const disks = diskResult.status === 'fulfilled' ? diskResult.value : [];
+    const networks = networkResult.status === 'fulfilled' ? networkResult.value : [];
+    const memoryText = memoryResult.status === 'fulfilled' ? memoryResult.value : null;
+    const memory = (key: string) => {
+      const match = memoryText?.match(new RegExp(`^${key}:\\s+(\\d+)`, 'm'));
+      return match ? Number(match[1]) * 1024 : null;
+    };
+    const memoryTotal = memory('MemTotal');
+    const memoryAvailable = memory('MemAvailable');
+    const swapTotal = memory('SwapTotal');
+    const swapFree = memory('SwapFree');
+    const safe = (value: number | undefined | null) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null);
+
+    return {
+      sampledAt: new Date().toISOString(),
+      cpu: {
+        scope: 'runtime',
+        totalPercent: safe(cpu?.currentLoad),
+        perCorePercent: cpu?.cpus.map((core) => safe(core.load)) ?? [],
+        uptimeSeconds: safe(si.time().uptime),
+      },
+      memory: {
+        scope: 'host-proc',
+        totalBytes: safe(memoryTotal),
+        availableBytes: safe(memoryAvailable),
+        swapTotalBytes: safe(swapTotal),
+        swapFreeBytes: safe(swapFree),
+      },
+      filesystems: disks
+        .filter((disk) => safe(disk.size) !== null)
+        .map((disk) => ({
+          mount: disk.mount,
+          filesystem: disk.fs,
+          sizeBytes: safe(disk.size),
+          usedBytes: safe(disk.used),
+          availableBytes: safe(disk.available),
+          scope: 'runtime',
+        })),
+      network: networks.map((interfaceStats) => ({
+        interface: interfaceStats.iface,
+        rxBytesPerSecond: safe(interfaceStats.rx_sec),
+        txBytesPerSecond: safe(interfaceStats.tx_sec),
+        receivedBytes: safe(interfaceStats.rx_bytes),
+        transmittedBytes: safe(interfaceStats.tx_bytes),
+        scope: 'runtime',
+      })),
+    };
+  }
+
   public async getLocalCertificate() {
     const { dataDir } = this.config.get('directories');
     const filePath = `${dataDir}/traefik/tls/cert.pem`;

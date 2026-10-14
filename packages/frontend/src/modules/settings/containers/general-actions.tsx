@@ -1,53 +1,22 @@
-import { Markdown } from '@/components/markdown/markdown';
-import { Button } from '@/components/ui/Button';
 import { useAppContext } from '@/context/app-context';
-import { IconStar } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
-import semver from 'semver';
 import { UpdateRepoModal } from '../components/update-repo-modal/update-repo-modal';
 
 export const GeneralActionsContainer = () => {
   const { t } = useTranslation();
   const { version } = useAppContext();
 
-  const isLatest = semver.valid(version.current) && semver.valid(version.latest) && semver.gte(version.current, version.latest);
-
-  const renderUpdate = () => {
-    if (isLatest) {
-      return <Button disabled>{t('SETTINGS_ACTIONS_ALREADY_LATEST')}</Button>;
-    }
-
-    return (
-      <div>
-        {version.releases?.map((release) => (
-          <div key={release.version} className="mt-3 card col-12 col-md-8">
-            <div className="card-stamp">
-              <div className="card-stamp-icon bg-yellow">
-                <IconStar size={80} />
-              </div>
-            </div>
-            <div className="card-header">
-              <h3 className="card-title">Version {release.version}</h3>
-            </div>
-            <div className="card-body">
-              <Markdown className="" content={release.body} />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
   return (
     <div className="card-body">
       <h2 className="mb-4">{t('SETTINGS_ACTIONS_TITLE')}</h2>
       <h3 className="card-title mt-4">{t('SETTINGS_ACTIONS_CURRENT_VERSION', { version: version.current })}</h3>
       <p className="card-subtitle">
-        {isLatest ? t('SETTINGS_ACTIONS_STAY_UP_TO_DATE') : t('SETTINGS_ACTIONS_NEW_VERSION', { version: version.latest })}
+        This server runs Orbis, a custom Runtipi fork. Core updates must be built and deployed from this project after compatibility checks. The
+        upstream Runtipi release shown by the API is a reference, not an update for this fork.
       </p>
-      {renderUpdate()}
+      <p className="card-subtitle">Upstream release currently reported: {version.latest || 'Unavailable'}.</p>
       <h3 className="card-title mt-4">{t('SETTINGS_ACTIONS_UPDATE_REPO_TITLE')}</h3>
-      <p className="card-subtitle">{t('SETTINGS_ACTIONS_UPDATE_REPO_SUBTITLE')}</p>
+      <p className="card-subtitle">{t('SETTINGS_ACTIONS_UPDATE_REPO_SUBTITLE')} App-store refreshes do not replace the server interface.</p>
       <UpdateRepoModal />
     </div>
   );

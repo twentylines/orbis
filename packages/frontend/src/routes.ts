@@ -11,6 +11,8 @@ export default [
   // Authenticated routes
   layout('./components/routes/authenticated-route.tsx', [
     route('dashboard', './modules/dashboard/pages/dashboard.tsx', { id: 'dashboard' }),
+    route('monitor', './modules/dashboard/pages/monitor.tsx', { id: 'monitor' }),
+    route('updates', './modules/updates/pages/updates.tsx', { id: 'updates' }),
 
     // App store routes
     ...prefix('app-store', [

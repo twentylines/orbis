@@ -22,17 +22,4 @@ export const getAutoTheme = (): Theme => {
   return theme ? (theme[0] as Theme) : 'default';
 };
 
-export const getLogo = (autoTheme: boolean) => {
-  if (!autoTheme) {
-    return '/tipi.png';
-  }
-
-  const theme = getAutoTheme();
-
-  switch (theme) {
-    case 'christmas':
-      return '/tipi-christmas.png';
-    default:
-      return '/tipi.png';
-  }
-};
+export const getLogo = (_autoTheme: boolean) => '/icons/orbis.svg';
