@@ -49,7 +49,13 @@ async function main() {
     await page.getByRole('heading', { name: 'Your server' }).waitFor();
 
     const api = {};
-    for (const endpoint of ['/api/marketplace/all', '/api/marketplace/apps/search?pageSize=5', '/api/apps/installed', '/api/system/telemetry', '/api/system/build']) {
+    for (const endpoint of [
+      '/api/marketplace/all',
+      '/api/marketplace/apps/search?pageSize=5',
+      '/api/apps/installed',
+      '/api/system/telemetry',
+      '/api/system/build',
+    ]) {
       const response = await page.request.get(`${base}${endpoint}`);
       assert.equal(response.status(), 200, `${endpoint} should succeed`);
       api[endpoint] = await response.json();
@@ -135,7 +141,7 @@ async function main() {
     }
 
     assert.deepEqual(errors, [], 'browser should have no page errors');
-    console.log(
+    console.info(
       JSON.stringify({
         result: 'passed',
         title: await page.title(),
