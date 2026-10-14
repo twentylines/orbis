@@ -88,6 +88,11 @@
   font-size: 13px;
   line-height: 1.5;
 }
+.desktop-update-build strong,
+.desktop-update-build span {
+  display: block;
+  overflow-wrap: anywhere;
+}
 .desktop-update-release {
   margin-top: 20px;
 }

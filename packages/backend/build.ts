@@ -14,6 +14,7 @@ await Bun.build({
   external: [
     'argon2',
     'class-transformer',
+    'cpu-features',
     '@nestjs/typeorm',
     '@nestjs/mongoose',
     '@nestjs/sequelize',

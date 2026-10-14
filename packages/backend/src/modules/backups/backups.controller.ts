@@ -55,7 +55,7 @@ export class BackupsController {
   @Get(':urn')
   @ApiResponse({ type: GetAppBackupsDto })
   async getAppBackups(@Param('urn') urn: string, @Query() query: GetAppBackupsQueryDto) {
-    const backups = await this.backupsService.getAppBackups({ appUrn: castAppUrn(urn), page: query.page ?? 0, pageSize: query.pageSize ?? 10 });
+    const backups = await this.backupsService.getAppBackups({ appUrn: castAppUrn(urn), page: query.page ?? 1, pageSize: query.pageSize ?? 10 });
 
     return GetAppBackupsDto.parse(backups, { reportOnly: true });
   }

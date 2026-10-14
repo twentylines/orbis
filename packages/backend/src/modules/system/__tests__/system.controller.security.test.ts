@@ -84,4 +84,14 @@ describe('SystemController certificate security', () => {
     expect(allowed.status).toBe(200);
     expect(allowed.body.cpu.scope).toBe('runtime');
   });
+
+  it('requires authentication for build metadata and reports the installed version', async () => {
+    const denied = await request(app.getHttpServer()).get('/system/build');
+    expect(denied.status).toBe(401);
+
+    const allowed = await request(app.getHttpServer()).get('/system/build').set('Authorization', 'Bearer cli-token');
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.version).toBe(process.env.ORBIS_VERSION || 'development');
+    expect(allowed.body.runtipiCompatibility).toBe(process.env.TIPI_VERSION || null);
+  });
 });

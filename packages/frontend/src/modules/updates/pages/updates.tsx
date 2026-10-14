@@ -6,7 +6,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import './updates.css';
 
-type Release = { tag: string; publishedAt: string | null; body: string; url: string };
+type Release = { tag: string; publishedAt: string | null; body: string; url: string; imageManifestUrl: string | null };
+type Build = { version: string; commit: string | null; imageDigest: string | null; runtipiCompatibility: string | null };
+
+async function loadInstalledBuild(signal: AbortSignal): Promise<Build> {
+  const response = await fetch('/api/system/build', { signal, credentials: 'same-origin' });
+  if (!response.ok) throw new Error(`Installed build check failed (${response.status})`);
+  return response.json();
+}
 
 async function loadOrbisReleases(signal: AbortSignal): Promise<Release[]> {
   const response = await fetch('https://api.github.com/repos/twentylines/orbis/releases?per_page=5', {
@@ -24,11 +31,18 @@ async function loadOrbisReleases(signal: AbortSignal): Promise<Release[]> {
       publishedAt: typeof item.published_at === 'string' ? item.published_at : null,
       body: typeof item.body === 'string' ? item.body : '',
       url: item.html_url as string,
+      imageManifestUrl:
+        (Array.isArray(item.assets) &&
+          item.assets.find(
+            (asset: unknown) => typeof asset === 'object' && asset !== null && 'name' in asset && asset.name === 'release-manifest.json',
+          )?.browser_download_url) ||
+        null,
     }));
 }
 
 export default function Updates() {
   const apps = useQuery(getInstalledAppsOptions());
+  const build = useQuery({ queryKey: ['orbis-installed-build'], queryFn: ({ signal }) => loadInstalledBuild(signal), staleTime: 30 * 60 * 1000 });
   const releases = useQuery({
     queryKey: ['orbis-github-releases'],
     queryFn: ({ signal }) => loadOrbisReleases(signal),
@@ -94,7 +108,20 @@ export default function Updates() {
             </div>
           </div>
           <div className="desktop-update-build">
-            This installation is a development build. Its upstream Runtipi compatibility version is separate from Orbis releases.
+            {build.isPending ? 'Reading installed Orbis build…' : null}
+            {build.isError ? 'Installed Orbis build metadata is unavailable.' : null}
+            {build.data ? (
+              <>
+                <strong>Installed: {build.data.version}</strong>
+                {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
+                {build.data.imageDigest ? (
+                  <span>Image {build.data.imageDigest}</span>
+                ) : (
+                  <span>Image digest was not supplied by this deployment.</span>
+                )}
+                {build.data.runtipiCompatibility ? <span>Runtipi compatibility: {build.data.runtipiCompatibility}</span> : null}
+              </>
+            ) : null}
           </div>
           {releases.isPending ? <p>Checking published Orbis releases…</p> : null}
           {releases.isError ? <p role="alert">GitHub releases are unavailable right now. You can check the repository directly.</p> : null}
@@ -105,6 +132,7 @@ export default function Updates() {
                 <strong>{latest.tag}</strong>
                 <time>{latest.publishedAt ? new Date(latest.publishedAt).toLocaleDateString() : 'Date unavailable'}</time>
               </div>
+              <p>{latest.imageManifestUrl ? 'Published image manifest available.' : 'No Orbis image manifest is attached to this release.'}</p>
               <details>
                 <summary>Read changelog</summary>
                 {latest.body ? <Markdown content={latest.body} className="desktop-update-markdown" /> : <p>This release has no changelog.</p>}

@@ -23,3 +23,5 @@ For the later multi-homelab design, the paired host agent can provide this same 
 ## Current status
 
 The current fork preserves the existing Runtipi app update mechanisms. Its Update Center links available app updates to their real detail flows and reads published Orbis release notes directly from GitHub. It does not yet provide an Orbis release installer or host operating system updater. Those controls must not appear as working actions until the helper, packaging, and rollback have passed disposable-host tests.
+
+The tag workflow now builds `ghcr.io/twentylines/orbis` for amd64 and arm64, records the immutable image digest in `release-manifest.json`, and publishes notes from the matching `releases/<tag>.md` file. Repository CI and integration tests run first. No Orbis tag or image has been released yet. The browser reads the installed version and commit from the running container and states when the deployment did not supply an image digest.

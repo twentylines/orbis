@@ -1,10 +1,11 @@
-name: Integraton tests
+name: Integration tests
 on:
   workflow_call:
   pull_request:
   push:
     branches:
-      - develop
+      - main
+      - 'codex/**'
 
 jobs:
   integration-tests:
