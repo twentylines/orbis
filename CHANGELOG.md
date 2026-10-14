@@ -17,5 +17,6 @@
 - Added a guarded release staging command that writes only a digest-pinned core Compose override, plus stricter external-path review in migration preflight.
 - Added Ocean and Blush appearance presets and two more bundled local wallpapers, retaining earlier saved preferences.
 - Reconciled persisted application statuses against Docker during startup, so a stopped container is not initially shown as running after a core restart.
+- Switched the workspace activity tiles to the same live telemetry used by Monitor, with host CPU and memory, clearly scoped core network rates, and runtime filesystem usage.
 
 Real homelab migration, automatic core installation and rollback, host package updates, and multi-server pairing remain outstanding.

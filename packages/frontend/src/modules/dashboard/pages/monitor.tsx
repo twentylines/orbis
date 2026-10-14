@@ -1,35 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
 import './monitor.css';
-
-type Telemetry = {
-  sampledAt: string;
-  cpu: { scope: 'host-proc' | 'runtime'; totalPercent: number | null; perCorePercent: (number | null)[]; uptimeSeconds: number | null };
-  memory: {
-    scope: 'host-proc';
-    totalBytes: number | null;
-    availableBytes: number | null;
-    swapTotalBytes: number | null;
-    swapFreeBytes: number | null;
-  };
-  filesystems: {
-    mount: string;
-    filesystem: string;
-    sizeBytes: number | null;
-    usedBytes: number | null;
-    availableBytes: number | null;
-    scope: 'runtime';
-  }[];
-  network: {
-    interface: string;
-    rxBytesPerSecond: number | null;
-    txBytesPerSecond: number | null;
-    receivedBytes: number | null;
-    transmittedBytes: number | null;
-    scope: 'runtime';
-  }[];
-};
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return 'Unavailable';
@@ -94,12 +67,8 @@ function LiveChart({
 export default function Monitor() {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const telemetry = useQuery<Telemetry>({
-    queryKey: ['system-telemetry'],
-    queryFn: async ({ signal }) => {
-      const response = await fetch('/api/system/telemetry', { credentials: 'include', signal });
-      if (!response.ok) throw new Error('Unable to read system telemetry');
-      return response.json() as Promise<Telemetry>;
-    },
+    queryKey: telemetryQueryKey,
+    queryFn: ({ signal }) => loadTelemetry(signal),
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
   });
