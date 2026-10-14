@@ -118,6 +118,7 @@ export default function Monitor() {
     sample?.memory.swapFreeBytes !== undefined
       ? sample.memory.swapTotalBytes - sample.memory.swapFreeBytes
       : null;
+  const memoryPercent = usedMemory !== null && sample?.memory.totalBytes ? (usedMemory / sample.memory.totalBytes) * 100 : null;
 
   useEffect(() => {
     if (!sample) return;
@@ -180,6 +181,63 @@ export default function Monitor() {
             Sampled {new Date(sample.sampledAt).toLocaleString()}
             {telemetry.isError ? ' · Disconnected' : ''}
           </output>
+          <section className="desktop-host-overview" aria-labelledby="desktop-host-overview-title">
+            <div className="desktop-host-overview-copy">
+              <span className="desktop-host-overview-kicker">LOCAL SERVER · 01</span>
+              <h2 id="desktop-host-overview-title">The machine behind your workspace</h2>
+              <p>One server, sampled live. The hardware view follows the readings below; it does not estimate missing data.</p>
+              <div className="desktop-host-overview-readings">
+                <div>
+                  <span>{sample.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU'}</span>
+                  <strong>{percent(sample.cpu.totalPercent)}</strong>
+                </div>
+                <div>
+                  <span>Host memory</span>
+                  <strong>{percent(memoryPercent)}</strong>
+                </div>
+                <div>
+                  <span>Host uptime</span>
+                  <strong>
+                    {sample.cpu.uptimeSeconds === null
+                      ? 'Unavailable'
+                      : `${Math.floor(sample.cpu.uptimeSeconds / 86400)}d ${Math.floor((sample.cpu.uptimeSeconds % 86400) / 3600)}h`}
+                  </strong>
+                </div>
+              </div>
+            </div>
+            <div className="desktop-host-visual" aria-hidden="true">
+              <div className="desktop-host-shadow" />
+              <div className="desktop-host-machine">
+                <div className="desktop-host-machine-top" />
+                <div className="desktop-host-machine-side" />
+                <div className="desktop-host-machine-front">
+                  <div className="desktop-host-machine-head">
+                    <span className="desktop-host-machine-mark">O</span>
+                    <span>ORBIS / LOCAL</span>
+                    <i className={telemetry.isError ? 'desktop-host-machine-led is-stale' : 'desktop-host-machine-led'} />
+                  </div>
+                  <div className="desktop-host-machine-bay">
+                    <span>CPU</span>
+                    <b>{percent(sample.cpu.totalPercent)}</b>
+                    <i>
+                      <span style={{ width: width(sample.cpu.totalPercent) }} />
+                    </i>
+                  </div>
+                  <div className="desktop-host-machine-bay">
+                    <span>MEMORY</span>
+                    <b>{percent(memoryPercent)}</b>
+                    <i>
+                      <span style={{ width: width(memoryPercent) }} />
+                    </i>
+                  </div>
+                  <div className="desktop-host-machine-base">
+                    <span>01</span>
+                    <span>SERVER MODULE</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
           <div className="desktop-telemetry-grid">
             <section className="desktop-telemetry-cpu" aria-labelledby="telemetry-cpu-title">
               <h2 id="telemetry-cpu-title">CPU</h2>

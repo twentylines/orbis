@@ -127,12 +127,13 @@ def plan(root: Path, manifest: dict[str, str]) -> dict:
         "result": "plan-ready",
         "installRoot": str(root),
         "installedRuntipiVersion": installed_version,
-        "currentImage": services["runtipi"].get("image"),
+        "configuredImage": services["runtipi"].get("image"),
         "candidateImage": f"{IMAGE}@{manifest['digest']}",
         "releaseTag": manifest["tag"],
         "releaseCommit": manifest["commit"],
         "userOverrideIncluded": user_override.is_file(),
-        "currentOrbisOverrideIncluded": current_override.is_file(),
+        "standardOrbisOverrideIncluded": current_override.is_file(),
+        "runtimeInspected": False,
         "requiredNextStep": "Rehearse on this copy with a verified database and file snapshot before any live rollout.",
     }
 

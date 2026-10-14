@@ -38,6 +38,22 @@ def data_overrides(env_file: Path) -> dict[str, str]:
     return values
 
 
+def root_host_status(env_file: Path, root: Path) -> str:
+    if not env_file.is_file():
+        return "missing"
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        name, separator, value = line.partition("=")
+        if separator and name.strip() == "ROOT_FOLDER_HOST":
+            configured = value.strip().strip('"\'')
+            if not configured or "$" in configured or "~" in configured:
+                return "unresolved"
+            candidate = Path(configured)
+            if not candidate.is_absolute():
+                return "relative-path"
+            return "matches-copy" if candidate.resolve(strict=False) == root else "points-elsewhere"
+    return "missing"
+
+
 def inspect_directory(root: Path, base: str, suffix: str) -> dict[str, object]:
     if not base or "$" in base or "~" in base:
         return {"status": "uninspected-variable"}
@@ -84,6 +100,7 @@ def inspect(root: Path) -> dict[str, object]:
     env_file = root / ".env"
     overrides = data_overrides(env_file)
     layout, default_base, database_path = detect_layout(root)
+    host_root = root_host_status(env_file, root) if layout == "cli-v4" else "not-applicable"
     directories = {
         suffix: inspect_directory(root, overrides.get(key, default_base), suffix)
         for suffix, key in DATA_PATHS.items()
@@ -99,12 +116,15 @@ def inspect(root: Path) -> dict[str, object]:
         "root": str(root),
         "readOnly": True,
         "layout": layout,
+        "rootFolderHost": host_root,
         "envFilePresent": env_file.is_file(),
         "composeFilesPresent": compose_files,
         "directories": directories,
         "criticalDirectoriesNeedingReview": critical_missing,
         "database": database,
-        "result": "review-required" if critical_missing or not env_file.is_file() or layout == "unknown" or database["status"] != "present" else "inventory-only",
+        "result": "review-required"
+        if critical_missing or not env_file.is_file() or layout == "unknown" or database["status"] != "present" or host_root not in {"matches-copy", "not-applicable"}
+        else "inventory-only",
     }
 
 

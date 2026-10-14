@@ -7,10 +7,12 @@
 - Added authenticated telemetry and per-user desktop preferences.
 - Added an Update Center that shows application update availability and reads Orbis release notes from GitHub when releases exist. Host package updates and in-browser Orbis installation are still pending restricted host tooling and rollback validation.
 - Verified clean startup, registration, key routes, official catalogue access, and new authenticated endpoints in a disposable Docker VM. Existing-install migration is still pending.
-- Replaced inherited upstream release jobs with a gated Orbis image and GitHub Release workflow, and added authenticated installed-build metadata to the Update Center. No Orbis release has been published yet.
+- Replaced inherited upstream release jobs with a gated Orbis image and GitHub Release workflow, and added authenticated installed-build metadata to the Update Center. Published `v0.1.0-beta.1` as an explicitly limited preview.
 - Passed a disposable Whoami install, stop, start, restart, backup, reset, restore, and uninstall path. Fixed the default backup list page and removed a tar self-inclusion warning during backup creation.
 - Corrected migration inventory for the pinned CLI's top-level folders and `data/postgres`, and added read-only digest/Compose planning for an Orbis release on a copied installation.
 - Rehearsed stock CLI v4.10.1 to Orbis and back on a synthetic installation with an account, custom core Compose override, official store, and Whoami app; Hades data remains untested.
 - Added low-cost host CPU sampling from `/proc/stat` for the live Monitor, with an explicit container fallback when the host mount is unavailable.
+- Added a live CSS perspective server view to Monitor with responsive layout and reduced-motion support.
+- Replaced the hard-coded Hades desktop label with a neutral default for new installations; saved server names remain untouched.
 
 The first tagged release will be created only after the fork has passed copied-data migration and application lifecycle testing.

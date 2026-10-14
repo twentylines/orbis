@@ -14,7 +14,7 @@ class MigrationPreflightTests(unittest.TestCase):
     def test_inventory_never_returns_env_values(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            (root / ".env").write_text("SECRET_TOKEN=private-value\n")
+            (root / ".env").write_text(f"SECRET_TOKEN=private-value\nROOT_FOLDER_HOST={root}\n")
             (root / "docker-compose.yml").write_text("services:\n  runtipi-db:\n    volumes:\n      - ./data/postgres:/var/lib/postgresql/data\n")
             for name in PREFLIGHT.DATA_PATHS:
                 (root / name).mkdir(parents=True)
@@ -23,6 +23,7 @@ class MigrationPreflightTests(unittest.TestCase):
             self.assertEqual(report["result"], "inventory-only")
             self.assertNotIn("private-value", str(report))
             self.assertEqual(report["layout"], "cli-v4")
+            self.assertEqual(report["rootFolderHost"], "matches-copy")
             self.assertEqual(report["directories"]["apps"]["status"], "present")
             self.assertEqual(report["database"]["status"], "present")
 
@@ -37,6 +38,18 @@ class MigrationPreflightTests(unittest.TestCase):
             self.assertEqual(report["layout"], "source-compose")
             self.assertEqual(report["directories"]["apps"]["status"], "present")
             self.assertEqual(report["database"]["status"], "docker-volume-not-inspected")
+            self.assertEqual(report["result"], "review-required")
+
+    def test_copied_cli_root_with_stale_host_path_needs_review(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".env").write_text("ROOT_FOLDER_HOST=/original/runtipi\n")
+            (root / "docker-compose.yml").write_text("services:\n  runtipi-db:\n    volumes:\n      - ./data/postgres:/var/lib/postgresql/data\n")
+            for name in PREFLIGHT.DATA_PATHS:
+                (root / name).mkdir()
+            (root / "data" / "postgres").mkdir(parents=True)
+            report = PREFLIGHT.inspect(root)
+            self.assertEqual(report["rootFolderHost"], "points-elsewhere")
             self.assertEqual(report["result"], "review-required")
 
     def test_external_override_is_not_inspected(self):
