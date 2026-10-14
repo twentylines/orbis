@@ -1,6 +1,6 @@
 # Orbis build and migration rehearsal
 
-The source tree builds and passes unit, browser-fixture, clean-install Docker, and disposable-app lifecycle smoke checks. It has **not** passed copied-data migration rehearsal. Do not use it to replace a live Runtipi installation yet.
+The source tree builds and passes unit, browser-fixture, clean-install Docker, disposable-app lifecycle, and a synthetic stock CLI migration rehearsal. It has **not** passed migration against a copy of an existing homelab. Do not use it to replace a live Runtipi installation yet.
 
 ## Verified clean-install smoke test (15 October 2026)
 
@@ -10,7 +10,13 @@ That first check verifies clean startup and key read paths. The separate app lif
 
 ## Verified disposable app lifecycle (15 October 2026)
 
-The same isolated VM was reset to an empty database and ran `ORBIS_SMOKE_LIFECYCLE=1 node scripts/live-smoke.cjs`. It installed the official Whoami app, reached running state, stopped, started, restarted, created and listed a backup, reset, restored that backup, and uninstalled while removing the archive. All operations completed through the authenticated browser API, and no application container remained. This verifies one small app on a clean installation; app updates, custom stores, external URLs, TOTP, HTTPS routing, and existing-install data remain untested.
+The same isolated VM was reset to an empty database and ran `ORBIS_SMOKE_LIFECYCLE=1 node scripts/live-smoke.cjs`. It installed the official Whoami app, reached running state, stopped, started, restarted, created and listed a backup, reset, restored that backup, and uninstalled while removing the archive. All operations completed through the authenticated browser API, and no application container remained. This verifies one small app on a clean installation; app updates, custom stores, external URLs, TOTP, HTTPS routing, and real existing-install data remain untested.
+
+## Synthetic stock CLI migration and rollback (15 October 2026)
+
+In the isolated Colima VM, the pinned Runtipi CLI v4.10.1 Compose template started the official `ghcr.io/runtipi/runtipi:v4.10.1` image with synthetic credentials, top-level data folders, `data/postgres`, and a `user-config/tipi-compose.yml` override for a loopback test port. A user registered, the official store loaded, and Whoami installed under `whoami:migrated`. With the app and core stopped, the entire installation tree was copied. A local Orbis image replaced only the core image through a final Compose override; the merged Compose model was checked to be otherwise unchanged. Orbis became healthy using the existing database and files, accepted the original session, reported one store and the same running app, then stopped and started that inherited app through its lifecycle API. The core and app were stopped again, the saved installation tree was restored, and stock Runtipi plus the app were recreated. Stock health, the original session, store, and app record all returned; `/api/system/build` returned 404 again as expected for stock.
+
+This verifies the migration path for a small synthetic CLI install and rollback using a full stopped-state copy. It does not validate a copy of Hades, large app data, external paths, user app overrides, custom stores, HTTPS domains, or rollback after an Orbis database migration. The local image was not a published digest-pinned release.
 
 ## Isolated Linux test host
 
