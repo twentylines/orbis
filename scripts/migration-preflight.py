@@ -61,25 +61,50 @@ def inspect_directory(root: Path, base: str, suffix: str) -> dict[str, object]:
     return {"status": "present", "topLevelEntries": count}
 
 
+def detect_layout(root: Path) -> tuple[str, str, str]:
+    """Distinguish a CLI installation from a source-tree Compose test stack."""
+    cli_compose = root / "docker-compose.yml"
+    dev_compose = root / "docker-compose.prod.yml"
+    try:
+        if cli_compose.is_file():
+            compose = cli_compose.read_text(encoding="utf-8")
+            if "./data/postgres:/var/lib/postgresql/data" in compose:
+                return "cli-v4", ".", "data/postgres"
+        if dev_compose.is_file():
+            compose = dev_compose.read_text(encoding="utf-8")
+            if "pgdata:/var/lib/postgresql/data" in compose:
+                return "source-compose", ".internal", "docker-volume:pgdata"
+    except (OSError, UnicodeError):
+        pass
+    return "unknown", "", "unknown"
+
+
 def inspect(root: Path) -> dict[str, object]:
     root = root.resolve(strict=True)
     env_file = root / ".env"
     overrides = data_overrides(env_file)
+    layout, default_base, database_path = detect_layout(root)
     directories = {
-        suffix: inspect_directory(root, overrides.get(key, ".internal"), suffix)
+        suffix: inspect_directory(root, overrides.get(key, default_base), suffix)
         for suffix, key in DATA_PATHS.items()
     }
     critical_missing = [name for name in sorted(CRITICAL) if directories[name]["status"] != "present"]
     compose_files = [name for name in ("docker-compose.yml", "docker-compose.prod.yml", "compose.yml") if (root / name).is_file()]
+    database = (
+        inspect_directory(root, ".", database_path)
+        if database_path == "data/postgres"
+        else {"status": "docker-volume-not-inspected"} if database_path.startswith("docker-volume:") else {"status": "unknown"}
+    )
     return {
         "root": str(root),
         "readOnly": True,
+        "layout": layout,
         "envFilePresent": env_file.is_file(),
         "composeFilesPresent": compose_files,
         "directories": directories,
         "criticalDirectoriesNeedingReview": critical_missing,
-        "database": "The Runtipi Postgres named volume is not in this tree. Capture and test a database backup separately.",
-        "result": "review-required" if critical_missing or not env_file.is_file() or not compose_files else "inventory-only",
+        "database": database,
+        "result": "review-required" if critical_missing or not env_file.is_file() or layout == "unknown" or database["status"] != "present" else "inventory-only",
     }
 
 

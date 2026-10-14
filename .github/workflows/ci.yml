@@ -37,6 +37,9 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      - name: Check migration and release planning
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
   build:
     runs-on: ubuntu-latest
     steps:
