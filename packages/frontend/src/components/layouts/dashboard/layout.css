@@ -1,3 +1,5 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Shared element selectors target separate desktop surfaces. */
+/* biome-ignore-all lint/complexity/noImportantStyles: Tabler utilities and reduced-motion controls need stronger overrides. */
 .desktop {
   --desktop-wallpaper: url("/wallpapers/sandstone.svg");
   --desktop-ink: #182522;
@@ -14,8 +16,12 @@
   background: #c9d0bc var(--desktop-wallpaper) center center / cover fixed;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-.desktop[data-desktop-wallpaper="tidal"] { --desktop-wallpaper: url("/wallpapers/tidal.svg"); }
-.desktop[data-desktop-wallpaper="canopy"] { --desktop-wallpaper: url("/wallpapers/canopy.svg"); }
+.desktop[data-desktop-wallpaper="tidal"] {
+  --desktop-wallpaper: url("/wallpapers/tidal.svg");
+}
+.desktop[data-desktop-wallpaper="canopy"] {
+  --desktop-wallpaper: url("/wallpapers/canopy.svg");
+}
 .desktop[data-desktop-preset="graphite"] {
   --desktop-ink: #edf2ef;
   --desktop-muted: #aebbb3;
@@ -99,9 +105,24 @@
   text-decoration: none;
   white-space: nowrap;
 }
-.desktop-brand img { border-radius: 8px; flex: none; }
-.desktop-product { letter-spacing: -0.035em; }
-.desktop-server-name { min-width: 0; max-width: 175px; overflow: hidden; text-overflow: ellipsis; padding-left: 10px; border-left: 1px solid var(--desktop-line); color: var(--desktop-muted); font-size: 12px; font-weight: 600; }
+.desktop-brand img {
+  border-radius: 8px;
+  flex: none;
+}
+.desktop-product {
+  letter-spacing: -0.035em;
+}
+.desktop-server-name {
+  min-width: 0;
+  max-width: 175px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 10px;
+  border-left: 1px solid var(--desktop-line);
+  color: var(--desktop-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
 .desktop-current {
   font-size: 14px;
   font-weight: 600;
@@ -148,10 +169,27 @@
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
-.desktop-connection { display: inline-flex; align-items: center; gap: 7px; color: var(--desktop-muted); font-size: 13px; white-space: nowrap; }
-.desktop-connection-dot { display: block; width: 7px; height: 7px; border-radius: 50%; background: #a28a62; }
-.desktop-connection-dot.is-connected { background: #42815b; }
-.desktop-connection-dot.is-reconnecting { background: #b46f50; }
+.desktop-connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--desktop-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.desktop-connection-dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a28a62;
+}
+.desktop-connection-dot.is-connected {
+  background: #42815b;
+}
+.desktop-connection-dot.is-reconnecting {
+  background: #b46f50;
+}
 .desktop-main {
   width: min(1440px, 100%);
   margin: 0 auto;

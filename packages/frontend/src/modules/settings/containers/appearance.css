@@ -121,9 +121,15 @@
   background-position: center;
   background-size: cover;
 }
-.appearance-wallpaper-sandstone { background-image: url("/wallpapers/sandstone.svg"); }
-.appearance-wallpaper-tidal { background-image: url("/wallpapers/tidal.svg"); }
-.appearance-wallpaper-canopy { background-image: url("/wallpapers/canopy.svg"); }
+.appearance-wallpaper-sandstone {
+  background-image: url("/wallpapers/sandstone.svg");
+}
+.appearance-wallpaper-tidal {
+  background-image: url("/wallpapers/tidal.svg");
+}
+.appearance-wallpaper-canopy {
+  background-image: url("/wallpapers/canopy.svg");
+}
 .appearance-choice,
 .appearance-actions {
   display: flex;
