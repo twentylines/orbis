@@ -106,6 +106,11 @@ def inspect(root: Path) -> dict[str, object]:
         for suffix, key in DATA_PATHS.items()
     }
     critical_missing = [name for name in sorted(CRITICAL) if directories[name]["status"] != "present"]
+    unsafe_paths = [
+        name
+        for name, details in sorted(directories.items())
+        if details["status"] not in {"present", "missing"}
+    ]
     compose_files = [name for name in ("docker-compose.yml", "docker-compose.prod.yml", "compose.yml") if (root / name).is_file()]
     database = (
         inspect_directory(root, ".", database_path)
@@ -121,9 +126,10 @@ def inspect(root: Path) -> dict[str, object]:
         "composeFilesPresent": compose_files,
         "directories": directories,
         "criticalDirectoriesNeedingReview": critical_missing,
+        "otherPathsNeedingReview": unsafe_paths,
         "database": database,
         "result": "review-required"
-        if critical_missing or not env_file.is_file() or layout == "unknown" or database["status"] != "present" or host_root not in {"matches-copy", "not-applicable"}
+        if critical_missing or unsafe_paths or not env_file.is_file() or layout == "unknown" or database["status"] != "present" or host_root not in {"matches-copy", "not-applicable"}
         else "inventory-only",
     }
 

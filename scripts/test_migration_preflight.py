@@ -61,6 +61,18 @@ class MigrationPreflightTests(unittest.TestCase):
             self.assertEqual(report["directories"]["apps"]["status"], "external-path-not-inspected")
             self.assertIn("apps", report["criticalDirectoriesNeedingReview"])
 
+    def test_external_noncritical_path_needs_review(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".env").write_text(f"ROOT_FOLDER_HOST={root}\nRUNTIPI_MEDIA_PATH=/external/media\n")
+            (root / "docker-compose.yml").write_text("services:\n  runtipi-db:\n    volumes:\n      - ./data/postgres:/var/lib/postgresql/data\n")
+            for name in PREFLIGHT.DATA_PATHS:
+                (root / name).mkdir()
+            (root / "data" / "postgres").mkdir(parents=True)
+            report = PREFLIGHT.inspect(root)
+            self.assertEqual(report["result"], "review-required")
+            self.assertIn("media", report["otherPathsNeedingReview"])
+
 
 if __name__ == "__main__":
     unittest.main()
