@@ -13,6 +13,5 @@
 - Rehearsed stock CLI v4.10.1 to Orbis and back on a synthetic installation with an account, custom core Compose override, official store, and Whoami app; Hades data remains untested.
 - Added low-cost host CPU sampling from `/proc/stat` for the live Monitor, with an explicit container fallback when the host mount is unavailable.
 - Added a live CSS perspective server view to Monitor with responsive layout and reduced-motion support.
-- Replaced the hard-coded Hades desktop label with a neutral default for new installations; saved server names remain untouched.
 
 The first tagged release will be created only after the fork has passed copied-data migration and application lifecycle testing.
