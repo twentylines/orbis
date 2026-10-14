@@ -10,6 +10,8 @@ Keep Runtipi's installed app identities, store metadata, compatibility checks, g
 
 Use GitHub Releases from the Orbis repository as the changelog source. Show the installed commit/image digest, available release tag, publication time, release notes, and whether a compatible image is available. The browser can check releases without credentials for a public repository, but applying a release must use a reviewed image digest and a server-side deployment controller with a backup and rollback path. The stock `scripts/install.sh` downloads upstream Runtipi and must not be presented as an Orbis updater.
 
+The upstream Runtipi CLI `start` and `update` paths also pull and run the upstream core without Orbis's Compose override. A production Orbis install must have an Orbis-owned host controller before these commands are retired; a staged override alone is not durable across stock CLI operations.
+
 Until a release and guarded deployment controller exist, the UI must say that no in-browser core update is available. A GitHub tag alone does not mean that a tested installable image exists.
 
 ## Host operating system updates
