@@ -103,6 +103,8 @@ async function main() {
             },
           ],
         });
+      if (url.pathname === '/api/system/build')
+        return respond({ version: 'development', commit: null, imageDigest: null, runtipiCompatibility: '4.10.1' });
       if (url.pathname === '/api/marketplace/apps/search') return respond({ data: catalogue, nextCursor: null });
       if (url.pathname === '/api/marketplace/enabled') return respond({ appStores: [] });
       if (url.pathname === '/api/desktop-preferences') {

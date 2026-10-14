@@ -1,12 +1,16 @@
 # Orbis build and migration rehearsal
 
-The source tree builds and passes unit, browser-fixture, and clean-install Docker smoke checks. It has **not** passed disposable-app lifecycle or copied-data migration rehearsal. Do not use it to replace a live Runtipi installation yet.
+The source tree builds and passes unit, browser-fixture, clean-install Docker, and disposable-app lifecycle smoke checks. It has **not** passed copied-data migration rehearsal. Do not use it to replace a live Runtipi installation yet.
 
 ## Verified clean-install smoke test (15 October 2026)
 
 An isolated Colima Linux VM with its own Docker socket built the Orbis image from this tree. The test Compose project used a fresh Postgres volume, loopback-only ports 18080/18443/18081, and no published Postgres port. The image and dependencies started healthy; `/api/health` returned 200. A fresh account registered through the real browser, completed the welcome step, and opened Workspace, Monitor, Updates, App Store, Applications, and Settings without page errors or horizontal overflow at 1440 × 900. The official store was present and the marketplace search reported 248 entries. Unauthenticated telemetry and desktop-preference reads returned 401; authenticated reads and preference save/reload succeeded. [Live screenshots](screenshots/live-smoke) and the repeatable [smoke script](scripts/live-smoke.cjs) capture this check. The script registers a new first user and therefore accepts only a loopback test stack with an empty database.
 
-This verifies clean startup and key read paths. No application was installed, updated, backed up, restored, or uninstalled, and no existing Runtipi data was imported. Host operating system updates and Orbis core updates are scoped in [UPDATES.md](UPDATES.md) and are not implemented yet.
+That first check verifies clean startup and key read paths. The separate app lifecycle check below covers one disposable application. No existing Runtipi data was imported. Host operating system updates and Orbis core updates are scoped in [UPDATES.md](UPDATES.md) and are not implemented yet.
+
+## Verified disposable app lifecycle (15 October 2026)
+
+The same isolated VM was reset to an empty database and ran `ORBIS_SMOKE_LIFECYCLE=1 node scripts/live-smoke.cjs`. It installed the official Whoami app, reached running state, stopped, started, restarted, created and listed a backup, reset, restored that backup, and uninstalled while removing the archive. All operations completed through the authenticated browser API, and no application container remained. This verifies one small app on a clean installation; app updates, custom stores, external URLs, TOTP, HTTPS routing, and existing-install data remain untested.
 
 ## Isolated Linux test host
 
@@ -34,3 +38,7 @@ Runtipi's own folders and database are the import format. The fork keeps the sam
 Hades remains untouched during current development. Before a later cutover, the exact installed Runtipi version, Compose file, environment, mount overrides, Postgres volume, app list, and running services must be inventoried live. After the copy rehearsal passes and the user explicitly approves production deployment, prepare a consistent snapshot, record current image digests, quiesce only the stock core, deploy the tested fork with the same data layout, verify the applications and external access, and keep the stock image and snapshot ready for rollback. Never run both cores on the same live data at the same time.
 
 The stock `scripts/install.sh` downloads official Runtipi releases, so it is **not** the fork deployment path. The Settings screen distinguishes upstream core releases from this fork; app-store refresh remains a separate operation. Fork updates must be built from reviewed source and applied through a guarded, reversible procedure.
+
+## Orbis release packaging
+
+The tag workflow in [.github/workflows/release.yml](.github/workflows/release.yml) publishes an Orbis-owned multi-architecture image and a GitHub Release containing its digest manifest and tag-specific notes. It cannot run until `releases/<tag>.md` exists and CI plus integration tests pass. The inherited nightly, upstream CLI, and upstream installer release jobs have been removed. Image publication alone does not install an update; the controller, backup, rollback, and copied-data rehearsal remain outstanding.

@@ -63,42 +63,49 @@ export class BackupManager {
       throw new Error('Failed to create temp directory');
     }
 
-    this.logger.info('Copying files to backup location...');
+    const archivePath = `${tempDir}.tar.gz`;
 
-    await this.filesystem.createDirectory(tempDir);
+    try {
+      this.logger.info('Copying files to backup location...');
 
-    const { appDataDir, appInstalledDir } = this.appFilesManager.getAppPaths(appUrn);
+      await this.filesystem.createDirectory(tempDir);
 
-    await this.filesystem.copyDirectory(appDataDir, path.join(tempDir, 'app-data'), {
-      recursive: true,
-      filter: (src) => !src.includes('backups'),
-    });
+      const { appDataDir, appInstalledDir } = this.appFilesManager.getAppPaths(appUrn);
 
-    await this.filesystem.copyDirectory(appInstalledDir, path.join(tempDir, 'app'));
+      await this.filesystem.copyDirectory(appDataDir, path.join(tempDir, 'app-data'), {
+        recursive: true,
+        filter: (src) => !src.includes('backups'),
+      });
 
-    if (await this.filesystem.isDirectory(userConfigDir)) {
-      this.logger.info('Including user configuration in backup...');
-      await this.filesystem.copyDirectory(userConfigDir, path.join(tempDir, 'user-config'));
+      await this.filesystem.copyDirectory(appInstalledDir, path.join(tempDir, 'app'));
+
+      if (await this.filesystem.isDirectory(userConfigDir)) {
+        this.logger.info('Including user configuration in backup...');
+        await this.filesystem.copyDirectory(userConfigDir, path.join(tempDir, 'user-config'));
+      }
+
+      this.logger.info('Creating archive...');
+
+      const { stdout, stderr } = await this.archiveManager.createTarGz(tempDir, archivePath);
+      this.logger.debug('--- archiveManager.createTarGz ---');
+      this.logger.debug('stderr:', stderr);
+      this.logger.debug('stdout:', stdout);
+
+      this.logger.info('Moving archive to backup directory...', backupDir);
+
+      await this.filesystem.createDirectory(backupDir);
+      await this.filesystem.copyFile(archivePath, path.join(backupDir, `${backupName}.tar.gz`));
+
+      this.logger.info('Backup completed!');
+    } finally {
+      try {
+        await this.filesystem.removeDirectory(tempDir);
+      } finally {
+        if (await this.filesystem.isFile(archivePath)) {
+          await this.filesystem.removeFile(archivePath);
+        }
+      }
     }
-
-    this.logger.info('Creating archive...');
-
-    // Create the archive
-    const { stdout, stderr } = await this.archiveManager.createTarGz(tempDir, `${path.join(tempDir, backupName)}.tar.gz`);
-    this.logger.debug('--- archiveManager.createTarGz ---');
-    this.logger.debug('stderr:', stderr);
-    this.logger.debug('stdout:', stdout);
-
-    this.logger.info('Moving archive to backup directory...', backupDir);
-
-    // Move the archive to the backup directory
-    await this.filesystem.createDirectory(backupDir);
-    await this.filesystem.copyFile(`${path.join(tempDir, backupName)}.tar.gz`, path.join(backupDir, `${backupName}.tar.gz`));
-
-    // Remove the temp backup folder
-    await this.filesystem.removeDirectory(tempDir);
-
-    this.logger.info('Backup completed!');
   };
 
   public restoreApp = async (appUrn: AppUrn, filename: string) => {
