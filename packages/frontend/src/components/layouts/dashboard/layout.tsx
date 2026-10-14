@@ -95,7 +95,12 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   };
 
   return (
-    <div className="desktop" data-desktop-preset={preferences.preset} data-desktop-density={preferences.density}>
+    <div
+      className="desktop"
+      data-desktop-preset={preferences.preset}
+      data-desktop-density={preferences.density}
+      data-desktop-wallpaper={preferences.wallpaper}
+    >
       <header className="desktop-system-bar">
         <Link to="/dashboard" className="desktop-brand" aria-label={`Orbis workspace on ${preferences.serverName}`}>
           <img src="/icons/orbis.svg" width={28} height={28} alt="" />

@@ -62,9 +62,25 @@ describe('desktop preferences', () => {
     const value = { serverName: 'Workshop', preset: 'forest', density: 'compact' };
     const saved = await request(app.getHttpServer()).put('/desktop-preferences').set('Authorization', 'Bearer test').send(value);
     expect(saved.status).toBe(200);
+    expect(saved.body).toEqual({ ...value, wallpaper: 'sandstone' });
     const fetched = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');
-    expect(fetched.body).toEqual(value);
+    expect(fetched.body).toEqual({ ...value, wallpaper: 'sandstone' });
     const file = await fs.stat(path.join(directory, 'state', 'desktop', '7.json'));
     expect(file.mode & 0o777).toBe(0o600);
+  });
+
+  it('preserves earlier saved settings while adding a wallpaper choice', async () => {
+    await fs.writeFile(
+      path.join(directory, 'state', 'desktop', '7.json'),
+      JSON.stringify({ serverName: 'Workshop', preset: 'stone', density: 'compact' }),
+    );
+    const fetched = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');
+    expect(fetched.body).toEqual({ serverName: 'Workshop', preset: 'stone', density: 'compact', wallpaper: 'sandstone' });
+    const changed = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ serverName: 'Workshop', preset: 'ocean', density: 'compact', wallpaper: 'tidal' });
+    expect(changed.status).toBe(200);
+    expect(changed.body.wallpaper).toBe('tidal');
   });
 });

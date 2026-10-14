@@ -8,6 +8,7 @@ import { DatabaseService } from './core/database/database.service';
 import { FilesystemService } from './core/filesystem/filesystem.service';
 import { LoggerService } from './core/logger/logger.service';
 import { AppLifecycleService } from './modules/app-lifecycle/app-lifecycle.service';
+import { AppStatusSyncService } from './modules/app-lifecycle/app-status-sync.service';
 import { AppStoreService } from './modules/app-stores/app-store.service';
 import { MarketplaceService } from './modules/marketplace/marketplace.service';
 import { RepoEventsQueue } from './modules/queue/entities/repo-events';
@@ -30,6 +31,7 @@ export class AppService {
     private readonly marketplaceService: MarketplaceService,
     private readonly databaseService: DatabaseService,
     private readonly appLifecycleService: AppLifecycleService,
+    private readonly appStatusSyncService: AppStatusSyncService,
     private readonly githubService: GithubService,
     @Inject(DOCKERODE) private docker: Dockerode,
   ) {}
@@ -75,6 +77,9 @@ export class AppService {
       if (__prod__ && (buster !== version || version === 'nightly')) {
         this.appLifecycleService.restartRunningApps();
       }
+
+      // Reconcile persisted app states before the dashboard serves its first status list.
+      await this.appStatusSyncService.syncAllAppStatuses();
     } catch (e) {
       this.logger.error(e);
       Sentry.captureException(e, { tags: { source: 'bootstrap' } });

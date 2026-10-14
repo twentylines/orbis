@@ -35,13 +35,13 @@ const translations = JSON.parse(
 async function main() {
   fs.mkdirSync(screenshotDir, { recursive: true });
   const browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
-  let preferences = { serverName: 'Hades', preset: 'frost', density: 'comfortable' };
+  let preferences = { serverName: 'Hades', preset: 'frost', density: 'comfortable', wallpaper: 'sandstone' };
   const reports = [];
   for (const viewport of [
     { name: 'desktop', width: 1440, height: 900 },
     { name: 'mobile', width: 390, height: 844 },
   ]) {
-    preferences = { serverName: 'Hades', preset: 'frost', density: 'comfortable' };
+    preferences = { serverName: 'Hades', preset: 'frost', density: 'comfortable', wallpaper: 'sandstone' };
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: 1 });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.stack || error.message));
@@ -154,12 +154,17 @@ async function main() {
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-appearance.png`), fullPage: true });
     const settingsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     await page.getByRole('button', { name: 'Graphite Deep charcoal' }).click();
-    for (let attempt = 0; attempt < 40 && preferences.preset !== 'graphite'; attempt++) await page.waitForTimeout(50);
+    await page.getByRole('button', { name: 'Tidal' }).click();
+    for (let attempt = 0; attempt < 40 && (preferences.preset !== 'graphite' || preferences.wallpaper !== 'tidal'); attempt++)
+      await page.waitForTimeout(50);
     if (preferences.preset !== 'graphite') throw new Error('Graphite preference was not sent to the server fixture');
+    if (preferences.wallpaper !== 'tidal') throw new Error('Tidal wallpaper was not sent to the server fixture');
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-graphite.png`), fullPage: true });
     await page.reload();
     await page.getByRole('heading', { name: 'Appearance & workspace' }).waitFor();
     const graphitePersisted = await page.getByRole('button', { name: 'Graphite Deep charcoal' }).getAttribute('aria-pressed');
+    const wallpaperPersisted = await page.getByRole('button', { name: 'Tidal' }).getAttribute('aria-pressed');
+    const bodyTheme = await page.evaluate(() => document.body.dataset.bsTheme);
     reports.push({
       viewport: viewport.name,
       orbisBrand,
@@ -170,6 +175,8 @@ async function main() {
       updatesOverflow,
       settingsOverflow,
       graphitePersisted,
+      wallpaperPersisted,
+      bodyTheme,
       errors,
     });
     await page.close();
@@ -187,6 +194,8 @@ async function main() {
         report.updatesOverflow ||
         report.settingsOverflow ||
         report.graphitePersisted !== 'true' ||
+        report.wallpaperPersisted !== 'true' ||
+        report.bodyTheme !== 'dark' ||
         report.errors.length,
     )
   )

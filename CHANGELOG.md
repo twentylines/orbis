@@ -13,5 +13,9 @@
 - Rehearsed stock CLI v4.10.1 to Orbis and back on a synthetic installation with an account, custom core Compose override, official store, and Whoami app; Hades data remains untested.
 - Added low-cost host CPU sampling from `/proc/stat` for the live Monitor, with an explicit container fallback when the host mount is unavailable.
 - Added a live CSS perspective server view to Monitor with responsive layout and reduced-motion support.
+- Published `v0.1.0-beta.2` with host CPU telemetry and the Monitor server view; verified its immutable arm64 image against a synthetic CLI install.
+- Added a guarded release staging command that writes only a digest-pinned core Compose override, plus stricter external-path review in migration preflight.
+- Added Ocean and Blush appearance presets and two more bundled local wallpapers, retaining earlier saved preferences.
+- Reconciled persisted application statuses against Docker during startup, so a stopped container is not initially shown as running after a core restart.
 
-The first tagged release will be created only after the fork has passed copied-data migration and application lifecycle testing.
+Real homelab migration, automatic core installation and rollback, host package updates, and multi-server pairing remain outstanding.

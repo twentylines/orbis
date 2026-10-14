@@ -12,6 +12,7 @@ import { fromPartial } from '@total-typescript/shoehorn';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { DOCKERODE } from '@/modules/docker/docker.module';
+import { AppStatusSyncService } from '@/modules/app-lifecycle/app-status-sync.service';
 import YAML from 'yaml';
 
 const TRAEFIK_CONFIG = `api:
@@ -39,16 +40,17 @@ describe('AppService', () => {
   let appService: AppService;
   let configurationService = mock<ConfigurationService>();
   let githubService = mock<GithubService>();
+  let appStatusSyncService = mock<AppStatusSyncService>();
 
   beforeEach(async () => {
-    const Dockerode = vi.fn();
+    const docker = { pruneNetworks: vi.fn() };
     const moduleRef = await Test.createTestingModule({
       providers: [
         AppService,
         FilesystemService,
         {
           provide: DOCKERODE,
-          useFactory: () => Dockerode,
+          useFactory: () => docker,
           inject: [],
         },
       ],
@@ -59,6 +61,19 @@ describe('AppService', () => {
     appService = moduleRef.get(AppService);
     configurationService = moduleRef.get(ConfigurationService);
     githubService = moduleRef.get(GithubService);
+    appStatusSyncService = moduleRef.get(AppStatusSyncService);
+  });
+
+  it('reconciles persisted application states before serving the dashboard', async () => {
+    configurationService.getConfig.mockReturnValue(
+      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'local.test' }, __prod__: false }),
+    );
+    vi.spyOn(appService, 'copyAssets').mockResolvedValue();
+    vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
+
+    await appService.bootstrap();
+
+    expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
   });
 
   describe('getVersion', () => {
