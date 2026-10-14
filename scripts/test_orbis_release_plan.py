@@ -40,7 +40,7 @@ class OrbisReleasePlanTests(unittest.TestCase):
     def test_plan_keeps_core_services_and_user_override(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            (root / ".env").write_text("TIPI_VERSION=4.10.1\nPOSTGRES_PASSWORD=private-value\n")
+            (root / ".env").write_text(f"TIPI_VERSION=4.10.1\nROOT_FOLDER_HOST={root}\nPOSTGRES_PASSWORD=private-value\n")
             (root / "docker-compose.yml").write_text(
                 "services:\n"
                 "  runtipi:\n"
@@ -65,6 +65,8 @@ class OrbisReleasePlanTests(unittest.TestCase):
             result = PLAN.plan(root, MANIFEST)
             self.assertEqual(result["result"], "plan-ready")
             self.assertTrue(result["userOverrideIncluded"])
+            self.assertEqual(result["configuredImage"], "ghcr.io/runtipi/runtipi:v4.10.1")
+            self.assertFalse(result["runtimeInspected"])
             self.assertEqual(result["candidateImage"], f"{MANIFEST['image']}@{MANIFEST['digest']}")
             self.assertNotIn("private-value", str(result))
 

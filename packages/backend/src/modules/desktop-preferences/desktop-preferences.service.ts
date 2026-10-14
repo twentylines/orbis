@@ -7,7 +7,7 @@ import path from 'node:path';
 import { desktopPreferencesSchema } from './desktop-preferences.dto';
 
 export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
-export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences = { serverName: 'Hades', preset: 'frost', density: 'comfortable' };
+export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences = { serverName: 'This server', preset: 'frost', density: 'comfortable' };
 
 @Injectable()
 export class DesktopPreferencesService {

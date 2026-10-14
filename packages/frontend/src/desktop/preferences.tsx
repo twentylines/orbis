@@ -7,7 +7,7 @@ export type DesktopPreferences = {
   density: 'comfortable' | 'compact';
 };
 
-export const defaultDesktopPreferences: DesktopPreferences = { serverName: 'Hades', preset: 'frost', density: 'comfortable' };
+export const defaultDesktopPreferences: DesktopPreferences = { serverName: 'This server', preset: 'frost', density: 'comfortable' };
 const STORAGE_KEY = 'server-desktop-preferences-v1';
 
 export const isPreferences = (value: unknown): value is DesktopPreferences => {
