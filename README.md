@@ -2,6 +2,8 @@
 
 Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runtipi app ecosystem and data layout while redesigning the workspace, application surfaces, monitoring, and appearance controls. A clean install has passed an isolated Docker and browser smoke test, but application lifecycle and copied-data migration verification remain. **Do not replace a live Runtipi installation with this tree yet.**
 
+[Orbis on GitHub](https://github.com/twentylines/orbis) · [Development changelog](CHANGELOG.md)
+
 - [Current implementation and limits](IMPLEMENTATION.md)
 - [Isolated build and migration rehearsal](DEPLOYMENT.md)
 - [Multi-homelab phase](MULTI-HOMELAB.md)
