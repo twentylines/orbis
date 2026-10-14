@@ -85,6 +85,8 @@ services:
       - ./.internal/cache:/cache
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /proc/meminfo:/host/proc/meminfo:ro
+      - /proc/stat:/host/proc/stat:ro
+      - /proc/uptime:/host/proc/uptime:ro
       - ./docker-compose.prod.yml:/data/docker-compose.yml
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
