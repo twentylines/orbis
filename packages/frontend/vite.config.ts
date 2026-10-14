@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import { reactRouter } from '@react-router/dev/vite';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import { defineConfig, type PluginOption } from 'vite';
@@ -32,7 +32,7 @@ export default defineConfig({
     alias,
   },
   server: {
-    host: true,
+    host: '127.0.0.1',
     port: 8080,
     proxy: {
       '/api': {
@@ -43,6 +43,6 @@ export default defineConfig({
     allowedHosts: true,
   },
   build: {
-    sourcemap: true,
+    sourcemap: false,
   },
 });

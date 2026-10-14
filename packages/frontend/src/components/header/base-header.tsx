@@ -58,7 +58,7 @@ export const BaseHeader = (props: BaseHeaderProps) => {
         <Link to="/dashboard">
           <h1 className="navbar-brand d-none-navbar-horizontal pe-0 pe-md-3">
             <img
-              alt="Runtipi logo"
+              alt="Orbis logo"
               className="navbar-brand-image me-3"
               width={100}
               height={100}
@@ -69,7 +69,7 @@ export const BaseHeader = (props: BaseHeaderProps) => {
                 height: 'auto',
               }}
             />
-            Runtipi
+            Orbis
           </h1>
         </Link>
         <div className="navbar-nav flex-row order-md-last">
@@ -77,7 +77,7 @@ export const BaseHeader = (props: BaseHeaderProps) => {
             <div className="btn-list">
               <a href="https://github.com/runtipi/runtipi" target="_blank" rel="noreferrer" className="btn btn-ghost">
                 <IconBrandGithub data-testid="icon-github" className="me-1 icon" size={24} />
-                {t('HEADER_SOURCE_CODE')}
+                Runtipi source
               </a>
               <a href="https://github.com/runtipi/runtipi?sponsor=1" target="_blank" rel="noreferrer" className="btn btn-ghost">
                 <IconHeart className="me-1 icon text-pink" size={24} />

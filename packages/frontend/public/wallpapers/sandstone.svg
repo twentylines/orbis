@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1200" viewBox="0 0 1920 1200" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#dde2d3"/><stop offset=".52" stop-color="#e6e1ce"/><stop offset="1" stop-color="#d7c4a9"/></linearGradient>
+    <linearGradient id="back" x2="0" y2="1"><stop stop-color="#adb9a5"/><stop offset="1" stop-color="#8d9f8e"/></linearGradient>
+    <linearGradient id="front" x2="0" y2="1"><stop stop-color="#c4b49c"/><stop offset="1" stop-color="#a99680"/></linearGradient>
+  </defs>
+  <rect width="1920" height="1200" fill="url(#sky)"/>
+  <path d="M0 600C314 543 492 619 715 554c242-70 486-80 745-29 181 35 324 37 460 10v665H0Z" fill="#d6d2ba"/>
+  <path d="M0 720c281-75 482-80 692-37 226 46 417-42 620-38 239 5 444 101 608 104v451H0Z" fill="url(#back)"/>
+  <path d="M0 876c287-79 514-34 731-57 242-25 390-92 633-71 223 19 381 91 556 71v381H0Z" fill="#9cae98"/>
+  <path d="M0 1012c354-83 597-35 879-61 291-27 502-71 1041 19v230H0Z" fill="url(#front)"/>
+</svg>

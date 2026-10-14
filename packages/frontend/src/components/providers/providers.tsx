@@ -8,6 +8,7 @@ import { SentryProvider } from './sentry/sentry-provider';
 import { AutoThemeProvider } from './theme/auto-theme-provider';
 import { ThemeProvider } from './theme/theme-provider';
 import { DebugPanel } from '../debug-panel/debug-panel';
+import { DesktopPreferencesProvider } from '@/desktop/preferences';
 
 const queryClient = new QueryClient({
   mutationCache: new MutationCache({
@@ -46,7 +47,9 @@ export const Providers = ({ children }: PropsWithChildren) => {
                 <SentryProvider>
                   <ThemeProvider>
                     <AutoThemeProvider>
-                      <I18nProvider>{children}</I18nProvider>
+                      <I18nProvider>
+                        <DesktopPreferencesProvider>{children}</DesktopPreferencesProvider>
+                      </I18nProvider>
                     </AutoThemeProvider>
                   </ThemeProvider>
                 </SentryProvider>

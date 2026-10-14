@@ -26,10 +26,7 @@ client.setConfig({
 
 export const links: Route.LinksFunction = () => [
   { rel: 'stylesheet', href: stylesheet },
-  { rel: 'apple-touch-icon', sizes: '180x180', href: '/icons/apple-touch-icon.png' },
-  { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/icons/favicon-96x96.png' },
-  { rel: 'icon', type: 'image/svg+xml', href: '/icons/favicon.svg' },
-  { rel: 'shortcut icon', href: '/icons/favicon.ico' },
+  { rel: 'icon', type: 'image/svg+xml', href: '/icons/orbis.svg' },
   { rel: 'manifest', href: '/icons/site.webmanifest' },
 ];
 
@@ -67,7 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
-        <title>Runtipi</title>
+        <title>Orbis</title>
         <meta charSet="UTF-8" />
         <script src="/js/tabler.min.js" async />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -85,7 +82,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App({ loaderData }: Route.ComponentProps) {
+export default function App() {
   return (
     <Providers>
       <Outlet />

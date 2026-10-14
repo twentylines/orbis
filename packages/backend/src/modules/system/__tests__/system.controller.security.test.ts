@@ -68,4 +68,20 @@ describe('SystemController certificate security', () => {
     expect(response.headers['content-disposition']).toBe('attachment; filename=cert.pem');
     expect(response.text).toBe('test-certificate');
   });
+
+  it('requires authentication for telemetry', async () => {
+    const denied = await request(app.getHttpServer()).get('/system/telemetry');
+    expect(denied.status).toBe(401);
+
+    systemService.getTelemetry.mockResolvedValue({
+      sampledAt: '2026-10-15T00:00:00.000Z',
+      cpu: { scope: 'runtime', totalPercent: 0, perCorePercent: [], uptimeSeconds: 0 },
+      memory: { scope: 'host-proc', totalBytes: null, availableBytes: null, swapTotalBytes: null, swapFreeBytes: null },
+      filesystems: [],
+      network: [],
+    });
+    const allowed = await request(app.getHttpServer()).get('/system/telemetry').set('Authorization', 'Bearer cli-token');
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.cpu.scope).toBe('runtime');
+  });
 });

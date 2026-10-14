@@ -6,6 +6,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
+import { Appearance } from '../containers/appearance';
 
 const GeneralActionsContainer = lazy(() => import('../containers/general-actions').then((module) => ({ default: module.GeneralActionsContainer })));
 const UserSettingsContainer = lazy(() => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer })));
@@ -26,11 +27,14 @@ export default () => {
   };
 
   return (
-    <div className="card d-flex">
+    <div className="desktop-settings">
       <Tabs value={currentTab}>
         <TabsList>
           <TabsTrigger onClick={() => handleTabChange('actions')} value="actions">
             {t('SETTINGS_ACTIONS_TAB_TITLE')}
+          </TabsTrigger>
+          <TabsTrigger onClick={() => handleTabChange('appearance')} value="appearance">
+            Appearance
           </TabsTrigger>
           <TabsTrigger onClick={() => handleTabChange('settings')} value="settings">
             {t('SETTINGS_GENERAL_TAB_TITLE')}
@@ -56,6 +60,9 @@ export default () => {
           <Suspense>
             <GeneralActionsContainer />
           </Suspense>
+        </TabsContent>
+        <TabsContent value="appearance">
+          <Appearance />
         </TabsContent>
         <TabsContent value="settings">
           <Suspense>
