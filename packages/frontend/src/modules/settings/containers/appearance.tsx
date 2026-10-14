@@ -1,6 +1,11 @@
-import { defaultDesktopPreferences, isPreferences, useDesktopPreferences, type DesktopPreferences } from '@/desktop/preferences';
-import { useUIStore } from '@/stores/ui-store';
-import { useRef, useState } from 'react';
+import {
+  defaultDesktopPreferences,
+  isPreferences,
+  normalisePreferences,
+  useDesktopPreferences,
+  type DesktopPreferences,
+} from '@/desktop/preferences';
+import { useEffect, useRef, useState } from 'react';
 import './appearance.css';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
@@ -8,18 +13,26 @@ const presets: { value: DesktopPreferences['preset']; title: string; description
   { value: 'graphite', title: 'Graphite', description: 'Deep charcoal' },
   { value: 'forest', title: 'Forest', description: 'Cool sage' },
   { value: 'stone', title: 'Warm stone', description: 'Sand and clay' },
+  { value: 'ocean', title: 'Ocean', description: 'Quiet blue green' },
+  { value: 'blush', title: 'Blush', description: 'Muted rose' },
+];
+
+const wallpapers: { value: DesktopPreferences['wallpaper']; title: string }[] = [
+  { value: 'sandstone', title: 'Sandstone' },
+  { value: 'tidal', title: 'Tidal' },
+  { value: 'canopy', title: 'Canopy' },
 ];
 
 export const Appearance = () => {
   const { preferences, update, reset, syncState } = useDesktopPreferences();
-  const setDarkMode = useUIStore((state) => state.setDarkMode);
   const [name, setName] = useState(preferences.serverName);
   const [message, setMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => setName(preferences.serverName), [preferences.serverName]);
+
   const changePreset = (preset: DesktopPreferences['preset']) => {
     update({ preset });
-    setDarkMode(preset === 'graphite');
     setMessage(`${presets.find((item) => item.value === preset)?.title} applied.`);
   };
 
@@ -53,9 +66,8 @@ export const Appearance = () => {
     try {
       const value: unknown = JSON.parse(await file.text());
       if (!isPreferences(value)) throw new Error('Invalid appearance settings');
-      update(value);
+      update(normalisePreferences(value));
       setName(value.serverName);
-      setDarkMode(value.preset === 'graphite');
       setMessage('Appearance settings imported.');
     } catch {
       setMessage('This file does not contain valid appearance settings.');
@@ -109,6 +121,26 @@ export const Appearance = () => {
           ))}
         </div>
       </section>
+      <section className="appearance-section" aria-labelledby="appearance-wallpaper">
+        <div>
+          <h2 id="appearance-wallpaper">Wallpaper</h2>
+          <p>Choose one of the bundled landscapes. It stays available when this server is offline.</p>
+        </div>
+        <div className="appearance-wallpapers">
+          {wallpapers.map(({ value, title }) => (
+            <button
+              key={value}
+              type="button"
+              className="appearance-wallpaper"
+              aria-pressed={preferences.wallpaper === value}
+              onClick={() => update({ wallpaper: value })}
+            >
+              <span className={`appearance-wallpaper-preview appearance-wallpaper-${value}`} aria-hidden="true" />
+              <strong>{title}</strong>
+            </button>
+          ))}
+        </div>
+      </section>
       <section className="appearance-section" aria-labelledby="appearance-density">
         <div>
           <h2 id="appearance-density">Density</h2>
@@ -151,7 +183,6 @@ export const Appearance = () => {
             onClick={() => {
               reset();
               setName(defaultDesktopPreferences.serverName);
-              setDarkMode(false);
               setMessage('Appearance restored to defaults.');
             }}
           >

@@ -61,7 +61,7 @@
 }
 .appearance-presets {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 .appearance .appearance-preset {
@@ -96,6 +96,34 @@
 .appearance-preset-stone .appearance-swatch {
   background: linear-gradient(135deg, #f0e2ce, #b6a48d 70%, #dbc5a9);
 }
+.appearance-preset-ocean .appearance-swatch {
+  background: linear-gradient(135deg, #d8e9e8, #86aeb4 70%, #6b9396);
+}
+.appearance-preset-blush .appearance-swatch {
+  background: linear-gradient(135deg, #f4dfdb, #cfa9a9 70%, #ae878b);
+}
+.appearance-wallpapers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.appearance .appearance-wallpaper {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+  text-align: left;
+}
+.appearance-wallpaper-preview {
+  display: block;
+  height: 84px;
+  border-radius: 6px;
+  background-position: center;
+  background-size: cover;
+}
+.appearance-wallpaper-sandstone { background-image: url("/wallpapers/sandstone.svg"); }
+.appearance-wallpaper-tidal { background-image: url("/wallpapers/tidal.svg"); }
+.appearance-wallpaper-canopy { background-image: url("/wallpapers/canopy.svg"); }
 .appearance-choice,
 .appearance-actions {
   display: flex;
@@ -110,7 +138,8 @@
   font-size: 13px;
 }
 @media (max-width: 900px) {
-  .appearance-presets {
+  .appearance-presets,
+  .appearance-wallpapers {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

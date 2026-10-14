@@ -1,4 +1,5 @@
 .desktop {
+  --desktop-wallpaper: url("/wallpapers/sandstone.svg");
   --desktop-ink: #182522;
   --desktop-muted: #5d6b66;
   --desktop-surface: rgba(251, 250, 245, 0.96);
@@ -10,9 +11,11 @@
   position: relative;
   isolation: isolate;
   color: var(--desktop-ink);
-  background: #c9d0bc url("/wallpapers/sandstone.svg") center center / cover fixed;
+  background: #c9d0bc var(--desktop-wallpaper) center center / cover fixed;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
+.desktop[data-desktop-wallpaper="tidal"] { --desktop-wallpaper: url("/wallpapers/tidal.svg"); }
+.desktop[data-desktop-wallpaper="canopy"] { --desktop-wallpaper: url("/wallpapers/canopy.svg"); }
 .desktop[data-desktop-preset="graphite"] {
   --desktop-ink: #edf2ef;
   --desktop-muted: #aebbb3;
@@ -21,7 +24,7 @@
   --desktop-line: rgba(222, 233, 225, 0.17);
   --desktop-accent: #d6a17e;
   background-color: #283732;
-  background-image: linear-gradient(rgba(15, 26, 22, 0.55), rgba(15, 26, 22, 0.6)), url("/wallpapers/sandstone.svg");
+  background-image: linear-gradient(rgba(15, 26, 22, 0.55), rgba(15, 26, 22, 0.6)), var(--desktop-wallpaper);
 }
 .desktop[data-desktop-preset="forest"] {
   --desktop-ink: #142b23;
@@ -40,6 +43,24 @@
   --desktop-line: rgba(77, 59, 45, 0.17);
   --desktop-accent: #9c5b3b;
   background-color: #d7c7ae;
+}
+.desktop[data-desktop-preset="ocean"] {
+  --desktop-ink: #172b32;
+  --desktop-muted: #4d6972;
+  --desktop-surface: rgba(244, 250, 249, 0.97);
+  --desktop-chrome: rgba(223, 237, 238, 0.82);
+  --desktop-line: rgba(29, 75, 83, 0.17);
+  --desktop-accent: #a3553e;
+  background-color: #adc7c8;
+}
+.desktop[data-desktop-preset="blush"] {
+  --desktop-ink: #352828;
+  --desktop-muted: #705f62;
+  --desktop-surface: rgba(253, 248, 246, 0.97);
+  --desktop-chrome: rgba(246, 233, 230, 0.83);
+  --desktop-line: rgba(89, 52, 55, 0.17);
+  --desktop-accent: #9a4d48;
+  background-color: #d7bab6;
 }
 .desktop a {
   color: inherit;

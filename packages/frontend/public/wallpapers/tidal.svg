@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1200" viewBox="0 0 1920 1200" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#dce7df"/><stop offset=".64" stop-color="#ccdfe0"/><stop offset="1" stop-color="#aec9ca"/></linearGradient>
+    <linearGradient id="sea" x2="0" y2="1"><stop stop-color="#8db4b8"/><stop offset="1" stop-color="#557e88"/></linearGradient>
+  </defs>
+  <rect width="1920" height="1200" fill="url(#sky)"/>
+  <path d="M0 585c292-48 457-11 707-26 264-16 439-66 698-60 215 5 379 58 515 39v662H0Z" fill="#c6d9d7"/>
+  <path d="M0 714c258-42 477-69 738-24 221 38 425 16 650-19 188-29 365-14 532 9v520H0Z" fill="url(#sea)"/>
+  <path d="M0 870c257-44 479 4 680-3 273-10 435-85 733-68 181 10 347 58 507 42v359H0Z" fill="#70969d"/>
+  <path d="M0 1042c287-48 484-25 748-37 293-13 560-63 800-35 133 15 253 50 372 49v181H0Z" fill="#d1d4c1"/>
+</svg>

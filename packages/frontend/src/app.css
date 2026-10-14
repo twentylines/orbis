@@ -21,10 +21,13 @@ body {
 }
 
 .desktop-auth {
+  --desktop-wallpaper: url("/wallpapers/sandstone.svg");
   min-height: 100vh;
-  background: #c9d0bc url("/wallpapers/sandstone.svg") center center / cover fixed;
+  background: #c9d0bc var(--desktop-wallpaper) center center / cover fixed;
   color: #182522;
 }
+.desktop-auth[data-desktop-wallpaper="tidal"] { --desktop-wallpaper: url("/wallpapers/tidal.svg"); }
+.desktop-auth[data-desktop-wallpaper="canopy"] { --desktop-wallpaper: url("/wallpapers/canopy.svg"); }
 .desktop-auth .card {
   border: 1px solid rgba(35, 56, 48, 0.16);
   border-radius: 21px;
@@ -48,12 +51,24 @@ body {
 .desktop-auth[data-desktop-preset="graphite"] {
   background-color: #283732;
 }
+.desktop-auth[data-desktop-preset="graphite"] .card {
+  background: rgba(31, 40, 39, 0.97);
+  border-color: rgba(222, 233, 225, 0.17);
+  color: #edf2ef;
+}
+.desktop-auth[data-desktop-preset="graphite"] .desktop-auth-identity h1,
+.desktop-auth[data-desktop-preset="graphite"] .desktop-auth-product,
+.desktop-auth[data-desktop-preset="graphite"] .desktop-auth-credit {
+  color: #edf2ef;
+}
 .desktop-auth[data-desktop-preset="forest"] {
   background-color: #a8c0a4;
 }
 .desktop-auth[data-desktop-preset="stone"] {
   background-color: #d7c7ae;
 }
+.desktop-auth[data-desktop-preset="ocean"] { background-color: #adc7c8; }
+.desktop-auth[data-desktop-preset="blush"] { background-color: #d7bab6; }
 .desktop-auth :focus-visible {
   outline: 3px solid #a35c3a;
   outline-offset: 3px;
