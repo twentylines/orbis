@@ -22,7 +22,7 @@ The requested browser Update Center for apps, Orbis releases, and host packages 
 ## Current implementation
 
 - Authenticated server desktop shell with a responsive top bar, dock, first-party routes, keyboard tool and installed-app search, and logout through the existing API.
-- Workspace populated from Runtipi's installed-app, links, and system-load APIs. App and store detail links keep their original routes and lifecycle components.
+- Workspace populated from Runtipi's installed-app and links APIs plus the authenticated telemetry endpoint shared with Monitor. It labels host CPU and memory, core-container network, and runtime filesystem readings. App and store detail links keep their original routes and lifecycle components.
 - System Monitor uses a new authenticated `/api/system/telemetry` endpoint for current per-core CPU, host-mounted memory and swap, runtime filesystems, and runtime network interfaces. Unavailable readings stay unavailable. Live charts keep at most 60 samples in the open browser view; there is no fabricated or persisted history.
 - New per-user desktop appearance endpoint under `/api/desktop-preferences`, protected by Runtipi's `AuthGuard` and request validation. Data is stored under the existing `/data/state/desktop` mount, with browser caching and export/import of non-secret settings.
 - Three bundled original SVG wallpapers and six appearance presets, with saved per-user selection. Login, app list, store, settings, and detail routes sit within the shared visual shell.
@@ -32,7 +32,7 @@ The requested browser Update Center for apps, Orbis releases, and host packages 
 ## Current limits
 
 - This is an implemented first slice, not yet a drop-in Runtipi replacement. The store and detail flows still need deeper visual work; task history, window controls, editable widgets, expanded monitoring, wallpaper upload, and advanced theme controls are pending.
-- The existing `/system/load` endpoint reports CPU and filesystem data from the Runtipi runtime. The dashboard labels the filesystem accordingly. The new telemetry endpoint adds current runtime network and filesystem detail, but host-wide disks/network, temperatures, fans, GPU, container telemetry, and historical storage still need explicit host mounts or an agent design.
+- The inherited `/system/load` endpoint reports CPU and filesystem data from the Runtipi runtime; the new workspace uses `/system/telemetry` instead. That endpoint reports host CPU and memory when the read-only proc mounts exist, while filesystem and network detail still describe the Orbis core container. Host-wide disks/network, temperatures, fans, GPU, container telemetry, and historical storage still need explicit host mounts or an agent design.
 - Browser screenshots include labelled development fixtures and a clean-install run against an isolated Colima Docker daemon. The latter verified registration, welcome, main routes, authenticated telemetry/preferences, and a 248-entry official catalogue. A disposable Whoami lifecycle and a synthetic stock CLI migration/rollback have since passed. Migration of real homelab data remains untested.
 - The official app-store connection uses the unchanged Runtipi mechanism. Catalogue search and one official Whoami install/uninstall path were verified on the clean install; app updates and custom-store refresh still need disposable-daemon checks.
 

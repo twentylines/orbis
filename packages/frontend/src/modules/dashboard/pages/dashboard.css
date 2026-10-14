@@ -21,20 +21,21 @@
   letter-spacing: -0.045em;
   margin: 0;
 }
-.workspace-add {
+.desktop .workspace-add {
   display: inline-flex;
   align-items: center;
   gap: 9px;
   min-height: 42px;
   padding: 0 16px;
   border-radius: 10px;
-  color: #fff !important;
+  color: #fff;
   background: #284b3c;
   text-decoration: none;
   font-weight: 600;
   box-shadow: 0 9px 20px rgba(22, 50, 39, 0.17);
 }
-.workspace-add:hover {
+.desktop .workspace-add:hover {
+  color: #fff;
   background: #1e3d30;
   text-decoration: none;
 }
@@ -247,6 +248,12 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.025em;
 }
+.workspace-metric .workspace-network-upload {
+  grid-column: 2 / -1;
+  color: var(--desktop-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
 .workspace-meter {
   grid-column: 1 / -1;
   width: 100%;
@@ -316,7 +323,7 @@
   .workspace-heading {
     align-items: start;
   }
-  .workspace-add {
+  .desktop .workspace-add {
     padding: 0 11px;
     font-size: 12px;
     white-space: nowrap;

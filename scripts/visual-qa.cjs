@@ -87,7 +87,7 @@ async function main() {
       if (url.pathname === '/api/system/telemetry')
         return respond({
           sampledAt: new Date().toISOString(),
-          cpu: { scope: 'runtime', totalPercent: 11.3, perCorePercent: [12, 9, 17, 7], uptimeSeconds: 345600 },
+          cpu: { scope: 'host-proc', totalPercent: 11.3, perCorePercent: [12, 9, 17, 7], uptimeSeconds: 345600 },
           memory: { scope: 'host-proc', totalBytes: 34359738368, availableBytes: 21474836480, swapTotalBytes: 8589934592, swapFreeBytes: 7516192768 },
           filesystems: [
             { mount: '/', filesystem: 'overlay', sizeBytes: 274877906944, usedBytes: 46170898432, availableBytes: 228707008512, scope: 'runtime' },
@@ -115,9 +115,14 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Your server' }).waitFor();
+    await page.getByText('Host CPU').waitFor();
+    await page.getByText('Core network').waitFor();
     const orbisBrand = (await page.title()) === 'Orbis' && (await page.getByRole('link', { name: 'Orbis workspace on Hades' }).isVisible());
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace.png`), fullPage: true });
     const workspaceOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    const workspaceBackgroundGap = await page.evaluate(
+      () => (document.querySelector('.desktop')?.getBoundingClientRect().bottom ?? 0) < document.documentElement.scrollHeight - 1,
+    );
     await page.keyboard.press('Control+k');
     await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
     await page.getByRole('textbox', { name: 'Find a tool or application' }).fill('Monitor');
@@ -169,6 +174,7 @@ async function main() {
       viewport: viewport.name,
       orbisBrand,
       workspaceOverflow,
+      workspaceBackgroundGap,
       monitorOverflow,
       appsOverflow,
       storeOverflow,
@@ -187,6 +193,7 @@ async function main() {
     reports.some(
       (report) =>
         report.workspaceOverflow ||
+        report.workspaceBackgroundGap ||
         !report.orbisBrand ||
         report.monitorOverflow ||
         report.appsOverflow ||
