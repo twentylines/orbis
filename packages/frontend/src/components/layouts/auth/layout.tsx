@@ -29,7 +29,7 @@ export const AuthLayout = ({ children }: PropsWithChildren) => {
         >
           {preferences.mode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
         </Button>
-        <LanguageSelector locale={locale as Locale} />
+        <LanguageSelector locale={locale as Locale} className="mb-0" />
       </div>
       <div className="container container-tight py-4">
         <div className="text-center mb-4 desktop-auth-identity">

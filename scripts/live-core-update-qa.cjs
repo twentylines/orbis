@@ -63,7 +63,14 @@ const cookies = fs
     await page.getByRole('button', { name: `Prepare update to ${release.tag}`, exact: true }).click();
     await page.getByText('Review core update', { exact: true }).waitFor();
     await page.getByText(`Verified image: ${release.image.split('@')[1]}`, { exact: true }).waitFor();
+    const applying = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/api/host-updates/apply' && response.request().method() === 'POST',
+    );
     await page.getByRole('button', { name: 'Install reviewed release', exact: true }).click();
+    const accepted = await applying;
+    assert.equal(accepted.status(), 202, 'The host helper did not accept the reviewed update');
+    const { jobId } = await accepted.json();
+    assert.equal(typeof jobId, 'string');
     let build;
     const deadline = Date.now() + 240000;
     while (Date.now() < deadline) {
@@ -74,6 +81,18 @@ const cookies = fs
       } catch {
         // The core endpoint is briefly unavailable while its container is replaced.
       }
+      let liveStatus;
+      try {
+        liveStatus = await read('/api/host-updates/status');
+      } catch {
+        /* The helper API shares the restarting core endpoint. */
+      }
+      if (liveStatus?.job?.id === jobId && ['rolled-back', 'failed', 'interrupted'].includes(liveStatus.job.state)) {
+        const job = liveStatus.job;
+        throw new Error(
+          `Reviewed update ${job.state}: ${job.message || 'Inspect the host update status.'} (${job.failureCode || 'no retained failure code'})`,
+        );
+      }
     }
     assert.equal(build?.version, release.tag, 'Reviewed update did not reach the target build');
     assert.equal(build.commit, release.commit);
@@ -81,13 +100,14 @@ const cookies = fs
     let afterStatus;
     while (Date.now() < deadline) {
       afterStatus = await read('/api/host-updates/status');
-      if (afterStatus.coreHealth === 'healthy' && afterStatus.job?.state === 'complete') break;
+      if (afterStatus.coreHealth === 'healthy' && afterStatus.job?.state === 'complete' && afterStatus.job.id === jobId) break;
       await page.waitForTimeout(1000);
     }
     assert.equal(afterStatus.coreHealth, 'healthy');
     assert.equal(afterStatus.enrolled, true);
     assert.equal(afterStatus.imageMatches, true);
     assert.equal(afterStatus.job?.state, 'complete');
+    assert.equal(afterStatus.job.id, jobId);
     assert.ok(
       isDeepStrictEqual(await read('/api/desktop-preferences'), { ...preferences, windows: preferences.windows ?? {} }),
       'Desktop preferences changed during core OTA',
@@ -107,7 +127,7 @@ const cookies = fs
     await page.locator('.desktop-connection').waitFor();
     assert.deepEqual(errors, []);
     process.stdout.write(
-      `${JSON.stringify({ from: fromVersion, version: build.version, commit: build.commit, digest: build.imageDigest, preferencesRetained: true, appRecordsRetained: identities.length, taskOutcomesRetained: tasks.length, healthy: true, pageErrors: errors })}\n`,
+      `${JSON.stringify({ from: fromVersion, version: build.version, commit: build.commit, digest: build.imageDigest, jobId: afterStatus.job.id, preferencesRetained: true, appRecordsRetained: identities.length, taskOutcomesRetained: tasks.length, healthy: true, pageErrors: errors })}\n`,
     );
   } finally {
     await browser.close();

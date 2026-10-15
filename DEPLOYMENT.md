@@ -10,6 +10,10 @@ A separate guarded stopped-tree capture then passed all three fingerprints: sour
 
 The current helper source now retains a fixed failure stage, code and exception category before rollback changes the journal stage. Snapshot read, copy, source-change, copy-mismatch and verification-record failures have distinct safe messages. Public diagnostics never include command stderr, file contents, paths from exceptions or arbitrary exception text. Strict fingerprint and sidecar requirements remain enforced. A replacement helper and subsequent published-image update must still be verified on the owned test host. Hades was not accessed.
 
+The replacement helper subsequently passed its guarded upgrade, host/container socket checks and active systemd state. The browser retried beta24→25 as job `22ff76a9-ef33-4ee6-afa3-e49f8a215dd3`; it completed at the exact published beta25 digest with a healthy core and matching enrollment. Preferences,2 installed app records and22 saved task outcomes matched their pre-update values. The previous beta24 snapshot independently verified 3,576 entries,2,812 files and97,055,150 bytes. This successful retry does not establish the cause of the original failure.
+
+The released beta25 bundle passed12 Settings/error-recovery/login compositions at1440/390/320px in both modes, with a controlled catalogue error and real authentication/preferences APIs. The account preferences were restored and compared. Screenshot inspection then found an8px offset between the login theme and language controls, which the existing assertions had missed. The next source iteration removes the language wrapper's form margin only in the auth toolbar and adds actual control-height/centre assertions to both retained fixture and released-image checks.
+
 Read-only follow-up of beta24's app-upgrade rehearsal verified the data marker and user override hashes, the stable generated random value, the new default, and selected v1 files inside the pre-upgrade archive. It does not turn the failed retention assertion into a pass. Published beta25 app-retention preservation remains to be exercised.
 
 ## Published beta 24 runtime verification (16 October 2026)
