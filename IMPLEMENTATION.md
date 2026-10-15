@@ -36,6 +36,8 @@ The requested browser Update Center for apps, Orbis releases, and host packages 
 
 The full remaining product scope and evidence requirements are tracked in [ACCEPTANCE.md](ACCEPTANCE.md).
 
+Published beta 22 adds the documented window model. Protected checks passed 323 backend tests and the build/common/integration gates. Independent fixture audits and real browser/API window, app, log, search and icon checks passed. The beta 21→22 update completed healthy at its exact digest; all four database tables and checked configuration/data/preferences/task files matched the stopped pre-update snapshot. Details and the corrected audit health wait are in `DEPLOYMENT.md`.
+
 ## Current limits
 
 - This is an incomplete product preview, not yet a verified drop-in Runtipi replacement. Remaining inherited edit/update/backup and recovery flows need further acceptance coverage; multiple retained tool windows, application groups and recent-use ordering, expanded host monitoring, wallpaper upload, and full theme packs are pending. Widget editing currently covers four fixed widgets with button controls; drag positioning and additional widget types remain open.

@@ -2,6 +2,32 @@
 
 The source tree builds and passes unit, browser-fixture, clean-install Docker, disposable-app lifecycle, and a synthetic stock CLI migration rehearsal. It has **not** passed migration against a copy of an existing homelab. Do not use it to replace a live Runtipi installation yet.
 
+## Published beta 22 runtime verification (15 October 2026)
+
+[Beta 22](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.22) passed protected PR 19 checks and release workflow `38741112820`. The checker verified source commit `2d482579cf318ee398fd02cb4e29ffacbb5a612e`, manifest and exact GHCR index digest `sha256:6274f2ab68f29b920790cbdcec585f4ea546aa3b5de461544efff07061fd5962`, including linux/amd64 and linux/arm64.
+
+Chrome on beta 21 reviewed that digest and clicked **Install reviewed release**. Host job `e1cd3825-4a4d-46a6-9a10-d696e9c6e619` completed at the exact beta 22 image, with healthy core, enrollment and image matching. The new generic audit initially asserted Docker health as soon as build metadata answered, catching normal `starting` state. Its wait now includes healthy Docker state and completed host job. The update was not submitted twice; settled status and preservation were verified independently.
+
+A disposable copy of the stopped pre-update PostgreSQL snapshot booted with networking disabled. Canonical row fingerprints matched the running database for all four tables: `app`, `app_store`, `link` and `user`. File fingerprints also matched `.env`, `apps`, `app-data`, `user-config`, desktop preferences and task history. These comparisons ran before preference/lifecycle tests changed their intended test state. The temporary database and its disposable copy were removed; the original private update snapshot remains intact. No credential values were printed or committed.
+
+The published image then passed actual browser/API window checks: unsaved draft minimize/restore, exact query/hash, one saved drag, maximize/restore, 16px snap gap, account-backed bounds after clearing local cache/reloading, independent Settings/Monitor placement, mobile fallback and configured IP visibility. Original preferences were restored and compared. Home/search/pin/show-all/card restoration also passed with no page errors.
+
+Real `whoami:migrated` start/stop tasks `c9e3fc5a-819b-4f66-9cd5-4b258b4cbbc7` and `2441a3b6-858e-43b9-833c-3465466f32df` succeeded. Its resource scope contained one running container. Minimizing terminated the native log request; restoring reopened its preserved 50-line stream. Invalid limits returned 400 JSON and unauthenticated access returned 401. Configuration stayed unchanged and the original stopped state was restored. All 248 catalogue/installed image responses decoded with no failures.
+
+Live captures: [floating Settings](screenshots/live-beta22/floating-settings.png), [Monitor](screenshots/live-beta22/monitor.png), [minimized phone tool with IP](screenshots/live-beta22/minimized-mobile.png), [Home](screenshots/live-beta22/workspace-mobile.png), [search](screenshots/live-beta22/search-mobile.png), [app resources](screenshots/live-beta22/app-resources.png).
+
+The retained `live-window-qa.cjs`, `live-app-workspace-qa.cjs`, `live-desktop-qa.cjs` and `live-catalogue-qa.cjs` scripts require a private cookie jar, checker-produced release JSON, loopback target and explicit audit flags. The first and third restore preferences; the app audit restores stopped state. `live-core-update-qa.cjs` requires an exact source version and a separate mutation opt-in; its revised health wait will be exercised in a future update rather than repeating the completed transaction.
+
+```sh
+python3 scripts/orbis-release-check.py v0.1.0-beta.22 > /tmp/orbis-release.json
+ORBIS_AUDIT_COOKIE_FILE=/path/to/private-cookie-jar.txt ORBIS_AUDIT_RELEASE_FILE=/tmp/orbis-release.json ORBIS_ALLOW_PREFERENCE_AUDIT=1 node scripts/live-window-qa.cjs
+ORBIS_AUDIT_COOKIE_FILE=/path/to/private-cookie-jar.txt ORBIS_AUDIT_RELEASE_FILE=/tmp/orbis-release.json ORBIS_ALLOW_CATALOGUE_AUDIT=1 node scripts/live-catalogue-qa.cjs
+```
+
+An idle pre-update core spot sample was 140.2 MiB/0.00% CPU; a post-audit sample was 162.9 MiB/0.12%. This is not a controlled memory or sustained-performance comparison. These results cover synthetic data on arm64. AMD64 runtime, copied real homelab data, external mounts, independent backup rehearsal and production cutover remain outstanding. Hades was untouched.
+
+Historical rehearsals follow; version-specific limits describe those runs. The full current acceptance record is in `ACCEPTANCE.md`.
+
 ## Published beta 21 runtime verification (15 October 2026)
 
 [Beta 21](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.21) passed protected checks and release workflow 38727931873. Its Git tag, manifest and exact GHCR index agree on source commit `4b9144b22e05733b3d68ce61cbd9104213e48940` and digest `sha256:597a1de894caa770fc424d8f0e9b4a2a8a32569f697ee61d1e1ff8eba76b222d`, with linux/amd64 and linux/arm64 entries.
@@ -12,7 +38,7 @@ On the published image, real `whoami:migrated` start/stop requests completed as 
 
 The 390 px browser saved pins/show-all and hidden lower cards, reloaded the account-backed preferences, restored the cards, searched both installed/catalogue apps and navigated to Updates and Appearance. Escape returned focus. The original preferences were restored through the authenticated API and compared after restoration. No page errors occurred. A separate browser decoded all 248 catalogue/installed icons with zero failures.
 
-Live captures: [desktop](screenshots/live-beta 21/workspace-desktop.png), [phone workspace during the interaction check](screenshots/live-beta 21/workspace-mobile.png), [search](screenshots/live-beta 21/search-mobile.png), [app resources while running](screenshots/live-beta 21/app-resources.png). Fixture inspection and its wider layout matrix are in `VISUAL-QA.md`.
+Live captures: [desktop](screenshots/live-beta21/workspace-desktop.png), [phone workspace during the interaction check](screenshots/live-beta21/workspace-mobile.png), [search](screenshots/live-beta21/search-mobile.png), [app resources while running](screenshots/live-beta21/app-resources.png). Fixture inspection and its wider layout matrix are in `VISUAL-QA.md`.
 
 These are isolated synthetic-data/arm64 results. AMD64 image publication does not establish an AMD64 boot; copied real-data migration, external mounts/volumes, independent backup rehearsal and Hades cutover remain outstanding. Hades was untouched.
 
