@@ -43,6 +43,12 @@ class OrbisHostTests(unittest.TestCase):
                 HOST.execute(self.root, MANIFEST, "runtipi-test", "enroll", str(self.root))
         self.assertFalse((self.root / HOST.STATE_NAME).exists())
 
+    def test_mutating_operations_share_a_host_lock(self):
+        with HOST.host_lock(self.root):
+            with self.assertRaisesRegex(ValueError, "in progress"):
+                with HOST.host_lock(self.root):
+                    pass
+
     def test_start_requires_enrollment_and_uses_final_pinned_override(self):
         calls = []
 

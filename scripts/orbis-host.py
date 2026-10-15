@@ -7,6 +7,7 @@ Orbis, migrate a database, or take a backup.
 """
 
 import argparse
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -15,6 +16,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -29,6 +31,20 @@ def load_script(name: str, module_name: str):
 PLAN = load_script("orbis-release-plan.py", "orbis_release_plan")
 STAGE = load_script("orbis-stage-release.py", "orbis_stage_release")
 STATE_NAME = ".orbis-host-state.json"
+
+
+@contextmanager
+def host_lock(root: Path):
+    path = root.parent / f".{root.name}.orbis-host.lock"
+    descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise ValueError("another Orbis host operation is in progress") from error
+        yield
+    finally:
+        os.close(descriptor)
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -216,7 +232,12 @@ def main() -> int:
         if not root.is_dir():
             raise ValueError("installation root must be a directory")
         manifest = PLAN.validate_manifest(json.loads(args.manifest.read_text(encoding="utf-8")))
-        print(json.dumps(execute(root, manifest, args.docker_context, args.action, args.confirm_root), indent=2))
+        if args.action == "status":
+            result = execute(root, manifest, args.docker_context, args.action, args.confirm_root)
+        else:
+            with host_lock(root):
+                result = execute(root, manifest, args.docker_context, args.action, args.confirm_root)
+        print(json.dumps(result, indent=2))
         return 0
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
         print(f"Orbis host command failed: {error}", file=sys.stderr)

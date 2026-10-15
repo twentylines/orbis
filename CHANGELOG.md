@@ -24,5 +24,6 @@
 - Shared telemetry probes across simultaneous browsers with a four-second server cache so each viewer does not trigger duplicate filesystem and network reads.
 - Added a read-only release checker that verifies GitHub's release tag and manifest against the exact GHCR image-index bytes and both supported Linux architectures.
 - Corrected the Workspace sync label to show a queued save immediately, avoiding a stale “Saved” message during the debounce window.
+- Added a locked, journaled host update transaction for an already enrolled Orbis CLI installation. It verifies a published digest, snapshots the stopped tree, restores the previous core on a failed start, and passed a synthetic beta 4 to beta 5 update in the isolated VM.
 
 Real homelab migration, automatic core installation and rollback, host package updates, and multi-server pairing remain outstanding.
