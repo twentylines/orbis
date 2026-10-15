@@ -162,7 +162,7 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
         raise ValueError("rsync is required to restore a stopped installation snapshot")
     if journal_path(snapshot).exists() or journal_path(snapshot).is_symlink():
         raise ValueError("an update journal already exists for this snapshot destination")
-    SNAPSHOT.prepare(root, snapshot)
+    snapshot_estimate = SNAPSHOT.preflight(root, snapshot)
     expected = HOST.installation_fingerprint(root, current, context)
     HOST.require_current_state(root, expected)
     candidate = HOST.PLAN.plan(root, target)
@@ -184,6 +184,7 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
         "targetTag": target["tag"],
         "targetImage": f"{target['image']}@{target['digest']}",
         "snapshot": str(snapshot),
+        "snapshotBytes": snapshot_estimate["bytes"],
         "runningAppsMustBeStopped": True,
     }
 

@@ -34,6 +34,39 @@ def prepare(root: Path, snapshot: Path) -> None:
         raise ValueError("snapshot destination must be outside the installation")
 
 
+def preflight(root: Path, snapshot: Path) -> dict[str, int]:
+    """Check tree shape and destination capacity without reading file contents."""
+    prepare(root, snapshot)
+    root = root.resolve(strict=True)
+    entries = 0
+    files = 0
+    bytes_required = 0
+
+    def unreadable(error: OSError) -> None:
+        raise error
+
+    for folder, directory_names, file_names in os.walk(root, topdown=True, followlinks=False, onerror=unreadable):
+        for name in [*directory_names, *file_names]:
+            item = Path(folder) / name
+            metadata = item.lstat()
+            entries += 1
+            if stat.S_ISLNK(metadata.st_mode):
+                target = os.readlink(item)
+                if Path(target).is_absolute() or not item.resolve(strict=False).is_relative_to(root):
+                    raise ValueError("snapshot contains a symlink outside its installation tree")
+                if name in directory_names:
+                    directory_names.remove(name)
+            elif stat.S_ISREG(metadata.st_mode):
+                files += 1
+                bytes_required += metadata.st_size
+            elif not stat.S_ISDIR(metadata.st_mode):
+                raise ValueError("snapshot contains an unsupported file type")
+    free = shutil.disk_usage(snapshot.parent).free
+    if free < int(bytes_required * 1.1) + 64 * 1024 * 1024:
+        raise ValueError("snapshot destination does not have enough available space")
+    return {"entries": entries, "files": files, "bytes": bytes_required}
+
+
 def fingerprint(root: Path) -> dict[str, object]:
     if not root.is_dir() or root.is_symlink():
         raise ValueError("snapshot tree must be a real directory")
@@ -42,7 +75,10 @@ def fingerprint(root: Path) -> dict[str, object]:
     files = 0
     bytes_read = 0
     entries = 0
-    for folder, directory_names, file_names in os.walk(root, topdown=True, followlinks=False):
+    def unreadable(error: OSError) -> None:
+        raise error
+
+    for folder, directory_names, file_names in os.walk(root, topdown=True, followlinks=False, onerror=unreadable):
         directory_names.sort()
         file_names.sort()
         for name in [*directory_names, *file_names]:
@@ -104,11 +140,8 @@ def capture(root: Path, snapshot: Path, release: str, docker_context: str) -> di
     root_mode = stat.S_IMODE(root.stat().st_mode)
     expanded = snapshot.expanduser()
     snapshot = expanded.parent.resolve(strict=True) / expanded.name
-    prepare(root, snapshot)
+    preflight(root, snapshot)
     before = fingerprint(root)
-    free = shutil.disk_usage(snapshot.parent).free
-    if free < int(before["bytes"] * 1.1) + 64 * 1024 * 1024:
-        raise ValueError("snapshot destination does not have enough available space")
     copied = subprocess.run(["cp", "-a", str(root), str(snapshot)], capture_output=True, check=False)
     if copied.returncode:
         raise RuntimeError("installation snapshot copy failed; inspect the incomplete destination locally")

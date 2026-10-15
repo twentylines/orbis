@@ -2,6 +2,7 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SPEC = importlib.util.spec_from_file_location("orbis_snapshot", Path(__file__).with_name("orbis-snapshot.py"))
@@ -50,6 +51,15 @@ class OrbisSnapshotTests(unittest.TestCase):
         SNAPSHOT.sidecar(destination).unlink()
         with self.assertRaisesRegex(ValueError, "sidecar"):
             SNAPSHOT.verify(destination, self.root)
+
+    def test_preflight_reports_size_and_refuses_insufficient_space_before_copy(self):
+        estimate = SNAPSHOT.preflight(self.root, self.base / "snapshot")
+        self.assertEqual(estimate["files"], 2)
+        self.assertGreater(estimate["bytes"], 0)
+        self.assertFalse((self.base / "snapshot").exists())
+        with mock.patch.object(SNAPSHOT.shutil, "disk_usage", return_value=mock.Mock(free=0)):
+            with self.assertRaisesRegex(ValueError, "enough available space"):
+                SNAPSHOT.preflight(self.root, self.base / "snapshot")
 
 
 if __name__ == "__main__":
