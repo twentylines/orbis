@@ -52,7 +52,7 @@ async function main() {
     preset: 'frost',
     density: 'comfortable',
     wallpaper: 'sandstone',
-    workspace: { order: ['applications', 'activity', 'storage', 'attention'], hidden: [], wide: ['applications', 'activity'], pinnedApps: [] },
+    workspace: { order: ['applications', 'activity', 'storage', 'attention'], hidden: [], wide: ['applications'], pinnedApps: [] },
   });
   let preferences = freshPreferences();
   const reports = [];
@@ -239,11 +239,11 @@ async function main() {
       return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: 'Your server' }).waitFor();
+    await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
     await page.getByText('Host CPU').waitFor();
     await page.getByText('Core network').waitFor();
     const orbisBrand = (await page.title()) === 'Orbis' && (await page.getByRole('link', { name: 'Orbis workspace on Hades' }).isVisible());
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace.png`), fullPage: true });
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace.png`), fullPage: true, animations: 'disabled' });
     const workspaceOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     const workspaceBackgroundGap = await page.evaluate(
       () => (document.querySelector('.desktop')?.getBoundingClientRect().bottom ?? 0) < document.documentElement.scrollHeight - 1,
@@ -255,13 +255,13 @@ async function main() {
     await page.getByRole('button', { name: 'Move System activity up' }).focus();
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: 'Hide Runtime filesystem' }).click();
-    await page.getByRole('button', { name: 'Make System activity standard width' }).click();
+    await page.getByRole('button', { name: 'Expand System activity wide' }).click();
     await page.getByRole('button', { name: 'Pin Backups' }).click();
     const savingAfterPin = await page.locator('.workspace-editor-sync').innerText();
     const editedOrder = await page.locator('.workspace-widget').first().locator('h2').innerText();
     const storageHidden = (await page.locator('.workspace-storage').count()) === 0;
-    const activityStandard = !(await page.locator('.workspace-widget').first().getAttribute('class')).includes('workspace-widget-wide');
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-edit.png`), fullPage: true });
+    const activityResized = (await page.locator('.workspace-widget').first().getAttribute('class')).includes('workspace-widget-wide');
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-edit.png`), fullPage: true, animations: 'disabled' });
     const editOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     for (
       let attempt = 0;
@@ -270,7 +270,7 @@ async function main() {
     )
       await page.waitForTimeout(50);
     await page.reload();
-    await page.getByRole('heading', { name: 'Your server' }).waitFor();
+    await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
     const dockVisibleAfterReload = await page.getByRole('navigation', { name: 'Desktop tools' }).isVisible();
     const workspaceLayoutPersisted =
       (await page.locator('.workspace-widget').first().locator('h2').innerText()) === 'System activity' &&
@@ -283,7 +283,7 @@ async function main() {
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
     await page.waitForTimeout(5200);
     await page.getByRole('heading', { name: 'Host memory' }).waitFor();
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-monitor.png`), fullPage: true });
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-monitor.png`), fullPage: true, animations: 'disabled' });
     const monitorOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     await page.getByRole('link', { name: 'Back to workspace' }).click();
     await page.getByRole('link', { name: 'Applications', exact: true }).click();
@@ -291,7 +291,7 @@ async function main() {
       .getByTestId('apps-list')
       .waitFor({ timeout: 5000 })
       .catch(async (error) => {
-        await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-applications-error.png`), fullPage: true });
+        await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-applications-error.png`), fullPage: true, animations: 'disabled' });
         console.error((await page.locator('body').innerText()).slice(0, 1800));
         throw error;
       });
@@ -300,7 +300,7 @@ async function main() {
       : null;
     const batchActionsStacked =
       !panelWidth || (await page.locator('.action-bar-content').evaluate((element) => getComputedStyle(element).flexDirection === 'column'));
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-applications.png`), fullPage: true });
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-applications.png`), fullPage: true, animations: 'disabled' });
     const appsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     const appTilesContained = await page
       .locator('.desktop-installed-grid .card-body')
@@ -328,7 +328,7 @@ async function main() {
     if (panelStyle) await panelStyle.evaluate((element) => element.remove());
     await page.getByRole('link', { name: 'App Store', exact: true }).click();
     await page.locator('.desktop-catalogue-grid').waitFor();
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-store.png`), fullPage: true });
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-store.png`), fullPage: true, animations: 'disabled' });
     const storeOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     await page.getByRole('link', { name: 'Updates', exact: true }).click();
     await page.getByRole('heading', { name: 'Updates', exact: true }).waitFor();
@@ -341,7 +341,7 @@ async function main() {
       await page.getByRole('region', { name: 'Review host package update' }).waitFor();
     }
     const updatePlanDockHidden = !hostUpdateFixture || (await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden());
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates.png`), fullPage: true });
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates.png`), fullPage: true, animations: 'disabled' });
     const updatesOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     let changelogAccessible = true;
     if (hostUpdateFixture) {
@@ -351,10 +351,10 @@ async function main() {
         const style = getComputedStyle(element);
         return element.tabIndex === 0 && (window.innerWidth > 760 || (style.maxHeight === 'none' && style.overflow === 'visible'));
       });
-      await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates-changelog.png`), fullPage: true });
+      await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates-changelog.png`), fullPage: true, animations: 'disabled' });
       await page.getByRole('button', { name: 'Read changelog' }).first().click();
       await page.getByRole('region', { name: 'linux-image-generic:arm64 changelog' }).waitFor();
-      await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-host-packages.png`), fullPage: true });
+      await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-host-packages.png`), fullPage: true, animations: 'disabled' });
     }
     if (hostUpdateFixture) await page.getByRole('button', { name: 'Cancel' }).first().click();
     await page.getByRole('link', { name: 'Back to workspace' }).click();
@@ -364,7 +364,7 @@ async function main() {
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('tab', { name: 'Appearance' }).click();
     await page.getByRole('heading', { name: 'Appearance & workspace' }).waitFor();
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-appearance.png`), fullPage: true });
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-appearance.png`), fullPage: true, animations: 'disabled' });
     const settingsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     await page.getByRole('button', { name: 'Graphite Deep charcoal' }).click();
     await page.getByRole('button', { name: 'Tidal' }).click();
@@ -372,16 +372,16 @@ async function main() {
       await page.waitForTimeout(50);
     if (preferences.preset !== 'graphite') throw new Error('Graphite preference was not sent to the server fixture');
     if (preferences.wallpaper !== 'tidal') throw new Error('Tidal wallpaper was not sent to the server fixture');
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-graphite.png`), fullPage: true });
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-graphite.png`), fullPage: true, animations: 'disabled' });
     await page.reload();
     await page.getByRole('heading', { name: 'Appearance & workspace' }).waitFor();
     const graphitePersisted = await page.getByRole('button', { name: 'Graphite Deep charcoal' }).getAttribute('aria-pressed');
     const wallpaperPersisted = await page.getByRole('button', { name: 'Tidal' }).getAttribute('aria-pressed');
     const bodyTheme = await page.evaluate(() => document.body.dataset.bsTheme);
     await page.getByRole('link', { name: 'Workspace', exact: true }).click();
-    await page.getByRole('heading', { name: 'Your server' }).waitFor();
+    await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
     const graphiteHeadingColor = await page.locator('.workspace-heading').evaluate((element) => getComputedStyle(element).color);
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-graphite.png`), fullPage: true });
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-graphite.png`), fullPage: true, animations: 'disabled' });
     reports.push({
       viewport: viewport.name,
       zoom,
@@ -394,7 +394,7 @@ async function main() {
       dockHiddenWhileEditing,
       dockVisibleAfterReload,
       storageHidden,
-      activityStandard,
+      activityResized,
       editOverflow,
       workspaceLayoutPersisted,
       pinnedAppFirst,
@@ -430,7 +430,7 @@ async function main() {
         !report.dockHiddenWhileEditing ||
         !report.dockVisibleAfterReload ||
         !report.storageHidden ||
-        !report.activityStandard ||
+        !report.activityResized ||
         report.editOverflow ||
         !report.workspaceLayoutPersisted ||
         !report.pinnedAppFirst ||

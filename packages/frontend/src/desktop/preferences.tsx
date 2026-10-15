@@ -19,7 +19,7 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   preset: 'frost',
   density: 'comfortable',
   wallpaper: 'sandstone',
-  workspace: { order: [...widgetIds], hidden: [], wide: ['applications', 'activity'], pinnedApps: [] },
+  workspace: { order: [...widgetIds], hidden: [], wide: ['applications'], pinnedApps: [] },
 };
 const STORAGE_KEY = 'server-desktop-preferences-v1';
 
