@@ -59,17 +59,18 @@ body {
   color: #34473c;
   font-size: 12px;
 }
-.desktop-auth[data-desktop-preset="graphite"] {
+.desktop-auth[data-desktop-mode="dark"][data-desktop-preset] {
   background-color: #283732;
+  background-image: linear-gradient(rgba(7, 19, 18, 0.46), rgba(7, 19, 18, 0.65)), var(--desktop-wallpaper);
 }
-.desktop-auth[data-desktop-preset="graphite"] .card {
+.desktop-auth[data-desktop-mode="dark"] .card {
   background: rgba(31, 40, 39, 0.97);
   border-color: rgba(222, 233, 225, 0.17);
   color: #edf2ef;
 }
-.desktop-auth[data-desktop-preset="graphite"] .desktop-auth-identity h1,
-.desktop-auth[data-desktop-preset="graphite"] .desktop-auth-product,
-.desktop-auth[data-desktop-preset="graphite"] .desktop-auth-credit {
+.desktop-auth[data-desktop-mode="dark"] .desktop-auth-identity h1,
+.desktop-auth[data-desktop-mode="dark"] .desktop-auth-product,
+.desktop-auth[data-desktop-mode="dark"] .desktop-auth-credit {
   color: #edf2ef;
 }
 .desktop-auth[data-desktop-preset="forest"] {

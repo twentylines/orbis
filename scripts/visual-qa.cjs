@@ -50,6 +50,7 @@ async function main() {
   const freshPreferences = () => ({
     serverName: 'Hades',
     preset: 'frost',
+    mode: 'light',
     density: 'comfortable',
     wallpaper: 'sandstone',
     workspace: { order: ['applications', 'activity', 'storage', 'attention'], hidden: [], wide: ['applications'], pinnedApps: [] },
@@ -59,7 +60,7 @@ async function main() {
   const viewports = process.env.ORBIS_VISUAL_NARROW
     ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
     : [
-        { name: 'desktop', width: 1440, height: 900 },
+        { name: 'desktop', width: 1440, height: 1120 },
         { name: 'mobile', width: 390, height: 844 },
       ];
   for (const viewport of viewports) {
@@ -244,6 +245,19 @@ async function main() {
     await page.getByText('Core network').waitFor();
     const orbisBrand = (await page.title()) === 'Orbis' && (await page.getByRole('link', { name: 'Orbis workspace on Hades' }).isVisible());
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace.png`), fullPage: true, animations: 'disabled' });
+    await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+    await page.locator('.desktop[data-desktop-mode="dark"]').waitFor();
+    for (let attempt = 0; attempt < 40 && preferences.mode !== 'dark'; attempt++) await page.waitForTimeout(50);
+    await page.reload();
+    await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    await page.getByText('Host CPU').waitFor();
+    await page.getByText('Core network').waitFor();
+    const darkModePersisted =
+      (await page.locator('.desktop').getAttribute('data-desktop-mode')) === 'dark' &&
+      (await page.evaluate(() => document.body.dataset.bsTheme)) === 'dark';
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-dark.png`), fullPage: true, animations: 'disabled' });
+    await page.getByRole('button', { name: 'Switch to light mode' }).click();
+    await page.locator('.desktop[data-desktop-mode="light"]').waitFor();
     const workspaceOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     const workspaceBackgroundGap = await page.evaluate(
       () => (document.querySelector('.desktop')?.getBoundingClientRect().bottom ?? 0) < document.documentElement.scrollHeight - 1,
@@ -388,6 +402,7 @@ async function main() {
       cssViewportWidth: viewport.width,
       cssViewportHeight: viewport.height,
       orbisBrand,
+      darkModePersisted,
       workspaceOverflow,
       workspaceBackgroundGap,
       editedOrder,
@@ -436,6 +451,7 @@ async function main() {
         !report.pinnedAppFirst ||
         report.savingAfterPin !== 'Saving layout…' ||
         !report.orbisBrand ||
+        !report.darkModePersisted ||
         report.monitorOverflow ||
         report.appsOverflow ||
         !report.appTilesContained ||

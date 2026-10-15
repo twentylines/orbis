@@ -240,11 +240,17 @@ export default function Dashboard() {
         <div className="workspace-meter">
           <span style={{ width: `${Math.min(100, Math.max(0, diskPercent ?? 0))}%` }} />
         </div>
+        <span className="workspace-drive-stack" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
       </Link>
     ),
     attention: (
       <section className="workspace-attention" aria-labelledby="workspace-attention-title">
         <span className="workspace-panel-kicker">Operations / 04</span>
+        <span className={`workspace-attention-beacon ${attention > 0 ? 'has-attention' : ''}`} aria-hidden="true" />
         <h2 id="workspace-attention-title">Needs attention</h2>
         {apps.data ? (
           <p>

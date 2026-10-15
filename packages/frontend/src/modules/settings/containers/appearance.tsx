@@ -6,6 +6,7 @@ import {
   type DesktopPreferences,
 } from '@/desktop/preferences';
 import { useEffect, useRef, useState } from 'react';
+import { IconMoonStars, IconSunHigh } from '@tabler/icons-react';
 import './appearance.css';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
@@ -32,7 +33,7 @@ export const Appearance = () => {
   useEffect(() => setName(preferences.serverName), [preferences.serverName]);
 
   const changePreset = (preset: DesktopPreferences['preset']) => {
-    update({ preset });
+    update({ preset, mode: preset === 'graphite' ? 'dark' : 'light' });
     setMessage(`${presets.find((item) => item.value === preset)?.title} applied.`);
   };
 
@@ -119,6 +120,38 @@ export const Appearance = () => {
               <small>{description}</small>
             </button>
           ))}
+        </div>
+      </section>
+      <section className="appearance-section" aria-labelledby="appearance-mode">
+        <div>
+          <h2 id="appearance-mode">Light & dark</h2>
+          <p>Switch the entire desktop. Your choice follows you when you sign in again.</p>
+        </div>
+        <div className="appearance-modes">
+          <button
+            type="button"
+            className="appearance-mode appearance-mode-light"
+            aria-pressed={preferences.mode === 'light'}
+            onClick={() => update({ mode: 'light' })}
+          >
+            <IconSunHigh size={24} stroke={1.5} aria-hidden="true" />
+            <span>
+              <strong>Daylight</strong>
+              <small>Clear, warm surfaces</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="appearance-mode appearance-mode-dark"
+            aria-pressed={preferences.mode === 'dark'}
+            onClick={() => update({ mode: 'dark' })}
+          >
+            <IconMoonStars size={24} stroke={1.5} aria-hidden="true" />
+            <span>
+              <strong>Nightfall</strong>
+              <small>Deep, luminous surfaces</small>
+            </span>
+          </button>
         </div>
       </section>
       <section className="appearance-section" aria-labelledby="appearance-wallpaper">

@@ -13,12 +13,15 @@ Orbis should feel like an operating system for a personal server: a place with a
 
 - Bundle the wallpaper locally. The generated horizon is compressed to a small WebP asset and needs no external image request.
 - Use translucent chrome where it gives the desktop depth, and solid enough surfaces behind dense content for clear reading. Keep the wallpaper visible between windows.
+- Light and dark are independent of the colour preset. Both modes should change the wallpaper exposure, window surfaces, instruments, text, and system controls; the top bar provides an immediate switch, and appearance settings keep the choice on the account.
+- Make system readings feel like physical instruments: recessed live dials, an etched panel, a layered storage marker, and a state-driven operations beacon. These are CSS layers over real values, not a graphics engine.
 - CSS tokens drive wallpaper, ink, chrome, surfaces, accent, and headings. Presets may have different character; future full themes should replace all of these together, including app windows and instruments.
 - Status color describes actual state. The orange and green lights in the UI must come from connection and application data.
 
 ## Motion and performance
 
 - The system bar, dock, windows, panels, and app icons enter with short, staggered motion. Navigation, hover, press, opening search, and editing the workspace each respond visibly.
+- Ambient motion is limited to a small scan accent and status beacon within their panels. The scene has no full-screen animation, and reduced-motion disables these effects.
 - Live dials update from real samples. Keep animation on transforms and opacity where possible, and do not use a full-screen animated wallpaper or a continuous 3D render loop on the server desktop.
 - Honor reduced motion, keyboard focus, narrow screens, and enlarged text. Keep the UI responsive while the data refreshes.
 

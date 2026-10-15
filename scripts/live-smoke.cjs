@@ -44,7 +44,7 @@ async function main() {
     });
     assert.equal(saved.status(), 200, 'saving preferences should succeed');
     const reloaded = await page.request.get(`${base}/api/desktop-preferences`);
-    assert.deepEqual(await reloaded.json(), preferences);
+    assert.deepEqual(Object.fromEntries(Object.entries(await reloaded.json()).filter(([key]) => key in preferences)), preferences);
     await page.reload();
     await page.getByRole('heading', { name: 'Orbis Test', exact: true }).waitFor();
 

@@ -15,6 +15,8 @@ import {
   IconRefresh,
   IconSearch,
   IconSettings,
+  IconMoon,
+  IconSun,
   IconX,
 } from '@tabler/icons-react';
 import { useIsMutating, useMutation, useQuery } from '@tanstack/react-query';
@@ -47,7 +49,7 @@ export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => (
 export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const { userSettings, user, apps } = useAppContext();
   const { isLoggedIn } = useUserContext();
-  const { preferences } = useDesktopPreferences();
+  const { preferences, update } = useDesktopPreferences();
   const location = useLocation();
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -98,6 +100,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     <div
       className="desktop"
       data-desktop-preset={preferences.preset}
+      data-desktop-mode={preferences.mode}
       data-desktop-density={preferences.density}
       data-desktop-wallpaper={preferences.wallpaper}
     >
@@ -111,6 +114,17 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
           {current?.label ?? 'Application'}
         </span>
         <div className="desktop-system-actions">
+          <button
+            type="button"
+            className="desktop-mode-toggle"
+            aria-label={`Switch to ${preferences.mode === 'dark' ? 'light' : 'dark'} mode`}
+            aria-pressed={preferences.mode === 'dark'}
+            title={`Switch to ${preferences.mode === 'dark' ? 'light' : 'dark'} mode`}
+            onClick={() => update({ mode: preferences.mode === 'dark' ? 'light' : 'dark' })}
+          >
+            {preferences.mode === 'dark' ? <IconSun size={18} aria-hidden="true" /> : <IconMoon size={18} aria-hidden="true" />}
+            <span>{preferences.mode === 'dark' ? 'Light' : 'Dark'}</span>
+          </button>
           <button type="button" className="desktop-search-trigger" onClick={() => setPaletteOpen(true)} aria-label="Search tools and settings">
             <IconSearch size={18} aria-hidden="true" />
             <span>Search</span>
