@@ -12,6 +12,8 @@ The full retained route regression exited 0 at 1440/768/390; the final bundle ex
 
 PR 19's protected gates passed frontend/backend/common builds/types, 323 backend tests, common tests, integration and dependency review. Published-image checks are recorded separately in `DEPLOYMENT.md`. These Chrome fixture results do not establish other-browser support, copied-data migration, every inherited recovery flow or full product acceptance.
 
+Published beta 22 subsequently passed real saved window/draft/mobile-IP checks, Home/search interactions, app start/stop/resources, native log close/reopen, and all 248 icon decodes. Original preferences and stopped app state were restored. Its reviewed core update completed healthy; private pre-update snapshot/database comparisons establish preservation independently of the audit's corrected startup-health wait. `screenshots/live-beta22` contains the inspected actual-API captures.
+
 Reproduce the window flow checks with a bundled local preview on port 8080:
 
 ```sh

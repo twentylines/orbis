@@ -88,6 +88,35 @@ const cookies = fs
       page.getByRole('spinbutton', { name: 'Max lines:' }).fill('50'),
     ]);
     if (logResponse.status() !== 200) throw new Error(`Bounded log stream returned ${logResponse.status()}`);
+    const streamRequest = logResponse.request();
+    const ended = new Promise((resolve, reject) => {
+      let timer;
+      const cleanup = () => {
+        clearTimeout(timer);
+        page.off('requestfinished', onEnd);
+        page.off('requestfailed', onEnd);
+      };
+      const onEnd = (request) => {
+        if (request !== streamRequest) return;
+        cleanup();
+        resolve(true);
+      };
+      page.on('requestfinished', onEnd);
+      page.on('requestfailed', onEnd);
+      timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('Minimized log request did not terminate'));
+      }, 10000);
+    });
+    await page.getByRole('button', { name: 'Minimize Applications', exact: true }).click();
+    await page.locator('.desktop-route-window').waitFor({ state: 'hidden' });
+    await ended;
+    const [resumedLogs] = await Promise.all([
+      page.waitForResponse((response) => response.url().includes('/api/sse/app-logs') && response.url().includes('maxLines=50')),
+      page.getByRole('link', { name: 'Applications', exact: true }).click(),
+    ]);
+    if (resumedLogs.status() !== 200) throw new Error('Restored log reader failed');
+    await page.getByText('Live container output', { exact: true }).waitFor();
     const invalid = await context.request.get(`${base}/api/sse/app-logs?appUrn=${encodeURIComponent(urn)}&maxLines=0`);
     if (invalid.status() !== 400 || !invalid.headers()['content-type'].includes('application/json'))
       throw new Error('Invalid log limit was not rejected before streaming');
@@ -125,6 +154,8 @@ const cookies = fs
         digest: build.imageDigest,
         scopedContainers: scoped.length,
         liveLogs: true,
+        minimizedLogRequestClosed: true,
+        restoredLogLimit: 50,
         invalidLimit400: true,
         unauthenticated401: true,
         startStopTasks: [startId, stopId],
