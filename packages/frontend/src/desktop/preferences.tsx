@@ -4,7 +4,7 @@ import { useUIStore } from '@/stores/ui-store';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
-export type WorkspacePreferences = { order: WidgetId[]; hidden: WidgetId[]; wide: WidgetId[] };
+export type WorkspacePreferences = { order: WidgetId[]; hidden: WidgetId[]; wide: WidgetId[]; pinnedApps: string[] };
 
 export type DesktopPreferences = {
   serverName: string;
@@ -19,20 +19,30 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   preset: 'frost',
   density: 'comfortable',
   wallpaper: 'sandstone',
-  workspace: { order: [...widgetIds], hidden: [], wide: ['applications', 'activity'] },
+  workspace: { order: [...widgetIds], hidden: [], wide: ['applications', 'activity'], pinnedApps: [] },
 };
 const STORAGE_KEY = 'server-desktop-preferences-v1';
 
-type StoredDesktopPreferences = Omit<DesktopPreferences, 'wallpaper' | 'workspace'> & Partial<Pick<DesktopPreferences, 'wallpaper' | 'workspace'>>;
+type StoredWorkspacePreferences = Omit<WorkspacePreferences, 'pinnedApps'> & Partial<Pick<WorkspacePreferences, 'pinnedApps'>>;
+type StoredDesktopPreferences = Omit<DesktopPreferences, 'wallpaper' | 'workspace'> &
+  Partial<Pick<DesktopPreferences, 'wallpaper'>> & { workspace?: StoredWorkspacePreferences };
 
 const isWidgetList = (value: unknown): value is WidgetId[] =>
   Array.isArray(value) && value.length <= widgetIds.length && new Set(value).size === value.length && value.every((item) => widgetIds.includes(item));
 
-export const isWorkspacePreferences = (value: unknown): value is WorkspacePreferences => {
+export const isWorkspacePreferences = (value: unknown): value is StoredWorkspacePreferences => {
   if (!value || typeof value !== 'object') return false;
   const workspace = value as Record<string, unknown>;
   return (
-    isWidgetList(workspace.order) && workspace.order.length === widgetIds.length && isWidgetList(workspace.hidden) && isWidgetList(workspace.wide)
+    isWidgetList(workspace.order) &&
+    workspace.order.length === widgetIds.length &&
+    isWidgetList(workspace.hidden) &&
+    isWidgetList(workspace.wide) &&
+    (workspace.pinnedApps === undefined ||
+      (Array.isArray(workspace.pinnedApps) &&
+        workspace.pinnedApps.length <= 12 &&
+        new Set(workspace.pinnedApps).size === workspace.pinnedApps.length &&
+        workspace.pinnedApps.every((urn) => typeof urn === 'string' && urn.length > 2 && urn.length <= 180 && /^[^:]+:[^:]+$/.test(urn))))
   );
 };
 
@@ -53,7 +63,7 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
 export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPreferences => ({
   ...defaultDesktopPreferences,
   ...value,
-  workspace: value.workspace ?? defaultDesktopPreferences.workspace,
+  workspace: { ...defaultDesktopPreferences.workspace, ...value.workspace },
 });
 
 type PreferenceContext = {

@@ -40,7 +40,7 @@ async function main() {
     preset: 'frost',
     density: 'comfortable',
     wallpaper: 'sandstone',
-    workspace: { order: ['applications', 'activity', 'storage', 'attention'], hidden: [], wide: ['applications', 'activity'] },
+    workspace: { order: ['applications', 'activity', 'storage', 'attention'], hidden: [], wide: ['applications', 'activity'], pinnedApps: [] },
   });
   let preferences = freshPreferences();
   const reports = [];
@@ -141,18 +141,25 @@ async function main() {
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: 'Hide Runtime filesystem' }).click();
     await page.getByRole('button', { name: 'Make System activity standard width' }).click();
+    await page.getByRole('button', { name: 'Pin Backups' }).click();
     const editedOrder = await page.locator('.workspace-widget').first().locator('h2').innerText();
     const storageHidden = (await page.locator('.workspace-storage').count()) === 0;
     const activityStandard = !(await page.locator('.workspace-widget').first().getAttribute('class')).includes('workspace-widget-wide');
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-edit.png`), fullPage: true });
     const editOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-    for (let attempt = 0; attempt < 40 && preferences.workspace.hidden.length === 0; attempt++) await page.waitForTimeout(50);
+    for (
+      let attempt = 0;
+      attempt < 40 && (preferences.workspace.hidden.length === 0 || !preferences.workspace.pinnedApps.includes('backup:test'));
+      attempt++
+    )
+      await page.waitForTimeout(50);
     await page.reload();
     await page.getByRole('heading', { name: 'Your server' }).waitFor();
     const dockVisibleAfterReload = await page.getByRole('navigation', { name: 'Desktop tools' }).isVisible();
     const workspaceLayoutPersisted =
       (await page.locator('.workspace-widget').first().locator('h2').innerText()) === 'System activity' &&
       (await page.locator('.workspace-storage').count()) === 0;
+    const pinnedAppFirst = (await page.locator('.workspace-app').first().locator('strong').innerText()) === 'Backups';
     await page.keyboard.press('Control+k');
     await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
     await page.getByRole('textbox', { name: 'Find a tool or application' }).fill('Monitor');
@@ -216,6 +223,7 @@ async function main() {
       activityStandard,
       editOverflow,
       workspaceLayoutPersisted,
+      pinnedAppFirst,
       monitorOverflow,
       appsOverflow,
       storeOverflow,
@@ -243,6 +251,7 @@ async function main() {
         !report.activityStandard ||
         report.editOverflow ||
         !report.workspaceLayoutPersisted ||
+        !report.pinnedAppFirst ||
         !report.orbisBrand ||
         report.monitorOverflow ||
         report.appsOverflow ||

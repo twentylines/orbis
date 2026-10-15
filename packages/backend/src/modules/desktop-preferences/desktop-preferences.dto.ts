@@ -7,6 +7,9 @@ const workspace = type({
   order: widgetList,
   hidden: widgetList,
   wide: widgetList,
+  'pinnedApps?': type('string > 2 & string <= 180')
+    .array()
+    .narrow((items) => items.length <= 12 && new Set(items).size === items.length && items.every((item) => /^[^:]+:[^:]+$/.test(item))),
 }).narrow(({ order }) => order.length === 4);
 
 export const desktopPreferencesSchema = type({

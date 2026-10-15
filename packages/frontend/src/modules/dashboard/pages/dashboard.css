@@ -114,6 +114,44 @@
 .workspace-editor-controls button {
   min-width: 68px;
 }
+.workspace-pin-editor {
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid var(--desktop-line);
+}
+.workspace-pin-editor h3 {
+  margin: 0 0 3px;
+  font-size: 16px;
+}
+.workspace-pin-editor p {
+  margin: 0 0 14px;
+  color: var(--desktop-muted);
+  font-size: 13px;
+}
+.workspace-pin-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.workspace-pin-list button {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 9px;
+  min-width: 0;
+  text-align: left;
+}
+.workspace-pin-list button[aria-pressed="true"] {
+  border-color: #6d8b75;
+  background: rgba(103, 143, 110, 0.14);
+}
+.workspace-pin-list button span:not(.app-logo) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.workspace-pin-editor > button {
+  margin-top: 12px;
+}
 .workspace-all-hidden {
   grid-column: 1 / -1;
   padding: 32px;
@@ -413,6 +451,11 @@
   color: var(--desktop-muted);
   font-size: 12px;
 }
+.workspace-pin-list button small {
+  grid-column: 2;
+  color: var(--desktop-muted);
+  font-weight: 600;
+}
 .workspace-attention {
   padding: 22px 24px;
 }
@@ -424,11 +467,17 @@
   font-size: 13px;
 }
 @media (max-width: 900px) {
+  .workspace-pin-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .workspace-widget-wide .workspace-app-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 700px) {
+  .workspace-pin-list {
+    grid-template-columns: 1fr;
+  }
   .workspace-grid {
     grid-template-columns: 1fr;
   }
