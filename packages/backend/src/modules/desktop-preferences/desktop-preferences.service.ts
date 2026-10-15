@@ -8,7 +8,7 @@ import { desktopPreferencesSchema } from './desktop-preferences.dto';
 
 export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonNullable<DesktopPreferences['workspace']> } = {
-  serverName: 'Local server',
+  serverName: 'Hades',
   preset: 'frost',
   density: 'comfortable',
   wallpaper: 'sandstone',
