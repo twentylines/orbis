@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { useUserContext } from '@/context/user-context';
 import { useUIStore } from '@/stores/ui-store';
 
@@ -81,6 +81,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const [hydrated, setHydrated] = useState(false);
   const [serverReady, setServerReady] = useState(false);
   const [syncState, setSyncState] = useState<PreferenceContext['syncState']>('local');
+  const revision = useRef(0);
 
   useEffect(() => {
     try {
@@ -107,15 +108,16 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       return;
     }
     const controller = new AbortController();
+    const loadRevision = revision.current;
     setSyncState('loading');
     fetch('/api/desktop-preferences', { credentials: 'include', signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('Preference load failed');
         const value: unknown = await response.json();
         if (!isPreferences(value)) throw new Error('Invalid server preferences');
-        setPreferences(normalisePreferences(value));
+        if (revision.current === loadRevision) setPreferences(normalisePreferences(value));
         setServerReady(true);
-        setSyncState('saved');
+        setSyncState(revision.current === loadRevision ? 'saved' : 'saving');
       })
       .catch(() => {
         if (!controller.signal.aborted) setSyncState('error');
@@ -126,6 +128,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => {
     if (!serverReady || !hydrated) return;
     const controller = new AbortController();
+    const saveRevision = revision.current;
     setSyncState('saving');
     const timer = window.setTimeout(async () => {
       try {
@@ -137,9 +140,9 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
           body: JSON.stringify(preferences),
         });
         if (!response.ok) throw new Error('Preference save failed');
-        setSyncState('saved');
+        if (revision.current === saveRevision) setSyncState('saved');
       } catch {
-        if (!controller.signal.aborted) setSyncState('error');
+        if (!controller.signal.aborted && revision.current === saveRevision) setSyncState('error');
       }
     }, 300);
     return () => {
@@ -148,15 +151,23 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     };
   }, [preferences, serverReady, hydrated]);
 
-  const update = (value: Partial<DesktopPreferences>) =>
+  const update = (value: Partial<DesktopPreferences>) => {
+    if (!isPreferences({ ...preferences, ...value })) return;
+    revision.current += 1;
+    setSyncState('saving');
     setPreferences((previous) => {
       const next = { ...previous, ...value };
       return isPreferences(next) ? next : previous;
     });
+  };
 
-  return (
-    <Context.Provider value={{ preferences, update, reset: () => setPreferences(defaultDesktopPreferences), syncState }}>{children}</Context.Provider>
-  );
+  const reset = () => {
+    revision.current += 1;
+    setSyncState('saving');
+    setPreferences({ ...defaultDesktopPreferences, workspace: { ...defaultDesktopPreferences.workspace } });
+  };
+
+  return <Context.Provider value={{ preferences, update, reset, syncState }}>{children}</Context.Provider>;
 };
 
 export const useDesktopPreferences = () => {
