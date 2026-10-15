@@ -55,6 +55,15 @@ class OrbisHostServiceUpgradeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "does not match"):
                     UPGRADE.workspace_from_record(record, root, "other")
 
+    def test_legacy_helper_digest_allows_new_optional_package_reader(self):
+        self.assertIn("orbis-host-packages.py", UPGRADE.SETUP.SCRIPTS)
+        self.assertNotIn("orbis-host-packages.py", UPGRADE.LEGACY_SCRIPTS)
+        for name in UPGRADE.LEGACY_SCRIPTS:
+            (self.base / name).write_text(name)
+        before = UPGRADE.digest_files(self.base)
+        (self.base / "orbis-host-packages.py").write_text("new helper")
+        self.assertNotEqual(before, UPGRADE.digest_files(self.base))
+
 
 if __name__ == "__main__":
     unittest.main()

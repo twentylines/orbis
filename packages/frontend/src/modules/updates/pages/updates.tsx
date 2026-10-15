@@ -30,6 +30,44 @@ type HostPlan = {
   snapshotBytes: number;
   appsMustBeStopped: boolean;
 };
+type HostPackage = {
+  name: string;
+  installedVersion: string;
+  candidateVersion: string;
+  downloadBytes: number | null;
+  security: boolean;
+  sources: Array<{ origin: string | null; archive: string | null; site: string | null; trusted: boolean }>;
+};
+type HostPackageInventory = {
+  available: boolean;
+  reason?: string;
+  operatingSystem?: string;
+  checkedAt?: string;
+  indexesUpdatedAt?: string | null;
+  rebootRequired?: boolean;
+  packageCount?: number;
+  truncated?: boolean;
+  packages?: HostPackage[];
+};
+type HostPackageChangelog = {
+  name: string;
+  candidateVersion: string;
+  available: boolean;
+  source: string;
+  body?: string;
+  truncated?: boolean;
+  reason?: string;
+};
+
+function packageSize(bytes: number | null): string {
+  if (bytes === null) return 'Download size unavailable';
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(bytes / 1_000_000)} MB download`;
+}
+
+function packageSources(sources: HostPackage['sources']): string {
+  const labels = sources.map((source) => [source.origin, source.archive].filter(Boolean).join(' · ')).filter(Boolean);
+  return [...new Set(labels)].join(', ') || 'Repository unavailable';
+}
 
 async function hostRequest<T>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/host-updates/${path}`, {
@@ -64,6 +102,9 @@ async function loadOrbisReleases(signal: AbortSignal): Promise<Release[]> {
 export default function Updates() {
   const { user } = useAppContext();
   const [reviewPlan, setReviewPlan] = useState<HostPlan | null>(null);
+  const [packageSearch, setPackageSearch] = useState('');
+  const [showAllPackages, setShowAllPackages] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const apps = useQuery(getInstalledAppsOptions());
   const build = useQuery({ queryKey: ['orbis-installed-build'], queryFn: ({ signal }) => loadInstalledBuild(signal), staleTime: 30 * 60 * 1000 });
   const releases = useQuery({
@@ -83,6 +124,23 @@ export default function Updates() {
     enabled: user?.operator === true,
     refetchInterval: (query) => (['running', 'recovering'].includes(query.state.data?.job?.state ?? '') ? 4000 : 30_000),
     retry: 1,
+  });
+  const systemPackages = useQuery({
+    queryKey: ['orbis-host-packages'],
+    queryFn: ({ signal }) => hostRequest<HostPackageInventory>('packages', undefined, signal),
+    enabled: user?.operator === true,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const packageChangelog = useQuery({
+    queryKey: ['orbis-host-package-changelog', selectedPackage],
+    queryFn: ({ signal }) =>
+      hostRequest<HostPackageChangelog>(`packages/changelog?name=${encodeURIComponent(selectedPackage ?? '')}`, undefined, signal),
+    enabled: user?.operator === true && selectedPackage !== null,
+    staleTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
   const plan = useMutation({
     mutationFn: (tag: string) => hostRequest<HostPlan>('plan', { tag }),
@@ -115,6 +173,10 @@ export default function Updates() {
       !jobBusy &&
       job?.state !== 'interrupted',
   );
+  const matchingPackages = (systemPackages.data?.packages ?? []).filter((item) =>
+    `${item.name} ${packageSources(item.sources)}`.toLocaleLowerCase().includes(packageSearch.trim().toLocaleLowerCase()),
+  );
+  const visiblePackages = showAllPackages ? matchingPackages : matchingPackages.slice(0, 12);
 
   return (
     <div className="desktop-updates">
@@ -292,14 +354,115 @@ export default function Updates() {
             <IconServerCog size={22} aria-hidden="true" />
             <div>
               <h2 id="host-updates-title">Host operating system</h2>
-              <p>Packages, security advisories, and reboot status</p>
+              <p>Packages, distribution changelogs, and reboot status</p>
             </div>
           </div>
-          <p>
-            Host package updates cannot be read or applied by the Orbis container. This server needs a restricted host service matched to its
-            operating system before Orbis can show package changelogs or apply updates.
-          </p>
-          <p className="desktop-update-note">No host update command is exposed to this browser.</p>
+          {user?.operator !== true ? <p>Host package details require an operator account.</p> : null}
+          {user?.operator === true && systemPackages.isPending ? <p>Reading the host package cache…</p> : null}
+          {systemPackages.isError ? <p role="alert">Host package details are unavailable. The installed host helper may need an upgrade.</p> : null}
+          {systemPackages.data && !systemPackages.data.available ? (
+            <p>{systemPackages.data.reason || 'This host does not have a supported package manager.'}</p>
+          ) : null}
+          {systemPackages.data?.available ? (
+            <>
+              <div className="desktop-host-package-summary">
+                <div>
+                  <strong>{systemPackages.data.packageCount ?? 0} available package updates</strong>
+                  <span>{systemPackages.data.operatingSystem || 'Host operating system'}</span>
+                </div>
+                <button type="button" disabled={systemPackages.isFetching} onClick={() => void systemPackages.refetch()}>
+                  {systemPackages.isFetching ? 'Checking…' : 'Check again'}
+                </button>
+              </div>
+              <p className="desktop-host-package-times">
+                {systemPackages.data.checkedAt ? `Checked ${new Date(systemPackages.data.checkedAt).toLocaleString()}. ` : ''}
+                {systemPackages.data.indexesUpdatedAt
+                  ? `Package lists last changed ${new Date(systemPackages.data.indexesUpdatedAt).toLocaleString()}.`
+                  : 'Package list age unavailable.'}
+                {systemPackages.data.rebootRequired ? ' A reboot request is recorded on this host.' : ''}
+              </p>
+              {systemPackages.data.truncated ? <output>Showing the first 1,000 packages. Check the host for the complete list.</output> : null}
+              {(systemPackages.data.packageCount ?? 0) > 0 ? (
+                <>
+                  <label className="desktop-host-package-search">
+                    <span>Find a package</span>
+                    <input
+                      type="search"
+                      value={packageSearch}
+                      onChange={(event) => {
+                        setPackageSearch(event.target.value);
+                        setShowAllPackages(false);
+                      }}
+                      placeholder="Name or repository"
+                    />
+                  </label>
+                  <ul className="desktop-host-package-list" aria-label="Available host package updates">
+                    {visiblePackages.map((item) => (
+                      <li className="desktop-host-package" key={item.name}>
+                        <div className="desktop-host-package-title">
+                          <strong>{item.name}</strong>
+                          {item.security ? <span>Security</span> : null}
+                        </div>
+                        <p>
+                          {item.installedVersion} <span aria-hidden="true">→</span> {item.candidateVersion}
+                        </p>
+                        <small>{packageSources(item.sources)}</small>
+                        <div className="desktop-host-package-foot">
+                          <span>{packageSize(item.downloadBytes)}</span>
+                          <button
+                            type="button"
+                            aria-pressed={selectedPackage === item.name}
+                            onClick={() => setSelectedPackage(selectedPackage === item.name ? null : item.name)}
+                          >
+                            {selectedPackage === item.name ? 'Close changelog' : 'Read changelog'}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {matchingPackages.length === 0 ? <p>No packages match that search.</p> : null}
+                  {!showAllPackages && matchingPackages.length > visiblePackages.length ? (
+                    <button className="desktop-host-package-more" type="button" onClick={() => setShowAllPackages(true)}>
+                      Show all {matchingPackages.length} matching packages
+                    </button>
+                  ) : null}
+                  {selectedPackage ? (
+                    <section className="desktop-host-changelog" aria-label={`${selectedPackage} changelog`}>
+                      <div>
+                        <strong>{selectedPackage} changelog</strong>
+                        <button type="button" onClick={() => setSelectedPackage(null)} aria-label="Close package changelog">
+                          Close
+                        </button>
+                      </div>
+                      {packageChangelog.isPending ? <p>Reading the distribution changelog…</p> : null}
+                      {packageChangelog.isError ? <p role="alert">The distribution changelog could not be read.</p> : null}
+                      {packageChangelog.data?.available ? (
+                        <>
+                          <p>
+                            {packageChangelog.data.source} · candidate {packageChangelog.data.candidateVersion}
+                            {packageChangelog.data.truncated ? ' · Showing the first part' : ''}
+                          </p>
+                          <textarea
+                            className="desktop-host-changelog-body"
+                            aria-label="Distribution changelog text"
+                            readOnly
+                            spellCheck={false}
+                            value={packageChangelog.data.body}
+                          />
+                        </>
+                      ) : null}
+                      {packageChangelog.data && !packageChangelog.data.available ? (
+                        <p>{packageChangelog.data.reason || 'No distribution changelog was supplied.'}</p>
+                      ) : null}
+                    </section>
+                  ) : null}
+                </>
+              ) : (
+                <p>No upgrades are listed in the current host package cache.</p>
+              )}
+              <p className="desktop-update-note">Package installation is unavailable in this build. This list reads the host cache only.</p>
+            </>
+          ) : null}
         </section>
       </div>
     </div>

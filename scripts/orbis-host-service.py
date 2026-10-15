@@ -21,6 +21,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Callable
+from urllib.parse import parse_qs, urlsplit
 
 
 def load_script(name: str, module_name: str):
@@ -32,6 +33,7 @@ def load_script(name: str, module_name: str):
 
 
 UPDATE = load_script("orbis-host-update.py", "orbis_update_for_service")
+PACKAGES = load_script("orbis-host-packages.py", "orbis_packages_for_service")
 HOST = UPDATE.HOST
 PLAN = HOST.PLAN
 CHECK = UPDATE.CHECK
@@ -349,13 +351,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self) -> None:
-        if self.path != "/v1/status":
+        if self.path == "/v1/status":
+            try:
+                self.send_json(200, self.server.service.status())
+            except (OSError, ValueError, RuntimeError):
+                self.send_json(503, {"error": "host status is unavailable"})
+            return
+        if self.path == "/v1/packages":
+            try:
+                self.send_json(200, PACKAGES.inventory())
+            except ValueError as error:
+                self.send_json(200, {"available": False, "reason": str(error)})
+            except (OSError, RuntimeError, SystemError):
+                self.send_json(503, {"error": "host package inventory is unavailable"})
+            return
+        parsed = urlsplit(self.path)
+        if parsed.path != "/v1/packages/changelog" or parsed.fragment:
             self.send_json(404, {"error": "not found"})
             return
         try:
-            self.send_json(200, self.server.service.status())
-        except (OSError, ValueError, RuntimeError):
-            self.send_json(503, {"error": "host status is unavailable"})
+            parameters = parse_qs(parsed.query, keep_blank_values=True)
+            if set(parameters) != {"name"} or len(parameters["name"]) != 1:
+                raise ValueError("choose one package name")
+            self.send_json(200, PACKAGES.changelog(parameters["name"][0]))
+        except ValueError as error:
+            self.send_json(409, {"error": str(error)})
+        except (OSError, RuntimeError, SystemError):
+            self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
         if self.path not in {"/v1/plan", "/v1/apply", "/v1/recover"}:

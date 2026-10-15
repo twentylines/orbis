@@ -41,6 +41,180 @@
 }
 .desktop-updates-host {
   grid-column: 1 / -1;
+  container-type: inline-size;
+}
+.desktop-host-package-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-surface);
+}
+.desktop-host-package-summary strong,
+.desktop-host-package-summary span {
+  display: block;
+}
+.desktop-host-package-summary strong {
+  font-size: 17px;
+}
+.desktop-host-package-summary span,
+.desktop-host-package-times {
+  color: var(--desktop-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.desktop-host-package-summary button,
+.desktop-host-package-foot button,
+.desktop-host-package-more,
+.desktop-host-changelog button {
+  min-height: 40px;
+  padding: 7px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.desktop-host-package-summary button:focus-visible,
+.desktop-host-package-foot button:focus-visible,
+.desktop-host-package-more:focus-visible,
+.desktop-host-changelog button:focus-visible,
+.desktop-host-package-search input:focus-visible,
+.desktop-host-changelog-body:focus-visible {
+  outline: 3px solid var(--desktop-accent);
+  outline-offset: 3px;
+}
+.desktop-host-package-summary button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.desktop-host-package-times {
+  margin: 12px 0 18px;
+}
+.desktop-host-package-search {
+  display: grid;
+  gap: 7px;
+  width: min(100%, 370px);
+  margin: 0 0 15px;
+  color: var(--desktop-ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+.desktop-host-package-search input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+}
+.desktop-host-package-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.desktop-host-package {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 11px;
+  background: var(--desktop-surface);
+  overflow-wrap: anywhere;
+}
+.desktop-host-package-title,
+.desktop-host-package-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.desktop-host-package-title strong {
+  min-width: 0;
+}
+.desktop-host-package-title span {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(159, 90, 42, 0.13);
+  color: var(--desktop-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+.desktop-host-package p {
+  margin: 0;
+  line-height: 1.45;
+}
+.desktop-host-package small,
+.desktop-host-package-foot span {
+  color: var(--desktop-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.desktop-host-package-foot {
+  justify-content: space-between;
+  margin-top: 5px;
+}
+.desktop-host-package-foot button {
+  color: var(--desktop-accent);
+}
+.desktop-host-package-more {
+  margin-top: 14px;
+}
+.desktop-host-changelog {
+  min-width: 0;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-surface);
+}
+.desktop-host-changelog > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.desktop-host-changelog p {
+  color: var(--desktop-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.desktop-host-changelog-body {
+  display: block;
+  width: 100%;
+  height: 330px;
+  max-height: 390px;
+  margin: 12px 0 0;
+  padding: 14px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: rgba(125, 145, 121, 0.06);
+  color: var(--desktop-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow: auto;
+  resize: vertical;
+  overflow-wrap: anywhere;
+}
+@container (max-width: 720px) {
+  .desktop-host-package-list {
+    grid-template-columns: 1fr;
+  }
 }
 .desktop-update-app {
   display: flex;

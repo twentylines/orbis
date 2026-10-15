@@ -156,6 +156,56 @@ async function main() {
               }
             : { available: false, reason: 'The Orbis host service is not connected.' },
         );
+      if (url.pathname === '/api/host-updates/packages')
+        return respond(
+          hostUpdateFixture
+            ? {
+                available: true,
+                manager: 'apt',
+                operatingSystem: 'Ubuntu 24.04.4 LTS',
+                checkedAt: '2026-10-15T04:15:00Z',
+                indexesUpdatedAt: '2026-10-14T20:07:01Z',
+                rebootRequired: false,
+                packageCount: 3,
+                truncated: false,
+                packages: [
+                  {
+                    name: 'linux-image-generic:arm64',
+                    installedVersion: '6.8.0-80.80',
+                    candidateVersion: '6.8.0-86.86',
+                    downloadBytes: 18439872,
+                    security: true,
+                    sources: [{ origin: 'Ubuntu', archive: 'noble-security', site: 'ports.ubuntu.com', trusted: true }],
+                  },
+                  {
+                    name: 'openssh-server:arm64',
+                    installedVersion: '1:9.6p1-3ubuntu13.10',
+                    candidateVersion: '1:9.6p1-3ubuntu13.13',
+                    downloadBytes: 501000,
+                    security: true,
+                    sources: [{ origin: 'Ubuntu', archive: 'noble-updates', site: 'ports.ubuntu.com', trusted: true }],
+                  },
+                  {
+                    name: 'base-files:arm64',
+                    installedVersion: '13ubuntu10.4',
+                    candidateVersion: '13ubuntu10.5',
+                    downloadBytes: 73378,
+                    security: false,
+                    sources: [{ origin: 'Ubuntu', archive: 'noble-updates', site: 'ports.ubuntu.com', trusted: true }],
+                  },
+                ],
+              }
+            : { available: false, reason: 'The Orbis host service is not connected.' },
+        );
+      if (url.pathname === '/api/host-updates/packages/changelog')
+        return respond({
+          name: url.searchParams.get('name'),
+          candidateVersion: '6.8.0-86.86',
+          available: true,
+          source: 'APT distribution changelog',
+          body: 'linux-image-generic (6.8.0-86.86) noble; urgency=medium\n\n  * Security and stability fixes.\n',
+          truncated: false,
+        });
       if (url.pathname === '/api/host-updates/plan')
         return respond({
           planId: '00000000-0000-4000-8000-000000000000',
@@ -267,6 +317,7 @@ async function main() {
     const storeOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     await page.getByRole('link', { name: 'Updates', exact: true }).click();
     await page.getByRole('heading', { name: 'Updates', exact: true }).waitFor();
+    if (process.env.ORBIS_VISUAL_UPDATES_TEXT_SCALE === '2') await page.addStyleTag({ content: '.desktop-updates { font-size: 200% !important; }' });
     if (hostUpdateFixture) {
       await page.getByRole('button', { name: 'Prepare update to v0.1.0-beta.8' }).click();
       await page.getByText('Review core update').waitFor();
@@ -276,13 +327,16 @@ async function main() {
     const updatesOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     let changelogAccessible = true;
     if (hostUpdateFixture) {
-      await page.getByText('Read changelog').click();
+      await page.locator('.desktop-update-release summary').click();
       const changelog = page.getByRole('region', { name: 'v0.1.0-beta.8 changelog' });
       changelogAccessible = await changelog.evaluate((element) => {
         const style = getComputedStyle(element);
         return element.tabIndex === 0 && (window.innerWidth > 760 || (style.maxHeight === 'none' && style.overflow === 'visible'));
       });
       await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates-changelog.png`), fullPage: true });
+      await page.getByRole('button', { name: 'Read changelog' }).first().click();
+      await page.getByRole('region', { name: 'linux-image-generic:arm64 changelog' }).waitFor();
+      await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-host-packages.png`), fullPage: true });
     }
     if (hostUpdateFixture) await page.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('link', { name: 'Back to workspace' }).click();

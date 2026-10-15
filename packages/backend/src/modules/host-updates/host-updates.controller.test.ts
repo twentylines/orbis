@@ -41,6 +41,8 @@ describe('host update authorization', () => {
   afterAll(async () => app.close());
   beforeEach(() => {
     hostUpdates.status.mockReset();
+    hostUpdates.packages.mockReset();
+    hostUpdates.packageChangelog.mockReset();
     hostUpdates.plan.mockReset();
     hostUpdates.apply.mockReset();
     hostUpdates.recover.mockReset();
@@ -48,6 +50,7 @@ describe('host update authorization', () => {
 
   it('requires a session for status and rejects a cross-origin update request', async () => {
     expect((await request(app.getHttpServer()).get('/host-updates/status')).status).toBe(401);
+    expect((await request(app.getHttpServer()).get('/host-updates/packages')).status).toBe(401);
     expect((await request(app.getHttpServer()).post('/host-updates/apply').send({ planId: 'fixture' })).status).toBe(401);
     const crossOrigin = await request(app.getHttpServer())
       .post('/host-updates/apply')
@@ -58,7 +61,25 @@ describe('host update authorization', () => {
     expect(crossOrigin.status).toBe(403);
     expect(hostUpdates.apply).not.toHaveBeenCalled();
     expect((await request(app.getHttpServer()).get('/host-updates/status').set('Authorization', 'Bearer guest-session')).status).toBe(403);
+    expect((await request(app.getHttpServer()).get('/host-updates/packages').set('Authorization', 'Bearer guest-session')).status).toBe(403);
     expect((await request(app.getHttpServer()).get('/host-updates/status').set('Authorization', 'Bearer fixture-cli')).status).toBe(403);
+    expect((await request(app.getHttpServer()).get('/host-updates/packages').set('Authorization', 'Bearer fixture-cli')).status).toBe(403);
+  });
+
+  it('lets an operator read host packages and their changelog', async () => {
+    hostUpdates.packages.mockResolvedValue({ available: true, packageCount: 1, packages: [] });
+    hostUpdates.packageChangelog.mockResolvedValue({
+      name: 'base-files:arm64',
+      candidateVersion: '13ubuntu10.5',
+      available: true,
+      source: 'APT distribution changelog',
+      body: 'Ubuntu changelog',
+    });
+    const base = request(app.getHttpServer());
+    const headers = { Authorization: 'Bearer fixture-session' };
+    expect((await base.get('/host-updates/packages').set(headers)).body.packageCount).toBe(1);
+    expect((await base.get('/host-updates/packages/changelog?name=base-files%3Aarm64').set(headers)).body.available).toBe(true);
+    expect(hostUpdates.packageChangelog).toHaveBeenCalledWith('base-files:arm64');
   });
 
   it('accepts a same-origin plan and apply request with exact fields', async () => {
