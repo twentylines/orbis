@@ -1,6 +1,7 @@
 import { taskHistorySchema, type TaskRecord } from '@runtipi/common/schemas';
 import { type } from 'arktype';
 import { useQuery } from '@tanstack/react-query';
+import { useWindowVisible } from './window-visibility';
 
 export const taskLabels: Record<TaskRecord['action'], string> = {
   start: 'Start',
@@ -23,8 +24,10 @@ export const taskStates: Record<TaskRecord['status'], string> = {
   unconfirmed: 'Awaiting confirmation',
 };
 export const taskIsActive = (task: TaskRecord) => task.status === 'queued' || task.status === 'running';
-export const useTasks = () =>
-  useQuery({
+export const useTasks = () => {
+  const visible = useWindowVisible();
+  return useQuery({
+    enabled: visible,
     queryKey: ['tasks'],
     queryFn: async ({ signal }) => {
       const response = await fetch('/api/tasks', { credentials: 'include', signal });
@@ -37,3 +40,4 @@ export const useTasks = () =>
     staleTime: 4000,
     refetchIntervalInBackground: false,
   });
+};

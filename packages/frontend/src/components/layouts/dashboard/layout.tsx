@@ -9,9 +9,12 @@ import { useTasks, taskIsActive } from '@/desktop/tasks';
 import { CommandSearch } from '@/desktop/command-search';
 import { desktopNavigation as navigation } from '@/desktop/navigation';
 import { useSectionMotion } from '@/desktop/section-motion';
-import { IconApps, IconLogout, IconMoon, IconSun, IconX, IconActivity } from '@tabler/icons-react';
+import { RouteWindow, type RouteWindowControls } from '@/desktop/route-window';
+import { isWindowMinimized, windowSearch } from '@/desktop/window-navigation';
+import { desktopWindowIds, type DesktopWindowId } from '@runtipi/common/schemas';
+import { IconApps, IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, useMutation } from '@tanstack/react-query';
-import type { PropsWithChildren } from 'react';
+import { useRef, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches } from 'react-router';
 import './layout.css';
 
@@ -34,6 +37,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const { preferences, update } = useDesktopPreferences();
   const location = useLocation();
   const matches = useMatches();
+  const windowControls = useRef<RouteWindowControls | null>(null);
   const isAppDetail = matches.some((match) => ['app-details', 'app-details-store', 'custom-app'].includes(match.id));
   useSectionMotion();
   const busy = useIsMutating();
@@ -46,6 +50,9 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   if (!user.hasSeenWelcome) return <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />;
 
   const current = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
+  const windowId = current?.path.slice(1) as DesktopWindowId;
+  const isTool = desktopWindowIds.includes(windowId);
+  const minimized = isTool && isWindowMinimized(location.search);
   return (
     <div
       className="desktop"
@@ -55,7 +62,18 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
       data-desktop-wallpaper={preferences.wallpaper}
     >
       <header className="desktop-system-bar">
-        <Link to="/dashboard" viewTransition className="desktop-brand" aria-label={`Orbis workspace on ${preferences.serverName}`}>
+        <Link
+          to="/dashboard"
+          viewTransition={!isTool}
+          onClick={(event) => {
+            if (isTool) {
+              event.preventDefault();
+              windowControls.current?.minimize();
+            }
+          }}
+          className="desktop-brand"
+          aria-label={`Orbis workspace on ${preferences.serverName}`}
+        >
           <img src="/icons/orbis.svg" width={28} height={28} alt="" />
           <span className="desktop-product">Orbis</span>
           <span className="desktop-server-name">{preferences.serverName}</span>
@@ -115,28 +133,24 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
       </header>
 
       <main className="desktop-main" id="desktop-content">
-        <div className={`desktop-view ${location.pathname === '/dashboard' ? 'desktop-view-home' : 'desktop-view-app'}`}>
-          {location.pathname !== '/dashboard' ? (
-            <div className="desktop-window-bar">
-              <span className="desktop-window-icon" aria-hidden="true">
-                {current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}
-              </span>
-              <div className="desktop-window-label">
-                <h1>{current?.label ?? 'Application'}</h1>
-                <span>{preferences.serverName} / Orbis</span>
+        {isTool ? (
+          <RouteWindow
+            key={windowId}
+            id={windowId}
+            label={current?.label ?? 'Application'}
+            icon={current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}
+            controlsRef={windowControls}
+          >
+            {!isAppDetail && location.pathname.split('/').filter(Boolean).length > 1 ? (
+              <div className="desktop-route-title">
+                <PageTitle apps={apps} />
               </div>
-              <Link to="/dashboard" viewTransition className="desktop-window-close" aria-label="Back to workspace" title="Back to workspace">
-                <IconX size={18} aria-hidden="true" />
-              </Link>
-            </div>
-          ) : null}
-          {!isAppDetail && location.pathname.split('/').filter(Boolean).length > 1 ? (
-            <div className="desktop-route-title">
-              <PageTitle apps={apps} />
-            </div>
-          ) : null}
-          {children}
-        </div>
+            ) : null}
+            {children}
+          </RouteWindow>
+        ) : (
+          <div className="desktop-view desktop-view-home">{children}</div>
+        )}
       </main>
 
       <nav className="desktop-dock" aria-label="Desktop tools">
@@ -145,12 +159,22 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
           .map(({ path, label, Icon, ...item }) => (
             <Link
               key={path}
-              to={path}
-              viewTransition
-              className={`desktop-dock-item ${current?.path === path ? 'is-active' : ''}`}
+              to={
+                minimized && current?.path === path
+                  ? { pathname: location.pathname, search: windowSearch(location.search, false), hash: location.hash }
+                  : path
+              }
+              viewTransition={!(isTool && path === '/dashboard') && !(minimized && current?.path === path)}
+              onClick={(event) => {
+                if (isTool && path === '/dashboard') {
+                  event.preventDefault();
+                  windowControls.current?.minimize();
+                }
+              }}
+              className={`desktop-dock-item ${current?.path === path ? (minimized ? 'is-minimized' : 'is-active') : ''}`}
               aria-label={label}
               aria-current={current?.path === path ? 'page' : undefined}
-              title={label}
+              title={minimized && current?.path === path ? `Restore ${label}` : label}
             >
               <Icon size={22} stroke={1.7} aria-hidden="true" />
               <span>{'dockLabel' in item ? item.dockLabel : label}</span>

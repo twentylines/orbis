@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { useUserContext } from '@/context/user-context';
 import { useUIStore } from '@/stores/ui-store';
+import { desktopWindowsSchema, type DesktopWindows, type DesktopWindowId, type DesktopWindowState } from '@runtipi/common/schemas';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
@@ -13,6 +14,7 @@ export type DesktopPreferences = {
   density: 'comfortable' | 'compact';
   wallpaper: 'sandstone' | 'tidal' | 'canopy';
   workspace: WorkspacePreferences;
+  windows: DesktopWindows;
 };
 
 export const defaultDesktopPreferences: DesktopPreferences = {
@@ -21,14 +23,15 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   mode: 'light',
   density: 'comfortable',
   wallpaper: 'sandstone',
+  windows: {},
   workspace: { order: [...widgetIds], hidden: [], wide: ['applications'], pinnedApps: [], showAllApps: false },
 };
 const STORAGE_KEY = 'server-desktop-preferences-v1';
 
 type StoredWorkspacePreferences = Omit<WorkspacePreferences, 'pinnedApps' | 'showAllApps'> &
   Partial<Pick<WorkspacePreferences, 'pinnedApps' | 'showAllApps'>>;
-type StoredDesktopPreferences = Omit<DesktopPreferences, 'mode' | 'wallpaper' | 'workspace'> &
-  Partial<Pick<DesktopPreferences, 'mode' | 'wallpaper'>> & { workspace?: StoredWorkspacePreferences };
+type StoredDesktopPreferences = Omit<DesktopPreferences, 'mode' | 'wallpaper' | 'workspace' | 'windows'> &
+  Partial<Pick<DesktopPreferences, 'mode' | 'wallpaper' | 'windows'>> & { workspace?: StoredWorkspacePreferences };
 
 const isWidgetList = (value: unknown): value is WidgetId[] =>
   Array.isArray(value) && value.length <= widgetIds.length && new Set(value).size === value.length && value.every((item) => widgetIds.includes(item));
@@ -61,20 +64,32 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
     (candidate.mode === undefined || ['light', 'dark'].includes(String(candidate.mode))) &&
     ['comfortable', 'compact'].includes(String(candidate.density)) &&
     (candidate.wallpaper === undefined || ['sandstone', 'tidal', 'canopy'].includes(String(candidate.wallpaper))) &&
-    (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace))
+    (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace)) &&
+    (candidate.windows === undefined || desktopWindowsSchema.allows(candidate.windows))
   );
 };
 
 export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPreferences => ({
   ...defaultDesktopPreferences,
-  ...value,
+  serverName: value.serverName,
+  preset: value.preset,
+  density: value.density,
+  wallpaper: value.wallpaper ?? defaultDesktopPreferences.wallpaper,
+  windows: value.windows ?? {},
   mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'light'),
-  workspace: { ...defaultDesktopPreferences.workspace, ...value.workspace },
+  workspace: {
+    order: value.workspace?.order ?? [...widgetIds],
+    hidden: value.workspace?.hidden ?? [],
+    wide: value.workspace?.wide ?? ['applications'],
+    pinnedApps: value.workspace?.pinnedApps ?? [],
+    showAllApps: value.workspace?.showAllApps ?? false,
+  },
 });
 
 type PreferenceContext = {
   preferences: DesktopPreferences;
   update: (value: Partial<DesktopPreferences>) => void;
+  updateWindow: (id: DesktopWindowId, value: DesktopWindowState) => void;
   reset: () => void;
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
 };
@@ -173,7 +188,14 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     setPreferences({ ...defaultDesktopPreferences, workspace: { ...defaultDesktopPreferences.workspace } });
   };
 
-  return <Context.Provider value={{ preferences, update, reset, syncState }}>{children}</Context.Provider>;
+  const updateWindow = (id: DesktopWindowId, value: DesktopWindowState) => {
+    if (!desktopWindowsSchema.allows({ [id]: value })) return;
+    revision.current += 1;
+    setSyncState('saving');
+    setPreferences((previous) => ({ ...previous, windows: { ...previous.windows, [id]: value } }));
+  };
+
+  return <Context.Provider value={{ preferences, update, updateWindow, reset, syncState }}>{children}</Context.Provider>;
 };
 
 export const useDesktopPreferences = () => {

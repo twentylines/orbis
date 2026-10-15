@@ -233,13 +233,13 @@
   color: var(--desktop-accent);
   font-size: 13px;
 }
-@media (max-width: 900px) {
+@container (max-width: 900px) {
   .appearance-presets,
   .appearance-wallpapers {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 650px) {
+@container (max-width: 650px) {
   .appearance-section {
     grid-template-columns: 1fr;
     gap: 12px;

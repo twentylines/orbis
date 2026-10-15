@@ -330,7 +330,7 @@
 .desktop-network-charts .metric-chart {
   margin: 0;
 }
-@media (max-width: 760px) {
+@container (max-width: 760px) {
   .desktop-network-charts {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -469,7 +469,7 @@
 .desktop-network small {
   margin-top: 9px;
 }
-@media (max-width: 900px) {
+@container (max-width: 900px) {
   .desktop-host-overview {
     grid-template-columns: minmax(0, 1fr);
     padding: 28px;
@@ -482,7 +482,7 @@
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 650px) {
+@container (max-width: 650px) {
   .desktop-host-overview {
     padding: 23px 18px;
   }
@@ -511,7 +511,7 @@
     white-space: normal;
   }
 }
-@media (max-width: 380px) {
+@container (max-width: 380px) {
   .desktop-host-machine {
     --machine-scale: 0.72;
   }
@@ -529,7 +529,7 @@
     grid-column: 1 / -1;
   }
 }
-@media (max-width: 360px) {
+@container (max-width: 360px) {
   .desktop-host-machine {
     --machine-scale: 0.64;
   }
@@ -542,7 +542,4 @@
   .desktop-host-machine-bay > i span {
     transition: none;
   }
-}
-.desktop:has(.desktop-monitor) .desktop-dock {
-  display: none;
 }

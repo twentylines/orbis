@@ -6,6 +6,7 @@ import { MetricChart } from '@/components/metric-chart/metric-chart';
 import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
 import './monitor.css';
 import { ContainerResources } from '@/components/container-resources/container-resources';
+import { useWindowVisible } from '@/desktop/window-visibility';
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return 'Unavailable';
@@ -23,11 +24,13 @@ const percent = (value: number | null) => (value === null ? 'Unavailable' : `${v
 const width = (value: number | null) => `${Math.min(100, Math.max(0, value ?? 0))}%`;
 
 export default function Monitor() {
+  const visible = useWindowVisible();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedRange = searchParams.get('range');
   const range: MetricHistoryRange = selectedRange && Object.hasOwn(metricHistoryRanges, selectedRange) ? (selectedRange as MetricHistoryRange) : '1h';
   const history = useMetricHistory(range);
   const telemetry = useQuery<Telemetry>({
+    enabled: visible,
     queryKey: telemetryQueryKey,
     queryFn: ({ signal }) => loadTelemetry(signal),
     refetchInterval: 5000,

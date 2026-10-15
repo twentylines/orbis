@@ -46,7 +46,11 @@ const rate = (value: number | null) => {
   return `${amount.toFixed(amount < 10 ? 1 : 0)} ${units[index]}`;
 };
 
-export default function Dashboard() {
+export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focusOnMount) heading.current?.focus({ preventScroll: true });
+  }, [focusOnMount]);
   const [editing, setEditing] = useState(false);
   const [pinPickerRequested, setPinPickerRequested] = useState(false);
   const pinHeading = useRef<HTMLHeadingElement>(null);
@@ -96,7 +100,10 @@ export default function Dashboard() {
     : orderedInstalled.slice(0, Math.max(3, workspace.pinnedApps.length - missingPins.length));
   const scrollApps = workspace.showAllApps && (!workspace.hidden.includes('storage') || !workspace.hidden.includes('attention'));
   const running = installed.filter(({ app }) => app.status === 'running').length;
-  const attention = installed.filter(({ app, metadata }) => app.status === 'stopped' || Number(app.version) < Number(metadata.latestVersion)).length;
+  const attention = installed.filter(
+    ({ app, metadata }) =>
+      app.status === 'stopped' || (Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion),
+  ).length;
   const unhealthy = new Set(containers.data?.containers.filter((item) => item.health === 'unhealthy' && item.appUrn).map((item) => item.appUrn)).size;
   const activeTasks = tasks.data?.tasks.filter(taskIsActive) ?? [];
   const disk = system.data?.filesystems.find((filesystem) => filesystem.mount === '/') ?? system.data?.filesystems[0];
@@ -366,7 +373,9 @@ export default function Dashboard() {
     <div className="workspace">
       <div className="workspace-heading">
         <div>
-          <h1>{preferences.serverName}</h1>
+          <h1 ref={heading} tabIndex={focusOnMount ? -1 : undefined}>
+            {preferences.serverName}
+          </h1>
           <p className="workspace-subline">{apps.data ? `${installed.length} installed · ${running} running` : 'Loading applications'}</p>
         </div>
         <div className="workspace-actions">

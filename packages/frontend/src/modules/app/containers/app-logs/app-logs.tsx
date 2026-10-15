@@ -11,6 +11,7 @@ export const AppLogs = ({ appUrn }: { appUrn: string }) => {
   const status = useSSE({
     topic: 'app-logs',
     params: new URLSearchParams({ appUrn, maxLines: maxLines.current.toString() }),
+    onOpen: () => setLogs([]),
     onEvent: (data) => {
       setLogs((prevLogs) => {
         if (!data.lines) {

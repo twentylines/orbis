@@ -1,9 +1,12 @@
 import type { ContainerReading, ContainerTelemetry } from '@runtipi/common/schemas';
 import { useQuery } from '@tanstack/react-query';
+import { useWindowVisible } from './window-visibility';
 
 export const containerTelemetryKey = ['container-telemetry'] as const;
-export const useContainerTelemetry = () =>
-  useQuery<ContainerTelemetry>({
+export const useContainerTelemetry = () => {
+  const visible = useWindowVisible();
+  return useQuery<ContainerTelemetry>({
+    enabled: visible,
     queryKey: containerTelemetryKey,
     queryFn: async ({ signal }) => {
       const response = await fetch('/api/system/containers', { credentials: 'include', signal });
@@ -14,6 +17,7 @@ export const useContainerTelemetry = () =>
     staleTime: 4000,
     refetchIntervalInBackground: false,
   });
+};
 
 export function appDockerHealth(containers: ContainerReading[]) {
   if (!containers.length) return { state: 'unknown', label: 'No container' };
