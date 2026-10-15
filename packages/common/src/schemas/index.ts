@@ -24,6 +24,7 @@ import {
   type TaskHistory,
 } from './task-history.js';
 import type { ContainerReading, ContainerTelemetry } from './container-telemetry.js';
+import { metricHistoryRanges, type MetricHistoryRange, type MetricSummary, type MetricHistoryPoint, type MetricHistory } from './metric-history.js';
 
 export {
   parseComposeJson,
@@ -69,4 +70,9 @@ export {
   type TaskHistory,
   type ContainerReading,
   type ContainerTelemetry,
+  metricHistoryRanges,
+  type MetricHistoryRange,
+  type MetricSummary,
+  type MetricHistoryPoint,
+  type MetricHistory,
 };

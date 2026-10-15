@@ -1,4 +1,4 @@
-import { Controller, Get, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { LoadDto } from './dto/system.dto';
@@ -6,6 +6,8 @@ import { SystemService } from './system.service';
 import { ApiResponse } from '@nestjs/swagger';
 import { OrbisReleaseService } from './orbis-release.service';
 import { ContainerTelemetryService } from './container-telemetry.service';
+import { MetricHistoryService } from './metric-history.service';
+import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
 
 @Controller('system')
 export class SystemController {
@@ -13,6 +15,7 @@ export class SystemController {
     private readonly systemService: SystemService,
     private readonly orbisReleases: OrbisReleaseService,
     private readonly containers: ContainerTelemetryService,
+    private readonly history: MetricHistoryService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -33,6 +36,13 @@ export class SystemController {
   @Get('/containers')
   containerTelemetry() {
     return this.containers.read();
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/history')
+  metricHistory(@Query('range') range: unknown = '1h') {
+    if (typeof range !== 'string' || !Object.hasOwn(metricHistoryRanges, range)) throw new BadRequestException('Unsupported history range');
+    return this.history.read(range as MetricHistoryRange);
   }
 
   @UseGuards(AuthGuard)

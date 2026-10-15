@@ -4,6 +4,7 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { IconChevronRight } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type * as React from 'react';
+import '../dropdown.css';
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
 
@@ -31,7 +32,7 @@ const DropdownMenuSubContent = ({ className, ...props }: React.ComponentProps<ty
 
 const DropdownMenuContent = ({ className, sideOffset = 4, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) => (
   <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content sideOffset={sideOffset} className={clsx('dropdown-menu d-block position-relative', className)} {...props} />
+    <DropdownMenuPrimitive.Content sideOffset={sideOffset} className={clsx('orbis-dropdown-menu d-block position-relative', className)} {...props} />
   </DropdownMenuPrimitive.Portal>
 );
 

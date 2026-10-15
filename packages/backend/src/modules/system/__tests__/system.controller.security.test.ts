@@ -9,6 +9,7 @@ import { SystemController } from '../system.controller';
 import { SystemService } from '../system.service';
 import { OrbisReleaseService } from '../orbis-release.service';
 import { ContainerTelemetryService } from '../container-telemetry.service';
+import { MetricHistoryService } from '../metric-history.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
@@ -16,6 +17,7 @@ describe('SystemController certificate security', () => {
   const orbisReleases = mock<OrbisReleaseService>();
   const logger = mock<LoggerService>();
   const containers = mock<ContainerTelemetryService>();
+  const history = mock<MetricHistoryService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -23,6 +25,7 @@ describe('SystemController certificate security', () => {
       providers: [
         AuthGuard,
         { provide: ContainerTelemetryService, useValue: containers },
+        { provide: MetricHistoryService, useValue: history },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         {
           provide: SystemService,
@@ -106,6 +109,15 @@ describe('SystemController certificate security', () => {
     expect(allowed.status).toBe(200);
     expect(allowed.body.version).toBe(process.env.ORBIS_VERSION || 'development');
     expect(allowed.body.runtipiCompatibility).toBe(process.env.TIPI_VERSION || null);
+  });
+
+  it('requires authentication and an allowlisted metric history range', async () => {
+    expect((await request(app.getHttpServer()).get('/system/history?range=7d')).status).toBe(401);
+    expect(history.read).not.toHaveBeenCalled();
+    expect((await request(app.getHttpServer()).get('/system/history?range=forever').set('Authorization', 'Bearer cli-token')).status).toBe(400);
+    expect((await request(app.getHttpServer()).get('/system/history?range=5m&range=7d').set('Authorization', 'Bearer cli-token')).status).toBe(400);
+    expect((await request(app.getHttpServer()).get('/system/history?range=7d').set('Authorization', 'Bearer cli-token')).status).toBe(200);
+    expect(history.read).toHaveBeenCalledWith('7d');
   });
 
   it('requires authentication for the cached Orbis changelog', async () => {

@@ -1,4 +1,5 @@
 .desktop-monitor .workspace-message {
+  display: block;
   padding: 20px;
   border: 1px solid #bf836c;
   border-radius: 12px;
@@ -6,7 +7,7 @@
   color: #653923;
   margin-bottom: 20px;
 }
-.desktop-monitor .workspace-message button {
+:where(.desktop-monitor .workspace-message) button {
   border: 0;
   padding: 0;
   background: transparent;
@@ -20,6 +21,65 @@
   color: var(--desktop-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+.monitor-history-toolbar {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  margin: 24px 0 20px;
+}
+.monitor-history-ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 13px;
+  background: rgba(121, 149, 130, 0.07);
+}
+.monitor-history-ranges button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--desktop-muted);
+  font-size: 12px;
+  font-weight: 650;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+.monitor-history-ranges button[aria-pressed="true"] {
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  box-shadow: 0 2px 7px rgba(19, 43, 27, 0.12);
+}
+.monitor-history-info {
+  max-width: 450px;
+  padding: 10px 0;
+  color: var(--desktop-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.monitor-history-resolution {
+  align-self: center;
+  margin-right: auto;
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+.desktop-telemetry-disks,
+.desktop-telemetry-network {
+  grid-column: 1 / -1;
+}
+.monitor-history-info summary {
+  width: fit-content;
+  cursor: pointer;
+}
+.monitor-history-info p {
+  margin: 10px 0 0;
 }
 .desktop-host-overview {
   display: grid;
@@ -66,6 +126,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   max-width: 520px;
+  margin-top: 24px;
   border-top: 1px solid rgba(31, 53, 44, 0.26);
   padding-top: 17px;
 }
@@ -249,68 +310,25 @@
   background: #d1a172;
   box-shadow: 0 0 0 4px rgba(209, 161, 114, 0.13);
 }
-.desktop-live-chart {
-  position: relative;
-  height: 138px;
-  margin: 5px 0 20px;
-  overflow: hidden;
-  border: 1px solid var(--desktop-line);
-  border-radius: 11px;
-  background: linear-gradient(180deg, rgba(167, 193, 176, 0.08), rgba(167, 193, 176, 0.015));
-}
-.desktop-live-chart svg {
-  position: absolute;
-  inset: 8px 9px 8px 46px;
-  width: calc(100% - 55px);
-  height: calc(100% - 16px);
-  overflow: visible;
-}
-.desktop-live-chart svg line {
-  stroke: var(--desktop-line);
-  stroke-width: 1;
-  stroke-dasharray: 4 4;
-}
-.desktop-live-chart svg polyline {
-  fill: none;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-.desktop-live-chart-grid {
-  position: absolute;
-  z-index: 1;
-  inset: 8px auto 8px 9px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: var(--desktop-muted);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-.desktop-live-chart-empty {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: var(--desktop-muted);
-  font-size: 12px;
-}
-.desktop-network-legend {
-  display: flex;
-  gap: 16px;
-  color: var(--desktop-muted);
-  font-size: 11px;
-  margin: -15px 0 10px;
-}
 .desktop-network-charts {
   display: grid;
-  gap: 9px;
-  margin-bottom: 15px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-bottom: 20px;
 }
-.desktop-network-charts .desktop-live-chart {
-  height: 87px;
+.desktop-network-charts h3 {
+  color: var(--desktop-muted);
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+.desktop-network-charts .metric-chart {
   margin: 0;
+}
+@media (max-width: 760px) {
+  .desktop-network-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .desktop-monitor .workspace-meter {
   width: 100%;
