@@ -113,7 +113,7 @@ describe('desktop preferences', () => {
       .set('Authorization', 'Bearer test')
       .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace });
     expect(saved.status).toBe(200);
-    expect(saved.body.workspace).toEqual({ ...workspace, pinnedApps: [] });
+    expect(saved.body.workspace).toEqual({ ...workspace, pinnedApps: [], showAllApps: false });
     const invalid = await request(app.getHttpServer())
       .put('/desktop-preferences')
       .set('Authorization', 'Bearer test')
@@ -126,11 +126,36 @@ describe('desktop preferences', () => {
     expect(unknown.status).toBe(400);
   });
 
+  it('persists showing every app independently of widget visibility', async () => {
+    const workspace = { ...DEFAULT_DESKTOP_PREFERENCES.workspace, showAllApps: true, pinnedApps: ['whoami:migrated'] };
+    const saved = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace });
+    expect(saved.status).toBe(200);
+    const hidden = { ...workspace, hidden: ['storage', 'attention'] };
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace: hidden })
+      .expect(200);
+    const fetched = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');
+    expect(fetched.body.workspace).toEqual(hidden);
+  });
+
+  it.each(['true', 'all', 1, null])('rejects invalid show-all preference %s', async (showAllApps) => {
+    const invalid = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, showAllApps } });
+    expect(invalid.status).toBe(400);
+  });
+
   it('keeps old widget layouts and validates pinned app identities', async () => {
     const workspace = { order: ['applications', 'activity', 'storage', 'attention'], hidden: [], wide: ['applications'] };
     await fs.writeFile(path.join(directory, 'state', 'desktop', '7.json'), JSON.stringify({ ...DEFAULT_DESKTOP_PREFERENCES, workspace }));
     const inherited = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');
-    expect(inherited.body.workspace).toEqual({ ...workspace, pinnedApps: [] });
+    expect(inherited.body.workspace).toEqual({ ...workspace, pinnedApps: [], showAllApps: false });
     const saved = await request(app.getHttpServer())
       .put('/desktop-preferences')
       .set('Authorization', 'Bearer test')

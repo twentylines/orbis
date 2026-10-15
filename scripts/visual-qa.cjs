@@ -607,19 +607,19 @@ async function main() {
       (await page.locator('.workspace-operations').count()) === 0;
     const pinnedAppFirst = (await page.locator('.workspace-app').first().locator('strong').innerText()) === 'Backups';
     await page.keyboard.press('Control+k');
-    await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
+    await page.getByRole('dialog', { name: 'Search Orbis' }).waitFor();
     for (let tab = 0; tab < 20; tab++) {
       await page.keyboard.press('Tab');
-      if (!(await page.getByRole('dialog', { name: 'Search tools' }).evaluate((dialog) => dialog.contains(document.activeElement))))
+      if (!(await page.getByRole('dialog', { name: 'Search Orbis' }).evaluate((dialog) => dialog.contains(document.activeElement))))
         throw new Error('Search keyboard focus escaped its dialog');
     }
     await page.keyboard.press('Escape');
-    await page.getByRole('dialog', { name: 'Search tools' }).waitFor({ state: 'hidden' });
+    await page.getByRole('dialog', { name: 'Search Orbis' }).waitFor({ state: 'hidden' });
     await page.waitForFunction(() => document.activeElement === document.querySelector('.desktop-search-trigger'));
     await page.keyboard.press('Control+k');
-    await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
-    await page.getByRole('textbox', { name: 'Find a tool or application' }).fill('Monitor');
-    await page.getByRole('dialog', { name: 'Search tools' }).getByRole('button', { name: 'Monitor' }).click();
+    await page.getByRole('dialog', { name: 'Search Orbis' }).waitFor();
+    await page.getByRole('searchbox', { name: 'Find a tool or application' }).fill('Monitor');
+    await page.getByRole('dialog', { name: 'Search Orbis' }).getByRole('button', { name: 'Monitor Orbis' }).click();
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
     await page.waitForTimeout(5200);
     await page.getByRole('heading', { name: 'Host memory' }).waitFor();

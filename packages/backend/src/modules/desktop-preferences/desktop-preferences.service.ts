@@ -18,6 +18,7 @@ export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonN
     hidden: [],
     wide: ['applications'],
     pinnedApps: [],
+    showAllApps: false,
   },
 };
 
