@@ -12,7 +12,12 @@ export const AuthLayout = ({ children }: PropsWithChildren) => {
   const { allowAutoThemes } = useUserContext();
   const { preferences } = useDesktopPreferences();
   return (
-    <div className="page page-center desktop-auth" data-desktop-preset={preferences.preset} data-desktop-wallpaper={preferences.wallpaper}>
+    <div
+      className="page page-center desktop-auth"
+      data-desktop-preset={preferences.preset}
+      data-desktop-mode={preferences.mode}
+      data-desktop-wallpaper={preferences.wallpaper}
+    >
       <div className="position-absolute top-0 mt-3 end-0 me-1 pb-4">
         <LanguageSelector locale={locale as Locale} />
       </div>
