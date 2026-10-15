@@ -1,0 +1,11 @@
+/* A separate class keeps Bootstrap's delegated dropdown keyboard handler away from Radix menus. */
+.orbis-dropdown-menu {
+  min-width: 10rem;
+  padding: 4px;
+  color: var(--tblr-body-color);
+  background: var(--tblr-bg-surface);
+  border: 1px solid var(--tblr-border-color);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(8, 24, 18, 0.18);
+  font-size: 14px;
+}

@@ -2,6 +2,10 @@
 
 ## Unreleased development preview
 
+- Corrected header hover alignment, toggle width changes and tablet overlaps; removed bright white rims and double dialog frames. Dialogs and menus now share Orbis tokens. Simplified Appearance and app controls after independent visual audits.
+
+- Added bounded server-side metric history with seven-day retention, inspectable charts, measured downsampling and responsive Monitor ranges. Full outstanding acceptance requirements are tracked in `ACCEPTANCE.md`.
+
 - Fixed the exposed strip above the desktop, widened chrome/window insets, removed duplicate route titles, and combined storage with System status. Recent operations now sits beneath the launcher.
 - Added Docker health beside installed apps, shared per-container telemetry, CPU/memory consumer rankings, and persistent lifecycle task history. The isolated icon audit decoded 248 app icons successfully.
 - Forked Runtipi v4.10.1 while preserving its application and data compatibility surfaces.

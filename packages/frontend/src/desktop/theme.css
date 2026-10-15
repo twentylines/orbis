@@ -1,0 +1,161 @@
+/* Shared tokens also reach dialogs and menus rendered into body portals. */
+.desktop,
+body:has(.desktop) {
+  --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
+  --desktop-ink: #192c29;
+  --desktop-muted: #536b65;
+  --desktop-surface: rgba(248, 250, 246, 0.92);
+  --desktop-chrome: rgba(17, 38, 36, 0.82);
+  --desktop-chrome-ink: #f5f8f2;
+  --desktop-panel-dark: rgba(14, 35, 34, 0.92);
+  --desktop-line: rgba(29, 65, 55, 0.16);
+  --desktop-edge: rgba(33, 64, 54, 0.2);
+  --desktop-highlight: rgba(255, 255, 255, 0.18);
+  --desktop-inset: 64px;
+  --desktop-accent: #ae6342;
+  --desktop-focus: #b75c3e;
+  --workspace-heading-ink: #132e2b;
+  --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
+}
+
+.desktop[data-desktop-wallpaper="tidal"],
+body:has(.desktop[data-desktop-wallpaper="tidal"]) {
+  --desktop-wallpaper: url("/wallpapers/tidal.svg");
+}
+
+.desktop[data-desktop-wallpaper="canopy"],
+body:has(.desktop[data-desktop-wallpaper="canopy"]) {
+  --desktop-wallpaper: url("/wallpapers/canopy.svg");
+}
+
+.desktop[data-desktop-preset="graphite"],
+body:has(.desktop[data-desktop-preset="graphite"]) {
+  --desktop-ink: #edf2ef;
+  --desktop-muted: #aebbb3;
+  --desktop-surface: rgba(24, 38, 37, 0.94);
+  --desktop-chrome: rgba(10, 22, 22, 0.9);
+  --desktop-chrome-ink: #f2f4ef;
+  --desktop-panel-dark: rgba(10, 23, 23, 0.95);
+  --desktop-line: rgba(222, 233, 225, 0.17);
+  --desktop-accent: #d6a17e;
+  --workspace-heading-ink: #edf2ef;
+  --workspace-heading-shadow: rgba(5, 18, 17, 0.18);
+}
+
+.desktop[data-desktop-preset="forest"],
+body:has(.desktop[data-desktop-preset="forest"]) {
+  --desktop-ink: #142b23;
+  --desktop-muted: #4b6559;
+  --desktop-surface: rgba(244, 248, 239, 0.97);
+  --desktop-chrome: rgba(22, 50, 37, 0.88);
+  --desktop-panel-dark: rgba(17, 49, 35, 0.93);
+  --desktop-line: rgba(22, 66, 43, 0.18);
+  --desktop-accent: #a25c3d;
+}
+
+.desktop[data-desktop-preset="stone"],
+body:has(.desktop[data-desktop-preset="stone"]) {
+  --desktop-ink: #302924;
+  --desktop-muted: #71685e;
+  --desktop-surface: rgba(250, 245, 237, 0.97);
+  --desktop-chrome: rgba(55, 43, 34, 0.88);
+  --desktop-panel-dark: rgba(47, 38, 31, 0.93);
+  --desktop-line: rgba(77, 59, 45, 0.17);
+  --desktop-accent: #9c5b3b;
+}
+
+.desktop[data-desktop-preset="ocean"],
+body:has(.desktop[data-desktop-preset="ocean"]) {
+  --desktop-ink: #172b32;
+  --desktop-muted: #4d6972;
+  --desktop-surface: rgba(244, 250, 249, 0.97);
+  --desktop-chrome: rgba(18, 48, 55, 0.89);
+  --desktop-panel-dark: rgba(15, 45, 52, 0.94);
+  --desktop-line: rgba(29, 75, 83, 0.17);
+  --desktop-accent: #a3553e;
+}
+
+.desktop[data-desktop-preset="blush"],
+body:has(.desktop[data-desktop-preset="blush"]) {
+  --desktop-ink: #352828;
+  --desktop-muted: #705f62;
+  --desktop-surface: rgba(253, 248, 246, 0.97);
+  --desktop-chrome: rgba(56, 36, 41, 0.89);
+  --desktop-panel-dark: rgba(49, 33, 38, 0.94);
+  --desktop-line: rgba(89, 52, 55, 0.17);
+  --desktop-accent: #9a4d48;
+}
+
+.desktop[data-desktop-mode="dark"],
+body:has(.desktop[data-desktop-mode="dark"]) {
+  --desktop-ink: #edf2ef;
+  --desktop-muted: #b5c8bf;
+  --desktop-surface: rgba(20, 36, 35, 0.95);
+  --desktop-chrome: rgba(9, 23, 23, 0.92);
+  --desktop-chrome-ink: #f2f4ef;
+  --desktop-panel-dark: rgba(7, 19, 19, 0.96);
+  --desktop-line: rgba(224, 239, 228, 0.18);
+  --desktop-edge: rgba(190, 221, 205, 0.14);
+  --desktop-highlight: rgba(196, 228, 212, 0.06);
+  --workspace-heading-ink: #edf2ef;
+  --workspace-heading-shadow: rgba(5, 18, 17, 0.18);
+}
+
+.desktop[data-desktop-mode="light"][data-desktop-preset="graphite"],
+body:has(.desktop[data-desktop-mode="light"][data-desktop-preset="graphite"]) {
+  --desktop-ink: #20312c;
+  --desktop-muted: #50655b;
+  --desktop-surface: rgba(243, 248, 244, 0.94);
+  --desktop-chrome: rgba(25, 46, 43, 0.87);
+  --desktop-chrome-ink: #f2f4ef;
+  --desktop-panel-dark: rgba(17, 36, 34, 0.94);
+  --desktop-line: rgba(45, 74, 57, 0.19);
+  --workspace-heading-ink: #20312c;
+  --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
+}
+
+body:has(.desktop) .modal-content,
+body:has(.desktop) .orbis-dropdown-menu {
+  --tblr-body-color: var(--desktop-ink);
+  --tblr-secondary-color: var(--desktop-muted);
+  --tblr-border-color: var(--desktop-line);
+  color: var(--desktop-ink);
+  background: var(--desktop-surface);
+  border: 1px solid var(--desktop-edge);
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(5, 22, 17, 0.3);
+  backdrop-filter: blur(24px);
+}
+body:has(.desktop) .modal-header,
+body:has(.desktop) .modal-footer {
+  background: transparent;
+  border-color: var(--desktop-line);
+}
+body:has(.desktop) .modal-content .text-muted {
+  /* biome-ignore lint/complexity/noImportantStyles: Tabler marks this muted utility important. */
+  color: var(--desktop-muted) !important;
+}
+body:has(.desktop) .dropdown-item {
+  color: var(--desktop-ink);
+  border-radius: 6px;
+}
+body:has(.desktop) .dropdown-item:is(:hover, :focus, [data-highlighted]) {
+  background: rgba(125, 145, 121, 0.18);
+  color: var(--desktop-ink);
+}
+body:has(.desktop) .modal-content .form-control,
+body:has(.desktop) .modal-content .form-select {
+  color: var(--desktop-ink);
+  background-color: var(--desktop-surface);
+  border-color: var(--desktop-line);
+}
+body:has(.desktop) :is(.modal-content, .orbis-dropdown-menu) :focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  body:has(.desktop) .zoom-in,
+  body:has(.desktop) .dimmed-background {
+    animation-duration: 0.01ms;
+  }
+}

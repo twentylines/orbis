@@ -3,6 +3,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import clsx from 'clsx';
 import type * as React from 'react';
+import { useRef } from 'react';
 import './Dialog.css';
 
 export type Sizes = 'sm' | 'md' | 'lg' | 'xl';
@@ -20,7 +21,7 @@ const DialogPortal = ({ children, ...props }: DialogPrimitive.DialogPortalProps 
   <DialogPrimitive.Portal {...props}>
     <div className="modal modal-sm d-block dimmed-background">
       <div className={clsx(`modal-dialog modal-dialog-centered modal-${props.size || 'lg'}`, 'zoom-in')}>
-        <div className="shadow modal-content">
+        <div className="orbis-modal-frame">
           <div
             data-testid="modal-status"
             className={clsx('modal-status', {
@@ -40,17 +41,40 @@ const DialogOverlay = ({ className, ...props }: React.ComponentProps<typeof Dial
   <DialogPrimitive.Overlay className={clsx('', className)} {...props} />
 );
 
-const DialogContent = ({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Content> & ModalProps) => (
-  <DialogPortal type={props.type} size={props.size}>
-    <DialogOverlay />
-    <DialogPrimitive.Content className={clsx('modal-content mt-1', className)} {...props}>
-      {children}
-      <DialogPrimitive.Close className="btn-close" aria-label="Close dialog">
-        <span data-testid="modal-close-button" className="btn-close" aria-hidden="true" />
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPortal>
-);
+const DialogContent = ({
+  className,
+  children,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Content> & ModalProps) => {
+  const opener = useRef<HTMLElement | null>(null);
+  return (
+    <DialogPortal type={props.type} size={props.size}>
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        className={clsx('modal-content', className)}
+        {...props}
+        onOpenAutoFocus={(event) => {
+          opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          if (!event.defaultPrevented && opener.current?.isConnected) {
+            event.preventDefault();
+            opener.current.focus();
+          }
+        }}
+      >
+        {children}
+        <DialogPrimitive.Close className="btn-close" aria-label="Close dialog">
+          <span data-testid="modal-close-button" className="btn-close" aria-hidden="true" />
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  );
+};
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div data-testid="modal-header" className={clsx('modal-header', className)} {...props} />

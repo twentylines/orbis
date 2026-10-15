@@ -95,6 +95,45 @@ const containerFixture = {
     },
   ],
 };
+const historyFixture = (range = '1h') => {
+  const ranges = { '5m': [300, 10], '1h': [3600, 60], '24h': [86400, 300], '7d': [604800, 1800] };
+  const [duration, interval] = ranges[range] || ranges['1h'];
+  const now = Date.now();
+  const start = now - duration * 1000;
+  const count = Math.floor(duration / interval);
+  const metric = (value, samples) => ({
+    average: value,
+    peak: value === null ? null : samples === 1 ? value : value * 1.1,
+    samples: value === null ? 0 : samples,
+  });
+  return {
+    range,
+    from: new Date(start).toISOString(),
+    to: new Date(now).toISOString(),
+    resolutionSeconds: interval,
+    sampledEverySeconds: 10,
+    retentionDays: 7,
+    storage: 'persistent',
+    collectorAvailable: true,
+    lastSampleAt: new Date(now - 1000).toISOString(),
+    persistedThrough: new Date(now - 60000).toISOString(),
+    points: Array.from({ length: count }, (_, index) => {
+      const at = start + index * interval * 1000;
+      const samples = interval / 10;
+      return {
+        at: new Date(at).toISOString(),
+        until: new Date(at + (interval - 10) * 1000).toISOString(),
+        intervalSeconds: interval,
+        samples,
+        cpuScope: index === 4 ? 'runtime' : 'host-proc',
+        cpu: metric(index === 2 ? null : 11 + (index % 12) * 1.5, samples),
+        memory: metric(35 + (index % 4), samples),
+        download: metric(42000 + (index % 8) * 2000, samples),
+        upload: metric(12000 + (index % 6) * 500, samples),
+      };
+    }).filter((_, index) => index !== Math.floor(count / 2) && index !== Math.floor(count / 2) + 1),
+  };
+};
 const taskFixture = {
   sampledAt: new Date().toISOString(),
   storage: 'persistent',
@@ -138,8 +177,30 @@ const translations = JSON.parse(
 );
 
 async function capture(page, name, { scrollTop = true } = {}) {
+  await page.waitForTimeout(600);
   if (scrollTop) await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.screenshot({ path: path.join(screenshotDir, name), animations: 'disabled' });
+}
+
+async function chromeGeometry(page) {
+  return page.locator('.desktop-system-bar').evaluate((bar) => {
+    const controls = [...bar.querySelectorAll('.desktop-task-trigger, .desktop-mode-toggle, .desktop-search-trigger, .desktop-icon-button')];
+    const boxes = controls.map((control) => {
+      const { x, y, width, height } = control.getBoundingClientRect();
+      return { x, y, width, height };
+    });
+    const brand = bar.querySelector('.desktop-brand').getBoundingClientRect();
+    const current = bar.querySelector('.desktop-current');
+    const next = current && getComputedStyle(current).display !== 'none' ? current.getBoundingClientRect() : boxes[0];
+    return {
+      boxes,
+      aligned: boxes.every((box) => Math.abs(box.y - boxes[0].y) < 0.1 && Math.abs(box.height - boxes[0].height) < 0.1),
+      separated:
+        brand.right + 4 <= (next.left ?? next.x) && boxes.every((box, index) => !index || boxes[index - 1].x + boxes[index - 1].width < box.x),
+      backdropMatches: getComputedStyle(document.body).backgroundColor === getComputedStyle(document.querySelector('.desktop')).backgroundColor,
+    };
+  });
 }
 
 async function main() {
@@ -210,6 +271,7 @@ async function main() {
         });
       if (url.pathname === '/api/apps/installed') return respond({ installed: apps });
       if (url.pathname === '/api/system/containers') return respond(containerFixture);
+      if (url.pathname === '/api/system/history') return respond(historyFixture(url.searchParams.get('range') || '1h'));
       if (url.pathname === '/api/tasks') return respond(taskFixture);
       if (url.pathname === '/api/links') return respond({ links: [] });
       if (url.pathname === '/api/system/load')
@@ -364,6 +426,15 @@ async function main() {
       .locator('.desktop-system-bar')
       .evaluate((element) => element.getBoundingClientRect().left >= 20 && element.getBoundingClientRect().top >= 20);
     const orbisBrand = (await page.title()) === 'Orbis' && (await page.getByRole('link', { name: 'Orbis workspace on Hades' }).isVisible());
+    const lightChrome = await chromeGeometry(page);
+    let chromeHoverAligned = true;
+    for (const selector of ['.desktop-task-trigger', '.desktop-mode-toggle', '.desktop-search-trigger', '.desktop-icon-button']) {
+      await page.locator(selector).hover();
+      await page.waitForTimeout(250);
+      const hovered = await chromeGeometry(page);
+      chromeHoverAligned &&= hovered.aligned && hovered.separated;
+    }
+    await page.mouse.move(0, 0);
     await capture(page, `${viewport.name}-workspace.png`);
     await page.getByRole('button', { name: 'Switch to dark mode' }).click();
     await page.locator('.desktop[data-desktop-mode="dark"]').waitFor();
@@ -375,6 +446,10 @@ async function main() {
     const darkModePersisted =
       (await page.locator('.desktop').getAttribute('data-desktop-mode')) === 'dark' &&
       (await page.evaluate(() => document.body.dataset.bsTheme)) === 'dark';
+    const darkChrome = await chromeGeometry(page);
+    const chromeAligned = lightChrome.aligned && darkChrome.aligned && lightChrome.separated && darkChrome.separated && chromeHoverAligned;
+    const chromeModeStable = Math.abs(lightChrome.boxes[1].width - darkChrome.boxes[1].width) < 0.1;
+    const rootBackdropMatches = lightChrome.backdropMatches && darkChrome.backdropMatches;
     await capture(page, `${viewport.name}-workspace-dark.png`);
     await page.getByRole('button', { name: 'Switch to light mode' }).click();
     await page.locator('.desktop[data-desktop-mode="light"]').waitFor();
@@ -417,6 +492,40 @@ async function main() {
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
     await page.waitForTimeout(5200);
     await page.getByRole('heading', { name: 'Host memory' }).waitFor();
+    await Promise.all([
+      page.waitForResponse((response) => response.url().includes('/api/system/history?range=24h')),
+      page.getByRole('button', { name: '24 hours', exact: true }).click(),
+    ]);
+    const historyRanges = (await page.getByRole('button', { name: '24 hours', exact: true }).getAttribute('aria-pressed')) === 'true';
+    await Promise.all([
+      page.waitForResponse((response) => response.url().includes('/api/system/history?range=7d')),
+      page.getByRole('button', { name: '7 days', exact: true }).click(),
+    ]);
+    await page.reload();
+    await page.getByRole('button', { name: '7 days', exact: true }).waitFor();
+    const historyRangePersisted = (await page.getByRole('button', { name: '7 days', exact: true }).getAttribute('aria-pressed')) === 'true';
+    await Promise.all([
+      page.waitForResponse((response) => response.url().includes('/api/system/history?range=1h')),
+      page.getByRole('button', { name: '1 hour', exact: true }).click(),
+    ]);
+    const chart = page.getByRole('slider', { name: 'Inspect CPU utilisation history' });
+    await chart.scrollIntoViewIfNeeded();
+    await chart.focus();
+    await page.keyboard.press('Home');
+    const firstHistoryIndex = await chart.getAttribute('aria-valuenow');
+    await page.keyboard.press('End');
+    const historyKeyboard =
+      firstHistoryIndex === '0' &&
+      Number(await chart.getAttribute('aria-valuenow')) > 0 &&
+      (await page.locator('.metric-chart[data-metric="cpu"] .metric-chart-tooltip').isVisible());
+    const historyTooltipContained = await page.locator('.metric-chart[data-metric="cpu"] .metric-chart-tooltip').evaluate((tooltip) => {
+      const box = tooltip.getBoundingClientRect();
+      const plot = tooltip.closest('.metric-chart-plot').getBoundingClientRect();
+      return box.top >= plot.top + 8 && box.bottom <= plot.bottom - 8 && box.left >= plot.left + 8 && box.right <= plot.right - 8;
+    });
+    const historyGaps = (await page.locator('.metric-chart[data-metric="cpu"] [data-history-segment]').count()) > 1;
+    await capture(page, `${viewport.name}-monitor-history.png`, { scrollTop: false });
+    await chart.blur();
     const cpuRanked = (await page.locator('.container-resource-list > li').first().getAttribute('data-container')) === 'media-web';
     await page.getByRole('group', { name: 'Rank containers by' }).getByRole('button', { name: 'Memory', exact: true }).click();
     const memoryRanked = (await page.locator('.container-resource-list > li').first().getAttribute('data-container')) === 'dns-server';
@@ -448,9 +557,29 @@ async function main() {
     const panelStyle = panelWidth
       ? await page.addStyleTag({ content: `.desktop-view-app { width: ${panelWidth}px; max-width: 100%; margin-inline: auto; }` })
       : null;
+    const bulkControlsCollapsed = !(await page.locator('.desktop-batch-controls').evaluate((element) => element.open));
+    await capture(page, `${viewport.name}-applications.png`);
+    await page.locator('.desktop-batch-controls > summary').click();
+    const bulkControlsReachable = await page.locator('.batch-action-desktop-button').first().isVisible();
     const batchActionsStacked =
       !panelWidth || (await page.locator('.action-bar-content').evaluate((element) => getComputedStyle(element).flexDirection === 'column'));
-    await capture(page, `${viewport.name}-applications.png`);
+    await capture(page, `${viewport.name}-applications-controls.png`);
+    const batchOpener = page.locator('.batch-action-desktop-button').first();
+    await batchOpener.click();
+    const batchDialog = page.getByRole('dialog');
+    await batchDialog.waitFor();
+    await capture(page, `${viewport.name}-application-dialog.png`);
+    const dialogCentered = await batchDialog.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return Math.abs(box.x + box.width / 2 - innerWidth / 2) < 2 && box.x >= 8 && box.right <= innerWidth - 8;
+    });
+    await page.keyboard.press('Tab');
+    const dialogFocusContained = await batchDialog.evaluate((element) => element.contains(document.activeElement));
+    await page.keyboard.press('Escape');
+    await batchDialog.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement === document.querySelector('.batch-action-desktop-button'), null, { timeout: 2000 });
+    const dialogFocusReturned = await batchOpener.evaluate((element) => element === document.activeElement);
+    await page.locator('.desktop-batch-controls > summary').click();
     const appsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     const appTilesContained = await page
       .locator('.desktop-installed-grid .card-body')
@@ -479,6 +608,17 @@ async function main() {
     await page.getByRole('link', { name: 'App Store', exact: true }).click();
     await page.locator('.desktop-catalogue-grid').waitFor();
     await capture(page, `${viewport.name}-store.png`);
+    await page.getByRole('combobox').first().click();
+    await page.getByRole('listbox').waitFor();
+    await capture(page, `${viewport.name}-store-menu.png`);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Escape');
+    await page.getByRole('listbox').waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement === document.querySelector('[role="combobox"]'), null, { timeout: 2000 });
+    const categoryFocusReturned = await page
+      .getByRole('combobox')
+      .first()
+      .evaluate((element) => element === document.activeElement);
     const storeOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     const singleStoreTitle =
       (await page.getByRole('heading', { name: 'App Store', exact: true }).count()) === 1 &&
@@ -516,7 +656,7 @@ async function main() {
     await page.getByRole('link', { name: 'Back to workspace' }).click();
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('tab', { name: 'Appearance' }).click();
-    await page.getByRole('heading', { name: 'Appearance & workspace' }).waitFor();
+    await page.getByRole('textbox', { name: 'Server name' }).waitFor();
     await capture(page, `${viewport.name}-appearance.png`);
     const settingsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     const windowInsets = await page
@@ -530,7 +670,7 @@ async function main() {
     if (preferences.wallpaper !== 'tidal') throw new Error('Tidal wallpaper was not sent to the server fixture');
     await capture(page, `${viewport.name}-graphite.png`);
     await page.reload();
-    await page.getByRole('heading', { name: 'Appearance & workspace' }).waitFor();
+    await page.getByRole('textbox', { name: 'Server name' }).waitFor();
     const graphitePersisted = await page.getByRole('button', { name: 'Graphite Deep charcoal' }).getAttribute('aria-pressed');
     const wallpaperPersisted = await page.getByRole('button', { name: 'Tidal' }).getAttribute('aria-pressed');
     const bodyTheme = await page.evaluate(() => document.body.dataset.bsTheme);
@@ -570,6 +710,20 @@ async function main() {
       unavailableDockerHonest,
       desktopStartsAtTop,
       shellInset,
+      chromeAligned,
+      chromeModeStable,
+      rootBackdropMatches,
+      bulkControlsCollapsed,
+      bulkControlsReachable,
+      dialogCentered,
+      dialogFocusContained,
+      dialogFocusReturned,
+      categoryFocusReturned,
+      historyRanges,
+      historyRangePersisted,
+      historyKeyboard,
+      historyGaps,
+      historyTooltipContained,
       cpuRanked,
       memoryRanked,
       activeTaskFiltered,
@@ -621,6 +775,20 @@ async function main() {
         !report.unavailableDockerHonest ||
         !report.desktopStartsAtTop ||
         !report.shellInset ||
+        !report.chromeAligned ||
+        !report.chromeModeStable ||
+        !report.rootBackdropMatches ||
+        !report.bulkControlsCollapsed ||
+        !report.bulkControlsReachable ||
+        !report.dialogCentered ||
+        !report.dialogFocusContained ||
+        !report.dialogFocusReturned ||
+        !report.categoryFocusReturned ||
+        !report.historyRanges ||
+        !report.historyRangePersisted ||
+        !report.historyKeyboard ||
+        !report.historyGaps ||
+        !report.historyTooltipContained ||
         !report.cpuRanked ||
         !report.memoryRanked ||
         !report.activeTaskFiltered ||

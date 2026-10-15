@@ -4,6 +4,7 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { IconCheck, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type * as React from 'react';
+import '../dropdown.css';
 
 type TriggerProps = {
   label?: string | React.ReactNode;
@@ -61,7 +62,7 @@ const SelectTrigger = ({
 
 const SelectContent = ({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Content>) => (
   <SelectPrimitive.Portal>
-    <SelectPrimitive.Content style={{ zIndex: 2000 }} className={clsx('overflow-hidden dropdown-menu', className)} {...props}>
+    <SelectPrimitive.Content style={{ zIndex: 2000 }} className={clsx('overflow-hidden orbis-dropdown-menu', className)} {...props}>
       <SelectPrimitive.ScrollUpButton className="d-flex align-items-center justify-content-center">
         <IconChevronUp />
       </SelectPrimitive.ScrollUpButton>

@@ -4,7 +4,6 @@ import type { AppInfo, AppStatus as AppStatusType } from '@/types/app.types';
 import { IconAlertCircle, IconDownload, IconRotateClockwise } from '@tabler/icons-react';
 import type React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Tooltip } from 'react-tooltip';
 import { AppStatus } from '../app-status/app-status';
 import './app-tile.css';
 import { DockerHealth } from '@/components/docker-health/docker-health';
@@ -21,43 +20,13 @@ export const AppTile: React.FC<{
 }> = ({ info, status, updateAvailable, pendingRestart, docker }) => {
   const { t } = useTranslation();
 
-  var badge = null;
-
-  // Using if-else sets the badge once while rendering them in the return causes badges to stack
-  if (pendingRestart) {
-    badge = (
-      <>
-        <Tooltip className="tooltip" anchorSelect=".pendingRestart">
-          {t('MY_APPS_PENDING_RESTART')}
-        </Tooltip>
-        <div className="pendingRestart ribbon bg-warning ribbon-top">
-          <IconRotateClockwise size={20} />
-        </div>
-      </>
-    );
-  } else if (updateAvailable) {
-    badge = (
-      <>
-        <Tooltip className="tooltip" anchorSelect=".updateAvailable">
-          {t('MY_APPS_UPDATE_AVAILABLE')}
-        </Tooltip>
-        <div className="updateAvailable ribbon bg-green ribbon-top">
-          <IconDownload size={20} />
-        </div>
-      </>
-    );
-  } else if (info.deprecated) {
-    badge = (
-      <>
-        <Tooltip className="tooltip" anchorSelect=".deprecated">
-          {t('MY_APPS_DEPRECATED')}
-        </Tooltip>
-        <div className="deprecated ribbon bg-red ribbon-top">
-          <IconAlertCircle />
-        </div>
-      </>
-    );
-  }
+  const notice = pendingRestart
+    ? { Icon: IconRotateClockwise, label: t('MY_APPS_PENDING_RESTART') }
+    : updateAvailable
+      ? { Icon: IconDownload, label: t('MY_APPS_UPDATE_AVAILABLE') }
+      : info.deprecated
+        ? { Icon: IconAlertCircle, label: t('MY_APPS_DEPRECATED') }
+        : null;
 
   return (
     <div className="card card-sm card-link">
@@ -66,13 +35,18 @@ export const AppTile: React.FC<{
         <div className="d-flex flex-column justify-items-center">
           <div className="d-flex align-items-center gap-2">
             <span className="fw-bolder">{info.name}</span>
-            <AppStatus lite status={status} />
+            {!docker || !['running', 'stopped'].includes(status) ? <AppStatus lite status={status} /> : null}
           </div>
           <div className="text-muted">{limitText(info.short_desc, 50)}</div>
           {docker ? <DockerHealth appUrn={info.urn} telemetry={docker.data} stale={docker.stale} /> : null}
+          {notice ? (
+            <span className="app-tile-notice">
+              <notice.Icon size={13} aria-hidden="true" />
+              {notice.label}
+            </span>
+          ) : null}
         </div>
       </div>
-      {badge}
     </div>
   );
 };

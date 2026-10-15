@@ -39,7 +39,7 @@
 }
 .workspace-actions {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -63,7 +63,7 @@
   background: rgba(247, 251, 247, 0.72);
   box-shadow:
     0 8px 25px rgba(15, 43, 37, 0.1),
-    inset 0 1px rgba(255, 255, 255, 0.8);
+    inset 0 1px var(--desktop-highlight);
   backdrop-filter: blur(12px);
   transition:
     transform 0.2s ease,
@@ -82,6 +82,7 @@
   color: #f2f6f0;
   background: rgba(20, 39, 38, 0.78);
   border-color: rgba(255, 255, 255, 0.19);
+  box-shadow: 0 8px 22px rgba(3, 17, 14, 0.18);
 }
 .desktop[data-desktop-mode="dark"] .workspace-edit-toggle:hover {
   background: rgba(29, 57, 54, 0.93);
@@ -281,12 +282,12 @@
 .workspace-storage,
 .workspace-attention {
   background: var(--desktop-surface);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--desktop-edge);
   color: var(--desktop-ink);
   border-radius: 24px;
   box-shadow:
     0 24px 58px rgba(12, 38, 34, 0.17),
-    inset 0 1px rgba(255, 255, 255, 0.63);
+    inset 0 1px var(--desktop-highlight);
   backdrop-filter: blur(20px) saturate(1.22);
   -webkit-backdrop-filter: blur(20px) saturate(1.22);
 }
@@ -378,9 +379,9 @@
   position: relative;
   padding: 17px 14px;
   border-radius: 17px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border: 1px solid var(--desktop-edge);
   text-decoration: none;
-  background: rgba(246, 252, 241, 0.15);
+  background: rgba(246, 252, 241, 0.66);
   text-align: left;
   transition:
     background 0.18s ease,
@@ -403,7 +404,7 @@
 }
 .workspace-app:hover {
   background: rgba(244, 250, 241, 0.32);
-  border-color: rgba(255, 255, 255, 0.42);
+  border-color: var(--desktop-accent);
   transform: translateY(-5px) scale(1.035);
   text-decoration: none;
   box-shadow: 0 12px 22px rgba(17, 51, 41, 0.12);
@@ -460,6 +461,9 @@
 }
 .desktop[data-desktop-mode="dark"] .workspace-app:hover {
   background: rgba(221, 240, 229, 0.1);
+}
+.desktop[data-desktop-mode="dark"] .workspace-app {
+  background: rgba(14, 33, 30, 0.72);
 }
 .workspace-app-status.running {
   background: #4b8060;
@@ -966,7 +970,7 @@
   color: var(--desktop-ink);
   box-shadow:
     0 24px 58px rgba(12, 38, 34, 0.17),
-    inset 0 1px rgba(255, 255, 255, 0.2);
+    inset 0 1px var(--desktop-highlight);
 }
 .workspace-operations .workspace-section-heading {
   margin-bottom: 14px;
@@ -1155,6 +1159,10 @@
   }
   .workspace-actions {
     width: 100%;
+  }
+  .workspace-edit-toggle {
+    padding: 0 10px;
+    font-size: 12px;
   }
   .desktop .workspace-add {
     padding: 0 11px;

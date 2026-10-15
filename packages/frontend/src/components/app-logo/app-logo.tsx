@@ -22,7 +22,7 @@ export const AppLogo: React.FC<{
       height={size}
       alt={alt}
       decoding="async"
-      style={{ width: size, height: size, minWidth: size }}
+      style={{ width: `var(--app-logo-size, ${size}px)`, height: `var(--app-logo-size, ${size}px)`, minWidth: `var(--app-logo-size, ${size}px)` }}
       onError={() => setFailed(logoUrl)}
     />
   );
