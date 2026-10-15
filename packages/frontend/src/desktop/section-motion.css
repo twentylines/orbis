@@ -1,0 +1,65 @@
+/* biome-ignore-all lint/correctness/noUnknownTypeSelector: View Transition names are identifiers, not element selectors. */
+.desktop-view {
+  view-transition-name: orbis-section;
+}
+.desktop-system-bar {
+  view-transition-name: orbis-header;
+}
+/* biome-ignore lint/correctness/noUnknownPseudoClass: Standard View Transition pseudo-class is newer than this CSS linter. */
+html:active-view-transition .desktop-view-app {
+  animation: none;
+}
+.desktop-dock {
+  view-transition-name: orbis-dock;
+}
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-old(orbis-header),
+::view-transition-new(orbis-header),
+::view-transition-old(orbis-dock),
+::view-transition-new(orbis-dock) {
+  animation: none;
+}
+::view-transition-group(orbis-section) {
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+::view-transition-old(orbis-section) {
+  animation: orbis-section-out 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+::view-transition-new(orbis-section) {
+  animation: orbis-section-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+::view-transition-image-pair(orbis-section) {
+  isolation: isolate;
+}
+@keyframes orbis-section-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--orbis-slide-direction, 1) * 64px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes orbis-section-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(calc(var(--orbis-slide-direction, 1) * -48px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(orbis-section),
+  ::view-transition-old(orbis-section),
+  ::view-transition-new(orbis-section),
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none;
+  }
+}

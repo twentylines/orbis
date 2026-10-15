@@ -4,7 +4,7 @@ import { useUIStore } from '@/stores/ui-store';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
-export type WorkspacePreferences = { order: WidgetId[]; hidden: WidgetId[]; wide: WidgetId[]; pinnedApps: string[] };
+export type WorkspacePreferences = { order: WidgetId[]; hidden: WidgetId[]; wide: WidgetId[]; pinnedApps: string[]; showAllApps: boolean };
 
 export type DesktopPreferences = {
   serverName: string;
@@ -21,11 +21,12 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   mode: 'light',
   density: 'comfortable',
   wallpaper: 'sandstone',
-  workspace: { order: [...widgetIds], hidden: [], wide: ['applications'], pinnedApps: [] },
+  workspace: { order: [...widgetIds], hidden: [], wide: ['applications'], pinnedApps: [], showAllApps: false },
 };
 const STORAGE_KEY = 'server-desktop-preferences-v1';
 
-type StoredWorkspacePreferences = Omit<WorkspacePreferences, 'pinnedApps'> & Partial<Pick<WorkspacePreferences, 'pinnedApps'>>;
+type StoredWorkspacePreferences = Omit<WorkspacePreferences, 'pinnedApps' | 'showAllApps'> &
+  Partial<Pick<WorkspacePreferences, 'pinnedApps' | 'showAllApps'>>;
 type StoredDesktopPreferences = Omit<DesktopPreferences, 'mode' | 'wallpaper' | 'workspace'> &
   Partial<Pick<DesktopPreferences, 'mode' | 'wallpaper'>> & { workspace?: StoredWorkspacePreferences };
 
@@ -40,6 +41,7 @@ export const isWorkspacePreferences = (value: unknown): value is StoredWorkspace
     workspace.order.length === widgetIds.length &&
     isWidgetList(workspace.hidden) &&
     isWidgetList(workspace.wide) &&
+    (workspace.showAllApps === undefined || typeof workspace.showAllApps === 'boolean') &&
     (workspace.pinnedApps === undefined ||
       (Array.isArray(workspace.pinnedApps) &&
         workspace.pinnedApps.length <= 12 &&

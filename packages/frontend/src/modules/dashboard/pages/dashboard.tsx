@@ -5,6 +5,8 @@ import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/tele
 import { useContainerTelemetry } from '@/desktop/containers';
 import { DockerHealth } from '@/components/docker-health/docker-health';
 import { ContainerResources } from '@/components/container-resources/container-resources';
+import { Button } from '@/components/ui/Button';
+import { Switch } from '@/components/ui/Switch';
 import { useTasks, taskIsActive, taskLabels, taskStates } from '@/desktop/tasks';
 import {
   IconAdjustmentsHorizontal,
@@ -15,9 +17,10 @@ import {
   IconDatabase,
   IconDeviceDesktopAnalytics,
   IconPlus,
+  IconPin,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import './dashboard.css';
 
@@ -45,6 +48,26 @@ const rate = (value: number | null) => {
 
 export default function Dashboard() {
   const [editing, setEditing] = useState(false);
+  const [pinPickerRequested, setPinPickerRequested] = useState(false);
+  const pinHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!editing || !pinPickerRequested) return;
+    let cancelled = false;
+    const heading = pinHeading.current;
+    const entrance = heading?.closest('.workspace-editor')?.getAnimations() ?? [];
+    void Promise.all(entrance.map((animation) => animation.finished.catch(() => undefined))).then(() => {
+      if (cancelled || !heading) return;
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView({
+        block: 'start',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      });
+      setPinPickerRequested(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editing, pinPickerRequested]);
   const { preferences, update, syncState } = useDesktopPreferences();
   const { workspace } = preferences;
   const apps = useQuery({ ...getInstalledAppsOptions(), refetchInterval: 15000 });
@@ -68,7 +91,10 @@ export default function Dashboard() {
   });
   const installedUrns = new Set(installed.map(({ info }) => info.urn));
   const missingPins = workspace.pinnedApps.filter((urn) => !installedUrns.has(urn));
-  const visibleInstalled = orderedInstalled.slice(0, Math.max(8, workspace.pinnedApps.length - missingPins.length));
+  const visibleInstalled = workspace.showAllApps
+    ? orderedInstalled
+    : orderedInstalled.slice(0, Math.max(3, workspace.pinnedApps.length - missingPins.length));
+  const scrollApps = workspace.showAllApps && (!workspace.hidden.includes('storage') || !workspace.hidden.includes('attention'));
   const running = installed.filter(({ app }) => app.status === 'running').length;
   const attention = installed.filter(({ app, metadata }) => app.status === 'stopped' || Number(app.version) < Number(metadata.latestVersion)).length;
   const unhealthy = new Set(containers.data?.containers.filter((item) => item.health === 'unhealthy' && item.appUrn).map((item) => item.appUrn)).size;
@@ -116,9 +142,24 @@ export default function Dashboard() {
           <div>
             <h2 id="workspace-apps-title">Applications</h2>
           </div>
-          <Link to="/apps">
-            View all <IconArrowRight size={18} aria-hidden="true" />
-          </Link>
+          <div className="workspace-home-app-actions">
+            <Button
+              size="icon"
+              className="workspace-pin-trigger"
+              title="Choose home apps"
+              aria-label="Choose home apps"
+              aria-controls="workspace-pins"
+              onClick={() => {
+                setEditing(true);
+                setPinPickerRequested(true);
+              }}
+            >
+              <IconPin size={18} aria-hidden="true" />
+            </Button>
+            <Link to="/apps" viewTransition>
+              View all <IconArrowRight size={18} aria-hidden="true" />
+            </Link>
+          </div>
         </div>
         {apps.isError ? (
           <div className="workspace-message" role="alert">
@@ -142,33 +183,42 @@ export default function Dashboard() {
             <IconApps size={28} stroke={1.5} aria-hidden="true" />
             <strong>No applications installed</strong>
             <p>Open the App Store to add your first service.</p>
-            <Link to="/app-store">Browse the App Store</Link>
+            <Link to="/app-store" viewTransition>
+              Browse the App Store
+            </Link>
           </div>
         ) : null}
         {installed.length > 0 ? (
-          <div className="workspace-app-list">
-            {visibleInstalled.map(({ app, info, metadata }) => {
-              const [appId, storeId] = info.urn.split(':');
-              const appUpdate = Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion;
-              return (
-                <Link
-                  key={info.urn}
-                  to={`/apps/${storeId}/${appId}`}
-                  className="workspace-app"
-                  aria-label={`${info.name}, ${app.status}${appUpdate ? ', update available' : ''}${workspace.pinnedApps.includes(info.urn) ? ', pinned' : ''}`}
-                >
-                  <AppLogo urn={info.urn} size={54} alt="" />
-                  <span className="workspace-app-copy">
-                    <strong>{info.name}</strong>
-                    <small aria-hidden={!appUpdate && !workspace.pinnedApps.includes(info.urn) ? true : undefined}>
-                      {`${workspace.pinnedApps.includes(info.urn) ? 'Pinned' : ''}${workspace.pinnedApps.includes(info.urn) && appUpdate ? ' · ' : ''}${appUpdate ? 'Update available' : ''}`}
-                    </small>
-                    <DockerHealth appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
+          <section
+            className="workspace-app-scroll"
+            data-scroll={scrollApps}
+            aria-label="Installed applications"
+            tabIndex={scrollApps ? 0 : undefined}
+          >
+            <div className="workspace-app-list">
+              {visibleInstalled.map(({ app, info, metadata }) => {
+                const [appId, storeId] = info.urn.split(':');
+                const appUpdate = Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion;
+                return (
+                  <Link
+                    key={info.urn}
+                    to={`/apps/${storeId}/${appId}`}
+                    className="workspace-app"
+                    aria-label={`${info.name}, ${app.status}${appUpdate ? ', update available' : ''}${workspace.pinnedApps.includes(info.urn) ? ', pinned' : ''}`}
+                  >
+                    <AppLogo urn={info.urn} size={54} alt="" />
+                    <span className="workspace-app-copy">
+                      <strong>{info.name}</strong>
+                      <small aria-hidden={!appUpdate && !workspace.pinnedApps.includes(info.urn) ? true : undefined}>
+                        {`${workspace.pinnedApps.includes(info.urn) ? 'Pinned' : ''}${workspace.pinnedApps.includes(info.urn) && appUpdate ? ' · ' : ''}${appUpdate ? 'Update available' : ''}`}
+                      </small>
+                      <DockerHealth appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
         ) : null}
         {links.data?.links?.length ? (
           <div className="workspace-links">
@@ -190,7 +240,7 @@ export default function Dashboard() {
             <h2 id="workspace-activity-title">System status</h2>
             <p>{system.data?.sampledAt ? `Sampled ${new Date(system.data.sampledAt).toLocaleTimeString()}` : 'Waiting for live sample'}</p>
           </div>
-          <Link to="/monitor" aria-label="Expand System status">
+          <Link to="/monitor" viewTransition aria-label="Expand System status">
             <IconDeviceDesktopAnalytics size={21} aria-hidden="true" />
           </Link>
         </div>
@@ -204,14 +254,14 @@ export default function Dashboard() {
         ) : (
           <div className="workspace-metrics">
             <div className="workspace-gauges">
-              <Link to="/monitor" className="workspace-gauge" aria-label={`Open CPU monitor, ${number(cpuPercent, '%')}`}>
+              <Link to="/monitor" viewTransition className="workspace-gauge" aria-label={`Open CPU monitor, ${number(cpuPercent, '%')}`}>
                 <span className="workspace-dial" style={{ '--dial-progress': `${Math.min(100, Math.max(0, cpuPercent ?? 0))}%` } as CSSProperties}>
                   <IconCpu size={17} aria-hidden="true" />
                   <strong>{typeof cpuPercent === 'number' ? number(cpuPercent, '%') : '—'}</strong>
                 </span>
                 <span>{system.data ? (system.data.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU') : 'CPU'}</span>
               </Link>
-              <Link to="/monitor" className="workspace-gauge" aria-label={`Open memory monitor, ${number(memoryPercent, '%')}`}>
+              <Link to="/monitor" viewTransition className="workspace-gauge" aria-label={`Open memory monitor, ${number(memoryPercent, '%')}`}>
                 <span className="workspace-dial" style={{ '--dial-progress': `${Math.min(100, Math.max(0, memoryPercent ?? 0))}%` } as CSSProperties}>
                   <IconDeviceDesktopAnalytics size={17} aria-hidden="true" />
                   <strong>{typeof memoryPercent === 'number' ? number(memoryPercent, '%') : '—'}</strong>
@@ -219,7 +269,7 @@ export default function Dashboard() {
                 <span>Host memory</span>
               </Link>
             </div>
-            <Link to="/monitor" className="workspace-network">
+            <Link to="/monitor" viewTransition className="workspace-network">
               <span className="workspace-network-heading">
                 <IconArrowsDownUp size={17} aria-hidden="true" /> Core network
               </span>
@@ -237,7 +287,7 @@ export default function Dashboard() {
             <IconDatabase size={17} aria-hidden="true" /> Storage <IconArrowRight size={16} aria-hidden="true" />
           </span>
           <strong>
-            {number(diskUsedGb, ' GB')} <small>/ {number(diskSizeGb, ' GB')}</small>
+            <span>{number(diskUsedGb, ' GB')}</span> <small>/ {number(diskSizeGb, ' GB')}</small>
           </strong>
           <div className="workspace-meter">
             <span style={{ width: `${Math.min(100, Math.max(0, diskPercent ?? 0))}%` }} />
@@ -254,7 +304,7 @@ export default function Dashboard() {
             <h2 id="workspace-operations-title">Recent operations</h2>
             <p>{activeTasks.length ? `${activeTasks.length} in progress` : 'Application activity'}</p>
           </div>
-          <Link to="/tasks">
+          <Link to="/tasks" viewTransition>
             View all <IconArrowRight size={18} aria-hidden="true" />
           </Link>
         </div>
@@ -266,7 +316,7 @@ export default function Dashboard() {
           <ol className="workspace-recent-tasks">
             {tasks.data.tasks.slice(0, 2).map((task) => (
               <li key={task.id}>
-                <Link to="/tasks">
+                <Link to="/tasks" viewTransition>
                   <span>
                     <strong>
                       {taskLabels[task.action]} {installed.find(({ info }) => info.urn === task.appUrn)?.info.name ?? task.appUrn.split(':')[0]}
@@ -303,7 +353,11 @@ export default function Dashboard() {
         ) : (
           <p>Waiting for application status.</p>
         )}
-        {attention > 0 ? <Link to="/apps">Review applications</Link> : null}
+        {attention > 0 ? (
+          <Link to="/apps" viewTransition>
+            Review applications
+          </Link>
+        ) : null}
       </section>
     ),
   };
@@ -325,7 +379,7 @@ export default function Dashboard() {
           >
             <IconAdjustmentsHorizontal size={18} aria-hidden="true" /> <span>{editing ? 'Done editing' : 'Edit workspace'}</span>
           </button>
-          <Link to="/app-store" className="workspace-add">
+          <Link to="/app-store" viewTransition className="workspace-add">
             <IconPlus size={18} aria-hidden="true" /> <span>Install an app</span>
           </Link>
         </div>
@@ -342,6 +396,7 @@ export default function Dashboard() {
               type="button"
               onClick={() =>
                 saveWorkspace({
+                  ...workspace,
                   order: [...defaultDesktopPreferences.workspace.order],
                   hidden: [],
                   wide: [...defaultDesktopPreferences.workspace.wide],
@@ -386,11 +441,19 @@ export default function Dashboard() {
               </li>
             ))}
           </ol>
-          <div className="workspace-pin-editor">
+          <div className="workspace-pin-editor" id="workspace-pins">
             <div>
-              <h3>Pinned applications</h3>
-              <p>Choose up to 12 applications to keep first in the launch area.</p>
+              <h3 ref={pinHeading} tabIndex={-1}>
+                Home apps
+              </h3>
+              <p>Home shows three apps plus any additional pins. Choose up to 12 apps to keep first.</p>
             </div>
+            <Switch
+              label="Show all installed apps"
+              checked={workspace.showAllApps}
+              onCheckedChange={(showAllApps) => saveWorkspace({ ...workspace, showAllApps })}
+              className="workspace-show-all"
+            />
             {apps.isPending ? <p>Loading installed applications…</p> : null}
             {apps.isError ? <p role="alert">Applications could not be loaded. Pinning is unavailable right now.</p> : null}
             {apps.data && installed.length === 0 ? <p>Install an application to pin it here.</p> : null}
@@ -438,6 +501,7 @@ export default function Dashboard() {
 
       <div
         className="workspace-grid"
+        data-more-apps={visibleInstalled.length > 3}
         data-default-layout={
           workspace.order.join(',') === 'applications,activity,storage,attention' &&
           workspace.hidden.length === 0 &&

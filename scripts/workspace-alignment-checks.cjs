@@ -13,6 +13,11 @@ module.exports = async function inspectWorkspaceAlignment(page) {
         return { ...bounds, top: bounds.top - scrollY, bottom: bounds.bottom - scrollY };
       };
       return {
+        launcher: box(document.querySelector('.workspace-app-list')),
+        launcherPanel: box(document.querySelector('.workspace-apps')),
+        operations: document.querySelector('.workspace-operations') ? box(document.querySelector('.workspace-operations')) : null,
+        attention: document.querySelector('.workspace-attention') ? box(document.querySelector('.workspace-attention')) : null,
+        scrollApps: document.querySelector('.workspace-app-scroll')?.dataset.scroll === 'true',
         actions: [...document.querySelectorAll('.workspace-actions > *')].map((action) => ({
           ...box(action),
           icon: box(action.querySelector('svg')),
@@ -45,6 +50,21 @@ module.exports = async function inspectWorkspaceAlignment(page) {
   assert.deepEqual(buttonStyles[0], buttonStyles[1], 'workspace actions must share the same button styling');
   assert.ok(initial.apps.length >= 3, 'exercise both plain and update-notice cards');
   const near = (first, second) => assert.ok(Math.abs(first - second) < 0.1, `${first} does not align with ${second}`);
+  if (!initial.scrollApps) {
+    near(initial.launcher.left, initial.launcherPanel.left);
+    near(initial.launcher.right, initial.launcherPanel.right);
+    if (
+      initial.operations &&
+      Math.abs(initial.operations.left - initial.launcher.left) < 0.1 &&
+      Math.abs(initial.operations.width - initial.launcherPanel.width) < 0.1
+    ) {
+      near(initial.launcher.right, initial.operations.right);
+    }
+  }
+  if (initial.operations && initial.attention && Math.abs(initial.operations.top - initial.attention.top) < 0.1) {
+    near(initial.launcherPanel.left, initial.operations.left);
+    near(initial.launcherPanel.right, initial.attention.right);
+  }
   for (const action of initial.actions) {
     near(action.height, 44);
     assert.equal(action.lineHeight, '20px');

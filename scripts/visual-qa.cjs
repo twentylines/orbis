@@ -4,9 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const inspectAppDetails = require('./app-detail-checks.cjs');
 const inspectWorkspaceAlignment = require('./workspace-alignment-checks.cjs');
+const inspectCommandSearch = require('./command-search-checks.cjs');
+const inspectHomeApps = require('./home-app-checks.cjs');
+const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 
 const base = 'http://localhost:8080';
-const screenshotDir = path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
+const screenshotDir = process.env.ORBIS_VISUAL_SCREENSHOT_DIR || path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
 const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
 const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1';
 const zoom = Number(process.env.ORBIS_VISUAL_ZOOM || 1);
@@ -37,6 +40,28 @@ const apps = [
     metadata: { latestVersion: 2 },
   },
 ];
+if (homeOnly) {
+  const names = [
+    'Home Assistant',
+    'Jellyfin Media Library and Transcoding Server',
+    'Paperless document archive and optical character recognition',
+    'Syncthing',
+    'Immich Photo Library',
+    'Uptime Kuma',
+    'Vaultwarden',
+    'Home automation and household telemetry dashboard',
+    'Audiobookshelf',
+    'Nextcloud collaborative workspace and private file storage',
+    'Crafty Controller',
+  ];
+  apps.push(
+    ...names.map((name, index) => ({
+      info: { urn: `extra${index}:test`, name, short_desc: 'An installed home server service', available: true },
+      app: { id: index + 4, status: index % 4 === 0 ? 'stopped' : 'running', version: 1, ignoredVersion: null },
+      metadata: { latestVersion: index % 3 === 0 ? 2 : 1 },
+    })),
+  );
+}
 const catalogue = [
   { id: 'media', urn: 'media:official', name: 'Media', short_desc: 'A self-hosted media service', categories: ['media'], created_at: 0 },
   { id: 'dns', urn: 'dns:official', name: 'DNS', short_desc: 'Manage network filtering', categories: ['network'], created_at: 0 },
@@ -260,6 +285,17 @@ async function chromeGeometry(page) {
       ),
       separated:
         brand.right + 4 <= (next.left ?? next.x) && boxes.every((box, index) => !index || boxes[index - 1].x + boxes[index - 1].width < box.x),
+      addressVisible: (() => {
+        const label = bar.querySelector('.desktop-connection-label');
+        const bounds = label.getBoundingClientRect();
+        return (
+          getComputedStyle(label).display !== 'none' &&
+          bounds.width > 0 &&
+          label.textContent.includes('127.0.0.1') &&
+          bounds.left >= bar.getBoundingClientRect().left + 8 &&
+          bounds.right <= bar.getBoundingClientRect().right - 8
+        );
+      })(),
       backdropMatches: getComputedStyle(document.body).backgroundColor === getComputedStyle(document.querySelector('.desktop')).backgroundColor,
     };
   });
@@ -522,7 +558,13 @@ async function main() {
           snapshotBytes: 78_925_886,
           appsMustBeStopped: true,
         });
-      if (url.pathname === '/api/marketplace/apps/search') return respond({ data: catalogue, nextCursor: null });
+      if (url.pathname === '/api/marketplace/apps/search') {
+        const needle = (url.searchParams.get('search') || '').toLowerCase();
+        return respond({
+          data: catalogue.filter((app) => `${app.name} ${app.short_desc}`.toLowerCase().includes(needle)).map((app) => ({ ...app, available: true })),
+          nextCursor: null,
+        });
+      }
       if (url.pathname === '/api/marketplace/enabled') return respond({ appStores: [] });
       if (url.pathname === '/api/desktop-preferences') {
         if (route.request().method() === 'PUT') preferences = JSON.parse(route.request().postData() || '{}');
@@ -532,6 +574,18 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (homeOnly) {
+      const homeApps = await inspectHomeApps(page, {
+        apps,
+        resetPreferences: (mode) => {
+          preferences = { ...freshPreferences(), mode };
+        },
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, homeApps, errors });
+      await page.close();
+      continue;
+    }
     await page.getByText('Host CPU').waitFor();
     await page.getByText('Core network').waitFor();
     await page.getByText('Healthy', { exact: true }).waitFor();
@@ -568,7 +622,14 @@ async function main() {
       (await page.evaluate(() => document.body.dataset.bsTheme)) === 'dark';
     const darkChrome = await chromeGeometry(page);
     const darkWorkspaceAlignment = await inspectWorkspaceAlignment(page);
-    const chromeAligned = lightChrome.aligned && darkChrome.aligned && lightChrome.separated && darkChrome.separated && chromeHoverAligned;
+    const chromeAligned =
+      lightChrome.aligned &&
+      darkChrome.aligned &&
+      lightChrome.separated &&
+      darkChrome.separated &&
+      lightChrome.addressVisible &&
+      darkChrome.addressVisible &&
+      chromeHoverAligned;
     const chromeModeStable = Math.abs(lightChrome.boxes[1].width - darkChrome.boxes[1].width) < 0.1;
     const rootBackdropMatches = lightChrome.backdropMatches && darkChrome.backdropMatches;
     await capture(page, `${viewport.name}-workspace-dark.png`);
@@ -606,21 +667,7 @@ async function main() {
       (await page.locator('.workspace-widget').first().locator('h2').first().innerText()) === 'System status' &&
       (await page.locator('.workspace-operations').count()) === 0;
     const pinnedAppFirst = (await page.locator('.workspace-app').first().locator('strong').innerText()) === 'Backups';
-    await page.keyboard.press('Control+k');
-    await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
-    for (let tab = 0; tab < 20; tab++) {
-      await page.keyboard.press('Tab');
-      if (!(await page.getByRole('dialog', { name: 'Search tools' }).evaluate((dialog) => dialog.contains(document.activeElement))))
-        throw new Error('Search keyboard focus escaped its dialog');
-    }
-    await page.keyboard.press('Escape');
-    await page.getByRole('dialog', { name: 'Search tools' }).waitFor({ state: 'hidden' });
-    await page.waitForFunction(() => document.activeElement === document.querySelector('.desktop-search-trigger'));
-    await page.keyboard.press('Control+k');
-    await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
-    await page.getByRole('textbox', { name: 'Find a tool or application' }).fill('Monitor');
-    await page.getByRole('dialog', { name: 'Search tools' }).getByRole('button', { name: 'Monitor' }).click();
-    await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
+    const commandSearch = await inspectCommandSearch(page, () => capture(page, `${viewport.name}-search.png`));
     await page.waitForTimeout(5200);
     await page.getByRole('heading', { name: 'Host memory' }).waitFor();
     await Promise.all([
@@ -912,6 +959,7 @@ async function main() {
       editOverflow,
       workspaceLayoutPersisted,
       pinnedAppFirst,
+      commandSearch,
       savingAfterPin,
       monitorOverflow,
       monitor3DContained,
@@ -938,6 +986,11 @@ async function main() {
     await Promise.race([page.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
+  if (homeOnly) {
+    if (reports.some((report) => report.errors.length)) process.exitCode = 1;
+    await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
+    return;
+  }
   if (
     reports.some(
       (report) =>
