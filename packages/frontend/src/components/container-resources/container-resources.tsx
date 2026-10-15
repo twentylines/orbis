@@ -35,7 +35,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
       <div className="container-resources-heading">
         <h2>
           <IconBrandDocker size={20} aria-hidden="true" />
-          {compact ? 'Top consumers' : 'Docker resources'}
+          Usage
         </h2>
         {compact ? (
           <Link to="/monitor#containers" aria-label="Expand Docker resource usage">
@@ -92,7 +92,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
                 {compact ? null : (
                   <span className="docker-health" data-health={health.state}>
                     <i aria-hidden="true" />
-                    {health.label}
+                    <span>{health.label}</span>
                   </span>
                 )}
               </div>

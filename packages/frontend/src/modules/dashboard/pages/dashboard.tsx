@@ -2,6 +2,7 @@ import { getInstalledAppsOptions, getLinksOptions } from '@/api-client/@tanstack
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { defaultDesktopPreferences, useDesktopPreferences, type WidgetId, type WorkspacePreferences } from '@/desktop/preferences';
 import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
+import { formatUptime } from '@/desktop/uptime';
 import { useContainerTelemetry } from '@/desktop/containers';
 import { DockerHealth } from '@/components/docker-health/docker-health';
 import { ContainerResources } from '@/components/container-resources/container-resources';
@@ -245,7 +246,7 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
         <div className="workspace-section-heading">
           <div>
             <h2 id="workspace-activity-title">System status</h2>
-            <p>{system.data?.sampledAt ? `Sampled ${new Date(system.data.sampledAt).toLocaleTimeString()}` : 'Waiting for live sample'}</p>
+            <p>{system.data ? `Uptime ${formatUptime(system.data.cpu.uptimeSeconds)}` : 'Reading uptime…'}</p>
           </div>
           <Link to="/monitor" viewTransition aria-label="Expand System status">
             <IconDeviceDesktopAnalytics size={21} aria-hidden="true" />

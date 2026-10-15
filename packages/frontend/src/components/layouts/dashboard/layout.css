@@ -6,6 +6,7 @@ html:has(.desktop) {
 }
 
 .desktop {
+  --desktop-bar-inset: 11px;
   min-height: 100vh;
   display: flow-root;
   position: relative;
@@ -58,7 +59,7 @@ html:has(.desktop) {
 }
 .desktop-system-bar {
   height: 64px;
-  padding: 0 15px 0 18px;
+  padding: 0 var(--desktop-bar-inset);
   display: flex;
   align-items: center;
   gap: 22px;
@@ -808,13 +809,14 @@ html:has(.desktop) {
 @media (max-width: 760px) {
   .desktop {
     --desktop-inset: 24px;
+    --desktop-bar-inset: 7px;
     background-attachment: scroll;
   }
   .desktop-system-bar {
     height: 56px;
     top: 20px;
     margin-top: 20px;
-    padding: 0 10px;
+    padding: 0 var(--desktop-bar-inset);
     gap: 8px;
     border-radius: 14px;
   }
@@ -907,6 +909,9 @@ html:has(.desktop) {
   }
 }
 @media (max-width: 600px) {
+  .desktop {
+    --desktop-bar-inset: calc(6px + 1em);
+  }
   .desktop-guest-bar .desktop-brand span {
     display: none;
   }
@@ -914,20 +919,26 @@ html:has(.desktop) {
     flex: none;
   }
   .desktop-system-bar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: 40px;
-    height: 78px;
+    display: flex;
+    height: calc(38px + var(--desktop-bar-inset) * 2);
     align-items: center;
-    align-content: start;
-    padding-top: 8px;
+    padding-top: 0;
+    gap: 4px;
+  }
+  .desktop .desktop-task-trigger,
+  .desktop-search-trigger,
+  .desktop-mode-toggle,
+  .desktop-icon-button {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
   }
   .desktop-connection {
     position: absolute;
-    left: 12px;
-    right: 12px;
-    bottom: 9px;
-    font-size: 10px;
+    left: var(--desktop-bar-inset);
+    right: var(--desktop-bar-inset);
+    bottom: 6px;
+    font-size: inherit;
     line-height: 12px;
   }
   .desktop-connection-label {

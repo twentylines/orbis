@@ -17,6 +17,10 @@
   background: #94a7a0;
   box-shadow: 0 0 0 3px rgba(148, 167, 160, 0.12);
 }
+.docker-health > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .docker-health[data-health="healthy"] i {
   background: #64a87e;
 }

@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { inspectTextContainment } = require('./workspace-alignment-checks.cjs');
 
 // Run: ORBIS_VISUAL_TEXT_ONLY=1 ORBIS_VISUAL_SCREENSHOT_DIR=/tmp/orbis-text node scripts/visual-qa.cjs
 // textScale2 doubles computed text/line-height while leaving root size, icons and CSS viewport unchanged.
@@ -246,6 +247,7 @@ module.exports = async function inspectEnlargedText({ page, base, viewport, capt
       for (const probe of probes)
         assert.ok(Math.abs(probe.enlarged - probe.normal * textScale) < 0.1, 'font scaling must not compound across states');
       const result = { mode, probes, initialDock, page: await assertPageFits(), header: await headerGeometry() };
+      result.homeContent = await inspectTextContainment(page);
       result.homeActions = await measureText('.workspace-home-app-actions a', '.workspace-apps');
       assertContained(result.homeActions, 'Home View all');
       await shot(`${mode}-text-home`);

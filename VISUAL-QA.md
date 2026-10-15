@@ -1,10 +1,23 @@
 # Orbis UI inspection
 
+## 2026-10-16: Home columns, header clearance and uptime
+
+Home now shares the system bar's inner inset. The title, Applications heading, app launcher and lower panels use the same content column; the right edge matches the logout control. Native logout top/right/bottom clearances are 12px at 1440/768px and 21px at 390/320px. The retained helper measures these relationships, card/action alignment, control centre lines, connection-footer alignment, Uptime and Usage text.
+
+The full native route checker passed 1440/768/390/320px in both modes. Enlarged-text inspection caught overflowing Home headings, fixed-height action labels, a Docker health label and a compact wordmark. Home text can wrap inside its surface, action height follows its label, and the compact header gives the wordmark its intrinsic room. A one-pixel connection-footer offset was also repaired. The final retained doubled-text matrix passes 1440/768/390/320px in both modes with no page errors. Current native and enlarged-text screenshots were refreshed.
+
+Independent phone checks cover 36 connection states, 12 reconnections, four search open/close/focus flows and eight directional section transitions. The transitions run 380ms with the header/dock stationary. Long IPv6 text can use a single-line ellipsis, retaining its full accessible label and title. The checker rejects clipping without an ellipsis and actual multiline text in separate negative controls. No browser errors or runtime mutations occurred.
+
+Home and Monitor use the existing host uptime counter; the change adds no timer or polling. An API/host comparison on the owned Linux VM used the host-proc source and differed by 1.56 seconds. Only main remains locally and on GitHub, with removed branch history archived privately. Direct pushes retain force-push/deletion protection; dependency version-update PR creation is disabled.
+
+
 ## 2026-10-16: authentication controls and released error recovery
 
 Screenshot review of published beta25 found an8px vertical offset between the login theme toggle and language selector. The selector's inherited form margin now stays out of the authentication toolbar. The retained fixture checker measures the actual control heights and centre lines, alongside the existing card, footer, placeholder, diagnostic and recovery assertions.
 
-The toolbar bundle passes24 error cases (collapsed/expanded),24 login/register/reset compositions and8 recovery records across1440/768/390/320px in both modes, with no page errors or fixture mutations. Independent inspection added two-factor authentication and found narrow code boxes that hid entered digits. The next retained check covers filled two-factor controls and their rendered content widths as well. Authentication screenshots under `screenshots/themes` are refreshed after the final check.
+The final bundle passes24 error cases (collapsed/expanded),32 login/register/reset/two-factor compositions and8 recovery records across1440/768/390/320px in both modes. All32 toolbar centre differences are0px. The filled-code checks cover8 native and4 doubled-digit flows (72 field measurements), arrow/Tab focus and a controlled rejected-code response. At320px each input has32px usable width,2px side padding and3.156px spare width beyond the doubled44px glyph. Actual screenshots show all six digits clearly. There were no page errors or forbidden mutations;16 expected auth posts were intercepted inside the fixture. Authentication and filled-code captures under `screenshots/themes` were refreshed.
+
+The final typography probe copies font properties explicitly and checks its font size against the input. An earlier probe used an empty computed `font` shorthand with tabular numbers and underreported glyph widths; its metrics were rejected and the corrected complete matrix rerun. Doubled-digit testing enlarges code text only, not the complete page or native browser zoom.
 
 Published beta25 passed12 actual Settings/error-recovery/login compositions at1440/390/320px in both modes using the real authentication/preferences APIs and a controlled catalogue failure. The temporary account appearance changes were restored and compared. That run predates the final toolbar/code-input fixes; it is not a released-image pass for those assertions. The retained `live-error-auth-qa.cjs` requires both explicit error/auth and preference-audit opt-ins.
 

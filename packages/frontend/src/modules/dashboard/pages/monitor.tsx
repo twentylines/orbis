@@ -4,6 +4,7 @@ import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/sc
 import { useMetricHistory } from '@/desktop/metric-history';
 import { MetricChart } from '@/components/metric-chart/metric-chart';
 import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
+import { formatUptime } from '@/desktop/uptime';
 import './monitor.css';
 import { ContainerResources } from '@/components/container-resources/container-resources';
 import { useWindowVisible } from '@/desktop/window-visibility';
@@ -73,7 +74,7 @@ export default function Monitor() {
       {sample ? (
         <>
           <output className="desktop-monitor-time">
-            Sampled {new Date(sample.sampledAt).toLocaleString()}
+            Uptime {formatUptime(sample.cpu.uptimeSeconds)}
             {telemetry.isError ? ' · Disconnected' : ''}
           </output>
           <section className="desktop-host-overview" aria-labelledby="desktop-host-overview-title">
@@ -87,14 +88,6 @@ export default function Monitor() {
                 <div>
                   <span>Host memory</span>
                   <strong>{percent(memoryPercent)}</strong>
-                </div>
-                <div>
-                  <span>Host uptime</span>
-                  <strong>
-                    {sample.cpu.uptimeSeconds === null
-                      ? 'Unavailable'
-                      : `${Math.floor(sample.cpu.uptimeSeconds / 86400)}d ${Math.floor((sample.cpu.uptimeSeconds % 86400) / 3600)}h`}
-                  </strong>
                 </div>
               </div>
             </div>
@@ -212,11 +205,6 @@ export default function Monitor() {
               ) : (
                 <p>Per-core readings unavailable.</p>
               )}
-              {sample.cpu.uptimeSeconds !== null ? (
-                <p className="desktop-telemetry-foot">
-                  Uptime {Math.floor(sample.cpu.uptimeSeconds / 86400)}d {Math.floor((sample.cpu.uptimeSeconds % 86400) / 3600)}h
-                </p>
-              ) : null}
             </section>
             <section className="desktop-telemetry-memory" aria-labelledby="telemetry-memory-title">
               <h2 id="telemetry-memory-title">Host memory</h2>
