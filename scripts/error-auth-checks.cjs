@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 
-// Run on a fresh visual-qa fixture page. No form submission or server command is issued.
+// Run on a fresh visual-qa fixture page. Authentication posts are intercepted synthetic fixtures.
 module.exports = async function inspectErrorAuth({ page, base, capture }) {
   assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(new URL(base).hostname), 'error/auth checks require loopback fixtures');
   const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
@@ -21,7 +21,7 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
       showAllApps: false,
     },
   };
-  const report = { errors: [], auth: [], recovery: [], mutations: [] };
+  const report = { errors: [], auth: [], recovery: [], totp: [], syntheticAuthRequests: [], mutations: [] };
   const respond = (route, value, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
   const userHandler = (route) =>
     respond(route, {
@@ -41,15 +41,50 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
     if (route.request().method() === 'PUT') preferences = JSON.parse(route.request().postData() || '{}');
     return respond(route, preferences);
   };
+  const fixtureSession = 'orbis-audit-synthetic-totp';
+  const loginHandler = (route) => {
+    const request = route.request();
+    assert.equal(request.method(), 'POST');
+    const body = request.postDataJSON();
+    assert.equal(body.username, 'fixture@example.com');
+    assert.equal(body.password, 'synthetic-otp-audit');
+    report.syntheticAuthRequests.push({ path: '/api/auth/login', method: 'POST', username: body.username });
+    return respond(route, { success: true, totpSessionId: fixtureSession });
+  };
+  const totpHandler = (route) => {
+    const request = route.request();
+    assert.equal(request.method(), 'POST');
+    const body = request.postDataJSON();
+    assert.equal(body.totpSessionId, fixtureSession);
+    assert.equal(body.totpCode, '123456');
+    report.syntheticAuthRequests.push({ path: '/api/auth/verify-totp', method: 'POST', code: body.totpCode });
+    return respond(route, { message: 'AUTH_ERROR_TOTP_INVALID_CODE' }, 401);
+  };
+  const expectedAuthPost = (path, method) => method === 'POST' && ['/api/auth/login', '/api/auth/verify-totp'].includes(path);
+  const preventUnknownMutation = (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method()) && !(path === '/api/desktop-preferences' && request.method() === 'PUT'))
+      return route.abort('blockedbyclient');
+    return route.fallback();
+  };
   const onRequest = (request) => {
     const url = new URL(request.url());
-    if (url.pathname.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(request.method()) && url.pathname !== '/api/desktop-preferences')
+    if (
+      url.pathname.startsWith('/api/') &&
+      !['GET', 'HEAD', 'OPTIONS'].includes(request.method()) &&
+      !(url.pathname === '/api/desktop-preferences' && request.method() === 'PUT') &&
+      !expectedAuthPost(url.pathname, request.method())
+    )
       report.mutations.push({ path: url.pathname, method: request.method() });
   };
   page.on('request', onRequest);
+  await page.route('**/api/**', preventUnknownMutation);
   await page.route('**/api/user-context', userHandler);
   await page.route('**/api/marketplace/all', storesHandler);
   await page.route('**/api/desktop-preferences', preferencesHandler);
+  await page.route('**/api/auth/login', loginHandler);
+  await page.route('**/api/auth/verify-totp', totpHandler);
   const shot = (name) => capture?.(name, { scrollTop: false });
   const settle = () => page.waitForTimeout(300);
   const seedMode = async (mode) => {
@@ -109,9 +144,11 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
         buttons,
         inputs: [...root.querySelectorAll('input')].map((node) => ({
           ...rect(node),
+          hasPlaceholder: Boolean(node.getAttribute('placeholder')),
           placeholderColor: getComputedStyle(node, '::placeholder').color,
           placeholderOpacity: getComputedStyle(node, '::placeholder').opacity,
         })),
+        toolbar: [...root.querySelectorAll('.desktop-auth-toolbar button')].map((node) => rect(node)),
         code: [...root.querySelectorAll('pre')].map((node) => ({ ...rect(node), color: getComputedStyle(node.querySelector('code') ?? node).color })),
       };
     });
@@ -149,6 +186,80 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
         return (values[1] + 0.05) / (values[0] + 0.05);
       }),
     );
+  };
+  const inspectTotp = async (mode, size) => {
+    await settle();
+    const fields = await page.locator('.otp-input').evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const style = getComputedStyle(node);
+        const bounds = node.getBoundingClientRect();
+        const probe = document.createElement('span');
+        Object.assign(probe.style, {
+          position: 'fixed',
+          visibility: 'hidden',
+          whiteSpace: 'pre',
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+          fontWeight: style.fontWeight,
+          fontStyle: style.fontStyle,
+          fontStretch: style.fontStretch,
+          lineHeight: style.lineHeight,
+          fontVariantNumeric: style.fontVariantNumeric,
+          fontFeatureSettings: style.fontFeatureSettings,
+          letterSpacing: style.letterSpacing,
+        });
+        probe.textContent = node.value;
+        document.body.append(probe);
+        const glyphWidth = probe.getBoundingClientRect().width;
+        const glyphFontSize = Number.parseFloat(getComputedStyle(probe).fontSize);
+        probe.remove();
+        const centreTarget = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+        let opacity = 1;
+        for (let ancestor = node; ancestor; ancestor = ancestor.parentElement) opacity *= Number.parseFloat(getComputedStyle(ancestor).opacity);
+        return {
+          value: node.value,
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+          cy: bounds.y + bounds.height / 2,
+          paddingLeft: Number.parseFloat(style.paddingLeft),
+          paddingRight: Number.parseFloat(style.paddingRight),
+          usableWidth: node.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight),
+          usableHeight: node.clientHeight - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom),
+          glyphWidth,
+          glyphFontSize,
+          fontSize: Number.parseFloat(style.fontSize),
+          scrollWidth: node.scrollWidth,
+          clientWidth: node.clientWidth,
+          color: style.color,
+          background: style.backgroundColor,
+          visibility: style.visibility,
+          display: style.display,
+          opacity,
+          unobscured: centreTarget === node,
+        };
+      }),
+    );
+    assert.equal(fields.length, 6, 'the TOTP form must show six code fields');
+    assert.equal(fields.map((field) => field.value).join(''), '123456');
+    for (const field of fields) {
+      assert.equal(field.glyphFontSize, field.fontSize, 'the glyph probe must use the actual input font size');
+      assert.ok(
+        field.usableWidth >= field.glyphWidth + 1,
+        `TOTP ${size}: digit ${field.value} needs ${field.glyphWidth + 1}px, has ${field.usableWidth}px`,
+      );
+      assert.ok(field.usableHeight >= field.fontSize - 1, 'TOTP digits must fit vertically');
+      assert.ok(field.scrollWidth <= field.clientWidth + 1, 'TOTP digits must not scroll out of their content box');
+      assert.equal(field.visibility, 'visible');
+      assert.notEqual(field.display, 'none');
+      assert.ok(field.opacity >= 0.9 && field.unobscured, 'entered TOTP digits must remain visibly paintable');
+      assert.ok(contrast(field.color, field.background) >= 4.5, 'entered TOTP digits must contrast with their field');
+      assert.ok(field.height >= 44, 'TOTP fields must retain usable targets');
+      assert.ok(Math.abs(field.cy - fields[0].cy) < 0.6 && Math.abs(field.width - fields[0].width) < 0.6, 'TOTP fields must align evenly');
+    }
+    await shot(`${mode}-totp-${size}-filled`);
+    return fields;
   };
 
   try {
@@ -223,15 +334,24 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
       await page.locator('.workspace-grid').waitFor();
       assert.equal(await page.locator('.orbis-error').count(), 0, 'Open workspace must render the dashboard after a failed query');
       report.recovery.push({ mode, retry: true, openWorkspace: true });
-      for (const route of ['login', 'reset-password', 'register']) {
+      for (const route of ['login', 'reset-password', 'register', 'totp']) {
         scenario = route === 'register' ? 'register' : 'anonymous';
         await seedMode(mode);
-        await page.goto(`${base}/${route}`, { waitUntil: 'domcontentloaded' });
+        await page.goto(`${base}/${route === 'totp' ? 'login' : route}`, { waitUntil: 'domcontentloaded' });
         await page.locator('.desktop-auth .card').waitFor();
+        if (route === 'totp') {
+          await page.getByRole('textbox', { name: 'Email address', exact: true }).fill('fixture@example.com');
+          await page.getByLabel('Password', { exact: true }).fill('synthetic-otp-audit');
+          await page.getByRole('button', { name: 'Log in', exact: true }).click();
+          await page.getByRole('heading', { name: 'Two-factor authentication', exact: true }).waitFor();
+        }
         await settle();
         const geometry = await measure('.desktop-auth');
         assertSurface(geometry, mode);
         assert.ok(geometry.credit?.contained, 'auth credit must stay inside the themed card');
+        assert.equal(geometry.toolbar.length, 2, 'authentication toolbar should have theme and language controls');
+        assert.ok(Math.abs(geometry.toolbar[0].cy - geometry.toolbar[1].cy) <= 1, 'authentication toolbar controls must share one centre line');
+        assert.ok(Math.abs(geometry.toolbar[0].height - geometry.toolbar[1].height) <= 1, 'authentication toolbar controls must have equal height');
         assert.ok(
           geometry.credit.x >= geometry.panel.x &&
             geometry.credit.right <= geometry.panel.right &&
@@ -243,8 +363,10 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
         for (const input of geometry.inputs) {
           assert.ok(input.width > 0 && input.x >= geometry.panel.x && input.right <= geometry.panel.right, 'auth fields must fit their panel');
           assert.ok(input.height >= 36, 'auth fields must remain reachable');
-          assert.equal(input.placeholderColor, geometry.mutedToken, 'auth placeholders must use the current theme');
-          assert.equal(input.placeholderOpacity, '1', 'placeholder contrast must not be reduced by stock opacity');
+          if (input.hasPlaceholder) {
+            assert.equal(input.placeholderColor, geometry.mutedToken, 'auth placeholders must use the current theme');
+            assert.equal(input.placeholderOpacity, '1', 'placeholder contrast must not be reduced by stock opacity');
+          }
         }
         for (const code of geometry.code) {
           assert.ok(code.x >= geometry.panel.x && code.right <= geometry.panel.right, 'reset instructions must fit their auth panel');
@@ -264,10 +386,54 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
           await page.getByRole('button', { name: `Switch to ${mode} mode`, exact: true }).click();
           await page.locator(`.desktop-auth[data-desktop-mode="${mode}"]`).waitFor();
         }
+        if (route === 'totp') {
+          await page.getByRole('textbox', { name: 'digit-0', exact: true }).fill('123456');
+          assert.equal(await page.locator('.otp-input').evaluateAll((nodes) => nodes.map((node) => node.value).join('')), '123456');
+          const native = await inspectTotp(mode, 'native');
+          let enlarged = null;
+          if (page.viewportSize().width <= 390) {
+            const originals = await page
+              .locator('.otp-input')
+              .evaluateAll((nodes) => nodes.map((node) => ({ font: getComputedStyle(node).fontSize, line: getComputedStyle(node).lineHeight })));
+            await page.locator('.otp-input').evaluateAll(
+              (nodes, originals) =>
+                nodes.forEach((node, index) => {
+                  node.style.setProperty('font-size', `${Number.parseFloat(originals[index].font) * 2}px`, 'important');
+                  node.style.setProperty('line-height', `${Number.parseFloat(originals[index].line) * 2}px`, 'important');
+                }),
+              originals,
+            );
+            enlarged = await inspectTotp(mode, 'digits-200-percent');
+            await page.locator('.otp-input').evaluateAll((nodes) =>
+              nodes.forEach((node) => {
+                node.style.removeProperty('font-size');
+                node.style.removeProperty('line-height');
+              }),
+            );
+          }
+          const first = page.getByRole('textbox', { name: 'digit-0', exact: true });
+          const second = page.getByRole('textbox', { name: 'digit-1', exact: true });
+          await first.focus();
+          await page.keyboard.press('ArrowRight');
+          assert.equal(await second.evaluate((node) => node === document.activeElement), true, 'OTP ArrowRight must advance focus');
+          await page.keyboard.press('ArrowLeft');
+          assert.equal(await first.evaluate((node) => node === document.activeElement), true, 'OTP ArrowLeft must return focus');
+          await page.getByRole('textbox', { name: 'digit-5', exact: true }).focus();
+          await page.keyboard.press('Tab');
+          const confirm = page.getByRole('button', { name: 'Confirm', exact: true });
+          assert.equal(await confirm.evaluate((node) => node === document.activeElement), true, 'OTP keyboard order must reach Confirm');
+          assert.equal(await confirm.isEnabled(), true);
+          await confirm.click();
+          await page.locator('.orbis-notification').getByText('Incorrect authentication code.', { exact: true }).waitFor();
+          await page.getByRole('heading', { name: 'Two-factor authentication', exact: true }).waitFor();
+          report.totp.push({ mode, native, enlarged, keyboard: true, fixtureRejection: true });
+        }
         report.auth.push({ mode, route, geometry });
       }
     }
     assert.deepEqual(report.mutations, [], 'error/auth visual checks must not submit server mutations');
+    assert.equal(report.syntheticAuthRequests.filter((request) => request.path === '/api/auth/login').length, 2);
+    assert.equal(report.syntheticAuthRequests.filter((request) => request.path === '/api/auth/verify-totp').length, 2);
     return report;
   } catch (error) {
     await shot('error-auth-failure');
@@ -277,5 +443,8 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
     await page.unroute('**/api/user-context', userHandler);
     await page.unroute('**/api/marketplace/all', storesHandler);
     await page.unroute('**/api/desktop-preferences', preferencesHandler);
+    await page.unroute('**/api/auth/login', loginHandler);
+    await page.unroute('**/api/auth/verify-totp', totpHandler);
+    await page.unroute('**/api/**', preventUnknownMutation);
   }
 };

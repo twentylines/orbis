@@ -1,5 +1,17 @@
 # Orbis UI inspection
 
+## 2026-10-16: authentication controls and released error recovery
+
+Screenshot review of published beta25 found an8px vertical offset between the login theme toggle and language selector. The selector's inherited form margin now stays out of the authentication toolbar. The retained fixture checker measures the actual control heights and centre lines, alongside the existing card, footer, placeholder, diagnostic and recovery assertions.
+
+The toolbar bundle passes24 error cases (collapsed/expanded),24 login/register/reset compositions and8 recovery records across1440/768/390/320px in both modes, with no page errors or fixture mutations. Independent inspection added two-factor authentication and found narrow code boxes that hid entered digits. The next retained check covers filled two-factor controls and their rendered content widths as well. Authentication screenshots under `screenshots/themes` are refreshed after the final check.
+
+Published beta25 passed12 actual Settings/error-recovery/login compositions at1440/390/320px in both modes using the real authentication/preferences APIs and a controlled catalogue failure. The temporary account appearance changes were restored and compared. That run predates the final toolbar/code-input fixes; it is not a released-image pass for those assertions. The retained `live-error-auth-qa.cjs` requires both explicit error/auth and preference-audit opt-ins.
+
+The core-update audit now binds its success/failure checks to the newly accepted host job ID and reports terminal rollback/failure promptly, including safe retained diagnostic codes.
+
+The revised released-image checker was also exercised as a negative control against beta25: it rejected the known toolbar offset, emitted its failed report, restored the account preferences and confirmed restoration by equality. Unexpected API mutations are blocked before forwarding. Controlled login challenges stay inside the browser; no real two-factor settings are changed.
+
 ## 2026-10-16: compact recovery, viewport usage and enlarged text
 
 The supplied error screenshot showed a640×462px panel with excessive blank space and a separate `Location: /settings` box. The replacement is480×228px at desktop/tablet in its default state. It uses a heading/icon, aligned recovery actions and a Details disclosure with the real page path and error. Real, empty and long errors share the same collapsed height. Phone and320px panels reflow to255.6px and345.6px respectively; long details scroll inside a bounded region.

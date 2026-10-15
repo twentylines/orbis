@@ -2,6 +2,8 @@
 
 ## Unreleased development preview
 
+- Removed the login language selector's inherited bottom margin so it aligns with the theme toggle. Auth checks now measure both controls' heights and centre lines.
+- Reflowed two-factor code inputs into equal columns with enough inner width for entered digits on narrow screens.
 - Retained safe update failure diagnostics through rollback and helper restarts. Backup read/copy/change/mismatch/seal failures now have separate messages; strict content and permission verification remains enforced.
 - Replaced oversized error panels with compact recovery actions and expandable diagnostics; route navigation resets the error boundary. Widened the desktop with24px insets and kept ultra-wide Settings forms in one readable window.
 - Fixed enlarged-text clipping in Home actions, resource/storage rows, app tabs, pins and dock labels. Keyboard focus now reveals a complete dock item. Login attribution, placeholders, reset instructions and empty-state glyphs use the active theme.

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 type IProps = {
   showLabel?: boolean;
   locale: Locale;
+  className?: string;
 };
 
 const supportedLocale = (value: string): Locale => {
@@ -34,7 +35,7 @@ export const LanguageSelector = (props: IProps) => {
   const { locale: initialLocale } = props;
   const [locale, setLocale] = React.useState<Locale>(() => supportedLocale(initialLocale));
   React.useEffect(() => setLocale(supportedLocale(initialLocale)), [initialLocale]);
-  const { showLabel = false } = props;
+  const { showLabel = false, className = 'mb-3' } = props;
 
   const onChange = (newLocale: Locale) => {
     i18next.changeLanguage(newLocale);
@@ -43,7 +44,7 @@ export const LanguageSelector = (props: IProps) => {
 
   return (
     <Select value={locale} defaultValue="en-US" onValueChange={onChange}>
-      <SelectTrigger className="mb-3" name="language" label={showLabel && <LanguageSelectorLabel />}>
+      <SelectTrigger className={className} name="language" label={showLabel && <LanguageSelectorLabel />}>
         <SelectValue placeholder="Language" />
       </SelectTrigger>
       <SelectContent>
