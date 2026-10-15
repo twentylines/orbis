@@ -28,6 +28,8 @@ This boot exposed a status delay: the inherited Whoami container was stopped, bu
 
 The `v0.1.0-beta.3` release passed its CI, integration, and publish jobs. The release manifest and anonymous GHCR OCI index agree on `sha256:fd601494a394c9dafb06cb7c37041f513823f030a9b1f4be0e643e1d6682522f`, with linux/amd64 and linux/arm64 entries. The published arm64 image was pulled by that digest and booted on the same stopped synthetic CLI data. The core and proxy became healthy and `/api/health` returned 200. This image includes the startup status fix. Its amd64 variant has been built and indexed but has not been booted in our isolated runtime.
 
+The `v0.1.0-beta.4` release also passed its gated CI, integration, and publish jobs. Its attached manifest and anonymous GHCR OCI index match at `sha256:79598b0970577dfb4f31404c9fa6612b0c11f2926a4ad40e8f5e0ff61a5d70b2`, with linux/amd64 and linux/arm64 entries. The beta 4 image has not yet been booted in the isolated runtime. It contains the shared Workspace telemetry and the host command tested on beta 3's published image.
+
 ## Isolated Linux test host
 
 Use a disposable Linux VM with its own Docker daemon and no production volumes, network, or Docker context. Runtipi v4.10.1 remains the compatibility base. The fork builds its own `runtipi` image from [Dockerfile](Dockerfile) through [docker-compose.prod.yml](docker-compose.prod.yml); the Compose file's `TIPI_VERSION` is set to `4.10.1` for app compatibility. Keep the source revision and resulting image digest together in test records.

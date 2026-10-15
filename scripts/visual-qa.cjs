@@ -35,13 +35,23 @@ const translations = JSON.parse(
 async function main() {
   fs.mkdirSync(screenshotDir, { recursive: true });
   const browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
-  let preferences = { serverName: 'Hades', preset: 'frost', density: 'comfortable', wallpaper: 'sandstone' };
+  const freshPreferences = () => ({
+    serverName: 'Hades',
+    preset: 'frost',
+    density: 'comfortable',
+    wallpaper: 'sandstone',
+    workspace: { order: ['applications', 'activity', 'storage', 'attention'], hidden: [], wide: ['applications', 'activity'] },
+  });
+  let preferences = freshPreferences();
   const reports = [];
-  for (const viewport of [
-    { name: 'desktop', width: 1440, height: 900 },
-    { name: 'mobile', width: 390, height: 844 },
-  ]) {
-    preferences = { serverName: 'Hades', preset: 'frost', density: 'comfortable', wallpaper: 'sandstone' };
+  const viewports = process.env.ORBIS_VISUAL_NARROW
+    ? [{ name: 'narrow', width: 320, height: 800 }]
+    : [
+        { name: 'desktop', width: 1440, height: 900 },
+        { name: 'mobile', width: 390, height: 844 },
+      ];
+  for (const viewport of viewports) {
+    preferences = freshPreferences();
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: 1 });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.stack || error.message));
@@ -123,6 +133,26 @@ async function main() {
     const workspaceBackgroundGap = await page.evaluate(
       () => (document.querySelector('.desktop')?.getBoundingClientRect().bottom ?? 0) < document.documentElement.scrollHeight - 1,
     );
+    await page.getByRole('button', { name: 'Edit workspace' }).click();
+    if (viewport.name === 'narrow')
+      await page.addStyleTag({ content: '.workspace-editor button,.workspace-editor-name,.workspace-editor p{font-size:200% !important}' });
+    const dockHiddenWhileEditing = await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden();
+    await page.getByRole('button', { name: 'Move System activity up' }).focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Hide Runtime filesystem' }).click();
+    await page.getByRole('button', { name: 'Make System activity standard width' }).click();
+    const editedOrder = await page.locator('.workspace-widget').first().locator('h2').innerText();
+    const storageHidden = (await page.locator('.workspace-storage').count()) === 0;
+    const activityStandard = !(await page.locator('.workspace-widget').first().getAttribute('class')).includes('workspace-widget-wide');
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-edit.png`), fullPage: true });
+    const editOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    for (let attempt = 0; attempt < 40 && preferences.workspace.hidden.length === 0; attempt++) await page.waitForTimeout(50);
+    await page.reload();
+    await page.getByRole('heading', { name: 'Your server' }).waitFor();
+    const dockVisibleAfterReload = await page.getByRole('navigation', { name: 'Desktop tools' }).isVisible();
+    const workspaceLayoutPersisted =
+      (await page.locator('.workspace-widget').first().locator('h2').innerText()) === 'System activity' &&
+      (await page.locator('.workspace-storage').count()) === 0;
     await page.keyboard.press('Control+k');
     await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
     await page.getByRole('textbox', { name: 'Find a tool or application' }).fill('Monitor');
@@ -175,6 +205,13 @@ async function main() {
       orbisBrand,
       workspaceOverflow,
       workspaceBackgroundGap,
+      editedOrder,
+      dockHiddenWhileEditing,
+      dockVisibleAfterReload,
+      storageHidden,
+      activityStandard,
+      editOverflow,
+      workspaceLayoutPersisted,
       monitorOverflow,
       appsOverflow,
       storeOverflow,
@@ -194,6 +231,13 @@ async function main() {
       (report) =>
         report.workspaceOverflow ||
         report.workspaceBackgroundGap ||
+        report.editedOrder !== 'System activity' ||
+        !report.dockHiddenWhileEditing ||
+        !report.dockVisibleAfterReload ||
+        !report.storageHidden ||
+        !report.activityStandard ||
+        report.editOverflow ||
+        !report.workspaceLayoutPersisted ||
         !report.orbisBrand ||
         report.monitorOverflow ||
         report.appsOverflow ||
