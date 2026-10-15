@@ -9,12 +9,12 @@ import { copilot } from '@uiw/codemirror-theme-copilot';
 import CodeMirror from '@uiw/react-codemirror';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Trans, useTranslation } from 'react-i18next';
 import { IconArrowRight, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import type { TranslatableError } from '@/types/error.types';
-import { redirect, useLocation, useNavigate, useParams } from 'react-router';
+import { redirect, useLocation, useNavigate, useNavigation, useParams } from 'react-router';
 import type { Route } from './+types/app-update-page';
 import { getApp } from '@/api-client';
 import yaml from 'yaml';
@@ -54,6 +54,12 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
   const { preferences } = useDesktopPreferences();
   const editorTheme = preferences.mode === 'dark' ? copilot : 'light';
   const location = useLocation();
+  const navigation = useNavigation();
+  const navigationState = useRef(navigation.state);
+  const wizard = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    navigationState.current = navigation.state;
+  }, [navigation.state]);
 
   const storeId = params.storeId;
   const appId = params.appId;
@@ -102,8 +108,16 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
     onError: (e: TranslatableError) => {
       toast.error(t(e.message, e.intlParams));
     },
-    onSuccess: () => {
-      navigate(location.state?.from || '/apps');
+    onSuccess: (_data, variables) => {
+      const element = wizard.current;
+      if (
+        navigationState.current === 'idle' &&
+        element?.isConnected &&
+        element.dataset.appUrn === variables.path.urn &&
+        !element.closest('[hidden],[inert]')
+      ) {
+        navigate(location.state?.from || '/apps');
+      }
     },
   });
 
@@ -124,13 +138,13 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
   const isLastStep = currentStep === steps.length - 1;
 
   return (
-    <div className="card app-update" data-testid="app-update" aria-busy={update.isPending}>
+    <div ref={wizard} className="card app-update" data-testid="app-update" data-app-urn={info.urn} aria-busy={update.isPending}>
       <div className="card-header border-0 pb-0">
-        <div className="d-flex flex-column flex-lg-row align-items-start align-items-lg-center border-bottom pb-3 w-100">
+        <div className="app-update-heading border-bottom pb-3">
           <AppLogo urn={info.urn} size={96} alt={info.name} />
-          <div className="mt-3 mt-lg-0 ms-lg-3">
+          <div className="app-update-heading-copy">
             <h2 className="mb-1">{t('APP_UPDATE_FORM_TITLE', { name: info.name })}</h2>
-            <div className="d-flex flex-wrap align-items-center gap-2 text-muted">
+            <div className="app-update-versions text-muted">
               <span className="badge bg-muted text-white">{info.version}</span>
               <IconArrowRight size={16} />
               <span className="badge bg-success text-white">{metadata.latestDockerVersion}</span>
@@ -204,7 +218,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                 <Switch
                   checked={backupApp}
                   onCheckedChange={setBackupApp}
-                  disabled={update.isPending}
+                  disabled={update.isPending || update.isSuccess}
                   label={t('APP_UPDATE_FORM_BACKUP')}
                   className="mt-3 mb-0"
                 />
@@ -214,6 +228,12 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
         </motion.div>
       </div>
       <div className="card-footer border-0">
+        {update.isSuccess && (
+          <div className="app-update-submitted">
+            <output>{t('APP_UPDATE_SUBMITTED', { defaultValue: 'Update submitted. Follow progress in Operations.' })}</output>
+            <Button onClick={() => navigate('/tasks')}>{t('APP_UPDATE_VIEW_OPERATIONS', { defaultValue: 'View Operations' })}</Button>
+          </div>
+        )}
         {reviewFailed && (
           <div className="app-update-review-error" role="alert">
             <p>{t('APP_UPDATE_REVIEW_ERROR', { defaultValue: 'The update review could not be loaded. Retry before updating.' })}</p>
@@ -231,7 +251,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
         <div className="app-update-footer pt-3 border-top">
           <Button onClick={() => navigate(location.state?.from || '/apps')} disabled={update.isPending}>
             <IconChevronLeft className="me-1" size={16} />
-            {t('APP_ACTION_CANCEL')}
+            {update.isSuccess ? t('APP_ACTION_DONE', { defaultValue: 'Done' }) : t('APP_ACTION_CANCEL')}
           </Button>
           <div className="app-update-navigation">
             {currentStep > 0 && (
@@ -255,7 +275,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                 }
                 intent="success"
                 loading={update.isPending}
-                disabled={!reviewReady}
+                disabled={!reviewReady || update.isSuccess}
               >
                 {t('APP_UPDATE_FORM_SUBMIT')}
               </Button>

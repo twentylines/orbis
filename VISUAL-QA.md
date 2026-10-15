@@ -1,5 +1,17 @@
 # Orbis UI inspection
 
+## 2026-10-16: long app names, version strings and update windows
+
+Additional text stress exposed two defects missed by the previous matrix: a long version badge widened the update header beyond a 320px panel, and the app detail icon column fractured ordinary words at doubled text. The update header now constrains and wraps its badges, uses one content inset and gives step buttons consistent interior spacing. Phone app titles take a full-width row; facts adapt their columns to text size, and descriptions use the workspace inset without another nested card inset. Author and architecture remain visible on phones.
+
+The retained `ORBIS_VISUAL_UPDATE_COMFORT_ONLY=1` fixture matrix passes 80 compositions at 1440/768/390/320px, light/dark, native/doubled text: Information, Configuration, Compose file, Backup and app details. Names and versions are deliberately long. Checks reject horizontal overflow, split ordinary words, escaped text, insufficient window-edge clearance and crowded step labels. There are no browser errors or API mutations. Code editors retain their own deliberate scroll areas; identifiers can wrap without changing their value. Full-page captures preserve the fixed dock at its viewport position.
+
+The update flow audit also reproduced delayed acceptance navigating away after minimize/close, discarding another tool's draft, and cancelling a pending Settings route load. The source guards against disconnected, hidden/inert, changed-app and pending-navigation states. An accepted window restored later shows submitted status, disables another submission and links to Operations. Controlled response checks are retained in `scripts/app-update-checks.cjs`.
+
+The final flow matrix passes all eight width/mode groups, including uncached destination loading and inert-but-not-hidden minimize animation. It records 128 footer geometry samples, 56 intercepted fixture update requests (eight deliberate rejections), no browser errors and no real lifecycle changes. Functional app-detail checks also pass all four widths: scoped resources/operations, keyboard/history, log limits and cleanup, install validation, custom removal/update and read-only diffs. [Current long-text captures](screenshots/app-text) and the usual app-detail captures have been refreshed. The final frontend bundle, types and changed-file lint pass.
+
+These checks establish the listed cases, not a guarantee that every possible app metadata string, language or browser is flawless. Production acceptance remains in `ACCEPTANCE.md`.
+
 ## 2026-10-16: text comfort and layout reflow
 
 The previous bounding-box pass was insufficient: it allowed ordinary labels to fracture and values to sit against decorative rings. This iteration treats cramped text, orphan letters and inadequate interior spacing as defects. Home actions and app cards, installed/catalogue cards, Monitor cores, package rows, Settings forms, dialogs, authentication, notifications and error details now reflow with enlarged text.

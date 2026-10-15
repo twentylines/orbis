@@ -47,6 +47,7 @@ vi.mock('react-router', async () => {
     redirect: vi.fn(),
     useLocation: () => ({ state: { from: '/apps' } }),
     useNavigate: () => navigate,
+    useNavigation: () => ({ state: 'idle' }),
     useParams: () => ({ appId: 'app-id', storeId: 'store-id' }),
   };
 });

@@ -57,6 +57,12 @@
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
+.app-detail-tabs .card:has(.markdown) {
+  border: 0;
+}
+.app-detail-tabs .card-body:has(> .markdown) {
+  padding: 0;
+}
 .app-detail-tabs .markdown img {
   max-width: 100%;
   height: auto;
@@ -67,6 +73,15 @@
 .app-detail-tabs .badge {
   background: rgba(115, 146, 127, 0.16);
   color: var(--desktop-ink);
+}
+
+@container (max-width: 420px) {
+  .app-detail-tabs .markdown h1,
+  .app-detail-tabs .markdown h2,
+  .app-detail-tabs .markdown h3 {
+    font-size: 20px;
+    line-height: 1.4;
+  }
 }
 .app-panel-loading,
 .app-panel-empty {

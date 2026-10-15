@@ -103,6 +103,11 @@
   color: var(--desktop-accent);
   font-size: 13px;
 }
+.app-workspace-notices > span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 .app-workspace-operation {
   display: flex;
   align-items: center;
@@ -193,29 +198,23 @@
   }
   .app-workspace-logo {
     --app-logo-size: 60px;
-    grid-row: 1 / 3;
   }
   .app-workspace-identity {
-    display: contents;
+    grid-column: 1 / -1;
   }
   .app-workspace-identity h2 {
-    font-size: 27px;
-    grid-column: 2;
-    margin: 0;
+    font-size: 20px;
+    line-height: 1.3;
   }
   .app-workspace-identity > p {
-    grid-column: 2;
     font-size: 13px;
-    margin: 0;
   }
   .app-workspace-state {
     grid-column: 1 / -1;
   }
   .app-workspace-facts {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8em), 1fr));
     padding: 18px;
     gap: 18px;
-  }
-  .app-workspace-facts > div:nth-child(n + 3) {
-    display: none;
   }
 }

@@ -311,6 +311,126 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
         assert.equal(mutations.length, beforeRetry, 'Retry review must not submit an update');
       }
       failure = null;
+      await open();
+      await step(steps[3]);
+      await page.waitForFunction(() => !document.querySelector('[data-testid="app-update"] .app-update-navigation button:last-child').disabled);
+      const settingsChunk = (url) => url.origin === new URL(base).origin && /\/settings-page-[^/]+\.js$/.test(url.pathname);
+      const settingsGate = gate();
+      const heldSettings = [];
+      const holdSettings = async (route) => {
+        heldSettings.push(new URL(route.request().url()).pathname);
+        await settingsGate.promise;
+        await route.continue();
+      };
+      await page.route(settingsChunk, holdSettings);
+      try {
+        updateGate = gate();
+        const count = mutations.length;
+        await submit().click();
+        await page.waitForFunction(() => document.querySelector('[data-testid="app-update"]')?.getAttribute('aria-busy') === 'true');
+        assert.equal(mutations.length, count + 1);
+        const loadingSettings = page.waitForRequest((request) => settingsChunk(new URL(request.url())));
+        await page.locator('.desktop-dock').getByRole('link', { name: 'Settings', exact: true }).click({ noWaitAfter: true });
+        await loadingSettings;
+        assert.equal(
+          await wizard().evaluate((element) => element.isConnected && !element.closest('[hidden],[inert]')),
+          true,
+          'the old wizard must remain mounted and visible while the destination module loads',
+        );
+        assert.equal(heldSettings.length, 1, 'hold the uncached Settings route, independently of its build hash');
+        const accepted = page.waitForResponse((response) => decodeURIComponent(new URL(response.url()).pathname) === endpoints.update);
+        updateGate.release();
+        updateGate = null;
+        await accepted;
+        await page.waitForTimeout(300);
+        assert.equal(new URL(page.url()).pathname, updatePath, 'acceptance must not replace an in-progress Settings navigation');
+        await wizard().locator('.app-update-submitted').waitFor();
+        assert.equal(await submit().isDisabled(), true);
+        assert.equal(mutations.length, count + 1);
+        await shot(mode, 'accepted-during-settings-navigation');
+        settingsGate.release();
+        await page.waitForURL(`${base}/settings`);
+        await page.getByRole('tab', { name: 'Appearance', exact: true }).waitFor();
+        await wizard().waitFor({ state: 'detached' });
+        assert.equal(await wizard().count(), 0, 'the selected destination must finish after its module is released');
+      } finally {
+        settingsGate.release();
+        await page.unroute(settingsChunk, holdSettings);
+      }
+
+      const animatedMinimize = await page.evaluate(
+        () => typeof Element.prototype.animate === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      );
+      for (const departure of ['minimize', ...(animatedMinimize ? ['minimize-in-flight'] : []), 'close-other-tool']) {
+        await open();
+        await step(steps[3]);
+        await page.waitForFunction(() => !document.querySelector('[data-testid="app-update"] .app-update-navigation button:last-child').disabled);
+        updateGate = gate();
+        const count = mutations.length;
+        await submit().click();
+        await page.waitForFunction(() => document.querySelector('[data-testid="app-update"]')?.getAttribute('aria-busy') === 'true');
+        assert.equal(mutations.length, count + 1);
+        if (departure.startsWith('minimize')) {
+          if (departure === 'minimize-in-flight') {
+            await wizard().evaluate((element) => {
+              const frame = element.closest('.desktop-route-window');
+              const original = Object.getOwnPropertyDescriptor(frame, 'animate');
+              const animate = frame.animate;
+              frame.animate = (...args) => {
+                const animation = animate.apply(frame, args);
+                animation.pause();
+                window.__orbisFinishUpdateMinimize = () => {
+                  if (original) Object.defineProperty(frame, 'animate', original);
+                  else delete frame.animate;
+                  animation.finish();
+                  delete window.__orbisFinishUpdateMinimize;
+                };
+                return animation;
+              };
+            });
+            await page.getByRole('button', { name: 'Minimize Applications', exact: true }).evaluate((node) => node.click());
+            await page.waitForFunction(() => {
+              const frame = document.querySelector('.desktop-route-window');
+              return frame.inert && !frame.hidden && typeof window.__orbisFinishUpdateMinimize === 'function';
+            });
+          } else {
+            await page.getByRole('button', { name: 'Minimize Applications', exact: true }).click();
+            await page.getByRole('button', { name: 'Restore Applications', exact: true }).waitFor();
+          }
+        } else {
+          await page.getByRole('button', { name: 'Close Applications', exact: true }).click();
+          await page.locator('.desktop-dock').getByRole('link', { name: 'Settings', exact: true }).click();
+          await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+          await page.getByRole('textbox', { name: 'Server name', exact: true }).fill('Unsaved server name');
+        }
+        const url = page.url();
+        const accepted = page.waitForResponse((response) => decodeURIComponent(new URL(response.url()).pathname) === endpoints.update);
+        updateGate.release();
+        updateGate = null;
+        await accepted;
+        await page.waitForTimeout(300);
+        assert.equal(page.url(), url, 'late update acceptance must not move the current tool or restore a minimized window');
+        if (departure.startsWith('minimize')) {
+          if (departure === 'minimize-in-flight') {
+            await shot(mode, 'accepted-while-minimizing');
+            await page.evaluate(() => window.__orbisFinishUpdateMinimize());
+            await page.getByRole('button', { name: 'Restore Applications', exact: true }).waitFor();
+          }
+          await page.getByRole('button', { name: 'Restore Applications', exact: true }).click();
+          await wizard().locator('.app-update-submitted').waitFor();
+          assert.equal(await submit().isDisabled(), true, 'accepted update must not be submitted twice after restore');
+          assert.equal(await backup().isDisabled(), true);
+          await submit().evaluate((node) => node.click());
+          assert.equal(mutations.length, count + 1);
+          await footerFits(mode, `${departure}-accepted-restored`);
+          await shot(mode, `${departure}-accepted-restored`);
+          await wizard().getByRole('button', { name: 'View Operations', exact: true }).click();
+          await page.waitForURL(`${base}/tasks`);
+        } else {
+          assert.equal(await page.getByRole('textbox', { name: 'Server name', exact: true }).inputValue(), 'Unsaved server name');
+          await shot(mode, 'accepted-other-tool');
+        }
+      }
       results.push({
         mode,
         stableFourSteps: true,
@@ -324,6 +444,11 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
         backupTrueAndFalse: true,
         acceptedUpdatesNavigate: true,
         minimizeRestore: true,
+        acceptedWhileMinimizedDoesNotNavigate: true,
+        acceptedAfterClosePreservesOtherToolDraft: true,
+        acceptedRestorePreventsDuplicateSubmission: true,
+        acceptedDuringUncachedNavigationPreservesDestination: true,
+        acceptedWhileMinimizingDoesNotNavigate: animatedMinimize ? true : 'not applicable: reduced motion or WAAPI unavailable',
       });
     }
     return { results, mutations, geometry };
@@ -332,6 +457,7 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
     throw error;
   } finally {
     for (const pending of gates) pending.release();
+    await page.evaluate(() => window.__orbisFinishUpdateMinimize?.()).catch(() => undefined);
     await page.unroute(match, handler);
   }
 };

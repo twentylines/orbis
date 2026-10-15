@@ -22,6 +22,8 @@ The original product brief and subsequent user requests remain the scope. A publ
 
 Text fitting inside a bounding box does not establish a usable layout. The current pass rejects split ordinary words, crowded ring values and labels pressed against controls. Layouts adapt to doubled text across the Home launcher, cards, forms, update lists, core statistics, dialogs, authentication, notifications and error recovery. Retained measurements and direct screenshot inspection are recorded in `VISUAL-QA.md`.
 
+Long app/version metadata subsequently exposed separate update-header and app-detail defects. The new retained matrix covers 80 native/enlarged compositions across four widths and both modes, including all update review steps and long-name app details. Delayed update acceptance must also respect window visibility and an in-progress route change; restored accepted windows prevent duplicate submission. Broader browser, locale and remaining product-flow acceptance is still open.
+
 ## Previous iteration: compact errors and responsive layouts
 
 The supplied error screenshot revealed excessive fixed whitespace and an isolated route-path box. The replacement uses intrinsic height, aligned recovery actions and an expandable Details section. The system bar, Home, full-page tools, search and notifications share a 24px outer inset. Login attribution and placeholders follow the active theme.
