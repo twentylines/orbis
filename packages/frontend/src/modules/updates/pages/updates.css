@@ -187,6 +187,7 @@
   color: var(--desktop-ink);
   border-color: var(--desktop-line);
 }
+.desktop:has(.desktop-update-release details[open]) .desktop-dock,
 .desktop:has(.desktop-update-plan) .desktop-dock,
 .desktop:has(.desktop-update-job.is-busy) .desktop-dock {
   display: none;
