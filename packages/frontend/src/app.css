@@ -258,3 +258,12 @@ body:has(.desktop[data-desktop-mode="dark"]) {
     gap: 16px;
   }
 }
+@media (max-width: 600px) {
+  .orbis-error-details dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .orbis-error-details dd + dt {
+    margin-top: 10px;
+  }
+}

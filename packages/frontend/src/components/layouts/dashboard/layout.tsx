@@ -14,7 +14,7 @@ import { isWindowMinimized, windowSearch } from '@/desktop/window-navigation';
 import { desktopWindowIds, type DesktopWindowId } from '@runtipi/common/schemas';
 import { IconApps, IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, useMutation } from '@tanstack/react-query';
-import { useRef, type PropsWithChildren } from 'react';
+import { useLayoutEffect, useRef, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches } from 'react-router';
 import './layout.css';
 
@@ -46,6 +46,26 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const location = useLocation();
   const matches = useMatches();
   const windowControls = useRef<RouteWindowControls | null>(null);
+  const dock = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (!user.hasSeenWelcome) return;
+    const element = dock.current;
+    if (!element) return;
+    const root = document.documentElement;
+    const property = '--orbis-dock-height';
+    const previous = root.style.getPropertyValue(property);
+    const measure = () => {
+      if (element.offsetHeight) root.style.setProperty(property, `${element.offsetHeight}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      if (previous) root.style.setProperty(property, previous);
+      else root.style.removeProperty(property);
+    };
+  }, [user.hasSeenWelcome]);
   const hasPageHeading = matches.some((match) =>
     ['app-details', 'app-details-store', 'custom-app', 'app-update', 'app-store-app-update'].includes(match.id),
   );
@@ -161,7 +181,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
         )}
       </main>
 
-      <nav className="desktop-dock" aria-label="Desktop tools">
+      <nav ref={dock} className="desktop-dock" aria-label="Desktop tools">
         {navigation
           .filter((item) => item.path !== '/tasks')
           .map(({ path, label, Icon, ...item }) => (

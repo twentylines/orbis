@@ -5,6 +5,7 @@
 }
 .workspace-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: end;
   justify-content: space-between;
   gap: 26px;
@@ -55,12 +56,12 @@
   height: auto;
   max-width: 100%;
   min-width: 0;
-  line-height: 20px;
+  line-height: 1.35;
   justify-content: center;
 }
 .workspace-actions > * > span {
   min-width: 0;
-  line-height: 20px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 .workspace-actions > * > svg {
@@ -77,7 +78,7 @@
   background: var(--desktop-surface);
   color: var(--desktop-ink);
   font: inherit;
-  line-height: 20px;
+  line-height: 1.35;
   font-weight: 650;
   cursor: pointer;
 }
@@ -193,6 +194,7 @@
   gap: 8px;
 }
 .workspace-pin-list button {
+  container: orbis-pin / inline-size;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
   grid-template-rows: auto auto;
@@ -447,6 +449,7 @@
 }
 .workspace-app {
   display: flex;
+  flex-wrap: wrap;
   flex-direction: row;
   min-width: 0;
   align-items: center;
@@ -494,7 +497,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-width: 0;
+  min-width: min(100%, 8em);
   width: 100%;
   gap: 3px;
   align-self: stretch;
@@ -508,11 +511,9 @@
   text-shadow: 0 1px 9px var(--workspace-heading-shadow);
 }
 .workspace-app-copy small {
-  min-height: 17px;
-  line-height: 17px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-height: 1.35em;
+  line-height: 1.35;
+  white-space: normal;
   font-size: 12px;
   color: var(--workspace-heading-ink);
   text-shadow: 0 1px 9px var(--workspace-heading-shadow);
@@ -672,17 +673,17 @@
 }
 .workspace-metrics {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(110px, 0.8fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr));
   gap: 16px;
 }
 .workspace-widget-wide .workspace-metrics {
-  grid-template-columns: 1fr minmax(170px, 0.7fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr));
   align-items: stretch;
 }
 .workspace-gauges {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6em), 1fr));
+  gap: max(12px, 1em);
 }
 .workspace-gauge {
   display: flex;
@@ -694,6 +695,7 @@
   font-size: 12px;
   font-weight: 620;
   text-decoration: none;
+  text-align: center;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .workspace-gauge:hover {
@@ -708,7 +710,7 @@
   text-decoration: none;
 }
 .workspace-dial {
-  width: min(100%, 88px);
+  width: min(100%, 9em);
   aspect-ratio: 1;
   display: flex;
   flex-direction: column;
@@ -918,6 +920,12 @@
   color: var(--desktop-muted);
   font-weight: 600;
 }
+@container orbis-pin (max-width: 10em) {
+  .workspace-pin-list button > span:not(.app-logo),
+  .workspace-pin-list button > small {
+    grid-column: 1 / -1;
+  }
+}
 .workspace-attention {
   padding: 26px 29px;
   position: relative;
@@ -1095,11 +1103,16 @@
 }
 .workspace-recent-tasks a {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 8px 16px;
   padding: 12px 0;
   text-decoration: none;
+}
+.workspace-recent-tasks a > span {
+  flex: 1 1 8em;
+  min-width: min(100%, 8em);
 }
 .workspace-recent-tasks strong,
 .workspace-recent-tasks small {
@@ -1290,9 +1303,14 @@
     gap: 19px;
   }
   .workspace-heading h1 {
-    font-size: clamp(48px, 14vw, 68px);
+    font-size: clamp(34px, 11vw, 46px);
+    line-height: 1.15;
+    letter-spacing: -0.05em;
   }
   .workspace-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10em), 1fr));
+    grid-auto-rows: 1fr;
     width: 100%;
   }
   .workspace-edit-toggle {
@@ -1304,11 +1322,12 @@
     font-size: 12px;
   }
   .workspace-widget .workspace-app-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5em), 1fr));
     gap: 12px;
   }
   .workspace-editor {
-    padding: 18px;
+    padding: 14px;
+    margin-inline: calc(-1 * (var(--desktop-bar-inset) + 1px));
   }
   .workspace-editor-heading {
     flex-direction: column;
@@ -1321,7 +1340,13 @@
   .workspace-operations,
   .workspace-storage,
   .workspace-attention {
-    padding: 20px;
+    padding: clamp(14px, 4vw, 20px);
+  }
+  .workspace-grid[data-more-apps="true"] :is(.workspace-operations, .workspace-attention) {
+    padding: 14px clamp(14px, 4vw, 20px);
+  }
+  .workspace-grid[data-more-apps="true"] :is(.workspace-operations, .workspace-attention) h2 {
+    font-size: clamp(18px, 5vw, 20px);
   }
   .workspace-drive-stack {
     right: 30px;
@@ -1342,9 +1367,12 @@
     flex-direction: column;
     align-items: start;
   }
+  .workspace-app-scroll[data-scroll="true"] {
+    padding-right: 0;
+  }
   .workspace-section-heading h2,
   .workspace-attention h2 {
-    font-size: 21px;
+    font-size: clamp(18px, 5vw, 21px);
   }
 }
 @media (max-width: 360px) {

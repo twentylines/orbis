@@ -14,11 +14,15 @@ The original product brief and subsequent user requests remain the scope. A publ
 | Complete personalisation | Saved light/dark, six presets, bundled wallpapers, density, workspace settings and validated non-secret export/import | Follow-system, accent, validated local wallpaper uploads and positioning/dimming/blur, bounded glass controls, text scale, dock placement/size/auto-hide/pins, effect preferences; full theme packs affect all surfaces and remain a later phase |
 | Motion, loading, accessibility and performance | Purposeful CSS motion, reduced-motion rules, bounded/shared collectors, background browser polling suspended, focus styles | Consistent skeletons and permission/reconnect states, focus restoration, chart keyboard inspection, contrast across all presets, attractive reduced-transparency/low-effects mode, comprehensive responsive checks |
 | Supporting tools after the core | Stock scoped app/instance logs and backups; reviewed core and Ubuntu package updates | Searchable scoped logs, notifications/thresholds; files/terminal only with explicit safe scope and real integration |
-| Secure reversible deployment and OTA from GitHub | Protected PR gates; digest-pinned amd64/arm64 publication; stopped-tree snapshots, recovery and stock rollback; systemd helper setup/upgrade; real browser OTA and package install on isolated arm64 | Supported clean-install/adoption experience for real homelabs, external data backup handling, copied-data and independent-backup rehearsal, production approval and validation |
+| Secure reversible deployment and OTA from GitHub | Verified direct pushes to main, CI and release checks, force-push/deletion protection; digest-pinned amd64/arm64 publication; stopped-tree snapshots, recovery and stock rollback; systemd helper setup/upgrade; real browser OTA and package install on isolated arm64 | Supported clean-install/adoption experience for real homelabs, external data backup handling, copied-data and independent-backup rehearsal, production approval and validation |
 | Multiple homelabs | Controller/agent and pairing requirements recorded in `MULTI-HOMELAB.md` | Later implementation and two-isolated-host testing, target-aware app install/launch, merged dashboards, disconnect/revoke/restart handling and efficient multi-server visualisation |
 | Final deliverables | GPL licence, upstream record, source/release repo, setup/migration notes, screenshots and test records | Reconcile instructions with final supported behaviour, complete requirement-by-requirement production acceptance audit |
 
-## Current iteration: compact errors and responsive layouts
+## Current iteration: text comfort
+
+Text fitting inside a bounding box does not establish a usable layout. The current pass rejects split ordinary words, crowded ring values and labels pressed against controls. Layouts adapt to doubled text across the Home launcher, cards, forms, update lists, core statistics, dialogs, authentication, notifications and error recovery. Retained measurements and direct screenshot inspection are recorded in `VISUAL-QA.md`.
+
+## Previous iteration: compact errors and responsive layouts
 
 The supplied error screenshot revealed excessive fixed whitespace and an isolated route-path box. The replacement uses intrinsic height, aligned recovery actions and an expandable Details section. The system bar, Home, full-page tools, search and notifications share a 24px outer inset. Login attribution and placeholders follow the active theme.
 

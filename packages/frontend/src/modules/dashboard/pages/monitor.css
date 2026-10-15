@@ -369,8 +369,9 @@
 }
 .desktop-telemetry-lead {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 10px 16px;
   margin-bottom: 19px;
 }
 .desktop-telemetry-lead strong {
@@ -382,6 +383,10 @@
 .desktop-telemetry-foot {
   color: var(--desktop-muted);
   font-size: 13px;
+}
+.desktop-telemetry-lead span {
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 .desktop-core-grid {
   display: grid;
@@ -502,7 +507,7 @@
     padding: 18px;
   }
   .desktop-core-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 6em), 1fr));
   }
   .desktop-disk {
     grid-template-columns: 1fr;

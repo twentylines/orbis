@@ -188,6 +188,9 @@ body:has(.orbis-theme) .modal-footer {
   background: transparent;
   border-color: var(--desktop-line);
 }
+body:has(.orbis-theme) .modal-header {
+  padding-block: 16px;
+}
 body:has(.orbis-theme) .text-muted {
   /* biome-ignore lint/complexity/noImportantStyles: Tabler marks this muted utility important. */
   color: var(--desktop-muted) !important;
@@ -238,6 +241,14 @@ body:has(.orbis-theme) .switch-root[data-state="checked"] {
   background-color: var(--desktop-action);
   border-color: var(--desktop-action);
 }
+body:has(.orbis-theme) .switch-root[data-state="unchecked"],
+body:has(.orbis-theme) .switch-root[data-state="unchecked"]:is(:focus, :hover) {
+  --tblr-form-switch-bg: radial-gradient(circle closest-side, var(--desktop-muted) 70%, transparent 75%);
+}
+body:has(.orbis-theme) .form-check-input:focus {
+  border-color: var(--desktop-accent);
+  box-shadow: none;
+}
 
 body:has(.orbis-theme) :is(.form-control, .form-select, .input-group-text) {
   color: var(--desktop-ink);
@@ -254,12 +265,20 @@ body:has(.orbis-theme) :is(.form-control, .form-select):focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--desktop-accent) 14%, transparent);
 }
 body:has(.orbis-theme) .btn {
+  max-width: 100%;
+  white-space: normal;
   min-height: 40px;
   border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+body:has(.orbis-theme) .btn:not(.btn-icon) {
+  min-width: 0;
+}
+body:has(.orbis-theme) .btn-icon {
+  flex-shrink: 0;
 }
 body:has(.orbis-theme) :is(.btn-primary, .btn-success) {
   --tblr-btn-bg: var(--desktop-action);
