@@ -53,10 +53,10 @@ export const Welcome = ({ allowErrorMonitoring }: Props) => {
                 loading={acknowledge.isPending || acknowledge.isPending}
                 disabled={acknowledge.isPending || acknowledge.isPending}
               >
-                Save and enter
+                Save and open dashboard
               </Button>
             </div>
-            <div className="hr-text">Join the community</div>
+            <div className="hr-text">Runtipi community</div>
             <div className="row justify-content-center gap-2">
               <Button onClick={() => openLink('https://github.com/runtipi/runtipi/discussions')}>
                 <IconBrandGithub /> Github

@@ -183,7 +183,7 @@ export function CommandSearch() {
       }}
     >
       <Dialog.Trigger asChild>
-        <button ref={trigger} type="button" className="desktop-search-trigger" aria-label="Search tools and settings" data-search-open={open}>
+        <button ref={trigger} type="button" className="desktop-search-trigger" aria-label="Search apps and settings" data-search-open={open}>
           <IconSearch size={20} aria-hidden="true" />
           <span>Search</span>
           <kbd>⌘/Ctrl K</kbd>
@@ -207,6 +207,7 @@ export function CommandSearch() {
             }}
             onInteractOutside={(event) => {
               event.preventDefault();
+              if (event.target instanceof Element && event.target.closest('.orbis-notifications')) return;
               close();
             }}
           >
@@ -219,8 +220,8 @@ export function CommandSearch() {
                   value={search}
                   type="search"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search your server"
-                  aria-label="Find a tool or application"
+                  placeholder="Search apps and settings"
+                  aria-label="Search apps and settings"
                   aria-controls="desktop-search-results"
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && firstResult) {
@@ -238,10 +239,6 @@ export function CommandSearch() {
                 </button>
               </div>
               <div id="desktop-search-results" className="desktop-search-results" aria-busy={loadingStore || installed.isPending}>
-                <div className="desktop-search-intro">
-                  <h2>{query ? 'Search results' : 'Where would you like to go?'}</h2>
-                  <p>Apps, settings and everything on your server.</p>
-                </div>
                 {groups
                   .filter((group) => group.items.length)
                   .map(({ name, items }) => (

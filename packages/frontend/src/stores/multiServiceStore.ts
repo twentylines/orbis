@@ -3,6 +3,7 @@ import { type } from 'arktype';
 import { dynamicComposeSchemaArk, type serviceSchemaArk, convertYamlToLegacy } from '@runtipi/common/schemas';
 import toast from 'react-hot-toast';
 import { deepClean } from '@/utils/objects';
+import { confirmDiscard } from '@/desktop/confirmation';
 
 type MultiServiceFormData = typeof dynamicComposeSchemaArk.infer;
 type ServiceFormData = typeof serviceSchemaArk.infer;
@@ -21,9 +22,9 @@ interface MultiServiceState {
   validate: (values: typeof dynamicComposeSchemaArk.infer) => boolean;
 
   // Actions
-  setActiveService: (tab: number) => void;
-  addService: () => void;
-  removeService: (index: number) => void;
+  setActiveService: (tab: number | 'json') => Promise<void>;
+  addService: () => Promise<void>;
+  removeService: (index: number) => Promise<void>;
   updateService: (index: number, serviceData: ServiceFormData) => void;
   updateFromJson: (services: MultiServiceFormData['services']) => void;
   updateFromYaml: (yamlData: unknown) => void;
@@ -92,11 +93,12 @@ export const useMultiServiceStore = create<MultiServiceState>()((set, get) => ({
     set({ error: '' });
     return true;
   },
-  setActiveService: (tab: number | 'json') => {
-    const { activeService, isDirty } = get();
+  setActiveService: async (tab: number | 'json') => {
+    const snapshot = get();
+    const { activeService, isDirty } = snapshot;
 
     if (activeService === 'json' && isDirty && tab !== 'json') {
-      if (!window.confirm('You have made changes to the JSON. Do you want to confirm losing them?')) {
+      if (!(await confirmDiscard('Changes in the JSON editor have not been saved.')) || get() !== snapshot) {
         return;
       }
     }
@@ -104,10 +106,11 @@ export const useMultiServiceStore = create<MultiServiceState>()((set, get) => ({
     set({ activeService: tab, isDirty: false });
   },
 
-  addService: () => {
-    const { services, activeService, isDirty } = get();
+  addService: async () => {
+    const snapshot = get();
+    const { services, activeService, isDirty } = snapshot;
     if (activeService === 'json' && isDirty) {
-      if (!window.confirm('You have made changes to the JSON. Do you want to confirm losing them?')) {
+      if (!(await confirmDiscard('Changes in the JSON editor have not been saved.')) || get() !== snapshot) {
         return;
       }
     }
@@ -128,10 +131,11 @@ export const useMultiServiceStore = create<MultiServiceState>()((set, get) => ({
     get().validate({ schemaVersion: 2, services: newServices });
   },
 
-  removeService: (index: number) => {
-    const { activeService, isDirty, services } = get();
+  removeService: async (index: number) => {
+    const snapshot = get();
+    const { activeService, isDirty, services } = snapshot;
     if (activeService === 'json' && isDirty) {
-      if (!window.confirm('You have made changes to the JSON. Do you want to confirm losing them?')) {
+      if (!(await confirmDiscard('Changes in the JSON editor have not been saved.')) || get() !== snapshot) {
         return;
       }
     }

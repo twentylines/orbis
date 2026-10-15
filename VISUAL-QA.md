@@ -1,5 +1,19 @@
 # Orbis UI inspection
 
+## 2026-10-15: practical copy and shared theme surfaces
+
+The copy review covers Home, Monitor, search, Appearance, authentication, Tasks, Updates, backups, dialogs, errors, and notifications. Monitor now says **System status**; search names its scope; Light and Dark replace decorative mode labels. Filler introductions and repeated paragraphs were removed. Both English dictionaries retain all 666 existing keys, with 101 values revised in each. Technical identifiers, telemetry scope, cached-data limits, destructive consequences, and upstream attribution remain explicit. `DESIGN.md` now includes a rendered-copy review checklist.
+
+Three independent agents reviewed copy, theme surfaces, and async confirmation behavior. The theme inspection covered 66 broad states, 48 focused states, five token checks, and six final error-centering cases in Chrome at 1440/768/390/320px and both modes. Repairs include narrow guest-header overlap, an overflowing editor footer, duplicate error-page framing, error-detail and dark-link contrast, and fallback centering. Final error panels have 0px center error at 1440/390/320 in both modes, with document height equal to viewport. Confirmations preserve drafts on Keep editing/Escape, restore focus, and discard only after acceptance. Thirteen focused store/editor tests pass, including rejection of stale confirmations after resets or newer edits.
+
+Notifications pass 48 preset/mode/viewport combinations with 240 card geometry measurements. The audit found and fixed dialog dismissal caused by toast clicks, timers left paused after emptying a hovered stack, and a 320px custom-action overflow. Promise updates, inherited SSE notifications, long loading, bounded stack scrolling, rapid keyboard dismissal/focus return, and reduced motion pass. The retained 320px runner was also rerun after the final English notification wording changed. [Theme captures](screenshots/themes) include notifications, authentication, guest access, Compose editing, and error screens.
+
+The full retained route regression passes desktop/tablet/phone with no page errors or horizontal overflow; current `screenshots/desktop-fixtures` were refreshed. Build, type checks, and changed-file Biome pass locally. These are isolated browser fixtures and focused unit checks, not a claim of production migration, other-browser coverage, or complete product acceptance.
+
+```sh
+ORBIS_VISUAL_NOTIFICATIONS_ONLY=1 node scripts/visual-qa.cjs
+```
+
 ## 2026-10-15: connection status and update review
 
 Connection status now has one label: the configured IP when connected, Connecting before the stream opens and Reconnecting after a stream error. The secondary small text and tablet stacking were removed. A controlled EventSource exercises the real SSE hook and provider through connecting/open/error/recovery. Twenty combinations (1440/1024/768/390/320px × both modes × IPv4/full IPv6) pass all 60 state checks, including exact text, one text node, consistent typography, centered dot/text, aligned controls, overlap, clipping/ellipsis and document overflow. All pages had zero errors. [Header captures](screenshots/connection) cover desktop and narrow layouts.

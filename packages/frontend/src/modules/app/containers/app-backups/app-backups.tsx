@@ -162,7 +162,7 @@ export const AppBackups = ({ info, status }: Props) => {
           </TableBody>
         </Table>
       ) : (
-        <p className="app-backups-empty">No backups yet. Create a backup or upload an existing one.</p>
+        <p className="app-backups-empty">No backups. Create one or upload an existing backup.</p>
       )}
       {data.total > 0 ? (
         <div className="card-footer d-flex justify-content-end">

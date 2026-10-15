@@ -59,9 +59,9 @@ module.exports = async function inspectAppDetails({ page, base, viewport, captur
   await page.getByRole('button', { name: 'Switch to light mode' }).click();
 
   await open('/apps/test/backup?tab=logs', 'Backups');
-  await page.getByRole('heading', { name: 'Container logs are not streaming' }).waitFor();
+  await page.getByRole('heading', { name: 'App is not running' }).waitFor();
   await select('Backups');
-  await page.getByText('No backups yet.', { exact: false }).waitFor();
+  await page.getByText('No backups.', { exact: false }).waitFor();
   await capture(page, `${viewport.name}-app-backups.png`);
   await fits();
   await select('Files');
@@ -132,7 +132,7 @@ module.exports = async function inspectAppDetails({ page, base, viewport, captur
   assert.equal(await diff.innerText(), originalDiff);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  assert.equal(await page.getByRole('switch', { name: 'Backup', exact: true }).getAttribute('aria-checked'), 'true');
+  assert.equal(await page.getByRole('switch', { name: 'Create backup before updating', exact: true }).getAttribute('aria-checked'), 'true');
   const beforeCancelUpdate = actions.length;
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.waitForURL('**/apps/managed');

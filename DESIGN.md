@@ -33,3 +33,12 @@ Orbis should feel like an operating system for a personal server: a place with a
 - Preserve upstream app lifecycle, store, backup, authentication, and configuration behavior as the interface changes.
 - Use an isolated Docker environment for integration tests. Hades remains untouched until the separate installation phase is authorized.
 - Preserve the Runtipi license and attribution, and record upstream state before future merges.
+
+## UI wording
+
+- Use direct labels for the task or information: System status, Light, Dark, Refresh app stores.
+- Remove slogans, conversational introductions, and duplicate headings. A heading should identify the section; help text should add a useful instruction or limit.
+- Empty states name what is missing and offer the available next action. Error messages name what failed and how to retry.
+- Distinguish a queued request, a completed operation, and a healthy app. Do not claim remote freshness from cached data.
+- Keep telemetry scope, retention, access requirements, destructive consequences, compatibility identifiers, and upstream attribution explicit.
+- Review the rendered wording on every route alongside alignment and spacing. Read dialogs, notifications, errors, search, and empty states as well as the normal page.

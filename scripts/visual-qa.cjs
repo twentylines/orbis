@@ -9,10 +9,12 @@ const inspectHomeApps = require('./home-app-checks.cjs');
 const inspectWindowFlows = require('./window-flow-checks.cjs');
 const inspectAppUpdate = require('./app-update-checks.cjs');
 const inspectConnectionStatus = require('./connection-status-checks.cjs');
+const inspectNotifications = require('./notification-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
 const updatesOnly = process.env.ORBIS_VISUAL_UPDATES_ONLY === '1';
 const connectionOnly = process.env.ORBIS_VISUAL_CONNECTION_ONLY === '1';
+const notificationsOnly = process.env.ORBIS_VISUAL_NOTIFICATIONS_ONLY === '1';
 
 const base = 'http://localhost:8080';
 const screenshotDir = process.env.ORBIS_VISUAL_SCREENSHOT_DIR || path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
@@ -337,7 +339,7 @@ async function main() {
           { name: 'desktop', width: 1440, height: 1120 },
           { name: 'tablet', width: 768, height: 1024 },
           { name: 'mobile', width: 390, height: 844 },
-          ...(updatesOnly ? [{ name: 'narrow', width: 320, height: 800 }] : []),
+          ...(updatesOnly || notificationsOnly ? [{ name: 'narrow', width: 320, height: 800 }] : []),
         ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
@@ -600,6 +602,17 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (notificationsOnly) {
+      const notifications = await inspectNotifications({
+        page,
+        base,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+        checkTiming: viewport.name === 'desktop',
+      });
+      reports.push({ viewport: viewport.name, notifications, errors });
+      await page.close();
+      continue;
+    }
     if (connectionOnly) {
       const connection = await inspectConnectionStatus(page, {
         base,
@@ -792,7 +805,7 @@ async function main() {
     await page.getByRole('button', { name: 'Active', exact: true }).click();
     const activeTaskFiltered = (await page.locator('.task-list > li').count()) === 1;
     await page.locator('.task-list summary').click();
-    await page.getByText('This operation is running.', { exact: false }).waitFor();
+    await page.getByText('Operation running.', { exact: false }).waitFor();
     await capture(page, `${viewport.name}-tasks.png`);
     const tasksOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     await page.getByRole('button', { name: 'Needs review', exact: true }).click();
@@ -947,7 +960,7 @@ async function main() {
     const windowInsets = await page
       .locator('.desktop-window-content')
       .evaluate((element) => element.getBoundingClientRect().left >= 24 && Number.parseFloat(getComputedStyle(element).paddingLeft) >= 20);
-    await page.getByRole('button', { name: 'Graphite Deep charcoal' }).click();
+    await page.getByRole('button', { name: 'Graphite Dark grey' }).click();
     await page.getByRole('button', { name: 'Tidal' }).click();
     for (let attempt = 0; attempt < 40 && (preferences.preset !== 'graphite' || preferences.wallpaper !== 'tidal'); attempt++)
       await page.waitForTimeout(50);
@@ -956,7 +969,7 @@ async function main() {
     await capture(page, `${viewport.name}-graphite.png`);
     await page.reload();
     await page.getByRole('textbox', { name: 'Server name' }).waitFor();
-    const graphitePersisted = await page.getByRole('button', { name: 'Graphite Deep charcoal' }).getAttribute('aria-pressed');
+    const graphitePersisted = await page.getByRole('button', { name: 'Graphite Dark grey' }).getAttribute('aria-pressed');
     const wallpaperPersisted = await page.getByRole('button', { name: 'Tidal' }).getAttribute('aria-pressed');
     const bodyTheme = await page.evaluate(() => document.body.dataset.bsTheme);
     await page.getByRole('link', { name: 'Workspace', exact: true }).click();
@@ -1055,7 +1068,7 @@ async function main() {
     await Promise.race([page.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
-  if (homeOnly || windowsOnly || updatesOnly || connectionOnly) {
+  if (homeOnly || windowsOnly || updatesOnly || connectionOnly || notificationsOnly) {
     if (reports.some((report) => report.errors.length)) process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     return;

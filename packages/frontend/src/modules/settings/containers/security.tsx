@@ -26,11 +26,7 @@ export const SecurityContainer = (props: { totpEnabled: boolean; username?: stri
         <IconLock className="me-2" />
         <h2 className="mb-0">{t('SETTINGS_SECURITY_2FA_TITLE')}</h2>
       </div>
-      <p className="text-muted">
-        {t('SETTINGS_SECURITY_2FA_SUBTITLE')}
-        <br />
-        {t('SETTINGS_SECURITY_2FA_SUBTITLE_2')}
-      </p>
+      <p className="text-muted">{t('SETTINGS_SECURITY_2FA_SUBTITLE')}</p>
       <OtpForm totpEnabled={totpEnabled} />
     </div>
   );

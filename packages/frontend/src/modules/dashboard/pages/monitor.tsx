@@ -59,7 +59,7 @@ export default function Monitor() {
       <div className="desktop-monitor-live-status">
         <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} />
         <strong>{telemetry.isError ? 'Connection interrupted' : 'Live readings'}</strong>
-        <span>Current readings every 5 seconds</span>
+        <span>Updates every 5 seconds</span>
       </div>
       {telemetry.isError ? (
         <div className="workspace-message" role="alert">
@@ -69,7 +69,7 @@ export default function Monitor() {
           </button>
         </div>
       ) : null}
-      {telemetry.isPending ? <p>Loading current system readings…</p> : null}
+      {telemetry.isPending ? <p>Loading system status…</p> : null}
       {sample ? (
         <>
           <output className="desktop-monitor-time">
@@ -78,8 +78,7 @@ export default function Monitor() {
           </output>
           <section className="desktop-host-overview" aria-labelledby="desktop-host-overview-title">
             <div className="desktop-host-overview-copy">
-              <span className="desktop-host-overview-kicker">LOCAL SERVER</span>
-              <h2 id="desktop-host-overview-title">Your server, live</h2>
+              <h2 id="desktop-host-overview-title">System status</h2>
               <div className="desktop-host-overview-readings">
                 <div>
                   <span>{sample.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU'}</span>
