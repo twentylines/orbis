@@ -9,6 +9,7 @@ export type WorkspacePreferences = { order: WidgetId[]; hidden: WidgetId[]; wide
 export type DesktopPreferences = {
   serverName: string;
   preset: 'frost' | 'graphite' | 'forest' | 'stone' | 'ocean' | 'blush';
+  mode: 'light' | 'dark';
   density: 'comfortable' | 'compact';
   wallpaper: 'sandstone' | 'tidal' | 'canopy';
   workspace: WorkspacePreferences;
@@ -17,6 +18,7 @@ export type DesktopPreferences = {
 export const defaultDesktopPreferences: DesktopPreferences = {
   serverName: 'Hades',
   preset: 'frost',
+  mode: 'light',
   density: 'comfortable',
   wallpaper: 'sandstone',
   workspace: { order: [...widgetIds], hidden: [], wide: ['applications'], pinnedApps: [] },
@@ -24,8 +26,8 @@ export const defaultDesktopPreferences: DesktopPreferences = {
 const STORAGE_KEY = 'server-desktop-preferences-v1';
 
 type StoredWorkspacePreferences = Omit<WorkspacePreferences, 'pinnedApps'> & Partial<Pick<WorkspacePreferences, 'pinnedApps'>>;
-type StoredDesktopPreferences = Omit<DesktopPreferences, 'wallpaper' | 'workspace'> &
-  Partial<Pick<DesktopPreferences, 'wallpaper'>> & { workspace?: StoredWorkspacePreferences };
+type StoredDesktopPreferences = Omit<DesktopPreferences, 'mode' | 'wallpaper' | 'workspace'> &
+  Partial<Pick<DesktopPreferences, 'mode' | 'wallpaper'>> & { workspace?: StoredWorkspacePreferences };
 
 const isWidgetList = (value: unknown): value is WidgetId[] =>
   Array.isArray(value) && value.length <= widgetIds.length && new Set(value).size === value.length && value.every((item) => widgetIds.includes(item));
@@ -54,6 +56,7 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
     candidate.serverName.length >= 1 &&
     candidate.serverName.length <= 40 &&
     ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'].includes(String(candidate.preset)) &&
+    (candidate.mode === undefined || ['light', 'dark'].includes(String(candidate.mode))) &&
     ['comfortable', 'compact'].includes(String(candidate.density)) &&
     (candidate.wallpaper === undefined || ['sandstone', 'tidal', 'canopy'].includes(String(candidate.wallpaper))) &&
     (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace))
@@ -63,6 +66,7 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
 export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPreferences => ({
   ...defaultDesktopPreferences,
   ...value,
+  mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'light'),
   workspace: { ...defaultDesktopPreferences.workspace, ...value.workspace },
 });
 
@@ -98,8 +102,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   }, [hydrated, preferences]);
 
   useEffect(() => {
-    if (hydrated) setDarkMode(preferences.preset === 'graphite');
-  }, [hydrated, preferences.preset, setDarkMode]);
+    if (hydrated) setDarkMode(preferences.mode === 'dark');
+  }, [hydrated, preferences.mode, setDarkMode]);
 
   useEffect(() => {
     if (!isLoggedIn) {

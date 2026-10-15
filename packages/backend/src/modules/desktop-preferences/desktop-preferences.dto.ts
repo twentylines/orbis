@@ -15,6 +15,7 @@ const workspace = type({
 export const desktopPreferencesSchema = type({
   serverName: 'string > 0 & string <= 40',
   preset: type.enumerated('frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'),
+  'mode?': type.enumerated('light', 'dark'),
   density: type.enumerated('comfortable', 'compact'),
   'wallpaper?': type.enumerated('sandstone', 'tidal', 'canopy'),
   'workspace?': workspace,

@@ -84,6 +84,28 @@ describe('desktop preferences', () => {
     expect(changed.body.wallpaper).toBe('tidal');
   });
 
+  it('persists light and dark mode and migrates older Graphite settings', async () => {
+    const file = path.join(directory, 'state', 'desktop', '7.json');
+    await fs.writeFile(file, JSON.stringify({ serverName: 'Workshop', preset: 'graphite', density: 'compact' }));
+    const inherited = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');
+    expect(inherited.body.mode).toBe('dark');
+
+    const light = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...inherited.body, mode: 'light' });
+    expect(light.status).toBe(200);
+    expect(light.body.mode).toBe('light');
+    const fetched = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');
+    expect(fetched.body.mode).toBe('light');
+
+    const invalid = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...inherited.body, mode: 'auto' });
+    expect(invalid.status).toBe(400);
+  });
+
   it('saves a widget layout and rejects duplicate or unknown widget IDs', async () => {
     const workspace = { order: ['activity', 'applications', 'storage', 'attention'], hidden: ['attention'], wide: ['applications'] };
     const saved = await request(app.getHttpServer())

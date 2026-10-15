@@ -31,5 +31,7 @@
 - Added a restricted Unix socket host service, authenticated core-update API, and Update Center plan/recovery controls. The browser completed published beta 9 → beta 10 and beta 10 → beta 11 transactions on the isolated arm64 installation.
 - Added a guarded first-install tool for the Linux host service on an already enrolled core. It verifies the published image, read-only socket mount, and matching host/container inode before installing private root-owned scripts and enabling systemd. A unit restart and full VM restart preserved socket access.
 - Published beta 11 with a dock-free Monitor and Update Center detail layout and accessible changelog scrolling. Chrome verified the running image at desktop and phone widths with live telemetry, full release notes, no horizontal overflow, and no page errors.
+- Rebuilt the beta 16 desktop around a bundled alpine horizon, open app launchpad, floating dock, window chrome, and live instrument panel, with coordinated motion and reduced-motion support.
+- Added a per-account light/dark switch in the system bar and Appearance. Existing Graphite settings retain dark mode; the new visual pass gives system dials, storage, and operations more depth. Desktop, phone, and 320px screenshots now cover both modes.
 
 Real homelab migration, a production-ready installation and helper-upgrade path, host package updates, and multi-server pairing remain outstanding.
