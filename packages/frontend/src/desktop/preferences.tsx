@@ -2,17 +2,39 @@ import { createContext, useContext, useEffect, useState, type PropsWithChildren 
 import { useUserContext } from '@/context/user-context';
 import { useUIStore } from '@/stores/ui-store';
 
+export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
+export type WidgetId = (typeof widgetIds)[number];
+export type WorkspacePreferences = { order: WidgetId[]; hidden: WidgetId[]; wide: WidgetId[] };
+
 export type DesktopPreferences = {
   serverName: string;
   preset: 'frost' | 'graphite' | 'forest' | 'stone' | 'ocean' | 'blush';
   density: 'comfortable' | 'compact';
   wallpaper: 'sandstone' | 'tidal' | 'canopy';
+  workspace: WorkspacePreferences;
 };
 
-export const defaultDesktopPreferences: DesktopPreferences = { serverName: 'Hades', preset: 'frost', density: 'comfortable', wallpaper: 'sandstone' };
+export const defaultDesktopPreferences: DesktopPreferences = {
+  serverName: 'Hades',
+  preset: 'frost',
+  density: 'comfortable',
+  wallpaper: 'sandstone',
+  workspace: { order: [...widgetIds], hidden: [], wide: ['applications', 'activity'] },
+};
 const STORAGE_KEY = 'server-desktop-preferences-v1';
 
-type StoredDesktopPreferences = Omit<DesktopPreferences, 'wallpaper'> & Partial<Pick<DesktopPreferences, 'wallpaper'>>;
+type StoredDesktopPreferences = Omit<DesktopPreferences, 'wallpaper' | 'workspace'> & Partial<Pick<DesktopPreferences, 'wallpaper' | 'workspace'>>;
+
+const isWidgetList = (value: unknown): value is WidgetId[] =>
+  Array.isArray(value) && value.length <= widgetIds.length && new Set(value).size === value.length && value.every((item) => widgetIds.includes(item));
+
+export const isWorkspacePreferences = (value: unknown): value is WorkspacePreferences => {
+  if (!value || typeof value !== 'object') return false;
+  const workspace = value as Record<string, unknown>;
+  return (
+    isWidgetList(workspace.order) && workspace.order.length === widgetIds.length && isWidgetList(workspace.hidden) && isWidgetList(workspace.wide)
+  );
+};
 
 export const isPreferences = (value: unknown): value is StoredDesktopPreferences => {
   if (!value || typeof value !== 'object') return false;
@@ -23,11 +45,16 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
     candidate.serverName.length <= 40 &&
     ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'].includes(String(candidate.preset)) &&
     ['comfortable', 'compact'].includes(String(candidate.density)) &&
-    (candidate.wallpaper === undefined || ['sandstone', 'tidal', 'canopy'].includes(String(candidate.wallpaper)))
+    (candidate.wallpaper === undefined || ['sandstone', 'tidal', 'canopy'].includes(String(candidate.wallpaper))) &&
+    (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace))
   );
 };
 
-export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPreferences => ({ ...defaultDesktopPreferences, ...value });
+export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPreferences => ({
+  ...defaultDesktopPreferences,
+  ...value,
+  workspace: value.workspace ?? defaultDesktopPreferences.workspace,
+});
 
 type PreferenceContext = {
   preferences: DesktopPreferences;

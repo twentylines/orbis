@@ -12,6 +12,11 @@ export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences = {
   preset: 'frost',
   density: 'comfortable',
   wallpaper: 'sandstone',
+  workspace: {
+    order: ['applications', 'activity', 'storage', 'attention'],
+    hidden: [],
+    wide: ['applications', 'activity'],
+  },
 };
 
 @Injectable()

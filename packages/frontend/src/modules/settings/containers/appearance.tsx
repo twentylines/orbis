@@ -51,10 +51,10 @@ export const Appearance = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'server-desktop-appearance.json';
+    link.download = 'orbis-appearance-workspace.json';
     link.click();
     URL.revokeObjectURL(url);
-    setMessage('Appearance settings exported.');
+    setMessage('Appearance and workspace settings exported.');
   };
 
   const importSettings = async (file?: File) => {
@@ -68,7 +68,7 @@ export const Appearance = () => {
       if (!isPreferences(value)) throw new Error('Invalid appearance settings');
       update(normalisePreferences(value));
       setName(value.serverName);
-      setMessage('Appearance settings imported.');
+      setMessage('Appearance and workspace settings imported.');
     } catch {
       setMessage('This file does not contain valid appearance settings.');
     }
@@ -158,7 +158,7 @@ export const Appearance = () => {
       <section className="appearance-section" aria-labelledby="appearance-transfer">
         <div>
           <h2 id="appearance-transfer">Keep a copy</h2>
-          <p>Export or import appearance settings. The file contains no credentials.</p>
+          <p>Export or import appearance and widget layout. The file contains no credentials.</p>
         </div>
         <div className="appearance-actions">
           <button type="button" onClick={exportSettings}>
@@ -171,7 +171,7 @@ export const Appearance = () => {
             ref={inputRef}
             type="file"
             accept="application/json,.json"
-            aria-label="Select appearance settings file"
+            aria-label="Select appearance and workspace settings file"
             onChange={(event) => {
               void importSettings(event.target.files?.[0]);
               event.target.value = '';
@@ -183,10 +183,10 @@ export const Appearance = () => {
             onClick={() => {
               reset();
               setName(defaultDesktopPreferences.serverName);
-              setMessage('Appearance restored to defaults.');
+              setMessage('Appearance and workspace restored to defaults.');
             }}
           >
-            Restore defaults
+            Restore all defaults
           </button>
         </div>
       </section>
