@@ -52,7 +52,11 @@ module.exports = async function inspectWorkspaceAlignment(page) {
   if (!initial.scrollApps) {
     near(initial.launcher.left, initial.launcherPanel.left);
     near(initial.launcher.right, initial.launcherPanel.right);
-    if (initial.operations && Math.abs(initial.operations.left - initial.launcher.left) < 0.1 && Math.abs(initial.operations.width - initial.launcherPanel.width) < 0.1) {
+    if (
+      initial.operations &&
+      Math.abs(initial.operations.left - initial.launcher.left) < 0.1 &&
+      Math.abs(initial.operations.width - initial.launcherPanel.width) < 0.1
+    ) {
       near(initial.launcher.right, initial.operations.right);
     }
   }

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const inspectAppDetails = require('./app-detail-checks.cjs');
 const inspectWorkspaceAlignment = require('./workspace-alignment-checks.cjs');
+const inspectCommandSearch = require('./command-search-checks.cjs');
 
 const base = 'http://localhost:8080';
 const screenshotDir = path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
@@ -522,7 +523,13 @@ async function main() {
           snapshotBytes: 78_925_886,
           appsMustBeStopped: true,
         });
-      if (url.pathname === '/api/marketplace/apps/search') return respond({ data: catalogue, nextCursor: null });
+      if (url.pathname === '/api/marketplace/apps/search') {
+        const needle = (url.searchParams.get('search') || '').toLowerCase();
+        return respond({
+          data: catalogue.filter((app) => `${app.name} ${app.short_desc}`.toLowerCase().includes(needle)).map((app) => ({ ...app, available: true })),
+          nextCursor: null,
+        });
+      }
       if (url.pathname === '/api/marketplace/enabled') return respond({ appStores: [] });
       if (url.pathname === '/api/desktop-preferences') {
         if (route.request().method() === 'PUT') preferences = JSON.parse(route.request().postData() || '{}');
@@ -606,21 +613,7 @@ async function main() {
       (await page.locator('.workspace-widget').first().locator('h2').first().innerText()) === 'System status' &&
       (await page.locator('.workspace-operations').count()) === 0;
     const pinnedAppFirst = (await page.locator('.workspace-app').first().locator('strong').innerText()) === 'Backups';
-    await page.keyboard.press('Control+k');
-    await page.getByRole('dialog', { name: 'Search Orbis' }).waitFor();
-    for (let tab = 0; tab < 20; tab++) {
-      await page.keyboard.press('Tab');
-      if (!(await page.getByRole('dialog', { name: 'Search Orbis' }).evaluate((dialog) => dialog.contains(document.activeElement))))
-        throw new Error('Search keyboard focus escaped its dialog');
-    }
-    await page.keyboard.press('Escape');
-    await page.getByRole('dialog', { name: 'Search Orbis' }).waitFor({ state: 'hidden' });
-    await page.waitForFunction(() => document.activeElement === document.querySelector('.desktop-search-trigger'));
-    await page.keyboard.press('Control+k');
-    await page.getByRole('dialog', { name: 'Search Orbis' }).waitFor();
-    await page.getByRole('searchbox', { name: 'Find a tool or application' }).fill('Monitor');
-    await page.getByRole('dialog', { name: 'Search Orbis' }).getByRole('button', { name: 'Monitor Orbis' }).click();
-    await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
+    const commandSearch = await inspectCommandSearch(page);
     await page.waitForTimeout(5200);
     await page.getByRole('heading', { name: 'Host memory' }).waitFor();
     await Promise.all([
@@ -912,6 +905,7 @@ async function main() {
       editOverflow,
       workspaceLayoutPersisted,
       pinnedAppFirst,
+      commandSearch,
       savingAfterPin,
       monitorOverflow,
       monitor3DContained,

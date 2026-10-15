@@ -20,11 +20,16 @@ export function CommandSearch() {
   const [closing, setClosing] = useState(false);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
+  const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const animation = useRef<Animation | null>(null);
   const pendingPath = useRef<string | null>(null);
+  const bindPanel = useCallback((element: HTMLDivElement | null) => {
+    panel.current = element;
+    setPanelElement(element);
+  }, []);
   const navigate = useNavigate();
   const query = search.trim();
   const installed = useQuery({ ...getInstalledAppsOptions(), enabled: open && !closing, staleTime: 15000 });
@@ -61,11 +66,13 @@ export function CommandSearch() {
         finishClose();
         return;
       }
-      const bounds = element.getBoundingClientRect();
+      const bounds = { left: element.offsetLeft, top: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight };
+      const currentTransform = getComputedStyle(element).transform;
+      const currentRadius = getComputedStyle(element).borderRadius;
       animation.current?.cancel();
       const exit = element.animate(
         [
-          { transform: 'none', borderRadius: '24px' },
+          { transform: currentTransform, borderRadius: currentRadius },
           {
             transform: `translate(${origin.left - bounds.left}px, ${origin.top - bounds.top}px) scale(${origin.width / bounds.width}, ${origin.height / bounds.height})`,
             borderRadius: '16px',
@@ -81,7 +88,7 @@ export function CommandSearch() {
 
   useLayoutEffect(() => {
     if (!open) return;
-    const element = panel.current;
+    const element = panelElement;
     const origin = trigger.current?.getBoundingClientRect();
     if (!element || !origin || reducedMotion()) return;
     const bounds = element.getBoundingClientRect();
@@ -104,7 +111,7 @@ export function CommandSearch() {
       animation.current?.cancel();
       window.removeEventListener('resize', resize);
     };
-  }, [open, finishClose]);
+  }, [open, finishClose, panelElement]);
 
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
@@ -182,7 +189,7 @@ export function CommandSearch() {
         <Dialog.Portal>
           <Dialog.Overlay className="desktop-search-backdrop" data-closing={closing} />
           <Dialog.Content
-            ref={panel}
+            ref={bindPanel}
             className="desktop-search-surface"
             data-closing={closing}
             aria-describedby={undefined}
