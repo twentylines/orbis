@@ -6,6 +6,7 @@ const path = require('node:path');
 const base = 'http://localhost:8080';
 const screenshotDir = path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
 const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
+const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1';
 const apps = [
   {
     info: { urn: 'media:test', name: 'Media', short_desc: 'Local media service', available: true },
@@ -56,7 +57,28 @@ async function main() {
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.stack || error.message));
     await page.route(/^https:\/\/api\.github\.com\/repos\/twentylines\/orbis\/releases/, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }),
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          hostUpdateFixture
+            ? [
+                {
+                  tag_name: 'v0.1.0-beta.8',
+                  html_url: 'https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.8',
+                  published_at: '2026-10-15T00:00:00Z',
+                  body: 'Fixture release notes.',
+                  assets: [
+                    {
+                      name: 'release-manifest.json',
+                      browser_download_url: 'https://github.com/twentylines/orbis/releases/download/v0.1.0-beta.8/release-manifest.json',
+                    },
+                  ],
+                },
+              ]
+            : [],
+        ),
+      }),
     );
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -114,7 +136,36 @@ async function main() {
           ],
         });
       if (url.pathname === '/api/system/build')
-        return respond({ version: 'development', commit: null, imageDigest: null, runtipiCompatibility: '4.10.1' });
+        return respond({
+          version: hostUpdateFixture ? 'v0.1.0-beta.7' : 'development',
+          commit: null,
+          imageDigest: null,
+          runtipiCompatibility: '4.10.1',
+        });
+      if (url.pathname === '/api/host-updates/status')
+        return respond(
+          hostUpdateFixture
+            ? {
+                available: true,
+                enrolled: true,
+                currentTag: 'v0.1.0-beta.7',
+                currentDigest: `sha256:${'b'.repeat(64)}`,
+                coreState: 'running',
+                coreHealth: 'healthy',
+                imageMatches: true,
+                job: null,
+              }
+            : { available: false, reason: 'The Orbis host service is not connected.' },
+        );
+      if (url.pathname === '/api/host-updates/plan')
+        return respond({
+          planId: '00000000-0000-4000-8000-000000000000',
+          currentTag: 'v0.1.0-beta.7',
+          targetTag: 'v0.1.0-beta.8',
+          targetDigest: `sha256:${'c'.repeat(64)}`,
+          snapshotBytes: 78_925_886,
+          appsMustBeStopped: true,
+        });
       if (url.pathname === '/api/marketplace/apps/search') return respond({ data: catalogue, nextCursor: null });
       if (url.pathname === '/api/marketplace/enabled') return respond({ appStores: [] });
       if (url.pathname === '/api/desktop-preferences') {
@@ -187,8 +238,14 @@ async function main() {
     const storeOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     await page.getByRole('link', { name: 'Updates', exact: true }).click();
     await page.getByRole('heading', { name: 'Updates', exact: true }).waitFor();
+    if (hostUpdateFixture) {
+      await page.getByRole('button', { name: 'Prepare update to v0.1.0-beta.8' }).click();
+      await page.getByText('Review core update').waitFor();
+    }
+    const updatePlanDockHidden = !hostUpdateFixture || (await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden());
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates.png`), fullPage: true });
     const updatesOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    if (hostUpdateFixture) await page.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('link', { name: 'Monitor', exact: true }).click();
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
@@ -230,6 +287,7 @@ async function main() {
       appsOverflow,
       storeOverflow,
       updatesOverflow,
+      updatePlanDockHidden,
       settingsOverflow,
       graphitePersisted,
       wallpaperPersisted,
@@ -260,6 +318,7 @@ async function main() {
         report.appsOverflow ||
         report.storeOverflow ||
         report.updatesOverflow ||
+        !report.updatePlanDockHidden ||
         report.settingsOverflow ||
         report.graphitePersisted !== 'true' ||
         report.wallpaperPersisted !== 'true' ||

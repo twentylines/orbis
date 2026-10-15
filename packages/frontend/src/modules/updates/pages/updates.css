@@ -123,8 +123,73 @@
   background: var(--desktop-surface);
 }
 .desktop-update-note {
+  display: block;
   margin: 19px 0 0;
   font-size: 12px;
+}
+.desktop-update-action,
+.desktop-update-job button,
+.desktop-update-plan-actions button {
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px solid var(--desktop-accent);
+  border-radius: 9px;
+  background: var(--desktop-accent);
+  color: var(--desktop-surface);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.desktop-update-action {
+  margin-top: 20px;
+}
+.desktop-update-action:disabled,
+.desktop-update-job button:disabled,
+.desktop-update-plan-actions button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.desktop-update-action:focus-visible,
+.desktop-update-job button:focus-visible,
+.desktop-update-plan-actions button:focus-visible {
+  outline: 3px solid var(--desktop-ink);
+  outline-offset: 3px;
+}
+.desktop-update-job,
+.desktop-update-plan {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  background: var(--desktop-surface);
+  overflow-wrap: anywhere;
+}
+.desktop-update-job span,
+.desktop-update-plan p {
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.5;
+}
+.desktop-update-job button {
+  justify-self: start;
+}
+.desktop-update-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 7px;
+}
+.desktop-update-plan-actions button:last-child {
+  background: transparent;
+  color: var(--desktop-ink);
+  border-color: var(--desktop-line);
+}
+.desktop:has(.desktop-update-plan) .desktop-dock,
+.desktop:has(.desktop-update-job.is-busy) .desktop-dock {
+  display: none;
 }
 @media (max-width: 760px) {
   .desktop-updates-grid {
