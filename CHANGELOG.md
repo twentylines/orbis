@@ -18,5 +18,8 @@
 - Added Ocean and Blush appearance presets and two more bundled local wallpapers, retaining earlier saved preferences.
 - Reconciled persisted application statuses against Docker during startup, so a stopped container is not initially shown as running after a core restart.
 - Switched the workspace activity tiles to the same live telemetry used by Monitor, with host CPU and memory, clearly scoped core network rates, and runtime filesystem usage.
+- Published `v0.1.0-beta.3` with the startup reconciliation fix; verified its arm64 image and an enrolled Orbis host stop/start cycle on a synthetic CLI installation.
+- Published `v0.1.0-beta.4` with shared Workspace telemetry and the host command; booted its arm64 image on the synthetic CLI data and verified the inherited account, app record, and store.
+- Added Workspace editing for the four widgets and per-user pinning for up to 12 installed applications. Checked desktop, phone, and enlarged text layouts in Chrome.
 
 Real homelab migration, automatic core installation and rollback, host package updates, and multi-server pairing remain outstanding.
