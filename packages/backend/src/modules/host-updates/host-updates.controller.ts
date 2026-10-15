@@ -23,6 +23,29 @@ export class HostUpdatesController {
     return this.hostUpdates.packageChangelog(name);
   }
 
+  @Get('packages/job')
+  packageJob() {
+    return this.hostUpdates.packageJob();
+  }
+
+  @Post('packages/plan')
+  @HttpCode(200)
+  packagePlan(@Body() body: Record<string, unknown>) {
+    if (!body || typeof body !== 'object' || Object.keys(body).length !== 1 || !('names' in body)) {
+      throw new BadRequestException('Choose host packages to review.');
+    }
+    return this.hostUpdates.packagePlan(body.names);
+  }
+
+  @Post('packages/apply')
+  @HttpCode(202)
+  packageApply(@Body() body: Record<string, unknown>) {
+    if (!body || typeof body !== 'object' || Object.keys(body).length !== 1 || !('planId' in body)) {
+      throw new BadRequestException('Apply one reviewed package plan.');
+    }
+    return this.hostUpdates.packageApply(body.planId);
+  }
+
   @Post('plan')
   @HttpCode(200)
   plan(@Body() body: Record<string, unknown>) {

@@ -52,6 +52,9 @@ class HostServiceTests(unittest.TestCase):
         self.plan = mock.patch.object(SERVICE.UPDATE, "update_plan", return_value={"snapshotBytes": 12345})
         self.plan.start()
         self.addCleanup(self.plan.stop)
+        self.healthy = mock.patch.object(self.service, "require_healthy_core")
+        self.healthy.start()
+        self.addCleanup(self.healthy.stop)
 
     def wait_for_job(self):
         for _ in range(100):
@@ -85,6 +88,59 @@ class HostServiceTests(unittest.TestCase):
             self.service.apply(planned["planId"])
         with self.assertRaisesRegex(ValueError, "maintenance"):
             self.service.recover(planned["planId"])
+
+    def test_package_plan_is_rechecked_and_launched_as_a_fixed_systemd_unit(self):
+        simulation = {
+            "selected": [{"name": "base-files:arm64", "installedVersion": "1", "candidateVersion": "2", "sources": [{"trusted": True}]}],
+            "operations": [{"name": "base-files", "installedVersion": "1", "candidateVersion": "2", "action": "upgrade"}],
+        }
+        with mock.patch.object(SERVICE.PACKAGES, "simulate_upgrades", return_value=simulation), mock.patch.object(
+            SERVICE.subprocess, "run", return_value=mock.Mock(returncode=0)
+        ) as launched:
+            plan = self.service.package_plan(["base-files:arm64"])
+            accepted = self.service.package_apply(plan["planId"])
+        self.assertEqual(accepted, {"jobId": plan["planId"], "state": "queued"})
+        self.assertEqual(SERVICE.read_private(self.service.package_job_file)["state"], "queued")
+        command = launched.call_args.args[0]
+        self.assertEqual(command[:2], ["/usr/bin/systemd-run", f"--unit=orbis-package-{plan['planId']}"])
+        self.assertEqual(command[-1], plan["planId"])
+        with self.assertRaisesRegex(ValueError, "host package transaction"):
+            self.service.plan(TARGET["tag"])
+        finished = SERVICE.read_private(self.service.package_job_file)
+        finished["state"] = "complete"
+        SERVICE.write_private(self.service.package_job_file, finished)
+        with self.assertRaisesRegex(ValueError, "already applied"):
+            self.service.package_apply(plan["planId"])
+
+    def test_package_apply_refuses_stale_apt_candidates(self):
+        simulation = {"selected": [{"name": "base-files:arm64", "candidateVersion": "2"}], "operations": [{"name": "base-files", "candidateVersion": "2"}]}
+        with mock.patch.object(SERVICE.PACKAGES, "simulate_upgrades", return_value=simulation) as simulate:
+            plan = self.service.package_plan(["base-files:arm64"])
+            simulate.return_value = {"selected": [{"name": "base-files:arm64", "candidateVersion": "3"}], "operations": []}
+            with self.assertRaisesRegex(ValueError, "changed"):
+                self.service.package_apply(plan["planId"])
+        self.assertIsNone(SERVICE.read_private(self.service.package_job_file))
+
+    def test_package_changes_require_a_healthy_enrolled_core(self):
+        with mock.patch.object(
+            self.service,
+            "status",
+            return_value={"enrolled": False, "imageMatches": False, "coreState": "running", "coreHealth": "healthy"},
+        ):
+            with self.assertRaisesRegex(ValueError, "healthy enrolled"):
+                SERVICE.HostService.require_healthy_core(self.service)
+
+    def test_inactive_package_worker_is_reported_as_interrupted(self):
+        job_id = "00000000-0000-4000-8000-000000000000"
+        SERVICE.write_private(
+            self.service.package_job_file,
+            {"schema": "orbis.package-job.v1", "id": job_id, "state": "running", "createdAt": time.time() - 10},
+        )
+        with mock.patch.object(SERVICE.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="inactive\n")):
+            status = self.service.package_job_status()
+        self.assertEqual(status["job"]["state"], "interrupted")
+        with self.assertRaisesRegex(ValueError, "host package transaction"):
+            self.service.plan(TARGET["tag"])
 
     def test_plan_cannot_be_reused_after_installed_release_changes(self):
         planned = self.service.plan(TARGET["tag"])
@@ -209,6 +265,15 @@ class HostServiceTests(unittest.TestCase):
         status, result = request("POST", "/v1/plan", {"tag": TARGET["tag"]})
         self.assertEqual(status, 200)
         self.assertEqual(result["targetTag"], TARGET["tag"])
+        self.assertEqual(request("GET", "/v1/packages/job")[1]["job"], None)
+        self.assertEqual(request("POST", "/v1/packages/plan", {"names": ["base-files:arm64"], "command": "shell"})[0], 409)
+        with mock.patch.object(self.service, "package_plan", return_value={"planId": "fixture"}) as package_plan, mock.patch.object(
+            self.service, "package_apply", return_value={"jobId": "fixture", "state": "queued"}
+        ) as package_apply:
+            self.assertEqual(request("POST", "/v1/packages/plan", {"names": ["base-files:arm64"]})[1]["planId"], "fixture")
+            self.assertEqual(request("POST", "/v1/packages/apply", {"planId": "fixture"})[0], 202)
+        package_plan.assert_called_once_with(["base-files:arm64"])
+        package_apply.assert_called_once_with("fixture")
 
 
 if __name__ == "__main__":

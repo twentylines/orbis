@@ -4,7 +4,7 @@ import { Markdown } from '@/components/markdown/markdown';
 import { useAppContext } from '@/context/app-context';
 import { IconArrowRight, IconBrandGithub, IconPackage, IconServerCog } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import './updates.css';
 
@@ -58,6 +58,23 @@ type HostPackageChangelog = {
   truncated?: boolean;
   reason?: string;
 };
+type HostPackagePlan = {
+  planId: string;
+  createdAt: number;
+  selected: HostPackage[];
+  operations: Array<{ name: string; installedVersion: string | null; candidateVersion: string; action: 'install' | 'upgrade' }>;
+};
+type HostPackageJob = {
+  id: string;
+  state: 'queued' | 'running' | 'complete' | 'failed' | 'interrupted';
+  createdAt: number;
+  startedAt?: number;
+  finishedAt?: number;
+  message?: string;
+  rebootRequired?: boolean;
+  operationCount?: number;
+};
+type HostPackageJobStatus = { available: boolean; job: HostPackageJob | null };
 
 function packageSize(bytes: number | null): string {
   if (bytes === null) return 'Download size unavailable';
@@ -105,6 +122,9 @@ export default function Updates() {
   const [packageSearch, setPackageSearch] = useState('');
   const [showAllPackages, setShowAllPackages] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
+  const [selectedPackages, setSelectedPackages] = useState<string[]>([]);
+  const [reviewPackagePlan, setReviewPackagePlan] = useState<HostPackagePlan | null>(null);
+  const lastRefreshedPackageJob = useRef<string | null>(null);
   const apps = useQuery(getInstalledAppsOptions());
   const build = useQuery({ queryKey: ['orbis-installed-build'], queryFn: ({ signal }) => loadInstalledBuild(signal), staleTime: 30 * 60 * 1000 });
   const releases = useQuery({
@@ -142,6 +162,25 @@ export default function Updates() {
     refetchOnWindowFocus: false,
     retry: false,
   });
+  const packageJob = useQuery({
+    queryKey: ['orbis-host-package-job'],
+    queryFn: ({ signal }) => hostRequest<HostPackageJobStatus>('packages/job', undefined, signal),
+    enabled: user?.operator === true,
+    refetchInterval: (query) => (['queued', 'running'].includes(query.state.data?.job?.state ?? '') ? 3000 : 30_000),
+    retry: 1,
+  });
+  const planPackages = useMutation({
+    mutationFn: (names: string[]) => hostRequest<HostPackagePlan>('packages/plan', { names }),
+    onSuccess: (result) => setReviewPackagePlan(result),
+  });
+  const applyPackages = useMutation({
+    mutationFn: (planId: string) => hostRequest<{ jobId: string; state: string }>('packages/apply', { planId }),
+    onSuccess: () => {
+      setReviewPackagePlan(null);
+      setSelectedPackages([]);
+      void packageJob.refetch();
+    },
+  });
   const plan = useMutation({
     mutationFn: (tag: string) => hostRequest<HostPlan>('plan', { tag }),
     onSuccess: (result) => setReviewPlan(result),
@@ -177,6 +216,19 @@ export default function Updates() {
     `${item.name} ${packageSources(item.sources)}`.toLocaleLowerCase().includes(packageSearch.trim().toLocaleLowerCase()),
   );
   const visiblePackages = showAllPackages ? matchingPackages : matchingPackages.slice(0, 12);
+  const packageJobState = packageJob.data?.job?.state;
+  const packageJobBusy = packageJobState === 'queued' || packageJobState === 'running';
+  const packageJobNeedsInspection = packageJobState === 'failed' || packageJobState === 'interrupted';
+  const matchingSelection =
+    matchingPackages.length > 0 && matchingPackages.length <= 250 && matchingPackages.every((item) => selectedPackages.includes(item.name));
+  const matchingSelectionExceedsLimit = new Set([...selectedPackages, ...matchingPackages.map((item) => item.name)]).size > 250;
+  useEffect(() => {
+    const completedId = packageJobState === 'complete' ? packageJob.data?.job?.id : null;
+    if (completedId && completedId !== lastRefreshedPackageJob.current) {
+      lastRefreshedPackageJob.current = completedId;
+      void systemPackages.refetch();
+    }
+  }, [packageJob.data?.job?.id, packageJobState, systemPackages.refetch]);
 
   return (
     <div className="desktop-updates">
@@ -188,7 +240,7 @@ export default function Updates() {
         <Link to="/dashboard">Back to workspace</Link>
       </div>
       <p className="desktop-updates-intro">
-        Review changes before applying them. Application, Orbis, and host updates have separate release and rollback paths.
+        Review changes before applying them. Application, Orbis, and host updates follow separate installation paths.
       </p>
       <div className="desktop-updates-grid">
         <section className="desktop-updates-card" aria-labelledby="application-updates-title">
@@ -363,6 +415,16 @@ export default function Updates() {
           {systemPackages.data && !systemPackages.data.available ? (
             <p>{systemPackages.data.reason || 'This host does not have a supported package manager.'}</p>
           ) : null}
+          {packageJob.isError ? <p role="alert">The host package job status is unavailable. Check it again before starting an update.</p> : null}
+          {packageJob.data?.job ? (
+            <output className={`desktop-host-package-job ${packageJobBusy ? 'is-busy' : ''}`} aria-live="polite">
+              <strong>
+                Host package operation: {packageJob.data.job.state} · {packageJob.data.job.operationCount ?? 0} planned changes
+              </strong>
+              <span>{packageJob.data.job.message || (packageJobBusy ? 'APT is working on the host. This page can be closed.' : '')}</span>
+              {packageJob.data.job.rebootRequired ? <span>The host requests a reboot. Orbis has not rebooted it.</span> : null}
+            </output>
+          ) : null}
           {systemPackages.data?.available ? (
             <>
               <div className="desktop-host-package-summary">
@@ -371,7 +433,7 @@ export default function Updates() {
                   <span>{systemPackages.data.operatingSystem || 'Host operating system'}</span>
                 </div>
                 <button type="button" disabled={systemPackages.isFetching} onClick={() => void systemPackages.refetch()}>
-                  {systemPackages.isFetching ? 'Checking…' : 'Check again'}
+                  {systemPackages.isFetching ? 'Reading…' : 'Read cache again'}
                 </button>
               </div>
               <p className="desktop-host-package-times">
@@ -396,13 +458,74 @@ export default function Updates() {
                       placeholder="Name or repository"
                     />
                   </label>
+                  <div className="desktop-host-package-selection">
+                    <strong>{selectedPackages.length} selected for review</strong>
+                    <div>
+                      <button
+                        type="button"
+                        disabled={
+                          matchingPackages.length === 0 ||
+                          (!matchingSelection && matchingSelectionExceedsLimit) ||
+                          packageJob.isPending ||
+                          packageJob.isError ||
+                          packageJobBusy ||
+                          packageJobNeedsInspection
+                        }
+                        onClick={() => {
+                          const names = matchingPackages.map((item) => item.name);
+                          setSelectedPackages(
+                            matchingSelection
+                              ? selectedPackages.filter((name) => !names.includes(name))
+                              : [...new Set([...selectedPackages, ...names])],
+                          );
+                          setReviewPackagePlan(null);
+                        }}
+                      >
+                        {matchingSelection ? 'Clear matching' : `Select matching (${matchingPackages.length})`}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          selectedPackages.length === 0 ||
+                          planPackages.isPending ||
+                          packageJob.isPending ||
+                          packageJob.isError ||
+                          packageJobBusy ||
+                          packageJobNeedsInspection ||
+                          jobBusy ||
+                          job?.state === 'interrupted'
+                        }
+                        onClick={() => planPackages.mutate(selectedPackages)}
+                      >
+                        {planPackages.isPending ? 'Checking APT transaction…' : 'Review selected updates'}
+                      </button>
+                    </div>
+                  </div>
                   <ul className="desktop-host-package-list" aria-label="Available host package updates">
                     {visiblePackages.map((item) => (
                       <li className="desktop-host-package" key={item.name}>
-                        <div className="desktop-host-package-title">
+                        <label className="desktop-host-package-title">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${item.name} for update`}
+                            checked={selectedPackages.includes(item.name)}
+                            disabled={
+                              packageJob.isPending ||
+                              packageJob.isError ||
+                              packageJobBusy ||
+                              packageJobNeedsInspection ||
+                              (!selectedPackages.includes(item.name) && selectedPackages.length >= 250)
+                            }
+                            onChange={(event) => {
+                              setSelectedPackages(
+                                event.target.checked ? [...selectedPackages, item.name] : selectedPackages.filter((name) => name !== item.name),
+                              );
+                              setReviewPackagePlan(null);
+                            }}
+                          />
                           <strong>{item.name}</strong>
                           {item.security ? <span>Security</span> : null}
-                        </div>
+                        </label>
                         <p>
                           {item.installedVersion} <span aria-hidden="true">→</span> {item.candidateVersion}
                         </p>
@@ -426,6 +549,40 @@ export default function Updates() {
                       Show all {matchingPackages.length} matching packages
                     </button>
                   ) : null}
+                  {reviewPackagePlan ? (
+                    <section className="desktop-host-package-plan" aria-label="Review host package update">
+                      <strong>Review host package update</strong>
+                      <p>
+                        {reviewPackagePlan.selected.length} selected · {reviewPackagePlan.operations.length} package changes. APT may install required
+                        dependencies; every planned change is listed below.
+                      </p>
+                      <textarea
+                        readOnly
+                        spellCheck={false}
+                        aria-label="Planned package changes"
+                        value={reviewPackagePlan.operations
+                          .map(
+                            (operation) =>
+                              `${operation.action === 'install' ? 'Install' : 'Upgrade'} ${operation.name}: ${operation.installedVersion ? `${operation.installedVersion} → ` : ''}${operation.candidateVersion}`,
+                          )
+                          .join('\n')}
+                      />
+                      <p>
+                        Services may restart during installation. Orbis will not reboot the host. APT package changes have no automatic rollback; keep
+                        an independent host backup.
+                      </p>
+                      <div className="desktop-update-plan-actions">
+                        <button type="button" disabled={applyPackages.isPending} onClick={() => applyPackages.mutate(reviewPackagePlan.planId)}>
+                          {applyPackages.isPending ? 'Starting host update…' : 'Install reviewed packages'}
+                        </button>
+                        <button type="button" disabled={applyPackages.isPending} onClick={() => setReviewPackagePlan(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
+                  {planPackages.isError ? <p role="alert">{planPackages.error.message}</p> : null}
+                  {applyPackages.isError ? <p role="alert">{applyPackages.error.message}. Check the host package job before trying again.</p> : null}
                   {selectedPackage ? (
                     <section className="desktop-host-changelog" aria-label={`${selectedPackage} changelog`}>
                       <div>
@@ -460,7 +617,9 @@ export default function Updates() {
               ) : (
                 <p>No upgrades are listed in the current host package cache.</p>
               )}
-              <p className="desktop-update-note">Package installation is unavailable in this build. This list reads the host cache only.</p>
+              <p className="desktop-update-note">
+                Package choices use the current APT cache. Reading this list does not refresh Ubuntu repositories or install packages.
+              </p>
             </>
           ) : null}
         </section>

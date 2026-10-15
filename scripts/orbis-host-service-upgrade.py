@@ -107,6 +107,9 @@ def require_installed(root: Path, context: str) -> None:
 
 
 def job_identity() -> tuple[str, str] | None:
+    package_job = SERVICE.read_private(STATE_DIR / "package-job.json")
+    if package_job and package_job.get("state") in {"queued", "running", "failed", "interrupted"}:
+        raise ValueError("resolve the host package transaction before upgrading the helper")
     job = SERVICE.read_private(STATE_DIR / "job.json")
     if not job:
         return None

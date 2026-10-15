@@ -116,6 +116,46 @@
   color: var(--desktop-ink);
   font: inherit;
 }
+.desktop-host-package-selection,
+.desktop-host-package-selection > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.desktop-host-package-selection {
+  justify-content: space-between;
+  margin: 0 0 15px;
+}
+.desktop-host-package-selection strong {
+  font-size: 13px;
+}
+.desktop-host-package-selection button {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.desktop-host-package-selection button:last-child {
+  border-color: var(--desktop-accent);
+  background: var(--desktop-accent);
+  color: var(--desktop-surface);
+}
+.desktop-host-package-selection button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.desktop-host-package-selection button:focus-visible,
+.desktop-host-package-title input:focus-visible,
+.desktop-host-package-plan textarea:focus-visible {
+  outline: 3px solid var(--desktop-accent);
+  outline-offset: 3px;
+}
 .desktop-host-package-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -144,6 +184,13 @@
 }
 .desktop-host-package-title strong {
   min-width: 0;
+}
+.desktop-host-package-title input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--desktop-accent);
+  flex: 0 0 auto;
 }
 .desktop-host-package-title span {
   padding: 3px 7px;
@@ -210,6 +257,43 @@
   overflow: auto;
   resize: vertical;
   overflow-wrap: anywhere;
+}
+.desktop-host-package-job,
+.desktop-host-package-plan {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 16px;
+  padding: 15px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 11px;
+  background: var(--desktop-surface);
+}
+.desktop-host-package-job.is-busy {
+  border-color: var(--desktop-accent);
+}
+.desktop-host-package-job span,
+.desktop-host-package-plan p {
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.5;
+}
+.desktop-host-package-plan {
+  margin-top: 17px;
+}
+.desktop-host-package-plan textarea {
+  display: block;
+  width: 100%;
+  height: 220px;
+  padding: 13px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: rgba(125, 145, 121, 0.06);
+  color: var(--desktop-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
 }
 @container (max-width: 720px) {
   .desktop-host-package-list {

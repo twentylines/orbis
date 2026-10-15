@@ -19,6 +19,10 @@ PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?$")
 MAX_PACKAGES = 1000
 MAX_CHANGELOG_BYTES = 48 * 1024
 CHANGELOG_TIMEOUT_SECONDS = 20
+MAX_PLAN_SELECTION = 250
+MAX_SIMULATION_BYTES = 256 * 1024
+SIMULATION_TIMEOUT_SECONDS = 45
+SIMULATED_INSTALL = re.compile(r"^Inst ([^ ]+)(?: \[([^]]+)\])? \(([^ ]+)(?: .*)?\)$")
 
 
 def require_ubuntu() -> dict[str, str]:
@@ -164,3 +168,90 @@ def changelog(name: str) -> dict:
             "source": "APT distribution changelog",
             "reason": "The changelog server did not respond in time.",
         }
+
+
+def selected_candidates(names: list[str], cache) -> list[dict]:
+    if not isinstance(names, list) or not 1 <= len(names) <= MAX_PLAN_SELECTION or not all(isinstance(name, str) for name in names):
+        raise ValueError("choose between 1 and 250 distinct packages")
+    if len(set(names)) != len(names):
+        raise ValueError("choose between 1 and 250 distinct packages")
+    selected = []
+    for name in names:
+        if not isinstance(name, str) or len(name) > 180 or not PACKAGE_NAME.fullmatch(name):
+            raise ValueError("package name is invalid")
+        if name not in cache:
+            raise ValueError("a selected package is not in the current APT cache")
+        record = candidate_record(cache[name])
+        if not record or record["name"] != name:
+            raise ValueError("a selected package has no current upgrade candidate")
+        if not any(origin.trusted for origin in cache[name].candidate.origins):
+            raise ValueError("a selected package has no trusted candidate source")
+        selected.append(record)
+    return sorted(selected, key=lambda item: item["name"])
+
+
+def apt_install_command(selected: list[dict], *, simulate: bool) -> list[str]:
+    command = ["/usr/bin/apt-get", "--no-remove", "--no-install-recommends"]
+    if simulate:
+        command.append("--simulate")
+    command.extend(["install", "--only-upgrade", "--"])
+    command.extend(f"{item['name']}={item['candidateVersion']}" for item in selected)
+    return command
+
+
+def apt_apply_command(selected: list[dict]) -> list[str]:
+    command = apt_install_command(selected, simulate=False)
+    command[1:1] = ["-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold"]
+    return command
+
+
+def parse_simulation(output: str, selected: list[dict]) -> list[dict]:
+    operations = []
+    for line in output.splitlines():
+        if line.startswith(("Remv ", "Purg ")):
+            raise ValueError("APT planned a package removal")
+        if not line.startswith("Inst "):
+            continue
+        match = SIMULATED_INSTALL.fullmatch(line)
+        if not match:
+            raise ValueError("APT returned an unrecognized install action")
+        name, installed, candidate = match.groups()
+        operations.append({"name": name, "installedVersion": installed, "candidateVersion": candidate, "action": "upgrade" if installed else "install"})
+    if not operations:
+        raise ValueError("APT did not plan any package changes")
+    for item in selected:
+        name = item["name"]
+        native_name = name.split(":", 1)[0]
+        if not any(
+            operation["name"] in {name, native_name} and operation["candidateVersion"] == item["candidateVersion"]
+            for operation in operations
+        ):
+            raise ValueError("APT omitted or changed a selected package")
+    return operations
+
+
+def simulate_upgrades(names: list[str]) -> dict:
+    require_ubuntu()
+    selected = selected_candidates(names, apt_module().Cache())
+    environment = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "DEBIAN_FRONTEND": "noninteractive", "HOME": "/root"}
+    try:
+        with tempfile.TemporaryFile() as output:
+            result = subprocess.run(
+                apt_install_command(selected, simulate=True),
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                env=environment,
+                timeout=SIMULATION_TIMEOUT_SECONDS,
+                check=False,
+            )
+            output.seek(0, os.SEEK_END)
+            if output.tell() > MAX_SIMULATION_BYTES:
+                raise ValueError("APT simulation output exceeded its limit")
+            output.seek(0)
+            summary = output.read().decode("utf-8", errors="replace")
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("APT simulation timed out") from error
+    if result.returncode:
+        raise ValueError("APT could not resolve the selected package updates")
+    return {"selected": selected, "operations": parse_simulation(summary, selected)}
