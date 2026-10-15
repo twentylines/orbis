@@ -1,6 +1,7 @@
 .workspace {
   max-width: none;
   margin: 0 auto;
+  padding-inline: calc(var(--desktop-bar-inset) + 1px);
 }
 .workspace-heading {
   display: flex;
@@ -11,6 +12,10 @@
   color: var(--workspace-heading-ink);
   text-shadow: 0 1px 18px var(--workspace-heading-shadow);
   animation: orbis-heading-enter 0.58s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.workspace-heading > div {
+  min-width: 0;
+  max-width: 100%;
 }
 .workspace-eyebrow {
   margin: 0 0 11px;
@@ -30,6 +35,7 @@
   font-weight: 720;
   letter-spacing: -0.068em;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 .workspace-subline {
   margin: 14px 0 0;
@@ -45,12 +51,17 @@
 }
 .workspace-actions > * {
   box-sizing: border-box;
-  height: 44px;
+  min-height: 44px;
+  height: auto;
+  max-width: 100%;
+  min-width: 0;
   line-height: 20px;
   justify-content: center;
 }
 .workspace-actions > * > span {
+  min-width: 0;
   line-height: 20px;
+  overflow-wrap: anywhere;
 }
 .workspace-actions > * > svg {
   display: block;
@@ -74,7 +85,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 11px 14px;
   background: #183e36;
   color: #fff;
   border-color: transparent;
@@ -219,7 +230,7 @@
   gap: 8px;
   min-height: 44px;
   border: 1px solid transparent;
-  padding: 0 14px;
+  padding: 11px 14px;
   border-radius: 12px;
   color: #fff;
   background: #183e36;
@@ -346,6 +357,10 @@
   gap: 20px;
   margin-bottom: 25px;
 }
+.workspace-section-heading > div {
+  min-width: 0;
+  max-width: 100%;
+}
 .workspace-apps .workspace-section-heading {
   align-items: center;
 }
@@ -358,6 +373,7 @@
   line-height: 1.25;
   margin: 0 0 4px;
   letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
 }
 .workspace-section-heading p,
 .workspace-attention p {
@@ -1280,13 +1296,12 @@
     width: 100%;
   }
   .workspace-edit-toggle {
-    padding: 0 10px;
+    padding: 11px 10px;
     font-size: 12px;
   }
   .desktop .workspace-add {
-    padding: 0 10px;
+    padding: 11px 10px;
     font-size: 12px;
-    white-space: nowrap;
   }
   .workspace-widget .workspace-app-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -12,7 +12,7 @@ export function DockerHealth({ appUrn, telemetry, stale = false }: { appUrn: str
   return (
     <span className="docker-health" data-health={result.state} title={`Docker: ${result.label}`}>
       <i aria-hidden="true" />
-      {result.label}
+      <span>{result.label}</span>
     </span>
   );
 }

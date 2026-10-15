@@ -8,7 +8,9 @@ CPU follows [Docker Engine's delta calculation](https://docs.docker.com/referenc
 
 App containers are associated through `runtipi.appurn`, or the existing Compose project name for older installations. Multi-container app health is conservative: an unhealthy service takes precedence, a restarting/starting service remains starting, a partly stopped app is labelled partly stopped, and only all-running, all-healthy checked containers produce “Healthy.” Running containers without configured healthchecks are labelled “No healthcheck.”
 
-The workspace combines CPU, memory, container network, and runtime storage in System status. Its top consumers and the expanded Monitor can rank containers by CPU or memory, highest first. This ranking covers Docker workloads only; it does not claim to identify other host processes. Host-wide mount details, host network interfaces, sensor telemetry, and process ranking remain future work.
+The workspace combines CPU, memory, container network, and runtime storage in System status. Home and Monitor show uptime from the existing system telemetry instead of the sample timestamp, formatted as days, hours and minutes. With the host-proc mount configured, the collector reads the server's `/proc/uptime`; it does not count how long the Orbis container has been running. On the owned Linux test host, API and host uptime differed by 1.56 seconds before the beta 27 update.
+
+The Usage section and expanded Monitor rank containers by CPU or memory, highest first. This ranking covers Docker workloads only; it does not claim to identify other host processes. Host-wide mount details, host network interfaces, sensor telemetry, and process ranking remain future work.
 
 ## Recorded history
 

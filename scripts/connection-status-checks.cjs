@@ -112,6 +112,22 @@ module.exports = async function inspectConnectionStatus(
       range.selectNodeContents(label);
       const rects = [...range.getClientRects()].filter((rect) => rect.width > 0);
       const style = getComputedStyle(label);
+      const ellipsisProbe = document.createElement('span');
+      Object.assign(ellipsisProbe.style, {
+        position: 'fixed',
+        visibility: 'hidden',
+        whiteSpace: 'pre',
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        fontStyle: style.fontStyle,
+        fontVariantNumeric: style.fontVariantNumeric,
+        letterSpacing: style.letterSpacing,
+      });
+      ellipsisProbe.textContent = `${label.textContent[0]}…`;
+      document.body.append(ellipsisProbe);
+      const minimumEllipsisWidth = ellipsisProbe.getBoundingClientRect().width;
+      ellipsisProbe.remove();
       const controls = [...bar.querySelectorAll('.desktop-task-trigger, .desktop-mode-toggle, .desktop-search-trigger, .desktop-icon-button')].map(
         (element) => ({
           ...box(element),
@@ -140,6 +156,14 @@ module.exports = async function inspectConnectionStatus(
         textRects: rects.map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom })),
         labelScrollWidth: label.scrollWidth,
         labelClientWidth: label.clientWidth,
+        clipping: {
+          whiteSpace: style.whiteSpace,
+          overflowX: style.overflowX,
+          textOverflow: style.textOverflow,
+          minimumEllipsisWidth,
+          visibility: style.visibility,
+          opacity: style.opacity,
+        },
         typography: {
           fontFamily: style.fontFamily,
           fontSize: style.fontSize,
@@ -168,10 +192,25 @@ module.exports = async function inspectConnectionStatus(
     assert.equal(result.labels, 1, `${context}: one label`);
     assert.equal(result.small, 0, `${context}: no secondary small text`);
     assert.equal(result.childElements, 2, `${context}: only dot and label`);
-    assert.equal(result.textRects.length, 1, `${context}: label must occupy one line`);
-    assert.ok(result.labelScrollWidth <= result.labelClientWidth + 1, `${context}: full label must fit`);
-    assert.ok(result.textRects[0].right <= result.label.right + 0.6, `${context}: text must not be ellipsized`);
-    assert.ok(result.textRects[0].x >= result.label.x - 0.6, `${context}: text must not clip at its start`);
+    assert.ok(result.textRects.length > 0, `${context}: label must paint text`);
+    assert.equal(result.clipping.visibility, 'visible', `${context}: label must be visible`);
+    assert.ok(Number(result.clipping.opacity) > 0, `${context}: label must not be transparent`);
+    for (const rect of result.textRects) {
+      near(rect.y, result.textRects[0].y, `${context}: text fragments must share one line`);
+      near(rect.bottom, result.textRects[0].bottom, `${context}: text fragments must share one baseline`);
+      assert.ok(rect.x >= result.label.x - 0.6, `${context}: text must not clip at its start`);
+      assert.ok(rect.y >= result.label.y - 0.6 && rect.bottom <= result.label.bottom + 0.6, `${context}: text must fit label vertically`);
+    }
+    const ellipsized = result.labelScrollWidth > result.labelClientWidth + 1;
+    if (ellipsized) {
+      assert.equal(state, 'connected', `${context}: transient connection status must remain fully visible`);
+      assert.equal(result.clipping.whiteSpace, 'nowrap', `${context}: shortened IP must stay on one line`);
+      assert.equal(result.clipping.overflowX, 'hidden', `${context}: shortened IP must contain its overflow`);
+      assert.equal(result.clipping.textOverflow, 'ellipsis', `${context}: shortened IP needs a visible ellipsis`);
+      assert.ok(result.labelClientWidth >= result.clipping.minimumEllipsisWidth, `${context}: shortened IP must show text beside its ellipsis`);
+    } else {
+      for (const rect of result.textRects) assert.ok(rect.right <= result.label.right + 0.6, `${context}: full text must fit label horizontally`);
+    }
     near(result.dot.cy, result.label.cy, `${context}: dot and label centre`);
     near(result.output.cy, result.label.cy, `${context}: output and label centre`);
     assert.ok(result.dot.right + 3 <= result.label.x, `${context}: dot and text need separation`);
@@ -195,7 +234,7 @@ module.exports = async function inspectConnectionStatus(
         assert.ok(overlapX <= 0.6 || overlapY <= 0.6, `${context}: header elements overlap`);
       }
     }
-    return result;
+    return { ...result, ellipsized };
   };
 
   try {

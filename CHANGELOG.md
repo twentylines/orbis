@@ -2,6 +2,7 @@
 
 ## Unreleased development preview
 
+- Aligned Home with the system bar's inner column, made logout clearance symmetric, replaced sample timestamps with system uptime and renamed Docker rankings to Usage.
 - Removed the login language selector's inherited bottom margin so it aligns with the theme toggle. Auth checks now measure both controls' heights and centre lines.
 - Reflowed two-factor code inputs into equal columns with enough inner width for entered digits on narrow screens.
 - Retained safe update failure diagnostics through rollback and helper restarts. Backup read/copy/change/mismatch/seal failures now have separate messages; strict content and permission verification remains enforced.
