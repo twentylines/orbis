@@ -196,7 +196,11 @@ export default function Updates() {
               <p>{latest.imageManifestUrl ? 'Published image manifest available.' : 'No Orbis image manifest is attached to this release.'}</p>
               <details>
                 <summary>Read changelog</summary>
-                {latest.body ? <Markdown content={latest.body} className="desktop-update-markdown" /> : <p>This release has no changelog.</p>}
+                {latest.body ? (
+                  <Markdown content={latest.body} className="desktop-update-markdown" tabIndex={0} label={`${latest.tag} changelog`} />
+                ) : (
+                  <p>This release has no changelog.</p>
+                )}
               </details>
               <a href={latest.url} target="_blank" rel="noreferrer">
                 View release on GitHub <IconArrowRight size={16} aria-hidden="true" />

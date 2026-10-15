@@ -6,10 +6,23 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 
-export const Markdown: React.FC<{ content: string; className: string }> = ({ content, className }) => (
-  <div className={clsx('markdown', className)}>
+export const Markdown: React.FC<{ content: string; className: string; tabIndex?: number; label?: string }> = ({
+  content,
+  className,
+  tabIndex,
+  label,
+}) => {
+  const rendered = (
     <ReactMarkdown remarkPlugins={[remarkBreaks, remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>
       {content}
     </ReactMarkdown>
-  </div>
-);
+  );
+  if (label) {
+    return (
+      <section className={clsx('markdown', className)} tabIndex={tabIndex} aria-label={label}>
+        {rendered}
+      </section>
+    );
+  }
+  return <div className={clsx('markdown', className)}>{rendered}</div>;
+};

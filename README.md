@@ -1,13 +1,14 @@
 # Orbis
 
-Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runtipi app ecosystem and data layout while redesigning the workspace, application surfaces, monitoring, and appearance controls. A clean install, a disposable Whoami app lifecycle, and migration from a synthetic stock CLI installation have passed isolated Docker and browser tests. Migration of a real homelab and automated production updates remain unverified. **Do not replace a live Runtipi installation with this tree yet.**
+Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runtipi app ecosystem and data layout while redesigning the workspace, application surfaces, monitoring, and appearance controls. A clean install, a disposable Whoami app lifecycle, migration from a synthetic stock CLI installation, and a browser-clicked core update have passed isolated Docker and browser tests. Migration of a real homelab and automated production updates remain unverified. **Do not replace a live Runtipi installation with this tree yet.**
 
-[Orbis on GitHub](https://github.com/twentylines/orbis) · [Beta preview](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.7) · [Development changelog](CHANGELOG.md)
+[Orbis on GitHub](https://github.com/twentylines/orbis) · [Beta previews](https://github.com/twentylines/orbis/releases) · [Development changelog](CHANGELOG.md)
 
 - [Current implementation and limits](IMPLEMENTATION.md)
 - [Isolated build and migration rehearsal](DEPLOYMENT.md)
 - [Multi-homelab phase](MULTI-HOMELAB.md)
 - [Update Center contract](UPDATES.md)
+- [Restricted Linux host service setup](HOST-SERVICE.md)
 - [Feature preservation checklist](FEATURE-INVENTORY.md)
 
 ![Orbis workspace on an isolated clean install](screenshots/live-smoke/workspace.png)

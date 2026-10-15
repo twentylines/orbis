@@ -113,6 +113,10 @@
   cursor: pointer;
   font-weight: 650;
 }
+.desktop-update-release summary:focus-visible {
+  outline: 3px solid var(--desktop-accent);
+  outline-offset: 4px;
+}
 .desktop-update-markdown {
   margin: 15px 0;
   max-height: 360px;
@@ -121,6 +125,10 @@
   border: 1px solid var(--desktop-line);
   border-radius: 10px;
   background: var(--desktop-surface);
+}
+.desktop-update-markdown:focus-visible {
+  outline: 3px solid var(--desktop-accent);
+  outline-offset: 3px;
 }
 .desktop-update-note {
   display: block;
@@ -187,12 +195,14 @@
   color: var(--desktop-ink);
   border-color: var(--desktop-line);
 }
-.desktop:has(.desktop-update-release details[open]) .desktop-dock,
-.desktop:has(.desktop-update-plan) .desktop-dock,
-.desktop:has(.desktop-update-job.is-busy) .desktop-dock {
+.desktop:has(.desktop-updates) .desktop-dock {
   display: none;
 }
 @media (max-width: 760px) {
+  .desktop-update-markdown {
+    max-height: none;
+    overflow: visible;
+  }
   .desktop-updates-grid {
     grid-template-columns: 1fr;
   }
