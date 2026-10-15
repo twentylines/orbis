@@ -1,5 +1,23 @@
 # Orbis UI inspection
 
+## 2026-10-15: Home apps, search and section motion
+
+Independent Chrome inspections cover 1440/768/390/320 CSS px in both modes, with 14 installed apps and long names. Home defaults to 3 apps, selected 4 pins compact the lower cards, and Show all displays 14 in a bounded keyboard/wheel scroller while either lower card is enabled. Hiding both removes the bound; restoring the layout restores the cards. Preferences survive reload after clearing the local cache.
+
+The agents found and the source repairs: editor scrolling before its entrance animation ended; inherited dark muted text; inconsistent long-name picker rows; a 15px launcher inset; top-aligned Applications heading controls; and decorative overflow creating a phantom scroll area. The launcher now clips decoration without becoming a scroll container.
+
+Search opening starts at the actual header trigger (measured 0px endpoint error), fills the workspace, and closes to the live trigger (0 px endpoint error). Interrupted closing continues from the current transform (maximum measured difference below 0.0008 px). Inner input/X/result/footer containment passes after correcting the grid's automatic minimum width. X, Escape, shortcut, focus containment/restoration, installed/catalogue/section routes, delayed/stale results, error/retry feedback, resize during close and rapid shortcuts pass. Empty-result messaging no longer masks search failures.
+
+Section slides follow dock order (+1,+1,-1 measured during forward/back navigation), retain header/dock bounds, and do not run for Settings query changes. The first reduced-motion rule lost to named transition selectors; explicit named overrides now compute animation:none and 0s, with zero active animations. Responsive headers retain the server IP, including the phone status row.
+
+On layouts at least 900 px wide, more than 3 apps place Recent operations and Needs attention beside each other below a shorter launcher pane. Independent checks at 900/901/999/1024/1099/1440px found no header overlap or overflow; the status card no longer acquires a 345 px empty tail.
+
+The retained helpers are `home-app-checks.cjs`, `command-search-checks.cjs` and `workspace-alignment-checks.cjs`, used by `visual-qa.cjs`. These are isolated fixture checks. They do not establish real Docker lifecycle, released image behavior, other-browser coverage or copied-data migration.
+
+Retained release-candidate runs exited 0 for the full 1440/768/390/320 route matrix and the 14-app Home matrix in both modes. All search, geometry, persistence, form, history and focus assertions passed with no page errors. The many-app Home matrix was rerun after the 900px compact-grid refinement, and its screenshots were regenerated at the top of the page with the launcher scrolled to its beginning.
+
+Separate baseline route runs also exited 0 at 3840×2160 CSS px and at 720×1120 CSS px rendered at 2× scale (a 1440px-wide, 200% zoom layout simulation). These passed the retained assertions and had no page errors. This does not establish native browser zoom, text-only enlargement or every inherited flow. Beta 21 released-image verification follows publication.
+
 ## 2026-10-15: app workspace and further alignment corrections
 
 Independent agents inspected 96 global route/size/mode states, plus app detail, form, menu and dialog interactions. Production-bundle Chrome checks used isolated API fixtures at 1440, 768, 390 and 320 CSS px in light and dark mode. Screenshots were inspected as well as measured; outer bounds alone missed clipped text and the 3D server's full silhouette.
@@ -18,7 +36,7 @@ Independent agents inspected 96 global route/size/mode states, plus app detail, 
 
 Notice text contrast measured from rendered pixels is 5.97–6.15:1 light and 8.10–8.22:1 dark. Independent checks found no document overflow or page errors after the targeted corrections.
 
-The retained fixture harness now checks inner button centring, dock-label insets, installed/home card baselines, full server-face bounds and search focus, alongside the previous shell, theme, icon, history and responsive checks. These are local Chrome results. They do not establish released-image behaviour, real Docker lifecycle success, other-browser coverage, a complete enlarged-text pass or production readiness. Beta 19 remains the latest runtime-verified release until the next publication and isolated OTA check.
+The retained fixture harness now checks inner button centring, dock-label insets, installed/home card baselines, full server-face bounds and search focus, alongside the previous shell, theme, icon, history and responsive checks. These are local Chrome results. They do not establish released-image behaviour, real Docker lifecycle success, other-browser coverage, a complete enlarged-text pass or production readiness. Published beta 20 completed the browser-reviewed isolated beta 19→20 OTA. Build commit and immutable digest match the release; dark mode, task history and the single Store title survived. A real disposable app started and was restored to its original stopped state. Its invalid log-query check exposed HTTP 200 SSE error responses with the production interceptor; validation still prevented log readers from opening. The next iteration repairs the HTTP boundary and adds the interceptor to the retained HTTP regression fixture.
 
 Final retained harness runs passed at 1440/768/390/320 px with light/dark checks, no page errors and all required geometry/navigation/form assertions true. Desktop, tablet, phone and narrow fixture screenshots were regenerated from that final bundle.
 

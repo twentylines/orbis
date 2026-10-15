@@ -1,6 +1,6 @@
 import { AuthGuard } from '@/modules/auth/auth.guard';
-import { type INestApplication, type NestMiddleware } from '@nestjs/common';
-import { APP_PIPE } from '@nestjs/core';
+import { type CallHandler, type ExecutionContext, type INestApplication, type NestMiddleware } from '@nestjs/common';
+import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ArkValidationPipe } from 'nestjs-arktype';
 import { of } from 'rxjs';
@@ -21,6 +21,8 @@ describe('SSEController log query validation', () => {
       providers: [
         AuthGuard,
         { provide: APP_PIPE, useClass: ArkValidationPipe },
+        // Production's Sentry interceptor defers pipes into the SSE observable.
+        { provide: APP_INTERCEPTOR, useValue: { intercept: (_context: ExecutionContext, next: CallHandler) => next.handle() } },
         { provide: LoggerService, useValue: mock<LoggerService>() },
         { provide: SSEService, useValue: service },
       ],
@@ -82,9 +84,9 @@ describe('SSEController log query validation', () => {
   for (const path of ['/sse/app-logs?appUrn=media:test', '/sse/runtipi-logs']) {
     it.each(['0', '-1', '1001', '1.5', 'NaN', '1&maxLines=1000'])(`rejects maxLines=%s before opening ${path}`, async (value) => {
       const response = await get(`${path}${path.includes('?') ? '&' : '?'}maxLines=${value}`);
-      expect(response.status).toBe(400);
-      expect(response.headers['content-type']).toContain('application/json');
       expect(service.getLogStreamObservable).not.toHaveBeenCalled();
+      expect(response.status, `${response.headers['content-type']}: ${response.text}`).toBe(400);
+      expect(response.headers['content-type']).toContain('application/json');
     });
   }
 
@@ -106,8 +108,8 @@ describe('SSEController log query validation', () => {
     '?appUrn=media:test&appUrn=other:test',
   ])('rejects missing or malformed app URNs %s before opening a log reader', async (query) => {
     const response = await get(`/sse/app-logs${query}`);
-    expect(response.status).toBe(400);
-    expect(response.headers['content-type']).toContain('application/json');
     expect(service.getLogStreamObservable).not.toHaveBeenCalled();
+    expect(response.status, `${response.headers['content-type']}: ${response.text}`).toBe(400);
+    expect(response.headers['content-type']).toContain('application/json');
   });
 });

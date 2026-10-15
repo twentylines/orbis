@@ -168,7 +168,7 @@ body:has(.desktop) .modal-footer {
   background: transparent;
   border-color: var(--desktop-line);
 }
-body:has(.desktop) .modal-content .text-muted {
+body:has(.desktop) .text-muted {
   /* biome-ignore lint/complexity/noImportantStyles: Tabler marks this muted utility important. */
   color: var(--desktop-muted) !important;
 }

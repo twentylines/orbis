@@ -7,6 +7,7 @@ const workspace = type({
   order: widgetList,
   hidden: widgetList,
   wide: widgetList,
+  'showAllApps?': 'boolean',
   'pinnedApps?': type('string > 2 & string <= 180')
     .array()
     .narrow((items) => items.length <= 12 && new Set(items).size === items.length && items.every((item) => /^[^:]+:[^:]+$/.test(item))),
