@@ -7,3 +7,5 @@
 - Work on `main`; do not create additional work branches. Keep force-push/deletion protection, run relevant checks locally before pushing, and fix any failing main CI run promptly.
 - Use the pinned Bun package manager and frozen lockfile. Do not run pnpm or npm install in this workspace.
 - Visual QA must reject cramped text as well as overflow. Ordinary words split into orphan letters, labels pressed against controls or card edges, clipped text, and crowded values are failures even when bounding-box checks pass. Enlarged text must trigger layout reflow and preserve comfortable spacing. Use readable wrapping or accessible ellipsis for long identifiers.
+- Check Connecting, Reconnecting and missing/empty server IP states with enlarged text. Status messages must remain complete; connected address identifiers may use accessible ellipsis.
+- Keyboard focus inside a scrolling table must reveal the entire control and its focus marker without moving the page vertically. Inspect resting tab labels as well as the active tab.

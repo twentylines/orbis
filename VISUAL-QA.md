@@ -18,6 +18,8 @@ The final native and doubled-text global route runs both pass at all four widths
 
 A final missing-IP probe reproduced another tablet overflow: the complete “Address unavailable” message pushed logout outside the bar. The scoped fix hides the secondary server name only in that connected-without-an-address state below 1100px; configured-IP and transient layouts stay unchanged. Its final compiled check passes 16 groups at 761/768px, native/doubled text and both modes, with missing and empty IP values: 48 states and 16 recoveries, full visible/accessibility messages, no ellipsis or overflow, and matching Home/logout columns.
 
+Published beta30 subsequently passed 17 representative text/interaction samples at 1440/768/320px, including the enlarged tablet connection state and narrow forms. HTML/assets and live connection/system/container reads come from the exact release image; long metadata and other controlled browser responses are labelled. Actual records and the separate app-file/data/override fingerprint matched before/after. [Released captures](screenshots/live-beta30) and `DEPLOYMENT.md` record the exact digest and OTA evidence.
+
 These are local Chrome checks using controlled API fixtures. Published-image and actual-backend checks remain separately identified in `DEPLOYMENT.md`; copied Hades data and complete production acceptance remain open.
 
 ## 2026-10-16: long app names, version strings and update windows
