@@ -91,7 +91,7 @@ describe('desktop preferences', () => {
       .set('Authorization', 'Bearer test')
       .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace });
     expect(saved.status).toBe(200);
-    expect(saved.body.workspace).toEqual(workspace);
+    expect(saved.body.workspace).toEqual({ ...workspace, pinnedApps: [] });
     const invalid = await request(app.getHttpServer())
       .put('/desktop-preferences')
       .set('Authorization', 'Bearer test')
@@ -102,5 +102,28 @@ describe('desktop preferences', () => {
       .set('Authorization', 'Bearer test')
       .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace: { ...workspace, hidden: ['admin-shell'] } });
     expect(unknown.status).toBe(400);
+  });
+
+  it('keeps old widget layouts and validates pinned app identities', async () => {
+    const workspace = { order: ['applications', 'activity', 'storage', 'attention'], hidden: [], wide: ['applications'] };
+    await fs.writeFile(path.join(directory, 'state', 'desktop', '7.json'), JSON.stringify({ ...DEFAULT_DESKTOP_PREFERENCES, workspace }));
+    const inherited = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');
+    expect(inherited.body.workspace).toEqual({ ...workspace, pinnedApps: [] });
+    const saved = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace: { ...workspace, pinnedApps: ['whoami:migrated'] } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.workspace.pinnedApps).toEqual(['whoami:migrated']);
+    const invalid = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace: { ...workspace, pinnedApps: ['whoami:migrated', 'whoami:migrated'] } });
+    expect(invalid.status).toBe(400);
+    const malformed = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace: { ...workspace, pinnedApps: [':migrated'] } });
+    expect(malformed.status).toBe(400);
   });
 });

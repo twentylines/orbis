@@ -52,6 +52,17 @@ export default function Dashboard() {
     refetchIntervalInBackground: false,
   });
   const installed = apps.data?.installed.filter(({ info }) => info.available) ?? [];
+  const orderedInstalled = [...installed].sort((left, right) => {
+    const leftPin = workspace.pinnedApps.indexOf(left.info.urn);
+    const rightPin = workspace.pinnedApps.indexOf(right.info.urn);
+    if (leftPin < 0 && rightPin < 0) return 0;
+    if (leftPin < 0) return 1;
+    if (rightPin < 0) return -1;
+    return leftPin - rightPin;
+  });
+  const installedUrns = new Set(installed.map(({ info }) => info.urn));
+  const missingPins = workspace.pinnedApps.filter((urn) => !installedUrns.has(urn));
+  const visibleInstalled = orderedInstalled.slice(0, Math.max(8, workspace.pinnedApps.length - missingPins.length));
   const running = installed.filter(({ app }) => app.status === 'running').length;
   const attention = installed.filter(({ app, metadata }) => app.status === 'stopped' || Number(app.version) < Number(metadata.latestVersion)).length;
   const disk = system.data?.filesystems.find((filesystem) => filesystem.mount === '/') ?? system.data?.filesystems[0];
@@ -83,6 +94,11 @@ export default function Dashboard() {
   const toggle = (id: WidgetId, field: 'hidden' | 'wide') => {
     const current = workspace[field];
     saveWorkspace({ ...workspace, [field]: current.includes(id) ? current.filter((item) => item !== id) : [...current, id] });
+  };
+  const togglePin = (urn: string) => {
+    const current = workspace.pinnedApps;
+    if (!current.includes(urn) && current.length >= 12) return;
+    saveWorkspace({ ...workspace, pinnedApps: current.includes(urn) ? current.filter((item) => item !== urn) : [...current, urn] });
   };
 
   const widgets: Record<WidgetId, ReactNode> = {
@@ -124,7 +140,7 @@ export default function Dashboard() {
         ) : null}
         {installed.length > 0 ? (
           <div className="workspace-app-list">
-            {installed.slice(0, 8).map(({ app, info, metadata }) => {
+            {visibleInstalled.map(({ app, info, metadata }) => {
               const [appId, storeId] = info.urn.split(':');
               const appUpdate = Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion;
               return (
@@ -132,12 +148,12 @@ export default function Dashboard() {
                   key={info.urn}
                   to={`/apps/${storeId}/${appId}`}
                   className="workspace-app"
-                  aria-label={`${info.name}, ${app.status}${appUpdate ? ', update available' : ''}`}
+                  aria-label={`${info.name}, ${app.status}${appUpdate ? ', update available' : ''}${workspace.pinnedApps.includes(info.urn) ? ', pinned' : ''}`}
                 >
                   <AppLogo urn={info.urn} size={46} alt="" />
                   <span className="workspace-app-copy">
                     <strong>{info.name}</strong>
-                    <small>{appUpdate ? 'Update available' : app.status}</small>
+                    <small>{`${workspace.pinnedApps.includes(info.urn) ? 'Pinned · ' : ''}${appUpdate ? 'Update available' : app.status}`}</small>
                   </span>
                   <span className={`workspace-app-status ${app.status}`} aria-hidden="true" />
                 </Link>
@@ -272,6 +288,7 @@ export default function Dashboard() {
                   order: [...defaultDesktopPreferences.workspace.order],
                   hidden: [],
                   wide: [...defaultDesktopPreferences.workspace.wide],
+                  pinnedApps: [...workspace.pinnedApps],
                 })
               }
             >
@@ -312,6 +329,44 @@ export default function Dashboard() {
               </li>
             ))}
           </ol>
+          <div className="workspace-pin-editor">
+            <div>
+              <h3>Pinned applications</h3>
+              <p>Choose up to 12 applications to keep first in the launch area.</p>
+            </div>
+            {apps.isPending ? <p>Loading installed applications…</p> : null}
+            {apps.isError ? <p role="alert">Applications could not be loaded. Pinning is unavailable right now.</p> : null}
+            {apps.data && installed.length === 0 ? <p>Install an application to pin it here.</p> : null}
+            {installed.length > 0 ? (
+              <div className="workspace-pin-list">
+                {installed.map(({ info }) => {
+                  const pinned = workspace.pinnedApps.includes(info.urn);
+                  return (
+                    <button
+                      key={info.urn}
+                      type="button"
+                      aria-pressed={pinned}
+                      aria-label={`${pinned ? 'Unpin' : 'Pin'} ${info.name}`}
+                      disabled={!pinned && workspace.pinnedApps.length >= 12}
+                      onClick={() => togglePin(info.urn)}
+                    >
+                      <AppLogo urn={info.urn} size={28} alt="" />
+                      <span>{info.name}</span>
+                      <small>{pinned ? 'Pinned' : 'Pin'}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {missingPins.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => saveWorkspace({ ...workspace, pinnedApps: workspace.pinnedApps.filter((urn) => installedUrns.has(urn)) })}
+              >
+                Remove {missingPins.length} unavailable pin{missingPins.length === 1 ? '' : 's'}
+              </button>
+            ) : null}
+          </div>
           <p className="workspace-editor-sync" role={syncState === 'error' ? 'alert' : undefined}>
             {syncState === 'saving'
               ? 'Saving layout…'
