@@ -179,6 +179,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                   windowControls.current?.minimize();
                 }
               }}
+              onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
               className={`desktop-dock-item ${current?.path === path ? (minimized ? 'is-minimized' : 'is-active') : ''}`}
               aria-label={label}
               aria-current={current?.path === path ? 'page' : undefined}

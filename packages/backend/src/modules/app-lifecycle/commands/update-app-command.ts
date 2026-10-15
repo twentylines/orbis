@@ -67,6 +67,7 @@ export class UpdateAppCommand extends AppLifecycleCommand {
       await marketplaceService.copyAppFromRepoToInstalled(appUrn);
 
       await this.ensureAppDir(appUrn, form);
+      await appHelpers.generateEnvFile(appUrn, form);
 
       await dockerService.composeApp(appUrn, 'pull');
 

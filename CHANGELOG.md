@@ -2,6 +2,11 @@
 
 ## Unreleased development preview
 
+- Replaced oversized error panels with compact recovery actions and expandable diagnostics; route navigation resets the error boundary. Widened the desktop with24px insets and kept ultra-wide Settings forms in one readable window.
+- Fixed enlarged-text clipping in Home actions, resource/storage rows, app tabs, pins and dock labels. Keyboard focus now reveals a complete dock item. Login attribution, placeholders, reset instructions and empty-state glyphs use the active theme.
+- Preserved stored app settings and backup retention during upgrades, generated new app defaults inside the update task, and persisted fresh-install retention overrides.374 backend and78 common tests pass; released app-upgrade preservation remains a separate acceptance check.
+
+
 - Added saved floating/maximized/snapped tool windows, pointer/keyboard move/resize, mobile fallback and minimize/restore that preserves the current form and URL. Hidden tools pause their polling and log streams; global events and tasks stay live.
 - Corrected content-width layouts, long Store headings/server labels, create/edit/update titles, input label associations, system-log IDs/limits and ignored-update attention counts. Independent window geometry, flow, motion and screenshot checks pass.
 - Added strict window-state persistence, visibility-only editor loader guards and declared-field preference import/export. The current single-tool model and remaining acceptance scope are documented in `DESKTOP-WINDOWS.md` and `ACCEPTANCE.md`.

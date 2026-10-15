@@ -160,9 +160,12 @@
   margin-bottom: 20px;
 }
 @container (max-width: 860px) {
+  .app-detail-tabs > [role="tablist"] [role="tab"] {
+    flex: 1 1 auto;
+    white-space: normal;
+  }
   .app-detail-tabs > [role="tablist"] .nav-tabs {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
   }
 }
 @container (max-width: 540px) {

@@ -8,6 +8,7 @@
   view-transition-name: none;
 }
 .desktop-route-window .desktop-window-bar {
+  flex-wrap: wrap;
   margin: 0;
   padding: 17px 22px;
   flex: none;
@@ -31,6 +32,9 @@
   gap: 7px;
   margin-left: auto;
   flex: none;
+}
+.desktop-route-window .desktop-window-label {
+  flex: 1 1 min-content;
 }
 .desktop-window-label span {
   max-width: 100%;
@@ -189,7 +193,7 @@
   }
   .desktop .desktop-window-label h1 {
     font-size: 16px;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
   }
 }
 @media (max-width: 380px) {
