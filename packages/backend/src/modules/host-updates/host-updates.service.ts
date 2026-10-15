@@ -4,6 +4,7 @@ import { BadRequestException, HttpException, Injectable, ServiceUnavailableExcep
 
 const TAG = /^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$/;
 const PLAN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PACKAGE_NAME = /^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?$/;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
 export type HostUpdateStatus = {
@@ -27,6 +28,38 @@ export type HostUpdatePlan = {
   appsMustBeStopped: boolean;
 };
 
+export type HostPackage = {
+  name: string;
+  installedVersion: string;
+  candidateVersion: string;
+  downloadBytes: number | null;
+  security: boolean;
+  sources: Array<{ origin: string | null; archive: string | null; site: string | null; trusted: boolean }>;
+};
+
+export type HostPackageInventory = {
+  available: boolean;
+  reason?: string;
+  manager?: 'apt';
+  operatingSystem?: string;
+  checkedAt?: string;
+  indexesUpdatedAt?: string | null;
+  rebootRequired?: boolean;
+  packageCount?: number;
+  truncated?: boolean;
+  packages?: HostPackage[];
+};
+
+export type HostPackageChangelog = {
+  name: string;
+  candidateVersion: string;
+  available: boolean;
+  source: string;
+  body?: string;
+  truncated?: boolean;
+  reason?: string;
+};
+
 @Injectable()
 export class HostUpdatesService {
   private readonly socketPath = process.env.ORBIS_HOST_SOCKET;
@@ -38,7 +71,10 @@ export class HostUpdatesService {
     return this.socketPath;
   }
 
-  private async call<T>(endpoint: '/v1/status' | '/v1/plan' | '/v1/apply' | '/v1/recover', body?: object): Promise<T> {
+  private async call<T>(
+    endpoint: '/v1/status' | '/v1/plan' | '/v1/apply' | '/v1/recover' | '/v1/packages' | `/v1/packages/changelog?name=${string}`,
+    body?: object,
+  ): Promise<T> {
     const socketPath = this.requireSocket();
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const response = await new Promise<{ status: number; data: unknown }>((resolve, reject) => {
@@ -47,7 +83,7 @@ export class HostUpdatesService {
           socketPath,
           path: endpoint,
           method: payload === undefined ? 'GET' : 'POST',
-          timeout: endpoint === '/v1/plan' ? 90_000 : 10_000,
+          timeout: endpoint === '/v1/plan' ? 90_000 : endpoint.startsWith('/v1/packages/changelog') ? 25_000 : 10_000,
           headers: payload === undefined ? {} : { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
         },
         (res) => {
@@ -55,7 +91,7 @@ export class HostUpdatesService {
           let size = 0;
           res.on('data', (chunk: Buffer) => {
             size += chunk.length;
-            if (size > MAX_RESPONSE_BYTES) {
+            if (size > (endpoint === '/v1/packages' ? 1024 * 1024 : MAX_RESPONSE_BYTES)) {
               res.destroy(new Error('Host service response was too large'));
               return;
             }
@@ -97,6 +133,17 @@ export class HostUpdatesService {
     } catch {
       return { available: false, reason: 'The Orbis host service is unavailable.' };
     }
+  }
+
+  packages(): Promise<HostPackageInventory> {
+    return this.call<HostPackageInventory>('/v1/packages');
+  }
+
+  packageChangelog(name: unknown): Promise<HostPackageChangelog> {
+    if (typeof name !== 'string' || name.length > 180 || !PACKAGE_NAME.test(name)) {
+      throw new BadRequestException('Choose a valid package name.');
+    }
+    return this.call<HostPackageChangelog>(`/v1/packages/changelog?name=${encodeURIComponent(name)}`);
   }
 
   plan(tag: unknown): Promise<HostUpdatePlan> {

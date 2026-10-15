@@ -35,6 +35,16 @@ STATE_DIR = Path("/var/lib/orbis/state")
 MAINTENANCE = STATE_DIR / "helper-maintenance.json"
 WORKSPACE_PREFIX = ".host-service-upgrade-"
 TERMINAL_JOBS = {"complete", "rolled-back", "failed"}
+LEGACY_SCRIPTS = {
+    "migration-preflight.py",
+    "orbis-release-plan.py",
+    "orbis-stage-release.py",
+    "orbis-host.py",
+    "orbis-release-check.py",
+    "orbis-snapshot.py",
+    "orbis-host-update.py",
+    "orbis-host-service.py",
+}
 
 
 def require_root_owned(path: Path, *, directory: bool, private: bool = False) -> None:
@@ -80,7 +90,9 @@ def require_installed(root: Path, context: str) -> None:
         require_root_owned(directory, directory=True, private=True)
     require_root_owned(SETUP.INSTALL_DIR, directory=True, private=True)
     for name in SETUP.SCRIPTS:
-        require_root_owned(SETUP.INSTALL_DIR / name, directory=False, private=True)
+        file = SETUP.INSTALL_DIR / name
+        if name in LEGACY_SCRIPTS or file.exists() or file.is_symlink():
+            require_root_owned(file, directory=False, private=True)
     require_root_owned(SETUP.ENV_FILE, directory=False, private=True)
     require_root_owned(SETUP.UNIT_FILE, directory=False)
     if SETUP.ENV_FILE.read_text(encoding="utf-8") != exact_environment(root, context):
@@ -109,6 +121,8 @@ def job_identity() -> tuple[str, str] | None:
 def digest_files(directory: Path) -> str:
     digest = hashlib.sha256()
     for name in SETUP.SCRIPTS:
+        if not (directory / name).is_file():
+            continue
         digest.update(name.encode("utf-8") + b"\0")
         digest.update((directory / name).read_bytes())
         digest.update(b"\0")

@@ -23,7 +23,17 @@ describe('host update Unix socket transport', () => {
         const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null;
         requests.push({ method: request.method || '', path: request.url || '', body });
         response.setHeader('Content-Type', 'application/json');
-        response.end(JSON.stringify(request.url === '/v1/status' ? { available: true, enrolled: true } : { planId: 'fixture-plan' }));
+        response.end(
+          JSON.stringify(
+            request.url === '/v1/status'
+              ? { available: true, enrolled: true }
+              : request.url === '/v1/packages'
+                ? { available: true, packageCount: 1, packages: [] }
+                : request.url?.startsWith('/v1/packages/changelog?')
+                  ? { name: 'base-files:arm64', available: true, body: 'Ubuntu changelog' }
+                  : { planId: 'fixture-plan' },
+          ),
+        );
       });
     });
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
@@ -47,6 +57,19 @@ describe('host update Unix socket transport', () => {
   it('rejects untrusted tags before contacting the host service', async () => {
     const count = requests.length;
     expect(() => service.plan('v0.1.0-beta.8; rm -rf /')).toThrow(BadRequestException);
+    expect(requests).toHaveLength(count);
+  });
+
+  it('reads packages and a fixed candidate changelog through the socket', async () => {
+    expect(await service.packages()).toMatchObject({ available: true, packageCount: 1 });
+    expect(await service.packageChangelog('base-files:arm64')).toMatchObject({ available: true, name: 'base-files:arm64' });
+    expect(requests).toContainEqual({ method: 'GET', path: '/v1/packages', body: null });
+    expect(requests).toContainEqual({ method: 'GET', path: '/v1/packages/changelog?name=base-files%3Aarm64', body: null });
+  });
+
+  it('rejects package names with query syntax before contacting the socket', async () => {
+    const count = requests.length;
+    expect(() => service.packageChangelog('base-files&name=other')).toThrow(BadRequestException);
     expect(requests).toHaveLength(count);
   });
 });

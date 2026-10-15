@@ -1,5 +1,5 @@
 import { AuthGuard } from '@/modules/auth/auth.guard';
-import { BadRequestException, Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
 import { HostUpdatesGuard } from './host-updates.guard';
 import { HostUpdatesService } from './host-updates.service';
 
@@ -11,6 +11,16 @@ export class HostUpdatesController {
   @Get('status')
   status() {
     return this.hostUpdates.status();
+  }
+
+  @Get('packages')
+  packages() {
+    return this.hostUpdates.packages();
+  }
+
+  @Get('packages/changelog')
+  packageChangelog(@Query('name') name: string) {
+    return this.hostUpdates.packageChangelog(name);
   }
 
   @Post('plan')
