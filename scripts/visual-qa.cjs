@@ -8,6 +8,7 @@ const inspectCommandSearch = require('./command-search-checks.cjs');
 const inspectHomeApps = require('./home-app-checks.cjs');
 const inspectWindowFlows = require('./window-flow-checks.cjs');
 const inspectAppUpdate = require('./app-update-checks.cjs');
+const inspectAppUpdateComfort = require('./app-update-comfort-checks.cjs');
 const inspectConnectionStatus = require('./connection-status-checks.cjs');
 const inspectNotifications = require('./notification-checks.cjs');
 const inspectErrorAuth = require('./error-auth-checks.cjs');
@@ -16,6 +17,8 @@ const inspectSurfaceComfort = require('./surface-comfort-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
 const updatesOnly = process.env.ORBIS_VISUAL_UPDATES_ONLY === '1';
+const updateComfortOnly = process.env.ORBIS_VISUAL_UPDATE_COMFORT_ONLY === '1';
+const appDetailsOnly = process.env.ORBIS_VISUAL_APP_DETAILS_ONLY === '1';
 const connectionOnly = process.env.ORBIS_VISUAL_CONNECTION_ONLY === '1';
 const notificationsOnly = process.env.ORBIS_VISUAL_NOTIFICATIONS_ONLY === '1';
 const errorsOnly = process.env.ORBIS_VISUAL_ERRORS_ONLY === '1';
@@ -87,8 +90,9 @@ const catalogue = [
 const appDetailFixture = (urn) => {
   const [id, storeId] = urn.split(':');
   const summary = apps.find((item) => item.info.urn === urn) || (urn === 'managed:_user' ? { app: { id: 4, status: 'stopped', version: 1 } } : null);
-  const name =
-    summary?.info?.name || (id === 'photos' ? 'Photos' : id === 'custom' ? 'Custom service' : id === 'managed' ? 'Managed service' : 'Media');
+  const name = updateComfortOnly
+    ? 'Jellyfin Media Library and Transcoding Server'
+    : summary?.info?.name || (id === 'photos' ? 'Photos' : id === 'custom' ? 'Custom service' : id === 'managed' ? 'Managed service' : 'Media');
   return {
     info: {
       id,
@@ -96,7 +100,7 @@ const appDetailFixture = (urn) => {
       name,
       short_desc: summary?.info?.short_desc || 'A self-hosted application for your server',
       description: `## ${name} on your server\n\nRead the application documentation before configuring access.\n\n- Configuration stays with this installation.\n- Backups and logs remain available in their sections.`,
-      version: '1.2.3',
+      version: updateComfortOnly ? '2026.10.15-release-candidate.1234567890-arm64' : '1.2.3',
       author: 'Fixture maintainer',
       source: 'https://example.com/source',
       website: 'https://example.com',
@@ -133,7 +137,13 @@ const appDetailFixture = (urn) => {
           isVisibleOnGuestDashboard: false,
         }
       : null,
-    metadata: { latestVersion: 2, latestDockerVersion: '1.3.0', localSubdomain: `${id}-${storeId}`, composeSchemaVersion: 2, hasCustomConfig: true },
+    metadata: {
+      latestVersion: 2,
+      latestDockerVersion: updateComfortOnly ? '2026.10.16-release-candidate.1234567890-arm64' : '1.3.0',
+      localSubdomain: `${id}-${storeId}`,
+      composeSchemaVersion: 2,
+      hasCustomConfig: true,
+    },
   };
 };
 const containerFixture = {
@@ -272,11 +282,11 @@ const translations = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', 'packages', 'backend', 'src', 'modules', 'i18n', 'translations', 'en.json'), 'utf8'),
 );
 
-async function capture(page, name, { scrollTop = true } = {}) {
+async function capture(page, name, { scrollTop = true, fullPage = false } = {}) {
   await page.waitForTimeout(600);
   if (scrollTop) await page.evaluate(() => window.scrollTo(0, 0));
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  await page.screenshot({ path: path.join(screenshotDir, name), animations: 'disabled' });
+  await page.screenshot({ path: path.join(screenshotDir, name), animations: 'disabled', fullPage });
 }
 
 async function chromeGeometry(page) {
@@ -353,7 +363,9 @@ async function main() {
             { name: 'desktop', width: 1440, height: 1120 },
             { name: 'tablet', width: 768, height: 1024 },
             { name: 'mobile', width: 390, height: 844 },
-            ...(updatesOnly || notificationsOnly || errorsOnly || textOnly ? [{ name: 'narrow', width: 320, height: 800 }] : []),
+            ...(updatesOnly || updateComfortOnly || appDetailsOnly || notificationsOnly || errorsOnly || textOnly
+              ? [{ name: 'narrow', width: 320, height: 800 }]
+              : []),
           ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
@@ -671,6 +683,30 @@ async function main() {
         },
       });
       reports.push({ viewport: viewport.name, connection, errors });
+      await page.close();
+      continue;
+    }
+    if (appDetailsOnly) {
+      detailPhase = true;
+      const appDetails = await inspectAppDetails({
+        page,
+        base,
+        viewport,
+        capture,
+        logs: { count: () => logRequests, limits: () => logLimits },
+        actions: actionRequests,
+      });
+      reports.push({ viewport: viewport.name, appDetails, errors });
+      await page.close();
+      continue;
+    }
+    if (updateComfortOnly) {
+      const updates = await inspectAppUpdateComfort({
+        page,
+        base,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, updates, errors });
       await page.close();
       continue;
     }
@@ -1117,7 +1153,18 @@ async function main() {
     await Promise.race([page.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
-  if (homeOnly || windowsOnly || updatesOnly || connectionOnly || notificationsOnly || errorsOnly || textOnly || comfortOnly) {
+  if (
+    homeOnly ||
+    windowsOnly ||
+    updatesOnly ||
+    updateComfortOnly ||
+    appDetailsOnly ||
+    connectionOnly ||
+    notificationsOnly ||
+    errorsOnly ||
+    textOnly ||
+    comfortOnly
+  ) {
     if (reports.some((report) => report.errors.length)) process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     return;
