@@ -12,11 +12,24 @@ import http from 'isomorphic-git/http/node';
 
 @Injectable()
 export class ReposHelpers {
+  private readonly repoOperations = new Map<string, Promise<unknown>>();
+
   constructor(
     private readonly logger: LoggerService,
     private readonly configuration: ConfigurationService,
     private readonly filesystem: FilesystemService,
   ) {}
+
+  private async withRepoLock<T>(id: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.repoOperations.get(id) ?? Promise.resolve();
+    const pending = previous.catch(() => undefined).then(operation);
+    this.repoOperations.set(id, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.repoOperations.get(id) === pending) this.repoOperations.delete(id);
+    }
+  }
 
   /**
    * Given a repo url, return a hash of it to be used as a folder name
@@ -82,11 +95,17 @@ export class ReposHelpers {
    * @param {string} url
    */
   public async cloneRepo(url: string, id: string) {
+    return this.withRepoLock(id, () => this.cloneRepoUnlocked(url, id));
+  }
+
+  private async cloneRepoUnlocked(url: string, id: string) {
+    let stagingPath: string | undefined;
     try {
       const { dataDir } = this.configuration.get('directories');
       const repoPath = path.join(dataDir, 'repos', id);
 
       if (await this.filesystem.pathExists(repoPath)) {
+        await git.resolveRef({ fs, dir: repoPath, ref: 'HEAD' });
         await this.ensureDirectoryWithPermissions(path.dirname(repoPath));
         this.logger.debug(`Repo ${url} already exists`);
         return { success: true, message: '' };
@@ -102,20 +121,26 @@ export class ReposHelpers {
       this.logger.debug(`Cloning repo ${repoUrl}${branch ? ` on branch ${branch}` : ''} to ${repoPath}`);
 
       await this.ensureDirectoryWithPermissions(path.dirname(repoPath));
+      stagingPath = await fs.promises.mkdtemp(path.join(path.dirname(repoPath), `.${id}-clone-`));
       await git.clone({
         fs,
         http,
-        dir: repoPath,
+        dir: stagingPath,
         url: repoUrl,
         singleBranch: true,
         depth: 1,
         ref: branch || undefined,
       });
 
+      await fs.promises.rename(stagingPath, repoPath);
+      stagingPath = undefined;
+
       this.logger.info(`Cloned repo ${repoUrl} to ${repoPath}`);
       return { success: true, message: '' };
     } catch (err) {
       return this.handleRepoError(err);
+    } finally {
+      if (stagingPath) await fs.promises.rm(stagingPath, { recursive: true, force: true });
     }
   }
 
@@ -125,8 +150,13 @@ export class ReposHelpers {
    * @param {string} repoUrl
    */
   public async pullRepo(repoUrl: string, slug: string) {
+    return this.withRepoLock(slug, () => this.pullRepoUnlocked(repoUrl, slug));
+  }
+
+  private async pullRepoUnlocked(repoUrl: string, slug: string) {
     try {
-      await this.cloneRepo(repoUrl, slug);
+      const cloned = await this.cloneRepoUnlocked(repoUrl, slug);
+      if (!cloned.success) return cloned;
 
       const [remoteUrl] = this.getRepoBaseUrlAndBranch(repoUrl);
 
@@ -146,10 +176,9 @@ export class ReposHelpers {
         fullname: false,
       });
       if (!currentBranch) {
-        this.logger.warn(`No current branch found for repo ${repoUrl}. Deleting and re-cloning.`);
-        await this.deleteRepo(slug);
-        return this.cloneRepo(repoUrl, slug);
+        return { success: false, message: `No current branch found for repo ${slug}` };
       }
+      const previousSha = await git.resolveRef({ fs, dir: repoPath, ref: 'HEAD' });
       const remoteBranchRef = `origin/${currentBranch}`;
 
       const fetchResult = await git.fetch({
@@ -169,27 +198,19 @@ export class ReposHelpers {
         ref: remoteBranchRef,
       });
       this.logger.debug('Target SHA:', targetSha);
-      await git.branch({
-        fs,
-        dir: repoPath,
-        ref: currentBranch,
-        object: targetSha,
-        force: true,
-      });
-      await git.checkout({
-        fs,
-        dir: repoPath,
-        ref: currentBranch,
-        force: true,
-      });
+      try {
+        await git.branch({ fs, dir: repoPath, ref: currentBranch, object: targetSha, force: true });
+        await git.checkout({ fs, dir: repoPath, ref: currentBranch, force: true });
+      } catch (error) {
+        await git.branch({ fs, dir: repoPath, ref: currentBranch, object: previousSha, force: true });
+        await git.checkout({ fs, dir: repoPath, ref: currentBranch, force: true });
+        throw error;
+      }
 
       this.logger.debug(`Pulled repo ${repoUrl} to ${repoPath}`);
       return { success: true, message: '' };
-    } catch (_) {
-      if (this.configuration.get('__prod__')) {
-        await this.deleteRepo(slug);
-      }
-      return this.cloneRepo(repoUrl, slug);
+    } catch (error) {
+      return this.handleRepoError(error);
     }
   }
 
@@ -197,6 +218,10 @@ export class ReposHelpers {
    * Given a repo id, delete it from the repos folder
    */
   public async deleteRepo(id: string) {
+    return this.withRepoLock(id, () => this.deleteRepoUnlocked(id));
+  }
+
+  private async deleteRepoUnlocked(id: string) {
     try {
       const { dataDir } = this.configuration.get('directories');
       const repoPath = path.join(dataDir, 'repos', id);

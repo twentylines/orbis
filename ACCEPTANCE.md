@@ -4,7 +4,7 @@ The original product brief and subsequent user requests remain the scope. A publ
 
 | Requirement | Current evidence | Work still required |
 | --- | --- | --- |
-| Runtipi compatibility, authentication, lifecycle, stores, configuration, data, networking, HTTPS, backups and attribution | Upstream v4.10.1 retained; feature inventory; isolated lifecycle and synthetic adoption/rollback; original account/app/store survive released updates | Copied real-data migration, custom-store refresh and app-update rehearsal, TOTP/forward-auth/HTTPS end-to-end checks, external mounts and volumes, amd64 runtime |
+| Runtipi compatibility, authentication, lifecycle, stores, configuration, data, networking, HTTPS, backups and attribution | Upstream v4.10.1 retained; feature inventory; isolated lifecycle and synthetic adoption/rollback; original account/app/store survive released updates; published amd64 clean-install/lifecycle/window/icon rehearsal | Copied real-data migration, custom-store refresh and app-update rehearsal, TOTP/forward-auth/HTTPS end-to-end checks, external mounts and volumes, amd64 runtime |
 | Cohesive server desktop and glass materials across screens | Shared chrome/dock/windows, local wallpaper, distinct content materials; desktop/mobile/narrow screenshots | Deeper store/detail/form presentation, consistent menus/dialogs/loading/error states, tablet/4K and enlarged-text audit across every flow |
 | Useful editable home workspace | Real installed apps/links, pinning, status/storage/network, recent operations and attention; saved show/hide/order/width controls | Application groups and recent-use ordering, additional widgets and presentation options, drag/resize with keyboard alternatives |
 | Integrated real monitoring | Host CPU/per-core/memory/swap/uptime when exposed; runtime storage/network; real per-container resources and health; CPU/memory rankings; bounded recorded aggregate history, time ranges and pointer/keyboard chart inspection | Host disks/network/I/O, exposed sensors/GPU, host-process consumers, precise source/staleness treatment |
@@ -52,7 +52,7 @@ Published as beta 21. Protected checks and the isolated arm64 browser OTA passed
 
 Local verification: measured background collection with every Orbis page closed; saved history survived a VM restart; an explicit core restart flushed the unsaved partial minute. Authenticated browser range selection, reload, keyboard inspection and desktop/mobile fit passed on the isolated arm64 build. Published-image verification follows the protected release gates.
 
-## Current iteration: practical desktop windows
+## Previous iteration: practical desktop windows
 
 - Provide full-page, floating, maximized and snapped tools with consistent title-bar controls, saved per-tool bounds and keyboard alternatives. Clamp to the actual workspace; mobile uses full-page tools.
 - Preserve the current route and unsaved form during minimize/restore. Keep app tabs, Monitor ranges and unrelated query values. Do not re-run editor loaders for a visibility-only navigation.
@@ -61,3 +61,13 @@ Local verification: measured background collection with every Orbis page closed;
 - Correct system-log line IDs and bounds, accessible input labels, contextual create/edit/update titles and ignored-update Home counts.
 
 See `DESKTOP-WINDOWS.md` for route/state semantics. Beta 22 publication, reviewed OTA, snapshot comparisons, real window/app/log/search checks and all 248 icon decodes passed on the isolated arm64 stack. `DEPLOYMENT.md` records the startup-health audit race and its independent settled verification. This iteration does not complete the full acceptance checklist.
+
+## Current iteration: store refresh and app upgrades
+
+- Preserve a last-good catalogue on an unavailable Git server; stage first clones and clean failures. Serialize operations on each repository.
+- Report partial refresh failures, remove duplicate pulls and preserve offline startup using local files.
+- Keep the app update review stable while requests load. Handle HTTP, missing-file and malformed-Compose failures with visible retry and gated submission. Keep the wizard on an HTTP rejection.
+- Verify native keyboard step activation, backup choice, minimize/restore, narrow footer geometry and consistent focus treatment.
+- Rehearse a real owned custom store and app version upgrade with persistent data, app configuration, user Compose/env overrides, generated values and backup evidence. Boot the published image in a separate x86_64 guest and run the clean-install/lifecycle checks.
+
+The source regression suite passes 354 backend tests and the common tests; types and bundle pass. The existing Tasks HTTP test failed intermittently while repeatedly opening/closing its listener; it now keeps one explicit loopback listener per test and the full suite passed. Beta 22 also passed clean registration, eight app lifecycle actions, real window checks and all 264 icon decodes in a separate x86_64 guest; see `DEPLOYMENT.md`. Custom-store upgrade evidence will be recorded after verification. The final bundle passed the full 1440/768/390 route regression, 60 connection-state assertions and the update wizard at 1440/768/390/320 in both modes, including 112 footer geometry checks and 64 review failure/retry recoveries. Hades remains unchanged.

@@ -11,7 +11,7 @@ if (!['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)) {
   throw new Error('The live smoke test accepts only a loopback test stack.');
 }
 
-const screenshots = path.join(__dirname, '..', 'screenshots', 'live-smoke');
+const screenshots = process.env.ORBIS_SMOKE_SCREENSHOT_DIR || path.join(__dirname, '..', 'screenshots', 'live-smoke');
 fs.mkdirSync(screenshots, { recursive: true });
 
 async function main() {
@@ -61,6 +61,12 @@ async function main() {
       api[endpoint] = await response.json();
     }
     assert.equal(api['/api/system/build'].version, process.env.ORBIS_EXPECTED_VERSION || 'development');
+    if (process.env.ORBIS_SMOKE_RELEASE_FILE) {
+      const release = JSON.parse(fs.readFileSync(process.env.ORBIS_SMOKE_RELEASE_FILE, 'utf8'));
+      assert.equal(api['/api/system/build'].version, release.tag);
+      assert.equal(api['/api/system/build'].commit, release.commit);
+      assert.equal(api['/api/system/build'].imageDigest, release.image.split('@')[1]);
+    }
 
     for (const [name, route] of [
       ['workspace', '/dashboard'],
@@ -141,6 +147,23 @@ async function main() {
     }
 
     assert.deepEqual(errors, [], 'browser should have no page errors');
+    if (process.env.ORBIS_SMOKE_COOKIE_FILE) {
+      const cookies = await page.context().cookies();
+      const jar = cookies
+        .map((cookie) =>
+          [
+            `${cookie.httpOnly ? '#HttpOnly_' : ''}${cookie.domain}`,
+            'FALSE',
+            cookie.path,
+            cookie.secure ? 'TRUE' : 'FALSE',
+            Math.max(0, Math.floor(cookie.expires)),
+            cookie.name,
+            cookie.value,
+          ].join('\t'),
+        )
+        .join('\n');
+      fs.writeFileSync(process.env.ORBIS_SMOKE_COOKIE_FILE, `${jar}\n`, { mode: 0o600 });
+    }
     console.info(
       JSON.stringify({
         result: 'passed',

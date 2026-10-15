@@ -2,6 +2,10 @@
 /* biome-ignore-all lint/complexity/noImportantStyles: Tabler utilities and reduced-motion controls need stronger overrides. */
 @import "../../../desktop/theme.css";
 
+html:has(.desktop) {
+  scroll-padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+}
+
 .desktop {
   min-height: 100vh;
   display: flow-root;
@@ -231,23 +235,23 @@
   gap: 7px;
   color: rgba(244, 249, 244, 0.77);
   font-size: 13px;
+  line-height: 20px;
   white-space: nowrap;
+  min-width: 0;
 }
 .desktop-connection-dot {
   display: block;
+  flex-shrink: 0;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: #a28a62;
 }
 .desktop-connection-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-.desktop-connection-label small {
-  font-size: 11px;
-  opacity: 0.8;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .desktop-connection-dot.is-connected {
   background: #42815b;
@@ -787,13 +791,7 @@
     padding: 0;
   }
   .desktop-connection-label {
-    flex-direction: column;
-    align-items: start;
-    gap: 1px;
     font-size: 11px;
-  }
-  .desktop-connection-label small {
-    font-size: 9px;
   }
 }
 @media (max-width: 760px) {
@@ -916,9 +914,6 @@
     line-height: 12px;
   }
   .desktop-connection-label {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
     font-size: 10px;
   }
 }

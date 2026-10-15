@@ -7,8 +7,12 @@ const inspectWorkspaceAlignment = require('./workspace-alignment-checks.cjs');
 const inspectCommandSearch = require('./command-search-checks.cjs');
 const inspectHomeApps = require('./home-app-checks.cjs');
 const inspectWindowFlows = require('./window-flow-checks.cjs');
+const inspectAppUpdate = require('./app-update-checks.cjs');
+const inspectConnectionStatus = require('./connection-status-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
+const updatesOnly = process.env.ORBIS_VISUAL_UPDATES_ONLY === '1';
+const connectionOnly = process.env.ORBIS_VISUAL_CONNECTION_ONLY === '1';
 
 const base = 'http://localhost:8080';
 const screenshotDir = process.env.ORBIS_VISUAL_SCREENSHOT_DIR || path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
@@ -289,11 +293,20 @@ async function chromeGeometry(page) {
         brand.right + 4 <= (next.left ?? next.x) && boxes.every((box, index) => !index || boxes[index - 1].x + boxes[index - 1].width < box.x),
       addressVisible: (() => {
         const label = bar.querySelector('.desktop-connection-label');
+        const dot = bar.querySelector('.desktop-connection-dot');
         const bounds = label.getBoundingClientRect();
+        const signal = dot.getBoundingClientRect();
+        const expected = dot.classList.contains('is-connected')
+          ? '127.0.0.1'
+          : dot.classList.contains('is-connecting')
+            ? 'Connecting'
+            : 'Reconnecting';
         return (
           getComputedStyle(label).display !== 'none' &&
           bounds.width > 0 &&
-          label.textContent.includes('127.0.0.1') &&
+          label.textContent === expected &&
+          label.childElementCount === 0 &&
+          Math.abs(bounds.top + bounds.height / 2 - signal.top - signal.height / 2) < 0.5 &&
           bounds.left >= bar.getBoundingClientRect().left + 8 &&
           bounds.right <= bar.getBoundingClientRect().right - 8
         );
@@ -316,16 +329,20 @@ async function main() {
   });
   let preferences = freshPreferences();
   const reports = [];
-  const viewports = process.env.ORBIS_VISUAL_NARROW
-    ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
-    : [
-        { name: 'desktop', width: 1440, height: 1120 },
-        { name: 'tablet', width: 768, height: 1024 },
-        { name: 'mobile', width: 390, height: 844 },
-      ];
+  const viewports = connectionOnly
+    ? [{ name: 'connection', width: 1440, height: 1120 }]
+    : process.env.ORBIS_VISUAL_NARROW
+      ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
+      : [
+          { name: 'desktop', width: 1440, height: 1120 },
+          { name: 'tablet', width: 768, height: 1024 },
+          { name: 'mobile', width: 390, height: 844 },
+          ...(updatesOnly ? [{ name: 'narrow', width: 320, height: 800 }] : []),
+        ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: zoom });
+    let fixtureServerAddress = '127.0.0.1';
     const errors = [];
     let detailPhase = false;
     let logRequests = 0;
@@ -385,7 +402,7 @@ async function main() {
             sslPort: 443,
             maxBackups: 5,
             guestDashboard: false,
-            internalIp: '127.0.0.1',
+            internalIp: fixtureServerAddress,
           },
           user: { id: 1, username: 'fixture', totpEnabled: false, locale: 'en', operator: true, hasSeenWelcome: true },
           apps: [],
@@ -583,6 +600,28 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (connectionOnly) {
+      const connection = await inspectConnectionStatus(page, {
+        base,
+        screenshotDir: path.join(screenshotDir, 'connection'),
+        setServerAddress: (address) => {
+          fixtureServerAddress = address;
+        },
+      });
+      reports.push({ viewport: viewport.name, connection, errors });
+      await page.close();
+      continue;
+    }
+    if (updatesOnly) {
+      const updates = await inspectAppUpdate({
+        page,
+        base,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, updates, errors });
+      await page.close();
+      continue;
+    }
     if (windowsOnly) {
       const windows = await inspectWindowFlows(page, {
         getPreferences: () => preferences,
@@ -1016,7 +1055,7 @@ async function main() {
     await Promise.race([page.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
-  if (homeOnly || windowsOnly) {
+  if (homeOnly || windowsOnly || updatesOnly || connectionOnly) {
     if (reports.some((report) => report.errors.length)) process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     return;
