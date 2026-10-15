@@ -27,6 +27,16 @@ class OrbisHostServiceUpgradeTests(unittest.TestCase):
             UPGRADE.SERVICE.write_private(job, {"id": "one", "state": "complete"})
             self.assertEqual(UPGRADE.job_identity(), ("one", "complete"))
 
+    def test_unresolved_package_job_blocks_helper_upgrade(self):
+        with mock.patch.object(UPGRADE, "STATE_DIR", self.base):
+            package_job = self.base / "package-job.json"
+            for state in ("queued", "running", "failed", "interrupted"):
+                UPGRADE.SERVICE.write_private(package_job, {"id": "one", "state": state})
+                with self.assertRaisesRegex(ValueError, "host package transaction"):
+                    UPGRADE.job_identity()
+            UPGRADE.SERVICE.write_private(package_job, {"id": "one", "state": "complete"})
+            self.assertIsNone(UPGRADE.job_identity())
+
     def test_unit_must_preserve_the_socket_directory_across_restarts(self):
         unit = (Path(__file__).parent.parent / "packaging/systemd/orbis-host.service").read_text()
         UPGRADE.validate_unit(unit)

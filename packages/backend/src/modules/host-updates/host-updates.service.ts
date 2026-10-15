@@ -60,6 +60,35 @@ export type HostPackageChangelog = {
   reason?: string;
 };
 
+export type HostPackageOperation = {
+  name: string;
+  installedVersion: string | null;
+  candidateVersion: string;
+  action: 'install' | 'upgrade';
+};
+
+export type HostPackagePlan = {
+  planId: string;
+  createdAt: number;
+  selected: HostPackage[];
+  operations: HostPackageOperation[];
+};
+
+export type HostPackageJobStatus = {
+  available: boolean;
+  job: null | {
+    id: string;
+    state: 'queued' | 'running' | 'complete' | 'failed' | 'interrupted';
+    createdAt: number;
+    startedAt?: number;
+    finishedAt?: number;
+    message?: string;
+    exitCode?: number;
+    rebootRequired?: boolean;
+    operationCount?: number;
+  };
+};
+
 @Injectable()
 export class HostUpdatesService {
   private readonly socketPath = process.env.ORBIS_HOST_SOCKET;
@@ -72,7 +101,16 @@ export class HostUpdatesService {
   }
 
   private async call<T>(
-    endpoint: '/v1/status' | '/v1/plan' | '/v1/apply' | '/v1/recover' | '/v1/packages' | `/v1/packages/changelog?name=${string}`,
+    endpoint:
+      | '/v1/status'
+      | '/v1/plan'
+      | '/v1/apply'
+      | '/v1/recover'
+      | '/v1/packages'
+      | '/v1/packages/job'
+      | '/v1/packages/plan'
+      | '/v1/packages/apply'
+      | `/v1/packages/changelog?name=${string}`,
     body?: object,
   ): Promise<T> {
     const socketPath = this.requireSocket();
@@ -83,7 +121,14 @@ export class HostUpdatesService {
           socketPath,
           path: endpoint,
           method: payload === undefined ? 'GET' : 'POST',
-          timeout: endpoint === '/v1/plan' ? 90_000 : endpoint.startsWith('/v1/packages/changelog') ? 25_000 : 10_000,
+          timeout:
+            endpoint === '/v1/plan'
+              ? 90_000
+              : endpoint === '/v1/packages/plan' || endpoint === '/v1/packages/apply'
+                ? 60_000
+                : endpoint.startsWith('/v1/packages/changelog')
+                  ? 25_000
+                  : 10_000,
           headers: payload === undefined ? {} : { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
         },
         (res) => {
@@ -91,7 +136,7 @@ export class HostUpdatesService {
           let size = 0;
           res.on('data', (chunk: Buffer) => {
             size += chunk.length;
-            if (size > (endpoint === '/v1/packages' ? 1024 * 1024 : MAX_RESPONSE_BYTES)) {
+            if (size > (endpoint === '/v1/packages' ? 1024 * 1024 : endpoint === '/v1/packages/plan' ? 256 * 1024 : MAX_RESPONSE_BYTES)) {
               res.destroy(new Error('Host service response was too large'));
               return;
             }
@@ -144,6 +189,30 @@ export class HostUpdatesService {
       throw new BadRequestException('Choose a valid package name.');
     }
     return this.call<HostPackageChangelog>(`/v1/packages/changelog?name=${encodeURIComponent(name)}`);
+  }
+
+  packageJob(): Promise<HostPackageJobStatus> {
+    return this.call<HostPackageJobStatus>('/v1/packages/job');
+  }
+
+  packagePlan(names: unknown): Promise<HostPackagePlan> {
+    if (
+      !Array.isArray(names) ||
+      names.length < 1 ||
+      names.length > 250 ||
+      !names.every((name) => typeof name === 'string' && name.length <= 180 && PACKAGE_NAME.test(name)) ||
+      new Set(names).size !== names.length
+    ) {
+      throw new BadRequestException('Choose 1 to 250 distinct host packages.');
+    }
+    return this.call<HostPackagePlan>('/v1/packages/plan', { names });
+  }
+
+  packageApply(planId: unknown): Promise<{ jobId: string; state: string }> {
+    if (typeof planId !== 'string' || !PLAN_ID.test(planId)) {
+      throw new BadRequestException('Choose a valid reviewed package plan.');
+    }
+    return this.call<{ jobId: string; state: string }>('/v1/packages/apply', { planId });
   }
 
   plan(tag: unknown): Promise<HostUpdatePlan> {

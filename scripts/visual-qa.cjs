@@ -206,6 +206,21 @@ async function main() {
           body: 'linux-image-generic (6.8.0-86.86) noble; urgency=medium\n\n  * Security and stability fixes.\n',
           truncated: false,
         });
+      if (url.pathname === '/api/host-updates/packages/job') return respond({ available: true, job: null });
+      if (url.pathname === '/api/host-updates/packages/plan') {
+        const names = JSON.parse(route.request().postData() || '{}').names || [];
+        return respond({
+          planId: '00000000-0000-4000-8000-000000000000',
+          createdAt: Date.now() / 1000,
+          selected: names.map((name) => ({ name })),
+          operations: [
+            { name: 'linux-image-generic', installedVersion: '6.8.0-80.80', candidateVersion: '6.8.0-86.86', action: 'upgrade' },
+            { name: 'linux-image-6.8.0-86-generic', installedVersion: null, candidateVersion: '6.8.0-86.86', action: 'install' },
+            { name: 'openssh-server', installedVersion: '1:9.6p1-3ubuntu13.10', candidateVersion: '1:9.6p1-3ubuntu13.13', action: 'upgrade' },
+            { name: 'base-files', installedVersion: '13ubuntu10.4', candidateVersion: '13ubuntu10.5', action: 'upgrade' },
+          ],
+        });
+      }
       if (url.pathname === '/api/host-updates/plan')
         return respond({
           planId: '00000000-0000-4000-8000-000000000000',
@@ -321,6 +336,9 @@ async function main() {
     if (hostUpdateFixture) {
       await page.getByRole('button', { name: 'Prepare update to v0.1.0-beta.8' }).click();
       await page.getByText('Review core update').waitFor();
+      await page.getByRole('button', { name: 'Select matching (3)' }).click();
+      await page.getByRole('button', { name: 'Review selected updates' }).click();
+      await page.getByRole('region', { name: 'Review host package update' }).waitFor();
     }
     const updatePlanDockHidden = !hostUpdateFixture || (await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden());
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates.png`), fullPage: true });
@@ -338,7 +356,7 @@ async function main() {
       await page.getByRole('region', { name: 'linux-image-generic:arm64 changelog' }).waitFor();
       await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-host-packages.png`), fullPage: true });
     }
-    if (hostUpdateFixture) await page.getByRole('button', { name: 'Cancel' }).click();
+    if (hostUpdateFixture) await page.getByRole('button', { name: 'Cancel' }).first().click();
     await page.getByRole('link', { name: 'Back to workspace' }).click();
     await page.getByRole('link', { name: 'Monitor', exact: true }).click();
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();

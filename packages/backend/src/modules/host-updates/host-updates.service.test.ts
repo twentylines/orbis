@@ -29,9 +29,15 @@ describe('host update Unix socket transport', () => {
               ? { available: true, enrolled: true }
               : request.url === '/v1/packages'
                 ? { available: true, packageCount: 1, packages: [] }
-                : request.url?.startsWith('/v1/packages/changelog?')
-                  ? { name: 'base-files:arm64', available: true, body: 'Ubuntu changelog' }
-                  : { planId: 'fixture-plan' },
+                : request.url === '/v1/packages/job'
+                  ? { available: true, job: null }
+                  : request.url === '/v1/packages/plan'
+                    ? { planId: '00000000-0000-4000-8000-000000000000', selected: [], operations: [] }
+                    : request.url === '/v1/packages/apply'
+                      ? { jobId: '00000000-0000-4000-8000-000000000000', state: 'queued' }
+                      : request.url?.startsWith('/v1/packages/changelog?')
+                        ? { name: 'base-files:arm64', available: true, body: 'Ubuntu changelog' }
+                        : { planId: 'fixture-plan' },
           ),
         );
       });
@@ -70,6 +76,26 @@ describe('host update Unix socket transport', () => {
   it('rejects package names with query syntax before contacting the socket', async () => {
     const count = requests.length;
     expect(() => service.packageChangelog('base-files&name=other')).toThrow(BadRequestException);
+    expect(requests).toHaveLength(count);
+  });
+
+  it('sends reviewed package plan and apply requests with fixed fields', async () => {
+    expect(await service.packageJob()).toMatchObject({ available: true, job: null });
+    expect(await service.packagePlan(['base-files:arm64'])).toHaveProperty('planId');
+    expect(await service.packageApply('00000000-0000-4000-8000-000000000000')).toMatchObject({ state: 'queued' });
+    expect(requests).toContainEqual({ method: 'POST', path: '/v1/packages/plan', body: { names: ['base-files:arm64'] } });
+    expect(requests).toContainEqual({
+      method: 'POST',
+      path: '/v1/packages/apply',
+      body: { planId: '00000000-0000-4000-8000-000000000000' },
+    });
+  });
+
+  it('rejects malformed package plans before sending them to the host', () => {
+    const count = requests.length;
+    expect(() => service.packagePlan(['base-files:arm64', 'base-files:arm64'])).toThrow(BadRequestException);
+    expect(() => service.packagePlan(['--option'])).toThrow(BadRequestException);
+    expect(() => service.packageApply('anything')).toThrow(BadRequestException);
     expect(requests).toHaveLength(count);
   });
 });

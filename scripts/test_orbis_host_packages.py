@@ -70,6 +70,34 @@ class HostPackagesTests(unittest.TestCase):
                 self.assertTrue(result["available"])
                 self.assertEqual(run.call_args.args[0], ["/usr/bin/apt-get", "changelog", "service:arm64=1.1"])
 
+    def test_simulation_reviews_exact_pinned_upgrade_and_implicit_install(self):
+        selected = PACKAGES.selected_candidates(["service:arm64"], {"service:arm64": package()})
+        self.assertEqual(
+            PACKAGES.apt_install_command(selected, simulate=True),
+            ["/usr/bin/apt-get", "--no-remove", "--no-install-recommends", "--simulate", "install", "--only-upgrade", "--", "service:arm64=1.1"],
+        )
+        self.assertEqual(PACKAGES.apt_apply_command(selected)[-3:], ["--only-upgrade", "--", "service:arm64=1.1"])
+        self.assertIn("Dpkg::Options::=--force-confold", PACKAGES.apt_apply_command(selected))
+        operations = PACKAGES.parse_simulation(
+            "Inst dependency (2.0 Ubuntu:24.04/noble-updates [arm64])\nInst service [1.0] (1.1 Ubuntu:24.04/noble-updates [arm64])\n",
+            selected,
+        )
+        self.assertEqual([operation["action"] for operation in operations], ["install", "upgrade"])
+        with self.assertRaisesRegex(ValueError, "removal"):
+            PACKAGES.parse_simulation("Remv service [1.0]\n", selected)
+        with self.assertRaisesRegex(ValueError, "omitted"):
+            PACKAGES.parse_simulation("Inst other [1.0] (1.1 Ubuntu:24.04/noble-updates [arm64])\n", selected)
+
+    def test_simulation_rejects_malformed_or_untrusted_selection(self):
+        item = package()
+        with self.assertRaisesRegex(ValueError, "distinct"):
+            PACKAGES.selected_candidates([item.fullname, item.fullname], {item.fullname: item})
+        with self.assertRaisesRegex(ValueError, "invalid"):
+            PACKAGES.selected_candidates(["--option"], {item.fullname: item})
+        item.candidate.origins[0].trusted = False
+        with self.assertRaisesRegex(ValueError, "trusted"):
+            PACKAGES.selected_candidates([item.fullname], {item.fullname: item})
+
 
 if __name__ == "__main__":
     unittest.main()

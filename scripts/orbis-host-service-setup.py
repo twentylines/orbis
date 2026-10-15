@@ -41,6 +41,7 @@ SCRIPTS = (
     "orbis-host-update.py",
     "orbis-host-service.py",
     "orbis-host-packages.py",
+    "orbis-host-package-worker.py",
 )
 INSTALL_DIR = Path("/opt/orbis/host-service")
 ENV_FILE = Path("/etc/orbis/host-service.env")
@@ -100,7 +101,7 @@ def preflight(root: Path, context: str, source: Path, *, allow_existing: bool = 
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", context):
         raise ValueError("Docker context name is invalid")
     source_files(source)
-    for executable in ("/usr/bin/python3", "/usr/bin/systemctl", "/usr/bin/systemd-analyze", "/usr/bin/install"):
+    for executable in ("/usr/bin/python3", "/usr/bin/systemctl", "/usr/bin/systemd-run", "/usr/bin/systemd-analyze", "/usr/bin/install"):
         if not Path(executable).is_file():
             raise ValueError(f"required host command is unavailable: {executable}")
     saved = HOST.saved_state(root)
