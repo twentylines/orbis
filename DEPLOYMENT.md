@@ -50,7 +50,23 @@ python3 scripts/orbis-host-update.py apply ROOT CURRENT_MANIFEST TARGET_MANIFEST
 python3 scripts/orbis-host-update.py recover ROOT CURRENT_MANIFEST TARGET_MANIFEST --docker-context TEST_CONTEXT --snapshot SNAPSHOT --confirm-root ROOT
 ```
 
-`recover` is for an interrupted, nonterminal transaction, not a completed update. The updater currently requires managed apps to be stopped and keeps them stopped. It rejects symlinks outside the installation tree and cannot capture external bind mounts or Docker named volumes outside that tree. It has no first stock-to-Orbis installer, browser API, package-manager adapter, or proven procedure for a real homelab. Large trees may hold the core offline for a long copy and three full-content hash passes; space and downtime must be measured on a representative copy before any live use.
+`recover` is for an interrupted, nonterminal transaction, not a completed update. The updater currently requires managed apps to be stopped and keeps them stopped. It rejects symlinks outside the installation tree and cannot capture external bind mounts or Docker named volumes outside that tree. The first-cutover command below is separate; neither transaction has a browser API, package-manager adapter, or proven procedure for a real homelab. Large trees may hold the core offline for a long copy and three full-content hash passes; space and downtime must be measured on a representative copy before any live use.
+
+## Isolated first adoption from stock Runtipi (15 October 2026)
+
+`scripts/orbis-host-adopt.py` provides `plan`, `apply`, and interrupted-transaction `recover` for a **copied, self-contained Runtipi CLI v4.10.1 installation**. It checks the running stock core and exact local stock image ID, all four core container owners, a published Orbis release and digest, the Compose delta, available snapshot space, and the absence of active managed apps or managed-app mounts outside the installation tree. `apply` pulls the Orbis image before downtime, stops the core, captures a verified snapshot including `data/postgres`, stages only the Orbis image override, starts the new core, and enrolls its exact digest. A failed start restores the stopped stock tree and recreates the captured stock image. The journal and snapshot sidecar are outside the installation.
+
+On the disposable arm64 VM, the published beta 7 image adopted a synthetic stock installation. The four core services were healthy at the expected digest, `/api/health` returned 200, the original account saw `whoami:migrated`, and Chrome displayed Whoami on Workspace without page errors or horizontal overflow. The inherited lifecycle API started Whoami and Docker reported its container running; it was then stopped. The stock snapshot verified: 3,514 entries, 2,778 files, and 78,925,886 bytes. A separate rehearsal injected a failure **after Orbis had started**; the transaction restored stock Runtipi v4.10.1 at its original local image ID, with the snapshot verified and the Orbis override removed. A snapshot failure before a sidecar exists also has a tested stock restart path.
+
+For a disposable copy with a reviewed published manifest, use a new snapshot location outside the installation:
+
+```sh
+python3 scripts/orbis-host-adopt.py plan ROOT TARGET_MANIFEST --docker-context TEST_CONTEXT --snapshot SNAPSHOT
+python3 scripts/orbis-host-adopt.py apply ROOT TARGET_MANIFEST --docker-context TEST_CONTEXT --snapshot SNAPSHOT --confirm-root ROOT
+python3 scripts/orbis-host-adopt.py recover ROOT TARGET_MANIFEST --docker-context TEST_CONTEXT --snapshot SNAPSHOT --confirm-root ROOT
+```
+
+`recover` applies only to an interrupted, nonterminal adoption. Managed apps must be stopped and remain stopped. The command refuses external managed-app bind mounts and named volumes, and cannot capture data outside the installation tree. It currently supports only the pinned stock CLI v4.10.1 layout and still requires a real-data copied rehearsal, application-by-application checks, and an independent backup before any homelab cutover. The stock CLI `start` and `update` commands must not operate an adopted installation because they replace the Orbis override.
 
 ## Isolated Linux test host
 
@@ -90,7 +106,7 @@ python3 scripts/orbis-host.py stop ROOT RELEASE_MANIFEST --docker-context colima
 python3 scripts/orbis-host.py start ROOT RELEASE_MANIFEST --docker-context colima-runtipi-test --confirm-root ROOT
 ```
 
-Replace `ROOT` with the exact resolved absolute root in each command. The published beta 3 image passed this enrolled stop/start cycle in the isolated VM; the final status again reported the expected digest and healthy core. The command refuses a changed Compose or environment file and will not enroll a stock core. It is not an installer, first cutover command, updater, snapshot tool, or rollback tool. The separate update transaction above is available only for an already enrolled installation; a restricted host service and real-data validation are still needed before the browser can apply releases or a real homelab can be replaced.
+Replace `ROOT` with the exact resolved absolute root in each command. The published beta 3 image passed this enrolled stop/start cycle in the isolated VM; the final status again reported the expected digest and healthy core. The command refuses a changed Compose or environment file and will not enroll a stock core. It is not an installer, first cutover command, updater, snapshot tool, or rollback tool. The adoption and update transactions above handle their respective host operations; a restricted host service and real-data validation are still needed before the browser can apply releases or a real homelab can be replaced.
 
 ## Later Hades cutover
 
@@ -98,7 +114,7 @@ Hades remains untouched during current development. Before the requested second-
 
 The stock `scripts/install.sh` downloads official Runtipi releases, so it is **not** the fork deployment path. The Settings screen distinguishes upstream core releases from this fork; app-store refresh remains a separate operation. Fork updates must be built from reviewed source and applied through a guarded, reversible procedure.
 
-The pinned Runtipi CLI's `start` command also regenerates `docker-compose.yml`, pulls `ghcr.io/runtipi/runtipi`, removes the core containers, and starts Compose without `orbis-compose.yml`. Its `update` command downloads an upstream release and invokes that same start path. Running either command after an Orbis cutover would replace the Orbis core. A later installer must retire the stock CLI's operational role in favor of Orbis-owned host commands that always include the digest-pinned override. The update transaction is one part of that path, but initial cutover, safe handling of running apps and external data, and browser authorization are outstanding. See the pinned [CLI start source](https://github.com/runtipi/cli/blob/v4.10.1/internal/commands/start.go) and [CLI update source](https://github.com/runtipi/cli/blob/v4.10.1/internal/commands/update.go).
+The pinned Runtipi CLI's `start` command also regenerates `docker-compose.yml`, pulls `ghcr.io/runtipi/runtipi`, removes the core containers, and starts Compose without `orbis-compose.yml`. Its `update` command downloads an upstream release and invokes that same start path. Running either command after an Orbis cutover would replace the Orbis core. A production installer must retire the stock CLI's operational role in favor of Orbis-owned host commands that always include the digest-pinned override. The first-adoption and update transactions are parts of that path, but safe handling of running apps and external data, real-data validation, and browser authorization are outstanding. See the pinned [CLI start source](https://github.com/runtipi/cli/blob/v4.10.1/internal/commands/start.go) and [CLI update source](https://github.com/runtipi/cli/blob/v4.10.1/internal/commands/update.go).
 
 ## Orbis release packaging
 
