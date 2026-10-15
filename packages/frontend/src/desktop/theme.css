@@ -1,6 +1,6 @@
 /* Shared tokens also reach dialogs and menus rendered into body portals. */
-.desktop,
-body:has(.desktop) {
+.orbis-theme,
+body:has(.orbis-theme) {
   --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
   --desktop-ink: #192c29;
   --desktop-muted: #536b65;
@@ -13,6 +13,16 @@ body:has(.desktop) {
   --desktop-highlight: rgba(255, 255, 255, 0.18);
   --desktop-inset: 64px;
   --desktop-accent: #914725;
+  --desktop-positive: #236c4d;
+  --desktop-negative: #aa4235;
+  --desktop-warning: #82551e;
+  --desktop-info: #366780;
+  --desktop-action: #27584a;
+  --desktop-action-ink: #fff8ee;
+  --desktop-warning-fill: #82551e;
+  --desktop-warning-ink: #fff8e5;
+  --desktop-danger-fill: #9f392f;
+  --desktop-danger-ink: #fff8ee;
   --desktop-focus: #b75c3e;
   --tblr-body-color: var(--desktop-ink);
   --tblr-secondary: var(--desktop-muted);
@@ -23,19 +33,21 @@ body:has(.desktop) {
   --tblr-bg-forms: var(--desktop-surface);
   --tblr-bg-surface-secondary: rgba(115, 146, 127, 0.06);
   --tblr-bg-surface-tertiary: rgba(115, 146, 127, 0.1);
-  --tblr-primary: #27584a;
+  --tblr-primary: var(--desktop-action);
   --tblr-primary-rgb: 39, 88, 74;
   --tblr-success: #27584a;
   --tblr-success-darken: #306b59;
   --tblr-shadow-input: none;
   --link-color: var(--desktop-accent);
+  --tblr-link-color: var(--desktop-accent);
+  --tblr-link-hover-color: var(--desktop-accent);
   --workspace-heading-ink: #132e2b;
   --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
 }
-body:has(.desktop) .form-select {
+body:has(.orbis-theme) .form-select {
   min-height: 40px;
 }
-body:has(.desktop) :is(.btn-outline-primary, .btn-ghost-primary) {
+body:has(.orbis-theme) :is(.btn-outline-primary, .btn-ghost-primary) {
   --tblr-btn-color: var(--desktop-ink);
   --tblr-btn-hover-color: var(--desktop-ink);
   --tblr-btn-hover-bg: rgba(115, 146, 127, 0.16);
@@ -43,26 +55,26 @@ body:has(.desktop) :is(.btn-outline-primary, .btn-ghost-primary) {
   --tblr-btn-active-bg: rgba(115, 146, 127, 0.2);
   --tblr-btn-disabled-color: var(--desktop-muted);
 }
-body:has(.desktop) .btn-outline-primary {
+body:has(.orbis-theme) .btn-outline-primary {
   --tblr-btn-border-color: var(--desktop-line);
   --tblr-btn-hover-border-color: var(--desktop-accent);
 }
-body:has(.desktop) .desktop-settings .dropdown-toggle {
+body:has(.orbis-theme) .desktop-settings .dropdown-toggle {
   color: var(--desktop-ink);
 }
 
-.desktop[data-desktop-wallpaper="tidal"],
-body:has(.desktop[data-desktop-wallpaper="tidal"]) {
+.orbis-theme[data-desktop-wallpaper="tidal"],
+body:has(.orbis-theme[data-desktop-wallpaper="tidal"]) {
   --desktop-wallpaper: url("/wallpapers/tidal.svg");
 }
 
-.desktop[data-desktop-wallpaper="canopy"],
-body:has(.desktop[data-desktop-wallpaper="canopy"]) {
+.orbis-theme[data-desktop-wallpaper="canopy"],
+body:has(.orbis-theme[data-desktop-wallpaper="canopy"]) {
   --desktop-wallpaper: url("/wallpapers/canopy.svg");
 }
 
-.desktop[data-desktop-preset="graphite"],
-body:has(.desktop[data-desktop-preset="graphite"]) {
+.orbis-theme[data-desktop-preset="graphite"],
+body:has(.orbis-theme[data-desktop-preset="graphite"]) {
   --desktop-ink: #edf2ef;
   --desktop-muted: #aebbb3;
   --desktop-surface: rgba(24, 38, 37, 0.94);
@@ -75,8 +87,8 @@ body:has(.desktop[data-desktop-preset="graphite"]) {
   --workspace-heading-shadow: rgba(5, 18, 17, 0.18);
 }
 
-.desktop[data-desktop-preset="forest"],
-body:has(.desktop[data-desktop-preset="forest"]) {
+.orbis-theme[data-desktop-preset="forest"],
+body:has(.orbis-theme[data-desktop-preset="forest"]) {
   --desktop-ink: #142b23;
   --desktop-muted: #4b6559;
   --desktop-surface: rgba(244, 248, 239, 0.97);
@@ -86,8 +98,8 @@ body:has(.desktop[data-desktop-preset="forest"]) {
   --desktop-accent: #8d482b;
 }
 
-.desktop[data-desktop-preset="stone"],
-body:has(.desktop[data-desktop-preset="stone"]) {
+.orbis-theme[data-desktop-preset="stone"],
+body:has(.orbis-theme[data-desktop-preset="stone"]) {
   --desktop-ink: #302924;
   --desktop-muted: #71685e;
   --desktop-surface: rgba(250, 245, 237, 0.97);
@@ -97,8 +109,8 @@ body:has(.desktop[data-desktop-preset="stone"]) {
   --desktop-accent: #8e482c;
 }
 
-.desktop[data-desktop-preset="ocean"],
-body:has(.desktop[data-desktop-preset="ocean"]) {
+.orbis-theme[data-desktop-preset="ocean"],
+body:has(.orbis-theme[data-desktop-preset="ocean"]) {
   --desktop-ink: #172b32;
   --desktop-muted: #4d6972;
   --desktop-surface: rgba(244, 250, 249, 0.97);
@@ -108,8 +120,8 @@ body:has(.desktop[data-desktop-preset="ocean"]) {
   --desktop-accent: #8f442d;
 }
 
-.desktop[data-desktop-preset="blush"],
-body:has(.desktop[data-desktop-preset="blush"]) {
+.orbis-theme[data-desktop-preset="blush"],
+body:has(.orbis-theme[data-desktop-preset="blush"]) {
   --desktop-ink: #352828;
   --desktop-muted: #705f62;
   --desktop-surface: rgba(253, 248, 246, 0.97);
@@ -119,9 +131,17 @@ body:has(.desktop[data-desktop-preset="blush"]) {
   --desktop-accent: #8f3f3b;
 }
 
-.desktop[data-desktop-mode="dark"],
-body:has(.desktop[data-desktop-mode="dark"]) {
+.orbis-theme[data-desktop-mode="dark"],
+body:has(.orbis-theme[data-desktop-mode="dark"]) {
   --desktop-accent: #e2b28d;
+  --desktop-positive: #8fd1af;
+  --desktop-negative: #efa99a;
+  --desktop-warning: #e8c180;
+  --desktop-info: #9cc3d3;
+  --desktop-warning-fill: #dcba86;
+  --desktop-warning-ink: #272219;
+  --desktop-danger-fill: #d99b90;
+  --desktop-danger-ink: #291c19;
   --desktop-ink: #edf2ef;
   --desktop-muted: #b5c8bf;
   --desktop-surface: rgba(20, 36, 35, 0.95);
@@ -135,8 +155,8 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   --workspace-heading-shadow: rgba(5, 18, 17, 0.18);
 }
 
-.desktop[data-desktop-mode="light"][data-desktop-preset="graphite"],
-body:has(.desktop[data-desktop-mode="light"][data-desktop-preset="graphite"]) {
+.orbis-theme[data-desktop-mode="light"][data-desktop-preset="graphite"],
+body:has(.orbis-theme[data-desktop-mode="light"][data-desktop-preset="graphite"]) {
   --desktop-accent: #914725;
   --desktop-ink: #20312c;
   --desktop-muted: #50655b;
@@ -149,8 +169,8 @@ body:has(.desktop[data-desktop-mode="light"][data-desktop-preset="graphite"]) {
   --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
 }
 
-body:has(.desktop) .modal-content,
-body:has(.desktop) .orbis-dropdown-menu {
+body:has(.orbis-theme) .modal-content,
+body:has(.orbis-theme) .orbis-dropdown-menu {
   --tblr-bg-surface: var(--desktop-surface);
   --tblr-bg-surface-secondary: rgba(115, 146, 127, 0.06);
   --tblr-body-color: var(--desktop-ink);
@@ -163,68 +183,173 @@ body:has(.desktop) .orbis-dropdown-menu {
   box-shadow: 0 24px 64px rgba(5, 22, 17, 0.3);
   backdrop-filter: blur(24px);
 }
-body:has(.desktop) .modal-header,
-body:has(.desktop) .modal-footer {
+body:has(.orbis-theme) .modal-header,
+body:has(.orbis-theme) .modal-footer {
   background: transparent;
   border-color: var(--desktop-line);
 }
-body:has(.desktop) .text-muted {
+body:has(.orbis-theme) .text-muted {
   /* biome-ignore lint/complexity/noImportantStyles: Tabler marks this muted utility important. */
   color: var(--desktop-muted) !important;
 }
-body:has(.desktop) .dropdown-item {
+body:has(.orbis-theme) .dropdown-item {
   color: var(--desktop-ink);
   border-radius: 6px;
 }
-body:has(.desktop) .dropdown-item:is(:hover, :focus, [data-highlighted]) {
+body:has(.orbis-theme) .dropdown-item:is(:hover, :focus, [data-highlighted]) {
   background: rgba(125, 145, 121, 0.18);
   color: var(--desktop-ink);
 }
-body:has(.desktop) .modal-content .form-control,
-body:has(.desktop) .modal-content .form-select {
+body:has(.orbis-theme) .modal-content .form-control,
+body:has(.orbis-theme) .modal-content .form-select {
   color: var(--desktop-ink);
   background-color: var(--desktop-surface);
   border-color: var(--desktop-line);
 }
-body:has(.desktop) :is(.modal-content, .orbis-dropdown-menu, .desktop-palette) :focus-visible {
+body:has(.orbis-theme) :is(.modal-content, .orbis-dropdown-menu, .desktop-palette) :focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-  body:has(.desktop) .zoom-in,
-  body:has(.desktop) .desktop-palette,
-  body:has(.desktop) .dimmed-background {
+  body:has(.orbis-theme) .zoom-in,
+  body:has(.orbis-theme) .desktop-palette,
+  body:has(.orbis-theme) .dimmed-background {
     animation-duration: 0.01ms;
   }
 }
 
-body:has(.desktop) .modal-dialog {
+body:has(.orbis-theme) .modal-dialog {
   width: calc(100% - 32px);
   max-width: 720px;
   margin: 16px auto;
   min-height: calc(100% - 32px);
 }
-body:has(.desktop) .modal-dialog.modal-sm {
+body:has(.orbis-theme) .modal-dialog.modal-sm {
   max-width: 380px;
 }
-body:has(.desktop) .modal-dialog.modal-md {
+body:has(.orbis-theme) .modal-dialog.modal-md {
   max-width: 560px;
 }
-body:has(.desktop) .modal-dialog.modal-xl {
+body:has(.orbis-theme) .modal-dialog.modal-xl {
   max-width: 1080px;
 }
-body:has(.desktop) .modal-content .btn-success {
-  --tblr-btn-bg: #27584a;
-  --tblr-btn-border-color: #27584a;
-  --tblr-btn-hover-bg: #306b59;
-  --tblr-btn-hover-border-color: #306b59;
+body:has(.orbis-theme) .form-check-input:checked,
+body:has(.orbis-theme) .switch-root[data-state="checked"] {
+  background-color: var(--desktop-action);
+  border-color: var(--desktop-action);
 }
-body:has(.desktop) .form-check-input:checked,
-body:has(.desktop) .switch-root[data-state="checked"] {
-  background-color: #27584a;
-  border-color: #27584a;
+
+body:has(.orbis-theme) :is(.form-control, .form-select, .input-group-text) {
+  color: var(--desktop-ink);
+  background-color: var(--desktop-surface);
+  border-color: var(--desktop-line);
+  border-radius: 12px;
 }
-body:has(.desktop) .modal-content :is(.form-control, .form-select):focus {
+body:has(.orbis-theme) :is(.form-control, .form-select):focus {
   border-color: var(--desktop-accent);
-  box-shadow: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--desktop-accent) 14%, transparent);
+}
+body:has(.orbis-theme) .btn {
+  min-height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+body:has(.orbis-theme) :is(.btn-primary, .btn-success) {
+  --tblr-btn-bg: var(--desktop-action);
+  --tblr-btn-border-color: var(--desktop-action);
+  --tblr-btn-color: var(--desktop-action-ink);
+  --tblr-btn-hover-bg: color-mix(in srgb, var(--desktop-action) 88%, black);
+  --tblr-btn-hover-border-color: var(--desktop-action);
+  --tblr-btn-hover-color: var(--desktop-action-ink);
+}
+body:has(.orbis-theme) .btn-warning {
+  --tblr-btn-bg: var(--desktop-warning-fill);
+  --tblr-btn-border-color: var(--desktop-warning-fill);
+  --tblr-btn-color: var(--desktop-warning-ink);
+  --tblr-btn-hover-bg: color-mix(in srgb, var(--desktop-warning-fill) 90%, var(--desktop-warning-ink));
+  --tblr-btn-hover-border-color: var(--desktop-warning-fill);
+  --tblr-btn-hover-color: var(--desktop-warning-ink);
+}
+body:has(.orbis-theme) .btn-danger {
+  --tblr-btn-bg: var(--desktop-danger-fill);
+  --tblr-btn-border-color: var(--desktop-danger-fill);
+  --tblr-btn-color: var(--desktop-danger-ink);
+  --tblr-btn-hover-bg: color-mix(in srgb, var(--desktop-danger-fill) 90%, var(--desktop-danger-ink));
+  --tblr-btn-hover-border-color: var(--desktop-danger-fill);
+  --tblr-btn-hover-color: var(--desktop-danger-ink);
+}
+body:has(.orbis-theme) .alert {
+  --orbis-alert-color: var(--desktop-muted);
+  color: var(--desktop-ink);
+  border: 1px solid color-mix(in srgb, var(--orbis-alert-color) 32%, var(--desktop-line));
+  background: color-mix(in srgb, var(--orbis-alert-color) 9%, var(--desktop-surface));
+  padding: 18px;
+  border-radius: 16px;
+  box-shadow: inset 0 1px var(--desktop-highlight);
+}
+body:has(.orbis-theme) .alert-success {
+  --orbis-alert-color: var(--desktop-positive);
+}
+body:has(.orbis-theme) .alert-danger {
+  --orbis-alert-color: var(--desktop-negative);
+}
+body:has(.orbis-theme) .alert-warning {
+  --orbis-alert-color: var(--desktop-warning);
+}
+body:has(.orbis-theme) .alert-info {
+  --orbis-alert-color: var(--desktop-info);
+}
+body:has(.orbis-theme) .alert-icon {
+  color: var(--orbis-alert-color);
+}
+body:has(.orbis-theme) .react-tooltip {
+  --rt-color-dark: var(--desktop-panel-dark);
+  --rt-color-white: var(--desktop-chrome-ink);
+  --rt-opacity: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--desktop-edge);
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 12px 30px rgba(5, 22, 17, 0.24);
+}
+body:has(.orbis-theme) .rt-Skeleton {
+  background-color: color-mix(in srgb, var(--desktop-muted) 16%, var(--desktop-surface));
+  border-radius: 12px;
+}
+
+body:has(.orbis-theme) .form-help {
+  background: color-mix(in srgb, var(--desktop-accent) 10%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  border: 1px solid var(--desktop-line);
+}
+body:has(.orbis-theme) .rt-Skeleton {
+  /* biome-ignore lint/complexity/noImportantStyles: The inherited skeleton animation is important. */
+  animation-name: orbis-skeleton-pulse !important;
+}
+@keyframes orbis-skeleton-pulse {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.8;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body:has(.orbis-theme) .rt-Skeleton {
+    /* biome-ignore lint/complexity/noImportantStyles: Disable the inherited important animation. */
+    animation: none !important;
+  }
+}
+
+body:has(.orbis-theme) a:not([class]),
+body:has(.orbis-theme) .form-text a {
+  color: var(--desktop-accent);
+}
+body:has(.orbis-theme) a:not([class]):hover,
+body:has(.orbis-theme) .form-text a:hover {
+  text-decoration: underline;
 }

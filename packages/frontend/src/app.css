@@ -1,5 +1,6 @@
 @import "@tabler/core/dist/css/tabler.min.css";
 @import "@tabler/core/dist/css/tabler-themes.min.css";
+@import "./desktop/theme.css";
 
 #root {
   min-height: 100svh;
@@ -37,7 +38,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
   min-height: 100vh;
   background: #c9d0bc var(--desktop-wallpaper) center center / cover fixed;
-  color: #182522;
+  color: var(--desktop-ink);
 }
 .desktop-auth[data-desktop-wallpaper="tidal"] {
   --desktop-wallpaper: url("/wallpapers/tidal.svg");
@@ -46,21 +47,21 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   --desktop-wallpaper: url("/wallpapers/canopy.svg");
 }
 .desktop-auth .card {
-  border: 1px solid rgba(35, 56, 48, 0.16);
+  border: 1px solid var(--desktop-edge);
   border-radius: 21px;
-  background: rgba(251, 250, 245, 0.97);
-  color: #182522;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
   box-shadow: 0 28px 70px rgba(28, 39, 35, 0.17);
 }
 .desktop-auth-identity h1 {
   font-size: 24px;
   letter-spacing: -0.035em;
   margin: 10px 0 0;
-  color: #203029;
+  color: var(--desktop-ink);
 }
 .desktop-auth-product {
   margin: 10px 0 0;
-  color: #203029;
+  color: var(--desktop-ink);
   font-size: 13px;
   font-weight: 750;
   letter-spacing: 0.12em;
@@ -69,7 +70,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 .desktop-auth-credit {
   text-align: center;
   margin: 16px 0 0;
-  color: #34473c;
+  color: var(--desktop-muted);
   font-size: 12px;
 }
 .desktop-auth[data-desktop-mode="dark"][data-desktop-preset] {
@@ -77,8 +78,8 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   background-image: linear-gradient(rgba(7, 19, 18, 0.46), rgba(7, 19, 18, 0.65)), var(--desktop-wallpaper);
 }
 .desktop-auth[data-desktop-mode="dark"] .card {
-  background: rgba(31, 40, 39, 0.97);
-  border-color: rgba(222, 233, 225, 0.17);
+  background: var(--desktop-surface);
+  border-color: var(--desktop-edge);
   color: #edf2ef;
 }
 .desktop-auth[data-desktop-mode="dark"] .desktop-auth-identity h1,
@@ -99,7 +100,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   background-color: #d7bab6;
 }
 .desktop-auth :focus-visible {
-  outline: 3px solid #a35c3a;
+  outline: 3px solid var(--desktop-focus);
   outline-offset: 3px;
 }
 @media (max-width: 640px) {
@@ -115,4 +116,52 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 .tooltip {
   max-width: 300px;
   text-align: center;
+}
+
+.desktop-auth {
+  position: relative;
+  padding-block: 88px 40px;
+}
+.desktop-auth-toolbar {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+@media (max-width: 480px) {
+  .desktop-auth-toolbar {
+    right: 16px;
+    top: 16px;
+  }
+}
+
+.desktop.desktop-fallback {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+  color: var(--desktop-ink);
+  background: var(--desktop-wallpaper) center / cover;
+}
+.desktop-fallback-panel {
+  width: min(100%, 640px);
+  padding: clamp(24px, 5vw, 48px);
+  border: 1px solid var(--desktop-edge);
+  border-radius: 24px;
+  background: var(--desktop-surface);
+  box-shadow: 0 20px 70px rgba(5, 22, 17, 0.2);
+  backdrop-filter: blur(24px);
+}
+.desktop-fallback-panel pre {
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-surface) 85%, var(--desktop-ink));
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  padding: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 40vh;
+  overflow-y: auto;
 }

@@ -1,0 +1,130 @@
+.orbis-notifications {
+  --notice-inset: 64px;
+  --notice-top: 108px;
+  position: fixed;
+  top: var(--notice-top);
+  right: var(--notice-inset);
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, calc(100vw - var(--notice-inset) * 2));
+  max-height: calc(100dvh - var(--notice-top) - 124px);
+  padding: 6px;
+  margin: -6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--desktop-line) transparent;
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.orbis-notifications:empty {
+  display: none;
+}
+body:not(:has(.desktop)) .orbis-notifications {
+  --notice-top: 94px;
+}
+.orbis-notification {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 32px;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 12px;
+  min-height: 68px;
+  padding: 14px;
+  border: 1px solid var(--desktop-edge);
+  border-radius: 18px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  box-shadow:
+    0 12px 32px rgba(5, 22, 17, 0.18),
+    inset 0 1px var(--desktop-highlight);
+  backdrop-filter: blur(22px) saturate(1.15);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+  pointer-events: auto;
+  --notice-color: var(--desktop-accent);
+}
+.orbis-notification[data-notification-type="success"] {
+  --notice-color: var(--desktop-positive);
+}
+.orbis-notification[data-notification-type="error"] {
+  --notice-color: var(--desktop-negative);
+}
+.orbis-notification-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: var(--notice-color);
+  background: color-mix(in srgb, var(--notice-color) 12%, transparent);
+}
+.orbis-notification-message {
+  min-width: 0;
+  max-height: calc(100dvh - var(--notice-top) - 152px);
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 520;
+  overflow-wrap: anywhere;
+}
+.orbis-notification-message .btn {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.orbis-notification-message :last-child {
+  margin-bottom: 0;
+}
+.orbis-notification-dismiss {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--desktop-muted);
+  background: transparent;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+.orbis-notification-dismiss:hover {
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-ink) 9%, transparent);
+}
+.orbis-notification :focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.orbis-notification[data-notification-type="loading"] .orbis-notification-icon svg {
+  animation: orbis-notice-spin 1.2s linear infinite;
+}
+@keyframes orbis-notice-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 760px) {
+  .orbis-notifications {
+    --notice-inset: 24px;
+    --notice-top: 96px;
+  }
+}
+@media (max-width: 600px) {
+  .orbis-notifications {
+    --notice-top: 118px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-notification,
+  .orbis-notification-dismiss {
+    animation: none;
+    transition: none;
+  }
+  .orbis-notification[data-notification-type="loading"] .orbis-notification-icon svg {
+    animation: none;
+  }
+}

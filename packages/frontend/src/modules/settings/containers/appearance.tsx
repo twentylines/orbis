@@ -10,12 +10,12 @@ import { IconMoonStars, IconSunHigh } from '@tabler/icons-react';
 import './appearance.css';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
-  { value: 'frost', title: 'Frost', description: 'Soft mineral light' },
-  { value: 'graphite', title: 'Graphite', description: 'Deep charcoal' },
-  { value: 'forest', title: 'Forest', description: 'Cool sage' },
-  { value: 'stone', title: 'Warm stone', description: 'Sand and clay' },
-  { value: 'ocean', title: 'Ocean', description: 'Quiet blue green' },
-  { value: 'blush', title: 'Blush', description: 'Muted rose' },
+  { value: 'frost', title: 'Frost', description: 'Pale green' },
+  { value: 'graphite', title: 'Graphite', description: 'Dark grey' },
+  { value: 'forest', title: 'Forest', description: 'Sage green' },
+  { value: 'stone', title: 'Warm stone', description: 'Beige' },
+  { value: 'ocean', title: 'Ocean', description: 'Blue green' },
+  { value: 'blush', title: 'Blush', description: 'Rose' },
 ];
 
 const wallpapers: { value: DesktopPreferences['wallpaper']; title: string }[] = [
@@ -110,8 +110,8 @@ export const Appearance = () => {
       </section>
       <section className="appearance-section" aria-labelledby="appearance-preset">
         <div>
-          <h2 id="appearance-preset">Material & colour</h2>
-          <p>Choose a preset for the workspace and application surfaces.</p>
+          <h2 id="appearance-preset">Colour preset</h2>
+          <p>Applies to windows, menus, and notifications.</p>
         </div>
         <div className="appearance-presets">
           {presets.map(({ value, title, description }) => (
@@ -132,7 +132,6 @@ export const Appearance = () => {
       <section className="appearance-section" aria-labelledby="appearance-mode">
         <div>
           <h2 id="appearance-mode">Light & dark</h2>
-          <p>Switch the entire desktop. Your choice follows you when you sign in again.</p>
         </div>
         <div className="appearance-modes">
           <button
@@ -143,8 +142,7 @@ export const Appearance = () => {
           >
             <IconSunHigh size={24} stroke={1.5} aria-hidden="true" />
             <span>
-              <strong>Daylight</strong>
-              <small>Clear, warm surfaces</small>
+              <strong>Light</strong>
             </span>
           </button>
           <button
@@ -155,8 +153,7 @@ export const Appearance = () => {
           >
             <IconMoonStars size={24} stroke={1.5} aria-hidden="true" />
             <span>
-              <strong>Nightfall</strong>
-              <small>Deep, luminous surfaces</small>
+              <strong>Dark</strong>
             </span>
           </button>
         </div>
@@ -164,7 +161,7 @@ export const Appearance = () => {
       <section className="appearance-section" aria-labelledby="appearance-wallpaper">
         <div>
           <h2 id="appearance-wallpaper">Wallpaper</h2>
-          <p>Choose one of the bundled landscapes. It stays available when this server is offline.</p>
+          <p>Wallpapers are stored on this server.</p>
         </div>
         <div className="appearance-wallpapers">
           {wallpapers.map(({ value, title }) => (
@@ -197,8 +194,8 @@ export const Appearance = () => {
       </section>
       <section className="appearance-section" aria-labelledby="appearance-transfer">
         <div>
-          <h2 id="appearance-transfer">Keep a copy</h2>
-          <p>Export or import appearance and widget layout. The file contains no credentials.</p>
+          <h2 id="appearance-transfer">Import and export</h2>
+          <p>Export or import theme and workspace settings. Credentials are excluded.</p>
         </div>
         <div className="appearance-actions">
           <button type="button" onClick={exportSettings}>

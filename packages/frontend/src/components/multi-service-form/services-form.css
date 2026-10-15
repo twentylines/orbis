@@ -4,7 +4,9 @@
 }
 
 .list-group .list-group-item.active {
-  color: var(--tblr-primary);
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
+  border-color: var(--desktop-accent);
 }
 
 .nav-item-c .nav-link {
@@ -32,7 +34,7 @@
 
 .nav-item-c .nav-link.active {
   padding-bottom: 10px;
-  color: var(--tblr-primary);
+  color: var(--desktop-accent);
   font-weight: 400;
 }
 
@@ -54,4 +56,52 @@
 
 .cm-scroller {
   border-radius: 0.5rem 0 0 0;
+}
+
+.service-selector {
+  gap: 8px;
+}
+.service-selector-name {
+  min-width: 0;
+  flex: 1;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.service-icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  color: var(--desktop-ink);
+  background: var(--desktop-surface);
+}
+.service-icon-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.service-form-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.service-form-footer > .btn {
+  flex: 1 1 140px;
+  min-width: min(100%, 140px);
+  white-space: normal;
+}
+.service-form-footer > div {
+  order: 3;
+  flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }

@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
 import { ComposeEditor } from './compose-editor';
 
+vi.mock('@/desktop/preferences', () => ({ useDesktopPreferences: () => ({ preferences: { mode: 'light' } }) }));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Toaster } from 'react-hot-toast';
+import { OrbisToaster } from './components/notifications/orbis-toaster';
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, redirect } from 'react-router';
 import type { Route } from './+types/root';
 import { userContext } from './api-client';
@@ -7,6 +7,8 @@ import { client } from './api-client/client.gen';
 import stylesheet from './app.css?url';
 import { Providers } from './components/providers/providers';
 import { TranslatableError } from './types/error.types';
+import { FallbackSurface } from './components/error/error-page';
+import { ConfirmationDialog } from './desktop/confirmation';
 
 client.interceptors.response.use(async (res) => {
   if (res.status >= 400) {
@@ -86,18 +88,19 @@ export default function App() {
   return (
     <Providers>
       <Outlet />
-      <Toaster />
+      <OrbisToaster />
+      <ConfirmationDialog />
     </Providers>
   );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = 'Oops!';
-  let details = 'An unexpected error occurred.';
+  let message = 'Unable to load this page';
+  let details = 'Reload the page to try again.';
   let stack: string | undefined;
 
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? '404' : 'Error';
+    message = error.status === 404 ? 'Page not found' : 'Unable to load this page';
     details = error.status === 404 ? 'The requested page could not be found.' : error.statusText || details;
   } else if (import.meta.env.DEV && error && error instanceof Error) {
     details = error.message;
@@ -105,14 +108,17 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   return (
-    <main className="pt-16 p-4 container mx-auto">
+    <FallbackSurface>
       <h1>{message}</h1>
       <p>{details}</p>
+      <a href="/dashboard" className="btn btn-primary">
+        Open workspace
+      </a>
       {stack && (
         <pre className="w-full p-4 overflow-x-auto">
           <code>{stack}</code>
         </pre>
       )}
-    </main>
+    </FallbackSurface>
   );
 }

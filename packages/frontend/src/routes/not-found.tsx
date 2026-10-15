@@ -1,8 +1,14 @@
+import { Link } from 'react-router';
+import { FallbackSurface } from '@/components/error/error-page';
+
 export default function NotFoundPage() {
   return (
-    <div className="flex flex-col items-center justify-center h-full p-4">
-      <h1 className="text-4xl font-bold mb-4">404 - Page Not Found</h1>
-      <p className="text-lg text-center">Oops! The page you are looking for does not exist. It might have been moved or deleted.</p>
-    </div>
+    <FallbackSurface>
+      <h1>Page not found</h1>
+      <p>Check the address or return to the workspace.</p>
+      <Link to="/dashboard" className="btn btn-primary">
+        Open workspace
+      </Link>
+    </FallbackSurface>
   );
 }

@@ -69,7 +69,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
       ) : null}
       {telemetry.isPending ? <p>Reading Docker containers…</p> : null}
       {!telemetry.isPending && !unavailable && !visible.length ? (
-        <p>{appUrn ? 'No containers matched this application.' : compact ? 'No running containers.' : 'No containers were returned by Docker.'}</p>
+        <p>{appUrn ? 'No containers found for this app.' : compact ? 'No running containers.' : 'No Docker containers found.'}</p>
       ) : null}
       <ol className="container-resource-list">
         {visible.map((item) => {

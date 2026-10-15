@@ -12,6 +12,7 @@ import { deepClean } from '@/utils/objects';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs/tabs';
 import betterAjvErrors from 'better-ajv-errors';
 import Ajv from 'ajv/dist/2020';
+import { useDesktopPreferences } from '@/desktop/preferences';
 
 type Props = {
   onChange: (value: string, format: 'yaml' | 'json', error?: string) => void;
@@ -25,6 +26,8 @@ const validateJson = ajv.compile(jsonSchema);
 
 export const ComposeEditor = ({ onChange, initialFormat = 'yaml' }: Props) => {
   const { t } = useTranslation();
+  const { preferences } = useDesktopPreferences();
+  const editorTheme = preferences.mode === 'dark' ? copilot : 'light';
   const { services, composeExtras, setIsDirty, isDirty: isDirtyStore } = useMultiServiceStore();
   const [error, setError] = useState<string | undefined>(undefined);
   const [format, setFormat] = useState<'yaml' | 'json'>(initialFormat);
@@ -222,7 +225,7 @@ export const ComposeEditor = ({ onChange, initialFormat = 'yaml' }: Props) => {
             height="400px"
             extensions={[yamlLang()]}
             onChange={handleYamlChange}
-            theme={copilot}
+            theme={editorTheme}
           />
         </div>
 
@@ -233,7 +236,7 @@ export const ComposeEditor = ({ onChange, initialFormat = 'yaml' }: Props) => {
             height="400px"
             extensions={[jsonLang()]}
             onChange={handleJsonChange}
-            theme={copilot}
+            theme={editorTheme}
           />
         </div>
 

@@ -86,6 +86,17 @@ export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPr
   },
 });
 
+export function readCachedDesktopPreferences(): DesktopPreferences {
+  if (typeof window === 'undefined') return defaultDesktopPreferences;
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+    if (isPreferences(value)) return normalisePreferences(value);
+  } catch {
+    // Error screens must also work when browser storage is unavailable.
+  }
+  return defaultDesktopPreferences;
+}
+
 type PreferenceContext = {
   preferences: DesktopPreferences;
   update: (value: Partial<DesktopPreferences>) => void;

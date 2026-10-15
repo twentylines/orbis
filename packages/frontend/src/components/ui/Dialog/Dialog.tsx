@@ -46,6 +46,7 @@ const DialogContent = ({
   children,
   onOpenAutoFocus,
   onCloseAutoFocus,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & ModalProps) => {
   const opener = useRef<HTMLElement | null>(null);
@@ -56,6 +57,10 @@ const DialogContent = ({
       <DialogPrimitive.Content
         className={clsx('modal-content', className)}
         {...props}
+        onInteractOutside={(event) => {
+          if (event.target instanceof Element && event.target.closest('.orbis-notifications')) event.preventDefault();
+          else onInteractOutside?.(event);
+        }}
         onOpenAutoFocus={(event) => {
           const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
           const menuTriggerId = active?.closest('[role="menu"]')?.getAttribute('aria-labelledby');

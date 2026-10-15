@@ -6,7 +6,7 @@ import { IconArrowsDownUp, IconCloudDataConnection, IconPlus, IconServer, IconSe
 import { useForm } from 'react-hook-form';
 import { ComposeEditor } from './compose-editor';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { AdvancedConfig } from './elements/advanced';
 import { PortsConfig } from './elements/ports';
@@ -18,6 +18,7 @@ import toast from 'react-hot-toast';
 import { deepClean } from '@/utils/objects';
 import { type } from 'arktype';
 import { parse } from 'yaml';
+import { confirmDiscard } from '@/desktop/confirmation';
 
 type Props = {
   onSubmit?: (data: typeof dynamicComposeSchemaArk.infer) => void;
@@ -48,6 +49,13 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
     error: undefined,
   });
   const [activeTab, setActiveTab] = useState('essentials');
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const tabs = [
     {
@@ -84,11 +92,12 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
 
   // biome-ignore lint/suspicious/noExplicitAny: We need any type here
   function saveBeforeAction<T extends (...args: any[]) => any>(action: T) {
-    return (...args: Parameters<T>): ReturnType<T> => {
+    return async (...args: Parameters<T>): Promise<ReturnType<T> | undefined> => {
       if (isDirty && composeEditorOpen) {
-        const confirmLeave = window.confirm(t('MULTI_SERVICE_UNSAVED_CHANGES_CONFIRM'));
-        if (!confirmLeave) {
-          return undefined as ReturnType<T>;
+        const snapshot = useMultiServiceStore.getState();
+        const confirmLeave = await confirmDiscard(t('MULTI_SERVICE_UNSAVED_CHANGES_CONFIRM'));
+        if (!confirmLeave || !mounted.current || useMultiServiceStore.getState() !== snapshot) {
+          return undefined;
         }
 
         setIsDirty(false);
@@ -180,19 +189,24 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
             <div className="col-12 col-md-2 border-end p-0">
               <div className="d-flex justify-content-between align-items-center p-3">
                 <div className="fw-bold">{t('MULTI_SERVICE_SERVICES')}</div>
-                <IconPlus className="text-primary cursor-pointer" size={20} onClick={() => saveBeforeAction(addService)()} />
+                <button type="button" className="service-icon-button" aria-label="Add service" onClick={() => void saveBeforeAction(addService)()}>
+                  <IconPlus size={20} aria-hidden="true" />
+                </button>
               </div>
               <div className="w-full border-top">
                 <div className="list-group list-group-transparent m-0">
                   {services.map((service, index) => (
-                    <button
-                      type="button"
+                    <div
                       key={service._id}
-                      className={clsx('list-group-item list-group-item-action d-flex align-items-center', { active: index === activeService })}
-                      onClick={() => saveBeforeAction(setActiveService)(index)}
+                      className={clsx('list-group-item d-flex align-items-center service-selector', { active: index === activeService })}
                     >
-                      <div className="d-flex justify-content-between align-items-center w-full">
-                        <div>
+                      <button
+                        type="button"
+                        className="service-selector-name"
+                        aria-pressed={index === activeService}
+                        onClick={() => void saveBeforeAction(setActiveService)(index)}
+                      >
+                        <span>
                           <span>
                             {service.name ||
                               t('MULTI_SERVICE_SERVICE_NAME', {
@@ -200,22 +214,22 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
                               })}
                           </span>
                           {serviceHasError(index) && <span className="ms-1 text-danger">*</span>}
-                        </div>
-                        {!service.isMain && (
-                          <button
-                            type="button"
-                            className="btn-close btn-close-white ms-2"
-                            aria-label={t('MULTI_SERVICE_REMOVE_SERVICE')}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              saveBeforeAction(removeService)(index);
-                            }}
-                          >
-                            <IconX />
-                          </button>
-                        )}
-                      </div>
-                    </button>
+                        </span>
+                      </button>
+                      {!service.isMain && (
+                        <button
+                          type="button"
+                          className="service-icon-button ms-2"
+                          aria-label={t('MULTI_SERVICE_REMOVE_SERVICE')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void saveBeforeAction(removeService)(index);
+                          }}
+                        >
+                          <IconX />
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -260,7 +274,7 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
             </div>
           </div>
         )}
-        <div className="d-flex justify-content-between align-items-center p-3 rounded-bottom border-top">
+        <div className="service-form-footer p-3 rounded-bottom border-top">
           <Button disabled={composeEditorOpen} type="submit" className={clsx({ 'd-none': composeEditorOpen })}>
             {t('MULTI_SERVICE_VALIDATE_ALL_SERVICES')}
           </Button>

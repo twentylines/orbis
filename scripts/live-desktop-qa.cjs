@@ -85,9 +85,9 @@ const cookies = fs
     assert.equal(await page.locator('.workspace-attention').count(), 1);
     assert.equal(await page.locator('.workspace-app-scroll').getAttribute('data-scroll'), 'true');
     await page.screenshot({ path: require('node:path').join(screenshotDir, 'workspace-mobile.png'), animations: 'disabled' });
-    await page.getByRole('button', { name: 'Search tools and settings' }).click();
+    await page.getByRole('button', { name: 'Search apps and settings' }).click();
     const dialog = page.getByRole('dialog', { name: 'Search Orbis' });
-    const input = dialog.getByRole('searchbox', { name: 'Find a tool or application' });
+    const input = dialog.getByRole('searchbox', { name: 'Search apps and settings' });
     await input.fill(app.info.name);
     await dialog
       .getByRole('region', { name: 'Installed apps', exact: true })
