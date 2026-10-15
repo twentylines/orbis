@@ -88,7 +88,7 @@ export const Appearance = () => {
       <section className="appearance-section" aria-labelledby="appearance-server-name">
         <div>
           <h2 id="appearance-server-name">Server name</h2>
-          <p>Shown in the system bar. The initial name is Hades, and you can change it here.</p>
+          <p>Shown in the system bar. Give this server a name you recognise.</p>
         </div>
         <div className="appearance-name">
           <label htmlFor="desktop-server-name">Display name</label>

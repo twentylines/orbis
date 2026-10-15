@@ -46,6 +46,8 @@ The beta 8 release passed CI, integration, publication, and exact tag/manifest/G
 
 That live Chrome check also found that the direct anonymous GitHub Releases API can return 403 when its shared quota is exhausted, hiding changelogs. Subsequent source uses GitHub's public Atom feed plus immutable tagged release notes for the Update Center, and the release verifier falls back to the published asset plus Git tag resolution during API rate limiting. The beta 8 image does **not** contain those corrections. A browser-driven core update and real-data migration remain unverified.
 
+The published beta 9 image then advanced the same installation through the supervised host socket from beta 8 to digest `sha256:7d63dc5092081fdeb918166c34275beeac85600c92dedeea3e30241af9b20e97`. The four core services became healthy, `/api/health` returned 200, and the authenticated build API reported its tag, commit, and digest. The original account and stopped `whoami:migrated` record remained. The new authenticated release endpoint returned beta 9's tagged Markdown changelog and direct manifest URL. Chrome showed that changelog at desktop and 390px widths without page errors or horizontal overflow. Opening a long changelog did reveal a fixed dock overlay in the desktop screenshot; subsequent source hides the dock while release notes are expanded. The beta 9 image does **not** include that visual correction. A browser-clicked update is still the next isolated rehearsal.
+
 On an isolated, already enrolled copy, use distinct manifests and a new snapshot path outside the installation:
 
 ```sh
