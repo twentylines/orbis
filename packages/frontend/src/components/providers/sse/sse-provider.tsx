@@ -5,13 +5,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { useConnectionStore } from '@/stores/connection-store';
 
 export const SSEProvider = ({ children }: PropsWithChildren) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const setConnectionStatus = useConnectionStore((state) => state.setStatus);
 
   useSSE({
@@ -27,7 +28,7 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
 
       queryClient.invalidateQueries();
 
-      if (appStoreId === '_user' && event === 'uninstall_success') {
+      if (appStoreId === '_user' && event === 'uninstall_success' && location.pathname === `/apps/${appName}`) {
         navigate('/apps', { replace: true });
       }
 

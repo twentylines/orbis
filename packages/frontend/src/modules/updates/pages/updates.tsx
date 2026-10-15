@@ -4,6 +4,7 @@ import { Markdown } from '@/components/markdown/markdown';
 import { useAppContext } from '@/context/app-context';
 import { IconArrowRight, IconBrandGithub, IconPackage, IconServerCog } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useWindowVisible } from '@/desktop/window-visibility';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import './updates.css';
@@ -117,6 +118,7 @@ async function loadOrbisReleases(signal: AbortSignal): Promise<Release[]> {
 }
 
 export default function Updates() {
+  const visible = useWindowVisible();
   const { user } = useAppContext();
   const [reviewPlan, setReviewPlan] = useState<HostPlan | null>(null);
   const [packageSearch, setPackageSearch] = useState('');
@@ -141,14 +143,14 @@ export default function Updates() {
   const host = useQuery({
     queryKey: ['orbis-host-update-status'],
     queryFn: ({ signal }) => hostRequest<HostStatus>('status', undefined, signal),
-    enabled: user?.operator === true,
+    enabled: visible && user?.operator === true,
     refetchInterval: (query) => (['running', 'recovering'].includes(query.state.data?.job?.state ?? '') ? 4000 : 30_000),
     retry: 1,
   });
   const systemPackages = useQuery({
     queryKey: ['orbis-host-packages'],
     queryFn: ({ signal }) => hostRequest<HostPackageInventory>('packages', undefined, signal),
-    enabled: user?.operator === true,
+    enabled: visible && user?.operator === true,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -157,7 +159,7 @@ export default function Updates() {
     queryKey: ['orbis-host-package-changelog', selectedPackage],
     queryFn: ({ signal }) =>
       hostRequest<HostPackageChangelog>(`packages/changelog?name=${encodeURIComponent(selectedPackage ?? '')}`, undefined, signal),
-    enabled: user?.operator === true && selectedPackage !== null,
+    enabled: visible && user?.operator === true && selectedPackage !== null,
     staleTime: 10 * 60_000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -165,7 +167,7 @@ export default function Updates() {
   const packageJob = useQuery({
     queryKey: ['orbis-host-package-job'],
     queryFn: ({ signal }) => hostRequest<HostPackageJobStatus>('packages/job', undefined, signal),
-    enabled: user?.operator === true,
+    enabled: visible && user?.operator === true,
     refetchInterval: (query) => (['queued', 'running'].includes(query.state.data?.job?.state ?? '') ? 3000 : 30_000),
     retry: 1,
   });

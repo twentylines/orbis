@@ -1,9 +1,7 @@
-import { useUIStore } from '@/stores/ui-store';
 import type { AppInfoSimple } from '@/types/app.types';
 import clsx from 'clsx';
-import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 
 type Props = {
   apps: AppInfoSimple[];
@@ -11,11 +9,8 @@ type Props = {
 
 export const PageTitle = ({ apps }: Props) => {
   const { t } = useTranslation();
-  const activeRoute = useUIStore((state) => state.activeRoute);
-
-  const path = window.location.pathname;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Explicitly ignore this rule to re-render the component when the activeRoute changes
-  const pathArray = useMemo(() => path?.substring(1).split('/') || [], [activeRoute]);
+  const { pathname } = useLocation();
+  const pathArray = pathname.substring(1).split('/');
   const installedAppRoute =
     pathArray[0] === 'apps' &&
     pathArray[1] &&
@@ -38,8 +33,17 @@ export const PageTitle = ({ apps }: Props) => {
     );
   };
 
-  const appTitle = apps.find((app) => app.id.split('_')[0] === pathArray.at(-1))?.name;
-  const title = appTitle ?? t(`HEADER_${pathArray[0]?.toUpperCase().replace('-', '_')}`);
+  const operation = pathArray.at(-1);
+  const appId = operation === 'edit' || operation === 'update' ? pathArray.at(-2) : operation;
+  const appTitle = apps.find((app) => app.id.split('_')[0] === appId)?.name ?? appId;
+  const title =
+    operation === 'create'
+      ? 'Create an application'
+      : operation === 'edit'
+        ? `Edit ${appTitle}`
+        : operation === 'update'
+          ? `Update ${appTitle}`
+          : (appTitle ?? t(`HEADER_${pathArray[0]?.toUpperCase().replace('-', '_')}`));
 
   return (
     <>

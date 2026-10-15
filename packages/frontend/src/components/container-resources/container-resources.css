@@ -198,7 +198,7 @@
 .is-compact .container-resources-sort button {
   border-color: rgba(218, 237, 223, 0.18);
 }
-@media (max-width: 650px) {
+@container (max-width: 650px) {
   .container-resources {
     padding: 20px;
   }

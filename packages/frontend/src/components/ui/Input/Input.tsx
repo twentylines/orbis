@@ -1,23 +1,36 @@
 import './input.css';
 import clsx from 'clsx';
-import type React from 'react';
+import { useId, type InputHTMLAttributes, type ReactNode, type Ref } from 'react';
 
-interface IProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface IProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
-  label?: string | React.ReactNode;
+  label?: string | ReactNode;
   isInvalid?: boolean;
-  children?: React.ReactNode;
-  ref?: React.Ref<HTMLInputElement>;
+  children?: ReactNode;
+  ref?: Ref<HTMLInputElement>;
 }
 
-export const Input = ({ name, label, error, type = 'text', className, isInvalid, children, ...rest }: IProps) => {
+export const Input = ({
+  name,
+  id: providedId,
+  label,
+  error,
+  type = 'text',
+  className,
+  isInvalid,
+  children,
+  'aria-describedby': describedBy,
+  ...rest
+}: IProps) => {
+  const generatedId = useId();
+  const id = providedId ?? name ?? generatedId;
   const hasError = Boolean(error || isInvalid);
-  const errorId = hasError && name ? `${name}-error` : undefined;
+  const errorId = hasError ? `${id}-error` : undefined;
 
   return (
     <div className={clsx(className)}>
       {label && (
-        <label htmlFor={name} className="form-label">
+        <label htmlFor={id} className="form-label">
           {label}
         </label>
       )}
@@ -25,10 +38,10 @@ export const Input = ({ name, label, error, type = 'text', className, isInvalid,
         suppressHydrationWarning
         aria-label={label ? undefined : name}
         aria-invalid={hasError}
-        aria-describedby={errorId}
+        aria-describedby={[describedBy, errorId].filter(Boolean).join(' ') || undefined}
         type={type}
         name={name}
-        id={name}
+        id={id}
         className={clsx('form-control', {
           'is-invalid': hasError,
         })}

@@ -1,5 +1,6 @@
 import type { SSE, Topic } from '@runtipi/common/schemas';
 import { useEffect, useRef, useState } from 'react';
+import { useWindowVisible } from '@/desktop/window-visibility';
 
 type Props<T> = {
   topic: T;
@@ -17,7 +18,9 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, param
     handlers.current = { onEvent, onError, onOpen };
   }, [onEvent, onError, onOpen]);
 
+  const visible = useWindowVisible();
   useEffect(() => {
+    if (!visible) return;
     let disposed = false;
     let stream: EventSource | null = null;
     let timer: number | undefined;
@@ -86,6 +89,6 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, param
       window.removeEventListener('focus', reconnect);
       window.removeEventListener('online', reconnect);
     };
-  }, [topic, query]);
+  }, [topic, query, visible]);
   return status;
 };

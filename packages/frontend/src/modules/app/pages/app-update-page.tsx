@@ -19,6 +19,9 @@ import type { Route } from './+types/app-update-page';
 import { getApp } from '@/api-client';
 import yaml from 'yaml';
 import { useDesktopPreferences } from '@/desktop/preferences';
+import { shouldRevalidateToolRoute } from '@/desktop/window-navigation';
+
+export const shouldRevalidate = shouldRevalidateToolRoute;
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   if (!params.appId || !params.storeId) {

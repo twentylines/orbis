@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import type { MetricHistory, MetricHistoryRange } from '@runtipi/common/schemas';
+import { useWindowVisible } from './window-visibility';
 
-export const useMetricHistory = (range: MetricHistoryRange) =>
-  useQuery<MetricHistory>({
+export const useMetricHistory = (range: MetricHistoryRange) => {
+  const visible = useWindowVisible();
+  return useQuery<MetricHistory>({
+    enabled: visible,
     queryKey: ['metric-history', range],
     queryFn: async ({ signal }) => {
       const response = await fetch(`/api/system/history?range=${range}`, { credentials: 'include', signal });
@@ -13,3 +16,4 @@ export const useMetricHistory = (range: MetricHistoryRange) =>
     staleTime: 9000,
     refetchIntervalInBackground: false,
   });
+};
