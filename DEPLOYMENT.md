@@ -81,3 +81,5 @@ The pinned Runtipi CLI's `start` command also regenerates `docker-compose.yml`, 
 ## Orbis release packaging
 
 The tag workflow in [.github/workflows/release.yml](.github/workflows/release.yml) publishes an Orbis-owned multi-architecture image and a GitHub Release containing its digest manifest and tag-specific notes. It cannot run until `releases/<tag>.md` exists and CI plus integration tests pass. The inherited nightly, upstream CLI, and upstream installer release jobs have been removed. Image publication alone does not install an update; the controller, backup, rollback, and copied-data rehearsal remain outstanding.
+
+`python3 scripts/orbis-release-check.py v0.1.0-beta.4` checks a specific public release without changing the installation. It requires the GitHub release and manifest tag to agree, resolves the Git tag to the manifest commit, hashes the exact GHCR image index, compares the registry digest header, and requires linux/amd64 and linux/arm64 entries. It returns the release notes and digest-pinned image. This check passed against beta 4. It does not prove the images boot on both architectures or apply an update.
