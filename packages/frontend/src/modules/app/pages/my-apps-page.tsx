@@ -15,8 +15,10 @@ import { useAppContext } from '@/context/app-context';
 import { ActionBar } from '@/components/action-bar/action-bar';
 import clsx from 'clsx';
 import { RestartAllButton, StartAllButton, StopAllButton } from '../components/batch-actions-dialog/batch-actions-dialog';
+import { useContainerTelemetry } from '@/desktop/containers';
 
 export default () => {
+  const containers = useContainerTelemetry();
   const { data: apps } = useSuspenseQuery({
     ...getInstalledAppsOptions(),
   });
@@ -43,7 +45,14 @@ export default () => {
     if (info.available) {
       return (
         <Link key={app.id} to={`/apps/${storeId}/${appName}`} className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0">
-          <AppTile key={info.urn} status={app.status} info={info} updateAvailable={updateAvailable} pendingRestart={app.pendingRestart} />
+          <AppTile
+            key={info.urn}
+            status={app.status}
+            info={info}
+            updateAvailable={updateAvailable}
+            pendingRestart={app.pendingRestart}
+            docker={{ data: containers.data, stale: containers.isError }}
+          />
         </Link>
       );
     }

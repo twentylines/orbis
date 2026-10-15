@@ -5,12 +5,14 @@ import { LoadDto } from './dto/system.dto';
 import { SystemService } from './system.service';
 import { ApiResponse } from '@nestjs/swagger';
 import { OrbisReleaseService } from './orbis-release.service';
+import { ContainerTelemetryService } from './container-telemetry.service';
 
 @Controller('system')
 export class SystemController {
   constructor(
     private readonly systemService: SystemService,
     private readonly orbisReleases: OrbisReleaseService,
+    private readonly containers: ContainerTelemetryService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -25,6 +27,12 @@ export class SystemController {
   @Get('/telemetry')
   async telemetry() {
     return this.systemService.getTelemetry();
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/containers')
+  containerTelemetry() {
+    return this.containers.read();
   }
 
   @UseGuards(AuthGuard)

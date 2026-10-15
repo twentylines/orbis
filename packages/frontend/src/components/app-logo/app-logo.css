@@ -1,3 +1,9 @@
 .drop-shadow {
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.1)) drop-shadow(0 1px 1px rgb(0 0 0 / 0.06));
 }
+.app-logo {
+  display: block;
+  flex: none;
+  object-fit: cover;
+  border-radius: 24%;
+}

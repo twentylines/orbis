@@ -13,6 +13,7 @@ export type ArkTypeSchema<TOut = unknown, TIn = unknown> = {
 
 type Infer<T extends { infer: unknown }> = T['infer'];
 type InferIn<T extends { infer: unknown; inferIn?: unknown }> = T extends { inferIn: infer I } ? I : T['infer'];
+export type QueueObserver<T> = { queued: (event: T) => Promise<void>; unconfirmed: (event: T) => Promise<void> };
 
 export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: boolean; message: string }>> {
   constructor(
@@ -24,7 +25,16 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
     private eventSchema: T,
     private resultSchema: R,
     private logger: LoggerService,
+    private observer?: QueueObserver<Infer<T>>,
   ) {}
+
+  private async observe(phase: 'queued' | 'unconfirmed', event: Infer<T>) {
+    try {
+      await this.observer?.[phase](event);
+    } catch {
+      this.logger.warn('Task history observer failed; the lifecycle queue remains available.');
+    }
+  }
 
   public onEvent(callback: (data: Infer<T> & { eventId: string }, reply: (response: InferIn<R>) => Promise<void>) => Promise<void>) {
     try {
@@ -70,11 +80,14 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
   }
 
   async publish(event: unknown): Promise<{ success: boolean; message: string } | Infer<R>> {
+    let accepted: Infer<T> | undefined;
     try {
       const eventData = this.eventSchema(event as never);
       if (eventData instanceof type.errors) {
         throw new Error(`Invalid event data: ${eventData.summary}`);
       }
+      accepted = eventData;
+      await this.observe('queued', eventData);
 
       const res = await this.rpcClient.send(this.queueName, eventData);
       const response = this.resultSchema(res.body as never);
@@ -84,6 +97,7 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
 
       throw new Error(`Invalid response schema: ${response.summary}`);
     } catch (err) {
+      if (accepted !== undefined) await this.observe('unconfirmed', accepted);
       if (err instanceof AMQPConnectionError) {
         this.logger.error('Connection to the queue was lost. Try restarting your instance before retrying.');
       }

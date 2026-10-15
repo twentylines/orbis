@@ -8,18 +8,21 @@ import { AuthGuard } from '../../auth/auth.guard';
 import { SystemController } from '../system.controller';
 import { SystemService } from '../system.service';
 import { OrbisReleaseService } from '../orbis-release.service';
+import { ContainerTelemetryService } from '../container-telemetry.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
   const systemService = mock<SystemService>();
   const orbisReleases = mock<OrbisReleaseService>();
   const logger = mock<LoggerService>();
+  const containers = mock<ContainerTelemetryService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [SystemController],
       providers: [
         AuthGuard,
+        { provide: ContainerTelemetryService, useValue: containers },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         {
           provide: SystemService,
@@ -86,6 +89,13 @@ describe('SystemController certificate security', () => {
     const allowed = await request(app.getHttpServer()).get('/system/telemetry').set('Authorization', 'Bearer cli-token');
     expect(allowed.status).toBe(200);
     expect(allowed.body.cpu.scope).toBe('runtime');
+  });
+  it('requires authentication before reading Docker containers', async () => {
+    expect((await request(app.getHttpServer()).get('/system/containers')).status).toBe(401);
+    expect(containers.read).not.toHaveBeenCalled();
+    containers.read.mockResolvedValue({ sampledAt: new Date().toISOString(), available: true, containers: [], omitted: 0 });
+    expect((await request(app.getHttpServer()).get('/system/containers').set('Authorization', 'Bearer cli-token')).status).toBe(200);
+    expect(containers.read).toHaveBeenCalledOnce();
   });
 
   it('requires authentication for build metadata and reports the installed version', async () => {

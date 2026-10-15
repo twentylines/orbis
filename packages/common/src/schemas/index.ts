@@ -14,6 +14,16 @@ import { APP_CATEGORIES, ARCHITECTURES, FIELD_TYPES, RANDOM_ENCODINGS, appInfoSc
 import type { AppCategory, AppInfo, AppInfoInput, FieldType, FormField, RandomEncoding } from './app-info.js';
 
 import { type SSE, type Topic, sseSchema } from './sse.js';
+import {
+  taskActionSchema,
+  taskStatusSchema,
+  taskRecordSchema,
+  taskHistorySchema,
+  type TaskRecord,
+  type TaskAction,
+  type TaskHistory,
+} from './task-history.js';
+import type { ContainerReading, ContainerTelemetry } from './container-telemetry.js';
 
 export {
   parseComposeJson,
@@ -50,4 +60,13 @@ export {
   type XRuntipiServiceParams,
   type ServiceSchema,
   type ServicesSchema,
+  taskActionSchema,
+  taskStatusSchema,
+  taskRecordSchema,
+  taskHistorySchema,
+  type TaskRecord,
+  type TaskAction,
+  type TaskHistory,
+  type ContainerReading,
+  type ContainerTelemetry,
 };
