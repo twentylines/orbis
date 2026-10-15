@@ -15,7 +15,7 @@ export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonN
   workspace: {
     order: ['applications', 'activity', 'storage', 'attention'],
     hidden: [],
-    wide: ['applications', 'activity'],
+    wide: ['applications'],
     pinnedApps: [],
   },
 };

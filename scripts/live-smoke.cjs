@@ -34,7 +34,7 @@ async function main() {
     await page.locator('button[type=submit]').click();
     await page.waitForURL('**/dashboard');
     await page.getByRole('button', { name: 'Save and enter' }).click();
-    await page.getByRole('heading', { name: 'Your server' }).waitFor();
+    await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
     assert.equal(await page.title(), 'Orbis');
 
     const preferences = { serverName: 'Orbis Test', preset: 'graphite', density: 'compact' };
@@ -46,7 +46,7 @@ async function main() {
     const reloaded = await page.request.get(`${base}/api/desktop-preferences`);
     assert.deepEqual(await reloaded.json(), preferences);
     await page.reload();
-    await page.getByRole('heading', { name: 'Your server' }).waitFor();
+    await page.getByRole('heading', { name: 'Orbis Test', exact: true }).waitFor();
 
     const api = {};
     for (const endpoint of [

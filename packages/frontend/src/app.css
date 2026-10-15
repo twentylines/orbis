@@ -21,7 +21,7 @@ body {
 }
 
 .desktop-auth {
-  --desktop-wallpaper: url("/wallpapers/sandstone.svg");
+  --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
   min-height: 100vh;
   background: #c9d0bc var(--desktop-wallpaper) center center / cover fixed;
   color: #182522;
