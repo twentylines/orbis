@@ -8,6 +8,8 @@ import { cpuUsage, parseHostCpuStat, type CpuSnapshot } from './host-cpu';
 @Injectable()
 export class SystemService {
   private previousHostCpu: CpuSnapshot | null = null;
+  private telemetryCache: { expiresAt: number; result: Awaited<ReturnType<SystemService['readTelemetry']>> } | null = null;
+  private telemetryInFlight: Promise<Awaited<ReturnType<SystemService['readTelemetry']>>> | null = null;
 
   constructor(
     private readonly logger: LoggerService,
@@ -53,6 +55,21 @@ export class SystemService {
   }
 
   public async getTelemetry() {
+    if (this.telemetryCache && Date.now() < this.telemetryCache.expiresAt) return this.telemetryCache.result;
+    if (!this.telemetryInFlight) {
+      this.telemetryInFlight = this.readTelemetry()
+        .then((result) => {
+          this.telemetryCache = { expiresAt: Date.now() + 4000, result };
+          return result;
+        })
+        .finally(() => {
+          this.telemetryInFlight = null;
+        });
+    }
+    return this.telemetryInFlight;
+  }
+
+  private async readTelemetry() {
     const [cpuStatResult, uptimeResult, diskResult, networkResult, memoryResult] = await Promise.allSettled([
       this.filesystem.readTextFile('/host/proc/stat'),
       this.filesystem.readTextFile('/host/proc/uptime'),
