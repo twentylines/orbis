@@ -321,7 +321,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
           </span>
           <div className="desktop-window-label">
             <h1>{label}</h1>
-            <span>{preferences.serverName}</span>
+            <span title={preferences.serverName}>{preferences.serverName}</span>
           </div>
           <div className="desktop-window-controls">
             {desktop ? (

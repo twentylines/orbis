@@ -2,6 +2,10 @@
 
 ## Unreleased development preview
 
+- Added saved floating/maximized/snapped tool windows, pointer/keyboard move/resize, mobile fallback and minimize/restore that preserves the current form and URL. Hidden tools pause their polling and log streams; global events and tasks stay live.
+- Corrected content-width layouts, long Store headings/server labels, create/edit/update titles, input label associations, system-log IDs/limits and ignored-update attention counts. Independent window geometry, flow, motion and screenshot checks pass.
+- Added strict window-state persistence, visibility-only editor loader guards and declared-field preference import/export. The current single-tool model and remaining acceptance scope are documented in `DESKTOP-WINDOWS.md` and `ACCEPTANCE.md`.
+
 - Added a saved show-all Home app mode, a direct pin picker and automatic compaction of Recent operations/Needs attention. App scrolling stays contained while either lower widget is enabled.
 - Added directional section slides and a full-workspace search expansion with installed apps, catalogue apps and Settings/Updates destinations. Keyboard, interrupted motion, error/retry states and reduced-motion support passed independent browser inspection.
 - Moved log-query validation ahead of SSE interceptors so invalid requests return HTTP 400 JSON before headers or readers open. The regression fixture now includes a production-like interceptor.

@@ -12,12 +12,15 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 - [Feature preservation checklist](FEATURE-INVENTORY.md)
 - [Docker health and resource readings](MONITORING.md)
 - [Persistent lifecycle tasks](TASKS.md)
+- [Desktop window controls and behavior](DESKTOP-WINDOWS.md)
 
 ![Orbis desktop in light mode with development fixture data](screenshots/desktop-fixtures/desktop-workspace.png)
 
 [Dark workspace](screenshots/desktop-fixtures/desktop-workspace-dark.png) · [Phone workspace](screenshots/desktop-fixtures/mobile-workspace.png) · [Phone in dark mode](screenshots/desktop-fixtures/mobile-workspace-dark.png) · [Monitor](screenshots/desktop-fixtures/desktop-monitor.png) · [Appearance](screenshots/desktop-fixtures/desktop-appearance.png)
 
 [Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Search](screenshots/desktop-fixtures/desktop-search.png) · [Home app picker](screenshots/desktop-fixtures/desktop-dark-home-picker.png) · [All Home apps](screenshots/desktop-fixtures/desktop-dark-home-all-apps.png) · [Inspection record](VISUAL-QA.md)
+
+[Floating tool](screenshots/windows/visual-1440x900-light-floating-settings.png) · [Dark floating tool](screenshots/windows/visual-1440x900-dark-floating-settings.png) · [Snapped Monitor](screenshots/windows/route-desktop-light-snapped-monitor.png) · [Minimized tool](screenshots/windows/desktop-light-window-minimized.png) · [Long-name phone layout](screenshots/windows/visual-320x800-dark-long-server.png)
 
 [Released beta 21 desktop](screenshots/live-beta21/workspace-desktop.png) · [Released phone workspace](screenshots/live-beta21/workspace-mobile.png) · [Released search](screenshots/live-beta21/search-mobile.png)
 

@@ -32,6 +32,12 @@
   margin-left: auto;
   flex: none;
 }
+.desktop-window-label span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .desktop .desktop-window-control {
   display: grid;
   place-items: center;
