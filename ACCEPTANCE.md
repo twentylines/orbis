@@ -18,7 +18,7 @@ The original product brief and subsequent user requests remain the scope. A publ
 | Multiple homelabs | Controller/agent and pairing requirements recorded in `MULTI-HOMELAB.md` | Later implementation and two-isolated-host testing, target-aware app install/launch, merged dashboards, disconnect/revoke/restart handling and efficient multi-server visualisation |
 | Final deliverables | GPL licence, upstream record, source/release repo, setup/migration notes, screenshots and test records | Reconcile instructions with final supported behaviour, complete requirement-by-requirement production acceptance audit |
 
-## Current iteration: application workspace and alignment
+## Previous iteration: application workspace and alignment
 
 - Consolidate official and custom application details into one responsive workspace, with lifecycle state, Docker health, actions and installed-version facts.
 - Scope container resources and operations by the complete application URN. Preserve global Monitor and Tasks views.
@@ -41,7 +41,9 @@ This iteration also addresses the user's UI inspection findings. Header geometry
 
 Hades remains reserved for the separately approved deployment phase. No production Docker daemon or data tree is used for development.
 
-## Latest requested interaction work
+## Current iteration: desktop interaction and Home apps
+
+Implemented in the beta 21 branch. Publication/runtime verification follows protected checks.
 
 - Use smooth, directional section slides with consistent easing and reduced-motion support.
 - Make app pinning easy to discover; add saved show-all home mode. More than three visible apps compact Recent operations and Needs attention; both widgets remain independently hideable/restorable. When those widgets are enabled, the app list uses a contained scroller.

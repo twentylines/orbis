@@ -129,9 +129,10 @@ export function CommandSearch() {
   }, [open, close]);
 
   const needle = query.toLocaleLowerCase();
+  const terms = needle.split(/\s+/).filter(Boolean);
   const sections: SearchResult[] = desktopSearchSections
-    .filter((section) => `${section.label} ${section.keywords}`.toLocaleLowerCase().includes(needle))
-    .map(({ path, label, Icon }) => ({ id: path, path, label, detail: 'Orbis', icon: <Icon size={22} aria-hidden="true" /> }));
+    .filter((section) => terms.every((term) => `${section.label} ${section.keywords}`.toLocaleLowerCase().includes(term)))
+    .map(({ path, label, Icon }) => ({ id: path, path, label, detail: '', icon: <Icon size={22} aria-hidden="true" /> }));
   const installedResults: SearchResult[] = (installed.data?.installed ?? [])
     .filter(({ info }) => info.available && `${info.name} ${info.short_desc} ${info.urn}`.toLocaleLowerCase().includes(needle))
     .slice(0, 24)
@@ -139,7 +140,7 @@ export function CommandSearch() {
       id: info.urn,
       path: appPath(info.urn),
       label: info.name,
-      detail: 'Installed',
+      detail: info.short_desc,
       icon: <AppLogo urn={info.urn} size={32} alt="" />,
     }));
   const storeResults: SearchResult[] =
@@ -255,7 +256,7 @@ export function CommandSearch() {
                             <span className="desktop-search-result-icon">{result.icon}</span>
                             <span className="desktop-search-result-text">
                               <strong>{result.label}</strong>
-                              <small>{result.detail}</small>
+                              {result.detail ? <small>{result.detail}</small> : null}
                             </span>
                             <IconArrowUpRight size={18} aria-hidden="true" />
                           </button>

@@ -7,7 +7,7 @@ export const desktopNavigation = [
   { path: '/monitor', label: 'Monitor', Icon: IconDeviceDesktopAnalytics, keywords: 'status system cpu memory storage resources' },
   { path: '/updates', label: 'Updates', Icon: IconRefresh, keywords: 'orbis server system changelog release upgrade' },
   { path: '/settings', label: 'Settings', Icon: IconSettings, keywords: 'configuration preferences' },
-  { path: '/tasks', label: 'Task centre', Icon: IconActivity, keywords: 'operations activity history' },
+  { path: '/tasks', label: 'Task centre', Icon: IconActivity, keywords: 'task center operations activity history' },
 ];
 
 export const desktopSearchSections = [

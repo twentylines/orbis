@@ -1,5 +1,17 @@
 # Orbis UI inspection
 
+## 2026-10-15: Home apps, search and section motion
+
+Independent Chrome inspections cover 1440/768/390/320 CSS px in both modes, with 14 installed apps and long names. Home defaults to 3 apps, selected 4 pins compact the lower cards, and Show all displays 14 in a bounded keyboard/wheel scroller while either lower card is enabled. Hiding both removes the bound; restoring the layout restores the cards. Preferences survive reload after clearing the local cache.
+
+The agents found and the source repairs: editor scrolling before its entrance animation ended; inherited dark muted text; inconsistent long-name picker rows; a 15px launcher inset; top-aligned Applications heading controls; and decorative overflow creating a phantom scroll area. The launcher now clips decoration without becoming a scroll container.
+
+Search opening starts at the actual header trigger (measured 0px endpoint error), fills the workspace, and closes to the live trigger (0 px endpoint error). Interrupted closing continues from the current transform (maximum measured difference below 0.0008 px). Inner input/X/result/footer containment passes after correcting the grid's automatic minimum width. X, Escape, shortcut, focus containment/restoration, installed/catalogue/section routes, delayed/stale results, error/retry feedback, resize during close and rapid shortcuts pass. Empty-result messaging no longer masks search failures.
+
+Section slides follow dock order (+1,+1,-1 measured during forward/back navigation), retain header/dock bounds, and do not run for Settings query changes. The first reduced-motion rule lost to named transition selectors; explicit named overrides now compute animation:none and 0s, with zero active animations. Responsive headers retain the server IP, including the phone status row.
+
+The retained helpers are `home-app-checks.cjs`, `command-search-checks.cjs` and `workspace-alignment-checks.cjs`, used by `visual-qa.cjs`. These are isolated fixture checks. They do not establish real Docker lifecycle, released image behavior, other-browser coverage or copied-data migration.
+
 ## 2026-10-15: app workspace and further alignment corrections
 
 Independent agents inspected 96 global route/size/mode states, plus app detail, form, menu and dialog interactions. Production-bundle Chrome checks used isolated API fixtures at 1440, 768, 390 and 320 CSS px in light and dark mode. Screenshots were inspected as well as measured; outer bounds alone missed clipped text and the 3D server's full silhouette.

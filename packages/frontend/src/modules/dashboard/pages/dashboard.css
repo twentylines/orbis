@@ -999,9 +999,17 @@
   font-weight: 650;
 }
 .workspace-status-storage > strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: end;
+  column-gap: 4px;
   font-size: 18px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.025em;
+}
+.workspace-status-storage > strong > * {
+  white-space: nowrap;
 }
 .workspace-status-storage strong small {
   font-size: 12px;

@@ -287,7 +287,7 @@ export default function Dashboard() {
             <IconDatabase size={17} aria-hidden="true" /> Storage <IconArrowRight size={16} aria-hidden="true" />
           </span>
           <strong>
-            {number(diskUsedGb, ' GB')} <small>/ {number(diskSizeGb, ' GB')}</small>
+            <span>{number(diskUsedGb, ' GB')}</span> <small>/ {number(diskSizeGb, ' GB')}</small>
           </strong>
           <div className="workspace-meter">
             <span style={{ width: `${Math.min(100, Math.max(0, diskPercent ?? 0))}%` }} />

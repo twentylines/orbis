@@ -22,6 +22,9 @@ module.exports = async function inspectCommandSearch(page, capture) {
     const end = surface.getBoundingClientRect();
     return {
       originError,
+      origin: { left: trigger.left, top: trigger.top, width: trigger.width, height: trigger.height },
+      start: { left: start.left, top: start.top, width: start.width, height: start.height },
+      frames: animation.effect.getKeyframes(),
       fullWorkspace: end.height >= innerHeight - 50 && end.left >= 15 && end.right <= innerWidth - 15,
       duration: animation.effect.getTiming().duration,
       controlsContained: [...surface.querySelectorAll('.desktop-search-input input, .desktop-search-close, [data-search-result]')].every(
@@ -32,7 +35,7 @@ module.exports = async function inspectCommandSearch(page, capture) {
       ),
     };
   });
-  assert.ok(opening.originError < 1, `opening must start at trigger, error ${opening.originError}`);
+  assert.ok(opening.originError < 1, `opening must start at trigger: ${JSON.stringify(opening)}`);
   assert.equal(opening.fullWorkspace, true);
   assert.equal(opening.duration, 440);
   assert.equal(opening.controlsContained, true, 'search input, X and results must fit inside the surface');
@@ -68,13 +71,15 @@ module.exports = async function inspectCommandSearch(page, capture) {
   await input.fill('Media');
   await dialog.getByRole('region', { name: 'App Store', exact: true }).getByRole('button', { name: /Media/ }).waitFor();
   assert.equal(await dialog.getByRole('region', { name: 'Installed apps' }).getByRole('button', { name: /Media/ }).count(), 1);
+  await input.fill('system updates');
+  await dialog.getByRole('button', { name: 'Updates', exact: true }).waitFor();
   await input.fill('wallpaper');
-  await dialog.getByRole('button', { name: 'Appearance Orbis' }).waitFor();
+  await dialog.getByRole('button', { name: 'Appearance', exact: true }).waitFor();
   await input.press('ArrowDown');
-  assert.equal(await page.locator(':focus').innerText(), 'Appearance\nOrbis');
+  assert.equal(await page.locator(':focus').innerText(), 'Appearance');
   await input.focus();
   await input.fill('Monitor');
-  await dialog.getByRole('button', { name: 'Monitor Orbis' }).click();
+  await dialog.getByRole('button', { name: 'Monitor', exact: true }).click();
   await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
   return {
     opensFromTrigger: true,
