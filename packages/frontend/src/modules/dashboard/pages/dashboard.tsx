@@ -13,7 +13,7 @@ import {
   IconPlus,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import './dashboard.css';
 
@@ -104,6 +104,7 @@ export default function Dashboard() {
   const widgets: Record<WidgetId, ReactNode> = {
     applications: (
       <section className="workspace-apps" aria-labelledby="workspace-apps-title">
+        <span className="workspace-panel-kicker">Launchpad / 01</span>
         <div className="workspace-section-heading">
           <div>
             <h2 id="workspace-apps-title">Applications</h2>
@@ -150,7 +151,7 @@ export default function Dashboard() {
                   className="workspace-app"
                   aria-label={`${info.name}, ${app.status}${appUpdate ? ', update available' : ''}${workspace.pinnedApps.includes(info.urn) ? ', pinned' : ''}`}
                 >
-                  <AppLogo urn={info.urn} size={46} alt="" />
+                  <AppLogo urn={info.urn} size={54} alt="" />
                   <span className="workspace-app-copy">
                     <strong>{info.name}</strong>
                     <small>{`${workspace.pinnedApps.includes(info.urn) ? 'Pinned · ' : ''}${appUpdate ? 'Update available' : app.status}`}</small>
@@ -176,6 +177,7 @@ export default function Dashboard() {
     ),
     activity: (
       <section className="workspace-activity" aria-labelledby="workspace-activity-title">
+        <span className="workspace-panel-kicker">Live system / 02</span>
         <div className="workspace-section-heading">
           <div>
             <h2 id="workspace-activity-title">System activity</h2>
@@ -194,27 +196,32 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="workspace-metrics">
-            <Link to="/monitor" className="workspace-metric">
-              <IconCpu size={20} aria-hidden="true" />
-              <span>{system.data ? (system.data.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU') : 'CPU'}</span>
-              <strong>{number(cpuPercent, '%')}</strong>
-              <div className="workspace-meter">
-                <span style={{ width: `${Math.min(100, Math.max(0, cpuPercent ?? 0))}%` }} />
-              </div>
-            </Link>
-            <Link to="/monitor" className="workspace-metric">
-              <IconDeviceDesktopAnalytics size={20} aria-hidden="true" />
-              <span>Host memory</span>
-              <strong>{number(memoryPercent, '%')}</strong>
-              <div className="workspace-meter">
-                <span style={{ width: `${Math.min(100, Math.max(0, memoryPercent ?? 0))}%` }} />
-              </div>
-            </Link>
-            <Link to="/monitor" className="workspace-metric">
-              <IconArrowsDownUp size={20} aria-hidden="true" />
-              <span>Core network</span>
-              <strong>↓ {rate(networkRate('rxBytesPerSecond'))}</strong>
-              <span className="workspace-network-upload">↑ {rate(networkRate('txBytesPerSecond'))}</span>
+            <div className="workspace-gauges">
+              <Link to="/monitor" className="workspace-gauge" aria-label={`Open CPU monitor, ${number(cpuPercent, '%')}`}>
+                <span className="workspace-dial" style={{ '--dial-progress': `${Math.min(100, Math.max(0, cpuPercent ?? 0))}%` } as CSSProperties}>
+                  <IconCpu size={17} aria-hidden="true" />
+                  <strong>{typeof cpuPercent === 'number' ? number(cpuPercent, '%') : '—'}</strong>
+                </span>
+                <span>{system.data ? (system.data.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU') : 'CPU'}</span>
+              </Link>
+              <Link to="/monitor" className="workspace-gauge" aria-label={`Open memory monitor, ${number(memoryPercent, '%')}`}>
+                <span className="workspace-dial" style={{ '--dial-progress': `${Math.min(100, Math.max(0, memoryPercent ?? 0))}%` } as CSSProperties}>
+                  <IconDeviceDesktopAnalytics size={17} aria-hidden="true" />
+                  <strong>{typeof memoryPercent === 'number' ? number(memoryPercent, '%') : '—'}</strong>
+                </span>
+                <span>Host memory</span>
+              </Link>
+            </div>
+            <Link to="/monitor" className="workspace-network">
+              <span className="workspace-network-heading">
+                <IconArrowsDownUp size={17} aria-hidden="true" /> Core network
+              </span>
+              <span className="workspace-network-rate">
+                <b>↓</b> {rate(networkRate('rxBytesPerSecond'))}
+              </span>
+              <span className="workspace-network-rate">
+                <b>↑</b> {rate(networkRate('txBytesPerSecond'))}
+              </span>
             </Link>
           </div>
         )}
@@ -222,6 +229,7 @@ export default function Dashboard() {
     ),
     storage: (
       <Link to="/monitor" className="workspace-storage">
+        <span className="workspace-panel-kicker">Capacity / 03</span>
         <div className="workspace-storage-top">
           <IconDatabase size={22} aria-hidden="true" />
           <span>Runtime filesystem</span>
@@ -236,6 +244,7 @@ export default function Dashboard() {
     ),
     attention: (
       <section className="workspace-attention" aria-labelledby="workspace-attention-title">
+        <span className="workspace-panel-kicker">Operations / 04</span>
         <h2 id="workspace-attention-title">Needs attention</h2>
         {apps.data ? (
           <p>
@@ -255,8 +264,14 @@ export default function Dashboard() {
     <div className="workspace">
       <div className="workspace-heading">
         <div>
-          <p className="workspace-eyebrow">Workspace</p>
-          <h1>Your server</h1>
+          <p className="workspace-eyebrow">
+            Server desktop <span aria-hidden="true">/</span> Workspace
+          </p>
+          <h1>{preferences.serverName}</h1>
+          <p className="workspace-subline">
+            {apps.data ? `${installed.length} installed · ${running} running` : 'Loading applications'}
+            {system.data?.sampledAt ? ` · System sampled ${new Date(system.data.sampledAt).toLocaleTimeString()}` : ''}
+          </p>
         </div>
         <div className="workspace-actions">
           <button
@@ -383,7 +398,7 @@ export default function Dashboard() {
         {workspace.order
           .filter((id) => !workspace.hidden.includes(id))
           .map((id) => (
-            <div className={`workspace-widget ${workspace.wide.includes(id) ? 'workspace-widget-wide' : ''}`} key={id}>
+            <div className={`workspace-widget workspace-widget-${id} ${workspace.wide.includes(id) ? 'workspace-widget-wide' : ''}`} key={id}>
               {widgets[id]}
             </div>
           ))}
