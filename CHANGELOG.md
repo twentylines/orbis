@@ -2,6 +2,8 @@
 
 ## Unreleased development preview
 
+- Fixed the exposed strip above the desktop, widened chrome/window insets, removed duplicate route titles, and combined storage with System status. Recent operations now sits beneath the launcher.
+- Added Docker health beside installed apps, shared per-container telemetry, CPU/memory consumer rankings, and persistent lifecycle task history. The isolated icon audit decoded 248 app icons successfully.
 - Forked Runtipi v4.10.1 while preserving its application and data compatibility surfaces.
 - Added the Orbis name, icon, browser metadata, server desktop, command search, App Store presentation, Appearance settings, and a live System Monitor.
 - Added authenticated telemetry and per-user desktop preferences.

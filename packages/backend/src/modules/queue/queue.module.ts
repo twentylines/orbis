@@ -6,15 +6,17 @@ import { RepoEventsQueue, repoCommandSchema } from './entities/repo-events';
 import { SystemEventsQueue, systemCommandSchema } from './entities/system-events';
 import { QueueFactory } from './queue.factory';
 import { QueueHealthIndicator } from './queue.health';
+import { TasksModule } from '../tasks/tasks.module';
+import { TasksService } from '../tasks/tasks.service';
 
 @Module({
-  imports: [TerminusModule],
+  imports: [TerminusModule, TasksModule],
   providers: [
     QueueHealthIndicator,
     QueueFactory,
     {
       provide: AppEventsQueue,
-      useFactory: async (queueFactory: QueueFactory, config: ConfigurationService) => {
+      useFactory: async (queueFactory: QueueFactory, config: ConfigurationService, tasks: TasksService) => {
         const timeout = config.get('userSettings').eventsTimeout * 60 * 1000;
 
         return await queueFactory.createQueue({
@@ -22,9 +24,10 @@ import { QueueHealthIndicator } from './queue.health';
           workers: 3,
           eventSchema: appEventSchema,
           timeout: timeout,
+          observer: { queued: (event) => tasks.enqueue(event), unconfirmed: (event) => tasks.unconfirmed(event) },
         });
       },
-      inject: [QueueFactory, ConfigurationService],
+      inject: [QueueFactory, ConfigurationService, TasksService],
     },
     {
       provide: RepoEventsQueue,

@@ -18,6 +18,7 @@ import { UpdateAppHandler } from './handlers/update-app.handler';
 import { UpdateConfigHandler } from './handlers/update-config.handler';
 import { BackupAppHandler } from './handlers/backup-app.handler';
 import { RestoreAppHandler } from './handlers/restore-app.handler';
+import { TasksService } from '../tasks/tasks.service';
 
 @Injectable()
 export class AppLifecycleService {
@@ -38,21 +39,28 @@ export class AppLifecycleService {
     private readonly updateAppHandler: UpdateAppHandler,
     private readonly backupAppHandler: BackupAppHandler,
     private readonly restoreAppHandler: RestoreAppHandler,
+    private readonly tasks: TasksService,
   ) {
     this.logger.debug('Subscribing to app events...');
     this.appEventsQueue.onEvent((data, reply) => this.invokeCommand(data, reply));
   }
 
   async invokeCommand(data: typeof appEventSchema.infer, reply: (response: typeof appEventResultSchema.infer) => Promise<void>) {
+    await this.tasks.enqueue(data);
     const release = await this.mutex.acquire(data.appUrn);
 
     try {
-      const command = this.commandFactory.createCommand(data);
-      const { success, message } = await command.execute(data.appUrn, data.form);
-      await reply({ success, message });
-    } catch (err) {
-      this.logger.error('Error invoking command:', err);
-      await reply({ success: false, message: String(err) });
+      await this.tasks.start(data);
+      let result: typeof appEventResultSchema.infer;
+      try {
+        const command = this.commandFactory.createCommand(data);
+        result = await command.execute(data.appUrn, data.form);
+      } catch (err) {
+        this.logger.error('Error invoking command:', err);
+        result = { success: false, message: String(err) };
+      }
+      await this.tasks.finish(data, result.success);
+      await reply(result);
     } finally {
       release();
     }
