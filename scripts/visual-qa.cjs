@@ -2,6 +2,8 @@
 const { chromium } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
+const inspectAppDetails = require('./app-detail-checks.cjs');
+const inspectWorkspaceAlignment = require('./workspace-alignment-checks.cjs');
 
 const base = 'http://localhost:8080';
 const screenshotDir = path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
@@ -40,6 +42,58 @@ const catalogue = [
   { id: 'dns', urn: 'dns:official', name: 'DNS', short_desc: 'Manage network filtering', categories: ['network'], created_at: 0 },
   { id: 'photos', urn: 'photos:official', name: 'Photos', short_desc: 'Organise your photo library', categories: ['media'], created_at: 0 },
 ];
+const appDetailFixture = (urn) => {
+  const [id, storeId] = urn.split(':');
+  const summary = apps.find((item) => item.info.urn === urn) || (urn === 'managed:_user' ? { app: { id: 4, status: 'stopped', version: 1 } } : null);
+  const name =
+    summary?.info?.name || (id === 'photos' ? 'Photos' : id === 'custom' ? 'Custom service' : id === 'managed' ? 'Managed service' : 'Media');
+  return {
+    info: {
+      id,
+      urn,
+      name,
+      short_desc: summary?.info?.short_desc || 'A self-hosted application for your server',
+      description: `## ${name} on your server\n\nRead the application documentation before configuring access.\n\n- Configuration stays with this installation.\n- Backups and logs remain available in their sections.`,
+      version: '1.2.3',
+      author: 'Fixture maintainer',
+      source: 'https://example.com/source',
+      website: 'https://example.com',
+      available: true,
+      deprecated: false,
+      supported_architectures: ['amd64', 'arm64'],
+      categories: ['utilities'],
+      created_at: 0,
+      updated_at: 0,
+      tipi_version: 1,
+      dynamic_config: true,
+      exposable: true,
+      force_expose: false,
+      force_pull: false,
+      generate_vapid_keys: false,
+      no_gui: false,
+      https: false,
+      port: 8123,
+      form_fields: [{ type: 'text', label: 'Service label', env_variable: 'SERVICE_LABEL', required: true }],
+    },
+    app: summary
+      ? {
+          ...summary.app,
+          createdAt: 0,
+          updatedAt: 0,
+          port: 8123,
+          domain: null,
+          exposed: false,
+          exposedLocal: false,
+          openPort: true,
+          pendingRestart: false,
+          config: { SERVICE_LABEL: 'Media library' },
+          templateUrn: null,
+          isVisibleOnGuestDashboard: false,
+        }
+      : null,
+    metadata: { latestVersion: 2, latestDockerVersion: '1.3.0', localSubdomain: `${id}-${storeId}`, composeSchemaVersion: 2, hasCustomConfig: true },
+  };
+};
 const containerFixture = {
   sampledAt: new Date().toISOString(),
   available: true,
@@ -188,14 +242,22 @@ async function chromeGeometry(page) {
     const controls = [...bar.querySelectorAll('.desktop-task-trigger, .desktop-mode-toggle, .desktop-search-trigger, .desktop-icon-button')];
     const boxes = controls.map((control) => {
       const { x, y, width, height } = control.getBoundingClientRect();
-      return { x, y, width, height };
+      const glyph = control.querySelector('svg').getBoundingClientRect();
+      return { x, y, width, height, glyph: { y: glyph.y, width: glyph.width, height: glyph.height } };
     });
     const brand = bar.querySelector('.desktop-brand').getBoundingClientRect();
     const current = bar.querySelector('.desktop-current');
     const next = current && getComputedStyle(current).display !== 'none' ? current.getBoundingClientRect() : boxes[0];
     return {
       boxes,
-      aligned: boxes.every((box) => Math.abs(box.y - boxes[0].y) < 0.1 && Math.abs(box.height - boxes[0].height) < 0.1),
+      aligned: boxes.every(
+        (box) =>
+          Math.abs(box.y - boxes[0].y) < 0.1 &&
+          Math.abs(box.height - boxes[0].height) < 0.1 &&
+          Math.abs(box.glyph.width - 20) < 0.1 &&
+          Math.abs(box.glyph.height - 20) < 0.1 &&
+          Math.abs(box.glyph.y + box.glyph.height / 2 - box.y - box.height / 2) < 0.1,
+      ),
       separated:
         brand.right + 4 <= (next.left ?? next.x) && boxes.every((box, index) => !index || boxes[index - 1].x + boxes[index - 1].width < box.x),
       backdropMatches: getComputedStyle(document.body).backgroundColor === getComputedStyle(document.querySelector('.desktop')).backgroundColor,
@@ -220,18 +282,33 @@ async function main() {
     ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
     : [
         { name: 'desktop', width: 1440, height: 1120 },
+        { name: 'tablet', width: 768, height: 1024 },
         { name: 'mobile', width: 390, height: 844 },
       ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: zoom });
     const errors = [];
+    let detailPhase = false;
+    let logRequests = 0;
+    const logLimits = [];
+    const actionRequests = [];
     page.on('pageerror', (error) => errors.push(error.stack || error.message));
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
       const respond = (value) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(value) });
       if (url.pathname.startsWith('/api/i18n/')) return respond(translations);
-      if (url.pathname.startsWith('/api/sse/')) return route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+      if (url.pathname.startsWith('/api/sse/')) {
+        if (url.pathname === '/api/sse/app-logs') {
+          logRequests += 1;
+          logLimits.push(url.searchParams.get('maxLines'));
+        }
+        return route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: url.pathname === '/api/sse/app-logs' ? 'data: {"lines":["[fixture] application ready"]}\n\n' : '',
+        });
+      }
       if (url.pathname.endsWith('/image')) {
         const id = decodeURIComponent(url.pathname).split('/').at(-2)?.split(':')[0];
         const glyphs = {
@@ -264,15 +341,57 @@ async function main() {
       if (url.pathname === '/api/app-context')
         return respond({
           version,
-          userSettings: { allowAutoThemes: false, localDomain: 'local.test', sslPort: 443 },
+          userSettings: {
+            allowAutoThemes: false,
+            localDomain: 'local.test',
+            sslPort: 443,
+            maxBackups: 5,
+            guestDashboard: false,
+            internalIp: '127.0.0.1',
+          },
           user: { id: 1, username: 'fixture', totpEnabled: false, locale: 'en', operator: true, hasSeenWelcome: true },
           apps: [],
           updatesAvailable: 0,
         });
+      if (url.pathname.startsWith('/api/app-lifecycle/')) {
+        actionRequests.push({ path: url.pathname, body: JSON.parse(route.request().postData() || '{}') });
+        return respond({ requestId: '55555555-5555-4555-8555-555555555555' });
+      }
       if (url.pathname === '/api/apps/installed') return respond({ installed: apps });
-      if (url.pathname === '/api/system/containers') return respond(containerFixture);
+      if (url.pathname === '/api/apps/random-port') return respond({ port: 8123 });
+      if (/^\/api\/apps\/[^/]+$/.test(url.pathname)) return respond(appDetailFixture(decodeURIComponent(url.pathname.split('/').at(-1))));
+      if (url.pathname.endsWith('/config-diff')) return respond({ current: 'SERVICE_LABEL=old', new: 'SERVICE_LABEL=new' });
+      if (url.pathname.endsWith('/compose-diff')) return respond({ current: '{"services":{}}', new: '{"services":{}}' });
+      if (url.pathname.startsWith('/api/backups/')) return respond({ currentPage: 1, data: [], lastPage: 1, total: 0 });
+      if (url.pathname.startsWith('/api/user-config/'))
+        return respond({
+          appEnv: 'KEEP_THIS=unchanged',
+          dockerCompose: '',
+          sourceCompose: 'services:\n  web:\n    image: example/service:1.2.3\n',
+          isEnabled: true,
+        });
+      if (url.pathname === '/api/system/containers')
+        return respond(
+          detailPhase
+            ? {
+                ...containerFixture,
+                containers: [
+                  ...containerFixture.containers,
+                  { ...containerFixture.containers[0], id: 'other-store', name: 'media-other-store', appUrn: 'media:other' },
+                ],
+              }
+            : containerFixture,
+        );
       if (url.pathname === '/api/system/history') return respond(historyFixture(url.searchParams.get('range') || '1h'));
-      if (url.pathname === '/api/tasks') return respond(taskFixture);
+      if (url.pathname === '/api/tasks')
+        return respond(
+          detailPhase
+            ? {
+                ...taskFixture,
+                tasks: [...taskFixture.tasks, { ...taskFixture.tasks[0], id: '44444444-4444-4444-8444-444444444444', appUrn: 'media:other' }],
+              }
+            : taskFixture,
+        );
       if (url.pathname === '/api/links') return respond({ links: [] });
       if (url.pathname === '/api/system/load')
         return respond({ diskUsed: 43, diskSize: 256, percentUsed: 17, cpuLoad: 11.3, memoryTotal: 32, percentUsedMemory: 38 });
@@ -427,6 +546,7 @@ async function main() {
       .evaluate((element) => element.getBoundingClientRect().left >= 20 && element.getBoundingClientRect().top >= 20);
     const orbisBrand = (await page.title()) === 'Orbis' && (await page.getByRole('link', { name: 'Orbis workspace on Hades' }).isVisible());
     const lightChrome = await chromeGeometry(page);
+    const lightWorkspaceAlignment = await inspectWorkspaceAlignment(page);
     let chromeHoverAligned = true;
     for (const selector of ['.desktop-task-trigger', '.desktop-mode-toggle', '.desktop-search-trigger', '.desktop-icon-button']) {
       await page.locator(selector).hover();
@@ -447,6 +567,7 @@ async function main() {
       (await page.locator('.desktop').getAttribute('data-desktop-mode')) === 'dark' &&
       (await page.evaluate(() => document.body.dataset.bsTheme)) === 'dark';
     const darkChrome = await chromeGeometry(page);
+    const darkWorkspaceAlignment = await inspectWorkspaceAlignment(page);
     const chromeAligned = lightChrome.aligned && darkChrome.aligned && lightChrome.separated && darkChrome.separated && chromeHoverAligned;
     const chromeModeStable = Math.abs(lightChrome.boxes[1].width - darkChrome.boxes[1].width) < 0.1;
     const rootBackdropMatches = lightChrome.backdropMatches && darkChrome.backdropMatches;
@@ -485,6 +606,16 @@ async function main() {
       (await page.locator('.workspace-widget').first().locator('h2').first().innerText()) === 'System status' &&
       (await page.locator('.workspace-operations').count()) === 0;
     const pinnedAppFirst = (await page.locator('.workspace-app').first().locator('strong').innerText()) === 'Backups';
+    await page.keyboard.press('Control+k');
+    await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
+    for (let tab = 0; tab < 20; tab++) {
+      await page.keyboard.press('Tab');
+      if (!(await page.getByRole('dialog', { name: 'Search tools' }).evaluate((dialog) => dialog.contains(document.activeElement))))
+        throw new Error('Search keyboard focus escaped its dialog');
+    }
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Search tools' }).waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement === document.querySelector('.desktop-search-trigger'));
     await page.keyboard.press('Control+k');
     await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
     await page.getByRole('textbox', { name: 'Find a tool or application' }).fill('Monitor');
@@ -531,6 +662,13 @@ async function main() {
     const memoryRanked = (await page.locator('.container-resource-list > li').first().getAttribute('data-container')) === 'dns-server';
     await page.getByRole('group', { name: 'Rank containers by' }).getByRole('button', { name: 'CPU', exact: true }).click();
     await capture(page, `${viewport.name}-monitor.png`);
+    const monitor3DContained = await page.locator('.desktop-host-visual').evaluate((visual) => {
+      const hero = visual.closest('.desktop-host-overview').getBoundingClientRect();
+      return [...visual.querySelectorAll('.desktop-host-machine-front, .desktop-host-machine-side, .desktop-host-machine-top')].every((face) => {
+        const bounds = face.getBoundingClientRect();
+        return bounds.left >= hero.left && bounds.right <= hero.right;
+      });
+    });
     await page.locator('.container-resources').scrollIntoViewIfNeeded();
     await capture(page, `${viewport.name}-monitor-containers.png`, { scrollTop: false });
     const monitorOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
@@ -559,6 +697,28 @@ async function main() {
       : null;
     const bulkControlsCollapsed = !(await page.locator('.desktop-batch-controls').evaluate((element) => element.open));
     await capture(page, `${viewport.name}-applications.png`);
+    const installedAppRowsAligned = await page.locator('.desktop-installed-grid').evaluate((grid) => {
+      const cards = [...grid.querySelectorAll('.app-tile')].map((card) => ({
+        card: card.getBoundingClientRect(),
+        logo: card.querySelector('.app-logo').getBoundingClientRect(),
+        title: card.querySelector('.fw-bolder').getBoundingClientRect(),
+        health: card.querySelector('.docker-health').getBoundingClientRect(),
+      }));
+      return (
+        cards.length >= 3 &&
+        cards.every((card) =>
+          cards
+            .filter((peer) => Math.abs(peer.card.top - card.card.top) < 0.1)
+            .every(
+              (peer) =>
+                Math.abs(peer.card.bottom - card.card.bottom) < 0.1 &&
+                Math.abs(peer.logo.top - card.logo.top) < 0.1 &&
+                Math.abs(peer.title.top - card.title.top) < 0.1 &&
+                Math.abs(peer.health.bottom - card.health.bottom) < 0.1,
+            ),
+        )
+      );
+    });
     await page.locator('.desktop-batch-controls > summary').click();
     const bulkControlsReachable = await page.locator('.batch-action-desktop-button').first().isVisible();
     const batchActionsStacked =
@@ -623,6 +783,16 @@ async function main() {
     const singleStoreTitle =
       (await page.getByRole('heading', { name: 'App Store', exact: true }).count()) === 1 &&
       (await page.locator('.desktop-route-title').count()) === 0;
+    detailPhase = true;
+    const appDetails = await inspectAppDetails({
+      page,
+      base,
+      viewport,
+      capture,
+      logs: { count: () => logRequests, limits: () => logLimits },
+      actions: actionRequests,
+    });
+    detailPhase = false;
     await page.getByRole('link', { name: 'Updates', exact: true }).click();
     await page.getByRole('heading', { name: 'Updates', exact: true }).waitFor();
     if (process.env.ORBIS_VISUAL_UPDATES_TEXT_SCALE === '2') await page.addStyleTag({ content: '.desktop-updates { font-size: 200% !important; }' });
@@ -711,6 +881,7 @@ async function main() {
       desktopStartsAtTop,
       shellInset,
       chromeAligned,
+      workspaceAlignment: { light: lightWorkspaceAlignment, dark: darkWorkspaceAlignment },
       chromeModeStable,
       rootBackdropMatches,
       bulkControlsCollapsed,
@@ -719,6 +890,7 @@ async function main() {
       dialogFocusContained,
       dialogFocusReturned,
       categoryFocusReturned,
+      appDetails,
       historyRanges,
       historyRangePersisted,
       historyKeyboard,
@@ -742,8 +914,10 @@ async function main() {
       pinnedAppFirst,
       savingAfterPin,
       monitorOverflow,
+      monitor3DContained,
       appsOverflow,
       appTilesContained,
+      installedAppRowsAligned,
       appTileSingleColumn,
       batchActionsStacked,
       appsDockClearance,
@@ -805,8 +979,10 @@ async function main() {
         !report.orbisBrand ||
         !report.darkModePersisted ||
         report.monitorOverflow ||
+        !report.monitor3DContained ||
         report.appsOverflow ||
         !report.appTilesContained ||
+        !report.installedAppRowsAligned ||
         !report.appTileSingleColumn ||
         !report.batchActionsStacked ||
         !report.appsDockClearance ||

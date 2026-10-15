@@ -2,9 +2,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAppContext } from '@/context/app-context';
 import { Suspense, lazy } from 'react';
-import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
 import { Appearance } from '../containers/appearance';
 
@@ -15,37 +14,34 @@ const LogsContainer = lazy(() => import('../containers/logs').then((module) => (
 
 export default () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get('tab');
   const { userSettings, user } = useAppContext();
-  const [currentTab, setCurrentTab] = React.useState(tab || 'actions');
+  const currentTab = tab && ['actions', 'appearance', 'settings', 'security', 'appstores', 'logs'].includes(tab) ? tab : 'actions';
 
   const handleTabChange = (newTab: string) => {
-    setCurrentTab(newTab);
-    navigate(`?tab=${newTab}`, { replace: true });
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set('tab', newTab);
+        return next;
+      },
+      { preventScrollReset: true },
+    );
   };
 
   return (
     <div className="desktop-settings">
-      <Tabs value={currentTab}>
+      <Tabs value={currentTab} onValueChange={handleTabChange}>
         <TabsList>
-          <TabsTrigger onClick={() => handleTabChange('actions')} value="actions">
-            {t('SETTINGS_ACTIONS_TAB_TITLE')}
-          </TabsTrigger>
-          <TabsTrigger onClick={() => handleTabChange('appearance')} value="appearance">
-            Appearance
-          </TabsTrigger>
-          <TabsTrigger onClick={() => handleTabChange('settings')} value="settings">
-            {t('SETTINGS_GENERAL_TAB_TITLE')}
-          </TabsTrigger>
-          <TabsTrigger onClick={() => handleTabChange('security')} value="security">
-            {t('SETTINGS_SECURITY_TAB_TITLE')}
-          </TabsTrigger>
-          <TabsTrigger onClick={() => handleTabChange('appstores')} value="appstores" className="d-none d-md-block">
+          <TabsTrigger value="actions">{t('SETTINGS_ACTIONS_TAB_TITLE')}</TabsTrigger>
+          <TabsTrigger value="appearance">Appearance</TabsTrigger>
+          <TabsTrigger value="settings">{t('SETTINGS_GENERAL_TAB_TITLE')}</TabsTrigger>
+          <TabsTrigger value="security">{t('SETTINGS_SECURITY_TAB_TITLE')}</TabsTrigger>
+          <TabsTrigger value="appstores" className="d-none d-md-block">
             {t('SETTINGS_APPSTORES_TAB_TITLE')}
           </TabsTrigger>
-          <TabsTrigger onClick={() => handleTabChange('logs')} value="logs" className="d-none d-md-block">
+          <TabsTrigger value="logs" className="d-none d-md-block">
             {t('SETTINGS_LOGS_TAB_TITLE')}
           </TabsTrigger>
           <DropdownMenu>

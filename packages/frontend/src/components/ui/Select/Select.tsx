@@ -4,6 +4,7 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { IconCheck, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type * as React from 'react';
+import { useId } from 'react';
 import '../dropdown.css';
 
 type TriggerProps = {
@@ -35,17 +36,20 @@ const SelectTrigger = ({
   onClear,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & TriggerProps) => {
+  const generatedId = useId();
+  const triggerId = props.id ?? generatedId;
+  const labelId = `${triggerId}-label`;
   return (
-    <label htmlFor={props.name} className={clsx('w-100', className)}>
+    <label htmlFor={triggerId} className={clsx('w-100', className)}>
       {Boolean(label) && (
-        <span id={props.name} className="form-label">
+        <span id={labelId} className="form-label">
           {label}
         </span>
       )}
       <div className="position-relative">
         <SelectPrimitive.Trigger
-          id={props.name}
-          aria-labelledby={props.name}
+          id={triggerId}
+          aria-labelledby={label ? labelId : undefined}
           className={clsx('d-flex w-100 align-items-center justify-content-between form-select', {
             'is-invalid is-invalid-lite': error,
             'text-muted': !value,
@@ -62,7 +66,12 @@ const SelectTrigger = ({
 
 const SelectContent = ({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Content>) => (
   <SelectPrimitive.Portal>
-    <SelectPrimitive.Content style={{ zIndex: 2000 }} className={clsx('overflow-hidden orbis-dropdown-menu', className)} {...props}>
+    <SelectPrimitive.Content
+      collisionPadding={16}
+      style={{ zIndex: 2000 }}
+      className={clsx('overflow-hidden orbis-dropdown-menu', className)}
+      {...props}
+    >
       <SelectPrimitive.ScrollUpButton className="d-flex align-items-center justify-content-center">
         <IconChevronUp />
       </SelectPrimitive.ScrollUpButton>

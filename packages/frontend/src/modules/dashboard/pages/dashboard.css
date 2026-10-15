@@ -43,6 +43,19 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+.workspace-actions > * {
+  box-sizing: border-box;
+  height: 44px;
+  line-height: 20px;
+  justify-content: center;
+}
+.workspace-actions > * > span {
+  line-height: 20px;
+}
+.workspace-actions > * > svg {
+  display: block;
+  flex: none;
+}
 .workspace-edit-toggle,
 .workspace-editor button,
 .workspace-all-hidden button {
@@ -53,6 +66,7 @@
   background: var(--desktop-surface);
   color: var(--desktop-ink);
   font: inherit;
+  line-height: 20px;
   font-weight: 650;
   cursor: pointer;
 }
@@ -60,10 +74,11 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(247, 251, 247, 0.72);
-  box-shadow:
-    0 8px 25px rgba(15, 43, 37, 0.1),
-    inset 0 1px var(--desktop-highlight);
+  padding: 0 14px;
+  background: #183e36;
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 8px 25px rgba(15, 43, 37, 0.1);
   backdrop-filter: blur(12px);
   transition:
     transform 0.2s ease,
@@ -71,21 +86,11 @@
     box-shadow 0.2s ease;
 }
 .workspace-edit-toggle:hover {
-  transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 14px 28px rgba(15, 43, 37, 0.16);
+  background: #1e3d30;
+  box-shadow: 0 16px 34px rgba(22, 50, 39, 0.28);
 }
 .workspace-edit-toggle:active {
-  transform: scale(0.97);
-}
-.desktop[data-desktop-mode="dark"] .workspace-edit-toggle {
-  color: #f2f6f0;
-  background: rgba(20, 39, 38, 0.78);
-  border-color: rgba(255, 255, 255, 0.19);
-  box-shadow: 0 8px 22px rgba(3, 17, 14, 0.18);
-}
-.desktop[data-desktop-mode="dark"] .workspace-edit-toggle:hover {
-  background: rgba(29, 57, 54, 0.93);
+  box-shadow: inset 0 2px 8px rgba(15, 43, 37, 0.16);
 }
 .workspace-edit-toggle:hover,
 .workspace-editor button:hover:not(:disabled),
@@ -209,17 +214,16 @@
 .desktop .workspace-add {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   min-height: 44px;
-  padding: 0 17px;
+  border: 1px solid transparent;
+  padding: 0 14px;
   border-radius: 12px;
   color: #fff;
   background: #183e36;
   text-decoration: none;
-  font-weight: 600;
-  box-shadow:
-    0 11px 26px rgba(22, 50, 39, 0.24),
-    inset 0 1px rgba(255, 255, 255, 0.18);
+  font-weight: 650;
+  box-shadow: 0 8px 25px rgba(15, 43, 37, 0.1);
   transition:
     transform 0.2s ease,
     background 0.2s ease,
@@ -229,11 +233,11 @@
   color: #fff;
   background: #1e3d30;
   text-decoration: none;
-  transform: translateY(-3px);
+  border-color: #6d8b75;
   box-shadow: 0 16px 34px rgba(22, 50, 39, 0.28);
 }
 .desktop .workspace-add:active {
-  transform: translateY(0) scale(0.97);
+  box-shadow: inset 0 2px 8px rgba(15, 43, 37, 0.16);
 }
 .workspace-grid {
   display: grid;
@@ -363,12 +367,12 @@
 }
 .workspace-app-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
   gap: 12px;
   max-width: 720px;
 }
 .workspace-widget-wide .workspace-app-list {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
 }
 .workspace-app {
   display: flex;
@@ -405,12 +409,11 @@
 .workspace-app:hover {
   background: rgba(244, 250, 241, 0.32);
   border-color: var(--desktop-accent);
-  transform: translateY(-5px) scale(1.035);
   text-decoration: none;
   box-shadow: 0 12px 22px rgba(17, 51, 41, 0.12);
 }
 .workspace-app:active {
-  transform: translateY(-1px) scale(0.97);
+  box-shadow: inset 0 2px 8px rgba(17, 51, 41, 0.12);
 }
 .workspace-app .app-logo {
   flex: none;
@@ -423,6 +426,7 @@
   min-width: 0;
   width: 100%;
   gap: 3px;
+  align-self: stretch;
 }
 .workspace-app-copy strong {
   overflow: hidden;
@@ -433,6 +437,8 @@
   text-shadow: 0 1px 9px var(--workspace-heading-shadow);
 }
 .workspace-app-copy small {
+  min-height: 17px;
+  line-height: 17px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -440,6 +446,9 @@
   color: var(--workspace-heading-ink);
   text-shadow: 0 1px 9px var(--workspace-heading-shadow);
   text-transform: capitalize;
+}
+.workspace-app-copy .docker-health {
+  margin-top: auto;
 }
 .workspace-app-status {
   position: absolute;
@@ -1112,9 +1121,6 @@
   .workspace-pin-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .workspace-widget-wide .workspace-app-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .workspace-widget-activity .workspace-metrics {
     grid-template-columns: 1fr;
   }
@@ -1165,7 +1171,7 @@
     font-size: 12px;
   }
   .desktop .workspace-add {
-    padding: 0 11px;
+    padding: 0 10px;
     font-size: 12px;
     white-space: nowrap;
   }
@@ -1214,6 +1220,10 @@
   }
 }
 @media (max-width: 360px) {
+  .workspace-actions > * {
+    flex: 1 0 100%;
+    width: 100%;
+  }
   .workspace-widget .workspace-app-list {
     grid-template-columns: 1fr;
   }

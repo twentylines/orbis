@@ -1,3 +1,188 @@
-tr {
-  word-break: break-word;
+/* biome-ignore-all lint/style/noDescendingSpecificity: Outer tab rules are scoped apart from nested configuration tabs. */
+.app-detail-tabs.card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-detail-tabs > [role="tablist"] .card-header {
+  padding: 0;
+  border: 0;
+}
+.app-detail-tabs > [role="tablist"] .nav-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  gap: 6px;
+  padding: 0 0 14px;
+  margin: 0;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.app-detail-tabs > [role="tablist"] [role="tab"] {
+  min-height: 40px;
+  padding: 9px 13px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--desktop-muted);
+  font-size: 13px;
+  font-weight: 650;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+.app-detail-tabs > [role="tablist"] [role="tab"][data-state="active"] {
+  color: var(--desktop-ink);
+  background: rgba(115, 146, 127, 0.16);
+  border-color: var(--desktop-line);
+}
+.app-detail-tabs > [role="tablist"] [role="tab"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.app-detail-tabs > [role="tabpanel"] > .card-body {
+  padding: 26px 0 0;
+}
+.app-detail-tabs > [role="tabpanel"] .card {
+  background: transparent;
+  border-color: var(--desktop-line);
+  border-radius: 16px;
+  box-shadow: none;
+}
+.app-detail-tabs > [role="tabpanel"] .container-resources {
+  margin: 0;
+  padding: 24px;
+}
+.app-detail-tabs .markdown {
+  max-width: 85ch;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.app-detail-tabs .markdown img {
+  max-width: 100%;
+  height: auto;
+}
+.app-detail-tabs .datagrid-content {
+  overflow-wrap: anywhere;
+}
+.app-detail-tabs .badge {
+  background: rgba(115, 146, 127, 0.16);
+  color: var(--desktop-ink);
+}
+.app-panel-loading,
+.app-panel-empty {
+  display: block;
+  min-height: 160px;
+  padding: 24px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  color: var(--desktop-muted);
+}
+.app-log-connection {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--desktop-muted);
+}
+.app-panel-empty h3 {
+  color: var(--desktop-ink);
+  font-size: 19px;
+  margin-bottom: 12px;
+}
+.app-panel-caption {
+  margin: 20px 0 0;
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+.app-operations > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.app-operations h3 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+.app-operations > header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 650;
+}
+.app-operations ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid var(--desktop-line);
+}
+.app-operations li {
+  border-bottom: 1px solid var(--desktop-line);
+}
+.app-operations summary {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 20px;
+  align-items: center;
+  padding: 20px 0;
+  cursor: pointer;
+}
+.app-operations time {
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+.app-operations summary > span {
+  font-size: 12px;
+  font-weight: 650;
+}
+.app-operations dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 8px 0;
+}
+.app-operations dt {
+  color: var(--desktop-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.app-operations dd {
+  overflow-wrap: anywhere;
+  margin: 5px 0 0;
+  font-size: 13px;
+}
+.app-operations dl > div:last-child {
+  grid-column: 1 / -1;
+}
+.app-operations details > a {
+  display: inline-block;
+  margin-bottom: 20px;
+}
+@container (max-width: 860px) {
+  .app-detail-tabs > [role="tablist"] .nav-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@container (max-width: 540px) {
+  .app-detail-tabs > [role="tablist"] .nav-tabs {
+    display: flex;
+    gap: 5px;
+  }
+  .app-detail-tabs > [role="tablist"] [role="tab"] {
+    flex: 1 1 auto;
+    padding: 9px 10px;
+  }
+  .app-detail-tabs > [role="tabpanel"] .container-resources {
+    padding: 18px;
+  }
+  .app-operations summary {
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+  .app-operations time {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }

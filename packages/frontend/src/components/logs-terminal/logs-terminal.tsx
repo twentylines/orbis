@@ -1,7 +1,7 @@
 import { useLocalStorage } from '@uidotdev/usehooks';
 import clsx from 'clsx';
 import DOMPurify from 'dompurify';
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './logs-terminal.css';
 
@@ -15,6 +15,7 @@ export const LogsTerminal = (props: Props) => {
   const { t } = useTranslation();
 
   const { logs, onMaxLinesChange, maxLines } = props;
+  const id = useId();
   const [follow, setFollow] = useLocalStorage<boolean>('logs-follow', true);
   const [wrapLines, setWrapLines] = useLocalStorage<boolean>('logs-wraplines', false);
   const ref = useRef<HTMLPreElement>(null);
@@ -29,7 +30,7 @@ export const LogsTerminal = (props: Props) => {
   }, [lastLogId, follow]);
 
   const updateMaxLines = (lines: number) => {
-    const linesToKeep = Math.max(1, lines);
+    const linesToKeep = Math.min(1000, Math.max(1, Number.isFinite(lines) ? Math.floor(lines) : 300));
     onMaxLinesChange(linesToKeep);
   };
 
@@ -37,14 +38,14 @@ export const LogsTerminal = (props: Props) => {
     <div>
       <div className="row d-flex align-items-center ps-1">
         <div className="col">
-          <label className="form-check form-switch mt-1" htmlFor="follow-logs">
-            <input id="follow-logs" className="form-check-input" type="checkbox" checked={follow} onChange={() => setFollow(!follow)} />
+          <label className="form-check form-switch mt-1" htmlFor={`${id}-follow`}>
+            <input id={`${id}-follow`} className="form-check-input" type="checkbox" checked={follow} onChange={() => setFollow(!follow)} />
             <span className="form-check-label">{t('APP_LOGS_TAB_FOLLOW')}</span>
           </label>
         </div>
         <div className="col">
-          <label className="form-check form-switch mt-1" htmlFor="follow-logs">
-            <input id="follow-logs" className="form-check-input" type="checkbox" checked={wrapLines} onChange={() => setWrapLines(!wrapLines)} />
+          <label className="form-check form-switch mt-1" htmlFor={`${id}-wrap`}>
+            <input id={`${id}-wrap`} className="form-check-input" type="checkbox" checked={wrapLines} onChange={() => setWrapLines(!wrapLines)} />
             <span className="form-check-label">{t('APP_LOGS_TAB_WRAP_LINES')}</span>
           </label>
         </div>
@@ -52,7 +53,10 @@ export const LogsTerminal = (props: Props) => {
           <div className="input-group mb-2">
             <span className="input-group-text">{t('APP_LOGS_TAB_MAX_LINES')}</span>
             <input
-              id="max-lines"
+              id={`${id}-max-lines`}
+              aria-label={t('APP_LOGS_TAB_MAX_LINES')}
+              min={1}
+              max={1000}
               type="number"
               className="form-control"
               value={maxLines}

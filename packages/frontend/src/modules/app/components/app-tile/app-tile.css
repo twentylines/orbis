@@ -1,3 +1,14 @@
+.app-tile-body {
+  height: 100%;
+}
+.app-tile-copy {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+}
+.app-tile-copy > .docker-health {
+  margin-top: auto;
+}
 .app-tile-notice {
   display: inline-flex;
   align-items: center;
@@ -6,4 +17,6 @@
   color: var(--desktop-accent);
   font-size: 11px;
   font-weight: 650;
+  min-height: 16px;
+  line-height: 16px;
 }

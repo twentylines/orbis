@@ -147,6 +147,8 @@
 .desktop-host-visual {
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
   min-height: 258px;
   place-items: center;
   perspective: 800px;
@@ -161,13 +163,16 @@
   filter: blur(14px);
 }
 .desktop-host-machine {
+  --machine-scale: 1;
   position: relative;
   width: 260px;
   height: 220px;
+  scale: var(--machine-scale);
+  translate: calc(-25px * var(--machine-scale)) 0;
   transform: rotateY(-16deg) rotateX(6deg);
   transform-style: preserve-3d;
   transition: transform 340ms ease;
-  animation: desktop-machine-enter 550ms ease-out both;
+  animation: desktop-machine-enter 550ms ease-out backwards;
 }
 .desktop-host-overview:hover .desktop-host-machine {
   transform: rotateY(-9deg) rotateX(3deg);
@@ -488,7 +493,7 @@
     font-size: 18px;
   }
   .desktop-host-machine {
-    scale: 0.86;
+    --machine-scale: 0.86;
   }
   .desktop-monitor-live-status {
     flex-wrap: wrap;
@@ -508,7 +513,7 @@
 }
 @media (max-width: 380px) {
   .desktop-host-machine {
-    scale: 0.72;
+    --machine-scale: 0.72;
   }
   .desktop-monitor .desktop-view-heading {
     display: block;
@@ -522,6 +527,11 @@
   }
   .desktop-host-overview-readings > div:last-child {
     grid-column: 1 / -1;
+  }
+}
+@media (max-width: 360px) {
+  .desktop-host-machine {
+    --machine-scale: 0.64;
   }
 }
 @media (prefers-reduced-motion: reduce) {

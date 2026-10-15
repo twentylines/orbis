@@ -156,7 +156,12 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
   );
   const UpdateListItem = (
     <DropdownMenuItem
-      onClick={() => navigate(`${location.pathname}/update`, { state: { from: location.pathname } })}
+      onClick={() =>
+        navigate(
+          `${location.pathname.startsWith('/app-store/') ? '/app-store' : '/apps'}/${encodeURIComponent(info.urn.split(':')[1] ?? '')}/${encodeURIComponent(info.id)}/update`,
+          { state: { from: location.pathname } },
+        )
+      }
       key="update"
       className="updateAvailable"
     >
@@ -229,12 +234,12 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
   const OpenButton = (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className="action-button">
+        <Button className="action-button app-launch-button">
           {t('APP_ACTION_OPEN')}
           <IconExternalLink className="ms-1" size={14} />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent>
+      <DropdownMenuContent align="end">
         <DropdownMenuGroup>
           {app?.exposed && app.domain && (
             <DropdownMenuItem onClick={() => handleOpen('domain')}>
@@ -294,7 +299,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       listItemsDestructive.push(RemoveListItem);
 
       if (!info.no_gui && (app?.exposedLocal || app?.openPort || app?.exposed)) {
-        buttons.push(OpenButton);
+        buttons.unshift(OpenButton);
       }
 
       if (updateAvailable && !versionIsIgnored) {
@@ -362,22 +367,22 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
         config={app?.config ?? {}}
       />
       <TemplateSyncDialog appUrn={info.urn} isOpen={syncTemplateDisclosure.isOpen} onClose={syncTemplateDisclosure.close} />
-      <div className="mt-1 btn-list d-flex">
+      <fieldset className="app-actions" aria-label="Application actions" tabIndex={-1} data-dialog-focus-fallback>
         {buttons.map((button) => {
           return createElement(button.type, {
             ...button.props,
             key: button.key,
           });
         })}
-        {listItems.length > 0 && (
+        {listItems.length + listItemsAdvanced.length + listItemsDestructive.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button name="more" className="more-button">
+              <Button name="more" className="more-button" aria-label="More application actions" title="More application actions">
                 <IconDots size={14} />
                 {((updateAvailable && !versionIsIgnored) || app?.pendingRestart) && <span className="badge badge-dot bg-red badge-notification" />}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent>
+            <DropdownMenuContent align="end">
               <DropdownMenuGroup>{listItems}</DropdownMenuGroup>
               {listItemsAdvanced.length > 0 ? <DropdownMenuSeparator /> : null}
               <DropdownMenuGroup>{listItemsAdvanced}</DropdownMenuGroup>
@@ -386,7 +391,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-      </div>
+      </fieldset>
     </>
   );
 };

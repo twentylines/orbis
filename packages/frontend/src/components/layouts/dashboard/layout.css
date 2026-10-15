@@ -142,8 +142,8 @@
 }
 .desktop .desktop-task-trigger {
   position: relative;
-  width: 39px;
-  height: 39px;
+  width: 40px;
+  height: 40px;
   border-radius: 11px;
   color: var(--desktop-chrome-ink);
 }
@@ -174,7 +174,7 @@
 }
 .desktop-search-trigger {
   gap: 10px;
-  height: 39px;
+  height: 40px;
   min-width: 178px;
   padding: 0 10px;
   border-radius: 11px;
@@ -182,7 +182,7 @@
 }
 .desktop-mode-toggle {
   gap: 8px;
-  height: 39px;
+  height: 40px;
   width: 84px;
   padding: 0 11px;
   border-radius: 11px;
@@ -192,10 +192,10 @@
 }
 .desktop-mode-toggle svg {
   color: #e8c49a;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: color 0.2s ease;
 }
 .desktop-mode-toggle:hover svg {
-  transform: rotate(-22deg) scale(1.15);
+  color: #f3d6b6;
 }
 .desktop-search-trigger span {
   flex: 1;
@@ -210,8 +210,8 @@
   box-shadow: none;
 }
 .desktop-icon-button {
-  width: 39px;
-  height: 39px;
+  width: 40px;
+  height: 40px;
   border-radius: 11px;
 }
 .desktop-operation {
@@ -239,6 +239,15 @@
   height: 7px;
   border-radius: 50%;
   background: #a28a62;
+}
+.desktop-connection-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.desktop-connection-label small {
+  font-size: 11px;
+  opacity: 0.8;
 }
 .desktop-connection-dot.is-connected {
   background: #42815b;
@@ -596,14 +605,14 @@
   animation: orbis-dock-enter 0.55s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .desktop .desktop-dock-item {
-  min-width: 73px;
+  min-width: 88px;
   height: 62px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 3px;
-  padding: 6px;
+  padding: 6px 12px;
   border-radius: 14px;
   color: rgba(245, 248, 242, 0.76);
   text-decoration: none;
@@ -612,6 +621,9 @@
     transform 0.18s ease;
 }
 .desktop-dock-item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -665,10 +677,15 @@
   cursor: default;
 }
 .desktop-palette {
-  position: relative;
-  z-index: 1;
-  width: min(560px, 100%);
-  overflow: hidden;
+  position: fixed;
+  z-index: 101;
+  top: min(18vh, 140px);
+  left: 20px;
+  right: 20px;
+  margin-inline: auto;
+  width: min(560px, calc(100% - 40px));
+  max-height: calc(100dvh - min(18vh, 140px) - 20px);
+  overflow: auto;
   border-radius: 18px;
   background: var(--desktop-surface);
   border: 1px solid var(--desktop-line);
@@ -833,8 +850,8 @@
   }
   .desktop-search-trigger,
   .desktop-mode-toggle {
-    width: 39px;
-    min-width: 39px;
+    width: 40px;
+    min-width: 40px;
     padding: 0;
   }
 }
@@ -868,15 +885,15 @@
   }
   .desktop-search-trigger {
     min-width: 0;
-    width: 39px;
-    height: 39px;
+    width: 40px;
+    height: 40px;
     justify-content: center;
     padding: 0;
   }
   .desktop-mode-toggle {
-    width: 39px;
-    min-width: 39px;
-    height: 39px;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
     padding: 0;
   }
   .desktop-main {
@@ -896,12 +913,14 @@
     bottom: 8px;
     width: calc(100% - 22px);
     justify-content: space-around;
+    gap: 0;
     border-radius: 16px;
   }
   .desktop .desktop-dock-item {
     min-width: 0;
     flex: 1;
     height: 55px;
+    padding-inline: 8px;
   }
   .desktop-dock-item span {
     font-size: 10px;
@@ -930,16 +949,16 @@
   .desktop-search-trigger,
   .desktop-mode-toggle,
   .desktop-icon-button {
-    width: 35px;
-    min-width: 35px;
-    height: 35px;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
   }
   .desktop-view-app .catalogue-tile .logo,
   .desktop-view-app .catalogue-tile img.app-logo {
     --app-logo-size: 56px;
   }
 }
-@media (max-width: 360px) {
+@media (max-width: 380px) {
   .desktop .desktop-dock-item {
     height: 45px;
   }

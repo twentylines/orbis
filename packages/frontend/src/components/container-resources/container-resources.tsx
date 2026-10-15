@@ -14,14 +14,14 @@ export const resourceBytes = (value: number | null) => {
   return `${(value / 1024 ** index).toFixed(index > 0 ? 1 : 0)} ${units[index]}`;
 };
 
-export function ContainerResources({ compact = false }: { compact?: boolean }) {
+export function ContainerResources({ compact = false, appUrn }: { compact?: boolean; appUrn?: string }) {
   const telemetry = useContainerTelemetry();
   const apps = useQuery(getInstalledAppsOptions());
   const [sort, setSort] = useState<'cpuPercent' | 'memoryBytes'>('cpuPercent');
   const names = new Map(apps.data?.installed.map(({ info }) => [info.urn, info.name]));
-  const ordered = [...(telemetry.data?.containers ?? [])].sort(
-    (left, right) => (right[sort] ?? -1) - (left[sort] ?? -1) || left.name.localeCompare(right.name),
-  );
+  const ordered = (telemetry.data?.containers ?? [])
+    .filter((item) => !appUrn || item.appUrn === appUrn)
+    .sort((left, right) => (right[sort] ?? -1) - (left[sort] ?? -1) || left.name.localeCompare(right.name));
   const visible = compact ? ordered.filter((item) => item.state === 'running').slice(0, 3) : ordered;
   const maximum = Math.max(1, ...visible.map((item) => item[sort] ?? 0));
   const unavailable = telemetry.isError || telemetry.data?.available === false;
@@ -69,7 +69,7 @@ export function ContainerResources({ compact = false }: { compact?: boolean }) {
       ) : null}
       {telemetry.isPending ? <p>Reading Docker containers…</p> : null}
       {!telemetry.isPending && !unavailable && !visible.length ? (
-        <p>{compact ? 'No running containers.' : 'No containers were returned by Docker.'}</p>
+        <p>{appUrn ? 'No containers matched this application.' : compact ? 'No running containers.' : 'No containers were returned by Docker.'}</p>
       ) : null}
       <ol className="container-resource-list">
         {visible.map((item) => {
@@ -134,7 +134,7 @@ export function ContainerResources({ compact = false }: { compact?: boolean }) {
                       </dd>
                     </div>
                   </dl>
-                  {item.appUrn && names.has(item.appUrn) ? (
+                  {!appUrn && item.appUrn && names.has(item.appUrn) ? (
                     <Link to={`/apps/${encodeURIComponent(item.appUrn.split(':')[1] ?? '')}/${encodeURIComponent(item.appUrn.split(':')[0] ?? '')}`}>
                       Open application
                     </Link>
