@@ -108,7 +108,9 @@
   background: var(--desktop-chrome);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 18px;
-  box-shadow: 0 16px 42px rgba(6, 27, 26, 0.22), inset 0 1px rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 16px 42px rgba(6, 27, 26, 0.22),
+    inset 0 1px rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(26px) saturate(1.45);
   -webkit-backdrop-filter: blur(26px) saturate(1.45);
   animation: orbis-chrome-enter 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -162,7 +164,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
 }
 .desktop-search-trigger:hover,
 .desktop-icon-button:hover:not(:disabled) {
@@ -238,7 +243,9 @@
   border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 26px;
   padding: 30px;
-  box-shadow: 0 30px 70px rgba(12, 35, 32, 0.19), inset 0 1px rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 30px 70px rgba(12, 35, 32, 0.19),
+    inset 0 1px rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(24px) saturate(1.2);
   -webkit-backdrop-filter: blur(24px) saturate(1.2);
   animation: orbis-window-enter 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -286,7 +293,10 @@
   border-radius: 10px;
   color: var(--desktop-muted);
   background: rgba(255, 255, 255, 0.26);
-  transition: background 0.2s ease, color 0.2s ease, transform 0.22s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.22s ease;
 }
 .desktop .desktop-window-close:hover {
   color: var(--desktop-ink);
@@ -482,7 +492,9 @@
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 20px;
   background: var(--desktop-chrome);
-  box-shadow: 0 18px 45px rgba(6, 27, 26, 0.34), inset 0 1px rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 18px 45px rgba(6, 27, 26, 0.34),
+    inset 0 1px rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(28px) saturate(1.45);
   -webkit-backdrop-filter: blur(28px) saturate(1.45);
   animation: orbis-dock-enter 0.55s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -533,7 +545,9 @@
 }
 .desktop[data-desktop-preset="graphite"] .desktop-view-app {
   border-color: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 30px 70px rgba(4, 15, 15, 0.32), inset 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 30px 70px rgba(4, 15, 15, 0.32),
+    inset 0 1px rgba(255, 255, 255, 0.08);
 }
 .desktop-palette-backdrop {
   position: fixed;
@@ -566,21 +580,47 @@
   animation: orbis-window-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes orbis-chrome-enter {
-  from { opacity: 0; transform: translateY(-16px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 @keyframes orbis-window-enter {
-  from { opacity: 0; transform: translateY(18px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 @keyframes orbis-dock-enter {
-  from { opacity: 0; transform: translate(-50%, 25px) scale(0.93); }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translate(-50%, 25px) scale(0.93);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
 }
 @keyframes orbis-signal {
-  0%, 75%, 100% { box-shadow: 0 0 0 0 rgba(93, 184, 128, 0); }
-  12% { box-shadow: 0 0 0 5px rgba(93, 184, 128, 0.25); }
-  24% { box-shadow: 0 0 0 8px rgba(93, 184, 128, 0); }
+  0%,
+  75%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(93, 184, 128, 0);
+  }
+  12% {
+    box-shadow: 0 0 0 5px rgba(93, 184, 128, 0.25);
+  }
+  24% {
+    box-shadow: 0 0 0 8px rgba(93, 184, 128, 0);
+  }
 }
 .desktop-palette-input {
   display: flex;
