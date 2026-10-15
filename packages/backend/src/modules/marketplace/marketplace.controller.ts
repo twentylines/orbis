@@ -1,4 +1,5 @@
 import { castAppUrn } from '@/common/helpers/app-helpers';
+import { TranslatableError } from '@/common/error/translatable-error';
 import {
   BadRequestException,
   Body,
@@ -85,8 +86,9 @@ export class MarketplaceController {
   @ApiResponse({ type: PullDto })
   async pullAppStores() {
     const res = await this.appStoreService.pullRepositories();
-    await this.marketplaceService.initialize();
-    return PullDto.parse(res, { reportOnly: true });
+    await this.marketplaceService.initialize({ refreshRepositories: false });
+    if (!res.success) throw new TranslatableError('APP_STORE_REFRESH_ERROR', { stores: res.message });
+    return PullDto.parse({ success: true }, { reportOnly: true });
   }
 
   @Post('create')
@@ -94,7 +96,7 @@ export class MarketplaceController {
   @ApiResponse({ type: AppStoreDto })
   async createAppStore(@Body() body: CreateAppStoreBodyDto) {
     const appStore = await this.appStoreService.createAppStore(body);
-    await this.marketplaceService.initialize();
+    await this.marketplaceService.initialize({ refreshRepositories: false });
 
     return AppStoreDto.parse(appStore, { reportOnly: true });
   }
@@ -122,7 +124,7 @@ export class MarketplaceController {
   @ApiResponse({ type: UpdateAppStoreDto })
   async updateAppStore(@Param('id') id: string, @Body() body: UpdateAppStoreBodyDto) {
     await this.appStoreService.updateAppStore(id, body);
-    await this.marketplaceService.initialize();
+    await this.marketplaceService.initialize({ refreshRepositories: false });
 
     return UpdateAppStoreDto.parse({ success: true }, { reportOnly: true });
   }
@@ -131,7 +133,7 @@ export class MarketplaceController {
   @UseGuards(AuthGuard)
   async deleteAppStore(@Param('id') id: string) {
     await this.appStoreService.deleteAppStore(id);
-    await this.marketplaceService.initialize();
+    await this.marketplaceService.initialize({ refreshRepositories: false });
 
     return { success: true };
   }

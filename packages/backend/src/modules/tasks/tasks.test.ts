@@ -42,7 +42,7 @@ describe('persistent lifecycle history', () => {
       if (req.headers.authorization === 'Bearer test') req.user = { id: 1 };
       next();
     }) as NestMiddleware['use']);
-    await app.init();
+    await app.listen(0, '127.0.0.1');
     service = module.get(TasksService);
   });
   afterEach(async () => {

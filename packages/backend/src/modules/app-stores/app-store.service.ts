@@ -22,19 +22,17 @@ export class AppStoreService {
     this.repoQueue.onEvent(async (data, reply) => {
       switch (data.command) {
         case 'update_all': {
-          const stores = await this.appStoreRepository.getEnabledAppStores();
-          for (const store of stores) {
-            await this.repoHelpers.pullRepo(store.url, store.slug);
-          }
-          await reply({ success: true, message: 'All repos updated' });
+          await reply(await this.pullRepositories());
           break;
         }
         case 'clone_all': {
           const stores = await this.appStoreRepository.getEnabledAppStores();
+          const failed: string[] = [];
           for (const store of stores) {
-            await this.repoHelpers.cloneRepo(store.url, store.slug);
+            const result = await this.repoHelpers.cloneRepo(store.url, store.slug);
+            if (!result.success) failed.push(store.name);
           }
-          await reply({ success: true, message: 'All repos cloned' });
+          await reply({ success: failed.length === 0, message: failed.join(', ') });
           break;
         }
         case 'clone': {
@@ -53,13 +51,15 @@ export class AppStoreService {
 
   public async pullRepositories() {
     const repositories = await this.appStoreRepository.getEnabledAppStores();
+    const failed: string[] = [];
 
     for (const repo of repositories) {
       this.logger.debug(`Pulling repo ${repo.url}`);
-      await this.repoHelpers.pullRepo(repo.url, repo.slug);
+      const result = await this.repoHelpers.pullRepo(repo.url, repo.slug);
+      if (!result.success) failed.push(repo.name);
     }
 
-    return { success: true };
+    return { success: failed.length === 0, message: failed.join(', ') };
   }
 
   /**
@@ -97,6 +97,12 @@ export class AppStoreService {
    * @param body The new data to update the app store with
    */
   public async updateAppStore(slug: string, body: UpdateAppStoreBodyDto) {
+    const current = await this.appStoreRepository.getAppStoreBySlug(slug);
+    if (!current) throw new NotFoundException(`App store ${slug} not found`);
+    if (body.enabled && !current.enabled) {
+      const refreshed = await this.repoHelpers.pullRepo(current.url, current.slug);
+      if (!refreshed.success) throw new TranslatableError('APP_STORE_REFRESH_ERROR', { stores: current.name }, HttpStatus.BAD_GATEWAY);
+    }
     return this.appStoreRepository.updateAppStore(slug, body);
   }
 

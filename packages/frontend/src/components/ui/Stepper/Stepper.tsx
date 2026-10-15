@@ -26,10 +26,15 @@ export const StepTrigger: React.FC<StepTriggerProps> = ({ step, title, disabled,
   return (
     <li
       className={clsx('breadcrumb-item d-flex align-items-center justify-content-center', currentStep === step && 'active', disabled && 'disabled')}
-      onClick={() => onStepChange(step)}
-      onKeyDown={() => onStepChange(step)}
     >
-      <Button variant="link" type="button" onClick={(e) => e.preventDefault()} className="breadcrumb-item link">
+      <Button
+        variant="link"
+        type="button"
+        disabled={disabled}
+        aria-current={currentStep === step ? 'step' : undefined}
+        onClick={() => onStepChange(step)}
+        className="breadcrumb-item link"
+      >
         {title}
       </Button>
     </li>

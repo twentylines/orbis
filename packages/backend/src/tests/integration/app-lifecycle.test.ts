@@ -13,6 +13,7 @@ import { AppLifecycleCommandFactory } from '@/modules/app-lifecycle/app-lifecycl
 import { AppLifecycleService } from '@/modules/app-lifecycle/app-lifecycle.service';
 import { AppStoreRepository } from '@/modules/app-stores/app-store.repository';
 import { AppStoreService } from '@/modules/app-stores/app-store.service';
+import { ReposHelpers } from '@/modules/app-stores/repos.helpers';
 import { AppFilesManager } from '@/modules/apps/app-files-manager';
 import { AppHelpers } from '@/modules/apps/app.helpers';
 import { AppsRepository } from '@/modules/apps/apps.repository';
@@ -63,6 +64,8 @@ describe('App lifecycle', () => {
   const dockerService = mock<DockerService>();
   const loggerService = mock<LoggerService>();
   const archiveService = mock<ArchiveService>();
+  const reposHelpers = mock<ReposHelpers>();
+  reposHelpers.pullRepo.mockResolvedValue({ success: true, message: '' });
 
   configurationService.get.calledWith('queue').mockReturnValue({
     host: 'localhost',
@@ -128,6 +131,10 @@ describe('App lifecycle', () => {
         {
           provide: DockerService,
           useValue: dockerService,
+        },
+        {
+          provide: ReposHelpers,
+          useValue: reposHelpers,
         },
         {
           provide: DatabaseService,

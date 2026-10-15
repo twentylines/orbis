@@ -131,6 +131,7 @@ module.exports = async function inspectAppDetails({ page, base, viewport, captur
   await page.keyboard.insertText('blocked edit');
   assert.equal(await diff.innerText(), originalDiff);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
   assert.equal(await page.getByRole('switch', { name: 'Backup', exact: true }).getAttribute('aria-checked'), 'true');
   const beforeCancelUpdate = actions.length;
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();

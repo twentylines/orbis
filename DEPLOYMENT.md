@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Published amd64 runtime rehearsal (15 October 2026)
+
+Beta 22's exact OCI index `sha256:6274f2ab68f29b920790cbdcec585f4ea546aa3b5de461544efff07061fd5962` booted in a separate QEMU x86_64 Linux guest on Apple silicon (2 vCPU, 3 GiB RAM). Docker reports an amd64 image and the core became healthy. The build API matched the release tag, commit and image digest. This is an emulated guest compatibility check, not a native hardware performance measurement.
+
+With a fresh database and generated synthetic credentials, the real browser registered the first account, completed onboarding, saved/reloaded preferences and opened Workspace, Monitor, Updates, Store, Applications and Settings without page errors or horizontal overflow at 1440 × 900. Unauthenticated build, telemetry and preference reads returned 401. Install, stop, start, restart, backup, reset, restore and uninstall of `whoami:migrated` all completed; no app container remained. The architecture-filtered catalogue contained 264 entries and every icon decoded successfully. Real window/draft/placement/mobile-IP checks passed and restored the account preferences.
+
+The guest uses its own `colima-orbis-amd64-test` Docker context, VM-local persistent data, no published database/queue ports, loopback-only dashboard/proxy ports and read-only host-proc mounts. The default Docker context stayed `default`. QEMU setup required the additional Lima guest agent and a guest-only DNS correction; the Mac and arm64 test daemon were not reconfigured. Hades was not accessed. [Captures](screenshots/live-amd64-beta22) record the published runtime.
+
+`scripts/live-smoke.cjs` accepts `ORBIS_SMOKE_SCREENSHOT_DIR`, `ORBIS_SMOKE_RELEASE_FILE` and an optional private `ORBIS_SMOKE_COOKIE_FILE` for repeatable isolated checks. It registers a first account and must only target a fresh loopback test database. Store refresh/app upgrade and copied real-data migration remain separate acceptance items.
+
 The source tree builds and passes unit, browser-fixture, clean-install Docker, disposable-app lifecycle, and a synthetic stock CLI migration rehearsal. It has **not** passed migration against a copy of an existing homelab. Do not use it to replace a live Runtipi installation yet.
 
 ## Published beta 22 runtime verification (15 October 2026)

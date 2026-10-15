@@ -137,7 +137,8 @@ const cookies = fs
     await waitFor(async () => (await frame().getAttribute('data-window-mode')) === 'focused', 'Mobile fallback did not apply');
     assert.equal(await frame().getAttribute('data-window-mode'), 'focused');
     assert.equal(await page.getByRole('button', { name: 'Window layout', exact: true }).count(), 0);
-    assert.ok((await page.locator('.desktop-connection').innerText()).includes(serverIp));
+    await page.locator('.desktop-connection-dot.is-connected').waitFor();
+    assert.equal((await page.locator('.desktop-connection').innerText()).trim(), serverIp);
     await page.getByRole('button', { name: 'Minimize Settings', exact: true }).click();
     await frame().waitFor({ state: 'hidden' });
     await page.getByRole('heading', { name: original.serverName, exact: true }).waitFor();
