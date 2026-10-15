@@ -90,7 +90,7 @@ def validate_running_mount(device: int, inode: int, container_stat: str) -> None
         raise ValueError("the running Orbis core has a stale host socket mount; recreate only that core after reviewing Compose")
 
 
-def preflight(root: Path, context: str, source: Path) -> dict[str, str]:
+def preflight(root: Path, context: str, source: Path, *, allow_existing: bool = False) -> dict[str, str]:
     if sys.platform != "linux" or not Path("/run/systemd/system").is_dir():
         raise ValueError("this setup requires a running Linux systemd host")
     if root.is_symlink() or not root.is_dir():
@@ -126,9 +126,10 @@ def preflight(root: Path, context: str, source: Path) -> dict[str, str]:
     if mounted.returncode:
         raise ValueError("the running Orbis core has no readable host socket mount")
     validate_running_mount(host_socket_dir.st_dev, host_socket_dir.st_ino, mounted.stdout)
-    for target in (INSTALL_DIR, ENV_FILE, UNIT_FILE):
-        if target.exists() or target.is_symlink():
-            raise ValueError(f"a host service installation already occupies {target}")
+    if not allow_existing:
+        for target in (INSTALL_DIR, ENV_FILE, UNIT_FILE):
+            if target.exists() or target.is_symlink():
+                raise ValueError(f"a host service installation already occupies {target}")
     return {"root": str(root), "dockerContext": context, "releaseTag": manifest["tag"], "digest": manifest["digest"]}
 
 
