@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { IconActivity, IconArrowUpRight, IconCheck, IconClock, IconAlertTriangle } from '@tabler/icons-react';
 import { useTasks, taskLabels, taskStates, taskIsActive } from '@/desktop/tasks';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
@@ -11,7 +11,10 @@ export default function Tasks() {
   const tasks = useTasks();
   const apps = useQuery(getInstalledAppsOptions());
   const [filter, setFilter] = useState('all');
-  const records = tasks.data?.tasks ?? [];
+  const [params, setParams] = useSearchParams();
+  const requestedApp = params.get('app');
+  const appScope = requestedApp && requestedApp.length <= 180 && /^[^:]+:[^:]+$/.test(requestedApp) ? requestedApp : null;
+  const records = (tasks.data?.tasks ?? []).filter((task) => !appScope || task.appUrn === appScope);
   const names = new Map(apps.data?.installed.map(({ info }) => [info.urn, info.name]));
   const active = records.filter(taskIsActive);
   const review = records.filter((task) => ['failed', 'interrupted', 'unconfirmed'].includes(task.status));
@@ -34,6 +37,25 @@ export default function Tasks() {
 
   return (
     <div className="task-centre">
+      {appScope ? (
+        <div className="task-scope">
+          <span>
+            Application: <strong>{names.get(appScope) ?? appScope}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setParams((previous) => {
+                const next = new URLSearchParams(previous);
+                next.delete('app');
+                return next;
+              })
+            }
+          >
+            Show all applications
+          </button>
+        </div>
+      ) : null}
       <div className="task-summary">
         <span className={`task-summary-orbit ${active.length ? 'is-busy' : ''}`} aria-hidden="true">
           <IconActivity size={30} stroke={1.3} />

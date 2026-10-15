@@ -83,7 +83,6 @@ const Button = ({ className, variant, size, intent, asChild = false, disabled, l
       disabled={isDisabled}
       aria-disabled={isDisabled}
       aria-busy={loading}
-      style={{ height: size ? 'auto' : '36px' }}
       className={clsx(buttonVariants({ variant, size, intent, className }), { disabled: isDisabled, 'btn-loading': loading }, className)}
       {...props}
     />

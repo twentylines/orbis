@@ -10,6 +10,12 @@ type IProps = {
   locale: Locale;
 };
 
+const supportedLocale = (value: string): Locale => {
+  const normalized = value.replaceAll('_', '-').toLowerCase();
+  const keys = Object.keys(locales) as Locale[];
+  return keys.find((key) => key.toLowerCase() === normalized) ?? keys.find((key) => key.split('-')[0] === normalized.split('-')[0]) ?? 'en-US';
+};
+
 const LanguageSelectorLabel = () => {
   const { t } = useTranslation();
 
@@ -26,7 +32,8 @@ const LanguageSelectorLabel = () => {
 
 export const LanguageSelector = (props: IProps) => {
   const { locale: initialLocale } = props;
-  const [locale, setLocale] = React.useState<Locale>(initialLocale);
+  const [locale, setLocale] = React.useState<Locale>(() => supportedLocale(initialLocale));
+  React.useEffect(() => setLocale(supportedLocale(initialLocale)), [initialLocale]);
   const { showLabel = false } = props;
 
   const onChange = (newLocale: Locale) => {

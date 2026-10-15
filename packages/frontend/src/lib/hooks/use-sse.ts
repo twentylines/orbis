@@ -1,5 +1,5 @@
 import type { SSE, Topic } from '@runtipi/common/schemas';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type Props<T> = {
   topic: T;
@@ -9,81 +9,83 @@ type Props<T> = {
   params?: URLSearchParams;
 };
 
-export const useSSE = <T extends Topic>(props: Props<T>) => {
-  const { topic, onEvent, onError, onOpen } = props;
-  const eventSourceRef = useRef<EventSource | null>(null);
-
-  const retries = useRef(0);
-
-  const initializeSSE = () => {
-    const url = new URL(`${window.location.origin}/api/sse/${topic}`);
-
-    if (props.params) {
-      url.search = props.params.toString();
-    }
-
-    const eventSource = new EventSource(url);
-
-    eventSource.onmessage = (e) => {
-      try {
-        onEvent(JSON.parse(e.data));
-      } catch (error) {
-        console.error('Failed to parse SSE message:', error);
-      }
-    };
-
-    eventSource.onopen = () => {
-      retries.current = 0;
-      console.info('SSE connection opened');
-      if (onOpen) onOpen();
-    };
-
-    eventSource.onerror = (error) => {
-      if (onError) {
-        onError(error);
-      } else {
-        console.error('SSE connection error:', error);
-      }
-
-      eventSource.close();
-      eventSourceRef.current = null;
-
-      // Exponential backoff retry
-      if (retries.current < 5) {
-        retries.current++;
-        setTimeout(
-          () => {
-            console.info('Retrying SSE connection after error');
-            initializeSSE();
-          },
-          2 ** retries.current * 1000,
-        );
-      } else {
-        console.error('Max retries reached, refresh the page to reconnect');
-      }
-    };
-
-    eventSourceRef.current = eventSource;
-  };
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: This hook should only run once on mount
+export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, params }: Props<T>) => {
+  const handlers = useRef({ onEvent, onError, onOpen });
+  const [status, setStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
+  const query = params?.toString() ?? '';
   useEffect(() => {
-    initializeSSE();
+    handlers.current = { onEvent, onError, onOpen };
+  }, [onEvent, onError, onOpen]);
 
-    const handleFocus = () => {
-      if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
-        initializeSSE();
+  useEffect(() => {
+    let disposed = false;
+    let stream: EventSource | null = null;
+    let timer: number | undefined;
+    let retries = 0;
+    const clearRetry = () => {
+      window.clearTimeout(timer);
+      timer = undefined;
+    };
+    const closeStream = () => {
+      if (!stream) return;
+      stream.onmessage = null;
+      stream.onopen = null;
+      stream.onerror = null;
+      stream.close();
+      stream = null;
+    };
+    const connect = () => {
+      if (disposed || (stream && stream.readyState !== EventSource.CLOSED)) return;
+      clearRetry();
+      const url = new URL(`/api/sse/${topic}`, window.location.origin);
+      url.search = query;
+      const source = new EventSource(url);
+      stream = source;
+      setStatus(retries ? 'reconnecting' : 'connecting');
+      source.onmessage = (event) => {
+        if (disposed || source !== stream) return;
+        try {
+          handlers.current.onEvent(JSON.parse(event.data));
+        } catch (error) {
+          console.error('Failed to handle SSE message:', error);
+        }
+      };
+      source.onopen = () => {
+        if (disposed || source !== stream) return;
+        retries = 0;
+        setStatus('connected');
+        handlers.current.onOpen?.();
+      };
+      source.onerror = (error) => {
+        if (disposed || source !== stream) return;
+        handlers.current.onError?.(error);
+        closeStream();
+        clearRetry();
+        if (retries < 5) {
+          retries += 1;
+          setStatus('reconnecting');
+          timer = window.setTimeout(connect, 2 ** retries * 1000);
+        } else {
+          setStatus('disconnected');
+        }
+      };
+    };
+    const reconnect = () => {
+      if (!stream || stream.readyState === EventSource.CLOSED) {
+        retries = 0;
+        connect();
       }
     };
-
-    window.addEventListener('focus', handleFocus);
-
+    connect();
+    window.addEventListener('focus', reconnect);
+    window.addEventListener('online', reconnect);
     return () => {
-      console.info('Cleaning up SSE connection');
-      window.removeEventListener('focus', handleFocus);
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
+      disposed = true;
+      clearRetry();
+      closeStream();
+      window.removeEventListener('focus', reconnect);
+      window.removeEventListener('online', reconnect);
     };
-  }, []);
+  }, [topic, query]);
+  return status;
 };

@@ -160,9 +160,9 @@ export default function Dashboard() {
                   <AppLogo urn={info.urn} size={54} alt="" />
                   <span className="workspace-app-copy">
                     <strong>{info.name}</strong>
-                    {appUpdate || workspace.pinnedApps.includes(info.urn) ? (
-                      <small>{`${workspace.pinnedApps.includes(info.urn) ? 'Pinned' : ''}${workspace.pinnedApps.includes(info.urn) && appUpdate ? ' · ' : ''}${appUpdate ? 'Update available' : ''}`}</small>
-                    ) : null}
+                    <small aria-hidden={!appUpdate && !workspace.pinnedApps.includes(info.urn) ? true : undefined}>
+                      {`${workspace.pinnedApps.includes(info.urn) ? 'Pinned' : ''}${workspace.pinnedApps.includes(info.urn) && appUpdate ? ' · ' : ''}${appUpdate ? 'Update available' : ''}`}
+                    </small>
                     <DockerHealth appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
                   </span>
                 </Link>
@@ -323,10 +323,10 @@ export default function Dashboard() {
             aria-controls="workspace-editor"
             onClick={() => setEditing(!editing)}
           >
-            <IconAdjustmentsHorizontal size={18} aria-hidden="true" /> {editing ? 'Done editing' : 'Edit workspace'}
+            <IconAdjustmentsHorizontal size={18} aria-hidden="true" /> <span>{editing ? 'Done editing' : 'Edit workspace'}</span>
           </button>
           <Link to="/app-store" className="workspace-add">
-            <IconPlus size={18} aria-hidden="true" /> Install an app
+            <IconPlus size={18} aria-hidden="true" /> <span>Install an app</span>
           </Link>
         </div>
       </div>

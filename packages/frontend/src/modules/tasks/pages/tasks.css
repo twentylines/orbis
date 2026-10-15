@@ -219,3 +219,19 @@
     grid-template-columns: 1fr;
   }
 }
+.task-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  overflow-wrap: anywhere;
+}
+.task-scope button {
+  padding: 8px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  color: var(--desktop-ink);
+  background: transparent;
+}

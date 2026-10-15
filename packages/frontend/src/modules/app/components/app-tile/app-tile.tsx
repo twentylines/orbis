@@ -29,22 +29,24 @@ export const AppTile: React.FC<{
         : null;
 
   return (
-    <div className="card card-sm card-link">
-      <div className="card-body d-flex gap-3 d-flex align-items-center">
+    <div className="card card-sm card-link app-tile">
+      <div className="card-body d-flex gap-3 align-items-center app-tile-body">
         <AppLogo alt={`${info.name} logo`} urn={info.urn} size={60} />
-        <div className="d-flex flex-column justify-items-center">
+        <div className="d-flex flex-column app-tile-copy">
           <div className="d-flex align-items-center gap-2">
             <span className="fw-bolder">{info.name}</span>
             {!docker || !['running', 'stopped'].includes(status) ? <AppStatus lite status={status} /> : null}
           </div>
           <div className="text-muted">{limitText(info.short_desc, 50)}</div>
           {docker ? <DockerHealth appUrn={info.urn} telemetry={docker.data} stale={docker.stale} /> : null}
-          {notice ? (
-            <span className="app-tile-notice">
-              <notice.Icon size={13} aria-hidden="true" />
-              {notice.label}
-            </span>
-          ) : null}
+          <span className="app-tile-notice" aria-hidden={notice ? undefined : true}>
+            {notice ? (
+              <>
+                <notice.Icon size={13} aria-hidden="true" />
+                {notice.label}
+              </>
+            ) : null}
+          </span>
         </div>
       </div>
     </div>

@@ -22,6 +22,10 @@ export const UninstallDialog = ({ info, isOpen, onClose }: IProps) => {
   const { setOptimisticStatus } = useAppStatus();
 
   const [shouldRemoveBackups, setShouldRemoveBackups] = useState(false);
+  const closeDialog = () => {
+    setShouldRemoveBackups(false);
+    onClose();
+  };
 
   const uninstallMutation = useMutation({
     ...uninstallAppMutation(),
@@ -30,12 +34,17 @@ export const UninstallDialog = ({ info, isOpen, onClose }: IProps) => {
     },
     onMutate: () => {
       setOptimisticStatus('uninstalling', info.urn);
-      onClose();
+      closeDialog();
     },
   });
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) closeDialog();
+      }}
+    >
       <DialogContent type="danger" size="sm">
         <DialogHeader>
           <DialogTitle>{t('APP_UNINSTALL_FORM_TITLE', { name: info.name })}</DialogTitle>

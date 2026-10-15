@@ -1,12 +1,43 @@
+.app-actions {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 .action-button {
-  flex: 1;
+  flex: 1 1 120px;
   min-width: 120px;
 }
-
-.more-button {
-  width: 100%;
-
-  @media (min-width: 768px) {
-    width: auto;
-  }
+.app-actions .more-button {
+  position: relative;
+  width: 40px;
+  min-height: 40px;
+  flex: none;
+  padding: 0;
+  border-radius: 10px;
+  border-color: var(--desktop-line);
+  background: rgba(115, 146, 127, 0.12);
+  color: var(--desktop-ink);
+  box-shadow: none;
+}
+.app-actions .action-button {
+  min-height: 40px;
+  border-radius: 10px;
+  color: var(--desktop-ink);
+  background: rgba(115, 146, 127, 0.12);
+  border-color: var(--desktop-line);
+  box-shadow: none;
+}
+.app-actions .btn-success,
+.app-actions .app-launch-button {
+  color: var(--desktop-chrome-ink);
+  background: #27584a;
+  border-color: #27584a;
+}
+.app-actions .action-button:hover {
+  border-color: var(--desktop-accent);
 }

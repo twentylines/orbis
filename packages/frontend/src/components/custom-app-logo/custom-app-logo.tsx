@@ -56,7 +56,10 @@ export const CustomAppLogo: React.FC<{
   };
 
   return (
-    <div className={clsx('custom-app-logo-container', className)} style={{ width: size, height: size }}>
+    <div
+      className={clsx('custom-app-logo-container', className)}
+      style={{ width: `var(--app-logo-size, ${size}px)`, height: `var(--app-logo-size, ${size}px)` }}
+    >
       <AppLogo urn={urn} url={url} size={size} alt={alt} />
       {onImageUpload && (
         <>

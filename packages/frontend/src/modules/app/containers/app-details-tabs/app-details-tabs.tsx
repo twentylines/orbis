@@ -2,7 +2,6 @@ import { updateAppMetadataMutation } from '@/api-client/@tanstack/react-query.ge
 import { Alert, AlertDescription, AlertHeading, AlertIcon } from '@/components/ui/Alert/Alert';
 import { Button } from '@/components/ui/Button';
 import { DataGrid, DataGridItem } from '@/components/ui/DataGrid';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { AppDetails, AppInfo, AppMetadata } from '@/types/app.types';
 import { extractAppUrn } from '@/utils/app-helpers';
@@ -14,7 +13,11 @@ import { Suspense, lazy } from 'react';
 import React from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
+import { Markdown } from '@/components/markdown/markdown';
+import { appDescriptionText } from '../../helpers/app-description';
+import { ContainerResources } from '@/components/container-resources/container-resources';
+import { AppOperations } from '../app-workspace/app-operations';
 import clsx from 'clsx';
 import './app-details-tabs.css';
 
@@ -47,9 +50,13 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
   const isUserApp = urn.appStoreId === '_user';
   const metaTabId = isUserApp ? 'notes' : 'description';
 
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
-  const [currentTab, setCurrentTab] = React.useState(params.get('tab') || metaTabId);
+  const [params, setParams] = useSearchParams();
+  const installed = Boolean(app && app.status !== 'missing');
+  const allowedTabs = installed
+    ? [metaTabId, 'info', 'backups', 'logs', 'user-config', 'resources', 'operations']
+    : [metaTabId, 'info', 'operations'];
+  const requestedTab = params.get('tab') || metaTabId;
+  const currentTab = allowedTabs.includes(requestedTab) ? requestedTab : metaTabId;
   const [isEditing, setIsEditing] = React.useState(false);
   const [meta, setMeta] = React.useState(info.description);
   const schemaVersion = metadata?.composeSchemaVersion;
@@ -66,37 +73,41 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
   });
 
   const handleTabChange = (newTab: string) => {
-    setCurrentTab(newTab);
-    navigate(`?tab=${newTab}`, { replace: true });
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set('tab', newTab);
+        return next;
+      },
+      { preventScrollReset: true },
+    );
   };
 
   return (
-    <Tabs value={currentTab} orientation="vertical" style={{ marginTop: -1 }}>
-      <TabsList>
-        <TabsTrigger onClick={() => handleTabChange(metaTabId)} value={metaTabId}>
-          {isUserApp ? t('APP_DETAILS_NOTES') : t('APP_DETAILS_DESCRIPTION')}
+    <Tabs className="app-detail-tabs" value={currentTab} onValueChange={handleTabChange} orientation="horizontal">
+      <TabsList aria-label="Application sections">
+        <TabsTrigger value={metaTabId}>{isUserApp ? t('APP_DETAILS_NOTES') : t('APP_DETAILS_DESCRIPTION')}</TabsTrigger>
+        <TabsTrigger value="resources" disabled={!installed}>
+          Resources
         </TabsTrigger>
-        <TabsTrigger onClick={() => handleTabChange('info')} value="info">
-          {t('APP_DETAILS_BASE_INFO')}
-        </TabsTrigger>
-        <TabsTrigger value="backups" onClick={() => handleTabChange('backups')} disabled={!app} className="d-none d-md-block">
+        <TabsTrigger value="operations">Operations</TabsTrigger>
+        <TabsTrigger value="backups" disabled={!installed}>
           {t('APP_BACKUPS_TAB_TITLE')}
         </TabsTrigger>
-        <TabsTrigger onClick={() => handleTabChange('logs')} value="logs" disabled={!app} className="d-none d-md-block">
+        <TabsTrigger value="logs" disabled={!installed}>
           {t('APP_LOGS_TAB_TITLE')}
         </TabsTrigger>
-        <TabsTrigger onClick={() => handleTabChange('user-config')} value="user-config" disabled={!app} className="d-none d-md-block">
+        <TabsTrigger value="user-config" disabled={!installed}>
           {t('APP_FILES_TAB_TITLE')}
         </TabsTrigger>
-        <DropdownMenu>
-          <DropdownMenuTrigger className="nav-link dropdown-toggle d-block d-md-none">{t('MORE')}</DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={() => handleTabChange('backups')}>{t('APP_BACKUPS_TAB_TITLE')}</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleTabChange('logs')}>{t('APP_LOGS_TAB_TITLE')}</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleTabChange('user-config')}>{t('APP_FILES_TAB_TITLE')}</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <TabsTrigger value="info">{t('APP_DETAILS_BASE_INFO')}</TabsTrigger>
       </TabsList>
+      <TabsContent value="resources">
+        <ContainerResources appUrn={info.urn} />
+      </TabsContent>
+      <TabsContent value="operations">
+        <AppOperations appUrn={info.urn} />
+      </TabsContent>
       <TabsContent value={metaTabId}>
         {info.deprecated && (
           <Alert variant="danger" className="mb-4">
@@ -161,14 +172,18 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
             </div>
           )}
           <div className="card-body">
-            <Suspense>
-              <AppDescriptionEditor isEditing={isEditing} meta={meta} setMeta={setMeta} />
+            <Suspense fallback={<output className="app-panel-loading">Loading application details…</output>}>
+              {isEditing ? (
+                <AppDescriptionEditor isEditing meta={meta} setMeta={setMeta} />
+              ) : (
+                <Markdown content={appDescriptionText(meta)} className="markdown" />
+              )}
             </Suspense>
           </div>
         </div>
       </TabsContent>
       <TabsContent value="backups">
-        <Suspense>
+        <Suspense fallback={<output className="app-panel-loading">Loading application details…</output>}>
           <AppBackups info={info} status={app?.status ?? 'missing'} />
         </Suspense>
       </TabsContent>
@@ -186,7 +201,7 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
           </DataGridItem>
           <DataGridItem title={t('APP_DETAILS_CATEGORIES_TITLE')}>
             {info.categories?.map((c) => (
-              <div key={c} className="badge text-white bg-green me-1">
+              <div key={c} className="badge app-detail-tag me-1">
                 {t(`APP_CATEGORY_${c.toUpperCase() as Uppercase<typeof c>}`)}
               </div>
             ))}
@@ -195,7 +210,7 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
           {info.supported_architectures && (
             <DataGridItem title={t('APP_DETAILS_SUPPORTED_ARCH')}>
               {info.supported_architectures.map((a) => (
-                <div key={a} className="badge text-white bg-red me-1">
+                <div key={a} className="badge app-detail-tag me-1">
                   {a.toLowerCase()}
                 </div>
               ))}
@@ -217,15 +232,21 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
         </DataGrid>
       </TabsContent>
       <TabsContent value="logs">
-        {app?.status === 'running' && (
-          <Suspense>
-            <AppLogs appUrn={info.urn} />
+        {app?.status === 'running' ? (
+          <Suspense fallback={<output className="app-panel-loading">Loading application details…</output>}>
+            <AppLogs key={info.urn} appUrn={info.urn} />
           </Suspense>
+        ) : (
+          <div className="app-panel-empty">
+            <h3>Container logs are not streaming</h3>
+            <p>Start this application to read its live container output. Lifecycle command output remains available in instance logs.</p>
+            <a href="/settings?tab=logs">Open instance logs</a>
+          </div>
         )}
       </TabsContent>
       <TabsContent value="user-config">
         {app && (
-          <Suspense>
+          <Suspense fallback={<output className="app-panel-loading">Loading application details…</output>}>
             <AppUserConfig info={info} />
           </Suspense>
         )}

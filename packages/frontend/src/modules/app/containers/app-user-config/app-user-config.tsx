@@ -18,6 +18,7 @@ import {
 } from '@/api-client/@tanstack/react-query.gen';
 import toast from 'react-hot-toast';
 import type { TranslatableError } from '@/types/error.types';
+import { useDesktopPreferences } from '@/desktop/preferences';
 
 interface AppUserConfigProps {
   info: AppInfo;
@@ -47,6 +48,8 @@ export const AppUserConfig = (props: AppUserConfigProps) => {
 
 export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose, initialSourceCompose, initialIsEnabled }: AppUserConfigProps) => {
   const { t } = useTranslation();
+  const { preferences } = useDesktopPreferences();
+  const editorTheme = preferences.mode === 'dark' ? copilot : 'light';
   const [activeTab, setActiveTab] = useState('docker-compose');
 
   const [dockerCompose, setDockerCompose] = useState(initialDockerCompose ?? '');
@@ -120,7 +123,7 @@ export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose
               <TabsTrigger value="overrides">{t('USER_CONFIG_OVERRIDES_TAB_TITLE')}</TabsTrigger>
             </TabsList>
             <TabsContent value="docker-compose">
-              <CodeMirror readOnly value={initialSourceCompose} height="400px" extensions={[yaml()]} theme={copilot} />
+              <CodeMirror readOnly value={initialSourceCompose} height="400px" extensions={[yaml()]} theme={editorTheme} />
               <div className="mt-2 text-muted small">{t('USER_CONFIG_SOURCE_COMPOSE_DESCRIPTION')}</div>
             </TabsContent>
             <TabsContent value="overrides">
@@ -134,7 +137,7 @@ export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose
                 height="400px"
                 extensions={[yaml()]}
                 onChange={(value) => setDockerCompose(value)}
-                theme={copilot}
+                theme={editorTheme}
               />
               <Trans
                 t={t}

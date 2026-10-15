@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AppUpdatePage from './app-update-page';
 
 const navigate = vi.fn();
+vi.mock('@/desktop/preferences', () => ({ useDesktopPreferences: () => ({ preferences: { mode: 'light' } }) }));
 
 vi.mock('@/api-client/@tanstack/react-query.gen', () => ({
   getAppComposeDiffOptions: () => ({ queryKey: ['compose-diff'] }),

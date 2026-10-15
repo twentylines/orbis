@@ -275,6 +275,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
             <div>
               <InputGroup
                 type="number"
+                aria-label={t('APP_DETAILS_PORT')}
                 defaultValue={info.port}
                 groupSuffix={
                   <Button type="button" onClick={() => randomPortMutation.mutate({})} loading={loading || randomPortMutation.isPending}>
