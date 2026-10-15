@@ -15,7 +15,7 @@ export type DesktopPreferences = {
 };
 
 export const defaultDesktopPreferences: DesktopPreferences = {
-  serverName: 'Local server',
+  serverName: 'Hades',
   preset: 'frost',
   density: 'comfortable',
   wallpaper: 'sandstone',
