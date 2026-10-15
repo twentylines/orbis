@@ -192,3 +192,5 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 
 Did you contribute and want to see your name listed in the README? Write a comment [here](https://github.com/runtipi/runtipi/issues/380)
 This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
+
+The full product scope, verified boundaries and remaining acceptance work are tracked in [ACCEPTANCE.md](ACCEPTANCE.md).

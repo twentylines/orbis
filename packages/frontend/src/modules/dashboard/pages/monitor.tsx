@@ -1,5 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
+import { useMetricHistory } from '@/desktop/metric-history';
+import { MetricChart } from '@/components/metric-chart/metric-chart';
 import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
 import './monitor.css';
 import { ContainerResources } from '@/components/container-resources/container-resources';
@@ -19,53 +22,11 @@ const bytes = (value: number | null) => {
 const percent = (value: number | null) => (value === null ? 'Unavailable' : `${value.toFixed(1)}%`);
 const width = (value: number | null) => `${Math.min(100, Math.max(0, value ?? 0))}%`;
 
-type HistoryPoint = { at: string; cpu: number | null; memory: number | null; download: number | null; upload: number | null };
-
-function LiveChart({
-  points,
-  field,
-  max,
-  label,
-  color,
-}: {
-  points: HistoryPoint[];
-  field: 'cpu' | 'memory' | 'download' | 'upload';
-  max: number;
-  label: string;
-  color: string;
-}) {
-  const values = points.map((point) => point[field]);
-  const available = values.filter((value): value is number => value !== null);
-  const coordinates = values
-    .map((value, index) => {
-      if (value === null) return null;
-      const x = values.length === 1 ? 0 : (index / (values.length - 1)) * 600;
-      return `${x.toFixed(1)},${(112 - (Math.min(max, value) / max) * 104).toFixed(1)}`;
-    })
-    .filter((point): point is string => point !== null);
-
-  return (
-    <div className="desktop-live-chart" role="img" aria-label={`${label}: ${available.length} live samples collected in this view`}>
-      <div className="desktop-live-chart-grid" aria-hidden="true">
-        <span>{field === 'cpu' || field === 'memory' ? '100%' : `${bytes(max)}/s`}</span>
-        <span>{field === 'cpu' || field === 'memory' ? '50%' : `${bytes(max / 2)}/s`}</span>
-        <span>0</span>
-      </div>
-      <svg viewBox="0 0 600 120" preserveAspectRatio="none" aria-hidden="true">
-        <line x1="0" x2="600" y1="8" y2="8" />
-        <line x1="0" x2="600" y1="60" y2="60" />
-        <line x1="0" x2="600" y1="112" y2="112" />
-        {coordinates.length > 1 ? <polyline points={coordinates.join(' ')} stroke={color} /> : null}
-        {coordinates.length === 1 ? <circle cx="0" cy={coordinates[0]?.split(',')[1] ?? 112} r="4" fill={color} /> : null}
-      </svg>
-      {coordinates.length === 0 ? <span className="desktop-live-chart-empty">Waiting for a live reading</span> : null}
-      {coordinates.length === 1 ? <span className="desktop-live-chart-empty">Collecting the next sample</span> : null}
-    </div>
-  );
-}
-
 export default function Monitor() {
-  const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedRange = searchParams.get('range');
+  const range: MetricHistoryRange = selectedRange && Object.hasOwn(metricHistoryRanges, selectedRange) ? (selectedRange as MetricHistoryRange) : '1h';
+  const history = useMetricHistory(range);
   const telemetry = useQuery<Telemetry>({
     queryKey: telemetryQueryKey,
     queryFn: ({ signal }) => loadTelemetry(signal),
@@ -89,41 +50,13 @@ export default function Monitor() {
       : null;
   const memoryPercent = usedMemory !== null && sample?.memory.totalBytes ? (usedMemory / sample.memory.totalBytes) * 100 : null;
 
-  useEffect(() => {
-    if (!sample) return;
-    const memoryPercent =
-      sample.memory.totalBytes && sample.memory.availableBytes !== null
-        ? ((sample.memory.totalBytes - sample.memory.availableBytes) / sample.memory.totalBytes) * 100
-        : null;
-    const activeInterfaces = sample.network.filter((item) => item.interface !== 'lo');
-    const rate = (field: 'rxBytesPerSecond' | 'txBytesPerSecond') =>
-      activeInterfaces.length && activeInterfaces.every((item) => item[field] !== null)
-        ? activeInterfaces.reduce((total, item) => total + (item[field] ?? 0), 0)
-        : null;
-    setHistory((current) => {
-      if (current.at(-1)?.at === sample.sampledAt) return current;
-      return [
-        ...current,
-        {
-          at: sample.sampledAt,
-          cpu: sample.cpu.totalPercent,
-          memory: memoryPercent,
-          download: rate('rxBytesPerSecond'),
-          upload: rate('txBytesPerSecond'),
-        },
-      ].slice(-60);
-    });
-  }, [sample]);
-
-  const networkMax = Math.max(1024, ...history.flatMap((point) => [point.download ?? 0, point.upload ?? 0])) * 1.15;
-
   return (
     <div className="desktop-monitor">
-      <p className="desktop-monitor-scope">Filesystem and network readings cover the Orbis core container. Charts collect while this view is open.</p>
+      <p className="desktop-monitor-scope">Filesystem and network readings cover the Orbis core container.</p>
       <div className="desktop-monitor-live-status">
         <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} />
         <strong>{telemetry.isError ? 'Connection interrupted' : 'Live readings'}</strong>
-        <span>Every 5 seconds while this tab is active · {history.length} of 60 recent samples</span>
+        <span>Current readings every 5 seconds</span>
       </div>
       {telemetry.isError ? (
         <div className="workspace-message" role="alert">
@@ -196,6 +129,63 @@ export default function Monitor() {
               </div>
             </div>
           </section>
+          <div className="monitor-history-toolbar">
+            <fieldset className="monitor-history-ranges">
+              <legend className="visually-hidden">History time range</legend>
+              {(
+                [
+                  ['5m', '5 min'],
+                  ['1h', '1 hour'],
+                  ['24h', '24 hours'],
+                  ['7d', '7 days'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  type="button"
+                  key={value}
+                  aria-pressed={range === value}
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set('range', value);
+                    setSearchParams(next, { replace: true });
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </fieldset>
+            <span className="monitor-history-resolution">
+              {range === '5m' ? 'Recent samples' : range === '1h' ? '1 min averages' : range === '24h' ? '5 min averages' : '30 min averages'}
+            </span>
+            <details className="monitor-history-info">
+              <summary>Recorded on this server</summary>
+              <p>
+                Ten-second collection continues when this view is closed. Minute summaries are saved for seven days; longer ranges show sample
+                averages and peaks. Gaps mean no reading was recorded.
+              </p>
+              {history.data?.persistedThrough ? (
+                <p>Saved through {new Date(history.data.persistedThrough).toLocaleString()}.</p>
+              ) : (
+                <p>The first minute has not been saved yet.</p>
+              )}
+            </details>
+          </div>
+          {history.isError ? (
+            <p className="workspace-message" role="alert">
+              History could not be refreshed. Previous chart samples may be stale.{' '}
+              <button type="button" onClick={() => history.refetch()}>
+                Retry
+              </button>
+            </p>
+          ) : null}
+          {history.data?.storage === 'unavailable' ? (
+            <p className="workspace-message" role="alert">
+              History storage is unavailable. Recent readings remain in memory and may be lost on restart.
+            </p>
+          ) : null}
+          {history.data && !history.data.collectorAvailable ? (
+            <output className="workspace-message">History collection is interrupted. Charts contain the last recorded samples.</output>
+          ) : null}
           <div className="desktop-telemetry-grid">
             <section className="desktop-telemetry-cpu" aria-labelledby="telemetry-cpu-title">
               <h2 id="telemetry-cpu-title">CPU</h2>
@@ -203,7 +193,7 @@ export default function Monitor() {
                 <strong>{percent(sample.cpu.totalPercent)}</strong>
                 <span>{sample.cpu.scope === 'host-proc' ? 'Host load' : 'Core container load'}</span>
               </div>
-              <LiveChart points={history} field="cpu" max={100} label="CPU load" color="#d1a172" />
+              <MetricChart history={history.data} field="cpu" label="CPU utilisation" color="#d1a172" loading={history.isPending} />
               {sample.cpu.perCorePercent.length ? (
                 <div className="desktop-core-grid">
                   {sample.cpu.perCorePercent.map((core, index) => (
@@ -232,7 +222,7 @@ export default function Monitor() {
                 <strong>{bytes(usedMemory)}</strong>
                 <span>used of {bytes(sample.memory.totalBytes)}</span>
               </div>
-              <LiveChart points={history} field="memory" max={100} label="Host memory used" color="#9fc0ad" />
+              <MetricChart history={history.data} field="memory" label="Host memory used" color="#9fc0ad" loading={history.isPending} />
               <div className="workspace-meter">
                 <span
                   style={{ width: width(usedMemory !== null && sample.memory.totalBytes ? (usedMemory / sample.memory.totalBytes) * 100 : null) }}
@@ -276,13 +266,15 @@ export default function Monitor() {
             </section>
             <section className="desktop-telemetry-network" aria-labelledby="telemetry-network-title">
               <h2 id="telemetry-network-title">Runtime network</h2>
-              <div className="desktop-network-legend">
-                <span>↓ Download</span>
-                <span>↑ Upload</span>
-              </div>
               <div className="desktop-network-charts">
-                <LiveChart points={history} field="download" max={networkMax} label="Network download" color="#9fc0ad" />
-                <LiveChart points={history} field="upload" max={networkMax} label="Network upload" color="#d1a172" />
+                <div>
+                  <h3>↓ Download</h3>
+                  <MetricChart history={history.data} field="download" label="Core network download" color="#9fc0ad" loading={history.isPending} />
+                </div>
+                <div>
+                  <h3>↑ Upload</h3>
+                  <MetricChart history={history.data} field="upload" label="Core network upload" color="#d1a172" loading={history.isPending} />
+                </div>
               </div>
               {sample.network.length ? (
                 <div className="desktop-telemetry-list">

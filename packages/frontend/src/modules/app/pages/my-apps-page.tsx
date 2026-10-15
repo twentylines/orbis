@@ -6,7 +6,7 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import { AppTile } from '../components/app-tile/app-tile';
 import { LinkTile } from '../components/link-tile/link-tile';
 import { ButtonTile } from '../components/button-tile/button-tile';
-import { IconLayoutGridAdd, IconLinkPlus } from '@tabler/icons-react';
+import { IconAdjustmentsHorizontal, IconChevronDown, IconLayoutGridAdd, IconLinkPlus } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useDisclosure } from '@/lib/hooks/use-disclosure';
 import { AddLinkDialog } from '../components/dialogs/add-link/add-link-dialog';
@@ -70,17 +70,24 @@ export default () => {
 
   return (
     <>
-      <ActionBar className={clsx({ 'd-none': installed.length <= 1 })}>
-        <ActionBar.Left>
-          <StartAllButton availableUpdates={updatesAvailable} />
-        </ActionBar.Left>
-        <ActionBar.Center>
-          <StopAllButton availableUpdates={updatesAvailable} />
-        </ActionBar.Center>
-        <ActionBar.Right>
-          <RestartAllButton availableUpdates={updatesAvailable} />
-        </ActionBar.Right>
-      </ActionBar>
+      <details className={clsx('desktop-batch-controls', { 'd-none': installed.length <= 1 })}>
+        <summary>
+          <IconAdjustmentsHorizontal size={17} aria-hidden="true" />
+          Manage all apps
+          <IconChevronDown size={15} aria-hidden="true" />
+        </summary>
+        <ActionBar>
+          <ActionBar.Left>
+            <StartAllButton availableUpdates={updatesAvailable} />
+          </ActionBar.Left>
+          <ActionBar.Center>
+            <StopAllButton availableUpdates={updatesAvailable} />
+          </ActionBar.Center>
+          <ActionBar.Right>
+            <RestartAllButton availableUpdates={updatesAvailable} />
+          </ActionBar.Right>
+        </ActionBar>
+      </details>
       {installed.length === 0 && customLinks.length === 0 ? (
         <EmptyPage
           title="MY_APPS_EMPTY_TITLE"

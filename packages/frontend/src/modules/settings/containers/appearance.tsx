@@ -77,24 +77,31 @@ export const Appearance = () => {
 
   return (
     <div className="appearance">
-      <div className="desktop-view-heading">
-        <div>
-          <p>Personalisation</p>
-          <h1>Appearance & workspace</h1>
-        </div>
-      </div>
-      <p className="appearance-note">
-        Appearance is saved to your account and cached in this browser. Sync: {syncState}. Orbis server settings remain in the General tab.
-      </p>
+      <output className="appearance-note">
+        {syncState === 'saved'
+          ? 'Synced to your account'
+          : syncState === 'saving'
+            ? 'Saving changes…'
+            : syncState === 'loading'
+              ? 'Loading your preferences…'
+              : syncState === 'error'
+                ? 'Sync unavailable. Changes are cached in this browser.'
+                : 'Saved in this browser'}
+      </output>
       <section className="appearance-section" aria-labelledby="appearance-server-name">
         <div>
           <h2 id="appearance-server-name">Server name</h2>
-          <p>Shown in the system bar. The initial name is Hades, and you can change it here.</p>
+          <p>Shown in the system bar and workspace.</p>
         </div>
         <div className="appearance-name">
-          <label htmlFor="desktop-server-name">Display name</label>
           <div>
-            <input id="desktop-server-name" value={name} maxLength={40} onChange={(event) => setName(event.target.value)} />
+            <input
+              id="desktop-server-name"
+              aria-labelledby="appearance-server-name"
+              value={name}
+              maxLength={40}
+              onChange={(event) => setName(event.target.value)}
+            />
             <button type="button" onClick={saveName}>
               Save name
             </button>

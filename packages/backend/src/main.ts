@@ -41,6 +41,7 @@ async function bootstrap() {
     abortOnError: true,
     logger: [process.env.LOG_LEVEL as LogLevel, 'error', 'warn', 'fatal'],
   });
+  app.enableShutdownHooks(['SIGTERM', 'SIGINT']);
 
   const appService = app.get(AppService);
   await appService.bootstrap();
