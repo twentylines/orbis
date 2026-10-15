@@ -1,10 +1,11 @@
 const assert = require('node:assert/strict');
 
-// Static loopback fixtures only: no update can leave this page.
-module.exports = async function inspectAppUpdateComfort({ page, base, capture }) {
+// Published-image callers verify the owned build before supplying controlled metadata.
+module.exports = async function inspectAppUpdateComfort({ page, base, capture, verifiedPublished = false, updatePath = '/apps/test/media/update' }) {
   const origin = new URL(base);
-  assert.ok(['localhost', '127.0.0.1'].includes(origin.hostname) && origin.port === '8080');
-  const report = { samples: [], mutations: [] };
+  assert.ok(['localhost', '127.0.0.1'].includes(origin.hostname) && origin.port === (verifiedPublished ? '18080' : '8080'));
+  assert.match(updatePath, /^\/apps\/[^/?#]+\/[^/?#]+\/update$/);
+  const report = { source: verifiedPublished ? 'published assets with controlled metadata' : 'static fixtures', samples: [], mutations: [] };
   const guard = (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -117,7 +118,7 @@ module.exports = async function inspectAppUpdateComfort({ page, base, capture })
   try {
     for (const mode of ['light', 'dark']) {
       for (const scale of [1, 2]) {
-        await page.goto(`${base}/apps/test/media/update`, { waitUntil: 'domcontentloaded' });
+        await page.goto(`${base}${updatePath}`, { waitUntil: 'domcontentloaded' });
         await wizard().waitFor();
         if (!(await page.locator(`.desktop[data-desktop-mode="${mode}"]`).count())) {
           await page.getByRole('button', { name: `Switch to ${mode} mode`, exact: true }).click();
@@ -129,7 +130,7 @@ module.exports = async function inspectAppUpdateComfort({ page, base, capture })
           if (['Configuration', 'Compose file'].includes(step)) await wizard().locator('.cm-content').first().waitFor();
           await inspect(mode, scale, step.toLowerCase().replaceAll(' ', '-'));
         }
-        await page.goto(`${base}/apps/test/media`, { waitUntil: 'domcontentloaded' });
+        await page.goto(`${base}${updatePath.slice(0, -'/update'.length)}`, { waitUntil: 'domcontentloaded' });
         await page.locator('.app-workspace-identity').waitFor();
         await inspect(mode, scale, 'app-detail', '.app-workspace');
       }
