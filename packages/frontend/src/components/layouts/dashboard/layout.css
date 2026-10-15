@@ -205,6 +205,7 @@
   border-radius: 24px;
   padding: 26px;
   box-shadow: 0 26px 65px rgba(28, 39, 35, 0.11);
+  container-type: inline-size;
 }
 .desktop-view-app > .card,
 .desktop-view-app > div.card {
@@ -342,10 +343,31 @@
 }
 .desktop-installed-grid {
   row-gap: 12px;
+  container-type: inline-size;
 }
 .desktop-installed-grid .app-link,
 .desktop-installed-grid .button-tile {
   margin: 0 !important;
+  min-width: 0;
+}
+.desktop-installed-grid .app-tile .card-body > .d-flex.flex-column,
+.desktop-installed-grid .button-tile .card-body > div:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@container (max-width: 540px) {
+  .desktop-view-app .action-bar-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .desktop-view-app .action-bar-section {
+    width: 100%;
+  }
+  .desktop-installed-grid .app-link,
+  .desktop-installed-grid .button-tile {
+    width: 100%;
+    max-width: 100%;
+  }
 }
 .desktop-route-title {
   margin: 0 0 25px;

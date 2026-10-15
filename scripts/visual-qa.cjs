@@ -7,6 +7,17 @@ const base = 'http://localhost:8080';
 const screenshotDir = path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
 const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
 const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1';
+const zoom = Number(process.env.ORBIS_VISUAL_ZOOM || 1);
+if (!Number.isInteger(zoom) || zoom < 1 || zoom > 3) throw new Error('ORBIS_VISUAL_ZOOM must be 1, 2, or 3');
+const narrowWidth = Number(process.env.ORBIS_VISUAL_WIDTH || 320);
+const narrowHeight = Number(process.env.ORBIS_VISUAL_HEIGHT || 800);
+const panelWidth = Number(process.env.ORBIS_VISUAL_PANEL_WIDTH || 0);
+if (!Number.isInteger(narrowWidth) || narrowWidth < 320 * zoom || narrowWidth > 4096)
+  throw new Error('ORBIS_VISUAL_WIDTH must be an integer between 320 times the zoom and 4096');
+if (!Number.isInteger(narrowHeight) || narrowHeight < 400 * zoom || narrowHeight > 2400)
+  throw new Error('ORBIS_VISUAL_HEIGHT must be an integer between 400 times the zoom and 2400');
+if (!Number.isInteger(panelWidth) || (panelWidth !== 0 && (panelWidth < 240 || panelWidth > 1200)))
+  throw new Error('ORBIS_VISUAL_PANEL_WIDTH must be an integer between 240 and 1200');
 const apps = [
   {
     info: { urn: 'media:test', name: 'Media', short_desc: 'Local media service', available: true },
@@ -46,14 +57,14 @@ async function main() {
   let preferences = freshPreferences();
   const reports = [];
   const viewports = process.env.ORBIS_VISUAL_NARROW
-    ? [{ name: 'narrow', width: 320, height: 800 }]
+    ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
     : [
         { name: 'desktop', width: 1440, height: 900 },
         { name: 'mobile', width: 390, height: 844 },
       ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
-    const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: 1 });
+    const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: zoom });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.stack || error.message));
     await page.route('**/api/**', async (route) => {
@@ -173,7 +184,7 @@ async function main() {
       () => (document.querySelector('.desktop')?.getBoundingClientRect().bottom ?? 0) < document.documentElement.scrollHeight - 1,
     );
     await page.getByRole('button', { name: 'Edit workspace' }).click();
-    if (viewport.name === 'narrow')
+    if (viewport.name === 'narrow' && zoom === 1)
       await page.addStyleTag({ content: '.workspace-editor button,.workspace-editor-name,.workspace-editor p{font-size:200% !important}' });
     const dockHiddenWhileEditing = await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden();
     await page.getByRole('button', { name: 'Move System activity up' }).focus();
@@ -219,8 +230,37 @@ async function main() {
         console.error((await page.locator('body').innerText()).slice(0, 1800));
         throw error;
       });
+    const panelStyle = panelWidth
+      ? await page.addStyleTag({ content: `.desktop-view-app { width: ${panelWidth}px; max-width: 100%; margin-inline: auto; }` })
+      : null;
+    const batchActionsStacked =
+      !panelWidth || (await page.locator('.action-bar-content').evaluate((element) => getComputedStyle(element).flexDirection === 'column'));
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-applications.png`), fullPage: true });
     const appsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    const appTilesContained = await page
+      .locator('.desktop-installed-grid .card-body')
+      .evaluateAll((bodies) => bodies.every((body) => body.scrollWidth <= body.clientWidth + 1));
+    const appTileSingleColumn =
+      !panelWidth ||
+      (await page
+        .locator('.desktop-installed-grid .app-link')
+        .first()
+        .evaluate((first) => {
+          const second = first.parentElement?.querySelectorAll('.app-link')[1];
+          return second !== undefined && Math.abs(first.getBoundingClientRect().left - second.getBoundingClientRect().left) <= 1;
+        }));
+    await page.evaluate(() => window.scrollTo(0, document.scrollingElement?.scrollHeight ?? 0));
+    await page.waitForTimeout(100);
+    const appsDock = await page.evaluate(() => {
+      const lastTile = document.querySelector('.desktop-installed-grid .button-tile:last-child');
+      const dock = document.querySelector('.desktop-dock');
+      if (!lastTile || !dock) return null;
+      const tileBox = lastTile.getBoundingClientRect();
+      const dockBox = dock.getBoundingClientRect();
+      return { tileBottom: tileBox.bottom, dockTop: dockBox.top, scrollY, scrollHeight: document.scrollingElement?.scrollHeight };
+    });
+    const appsDockClearance = appsDock !== null && appsDock.tileBottom + 8 <= appsDock.dockTop;
+    if (panelStyle) await panelStyle.evaluate((element) => element.remove());
     await page.getByRole('link', { name: 'App Store', exact: true }).click();
     await page.locator('.desktop-catalogue-grid').waitFor();
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-store.png`), fullPage: true });
@@ -272,6 +312,9 @@ async function main() {
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-graphite.png`), fullPage: true });
     reports.push({
       viewport: viewport.name,
+      zoom,
+      cssViewportWidth: viewport.width,
+      cssViewportHeight: viewport.height,
       orbisBrand,
       workspaceOverflow,
       workspaceBackgroundGap,
@@ -286,6 +329,11 @@ async function main() {
       savingAfterPin,
       monitorOverflow,
       appsOverflow,
+      appTilesContained,
+      appTileSingleColumn,
+      batchActionsStacked,
+      appsDockClearance,
+      appsDock,
       storeOverflow,
       updatesOverflow,
       updatePlanDockHidden,
@@ -318,6 +366,10 @@ async function main() {
         !report.orbisBrand ||
         report.monitorOverflow ||
         report.appsOverflow ||
+        !report.appTilesContained ||
+        !report.appTileSingleColumn ||
+        !report.batchActionsStacked ||
+        !report.appsDockClearance ||
         report.storeOverflow ||
         report.updatesOverflow ||
         !report.updatePlanDockHidden ||
