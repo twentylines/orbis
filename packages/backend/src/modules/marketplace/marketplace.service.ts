@@ -42,7 +42,7 @@ export class MarketplaceService {
     private readonly appStoreService: AppStoreService,
   ) {}
 
-  async initialize() {
+  async initialize({ refreshRepositories = true }: { refreshRepositories?: boolean } = {}) {
     this.stores.clear();
 
     const stores = await this.appStoreService.getAllAppStores();
@@ -69,7 +69,10 @@ export class MarketplaceService {
       }
     }
 
-    await this.appStoreService.pullRepositories();
+    if (refreshRepositories) {
+      const result = await this.appStoreService.pullRepositories();
+      if (!result.success) this.logger.warn(`Using cached app stores after refresh failed: ${result.message}`);
+    }
     this.invalidateCache();
 
     this.logger.debug('Marketplace service initialized with stores', Array.from(this.stores.keys()).join(', '));

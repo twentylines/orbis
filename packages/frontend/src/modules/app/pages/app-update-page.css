@@ -1,0 +1,38 @@
+.app-update .breadcrumb {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-update-footer,
+.app-update-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.app-update-navigation {
+  justify-content: flex-end;
+}
+
+.app-update-footer button {
+  scroll-margin-block: 24px;
+}
+
+.app-update-review-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--orbis-danger, #c85d52) 12%, transparent);
+}
+
+.app-update-review-error p {
+  flex: 1 1 220px;
+  margin: 0;
+}

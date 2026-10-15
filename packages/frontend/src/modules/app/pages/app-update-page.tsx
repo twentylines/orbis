@@ -20,6 +20,7 @@ import { getApp } from '@/api-client';
 import yaml from 'yaml';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { shouldRevalidateToolRoute } from '@/desktop/window-navigation';
+import './app-update-page.css';
 
 export const shouldRevalidate = shouldRevalidateToolRoute;
 
@@ -43,7 +44,7 @@ const buildVersionLabel = (latestDocker?: string | null, latestVersion?: string 
 
 const LoadingBlock = () => {
   const { t } = useTranslation();
-  return <div className="mt-3 text-muted">{t('LOADING')}</div>;
+  return <output className="d-block mt-3 text-muted">{t('APP_ACTION_LOADING')}</output>;
 };
 
 export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
@@ -75,14 +76,33 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
     ...getAppComposeDiffOptions({ path: { urn: info.urn } }),
   });
 
-  const isComposeDifferent = composeDiffQuery.data?.new !== composeDiffQuery.data?.current;
+  const composeReview = useMemo(() => {
+    if (!composeDiffQuery.data) return null;
+    if (composeDiffQuery.data.new === null) return null;
+    try {
+      return {
+        current: yaml.stringify(JSON.parse(composeDiffQuery.data.current ?? '{}'), { nullStr: '' }),
+        new: yaml.stringify(JSON.parse(composeDiffQuery.data.new), { nullStr: '' }),
+      };
+    } catch {
+      return null;
+    }
+  }, [composeDiffQuery.data]);
+  const configReviewReady = configDiffQuery.isSuccess && typeof configDiffQuery.data?.new === 'string';
+  const reviewFailed =
+    configDiffQuery.isError ||
+    composeDiffQuery.isError ||
+    (configDiffQuery.isSuccess && !configReviewReady) ||
+    (composeDiffQuery.isSuccess && !composeReview);
+  const reviewReady =
+    configReviewReady && composeDiffQuery.isSuccess && composeReview !== null && !configDiffQuery.isFetching && !composeDiffQuery.isFetching;
 
   const update = useMutation({
     ...updateAppMutation(),
     onError: (e: TranslatableError) => {
       toast.error(t(e.message, e.intlParams));
     },
-    onMutate: () => {
+    onSuccess: () => {
       navigate(location.state?.from || '/apps');
     },
   });
@@ -96,15 +116,15 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
     return [
       { id: 'info', title: t('APP_UPDATE_INFORMATION_TITLE') },
       { id: 'config', title: t('APP_UPDATE_CONFIGURATION_TITLE') },
-      ...(isComposeDifferent ? [{ id: 'compose', title: t('APP_UPDATE_COMPOSE_TITLE') }] : []),
+      { id: 'compose', title: t('APP_UPDATE_COMPOSE_TITLE') },
       { id: 'backup', title: t('APP_UPDATE_BACKUP_TITLE') },
     ];
-  }, [isComposeDifferent, t]);
+  }, [t]);
 
   const isLastStep = currentStep === steps.length - 1;
 
   return (
-    <div className="card" data-testid="app-update">
+    <div className="card app-update" data-testid="app-update" aria-busy={update.isPending}>
       <div className="card-header border-0 pb-0">
         <div className="d-flex flex-column flex-lg-row align-items-start align-items-lg-center border-bottom pb-3 w-100">
           <AppLogo urn={info.urn} size={96} alt={info.name} />
@@ -123,7 +143,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
           <Stepper currentStep={currentStep}>
             <StepTriggerList>
               {steps.map((step, index) => (
-                <StepTrigger key={step.id} step={index} title={step.title} onStepChange={setCurrentStep} />
+                <StepTrigger key={step.id} step={index} title={step.title} onStepChange={setCurrentStep} disabled={update.isPending} />
               ))}
             </StepTriggerList>
             <div className="mt-1">
@@ -142,7 +162,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
               <StepContent step={steps.findIndex((s) => s.id === 'config')}>
                 <div className="text-muted">{t('APP_UPDATE_CONFIGURATION_SUBTITLE')}</div>
                 {configDiffQuery.isLoading && <LoadingBlock />}
-                {!configDiffQuery.isLoading && (
+                {configReviewReady && (
                   <ScrollArea maxheight={500} className="mt-3 border rounded">
                     <CodeMirror
                       value={configDiffQuery.data?.new ?? ''}
@@ -159,50 +179,68 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                   </ScrollArea>
                 )}
               </StepContent>
-              {isComposeDifferent && (
-                <StepContent step={steps.findIndex((s) => s.id === 'compose')}>
-                  <div className="text-muted">{t('APP_UPDATE_COMPOSE_SUBTITLE')}</div>
-                  {composeDiffQuery.isLoading && <LoadingBlock />}
-                  {!composeDiffQuery.isLoading && (
-                    <ScrollArea maxheight={500} className="mt-3 border rounded">
-                      <CodeMirror
-                        value={yaml.stringify(JSON.parse(composeDiffQuery.data?.new ?? '{}'), { nullStr: '' }) ?? ''}
-                        readOnly
-                        height="400px"
-                        theme={editorTheme}
-                        extensions={[
-                          unifiedMergeView({
-                            original: yaml.stringify(JSON.parse(composeDiffQuery.data?.current ?? '{}'), { nullStr: '' }) ?? '',
-                            mergeControls: false,
-                          }),
-                        ]}
-                      />
-                    </ScrollArea>
-                  )}
-                </StepContent>
-              )}
+              <StepContent step={steps.findIndex((s) => s.id === 'compose')}>
+                <div className="text-muted">{t('APP_UPDATE_COMPOSE_SUBTITLE')}</div>
+                {composeDiffQuery.isLoading && <LoadingBlock />}
+                {composeDiffQuery.isSuccess && composeReview && (
+                  <ScrollArea maxheight={500} className="mt-3 border rounded">
+                    <CodeMirror
+                      value={composeReview.new}
+                      readOnly
+                      height="400px"
+                      theme={editorTheme}
+                      extensions={[
+                        unifiedMergeView({
+                          original: composeReview.current,
+                          mergeControls: false,
+                        }),
+                      ]}
+                    />
+                  </ScrollArea>
+                )}
+              </StepContent>
               <StepContent step={steps.findIndex((s) => s.id === 'backup')}>
                 <div className="text-muted">{t('APP_UPDATE_BACKUP_SUBTITLE')}</div>
-                <Switch checked={backupApp} onCheckedChange={setBackupApp} label={t('APP_UPDATE_FORM_BACKUP')} className="mt-3 mb-0" />
+                <Switch
+                  checked={backupApp}
+                  onCheckedChange={setBackupApp}
+                  disabled={update.isPending}
+                  label={t('APP_UPDATE_FORM_BACKUP')}
+                  className="mt-3 mb-0"
+                />
               </StepContent>
             </div>
           </Stepper>
         </motion.div>
       </div>
       <div className="card-footer border-0">
-        <div className="d-flex align-items-center justify-content-between gap-3 pt-3 border-top">
-          <Button onClick={() => navigate(location.state?.from || '/apps')}>
+        {reviewFailed && (
+          <div className="app-update-review-error" role="alert">
+            <p>{t('APP_UPDATE_REVIEW_ERROR', { defaultValue: 'The update review could not be loaded. Retry before updating.' })}</p>
+            <Button
+              loading={configDiffQuery.isFetching || composeDiffQuery.isFetching}
+              onClick={() => {
+                void configDiffQuery.refetch();
+                void composeDiffQuery.refetch();
+              }}
+            >
+              {t('APP_UPDATE_REVIEW_RETRY', { defaultValue: 'Retry review' })}
+            </Button>
+          </div>
+        )}
+        <div className="app-update-footer pt-3 border-top">
+          <Button onClick={() => navigate(location.state?.from || '/apps')} disabled={update.isPending}>
             <IconChevronLeft className="me-1" size={16} />
             {t('APP_ACTION_CANCEL')}
           </Button>
-          <div className="d-flex align-items-center justify-content-end gap-2">
+          <div className="app-update-navigation">
             {currentStep > 0 && (
-              <Button onClick={() => setCurrentStep((step) => step - 1)} className="me-2">
+              <Button onClick={() => setCurrentStep((step) => step - 1)} disabled={update.isPending}>
                 {t('APP_UPDATE_FORM_BACK')}
               </Button>
             )}
             {!isLastStep && (
-              <Button variant="outline" onClick={() => setCurrentStep((step) => step + 1)}>
+              <Button variant="outline" onClick={() => setCurrentStep((step) => step + 1)} disabled={update.isPending}>
                 {t('APP_UPDATE_FORM_NEXT')}
                 <IconChevronRight className="ms-2 text-muted" size={12} />
               </Button>
@@ -217,6 +255,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                 }
                 intent="success"
                 loading={update.isPending}
+                disabled={!reviewReady}
               >
                 {t('APP_UPDATE_FORM_SUBMIT')}
               </Button>

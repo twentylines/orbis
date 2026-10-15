@@ -38,13 +38,16 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const location = useLocation();
   const matches = useMatches();
   const windowControls = useRef<RouteWindowControls | null>(null);
-  const isAppDetail = matches.some((match) => ['app-details', 'app-details-store', 'custom-app'].includes(match.id));
+  const hasPageHeading = matches.some((match) =>
+    ['app-details', 'app-details-store', 'custom-app', 'app-update', 'app-store-app-update'].includes(match.id),
+  );
   useSectionMotion();
   const busy = useIsMutating();
   const tasks = useTasks();
   const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
   const connectionStatus = useConnectionStore((state) => state.status);
   const serverAddress = userSettings.internalIp || 'Address unavailable';
+  const connectionLabel = connectionStatus === 'connected' ? serverAddress : connectionStatus === 'connecting' ? 'Connecting' : 'Reconnecting';
   const logout = useMutation({ ...logoutMutation(), onSuccess: () => window.location.reload() });
 
   if (!user.hasSeenWelcome) return <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />;
@@ -106,14 +109,11 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
           <CommandSearch />
           <output
             className="desktop-connection"
-            aria-label={`Server ${serverAddress}; live updates ${connectionStatus}`}
-            title={`${serverAddress} · ${connectionStatus}`}
+            aria-label={connectionStatus === 'connected' ? `Connected to server ${serverAddress}` : connectionLabel}
+            title={connectionLabel}
           >
             <span className={`desktop-connection-dot is-${connectionStatus}`} aria-hidden="true" />
-            <span className="desktop-connection-label">
-              {serverAddress}
-              {connectionStatus !== 'connected' ? <small>{connectionStatus === 'connecting' ? 'Connecting' : 'Reconnecting'}</small> : null}
-            </span>
+            <span className="desktop-connection-label">{connectionLabel}</span>
           </output>
           {busy > 0 ? (
             <output className="desktop-operation">
@@ -141,7 +141,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             icon={current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}
             controlsRef={windowControls}
           >
-            {!isAppDetail && location.pathname.split('/').filter(Boolean).length > 1 ? (
+            {!hasPageHeading && location.pathname.split('/').filter(Boolean).length > 1 ? (
               <div className="desktop-route-title">
                 <PageTitle apps={apps} />
               </div>

@@ -1,5 +1,18 @@
 # Orbis UI inspection
 
+## 2026-10-15: connection status and update review
+
+Connection status now has one label: the configured IP when connected, Connecting before the stream opens and Reconnecting after a stream error. The secondary small text and tablet stacking were removed. A controlled EventSource exercises the real SSE hook and provider through connecting/open/error/recovery. Twenty combinations (1440/1024/768/390/320px × both modes × IPv4/full IPv6) pass all 60 state checks, including exact text, one text node, consistent typography, centered dot/text, aligned controls, overlap, clipping/ellipsis and document overflow. All pages had zero errors. [Header captures](screenshots/connection) cover desktop and narrow layouts.
+
+The update wizard passes 1440/768/390/320px in both modes: 112 footer geometry samples, 64 review-failure/retry recoveries, 8 rejected and 16 accepted fixture update requests. Checks cover stable steps during delayed Compose loading, Tab without activation, disabled pending controls, translated loading, one heading, shared focus treatment, missing/malformed reviews, refetch gating, backup choices, rejection retention and minimize/restore. The audit found tablet controls underneath the dock; document scroll padding and footer scroll margins now make native keyboard focus reveal them above the dock at every tested width. [Update captures](screenshots/app-updates) include the corrected tablet and narrow error states.
+
+The full retained route regression also passed 1440/768/390px with no page errors. These are Chrome fixtures, independent of the published amd64 runtime checks recorded in `DEPLOYMENT.md`.
+
+```sh
+ORBIS_VISUAL_CONNECTION_ONLY=1 node scripts/visual-qa.cjs
+ORBIS_VISUAL_UPDATES_ONLY=1 node scripts/visual-qa.cjs
+```
+
 ## 2026-10-15: practical desktop windows
 
 Three independent agents inspected the production bundle with isolated API fixtures. The window matrix covers 24 viewport/mode combinations and 114 geometry samples at 1440/1024/900/768/390/320px, including 540px-high layouts. Final mode assertions pass for full page, floating, maximize/restore and both snaps. Maximized/snapped windows leave exactly 20px below the system bar and above the dock; snap halves have a 16px gap. Pointer drag/resize makes no preference writes during movement and one debounced write after release. Pointer/keyboard cancellation makes none. Bounds survive reload, remain independent per tool and recover after large/mobile/large viewport changes.

@@ -55,6 +55,7 @@ const cookies = fs
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: original.serverName, exact: true }).waitFor();
+    await page.locator('.desktop-connection-dot.is-connected').waitFor();
     const address = await page.locator('.desktop-connection-label').innerText();
     assert.match(address, /\b(?:\d{1,3}\.){3}\d{1,3}\b/);
     assert.equal(await page.locator('.desktop-connection-label').isVisible(), true);
