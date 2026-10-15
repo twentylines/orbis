@@ -41,4 +41,11 @@ This iteration also addresses the user's UI inspection findings. Header geometry
 
 Hades remains reserved for the separately approved deployment phase. No production Docker daemon or data tree is used for development.
 
+## Latest requested interaction work
+
+- Use smooth, directional section slides with consistent easing and reduced-motion support.
+- Make app pinning easy to discover; add saved show-all home mode. More than three visible apps compact Recent operations and Needs attention; both widgets remain independently hideable/restorable. When those widgets are enabled, the app list uses a contained scroller.
+- Expand search fluidly from the system-bar control into the workspace, covering installed apps, catalogue apps and UI sections. The close button reverses the transition, and keyboard focus returns to the search control.
+- Keep one button design language, sufficient dock-label padding, and show the configured server IP in the connection status. Recheck all rendered controls after these changes.
+
 Local verification: measured background collection with every Orbis page closed; saved history survived a VM restart; an explicit core restart flushed the unsaved partial minute. Authenticated browser range selection, reload, keyboard inspection and desktop/mobile fit passed on the isolated arm64 build. Published-image verification follows the protected release gates.

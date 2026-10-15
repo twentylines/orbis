@@ -163,9 +163,12 @@
   filter: blur(14px);
 }
 .desktop-host-machine {
+  --machine-scale: 1;
   position: relative;
   width: 260px;
   height: 220px;
+  scale: var(--machine-scale);
+  translate: calc(-25px * var(--machine-scale)) 0;
   transform: rotateY(-16deg) rotateX(6deg);
   transform-style: preserve-3d;
   transition: transform 340ms ease;
@@ -490,7 +493,7 @@
     font-size: 18px;
   }
   .desktop-host-machine {
-    scale: 0.86;
+    --machine-scale: 0.86;
   }
   .desktop-monitor-live-status {
     flex-wrap: wrap;
@@ -510,7 +513,7 @@
 }
 @media (max-width: 380px) {
   .desktop-host-machine {
-    scale: 0.72;
+    --machine-scale: 0.72;
   }
   .desktop-monitor .desktop-view-heading {
     display: block;
@@ -528,7 +531,7 @@
 }
 @media (max-width: 360px) {
   .desktop-host-machine {
-    scale: 0.64;
+    --machine-scale: 0.64;
   }
 }
 @media (prefers-reduced-motion: reduce) {

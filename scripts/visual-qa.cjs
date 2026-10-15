@@ -45,7 +45,8 @@ const catalogue = [
 const appDetailFixture = (urn) => {
   const [id, storeId] = urn.split(':');
   const summary = apps.find((item) => item.info.urn === urn) || (urn === 'managed:_user' ? { app: { id: 4, status: 'stopped', version: 1 } } : null);
-  const name = summary?.info?.name || (id === 'photos' ? 'Photos' : id === 'custom' ? 'Custom service' : id === 'managed' ? 'Managed service' : 'Media');
+  const name =
+    summary?.info?.name || (id === 'photos' ? 'Photos' : id === 'custom' ? 'Custom service' : id === 'managed' ? 'Managed service' : 'Media');
   return {
     info: {
       id,
@@ -249,10 +250,14 @@ async function chromeGeometry(page) {
     const next = current && getComputedStyle(current).display !== 'none' ? current.getBoundingClientRect() : boxes[0];
     return {
       boxes,
-      aligned: boxes.every((box) =>
-        Math.abs(box.y - boxes[0].y) < 0.1 && Math.abs(box.height - boxes[0].height) < 0.1 &&
-        Math.abs(box.glyph.width - 20) < 0.1 && Math.abs(box.glyph.height - 20) < 0.1 &&
-        Math.abs(box.glyph.y + box.glyph.height / 2 - box.y - box.height / 2) < 0.1),
+      aligned: boxes.every(
+        (box) =>
+          Math.abs(box.y - boxes[0].y) < 0.1 &&
+          Math.abs(box.height - boxes[0].height) < 0.1 &&
+          Math.abs(box.glyph.width - 20) < 0.1 &&
+          Math.abs(box.glyph.height - 20) < 0.1 &&
+          Math.abs(box.glyph.y + box.glyph.height / 2 - box.y - box.height / 2) < 0.1,
+      ),
       separated:
         brand.right + 4 <= (next.left ?? next.x) && boxes.every((box, index) => !index || boxes[index - 1].x + boxes[index - 1].width < box.x),
       backdropMatches: getComputedStyle(document.body).backgroundColor === getComputedStyle(document.querySelector('.desktop')).backgroundColor,
@@ -603,6 +608,16 @@ async function main() {
     const pinnedAppFirst = (await page.locator('.workspace-app').first().locator('strong').innerText()) === 'Backups';
     await page.keyboard.press('Control+k');
     await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
+    for (let tab = 0; tab < 20; tab++) {
+      await page.keyboard.press('Tab');
+      if (!(await page.getByRole('dialog', { name: 'Search tools' }).evaluate((dialog) => dialog.contains(document.activeElement))))
+        throw new Error('Search keyboard focus escaped its dialog');
+    }
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Search tools' }).waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement === document.querySelector('.desktop-search-trigger'));
+    await page.keyboard.press('Control+k');
+    await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
     await page.getByRole('textbox', { name: 'Find a tool or application' }).fill('Monitor');
     await page.getByRole('dialog', { name: 'Search tools' }).getByRole('button', { name: 'Monitor' }).click();
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
@@ -689,9 +704,20 @@ async function main() {
         title: card.querySelector('.fw-bolder').getBoundingClientRect(),
         health: card.querySelector('.docker-health').getBoundingClientRect(),
       }));
-      return cards.length >= 3 && cards.every((card) => cards.filter((peer) => Math.abs(peer.card.top - card.card.top) < 0.1).every((peer) =>
-        Math.abs(peer.card.bottom - card.card.bottom) < 0.1 && Math.abs(peer.logo.top - card.logo.top) < 0.1 &&
-        Math.abs(peer.title.top - card.title.top) < 0.1 && Math.abs(peer.health.bottom - card.health.bottom) < 0.1));
+      return (
+        cards.length >= 3 &&
+        cards.every((card) =>
+          cards
+            .filter((peer) => Math.abs(peer.card.top - card.card.top) < 0.1)
+            .every(
+              (peer) =>
+                Math.abs(peer.card.bottom - card.card.bottom) < 0.1 &&
+                Math.abs(peer.logo.top - card.logo.top) < 0.1 &&
+                Math.abs(peer.title.top - card.title.top) < 0.1 &&
+                Math.abs(peer.health.bottom - card.health.bottom) < 0.1,
+            ),
+        )
+      );
     });
     await page.locator('.desktop-batch-controls > summary').click();
     const bulkControlsReachable = await page.locator('.batch-action-desktop-button').first().isVisible();

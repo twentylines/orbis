@@ -240,6 +240,15 @@
   border-radius: 50%;
   background: #a28a62;
 }
+.desktop-connection-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.desktop-connection-label small {
+  font-size: 11px;
+  opacity: 0.8;
+}
 .desktop-connection-dot.is-connected {
   background: #42815b;
   box-shadow: 0 0 0 0 rgba(93, 184, 128, 0.45);
@@ -596,14 +605,14 @@
   animation: orbis-dock-enter 0.55s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .desktop .desktop-dock-item {
-  min-width: 73px;
+  min-width: 88px;
   height: 62px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 3px;
-  padding: 6px;
+  padding: 6px 12px;
   border-radius: 14px;
   color: rgba(245, 248, 242, 0.76);
   text-decoration: none;
@@ -665,10 +674,15 @@
   cursor: default;
 }
 .desktop-palette {
-  position: relative;
-  z-index: 1;
-  width: min(560px, 100%);
-  overflow: hidden;
+  position: fixed;
+  z-index: 101;
+  top: min(18vh, 140px);
+  left: 20px;
+  right: 20px;
+  margin-inline: auto;
+  width: min(560px, calc(100% - 40px));
+  max-height: calc(100dvh - min(18vh, 140px) - 20px);
+  overflow: auto;
   border-radius: 18px;
   background: var(--desktop-surface);
   border: 1px solid var(--desktop-line);
@@ -902,6 +916,7 @@
     min-width: 0;
     flex: 1;
     height: 55px;
+    padding-inline: 8px;
   }
   .desktop-dock-item span {
     font-size: 10px;

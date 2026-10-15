@@ -170,12 +170,13 @@ body:has(.desktop) .modal-content .form-select {
   background-color: var(--desktop-surface);
   border-color: var(--desktop-line);
 }
-body:has(.desktop) :is(.modal-content, .orbis-dropdown-menu) :focus-visible {
+body:has(.desktop) :is(.modal-content, .orbis-dropdown-menu, .desktop-palette) :focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
   body:has(.desktop) .zoom-in,
+  body:has(.desktop) .desktop-palette,
   body:has(.desktop) .dimmed-background {
     animation-duration: 0.01ms;
   }
