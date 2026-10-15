@@ -5,8 +5,8 @@
 - Forked Runtipi v4.10.1 while preserving its application and data compatibility surfaces.
 - Added the Orbis name, icon, browser metadata, server desktop, command search, App Store presentation, Appearance settings, and a live System Monitor.
 - Added authenticated telemetry and per-user desktop preferences.
-- Added an Update Center that shows application update availability and reads Orbis release notes from GitHub when releases exist. Host package updates and in-browser Orbis installation are still pending restricted host tooling and rollback validation.
-- Verified clean startup, registration, key routes, official catalogue access, and new authenticated endpoints in a disposable Docker VM. Existing-install migration is still pending.
+- Added an Update Center that shows application update availability and reads Orbis release notes from GitHub. Its reviewed Orbis core update path now runs through a restricted host service; host package updates remain pending.
+- Verified clean startup, registration, key routes, official catalogue access, and new authenticated endpoints in a disposable Docker VM. Migration of actual homelab data remains pending.
 - Replaced inherited upstream release jobs with a gated Orbis image and GitHub Release workflow, and added authenticated installed-build metadata to the Update Center. Published `v0.1.0-beta.1` as an explicitly limited preview.
 - Passed a disposable Whoami install, stop, start, restart, backup, reset, restore, and uninstall path. Fixed the default backup list page and removed a tar self-inclusion warning during backup creation.
 - Corrected migration inventory for the pinned CLI's top-level folders and `data/postgres`, and added read-only digest/Compose planning for an Orbis release on a copied installation.
@@ -28,6 +28,8 @@
 - Published `v0.1.0-beta.6` and advanced the synthetic CLI installation from beta 5 to beta 6 through that transaction. A real browser check then found that the save label could still briefly show “Saved” after a new pin change. The preference provider now marks the edit as saving in the same event and ignores late responses from older saves; a locally built image passed the same browser interaction.
 - Published `v0.1.0-beta.7` with the corrected save state. Its arm64 image passed an enrolled beta 6 to beta 7 update, exact-digest health and snapshot checks, and the real browser pin/save/reload interaction.
 - Added a guarded CLI v4.10.1 first-adoption transaction with release verification, stopped-state snapshot, digest-pinned Orbis start, enrollment, and stock rollback. A synthetic stock installation reached published beta 7 with its account and Whoami intact; an injected failure after Orbis start restored stock at the original image ID in the isolated VM.
-- Added a restricted Unix socket host service, authenticated core-update API, and Update Center plan/recovery controls. Socket transport, authorization, transaction-state, and responsive review-layout checks pass locally; a published-image browser transaction is still pending.
+- Added a restricted Unix socket host service, authenticated core-update API, and Update Center plan/recovery controls. The browser completed published beta 9 → beta 10 and beta 10 → beta 11 transactions on the isolated arm64 installation.
+- Added a guarded first-install tool for the Linux host service on an already enrolled core. It verifies the published image, read-only socket mount, and matching host/container inode before installing private root-owned scripts and enabling systemd. A unit restart and full VM restart preserved socket access.
+- Published beta 11 with a dock-free Monitor and Update Center detail layout and accessible changelog scrolling. Chrome verified the running image at desktop and phone widths with live telemetry, full release notes, no horizontal overflow, and no page errors.
 
-Real homelab migration, automatic core installation and rollback, host package updates, and multi-server pairing remain outstanding.
+Real homelab migration, a production-ready installation and helper-upgrade path, host package updates, and multi-server pairing remain outstanding.
