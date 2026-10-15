@@ -141,6 +141,20 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
 
       <main className="desktop-main" id="desktop-content">
         <div className={`desktop-view ${location.pathname === '/dashboard' ? 'desktop-view-home' : 'desktop-view-app'}`}>
+          {location.pathname !== '/dashboard' ? (
+            <div className="desktop-window-bar">
+              <span className="desktop-window-icon" aria-hidden="true">
+                {current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}
+              </span>
+              <div className="desktop-window-label">
+                <strong>{current?.label ?? 'Application'}</strong>
+                <span>{preferences.serverName} / Orbis</span>
+              </div>
+              <Link to="/dashboard" className="desktop-window-close" aria-label={`Close ${current?.label ?? 'application'} and return to workspace`}>
+                <IconX size={18} aria-hidden="true" />
+              </Link>
+            </div>
+          ) : null}
           {location.pathname !== '/dashboard' && location.pathname !== '/monitor' && location.pathname !== '/updates' ? (
             <div className="desktop-route-title">
               <PageTitle apps={apps} />
