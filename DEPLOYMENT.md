@@ -2,6 +2,31 @@
 
 The source tree builds and passes unit, browser-fixture, clean-install Docker, disposable-app lifecycle, and a synthetic stock CLI migration rehearsal. It has **not** passed migration against a copy of an existing homelab. Do not use it to replace a live Runtipi installation yet.
 
+## Published beta 21 runtime verification (15 October 2026)
+
+[Beta 21](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.21) passed protected checks and release workflow 38727931873. Its Git tag, manifest and exact GHCR index agree on source commit `4b9144b22e05733b3d68ce61cbd9104213e48940` and digest `sha256:597a1de894caa770fc424d8f0e9b4a2a8a32569f697ee61d1e1ff8eba76b222d`, with linux/amd64 and linux/arm64 entries.
+
+Chrome reviewed that immutable digest in the beta 20 Update Center and clicked **Install reviewed release**. The isolated arm64 installation returned healthy at beta 21; host enrollment/image matching and the private update job reported complete. Dark mode and existing task outcomes survived, and the Store retained one title with decoded icons.
+
+On the published image, real `whoami:migrated` start/stop requests completed as tasks `97d27ffa-2b5a-4ccf-8a68-686bbae6ddf9` and `3d4d6538-9a31-4d8f-b60a-d826f9c4e711`. Exact-app resources and a 50-line live log stream worked. Invalid limits returned HTTP 400 JSON before streaming; unauthenticated requests returned 401. The app's configuration stayed unchanged and its original stopped state was restored. This verifies the beta 20 interceptor status correction against the real bundle, beyond the 32 HTTP unit cases.
+
+The 390 px browser saved pins/show-all and hidden lower cards, reloaded the account-backed preferences, restored the cards, searched both installed/catalogue apps and navigated to Updates and Appearance. Escape returned focus. The original preferences were restored through the authenticated API and compared after restoration. No page errors occurred. A separate browser decoded all 248 catalogue/installed icons with zero failures.
+
+Live captures: [desktop](screenshots/live-beta 21/workspace-desktop.png), [phone workspace during the interaction check](screenshots/live-beta 21/workspace-mobile.png), [search](screenshots/live-beta 21/search-mobile.png), [app resources while running](screenshots/live-beta 21/app-resources.png). Fixture inspection and its wider layout matrix are in `VISUAL-QA.md`.
+
+These are isolated synthetic-data/arm64 results. AMD64 image publication does not establish an AMD64 boot; copied real-data migration, external mounts/volumes, independent backup rehearsal and Hades cutover remain outstanding. Hades was untouched.
+
+The retained `scripts/live-app-workspace-qa.cjs` and `scripts/live-desktop-qa.cjs` repeated these checks successfully against beta 21. They require a loopback disposable stack, a private authenticated cookie jar, the checker-generated release JSON and explicit opt-in. The app check requires its selected app to start stopped, then restores that state and compares configuration. The desktop check restores the account's original preferences. Keep the cookie jar private and outside Git.
+
+```sh
+python3 scripts/orbis-release-check.py v0.1.0-beta.21 > /tmp/orbis-release.json
+ORBIS_AUDIT_COOKIE_FILE=/path/to/private-cookie-jar.txt ORBIS_AUDIT_RELEASE_FILE=/tmp/orbis-release.json ORBIS_ALLOW_LIFECYCLE_AUDIT=1 node scripts/live-app-workspace-qa.cjs
+ORBIS_AUDIT_COOKIE_FILE=/path/to/private-cookie-jar.txt ORBIS_AUDIT_RELEASE_FILE=/tmp/orbis-release.json ORBIS_ALLOW_PREFERENCE_AUDIT=1 node scripts/live-desktop-qa.cjs
+```
+
+The default test app is `whoami:migrated`; set `ORBIS_AUDIT_APP_URN` for another disposable catalogue app. `ORBIS_AUDIT_URL`, `ORBIS_AUDIT_SCREENSHOT_DIR` and `ORBIS_BROWSER_PATH` configure the local test target and captures. These checks do not create a login session or replace a clean-install/migration rehearsal.
+
+
 ## Verified clean-install smoke test (15 October 2026)
 
 An isolated Colima Linux VM with its own Docker socket built the Orbis image from this tree. The test Compose project used a fresh Postgres volume, loopback-only ports 18080/18443/18081, and no published Postgres port. The image and dependencies started healthy; `/api/health` returned 200. A fresh account registered through the real browser, completed the welcome step, and opened Workspace, Monitor, Updates, App Store, Applications, and Settings without page errors or horizontal overflow at 1440 × 900. The official store was present and the marketplace search reported 248 entries. Unauthenticated telemetry and desktop-preference reads returned 401; authenticated reads and preference save/reload succeeded. [Live screenshots](screenshots/live-smoke) and the repeatable [smoke script](scripts/live-smoke.cjs) capture this check. The script registers a new first user and therefore accepts only a loopback test stack with an empty database.
@@ -76,7 +101,7 @@ python3 scripts/orbis-host-update.py apply ROOT CURRENT_MANIFEST TARGET_MANIFEST
 python3 scripts/orbis-host-update.py recover ROOT CURRENT_MANIFEST TARGET_MANIFEST --docker-context TEST_CONTEXT --snapshot SNAPSHOT --confirm-root ROOT
 ```
 
-`recover` is for an interrupted, nonterminal transaction, not a completed update. The updater currently requires managed apps to be stopped and keeps them stopped. It rejects symlinks outside the installation tree and cannot capture external bind mounts or Docker named volumes outside that tree. The first-cutover command below is separate; the restricted browser API is documented in [HOST-SERVICE.md](HOST-SERVICE.md). Neither path has a package-manager adapter or proven procedure for a real homelab. Large trees may hold the core offline for a long copy and three full-content hash passes; space and downtime must be measured on a representative copy before any live use.
+`recover` is for an interrupted, nonterminal transaction, not a completed update. The updater currently requires managed apps to be stopped and keeps them stopped. It rejects symlinks outside the installation tree and cannot capture external bind mounts or Docker named volumes outside that tree. The first-cutover command below is separate; the restricted browser API is documented in [HOST-SERVICE.md](HOST-SERVICE.md). These core adoption/update commands are separate from the reviewed Ubuntu package worker. A production procedure for a real homelab is still unverified. Large trees may hold the core offline for a long copy and three full-content hash passes; space and downtime must be measured on a representative copy before any live use.
 
 ## Isolated first adoption from stock Runtipi (15 October 2026)
 
