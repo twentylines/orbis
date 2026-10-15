@@ -6,7 +6,7 @@ The source tree builds and passes unit, browser-fixture, clean-install Docker, d
 
 An isolated Colima Linux VM with its own Docker socket built the Orbis image from this tree. The test Compose project used a fresh Postgres volume, loopback-only ports 18080/18443/18081, and no published Postgres port. The image and dependencies started healthy; `/api/health` returned 200. A fresh account registered through the real browser, completed the welcome step, and opened Workspace, Monitor, Updates, App Store, Applications, and Settings without page errors or horizontal overflow at 1440 × 900. The official store was present and the marketplace search reported 248 entries. Unauthenticated telemetry and desktop-preference reads returned 401; authenticated reads and preference save/reload succeeded. [Live screenshots](screenshots/live-smoke) and the repeatable [smoke script](scripts/live-smoke.cjs) capture this check. The script registers a new first user and therefore accepts only a loopback test stack with an empty database.
 
-That first check verifies clean startup and key read paths. The separate app lifecycle check below covers one disposable application. No existing Runtipi data was imported. Host operating system updates and browser-driven Orbis core updates are scoped in [UPDATES.md](UPDATES.md) and are not implemented yet.
+That first check verifies clean startup and key read paths. The separate app lifecycle check below covers one disposable application. No existing Runtipi data was imported. Host operating system updates are scoped in [UPDATES.md](UPDATES.md) and are not implemented yet.
 
 ## Verified disposable app lifecycle (15 October 2026)
 
@@ -42,6 +42,10 @@ The `v0.1.0-beta.6` GitHub tag, manifest, and GHCR index then matched commit `98
 
 The corrective `v0.1.0-beta.7` release passed its build, test, integration, and publication jobs. The public tag, attached manifest, and GHCR index match commit `7a4d77bd8f15d67625eeb59a7d8b64f9d5fe492a` and digest `sha256:9cb020fe2d917456a01a1f1d84d698872e9077d7c8fa69de586b89316d6a1e71`, with linux/amd64 and linux/arm64 entries. The host transaction updated the enrolled synthetic installation from beta 6 to beta 7. The beta 6 stopped-tree snapshot verified, the core became healthy at the exact new digest, `/api/health` and the authenticated build endpoint returned 200, and the inherited account and Whoami app remained. In Chrome, pin and unpin each showed “Saving layout…” immediately, then “Saved to your account.” after a successful PUT; the original pin persisted after reload. A 390px view had no horizontal overflow or page errors. The amd64 image is indexed but has not been booted in the isolated arm64 VM.
 
+The beta 8 release passed CI, integration, publication, and exact tag/manifest/GHCR index verification. The isolated Linux VM ran the restricted host service outside Docker with its private socket mounted into the Orbis core. A plan through that socket reviewed beta 7 → beta 8 at digest `sha256:c2e97fd6bac23aa907ec648b1fcc52c9ec09fc5d28c86b79d3b028212017bfe2` and estimated a 78,936,882 byte tree. Apply returned a job ID before core downtime, then finished at the exact digest with all four core services healthy. The beta 7 stopped-tree snapshot independently verified 3,516 entries, 2,780 files, and 78,936,788 bytes. `/api/health` returned 200, the build API reported beta 8's exact commit and digest, the original account and stopped `whoami:migrated` app remained, and the authenticated host-status API returned the completed job; anonymous host status returned 401. Chrome opened Updates at desktop and 390px widths without page errors or horizontal overflow. The UI reached the helper and displayed the completed job.
+
+That live Chrome check also found that the direct anonymous GitHub Releases API can return 403 when its shared quota is exhausted, hiding changelogs. Subsequent source uses GitHub's public Atom feed plus immutable tagged release notes for the Update Center, and the release verifier falls back to the published asset plus Git tag resolution during API rate limiting. The beta 8 image does **not** contain those corrections. A browser-driven core update and real-data migration remain unverified.
+
 On an isolated, already enrolled copy, use distinct manifests and a new snapshot path outside the installation:
 
 ```sh
@@ -50,7 +54,7 @@ python3 scripts/orbis-host-update.py apply ROOT CURRENT_MANIFEST TARGET_MANIFEST
 python3 scripts/orbis-host-update.py recover ROOT CURRENT_MANIFEST TARGET_MANIFEST --docker-context TEST_CONTEXT --snapshot SNAPSHOT --confirm-root ROOT
 ```
 
-`recover` is for an interrupted, nonterminal transaction, not a completed update. The updater currently requires managed apps to be stopped and keeps them stopped. It rejects symlinks outside the installation tree and cannot capture external bind mounts or Docker named volumes outside that tree. The first-cutover command below is separate; neither transaction has a browser API, package-manager adapter, or proven procedure for a real homelab. Large trees may hold the core offline for a long copy and three full-content hash passes; space and downtime must be measured on a representative copy before any live use.
+`recover` is for an interrupted, nonterminal transaction, not a completed update. The updater currently requires managed apps to be stopped and keeps them stopped. It rejects symlinks outside the installation tree and cannot capture external bind mounts or Docker named volumes outside that tree. The first-cutover command below is separate; the restricted browser API is documented in [HOST-SERVICE.md](HOST-SERVICE.md). Neither path has a package-manager adapter or proven procedure for a real homelab. Large trees may hold the core offline for a long copy and three full-content hash passes; space and downtime must be measured on a representative copy before any live use.
 
 ## Isolated first adoption from stock Runtipi (15 October 2026)
 
@@ -116,7 +120,7 @@ The stock `scripts/install.sh` downloads official Runtipi releases, so it is **n
 
 The pinned Runtipi CLI's `start` command also regenerates `docker-compose.yml`, pulls `ghcr.io/runtipi/runtipi`, removes the core containers, and starts Compose without `orbis-compose.yml`. Its `update` command downloads an upstream release and invokes that same start path. Running either command after an Orbis cutover would replace the Orbis core. A production installer must retire the stock CLI's operational role in favor of Orbis-owned host commands that always include the digest-pinned override. The first-adoption and update transactions are parts of that path, but safe handling of running apps and external data, real-data validation, and a published-image browser transaction are outstanding. See the pinned [CLI start source](https://github.com/runtipi/cli/blob/v4.10.1/internal/commands/start.go) and [CLI update source](https://github.com/runtipi/cli/blob/v4.10.1/internal/commands/update.go).
 
-A restricted browser-to-host update bridge is now in source; its preview setup and verification limits are in [HOST-SERVICE.md](HOST-SERVICE.md). It is not yet a supported production installer or package updater.
+A restricted browser-to-host update bridge is now in source; its preview setup and verification limits are in [HOST-SERVICE.md](HOST-SERVICE.md). Its socket path has completed one published-image update in the isolated Linux VM. It is not yet a supported production installer or package updater.
 
 ## Orbis release packaging
 

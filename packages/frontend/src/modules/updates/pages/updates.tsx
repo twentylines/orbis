@@ -55,28 +55,10 @@ async function loadInstalledBuild(signal: AbortSignal): Promise<Build> {
 }
 
 async function loadOrbisReleases(signal: AbortSignal): Promise<Release[]> {
-  const response = await fetch('https://api.github.com/repos/twentylines/orbis/releases?per_page=5', {
-    headers: { Accept: 'application/vnd.github+json' },
-    signal,
-  });
-  if (!response.ok) throw new Error(`GitHub release check failed (${response.status})`);
-  const raw: unknown = await response.json();
-  if (!Array.isArray(raw)) throw new Error('GitHub release response was invalid');
-  return raw
-    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
-    .filter((item) => typeof item.tag_name === 'string' && typeof item.html_url === 'string')
-    .map((item) => ({
-      tag: item.tag_name as string,
-      publishedAt: typeof item.published_at === 'string' ? item.published_at : null,
-      body: typeof item.body === 'string' ? item.body : '',
-      url: item.html_url as string,
-      imageManifestUrl:
-        (Array.isArray(item.assets) &&
-          item.assets.find(
-            (asset: unknown) => typeof asset === 'object' && asset !== null && 'name' in asset && asset.name === 'release-manifest.json',
-          )?.browser_download_url) ||
-        null,
-    }));
+  const response = await fetch('/api/system/orbis-release', { signal, credentials: 'same-origin' });
+  if (!response.ok) throw new Error(`Orbis release check failed (${response.status})`);
+  const release: Release | null = await response.json();
+  return release ? [release] : [];
 }
 
 export default function Updates() {

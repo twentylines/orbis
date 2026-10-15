@@ -3,6 +3,8 @@ import importlib.util
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 
 SPEC = importlib.util.spec_from_file_location("orbis_release_check", Path(__file__).with_name("orbis-release-check.py"))
@@ -29,6 +31,16 @@ class OrbisReleaseCheckTests(unittest.TestCase):
         self.assertEqual(CHECK.tag_commit(ref, {"object": {"type": "commit", "sha": commit}}), commit)
         with self.assertRaisesRegex(ValueError, "annotated"):
             CHECK.tag_commit(ref)
+
+    def test_public_release_fallback_after_anonymous_api_rate_limit(self):
+        with patch.object(CHECK, "read_json", side_effect=HTTPError(CHECK.GITHUB_API, 403, "rate limit", {}, None)), \
+             patch.object(CHECK, "git_tag_commit", return_value="a" * 40), \
+             patch.object(CHECK, "read_url", return_value=(b"# Published notes", {})):
+            asset, commit, published, notes = CHECK.published_release(TAG)
+        self.assertEqual(asset, ASSET)
+        self.assertEqual(commit, "a" * 40)
+        self.assertIsNone(published)
+        self.assertEqual(notes, "# Published notes")
 
     def test_checks_index_body_digest_header_and_platforms(self):
         index = {

@@ -7,10 +7,12 @@ import { mock } from 'vitest-mock-extended';
 import { AuthGuard } from '../../auth/auth.guard';
 import { SystemController } from '../system.controller';
 import { SystemService } from '../system.service';
+import { OrbisReleaseService } from '../orbis-release.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
   const systemService = mock<SystemService>();
+  const orbisReleases = mock<OrbisReleaseService>();
   const logger = mock<LoggerService>();
 
   beforeAll(async () => {
@@ -18,6 +20,7 @@ describe('SystemController certificate security', () => {
       controllers: [SystemController],
       providers: [
         AuthGuard,
+        { provide: OrbisReleaseService, useValue: orbisReleases },
         {
           provide: SystemService,
           useValue: systemService,
@@ -93,5 +96,22 @@ describe('SystemController certificate security', () => {
     expect(allowed.status).toBe(200);
     expect(allowed.body.version).toBe(process.env.ORBIS_VERSION || 'development');
     expect(allowed.body.runtipiCompatibility).toBe(process.env.TIPI_VERSION || null);
+  });
+
+  it('requires authentication for the cached Orbis changelog', async () => {
+    const denied = await request(app.getHttpServer()).get('/system/orbis-release');
+    expect(denied.status).toBe(401);
+    expect(orbisReleases.latest).not.toHaveBeenCalled();
+
+    orbisReleases.latest.mockResolvedValue({
+      tag: 'v0.1.0-beta.8',
+      publishedAt: '2026-10-15T02:18:39Z',
+      body: '# Orbis beta 8',
+      url: 'https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.8',
+      imageManifestUrl: 'https://github.com/twentylines/orbis/releases/download/v0.1.0-beta.8/release-manifest.json',
+    });
+    const allowed = await request(app.getHttpServer()).get('/system/orbis-release').set('Authorization', 'Bearer cli-token');
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.tag).toBe('v0.1.0-beta.8');
   });
 });

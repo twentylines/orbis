@@ -4,10 +4,14 @@ import { AuthGuard } from '../auth/auth.guard';
 import { LoadDto } from './dto/system.dto';
 import { SystemService } from './system.service';
 import { ApiResponse } from '@nestjs/swagger';
+import { OrbisReleaseService } from './orbis-release.service';
 
 @Controller('system')
 export class SystemController {
-  constructor(private readonly systemService: SystemService) {}
+  constructor(
+    private readonly systemService: SystemService,
+    private readonly orbisReleases: OrbisReleaseService,
+  ) {}
 
   @UseGuards(AuthGuard)
   @Get('/load')
@@ -32,6 +36,12 @@ export class SystemController {
       imageDigest: process.env.ORBIS_IMAGE_DIGEST || null,
       runtipiCompatibility: process.env.TIPI_VERSION || null,
     };
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/orbis-release')
+  latestOrbisRelease() {
+    return this.orbisReleases.latest();
   }
 
   @Get('/certificate')
