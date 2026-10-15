@@ -26,6 +26,8 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 
 [Beta 29 long-text checks](screenshots/live-beta29) · [320px update](screenshots/live-beta29/320-light-update-text-1-information.png) · [Enlarged app details](screenshots/live-beta29/320-dark-update-text-2-app-detail.png)
 
+[Whole words and nested forms](screenshots/text-compounds) · [Long phone server name](screenshots/text-compounds/mobile-light-heading-text200.png) · [Long search result](screenshots/text-compounds/narrow-light-search-text200.png) · [Keyboard-focused table action](screenshots/text-compounds/mobile-light-table-action-text200.png)
+
 [Enlarged text](screenshots/text-stress/narrow-light-text-home.png) · [Login](screenshots/themes/mobile-light-login.png) · [Expanded error details](screenshots/themes/desktop-dark-error-details.png) · [4K Settings](screenshots/themes/4k-dark-appearance.png) · [Themed notifications](screenshots/themes/narrow-frost-dark-notifications.png) · [Guest access](screenshots/themes/narrow-light-guest.png) · [Compose confirmation](screenshots/themes/narrow-light-discard-confirmation.png) · [Error recovery](screenshots/themes/narrow-light-error.png)
 
 [Two-factor fields](screenshots/themes/narrow-dark-two-factor.png) · [Enlarged code digits](screenshots/themes/narrow-light-two-factor-enlarged-digits.png)

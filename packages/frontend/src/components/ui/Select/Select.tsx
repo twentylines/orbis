@@ -5,6 +5,7 @@ import { IconCheck, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type * as React from 'react';
 import { useId } from 'react';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import '../dropdown.css';
 
 type TriggerProps = {
@@ -56,7 +57,7 @@ const SelectTrigger = ({
           })}
           {...props}
         >
-          {children}
+          <span className="orbis-select-value">{children}</span>
         </SelectPrimitive.Trigger>
       </div>
       {error && <div className="invalid-feedback">{error}</div>}
@@ -67,31 +68,46 @@ const SelectTrigger = ({
 const SelectContent = ({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Content>) => (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
+      position="popper"
+      align="start"
+      sideOffset={6}
       collisionPadding={16}
       style={{ zIndex: 2000 }}
-      className={clsx('overflow-hidden orbis-dropdown-menu', className)}
+      className={clsx('orbis-dropdown-menu orbis-select-content', className)}
       {...props}
     >
-      <SelectPrimitive.ScrollUpButton className="d-flex align-items-center justify-content-center">
+      <SelectPrimitive.ScrollUpButton className="orbis-select-scroll-button d-flex align-items-center justify-content-center">
         <IconChevronUp />
       </SelectPrimitive.ScrollUpButton>
-      <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
-      <SelectPrimitive.ScrollDownButton className="d-flex align-items-center justify-content-center">
+      <SelectPrimitive.Viewport className="orbis-select-viewport p-1">{children}</SelectPrimitive.Viewport>
+      <SelectPrimitive.ScrollDownButton className="orbis-select-scroll-button d-flex align-items-center justify-content-center">
         <IconChevronDown />
       </SelectPrimitive.ScrollDownButton>
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
 );
 
-const SelectItem = ({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Item>) => (
-  <SelectPrimitive.Item className={clsx('position-relative d-flex align-items-center dropdown-item', className)} {...props}>
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-    <span style={{ right: 8 }} className="ms-2">
-      <SelectPrimitive.ItemIndicator>
-        <IconCheck size={20} />
-      </SelectPrimitive.ItemIndicator>
-    </span>
-  </SelectPrimitive.Item>
-);
+const SelectItem = ({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Item>) => {
+  const text = typeof children === 'string' ? children : undefined;
+  return (
+    <SelectPrimitive.Item
+      className={clsx('position-relative d-flex align-items-center dropdown-item orbis-select-item', className)}
+      aria-label={text}
+      textValue={text}
+      {...props}
+    >
+      <SelectPrimitive.ItemText asChild>
+        <span className="orbis-select-item-text" title={text}>
+          {text ? <WrapWords text={text} /> : children}
+        </span>
+      </SelectPrimitive.ItemText>
+      <span className="orbis-select-item-indicator" aria-hidden="true">
+        <SelectPrimitive.ItemIndicator>
+          <IconCheck size={20} />
+        </SelectPrimitive.ItemIndicator>
+      </span>
+    </SelectPrimitive.Item>
+  );
+};
 
 export { Select, SelectValue, SelectTrigger, SelectContent, SelectItem };

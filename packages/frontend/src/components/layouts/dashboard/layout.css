@@ -88,7 +88,7 @@ html:has(.desktop) {
   font-weight: 720;
   text-decoration: none;
   white-space: nowrap;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
 }
 .desktop-brand img {
   border-radius: 8px;
@@ -151,6 +151,12 @@ html:has(.desktop) {
   border-radius: 11px;
   color: var(--desktop-chrome-ink);
 }
+.desktop-task-trigger svg,
+.desktop-mode-toggle svg,
+.desktop-search-trigger svg,
+.desktop-icon-button svg {
+  flex: none;
+}
 .desktop-task-trigger span {
   position: absolute;
   top: -5px;
@@ -187,7 +193,8 @@ html:has(.desktop) {
 .desktop-mode-toggle {
   gap: 8px;
   height: 40px;
-  width: 84px;
+  width: calc(48px + 3em);
+  min-width: 84px;
   padding: 0 11px;
   border-radius: 11px;
   font-size: 12px;
@@ -238,6 +245,7 @@ html:has(.desktop) {
   line-height: 20px;
   white-space: nowrap;
   min-width: 0;
+  max-width: clamp(80px, 18vw, 240px);
 }
 .desktop-connection-dot {
   display: block;
@@ -252,6 +260,14 @@ html:has(.desktop) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.desktop-connection[data-connection-kind="status"] {
+  flex: none;
+  max-width: none;
+}
+.desktop-connection[data-connection-kind="status"] .desktop-connection-label {
+  overflow: visible;
+  text-overflow: clip;
 }
 .desktop-connection-dot.is-connected {
   background: #42815b;
@@ -801,6 +817,9 @@ html:has(.desktop) {
   margin: 0;
 }
 @media (max-width: 1100px) {
+  .desktop-system-bar:has(.desktop-connection[data-connection-kind="status"][data-connection-state="connected"]) .desktop-server-name {
+    display: none;
+  }
   .desktop-current,
   .desktop-search-trigger span,
   .desktop-mode-toggle span,
@@ -834,6 +853,9 @@ html:has(.desktop) {
   .desktop-brand {
     min-width: 0;
     font-size: 15px;
+  }
+  .desktop-server-name {
+    display: none;
   }
   .desktop-current,
   .desktop-operation,
@@ -957,6 +979,7 @@ html:has(.desktop) {
     bottom: 6px;
     font-size: inherit;
     line-height: 12px;
+    max-width: none;
   }
   .desktop-connection-label {
     font-size: 10px;

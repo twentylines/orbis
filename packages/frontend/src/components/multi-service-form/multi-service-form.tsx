@@ -19,6 +19,7 @@ import { deepClean } from '@/utils/objects';
 import { type } from 'arktype';
 import { parse } from 'yaml';
 import { confirmDiscard } from '@/desktop/confirmation';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 
 type Props = {
   onSubmit?: (data: typeof dynamicComposeSchemaArk.infer) => void;
@@ -156,11 +157,13 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
 
     return (
       <li className="nav-item nav-item-c" key={tabId}>
-        <button type="button" className={tabClass} aria-current="page" onClick={() => setActiveTab(tabId)}>
+        <button type="button" className={tabClass} aria-current={isActive ? 'page' : undefined} onClick={() => setActiveTab(tabId)} title={label}>
           <span className="nav-link-icon nav-link-icon-c">
             <IconComponent size={24} />
           </span>
-          <span className="nav-link-title nav-link-title-c">{label}</span>
+          <span className="nav-link-title nav-link-title-c">
+            <WrapWords text={label} />
+          </span>
           {hasSectionErrors(tabId, index) && <span className="ms-1 text-danger">*</span>}
         </button>
       </li>
@@ -180,15 +183,17 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
 
   return (
     <form className="flex flex-col" onSubmit={form.handleSubmit(handleSubmit)}>
-      <div className="main-container bg-card border rounded-3 mt-4 m-0">
+      <div className="main-container service-compose-panel bg-card border rounded-3 mt-4 m-0">
         {composeEditorOpen && (
           <ComposeEditor initialFormat={composeData.format} onChange={(value, format, error) => setComposeData({ value, format, error })} />
         )}
         {!composeEditorOpen && (
-          <div className="row ms-0 me-0">
-            <div className="col-12 col-md-2 border-end p-0">
-              <div className="d-flex justify-content-between align-items-center p-3">
-                <div className="fw-bold">{t('MULTI_SERVICE_SERVICES')}</div>
+          <div className="service-form-layout">
+            <div className="service-form-sidebar">
+              <div className="service-form-sidebar-header">
+                <div className="fw-bold">
+                  <WrapWords text={t('MULTI_SERVICE_SERVICES')} />
+                </div>
                 <button type="button" className="service-icon-button" aria-label="Add service" onClick={() => void saveBeforeAction(addService)()}>
                   <IconPlus size={20} aria-hidden="true" />
                 </button>
@@ -234,9 +239,9 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
                 </div>
               </div>
             </div>
-            <div className="col col-12 col-md-10">
+            <div className="service-form-content">
               <div className="col">
-                <ul className="nav nav-underline pt-2 gap-4 flex-nowrap overflow-auto">
+                <ul className="service-config-tabs nav nav-underline pt-2">
                   {activeService !== 'json' && services[activeService] && tabs.map((tab) => renderTab(tab.id, tab.label, tab.icon, activeService))}
                 </ul>
               </div>

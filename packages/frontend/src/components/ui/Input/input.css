@@ -2,3 +2,34 @@
 .was-validated .form-control:invalid {
   background-image: none;
 }
+
+.orbis-input-field {
+  min-width: 0;
+  container-type: inline-size;
+}
+.orbis-input-group {
+  min-width: 0;
+  gap: 8px;
+}
+.orbis-input-group > .form-control {
+  flex: 1 1 8em;
+  min-width: min(100%, 8em);
+}
+.orbis-input-group > .input-group-text {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+body:has(.orbis-theme) .orbis-input-group > :is(.form-control, .input-group-text, .btn) {
+  margin-left: 0;
+  /* biome-ignore lint/complexity/noImportantStyles: Tabler's joined-field selectors override corners on these separately wrapped controls. */
+  border-radius: 12px !important;
+}
+@container (max-width: 14em) {
+  .orbis-input-group > .btn {
+    width: 100%;
+  }
+}

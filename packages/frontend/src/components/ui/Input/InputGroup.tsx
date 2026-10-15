@@ -1,5 +1,7 @@
 import clsx from 'clsx';
 import type * as React from 'react';
+import { Fragment } from 'react';
+import './input.css';
 
 interface IProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string;
@@ -10,6 +12,17 @@ interface IProps extends React.InputHTMLAttributes<HTMLInputElement> {
   groupClassName?: string;
   ref?: React.Ref<HTMLInputElement>;
 }
+
+const TextAffix = ({ text }: { text: string }) => (
+  <span className="input-group-text">
+    {[...text.matchAll(/[^./:-]+[./:-]*|[./:-]+/g)].map((part) => (
+      <Fragment key={part.index}>
+        {part[0]}
+        <wbr />
+      </Fragment>
+    ))}
+  </span>
+);
 
 export const InputGroup = ({
   name,
@@ -25,21 +38,21 @@ export const InputGroup = ({
 }: IProps) => {
   let prefix = groupPrefix;
   if (typeof groupPrefix === 'string') {
-    prefix = <span className="input-group-text">{groupPrefix}</span>;
+    prefix = <TextAffix text={groupPrefix} />;
   }
   let suffix = groupSuffix;
   if (typeof groupSuffix === 'string') {
-    suffix = <span className="input-group-text">{groupSuffix}</span>;
+    suffix = <TextAffix text={groupSuffix} />;
   }
 
   return (
-    <div className={clsx(className)}>
+    <div className={clsx('orbis-input-field', className)}>
       {label && (
         <label htmlFor={name} className="form-label">
           {label}
         </label>
       )}
-      <div className={clsx('input-group', groupClassName)}>
+      <div className={clsx('input-group orbis-input-group', groupClassName)}>
         {prefix}
         <input
           suppressHydrationWarning

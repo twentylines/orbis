@@ -23,3 +23,43 @@
   margin: 6px 4px;
   border-top: 1px solid var(--desktop-line, var(--tblr-border-color));
 }
+
+.orbis-select-content {
+  width: max-content;
+  min-width: min(var(--radix-select-trigger-width), var(--radix-select-content-available-width), calc(100vw - 32px));
+  max-width: min(var(--radix-select-content-available-width), calc(100vw - 32px));
+  max-height: min(480px, var(--radix-select-content-available-height));
+}
+.orbis-select-viewport {
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+}
+.orbis-select-scroll-button {
+  flex: none;
+  min-height: 24px;
+}
+.orbis-select-value,
+.orbis-select-item-text {
+  min-width: 0;
+  flex: 1;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  text-align: start;
+}
+.orbis-select-item {
+  gap: 12px;
+}
+.orbis-select-item-indicator {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+}
+.orbis-select-item-indicator svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}

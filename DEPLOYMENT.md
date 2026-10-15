@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Published beta 29 custom-store upgrade (16 October 2026)
+
+The same exact beta29 image recorded below passes a fresh owned stopped v2→v3 application upgrade. Settings Actions refreshed the private Git store once from `b68b528d021e309484615ea846b3c7141515e46b` to `ce01d8a84ca291a35b3e236c4e8b6a75a0f51b5e`. Refresh left the installed v2 files, generated environment, settings, data and user overrides unchanged. The real update wizard passed review, cancel-without-submission, backup default and minimize/restore choice checks at 1440/390/320px.
+
+The browser submitted one backed-up update, task `aa8449a6-9c99-40f8-9a50-7ef016b9aa33`. It succeeded at installed v3 while stopped, with no automatic start or runtime container. Stored inherited retention remained null and the raw form continued to omit it. Other operational settings, the data marker, user Compose/env overrides and the generated random-value hash matched the fresh v2 baseline. The newly added default was verified in the generated environment **before any start**, so subsequent start-time generation could not mask the update ordering regression.
+
+One explicit start, task `0488356e-9581-42a0-b95a-65ac60c92625`, produced healthy web/helper services on `nginx:1.28.1-alpine`. The host HTTP marker and web→helper DNS/HTTP response matched v3. Generated private IPAM, the app allocation and Docker IPAM agreed; both services had unique private addresses, with only web also attached to the shared network. Derived subnet allocations were checked independently because lifecycle preparation reallocates them; this does not prove compatibility with custom static IP assignments.
+
+The new 6,300-byte backup contains the prior v2 config/source and matching data/user override hashes. Archive inspection read selected members to stdout only; no filesystem extraction or generated-environment disclosure occurred. Final stop task `9aa2ccd9-8b05-49c5-9b38-9ab3ac7d5ac7` succeeded. All three tasks were terminal and quiet, no fixture container remained running, actual account preferences matched and the browser reported no errors. Browser appearance writes were intercepted locally. The guarded runner is `scripts/live-store-upgrade-qa.cjs`; private report/checkpoint inputs stay outside Git. This synthetic-data rehearsal leaves failure/recovery and real-data migration acceptance open. Hades was not accessed.
+
 ## Published beta 29 text verification (16 October 2026)
 
 [Beta 29](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.29) is published at source commit `1697920a0fe14ccea2cc791cc26b6d06244eee12`. Main CI `38810705798`, integration `38810705784` and release workflow `38810814153` passed. The read-only release checker verified the tag, commit and exact OCI index `sha256:84a8502cb31c56563af6df6353765581613808a1e6aa78d9aaac7d0353402905`, with linux/amd64 and linux/arm64 entries.

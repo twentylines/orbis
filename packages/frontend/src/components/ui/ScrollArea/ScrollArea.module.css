@@ -4,6 +4,12 @@
   border-radius: inherit;
 }
 
+/* Radix uses an inner table for measurement; fixed layout keeps forms within the viewport. */
+.viewport > div {
+  width: 100%;
+  table-layout: fixed;
+}
+
 .scrollbar {
   display: flex;
   touch-action: none;

@@ -21,6 +21,7 @@ import {
   IconPin,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import './dashboard.css';
@@ -75,6 +76,7 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
   }, [editing, pinPickerRequested]);
   const { preferences, update, syncState } = useDesktopPreferences();
   const { workspace } = preferences;
+  const longServerName = preferences.serverName.length > 16 || preferences.serverName.split(/\s+/).some((word) => word.length > 7);
   const apps = useQuery({ ...getInstalledAppsOptions(), refetchInterval: 15000 });
   const links = useQuery({ ...getLinksOptions() });
   const containers = useContainerTelemetry();
@@ -232,8 +234,8 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
           <div className="workspace-links">
             <h3>Links</h3>
             {links.data.links.slice(0, 4).map((link) => (
-              <a key={link.id} href={link.url} target="_blank" rel="noreferrer">
-                {link.title}
+              <a key={link.id} href={link.url} target="_blank" rel="noreferrer" title={link.title} aria-label={link.title}>
+                <WrapWords text={link.title} />
                 <IconArrowRight size={16} aria-hidden="true" />
               </a>
             ))}
@@ -322,19 +324,24 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
           <p>Loading operations…</p>
         ) : tasks.data?.tasks.length ? (
           <ol className="workspace-recent-tasks">
-            {tasks.data.tasks.slice(0, 2).map((task) => (
-              <li key={task.id}>
-                <Link to="/tasks" viewTransition>
-                  <span>
-                    <strong>
-                      {taskLabels[task.action]} {installed.find(({ info }) => info.urn === task.appUrn)?.info.name ?? task.appUrn.split(':')[0]}
-                    </strong>
-                    <small>{new Date(task.updatedAt).toLocaleTimeString()}</small>
-                  </span>
-                  <b data-status={task.status}>{taskStates[task.status]}</b>
-                </Link>
-              </li>
-            ))}
+            {tasks.data.tasks.slice(0, 2).map((task) => {
+              const name = installed.find(({ info }) => info.urn === task.appUrn)?.info.name ?? task.appUrn.split(':')[0];
+              const title = `${taskLabels[task.action]} ${name}`;
+              const time = new Date(task.updatedAt).toLocaleTimeString();
+              return (
+                <li key={task.id}>
+                  <Link to="/tasks" viewTransition aria-label={`${title}, ${taskStates[task.status]}, ${time}`} title={title}>
+                    <span>
+                      <strong>
+                        {taskLabels[task.action]} <span className="workspace-recent-app-name">{name}</span>
+                      </strong>
+                      <small>{time}</small>
+                    </span>
+                    <b data-status={task.status}>{taskStates[task.status]}</b>
+                  </Link>
+                </li>
+              );
+            })}
           </ol>
         ) : (
           <p className="workspace-operations-empty">No recent operations.</p>
@@ -372,8 +379,14 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
     <div className="workspace">
       <div className="workspace-heading">
         <div>
-          <h1 ref={heading} tabIndex={focusOnMount ? -1 : undefined}>
-            {preferences.serverName}
+          <h1
+            ref={heading}
+            tabIndex={focusOnMount ? -1 : undefined}
+            data-long-name={longServerName}
+            title={preferences.serverName}
+            aria-label={preferences.serverName}
+          >
+            <WrapWords text={preferences.serverName} />
           </h1>
           <p className="workspace-subline">{apps.data ? `${installed.length} installed · ${running} running` : 'Loading applications'}</p>
         </div>

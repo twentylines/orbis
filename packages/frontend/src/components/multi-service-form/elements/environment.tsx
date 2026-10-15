@@ -1,4 +1,5 @@
 import './elements.css';
+import { revealTableAction } from './reveal-table-action';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
@@ -26,7 +27,7 @@ export const EnvironmentConfig = ({ errors, serviceIndex, control, register }: P
   return (
     <div className="row g-4">
       <div className="col-12">
-        <div className="d-flex justify-content-between align-items-center mb-3">
+        <div className="service-config-toolbar mb-3">
           <div>
             <Tooltip className="tooltip" anchorSelect=".my-env-vars">
               {t('MULTI_SERVICE_ENVIRONMENT_TITLE_TOOLTIP')}
@@ -37,12 +38,12 @@ export const EnvironmentConfig = ({ errors, serviceIndex, control, register }: P
             {t('MULTI_SERVICE_ENVIRONMENT_ADD_VARIABLE')}
           </Button>
         </div>
-        <Table className={clsx('border p-1', { 'd-none': fields.length === 0 })}>
+        <Table className={clsx('service-config-table border p-1', { 'd-none': fields.length === 0 })}>
           <TableHeader>
             <TableRow>
               <TableHead>{t('MULTI_SERVICE_ENVIRONMENT_KEY')}</TableHead>
               <TableHead>{t('MULTI_SERVICE_ENVIRONMENT_VALUE')}</TableHead>
-              <TableHead />
+              <TableHead className="service-config-actions-cell" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -64,9 +65,17 @@ export const EnvironmentConfig = ({ errors, serviceIndex, control, register }: P
                     className="table-row-input"
                   />
                 </TableCell>
-                <TableCell className="align-middle w-1">
-                  <Button type="button" size="sm" onClick={() => remove(index)} className="btn-action">
-                    <IconX className="" size={16} />
+                <TableCell className="align-middle service-config-actions-cell">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => remove(index)}
+                    onFocus={revealTableAction}
+                    className="btn-action service-config-remove"
+                    aria-label={`${t('APP_ACTION_REMOVE')}: ${t('MULTI_SERVICE_ENVIRONMENT_TITLE')} ${index + 1}`}
+                    title={t('APP_ACTION_REMOVE')}
+                  >
+                    <IconX size={20} aria-hidden="true" />
                   </Button>
                 </TableCell>
               </TableRow>

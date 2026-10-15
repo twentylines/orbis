@@ -139,7 +139,8 @@ export const OtpForm = (props: { totpEnabled: boolean }) => {
                 name="password"
                 type="password"
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={t('SETTINGS_SECURITY_PASSWORD_NEEDED')}
+                label={t('AUTH_FORM_PASSWORD')}
+                autoComplete="current-password"
               />
             </form>
           </DialogDescription>
@@ -168,7 +169,8 @@ export const OtpForm = (props: { totpEnabled: boolean }) => {
                 name="password"
                 type="password"
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={t('SETTINGS_SECURITY_PASSWORD_NEEDED')}
+                label={t('AUTH_FORM_PASSWORD')}
+                autoComplete="current-password"
               />
             </form>
           </DialogDescription>

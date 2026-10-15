@@ -289,7 +289,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
                 error={errors.port?.message}
                 disabled={loading || randomPortMutation.isPending}
                 placeholder="8484"
-                className="flex-grow-1 input-group"
+                className="flex-grow-1"
               />
               <span className="text-muted">{t('APP_INSTALL_FORM_PORT_HINT')}</span>
             </div>

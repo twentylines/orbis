@@ -4,6 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const inspectAppDetails = require('./app-detail-checks.cjs');
 const inspectWorkspaceAlignment = require('./workspace-alignment-checks.cjs');
+const inspectCompoundHomeComfort = require('./compound-home-comfort-checks.cjs');
+const inspectSearchComfort = require('./search-comfort-checks.cjs');
+const inspectSelectComfort = require('./select-comfort-checks.cjs');
+const inspectNestedFormComfort = require('./nested-form-comfort-checks.cjs');
 const inspectCommandSearch = require('./command-search-checks.cjs');
 const inspectHomeApps = require('./home-app-checks.cjs');
 const inspectWindowFlows = require('./window-flow-checks.cjs');
@@ -15,11 +19,16 @@ const inspectErrorAuth = require('./error-auth-checks.cjs');
 const inspectEnlargedText = require('./enlarged-text-checks.cjs');
 const inspectSurfaceComfort = require('./surface-comfort-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
+const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
+const searchComfortOnly = process.env.ORBIS_VISUAL_SEARCH_COMFORT_ONLY === '1';
+const selectComfortOnly = process.env.ORBIS_VISUAL_SELECT_COMFORT_ONLY === '1';
+const nestedFormComfortOnly = process.env.ORBIS_VISUAL_NESTED_FORM_COMFORT_ONLY === '1';
 const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
 const updatesOnly = process.env.ORBIS_VISUAL_UPDATES_ONLY === '1';
 const updateComfortOnly = process.env.ORBIS_VISUAL_UPDATE_COMFORT_ONLY === '1';
 const appDetailsOnly = process.env.ORBIS_VISUAL_APP_DETAILS_ONLY === '1';
-const connectionOnly = process.env.ORBIS_VISUAL_CONNECTION_ONLY === '1';
+const connectionFallbackOnly = process.env.ORBIS_VISUAL_CONNECTION_FALLBACK_ONLY === '1';
+const connectionOnly = process.env.ORBIS_VISUAL_CONNECTION_ONLY === '1' || connectionFallbackOnly;
 const notificationsOnly = process.env.ORBIS_VISUAL_NOTIFICATIONS_ONLY === '1';
 const errorsOnly = process.env.ORBIS_VISUAL_ERRORS_ONLY === '1';
 const textOnly = process.env.ORBIS_VISUAL_TEXT_ONLY === '1';
@@ -32,7 +41,8 @@ const screenshotDir = process.env.ORBIS_VISUAL_SCREENSHOT_DIR || path.join(__dir
 const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
 const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1' || textOnly || comfortOnly;
 const zoom = Number(process.env.ORBIS_VISUAL_ZOOM || 1);
-if (textOnly && zoom !== 1) throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
+if ((textOnly || compoundHomeOnly || searchComfortOnly || selectComfortOnly || nestedFormComfortOnly) && zoom !== 1)
+  throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
 if (!Number.isInteger(zoom) || zoom < 1 || zoom > 3) throw new Error('ORBIS_VISUAL_ZOOM must be 1, 2, or 3');
 const narrowWidth = Number(process.env.ORBIS_VISUAL_WIDTH || 320);
 const narrowHeight = Number(process.env.ORBIS_VISUAL_HEIGHT || 800);
@@ -350,23 +360,34 @@ async function main() {
   });
   let preferences = freshPreferences();
   const reports = [];
-  const viewports = comfortOnly
-    ? [
-        { name: 'mobile', width: 390, height: 844 },
-        { name: 'narrow', width: 320, height: 800 },
-      ]
-    : connectionOnly
-      ? [{ name: 'connection', width: 1440, height: 1120 }]
-      : process.env.ORBIS_VISUAL_NARROW
-        ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
-        : [
+  const viewports = connectionOnly
+    ? [{ name: 'connection', width: 1440, height: 1120 }]
+    : process.env.ORBIS_VISUAL_NARROW
+      ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
+      : compoundHomeOnly
+        ? [
             { name: 'desktop', width: 1440, height: 1120 },
             { name: 'tablet', width: 768, height: 1024 },
             { name: 'mobile', width: 390, height: 844 },
-            ...(updatesOnly || updateComfortOnly || appDetailsOnly || notificationsOnly || errorsOnly || textOnly
-              ? [{ name: 'narrow', width: 320, height: 800 }]
-              : []),
-          ];
+            { name: 'narrow', width: 320, height: 800 },
+          ]
+        : searchComfortOnly || selectComfortOnly || nestedFormComfortOnly
+          ? [
+              { name: 'tablet', width: 768, height: 1024 },
+              { name: 'mobile', width: 390, height: 844 },
+              { name: 'narrow', width: 320, height: 800 },
+            ]
+          : comfortOnly
+            ? [
+                { name: 'mobile', width: 390, height: 844 },
+                { name: 'narrow', width: 320, height: 800 },
+              ]
+            : [
+                { name: 'desktop', width: 1440, height: 1120 },
+                { name: 'tablet', width: 768, height: 1024 },
+                { name: 'mobile', width: 390, height: 844 },
+                { name: 'narrow', width: 320, height: 800 },
+              ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: zoom });
@@ -628,6 +649,30 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (searchComfortOnly || selectComfortOnly || nestedFormComfortOnly) {
+      const inspect = searchComfortOnly ? inspectSearchComfort : selectComfortOnly ? inspectSelectComfort : inspectNestedFormComfort;
+      const result = await inspect({
+        page,
+        base,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      const key = searchComfortOnly ? 'searchComfort' : selectComfortOnly ? 'selectComfort' : 'nestedFormComfort';
+      reports.push({ viewport: viewport.name, [key]: result, errors });
+      await page.close();
+      continue;
+    }
+    if (compoundHomeOnly) {
+      const compoundHomeComfort = await inspectCompoundHomeComfort({
+        page,
+        base,
+        textScale,
+        fixtures: { preferences: freshPreferences(), apps, tasks: taskFixture, containers: containerFixture },
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, compoundHomeComfort, errors });
+      await page.close();
+      continue;
+    }
     if (comfortOnly) {
       const surfaceComfort = await inspectSurfaceComfort({
         page,
@@ -681,6 +726,14 @@ async function main() {
         setServerAddress: (address) => {
           fixtureServerAddress = address;
         },
+        setServerName: (serverName) => {
+          preferences = { ...preferences, serverName };
+        },
+        serverNames: ['Hades Media and Automation Server', 'DocumentationArchivePrimaryStorageNode'],
+        addresses: connectionFallbackOnly ? [undefined, ''] : ['2001:0db8:85a3:0000:0000:8a2e:0370:7334', undefined, ''],
+        textScales: [1, 2],
+        viewports: [320, 390, 601, 650, 761, 768, 1100, 1440].map((width) => ({ width, height: 1120 })),
+        captureWidths: [320, 390, 601, 650, 761, 768, 1100, 1440],
       });
       reports.push({ viewport: viewport.name, connection, errors });
       await page.close();
@@ -1155,6 +1208,10 @@ async function main() {
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
   if (
     homeOnly ||
+    compoundHomeOnly ||
+    searchComfortOnly ||
+    selectComfortOnly ||
+    nestedFormComfortOnly ||
     windowsOnly ||
     updatesOnly ||
     updateComfortOnly ||

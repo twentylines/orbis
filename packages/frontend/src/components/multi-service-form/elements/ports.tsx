@@ -1,5 +1,6 @@
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
 import './elements.css';
+import { revealTableAction } from './reveal-table-action';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
@@ -27,7 +28,7 @@ export const PortsConfig = ({ errors, serviceIndex, control, register }: Props) 
   return (
     <div className="row g-4">
       <div className="col-12">
-        <div className="d-flex justify-content-between align-items-center mb-3">
+        <div className="service-config-toolbar mb-3">
           <div>
             <Tooltip className="tooltip" anchorSelect=".my-ports">
               {t('MULTI_SERVICE_PORTS_TITLE_TOOLTIP')}
@@ -38,7 +39,7 @@ export const PortsConfig = ({ errors, serviceIndex, control, register }: Props) 
             {t('MULTI_SERVICE_PORTS_ADD_PORT')}
           </Button>
         </div>
-        <Table className={clsx('border p-1', { 'd-none': fields.length === 0 })}>
+        <Table className={clsx('service-config-table border p-1', { 'd-none': fields.length === 0 })}>
           <TableHeader>
             <TableRow>
               <TableHead>{t('MULTI_SERVICE_PORTS_HOST_PORT')}</TableHead>
@@ -46,7 +47,7 @@ export const PortsConfig = ({ errors, serviceIndex, control, register }: Props) 
               <TableHead>{t('MULTI_SERVICE_PORTS_TCP')}</TableHead>
               <TableHead>{t('MULTI_SERVICE_PORTS_UDP')}</TableHead>
               <TableHead>{t('MULTI_SERVICE_PORTS_INTERFACE')}</TableHead>
-              <TableHead />
+              <TableHead className="service-config-actions-cell" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -95,9 +96,17 @@ export const PortsConfig = ({ errors, serviceIndex, control, register }: Props) 
                     placeholder="eth0"
                   />
                 </TableCell>
-                <TableCell className="w-1">
-                  <Button type="button" size="sm" onClick={() => remove(index)} className="btn-action">
-                    <IconX size={16} />
+                <TableCell className="service-config-actions-cell">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => remove(index)}
+                    onFocus={revealTableAction}
+                    className="btn-action service-config-remove"
+                    aria-label={`${t('APP_ACTION_REMOVE')}: ${t('MULTI_SERVICE_PORTS_TITLE')} ${index + 1}`}
+                    title={t('APP_ACTION_REMOVE')}
+                  >
+                    <IconX size={20} aria-hidden="true" />
                   </Button>
                 </TableCell>
               </TableRow>

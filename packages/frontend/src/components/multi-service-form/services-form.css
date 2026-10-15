@@ -1,3 +1,78 @@
+.service-compose-panel {
+  container-type: inline-size;
+}
+.service-form-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+.service-form-sidebar {
+  min-width: 0;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.service-form-sidebar-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+}
+.service-form-sidebar-header > .fw-bold {
+  flex: 1 1 8em;
+  min-width: 0;
+}
+.service-form-content {
+  min-width: 0;
+  padding-inline: 0.5rem;
+}
+@container (min-width: 42em) {
+  .service-form-layout {
+    grid-template-columns: minmax(14em, 1fr) minmax(0, 4fr);
+  }
+  .service-form-sidebar {
+    border-right: 1px solid var(--desktop-line);
+    border-bottom: 0;
+  }
+}
+
+.service-config-tabs {
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+.service-config-tabs > .nav-item-c {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.service-config-tabs .nav-item-c .nav-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 8px;
+  white-space: normal;
+}
+.service-config-tabs .nav-link-icon-c {
+  flex: none;
+  margin: 0;
+}
+.service-config-tabs .nav-link-title-c {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .service-group {
   padding-top: 1rem;
   padding-bottom: 1rem;

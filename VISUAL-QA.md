@@ -1,5 +1,25 @@
 # Orbis UI inspection
 
+## 2026-10-16: whole words, nested forms and connection states
+
+Further inspection found defects that the earlier route checks missed: fractured server and search names, crowded log controls, clipped security placeholders, overflowing installer suffixes, a fixed Compose sidebar and a partially clipped keyboard-focused Remove button. The fixes give text room through wrapping, stacked layouts and bounded scrolling. Security fields now keep visible labels. Long identifiers retain their complete accessible name and hover text when deliberate ellipsis is needed.
+
+The retained checks now cover long Home headings, Links and recent operations; search results and feedback; Select menus; and nested logs, security, installer and Compose forms. They inspect ordinary-word integrity, interior clearance, icon size, focus visibility and keyboard access in addition to element bounds. Text enlargement is applied once to computed font sizes, without shrinking the viewport or cancelling enlargement with a second font adjustment. The global native and doubled-text route matrices cover 1440/768/390/320px in both modes. Focused cases are recorded below after their final source runs.
+
+Direct inspection of the enlarged tablet capture found that the IP width cap also shortened “Reconnecting.” Connection status text and server addresses now have separate sizing rules. A negative control rejected the previous 768px doubled-text layout. The final compiled-source matrix passes 192 connection states and 64 recoveries across 320/390/601/650/761/768/1100/1440px, two legal long server names, native/doubled text and both modes. All 128 Connecting/Reconnecting samples show the full word. Connected IPv6 addresses retain deliberate accessible ellipsis; control glyphs stay 20px, brand text stays separate, Home columns align and desktop logout clearance remains symmetric.
+
+Search passes 36 long-result/feedback samples at 768/390/320px, with 12 keyboard groups and complete accessible result names. Select menus pass 12 native/enlarged width/mode groups with viewport clearance, reserved selection indicators, scrolling, typeahead and focus restoration. Home passes 48 compound-name/link/task samples; a further 24 phone compositions confirm that the clipped decorative orbit is gone. The previously checked 80 long update/app-detail compositions remain recorded below; the shared dialog-width repair is included.
+
+The final compiled nested-form suite passes 12 width/mode/text combinations and 144 captures at 768/390/320px. Its 36 keyboard table-action checks retain the complete 40px button and focus marker, with at least 12.76px trailing clearance and no vertical page/window/table jump. Wrapped Compose tabs show every complete label and retain keyboard selection. Logs keep `1000` visible and still clamp to 1–1000; security and two-factor password fields keep their labels; installer fields, domain suffixes and Random actions stay inside the dialog. Tables, code editors and single-line identifier fields retain deliberate contained scrolling. No browser errors or unexpected API mutations occurred.
+
+Representative captures are in [text-compounds](screenshots/text-compounds). The source bundle, frontend types and changed-file lint pass. These findings correct the previous pass rather than treating route bounds as proof of text quality.
+
+The final native and doubled-text global route runs both pass at all four widths with no page errors. The tablet long-update matrix was rerun after the connection repair: 20 compositions pass, and its enlarged app-detail capture has been replaced. This iteration refreshed 108 ordinary route captures, six standard text captures and eight long update/detail captures, alongside the focused gallery.
+
+A final missing-IP probe reproduced another tablet overflow: the complete “Address unavailable” message pushed logout outside the bar. The scoped fix hides the secondary server name only in that connected-without-an-address state below 1100px; configured-IP and transient layouts stay unchanged. Its final compiled check passes 16 groups at 761/768px, native/doubled text and both modes, with missing and empty IP values: 48 states and 16 recoveries, full visible/accessibility messages, no ellipsis or overflow, and matching Home/logout columns.
+
+These are local Chrome checks using controlled API fixtures. Published-image and actual-backend checks remain separately identified in `DEPLOYMENT.md`; copied Hades data and complete production acceptance remain open.
+
 ## 2026-10-16: long app names, version strings and update windows
 
 Additional text stress exposed two defects missed by the previous matrix: a long version badge widened the update header beyond a 320px panel, and the app detail icon column fractured ordinary words at doubled text. The update header now constrains and wraps its badges, uses one content inset and gives step buttons consistent interior spacing. Phone app titles take a full-width row; facts adapt their columns to text size, and descriptions use the workspace inset without another nested card inset. Author and architecture remain visible on phones.
