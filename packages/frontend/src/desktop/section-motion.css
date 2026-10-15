@@ -54,6 +54,9 @@ html:active-view-transition .desktop-view-app {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(orbis-section),
+  ::view-transition-old(orbis-section),
+  ::view-transition-new(orbis-section),
   ::view-transition-group(*),
   ::view-transition-old(*),
   ::view-transition-new(*) {

@@ -30,6 +30,7 @@
 }
 .desktop-search-content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100%;
   animation: orbis-search-content 300ms 90ms both;
@@ -45,6 +46,7 @@
   gap: 16px;
   padding: 20px 28px;
   border-bottom: 1px solid var(--desktop-line);
+  min-width: 0;
 }
 .desktop-search-input > svg {
   flex: none;
@@ -84,6 +86,7 @@
   background: rgba(115, 146, 127, 0.24);
 }
 .desktop-search-results {
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;

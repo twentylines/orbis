@@ -26,6 +26,7 @@ export function CommandSearch() {
   const input = useRef<HTMLInputElement>(null);
   const animation = useRef<Animation | null>(null);
   const pendingPath = useRef<string | null>(null);
+  const closingRef = useRef(false);
   const bindPanel = useCallback((element: HTMLDivElement | null) => {
     panel.current = element;
     setPanelElement(element);
@@ -46,6 +47,7 @@ export function CommandSearch() {
   const finishClose = useCallback(() => {
     animation.current?.cancel();
     animation.current = null;
+    closingRef.current = false;
     setOpen(false);
     setClosing(false);
     setSearch('');
@@ -57,7 +59,8 @@ export function CommandSearch() {
 
   const close = useCallback(
     (path?: string) => {
-      if (closing) return;
+      if (closingRef.current) return;
+      closingRef.current = true;
       pendingPath.current = path ?? null;
       setClosing(true);
       const element = panel.current;
@@ -83,7 +86,7 @@ export function CommandSearch() {
       animation.current = exit;
       void exit.finished.then(finishClose, () => undefined);
     },
-    [closing, finishClose],
+    [finishClose],
   );
 
   useLayoutEffect(() => {
@@ -104,7 +107,7 @@ export function CommandSearch() {
     );
     const resize = () => {
       animation.current?.cancel();
-      if (pendingPath.current || panel.current?.dataset.closing === 'true') finishClose();
+      if (closingRef.current) finishClose();
     };
     window.addEventListener('resize', resize);
     return () => {
@@ -278,7 +281,7 @@ export function CommandSearch() {
                       </button>
                     </p>
                   ) : null}
-                  {!firstResult && !loadingStore && !installed.isPending ? (
+                  {!firstResult && !loadingStore && !installed.isPending && !installed.isError && (!query || !catalogue.isError) ? (
                     <p>No matches for “{query}”. Try an app name or a section such as Updates.</p>
                   ) : null}
                 </div>

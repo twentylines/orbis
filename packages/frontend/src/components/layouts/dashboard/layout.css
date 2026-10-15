@@ -764,7 +764,6 @@
 }
 @media (max-width: 1100px) {
   .desktop-current,
-  .desktop-connection-label,
   .desktop-search-trigger span,
   .desktop-mode-toggle span,
   .desktop-search-trigger kbd {
@@ -775,6 +774,15 @@
     width: 40px;
     min-width: 40px;
     padding: 0;
+  }
+  .desktop-connection-label {
+    flex-direction: column;
+    align-items: start;
+    gap: 1px;
+    font-size: 11px;
+  }
+  .desktop-connection-label small {
+    font-size: 9px;
   }
 }
 @media (max-width: 760px) {
@@ -796,7 +804,6 @@
   }
   .desktop-current,
   .desktop-operation,
-  .desktop-connection-label,
   .desktop-search-trigger span,
   .desktop-mode-toggle span,
   .desktop-search-trigger kbd {
@@ -856,8 +863,7 @@
   }
 }
 @media (max-width: 480px) {
-  .desktop-server-name,
-  .desktop-connection {
+  .desktop-server-name {
     display: none;
   }
   .desktop-brand {
@@ -878,6 +884,31 @@
   .desktop-view-app .catalogue-tile .logo,
   .desktop-view-app .catalogue-tile img.app-logo {
     --app-logo-size: 56px;
+  }
+}
+@media (max-width: 600px) {
+  .desktop-system-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 40px;
+    height: 78px;
+    align-items: center;
+    align-content: start;
+    padding-top: 8px;
+  }
+  .desktop-connection {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 9px;
+    font-size: 10px;
+    line-height: 12px;
+  }
+  .desktop-connection-label {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
   }
 }
 @media (max-width: 380px) {

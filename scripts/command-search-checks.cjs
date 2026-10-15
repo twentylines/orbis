@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 
-module.exports = async function inspectCommandSearch(page) {
+module.exports = async function inspectCommandSearch(page, capture) {
   const dialog = page.getByRole('dialog', { name: 'Search Orbis' });
   const trigger = page.getByRole('button', { name: 'Search tools and settings' });
   await page.keyboard.press('Control+k');
@@ -24,11 +24,19 @@ module.exports = async function inspectCommandSearch(page) {
       originError,
       fullWorkspace: end.height >= innerHeight - 50 && end.left >= 15 && end.right <= innerWidth - 15,
       duration: animation.effect.getTiming().duration,
+      controlsContained: [...surface.querySelectorAll('.desktop-search-input input, .desktop-search-close, [data-search-result]')].every(
+        (element) => {
+          const bounds = element.getBoundingClientRect();
+          return bounds.left >= end.left + 12 && bounds.right <= end.right - 12;
+        },
+      ),
     };
   });
   assert.ok(opening.originError < 1, `opening must start at trigger, error ${opening.originError}`);
   assert.equal(opening.fullWorkspace, true);
   assert.equal(opening.duration, 440);
+  assert.equal(opening.controlsContained, true, 'search input, X and results must fit inside the surface');
+  if (capture) await capture();
   for (let tab = 0; tab < 20; tab++) {
     await page.keyboard.press('Tab');
     assert.ok(await dialog.evaluate((surface) => surface.contains(document.activeElement)), 'search must contain keyboard focus');
