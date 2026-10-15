@@ -188,10 +188,10 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
         {apps.data && installed.length === 0 ? (
           <div className="workspace-empty">
             <IconApps size={28} stroke={1.5} aria-hidden="true" />
-            <strong>No applications installed</strong>
-            <p>Open the App Store to add your first service.</p>
+            <strong>No apps installed</strong>
+            <p>Install an app from the App Store.</p>
             <Link to="/app-store" viewTransition>
-              Browse the App Store
+              Open App Store
             </Link>
           </div>
         ) : null}
@@ -336,9 +336,7 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
             ))}
           </ol>
         ) : (
-          <p className="workspace-operations-empty">
-            New installs, updates, and backups appear here. Their outcomes stay available after you leave the workspace.
-          </p>
+          <p className="workspace-operations-empty">No recent operations.</p>
         )}
       </section>
     ),
@@ -355,7 +353,7 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
           <p>
             {attention
               ? `${attention} installed application${attention === 1 ? '' : 's'} stopped or ready to update.`
-              : 'No stopped apps or available updates in the current app list.'}
+              : 'No stopped apps or available updates.'}
           </p>
         ) : (
           <p>Waiting for application status.</p>
@@ -399,7 +397,6 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
           <div className="workspace-editor-heading">
             <div>
               <h2 id="workspace-editor-title">Arrange widgets</h2>
-              <p>Choose what appears, where it appears, and how much space it takes.</p>
             </div>
             <button
               type="button"
@@ -455,7 +452,7 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
               <h3 ref={pinHeading} tabIndex={-1}>
                 Home apps
               </h3>
-              <p>Home shows three apps plus any additional pins. Choose up to 12 apps to keep first.</p>
+              <p>Home shows three apps by default and expands for pinned apps, up to 12.</p>
             </div>
             <Switch
               label="Show all installed apps"
@@ -465,7 +462,7 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
             />
             {apps.isPending ? <p>Loading installed applications…</p> : null}
             {apps.isError ? <p role="alert">Applications could not be loaded. Pinning is unavailable right now.</p> : null}
-            {apps.data && installed.length === 0 ? <p>Install an application to pin it here.</p> : null}
+            {apps.data && installed.length === 0 ? <p>Install an app before pinning it.</p> : null}
             {installed.length > 0 ? (
               <div className="workspace-pin-list">
                 {installed.map(({ info }) => {
@@ -528,7 +525,7 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
         {workspace.hidden.length === workspace.order.length ? (
           <div className="workspace-all-hidden">
             <strong>All widgets are hidden</strong>
-            <p>Choose Edit workspace to show the views you want here.</p>
+            <p>Show widgets in Edit workspace.</p>
             {editing ? null : (
               <button type="button" onClick={() => setEditing(true)}>
                 Edit workspace

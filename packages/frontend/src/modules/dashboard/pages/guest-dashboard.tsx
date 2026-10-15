@@ -2,7 +2,6 @@ import type { GuestAppsDto } from '@/api-client';
 import { getGuestAppsOptions, getGuestLinksOptions } from '@/api-client/@tanstack/react-query.gen';
 import { GuestHeader } from '@/components/header/guest-header';
 import { BaseDashboardLayout } from '@/components/layouts/dashboard/base-dashboard-layout';
-import { PageTitle } from '@/components/page-title/page-title';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { AppTile } from '@/modules/app/components/app-tile/app-tile';
 import { IconLock, IconLockOff } from '@tabler/icons-react';
@@ -42,10 +41,9 @@ const Tile = ({ data, localDomain, sslPort }: { data: GuestAppsDto['installed'][
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: works fine */}
-        <div tabIndex={0} className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0">
+        <button type="button" className="col-sm-6 col-lg-4 app-link guest-app-trigger p-2 pt-0 pb-0 mb-0" aria-label={`Open ${info.name}`}>
           <AppTile key={info.urn} info={info} status={app.status} updateAvailable={false} />
-        </div>
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuGroup>
@@ -89,7 +87,7 @@ export const GuestDashboard = () => {
   const hasContent = appsData.installed.length > 0 || linksData.links.length > 0;
 
   return (
-    <BaseDashboardLayout header={<GuestHeader />} pageTitle={<PageTitle apps={[]} />}>
+    <BaseDashboardLayout header={<GuestHeader />} pageTitle={<h1 className="page-title">Applications</h1>}>
       {!hasContent && <EmptyPage title="GUEST_DASHBOARD_NO_APPS" subtitle="GUEST_DASHBOARD_NO_APPS_SUBTITLE" />}
       <div className="row row-cards">
         {appsData.installed.map((appData) => {

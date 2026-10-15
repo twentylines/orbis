@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 
 module.exports = async function inspectCommandSearch(page, capture) {
   const dialog = page.getByRole('dialog', { name: 'Search Orbis' });
-  const trigger = page.getByRole('button', { name: 'Search tools and settings' });
+  const trigger = page.getByRole('button', { name: 'Search apps and settings' });
   await page.keyboard.press('Control+k');
   await dialog.waitFor();
   await page.waitForFunction(() =>
@@ -67,7 +67,7 @@ module.exports = async function inspectCommandSearch(page, capture) {
     await page.waitForFunction(() => document.activeElement === document.querySelector('.desktop-search-trigger'));
   }
   await trigger.click();
-  const input = dialog.getByRole('searchbox', { name: 'Find a tool or application' });
+  const input = dialog.getByRole('searchbox', { name: 'Search apps and settings' });
   await input.fill('Media');
   await dialog.getByRole('region', { name: 'App Store', exact: true }).getByRole('button', { name: /Media/ }).waitFor();
   assert.equal(await dialog.getByRole('region', { name: 'Installed apps' }).getByRole('button', { name: /Media/ }).count(), 1);

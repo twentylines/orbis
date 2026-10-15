@@ -79,7 +79,7 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
   const wizard = () => page.getByTestId('app-update');
   const triggers = () => wizard().locator('.breadcrumb > li > button');
   const active = () => triggers().and(page.locator('[aria-current="step"]')).innerText();
-  const backup = () => wizard().getByRole('switch', { name: 'Backup', exact: true });
+  const backup = () => wizard().getByRole('switch', { name: 'Create backup before updating', exact: true });
   const submit = () => wizard().getByRole('button', { name: 'Update', exact: true });
   const expectSteps = async () => assert.deepEqual(await triggers().allTextContents(), steps, 'loading must not add/remove/reindex a step');
   const step = async (name) => {

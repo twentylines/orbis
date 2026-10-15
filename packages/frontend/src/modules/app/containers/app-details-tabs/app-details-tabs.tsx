@@ -238,8 +238,8 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
           </Suspense>
         ) : (
           <div className="app-panel-empty">
-            <h3>Container logs are not streaming</h3>
-            <p>Start this application to read its live container output. Lifecycle command output remains available in instance logs.</p>
+            <h3>App is not running</h3>
+            <p>Start the app to view container logs. Operation output is available in Orbis logs.</p>
             <a href="/settings?tab=logs">Open instance logs</a>
           </div>
         )}

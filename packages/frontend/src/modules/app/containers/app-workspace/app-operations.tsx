@@ -23,7 +23,7 @@ export function AppOperations({ appUrn }: { appUrn: string }) {
         </p>
       ) : null}
       {history.data?.storage === 'unavailable' ? <p role="alert">History storage is unavailable. New records may be lost on restart.</p> : null}
-      {!history.isPending && !history.isError && !records.length ? <p>No retained operations for this application.</p> : null}
+      {!history.isPending && !history.isError && !records.length ? <p>No recorded operations for this app.</p> : null}
       <ol>
         {records.map((task) => (
           <li key={task.id} data-status={task.status}>

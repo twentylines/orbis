@@ -18,18 +18,26 @@ import { useRef, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches } from 'react-router';
 import './layout.css';
 
-export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => (
-  <div className="desktop desktop-loading">
-    <div className="desktop-system-bar">
-      <span className="desktop-brand">
-        <img src="/icons/orbis.svg" width={28} height={28} alt="" /> Orbis
-      </span>
+export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => {
+  const { preferences } = useDesktopPreferences();
+  return (
+    <div
+      className="desktop desktop-loading orbis-theme"
+      data-desktop-mode={preferences.mode}
+      data-desktop-preset={preferences.preset}
+      data-desktop-wallpaper={preferences.wallpaper}
+    >
+      <div className="desktop-system-bar">
+        <span className="desktop-brand">
+          <img src="/icons/orbis.svg" width={28} height={28} alt="" /> Orbis
+        </span>
+      </div>
+      <main className="desktop-main">
+        <div className="desktop-view desktop-view-loading">{children}</div>
+      </main>
     </div>
-    <main className="desktop-main">
-      <div className="desktop-view desktop-view-loading">{children}</div>
-    </main>
-  </div>
-);
+  );
+};
 
 export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const { userSettings, user, apps } = useAppContext();
@@ -58,7 +66,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const minimized = isTool && isWindowMinimized(location.search);
   return (
     <div
-      className="desktop"
+      className="desktop orbis-theme"
       data-desktop-preset={preferences.preset}
       data-desktop-mode={preferences.mode}
       data-desktop-density={preferences.density}

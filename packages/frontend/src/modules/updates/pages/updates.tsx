@@ -234,9 +234,6 @@ export default function Updates() {
 
   return (
     <div className="desktop-updates">
-      <p className="desktop-updates-intro">
-        Review changes before applying them. Application, Orbis, and host updates follow separate installation paths.
-      </p>
       <div className="desktop-updates-grid">
         <section className="desktop-updates-card" aria-labelledby="application-updates-title">
           <div className="desktop-updates-card-head">
@@ -248,7 +245,7 @@ export default function Updates() {
           </div>
           {apps.isPending ? <p>Checking installed applications…</p> : null}
           {apps.isError ? <p role="alert">Application updates could not be checked. Try again from Applications.</p> : null}
-          {apps.data && available.length === 0 ? <p>Installed applications are up to date according to the current store metadata.</p> : null}
+          {apps.data && available.length === 0 ? <p>No app updates in the cached catalogue.</p> : null}
           {available.map(({ app, info, metadata }) => {
             const [appId, storeId] = info.urn.split(':');
             return (
@@ -284,18 +281,14 @@ export default function Updates() {
               <>
                 <strong>Installed: {build.data.version}</strong>
                 {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
-                {build.data.imageDigest ? (
-                  <span>Image {build.data.imageDigest}</span>
-                ) : (
-                  <span>Image digest was not supplied by this deployment.</span>
-                )}
+                {build.data.imageDigest ? <span>Image {build.data.imageDigest}</span> : <span>Image digest unavailable.</span>}
                 {build.data.runtipiCompatibility ? <span>Runtipi compatibility: {build.data.runtipiCompatibility}</span> : null}
               </>
             ) : null}
           </div>
           {releases.isPending ? <p>Checking published Orbis releases…</p> : null}
           {releases.isError ? <p role="alert">GitHub releases are unavailable right now. You can check the repository directly.</p> : null}
-          {releases.data?.length === 0 ? <p>No Orbis release has been published yet.</p> : null}
+          {releases.data?.length === 0 ? <p>No published Orbis releases.</p> : null}
           {latest ? (
             <div className="desktop-update-release">
               <div className="desktop-update-release-title">
@@ -308,7 +301,7 @@ export default function Updates() {
                 {latest.body ? (
                   <Markdown content={latest.body} className="desktop-update-markdown" tabIndex={0} label={`${latest.tag} changelog`} />
                 ) : (
-                  <p>This release has no changelog.</p>
+                  <p>No changelog provided.</p>
                 )}
               </details>
               <a href={latest.url} target="_blank" rel="noreferrer">
@@ -322,9 +315,7 @@ export default function Updates() {
             <output className="desktop-update-note">The server may be restarting. Checking the host service again shortly.</output>
           ) : null}
           {host.data && !host.data.available ? (
-            <p className="desktop-update-note">
-              {host.data.reason || 'The local host service is not connected. Core updates need its verified snapshot and rollback path.'}
-            </p>
+            <p className="desktop-update-note">{host.data.reason || 'Host service disconnected. Connect it before updating Orbis.'}</p>
           ) : null}
           {host.data?.available && !host.data.enrolled ? (
             <p className="desktop-update-note">This installation is not enrolled for host updates.</p>
@@ -428,7 +419,7 @@ export default function Updates() {
                   <span>{systemPackages.data.operatingSystem || 'Host operating system'}</span>
                 </div>
                 <button type="button" disabled={systemPackages.isFetching} onClick={() => void systemPackages.refetch()}>
-                  {systemPackages.isFetching ? 'Reading…' : 'Read cache again'}
+                  {systemPackages.isFetching ? 'Reading…' : 'Reload package list'}
                 </button>
               </div>
               <p className="desktop-host-package-times">
@@ -604,17 +595,15 @@ export default function Updates() {
                         </>
                       ) : null}
                       {packageChangelog.data && !packageChangelog.data.available ? (
-                        <p>{packageChangelog.data.reason || 'No distribution changelog was supplied.'}</p>
+                        <p>{packageChangelog.data.reason || 'No distribution changelog available.'}</p>
                       ) : null}
                     </section>
                   ) : null}
                 </>
               ) : (
-                <p>No upgrades are listed in the current host package cache.</p>
+                <p>No package updates in the local cache.</p>
               )}
-              <p className="desktop-update-note">
-                Package choices use the current APT cache. Reading this list does not refresh Ubuntu repositories or install packages.
-              </p>
+              <p className="desktop-update-note">Uses the local APT cache. Reloading this list does not refresh repositories or install packages.</p>
             </>
           ) : null}
         </section>

@@ -28,12 +28,12 @@ export default function Tasks() {
       : task.status === 'unconfirmed'
         ? 'The queue did not confirm this request. It may still be running; check the app before retrying.'
         : task.status === 'failed'
-          ? 'The lifecycle command reported a failure. Open instance logs for the command details.'
+          ? 'Operation failed. Check Orbis logs for details.'
           : task.status === 'queued'
             ? 'Waiting for a lifecycle worker or another operation on this app.'
             : task.status === 'running'
-              ? 'This operation is running. Open instance logs for detailed output.'
-              : 'The lifecycle command completed. Application health is shown separately beside the app.';
+              ? 'Operation running. Check Orbis logs for output.'
+              : 'Operation completed. Check the app’s health separately.';
 
   return (
     <div className="task-centre">
@@ -70,11 +70,11 @@ export default function Tasks() {
                 ? 'Operation history unavailable'
                 : 'Reading operations'}
           </h2>
-          <p>
-            {review.length
-              ? `${review.length} recorded outcome${review.length === 1 ? '' : 's'} need review.`
-              : 'Your recent application operations stay here after you close a view.'}
-          </p>
+          {review.length > 0 ? (
+            <p>
+              {review.length} operation{review.length === 1 ? ' needs' : 's need'} review.
+            </p>
+          ) : null}
         </div>
         <span className="task-retention">
           Up to {tasks.data?.limit ?? 300} operations · {tasks.data?.retentionDays ?? 30} days
@@ -113,12 +113,8 @@ export default function Tasks() {
       {!tasks.isPending && !visible.length ? (
         <div className="task-empty">
           <IconClock size={32} stroke={1.4} aria-hidden="true" />
-          <h2>No operations here yet</h2>
-          <p>
-            {filter === 'all'
-              ? 'Installs, starts, stops, updates, backups, and restores appear when they enter the application queue.'
-              : 'No retained operations match this filter.'}
-          </p>
+          <h2>{filter === 'all' ? 'No recorded operations' : 'No matching operations'}</h2>
+          {filter === 'all' ? <p>App installs, starts, stops, updates, backups and restores are recorded here.</p> : null}
         </div>
       ) : null}
       <ol className="task-list">
@@ -168,7 +164,7 @@ export default function Tasks() {
                     <Link to={names.has(task.appUrn) ? `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}` : '/apps'}>
                       {names.has(task.appUrn) ? 'Open application' : 'View applications'}
                     </Link>
-                    <Link to="/settings?tab=logs">Open instance logs</Link>
+                    <Link to="/settings?tab=logs">Open Orbis logs</Link>
                   </div>
                 </div>
               </details>
