@@ -26,5 +26,6 @@
 - Corrected the Workspace sync label to show a queued save immediately, avoiding a stale “Saved” message during the debounce window.
 - Added a locked, journaled host update transaction for an already enrolled Orbis CLI installation. It verifies a published digest, snapshots the stopped tree, restores the previous core on a failed start, and passed a synthetic beta 4 to beta 5 update in the isolated VM.
 - Published `v0.1.0-beta.6` and advanced the synthetic CLI installation from beta 5 to beta 6 through that transaction. A real browser check then found that the save label could still briefly show “Saved” after a new pin change. The preference provider now marks the edit as saving in the same event and ignores late responses from older saves; a locally built image passed the same browser interaction.
+- Published `v0.1.0-beta.7` with the corrected save state. Its arm64 image passed an enrolled beta 6 to beta 7 update, exact-digest health and snapshot checks, and the real browser pin/save/reload interaction.
 
 Real homelab migration, automatic core installation and rollback, host package updates, and multi-server pairing remain outstanding.
