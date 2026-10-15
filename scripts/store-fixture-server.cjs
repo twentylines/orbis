@@ -67,8 +67,11 @@ const server = http.createServer((request, response) => {
   response.on('close', () => {
     if (!backend.killed) backend.kill();
   });
-  backend.stdin.on('error', () => {});
-  backend.stderr.on('data', () => {});
+  backend.stdin.on('error', () => {
+    request.unpipe(backend.stdin);
+    request.resume();
+  });
+  backend.stderr.resume();
   request.pipe(backend.stdin);
 });
 server.listen(9418, '0.0.0.0');
