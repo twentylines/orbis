@@ -1,5 +1,19 @@
 # Orbis build and migration rehearsal
 
+## Published beta 28 runtime verification (16 October 2026)
+
+[Beta 28](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.28) was pushed directly to main at source commit `546005bac38772cd67ed6dd3a548a023b0fa5ae8`. Main CI `38803958196`, integration `38803958284` and release workflow `38804241743` passed. The read-only checker verified the tag, manifest and exact OCI index `sha256:05e486cdde33a4f9aedfb9572487c541827e5622e0be292b13721867279dcaa4`, including linux/amd64 and linux/arm64. Beta 26/27 were published but were not installed on this owned server; the later text-comfort findings were resolved in beta 28 before deployment.
+
+The real browser reviewed and installed beta 25→28 on the isolated arm64 stack. Host job `02f7f4ed-4245-4381-845b-a9556dc1e1f6` completed at that exact image with a healthy core and matching enrollment. Preferences, 2 installed app records and 22 saved task outcomes matched their pre-update values. The previous beta 25 stopped-tree snapshot independently verified 3,576 entries, 2,812 files and 97,094,764 bytes, including file contents, permissions and numeric ownership. No restoration was performed.
+
+Host uptime continued across the container update: the API counter rose from 42,455.52 to 42,546.01 seconds; host-proc comparisons differed by 0.31/0.34 seconds before/after. These are counter/source checks, not an update-duration or performance benchmark.
+
+The published image passed 30 browser compositions at 1440/390/320px in both modes: native/enlarged Home, controlled catalogue failure and retry into real Settings, login rendering and controlled two-factor challenges with native/doubled code digits. Home/header columns, symmetric logout clearance, connected-IP-only text, Uptime and Usage matched the real API. All six enlarged resting dock labels stayed complete with sufficient page clearance. The audit recorded zero page errors or unexpected mutations, 6 intercepted synthetic login posts, 24 allowed page preference writes and 7 direct preparation/restoration writes. Original preferences were restored and compared. Real two-factor enrollment/validation is a separate acceptance item.
+
+A separate released-image window audit passed unsaved-draft minimize/restore, one debounced drag write, maximize/restore, 16px snap gap, saved bounds after clearing local cache/reload, independent tool placement, phone fallback and configured-IP visibility. Preferences were restored and compared again; there were no page errors.
+
+[Current released captures](screenshots/live-beta28) include Home, enlarged phone text, login, controlled recovery/diagnostics, controlled two-factor inputs and real window states. Source fixture/long-name inspection is in `VISUAL-QA.md`. The default Docker context stayed `default`. These are isolated synthetic-data results; copied real homelab migration, external storage/HTTPS and full production acceptance remain open. Hades was not accessed.
+
 ## Beta 25 publication and update investigation (16 October 2026)
 
 [Beta 25](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.25) passed protected PR 23 and release workflow `38775867799`. The checker verified commit `95618c6002b15c9c04fe89c9f7c6d141dfbf5841`, the manifest and exact OCI index `sha256:daf14cd97068665a0c645679fd3bb51b63afc4e8e9c0bd6c708f07ad1ff9d0ce`, with linux/amd64 and linux/arm64 entries. Its compact error/authentication screens, wider desktop and enlarged-text fixes passed the fixture and independent browser matrices recorded in `VISUAL-QA.md`.
