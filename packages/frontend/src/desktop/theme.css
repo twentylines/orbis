@@ -11,7 +11,7 @@ body:has(.orbis-theme) {
   --desktop-line: rgba(29, 65, 55, 0.16);
   --desktop-edge: rgba(33, 64, 54, 0.2);
   --desktop-highlight: rgba(255, 255, 255, 0.18);
-  --desktop-inset: 64px;
+  --desktop-inset: 24px;
   --desktop-accent: #914725;
   --desktop-positive: #236c4d;
   --desktop-negative: #aa4235;
@@ -244,6 +244,10 @@ body:has(.orbis-theme) :is(.form-control, .form-select, .input-group-text) {
   background-color: var(--desktop-surface);
   border-color: var(--desktop-line);
   border-radius: 12px;
+}
+body:has(.orbis-theme) .form-control::placeholder {
+  color: var(--desktop-muted);
+  opacity: 1;
 }
 body:has(.orbis-theme) :is(.form-control, .form-select):focus {
   border-color: var(--desktop-accent);

@@ -10,7 +10,6 @@ import { MarketplaceService } from '../../marketplace/marketplace.service';
 import { AppEventsQueue } from '../../queue/entities/app-events';
 import { StatusManagerService } from '../services/status-manager.service';
 import { StartAppHandler } from './start-app.handler';
-import { UpdateConfigHandler } from './update-config.handler';
 import { type HandlerResult, type ILifecycleHandler, generateRequestId } from './base-handler';
 
 export type UpdateAppParams = {
@@ -28,7 +27,6 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
     private readonly marketplaceService: MarketplaceService,
     private readonly appFilesManager: AppFilesManager,
     private readonly startAppHandler: StartAppHandler,
-    private readonly updateConfigHandler: UpdateConfigHandler,
   ) {}
 
   async execute(appUrn: AppUrn, params?: UpdateAppParams): Promise<HandlerResult> {
@@ -55,7 +53,6 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
       if (success) {
         const appInfo = await this.appFilesManager.getInstalledAppInfo(appUrn);
 
-        await this.updateConfigHandler.execute(appUrn, { form: app.config });
         await this.appRepository.updateAppById(app.id, { version: appInfo?.tipi_version });
         this.statusManager.emitEvent({ appUrn, event: 'update_success' });
 

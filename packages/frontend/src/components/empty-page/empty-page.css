@@ -1,4 +1,11 @@
-.empty-image {
-  height: 80px;
-  width: 80px;
+.empty-page-glyph {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 22px;
+  color: var(--desktop-muted);
+  background: color-mix(in srgb, var(--desktop-ink) 5%, transparent);
 }

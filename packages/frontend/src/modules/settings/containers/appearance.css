@@ -9,7 +9,7 @@
 }
 .appearance-section {
   display: grid;
-  grid-template-columns: minmax(160px, 0.75fr) minmax(0, 1.5fr);
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
   gap: 28px;
   padding: 24px 0;
   border-top: 1px solid var(--desktop-line);
@@ -35,8 +35,8 @@
   gap: 9px;
 }
 .appearance-name input {
-  height: 42px;
-  min-width: 180px;
+  min-height: 42px;
+  min-width: min(100%, 180px);
   flex: 1;
   border: 1px solid var(--desktop-line);
   border-radius: 8px;

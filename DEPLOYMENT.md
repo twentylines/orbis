@@ -1,5 +1,16 @@
 # Orbis build and migration rehearsal
 
+## Published beta 24 runtime verification (16 October 2026)
+
+[Beta24](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.24) is published at source commit `13a5673ae9e0c758008695fca899f19570b7a304`. Release workflow `38763635611` succeeded; the release checker verified the exact OCI index `sha256:691a410cc5c673d153a15c61269d7b7969b8c7a1015135842fd3ab8121334953` with linux/amd64 and linux/arm64.
+
+The real browser on the isolated arm64 stack reviewed and installed beta23→24. Host job `b77eeb08-f4c7-4038-b4a6-06a244047d9a` completed at that exact healthy image. The API comparison retained account preferences,2 installed app records and17 task outcomes. Post-update data-marker and user override hashes matched the private baseline. A full beta24 snapshot/database comparison has not been performed; beta22's separate full comparison remains historical evidence.
+
+Actual Home/search checks passed: configured IP, preference persistence, pin/card restoration, installed/catalogue/section search, icon decoding and focus return. Native EventSource checks passed at1440/768/390/320px in both modes: hold the initial connection, abort that initial request, then recover through the real endpoint. This is not a test of disconnecting an already-established TCP stream. Original preferences were restored and the default Docker context stayed `default`.
+
+A real owned `orbis-qa` Git store refreshed from a new commit through Settings. The installed v1 app/data stayed unchanged by refresh. The browser reviewed and submitted one backed-up app upgrade; the app reached version2 with the healthy `nginx:1.28.0-alpine` container and expected HTTP marker. The audit then failed its settings-preservation assertion: stored backup retention changed from null to3. Derived subnet allocation also changed. The app was stopped and original preferences restored. This run is **not** a passed app-upgrade preservation rehearsal. The next source iteration fixes retention and new-environment ordering; a published-image rerun and remaining archive/data/generated-value verification are required. Hades was not accessed.
+
+
 ## Published amd64 runtime rehearsal (15 October 2026)
 
 Beta 22's exact OCI index `sha256:6274f2ab68f29b920790cbdcec585f4ea546aa3b5de461544efff07061fd5962` booted in a separate QEMU x86_64 Linux guest on Apple silicon (2 vCPU, 3 GiB RAM). Docker reports an amd64 image and the core became healthy. The build API matched the release tag, commit and image digest. This is an emulated guest compatibility check, not a native hardware performance measurement.

@@ -4,7 +4,7 @@ The original product brief and subsequent user requests remain the scope. A publ
 
 | Requirement | Current evidence | Work still required |
 | --- | --- | --- |
-| Runtipi compatibility, authentication, lifecycle, stores, configuration, data, networking, HTTPS, backups and attribution | Upstream v4.10.1 retained; feature inventory; isolated lifecycle and synthetic adoption/rollback; original account/app/store survive released updates; published amd64 clean-install/lifecycle/window/icon rehearsal | Copied real-data migration, custom-store refresh and app-update rehearsal, TOTP/forward-auth/HTTPS end-to-end checks, external mounts and volumes, amd64 runtime |
+| Runtipi compatibility, authentication, lifecycle, stores, configuration, data, networking, HTTPS, backups and attribution | Upstream v4.10.1 retained; feature inventory; isolated lifecycle and synthetic adoption/rollback; original account/app/store survive released updates; published amd64 clean-install/lifecycle/window/icon rehearsal | Copied real-data migration, custom-store refresh and app-update rehearsal, TOTP/forward-auth/HTTPS end-to-end checks, external mounts and volumes |
 | Cohesive server desktop and glass materials across screens | Shared chrome/dock/windows, local wallpaper, distinct content materials; desktop/mobile/narrow screenshots | Deeper store/detail/form presentation, consistent menus/dialogs/loading/error states, tablet/4K and enlarged-text audit across every flow |
 | Useful editable home workspace | Real installed apps/links, pinning, status/storage/network, recent operations and attention; saved show/hide/order/width controls | Application groups and recent-use ordering, additional widgets and presentation options, drag/resize with keyboard alternatives |
 | Integrated real monitoring | Host CPU/per-core/memory/swap/uptime when exposed; runtime storage/network; real per-container resources and health; CPU/memory rankings; bounded recorded aggregate history, time ranges and pointer/keyboard chart inspection | Host disks/network/I/O, exposed sensors/GPU, host-process consumers, precise source/staleness treatment |
@@ -17,6 +17,14 @@ The original product brief and subsequent user requests remain the scope. A publ
 | Secure reversible deployment and OTA from GitHub | Protected PR gates; digest-pinned amd64/arm64 publication; stopped-tree snapshots, recovery and stock rollback; systemd helper setup/upgrade; real browser OTA and package install on isolated arm64 | Supported clean-install/adoption experience for real homelabs, external data backup handling, copied-data and independent-backup rehearsal, production approval and validation |
 | Multiple homelabs | Controller/agent and pairing requirements recorded in `MULTI-HOMELAB.md` | Later implementation and two-isolated-host testing, target-aware app install/launch, merged dashboards, disconnect/revoke/restart handling and efficient multi-server visualisation |
 | Final deliverables | GPL licence, upstream record, source/release repo, setup/migration notes, screenshots and test records | Reconcile instructions with final supported behaviour, complete requirement-by-requirement production acceptance audit |
+
+## Current iteration: compact errors and responsive layouts
+
+The supplied error screenshot revealed excessive fixed whitespace and an isolated route-path box. The replacement uses intrinsic height, aligned recovery actions and an expandable Details section. The system bar, Home, full-page tools, search and notifications share a 24px outer inset. Login attribution and placeholders follow the active theme.
+
+Independent enlarged-text inspection identified six additional layout defects in Home actions, storage/resources, pins, dock labels, app tabs and window titles. Targeted source repairs let the content reflow; full labels remain reachable in a scrolling dock. Visual verification is recorded in `VISUAL-QA.md`.
+
+A real beta24 custom-store upgrade reached a healthy v2 container but exposed a backup-retention change. Source regressions now preserve stored retention and other app settings, save fresh-install retention and generate the new environment within the update task. Backend374 tests and common78 tests pass. A released-image rerun remains required before claiming the custom-store upgrade path fully verified. New catalogue force-expose/exposability/domain compatibility needs a deliberate preflight; automatic source rollback is not implemented.
 
 ## Previous iteration: application workspace and alignment
 

@@ -64,7 +64,7 @@ html:has(.desktop) {
   gap: 22px;
   position: sticky;
   top: 24px;
-  width: min(1372px, calc(100% - var(--desktop-inset) * 2));
+  width: calc(100% - var(--desktop-inset) * 2);
   margin: 24px auto 0;
   z-index: 20;
   color: var(--desktop-chrome-ink);
@@ -261,9 +261,9 @@ html:has(.desktop) {
   background: #b46f50;
 }
 .desktop-main {
-  width: min(1500px, 100%);
+  width: 100%;
   margin: 0 auto;
-  padding: 40px var(--desktop-inset) 154px;
+  padding: 24px var(--desktop-inset) 154px;
   min-height: calc(100vh - 78px);
 }
 .desktop-view {
@@ -420,6 +420,15 @@ html:has(.desktop) {
 }
 .desktop-view-app .status-dot-animated {
   animation: none;
+}
+/* Keep forms together on ultra-wide screens while the desktop remains fluid. */
+.desktop-route-window:not([data-window-positioned="true"]):has(.desktop-settings) {
+  max-width: 1720px;
+  margin-inline: auto;
+}
+.desktop-settings {
+  max-width: 1600px;
+  margin-inline: auto;
 }
 .desktop-settings > .card {
   border: 0;
@@ -606,6 +615,10 @@ html:has(.desktop) {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  max-width: calc(100% - var(--desktop-inset) * 2);
+  overflow-x: auto;
+  scroll-padding-inline: 7px;
+  scrollbar-width: thin;
   gap: 4px;
   padding: 7px;
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -620,7 +633,8 @@ html:has(.desktop) {
 }
 .desktop .desktop-dock-item {
   min-width: 88px;
-  height: 62px;
+  min-height: 62px;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -636,8 +650,6 @@ html:has(.desktop) {
 }
 .desktop-dock-item span {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -854,9 +866,9 @@ html:has(.desktop) {
     border-radius: 16px;
   }
   .desktop .desktop-dock-item {
-    min-width: 0;
-    flex: 1;
-    height: 55px;
+    min-width: max-content;
+    flex: 1 0 auto;
+    min-height: 55px;
     padding-inline: 8px;
   }
   .desktop-dock-item span {
@@ -923,10 +935,20 @@ html:has(.desktop) {
   }
 }
 @media (max-width: 380px) {
-  .desktop .desktop-dock-item {
-    height: 45px;
+  .desktop-dock {
+    width: calc(100% - 8px);
+    max-width: calc(100% - 8px);
+    padding: 3px;
+    scroll-padding-inline: 3px;
   }
-  .desktop-dock-item span {
+  .desktop .desktop-dock-item {
+    min-width: 44px;
+    padding-inline: 8px;
+  }
+  .desktop .desktop-dock-item:focus-visible {
+    outline-offset: -3px;
+  }
+  .desktop-product {
     display: none;
   }
 }
@@ -949,7 +971,7 @@ html:has(.desktop) {
 }
 
 .desktop-guest-main {
-  width: min(1372px, calc(100% - var(--desktop-inset) * 2));
+  width: calc(100% - var(--desktop-inset) * 2);
   margin: 40px auto 64px;
 }
 .desktop-guest-main .container-xl {

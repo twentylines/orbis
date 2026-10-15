@@ -1,5 +1,28 @@
 # Orbis UI inspection
 
+## 2026-10-16: compact recovery, viewport usage and enlarged text
+
+The supplied error screenshot showed a640×462px panel with excessive blank space and a separate `Location: /settings` box. The replacement is480×228px at desktop/tablet in its default state. It uses a heading/icon, aligned recovery actions and a Details disclosure with the real page path and error. Real, empty and long errors share the same collapsed height. Phone and320px panels reflow to255.6px and345.6px respectively; long details scroll inside a bounded region.
+
+Independent composition inspection covered120 captured error/auth/guest/Home/Settings states at1440/3840/390/320px in both modes, including404 and root503 errors. It found low-contrast login attribution, stock placeholders/reset code/empty artwork, and an oversized ultra-wide Settings sheet. Targeted final checks verified the corrections. Login attribution now lives inside the themed card; its conservative contrast is at least4.57:1. Password-reset commands retain their actual CLI identifier and follow the theme. Empty states use a shared themed glyph.
+
+The retained error/auth matrix passed24 error cases (48 closed/expanded geometries),24 authentication states and16 actual recovery flows. Retry reloads content and Open workspace reaches the real Home component after the fixture failure is removed. Four additional loading checks hold the Providers query, verify its compact78px-high themed fallback and then resume Settings. No production server or account is changed by these fixture checks.
+
+A separate200-state baseline text/4K audit found six defects that document-overflow checks alone missed. The repaired Home actions, storage/resource values, pin controls, app tabs, window title and dock labels passed a focused48-state recheck at390/768 with doubled text and native4K in both modes. At4K the system bar and Home now use3792px with matching24px insets. Full-page Settings has a readable1720px focused frame and1600px content area on ultra-wide screens; user-maximized geometry remains available.
+
+Actual forward and reverse keyboard traversal found a further partially clipped dock item; native focus now reveals the full item.44 focused states at320/390px in both modes pass with complete labels/focus rings and no vertical page jump. The320px enlarged-text header also exposed a wordmark collision; narrow chrome now keeps the logo and accessible name while hiding that wordmark. A separate normal320px screenshot exposed the final dock label crop. Its compact dock now shows all six full labels before focus, preserves at least8px label-side padding and44×44px targets, and uses an inset focus marker. Both normal and doubled-text320px retained checks pass.
+
+The retained text matrix passed1440/768/390/320px in both modes. Text-only checks reject simultaneous viewport-zoom simulation to keep the evidence distinct. The full retained route matrix passed1440/768/390/320px with no page errors. The many-app Home matrix passed1440/768/390 in both modes, and notification geometry passed all12 preset/mode combinations at1440px after the inset change. Eight retained window-flow cases pass for drafts, history, focus, log cleanup and polling. A separate25-sample placement check verifies12 maximize/snap clearances of20px, four16px snap gaps, floating restore and exact saved-bounds reload. Current design screenshots were refreshed in `screenshots/desktop-fixtures` and `screenshots/themes`. Published beta24 runtime evidence is separately labelled under `screenshots/live-beta24` and `DEPLOYMENT.md`.
+
+```sh
+ORBIS_VISUAL_ERRORS_ONLY=1 node scripts/visual-qa.cjs
+ORBIS_VISUAL_TEXT_ONLY=1 node scripts/visual-qa.cjs
+ORBIS_VISUAL_TEXT_ONLY=1 ORBIS_VISUAL_TEXT_SCALE=1 ORBIS_VISUAL_NARROW=1 node scripts/visual-qa.cjs
+```
+
+These are Chrome fixture and text-stress results. The doubled-text method changes rendered font sizes/line heights while preserving the CSS viewport, root size, icons and pixel geometry; it is not native browser text zoom or a full accessibility certification. Other browsers, physical devices, every inherited flow and copied real homelab data remain open acceptance items.
+
+
 ## 2026-10-15: practical copy and shared theme surfaces
 
 The copy review covers Home, Monitor, search, Appearance, authentication, Tasks, Updates, backups, dialogs, errors, and notifications. Monitor now says **System status**; search names its scope; Light and Dark replace decorative mode labels. Filler introductions and repeated paragraphs were removed. Both English dictionaries retain all 666 existing keys, with 101 values revised in each. Technical identifiers, telemetry scope, cached-data limits, destructive consequences, and upstream attribution remain explicit. `DESIGN.md` now includes a rendered-copy review checklist.

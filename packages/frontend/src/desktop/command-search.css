@@ -17,8 +17,8 @@
   z-index: 101;
   top: 24px;
   bottom: 24px;
-  left: max(64px, calc((100vw - 1372px) / 2));
-  right: max(64px, calc((100vw - 1372px) / 2));
+  left: var(--desktop-inset);
+  right: var(--desktop-inset);
   overflow: hidden;
   transform-origin: top left;
   border-radius: 24px;

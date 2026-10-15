@@ -10,17 +10,24 @@ const inspectWindowFlows = require('./window-flow-checks.cjs');
 const inspectAppUpdate = require('./app-update-checks.cjs');
 const inspectConnectionStatus = require('./connection-status-checks.cjs');
 const inspectNotifications = require('./notification-checks.cjs');
+const inspectErrorAuth = require('./error-auth-checks.cjs');
+const inspectEnlargedText = require('./enlarged-text-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
 const updatesOnly = process.env.ORBIS_VISUAL_UPDATES_ONLY === '1';
 const connectionOnly = process.env.ORBIS_VISUAL_CONNECTION_ONLY === '1';
 const notificationsOnly = process.env.ORBIS_VISUAL_NOTIFICATIONS_ONLY === '1';
+const errorsOnly = process.env.ORBIS_VISUAL_ERRORS_ONLY === '1';
+const textOnly = process.env.ORBIS_VISUAL_TEXT_ONLY === '1';
+const textScale = Number(process.env.ORBIS_VISUAL_TEXT_SCALE || 2);
+if (![1, 2].includes(textScale)) throw new Error('ORBIS_VISUAL_TEXT_SCALE must be 1 or 2');
 
 const base = 'http://localhost:8080';
 const screenshotDir = process.env.ORBIS_VISUAL_SCREENSHOT_DIR || path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
 const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
 const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1';
 const zoom = Number(process.env.ORBIS_VISUAL_ZOOM || 1);
+if (textOnly && zoom !== 1) throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
 if (!Number.isInteger(zoom) || zoom < 1 || zoom > 3) throw new Error('ORBIS_VISUAL_ZOOM must be 1, 2, or 3');
 const narrowWidth = Number(process.env.ORBIS_VISUAL_WIDTH || 320);
 const narrowHeight = Number(process.env.ORBIS_VISUAL_HEIGHT || 800);
@@ -339,7 +346,7 @@ async function main() {
           { name: 'desktop', width: 1440, height: 1120 },
           { name: 'tablet', width: 768, height: 1024 },
           { name: 'mobile', width: 390, height: 844 },
-          ...(updatesOnly || notificationsOnly ? [{ name: 'narrow', width: 320, height: 800 }] : []),
+          ...(updatesOnly || notificationsOnly || errorsOnly || textOnly ? [{ name: 'narrow', width: 320, height: 800 }] : []),
         ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
@@ -602,6 +609,31 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (textOnly) {
+      const enlargedText = await inspectEnlargedText({
+        page,
+        base,
+        viewport,
+        textScale,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+        resetPreferences: (mode) => {
+          preferences = { ...freshPreferences(), mode };
+        },
+      });
+      reports.push({ viewport: viewport.name, enlargedText, errors });
+      await page.close();
+      continue;
+    }
+    if (errorsOnly) {
+      const errorAuth = await inspectErrorAuth({
+        page,
+        base,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, errorAuth, errors });
+      await page.close();
+      continue;
+    }
     if (notificationsOnly) {
       const notifications = await inspectNotifications({
         page,
@@ -1068,7 +1100,7 @@ async function main() {
     await Promise.race([page.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
-  if (homeOnly || windowsOnly || updatesOnly || connectionOnly || notificationsOnly) {
+  if (homeOnly || windowsOnly || updatesOnly || connectionOnly || notificationsOnly || errorsOnly || textOnly) {
     if (reports.some((report) => report.errors.length)) process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     return;
