@@ -12,7 +12,7 @@ Use GitHub Releases from the Orbis repository as the changelog source. Show the 
 
 The upstream Runtipi CLI `start` and `update` paths also pull and run the upstream core without Orbis's Compose override. A production Orbis install must have an Orbis-owned host controller before these commands are retired; a staged override alone is not durable across stock CLI operations.
 
-Until a release and guarded deployment controller exist, the UI must say that no in-browser core update is available. A GitHub tag alone does not mean that a tested installable image exists.
+Until a guarded deployment controller exists, the UI must say that no in-browser core update is available. A GitHub tag alone does not mean that a tested installable image exists.
 
 ## Host operating system updates
 

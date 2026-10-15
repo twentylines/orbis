@@ -143,7 +143,8 @@ export default function Updates() {
             </div>
           ) : null}
           <p className="desktop-update-note">
-            In-browser Orbis installation is unavailable until signed images, compatibility checks, backup, and rollback are implemented.
+            In-browser Orbis installation is unavailable until the host controller can verify image digests, check compatibility, and back up and roll
+            back the installation.
           </p>
         </section>
 
