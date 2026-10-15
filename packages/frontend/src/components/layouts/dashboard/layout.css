@@ -935,6 +935,19 @@ html:has(.desktop) {
   }
 }
 @media (max-width: 380px) {
+  .desktop-dock {
+    width: calc(100% - 8px);
+    max-width: calc(100% - 8px);
+    padding: 3px;
+    scroll-padding-inline: 3px;
+  }
+  .desktop .desktop-dock-item {
+    min-width: 44px;
+    padding-inline: 8px;
+  }
+  .desktop .desktop-dock-item:focus-visible {
+    outline-offset: -3px;
+  }
   .desktop-product {
     display: none;
   }
