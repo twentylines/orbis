@@ -61,9 +61,14 @@
   align-items: center;
   gap: 8px;
   background: rgba(247, 251, 247, 0.72);
-  box-shadow: 0 8px 25px rgba(15, 43, 37, 0.1), inset 0 1px rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 8px 25px rgba(15, 43, 37, 0.1),
+    inset 0 1px rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
-  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
 }
 .workspace-edit-toggle:hover {
   transform: translateY(-2px);
@@ -211,8 +216,13 @@
   background: #183e36;
   text-decoration: none;
   font-weight: 600;
-  box-shadow: 0 11px 26px rgba(22, 50, 39, 0.24), inset 0 1px rgba(255, 255, 255, 0.18);
-  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  box-shadow:
+    0 11px 26px rgba(22, 50, 39, 0.24),
+    inset 0 1px rgba(255, 255, 255, 0.18);
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
 }
 .desktop .workspace-add:hover {
   color: #fff;
@@ -236,10 +246,18 @@
   grid-column: span 4;
   animation: orbis-panel-enter 0.56s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.workspace-widget:nth-child(1) { animation-delay: 0.06s; }
-.workspace-widget:nth-child(2) { animation-delay: 0.13s; }
-.workspace-widget:nth-child(3) { animation-delay: 0.2s; }
-.workspace-widget:nth-child(4) { animation-delay: 0.27s; }
+.workspace-widget:nth-child(1) {
+  animation-delay: 0.06s;
+}
+.workspace-widget:nth-child(2) {
+  animation-delay: 0.13s;
+}
+.workspace-widget:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.workspace-widget:nth-child(4) {
+  animation-delay: 0.27s;
+}
 .workspace-widget > * {
   height: 100%;
 }
@@ -262,7 +280,9 @@
   border: 1px solid rgba(255, 255, 255, 0.6);
   color: var(--desktop-ink);
   border-radius: 24px;
-  box-shadow: 0 24px 58px rgba(12, 38, 34, 0.17), inset 0 1px rgba(255, 255, 255, 0.63);
+  box-shadow:
+    0 24px 58px rgba(12, 38, 34, 0.17),
+    inset 0 1px rgba(255, 255, 255, 0.63);
   backdrop-filter: blur(20px) saturate(1.22);
   -webkit-backdrop-filter: blur(20px) saturate(1.22);
 }
@@ -296,24 +316,16 @@
   bottom: -360px;
   border: 1px solid rgba(29, 85, 68, 0.13);
   border-radius: 50%;
-  box-shadow: 0 0 0 64px rgba(34, 96, 76, 0.035), 0 0 0 128px rgba(34, 96, 76, 0.025), 0 0 0 192px rgba(34, 96, 76, 0.018);
+  box-shadow:
+    0 0 0 64px rgba(34, 96, 76, 0.035),
+    0 0 0 128px rgba(34, 96, 76, 0.025),
+    0 0 0 192px rgba(34, 96, 76, 0.018);
   transform: rotate(-22deg) scaleY(0.62);
   pointer-events: none;
 }
 .workspace-apps > * {
   position: relative;
   z-index: 1;
-}
-.workspace-apps .workspace-panel-kicker,
-.workspace-apps .workspace-section-heading {
-  color: var(--workspace-heading-ink);
-  text-shadow: 0 1px 15px var(--workspace-heading-shadow);
-}
-.workspace-apps .workspace-section-heading p {
-  color: var(--workspace-heading-ink);
-}
-.desktop .workspace-apps .workspace-section-heading a {
-  color: var(--workspace-heading-ink);
 }
 .workspace-section-heading {
   display: flex;
@@ -373,10 +385,18 @@
     box-shadow 0.22s ease;
   animation: orbis-app-enter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.workspace-app:nth-child(2) { animation-delay: 0.06s; }
-.workspace-app:nth-child(3) { animation-delay: 0.12s; }
-.workspace-app:nth-child(4) { animation-delay: 0.18s; }
-.workspace-app:nth-child(5) { animation-delay: 0.24s; }
+.workspace-app:nth-child(2) {
+  animation-delay: 0.06s;
+}
+.workspace-app:nth-child(3) {
+  animation-delay: 0.12s;
+}
+.workspace-app:nth-child(4) {
+  animation-delay: 0.18s;
+}
+.workspace-app:nth-child(5) {
+  animation-delay: 0.24s;
+}
 .workspace-app:hover {
   background: rgba(244, 250, 241, 0.32);
   border-color: rgba(255, 255, 255, 0.42);
@@ -429,7 +449,9 @@
 .desktop[data-desktop-preset="graphite"] .workspace-storage,
 .desktop[data-desktop-preset="graphite"] .workspace-attention {
   border-color: rgba(255, 255, 255, 0.13);
-  box-shadow: 0 24px 58px rgba(3, 15, 14, 0.28), inset 0 1px rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 24px 58px rgba(3, 15, 14, 0.28),
+    inset 0 1px rgba(255, 255, 255, 0.07);
 }
 .desktop[data-desktop-preset="graphite"] .workspace-app:hover {
   background: rgba(221, 240, 229, 0.1);
@@ -519,7 +541,9 @@
   background: var(--desktop-panel-dark);
   border-color: rgba(242, 249, 241, 0.16);
   color: #f2f7f0;
-  box-shadow: 0 26px 58px rgba(7, 34, 31, 0.29), inset 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 26px 58px rgba(7, 34, 31, 0.29),
+    inset 0 1px rgba(255, 255, 255, 0.1);
 }
 .workspace-activity .workspace-panel-kicker {
   color: #d9a989;
@@ -555,8 +579,12 @@
   text-decoration: none;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.workspace-gauge:hover { transform: translateY(-4px); }
-.workspace-gauge:active { transform: scale(0.95); }
+.workspace-gauge:hover {
+  transform: translateY(-4px);
+}
+.workspace-gauge:active {
+  transform: scale(0.95);
+}
 .workspace-gauge:hover,
 .workspace-network:hover {
   color: #fff;
@@ -605,7 +633,9 @@
   background: rgba(220, 241, 225, 0.07);
   color: #e5f0e8;
   text-decoration: none;
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
 }
 .workspace-network:hover {
   transform: translateY(-3px);
@@ -649,7 +679,9 @@
   flex-direction: column;
   padding: 26px 29px;
   text-decoration: none;
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease;
 }
 .workspace-storage:hover {
   text-decoration: none;
@@ -718,22 +750,59 @@
 .workspace-attention a {
   font-size: 13px;
 }
+.workspace-apps .workspace-panel-kicker,
+.workspace-apps .workspace-section-heading {
+  color: var(--workspace-heading-ink);
+  text-shadow: 0 1px 15px var(--workspace-heading-shadow);
+}
+.workspace-apps .workspace-section-heading p {
+  color: var(--workspace-heading-ink);
+}
+.desktop .workspace-apps .workspace-section-heading a {
+  color: var(--workspace-heading-ink);
+}
 @keyframes orbis-heading-enter {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes orbis-panel-enter {
-  from { opacity: 0; transform: translateY(22px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 @keyframes orbis-app-enter {
-  from { opacity: 0; transform: translateY(10px) scale(0.92); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 @keyframes orbis-status-pulse {
-  0%, 75%, 100% { box-shadow: 0 0 0 0 rgba(75, 128, 96, 0); }
-  15% { box-shadow: 0 0 0 5px rgba(75, 128, 96, 0.22); }
-  28% { box-shadow: 0 0 0 8px rgba(75, 128, 96, 0); }
+  0%,
+  75%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(75, 128, 96, 0);
+  }
+  15% {
+    box-shadow: 0 0 0 5px rgba(75, 128, 96, 0.22);
+  }
+  28% {
+    box-shadow: 0 0 0 8px rgba(75, 128, 96, 0);
+  }
 }
 @media (max-width: 900px) {
   .workspace-pin-list {
