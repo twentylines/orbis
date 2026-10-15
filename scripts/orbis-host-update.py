@@ -32,6 +32,35 @@ SNAPSHOT = load_script("orbis-snapshot.py", "orbis_snapshot_for_update")
 CORE_SERVICES = ("runtipi-reverse-proxy", "runtipi", "runtipi-queue", "runtipi-db")
 JOURNAL_SCHEMA = "orbis.update.v1"
 TERMINAL_STAGES = {"complete", "rolled-back", "aborted"}
+FAILURE_STAGES = {"preparing", "pulled", "stopping", "stopped", "snapshotting", "snapshot-ready", "staged"}
+
+
+def failure_details(stage: object, error: Exception) -> dict[str, str]:
+    code = getattr(error, "code", None)
+    name = next((kind.__name__ for kind in (SNAPSHOT.SnapshotError, PermissionError, FileNotFoundError, OSError, ValueError, RuntimeError) if isinstance(error, kind)), "Exception")
+    return {
+        "failureStage": stage if isinstance(stage, str) and stage in FAILURE_STAGES else "unknown",
+        "failureCode": code if isinstance(code, str) and code in SNAPSHOT.FAILURE_MESSAGES else "update-step-failed",
+        "failureType": name,
+    }
+
+
+def safe_failure(record: dict | None) -> dict[str, str]:
+    if not record:
+        return {}
+    stage, code, name = (record.get(key) for key in ("failureStage", "failureCode", "failureType"))
+    if (
+        not isinstance(stage, str) or stage not in FAILURE_STAGES | {"unknown"}
+        or not isinstance(code, str) or code not in SNAPSHOT.FAILURE_MESSAGES.keys() | {"update-step-failed"}
+        or not isinstance(name, str) or name not in {"SnapshotError", "PermissionError", "FileNotFoundError", "OSError", "ValueError", "RuntimeError", "Exception"}
+    ):
+        return {}
+    return {"failureStage": stage, "failureCode": code, "failureType": name}
+
+
+def failure_message(record: dict | None) -> str:
+    failure = safe_failure(record)
+    return SNAPSHOT.FAILURE_MESSAGES.get(failure.get("failureCode"), "The reviewed update could not finish.") if failure else ""
 
 
 def journal_path(snapshot: Path) -> Path:
@@ -269,6 +298,8 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             require_quiet_apps(root, context)
             record["stage"] = "stopped"
             write_journal(snapshot, record)
+            record["stage"] = "snapshotting"
+            write_journal(snapshot, record)
             SNAPSHOT.capture(root, snapshot, current["tag"], context)
             record["stage"] = "snapshot-ready"
             write_journal(snapshot, record)
@@ -284,6 +315,7 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             write_journal(snapshot, record)
             return {"result": "healthy", "releaseTag": target["tag"], "snapshot": str(snapshot), "journal": str(journal_path(snapshot))}
         except Exception as error:
+            record.update(failure_details(record["stage"], error))
             if record["stage"] in {"preparing", "pulled"}:
                 record["stage"] = "aborted"
                 write_journal(snapshot, record)

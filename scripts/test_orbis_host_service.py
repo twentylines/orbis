@@ -175,6 +175,40 @@ class HostServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "private"):
             SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
 
+    def test_snapshot_failure_keeps_safe_diagnostics_after_rollback(self):
+        planned = self.service.plan(TARGET["tag"])
+        failure = {"failureStage": "snapshotting", "failureCode": "snapshot-source-changed", "failureType": "SnapshotError"}
+
+        def fail_after_rollback(root, current, target, context, snapshot):
+            SERVICE.write_private(SERVICE.UPDATE.journal_path(snapshot), {"stage": "rolled-back", **failure})
+            raise RuntimeError("SECRET_MARKER /private/password.env")
+
+        with mock.patch.object(SERVICE.UPDATE, "apply_update", side_effect=fail_after_rollback):
+            _, launch = self.service.apply(planned["planId"])
+            launch()
+            job = self.wait_for_job()
+        self.assertEqual(job["state"], "rolled-back")
+        self.assertEqual({key: job[key] for key in failure}, failure)
+        self.assertEqual(job["message"], "Installation files changed while the backup was being copied. The previous Orbis release was restored.")
+        self.assertNotIn("SECRET_MARKER", json.dumps(job))
+        with mock.patch.object(SERVICE.HOST, "saved_state", return_value=None), mock.patch.object(SERVICE.HOST, "current_core", return_value={}):
+            public = self.service.status()["job"]
+        self.assertEqual({key: public[key] for key in failure}, failure)
+        self.assertNotIn("snapshot", public)
+        self.assertNotIn("SECRET_MARKER", json.dumps(public))
+
+    def test_malformed_failure_metadata_is_not_returned_to_the_browser(self):
+        cases = (
+            {"failureStage": ["snapshotting"], "failureCode": "snapshot-copy-failed", "failureType": "SnapshotError"},
+            {"failureStage": "snapshotting", "failureCode": "SECRET_MARKER", "failureType": "RuntimeError"},
+            {"failureStage": "snapshotting", "failureCode": "snapshot-copy-failed", "failureType": ["RuntimeError"]},
+            {"failureStage": "snapshotting", "failureCode": "snapshot-copy-failed", "failureType": "SECRET_MARKER"},
+        )
+        for failure in cases:
+            with self.subTest(failure=failure):
+                self.assertEqual(SERVICE.UPDATE.safe_failure(failure), {})
+                self.assertEqual(SERVICE.UPDATE.failure_message(failure), "")
+
     def test_interrupted_update_can_recover_the_recorded_transaction(self):
         planned = self.service.plan(TARGET["tag"])
         job = {
