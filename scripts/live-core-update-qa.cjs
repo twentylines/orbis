@@ -83,7 +83,10 @@ const cookies = fs
     assert.equal(afterStatus.enrolled, true);
     assert.equal(afterStatus.imageMatches, true);
     assert.equal(afterStatus.job?.state, 'complete');
-    assert.deepEqual(await read('/api/desktop-preferences'), { ...preferences, windows: preferences.windows ?? {} });
+    assert.ok(
+      isDeepStrictEqual(await read('/api/desktop-preferences'), { ...preferences, windows: preferences.windows ?? {} }),
+      'Desktop preferences changed during core OTA',
+    );
     assert.deepEqual((await read('/api/apps/installed')).installed.map(({ info }) => info.urn).sort(), identities);
     for (const [index, urn] of identities.entries()) {
       const after = await read(`/api/apps/${encodeURIComponent(urn)}`);
