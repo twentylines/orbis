@@ -2,6 +2,10 @@ import { getInstalledAppsOptions, getLinksOptions } from '@/api-client/@tanstack
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { defaultDesktopPreferences, useDesktopPreferences, type WidgetId, type WorkspacePreferences } from '@/desktop/preferences';
 import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
+import { useContainerTelemetry } from '@/desktop/containers';
+import { DockerHealth } from '@/components/docker-health/docker-health';
+import { ContainerResources } from '@/components/container-resources/container-resources';
+import { useTasks, taskIsActive, taskLabels, taskStates } from '@/desktop/tasks';
 import {
   IconAdjustmentsHorizontal,
   IconApps,
@@ -19,8 +23,8 @@ import './dashboard.css';
 
 const labels: Record<WidgetId, string> = {
   applications: 'Applications',
-  activity: 'System activity',
-  storage: 'Runtime filesystem',
+  activity: 'System status',
+  storage: 'Recent operations',
   attention: 'Needs attention',
 };
 
@@ -45,6 +49,8 @@ export default function Dashboard() {
   const { workspace } = preferences;
   const apps = useQuery({ ...getInstalledAppsOptions(), refetchInterval: 15000 });
   const links = useQuery({ ...getLinksOptions() });
+  const containers = useContainerTelemetry();
+  const tasks = useTasks();
   const system = useQuery<Telemetry>({
     queryKey: telemetryQueryKey,
     queryFn: ({ signal }) => loadTelemetry(signal),
@@ -65,6 +71,8 @@ export default function Dashboard() {
   const visibleInstalled = orderedInstalled.slice(0, Math.max(8, workspace.pinnedApps.length - missingPins.length));
   const running = installed.filter(({ app }) => app.status === 'running').length;
   const attention = installed.filter(({ app, metadata }) => app.status === 'stopped' || Number(app.version) < Number(metadata.latestVersion)).length;
+  const unhealthy = new Set(containers.data?.containers.filter((item) => item.health === 'unhealthy' && item.appUrn).map((item) => item.appUrn)).size;
+  const activeTasks = tasks.data?.tasks.filter(taskIsActive) ?? [];
   const disk = system.data?.filesystems.find((filesystem) => filesystem.mount === '/') ?? system.data?.filesystems[0];
   const diskAvailable = typeof disk?.sizeBytes === 'number' && disk.sizeBytes > 0 && typeof disk.usedBytes === 'number';
   const diskUsedGb = diskAvailable ? (disk?.usedBytes ?? 0) / 1024 ** 3 : null;
@@ -104,11 +112,9 @@ export default function Dashboard() {
   const widgets: Record<WidgetId, ReactNode> = {
     applications: (
       <section className="workspace-apps" aria-labelledby="workspace-apps-title">
-        <span className="workspace-panel-kicker">Launchpad / 01</span>
         <div className="workspace-section-heading">
           <div>
             <h2 id="workspace-apps-title">Applications</h2>
-            <p>{apps.data ? `${running} running · ${installed.length} installed` : 'Loading installed applications'}</p>
           </div>
           <Link to="/apps">
             View all <IconArrowRight size={18} aria-hidden="true" />
@@ -154,9 +160,11 @@ export default function Dashboard() {
                   <AppLogo urn={info.urn} size={54} alt="" />
                   <span className="workspace-app-copy">
                     <strong>{info.name}</strong>
-                    <small>{`${workspace.pinnedApps.includes(info.urn) ? 'Pinned · ' : ''}${appUpdate ? 'Update available' : app.status}`}</small>
+                    {appUpdate || workspace.pinnedApps.includes(info.urn) ? (
+                      <small>{`${workspace.pinnedApps.includes(info.urn) ? 'Pinned' : ''}${workspace.pinnedApps.includes(info.urn) && appUpdate ? ' · ' : ''}${appUpdate ? 'Update available' : ''}`}</small>
+                    ) : null}
+                    <DockerHealth appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
                   </span>
-                  <span className={`workspace-app-status ${app.status}`} aria-hidden="true" />
                 </Link>
               );
             })}
@@ -177,13 +185,12 @@ export default function Dashboard() {
     ),
     activity: (
       <section className="workspace-activity" aria-labelledby="workspace-activity-title">
-        <span className="workspace-panel-kicker">Live system / 02</span>
         <div className="workspace-section-heading">
           <div>
-            <h2 id="workspace-activity-title">System activity</h2>
+            <h2 id="workspace-activity-title">System status</h2>
             <p>{system.data?.sampledAt ? `Sampled ${new Date(system.data.sampledAt).toLocaleTimeString()}` : 'Waiting for live sample'}</p>
           </div>
-          <Link to="/monitor" aria-label="Open System Monitor">
+          <Link to="/monitor" aria-label="Expand System status">
             <IconDeviceDesktopAnalytics size={21} aria-hidden="true" />
           </Link>
         </div>
@@ -225,33 +232,68 @@ export default function Dashboard() {
             </Link>
           </div>
         )}
+        <Link to="/monitor#telemetry-disks-title" className="workspace-status-storage">
+          <span>
+            <IconDatabase size={17} aria-hidden="true" /> Storage <IconArrowRight size={16} aria-hidden="true" />
+          </span>
+          <strong>
+            {number(diskUsedGb, ' GB')} <small>/ {number(diskSizeGb, ' GB')}</small>
+          </strong>
+          <div className="workspace-meter">
+            <span style={{ width: `${Math.min(100, Math.max(0, diskPercent ?? 0))}%` }} />
+          </div>
+          <small>Orbis core filesystem</small>
+        </Link>
+        <ContainerResources compact />
       </section>
     ),
     storage: (
-      <Link to="/monitor" className="workspace-storage">
-        <span className="workspace-panel-kicker">Capacity / 03</span>
-        <div className="workspace-storage-top">
-          <IconDatabase size={22} aria-hidden="true" />
-          <span>Runtime filesystem</span>
-          <IconArrowRight size={18} aria-hidden="true" />
+      <section className="workspace-operations" aria-labelledby="workspace-operations-title">
+        <div className="workspace-section-heading">
+          <div>
+            <h2 id="workspace-operations-title">Recent operations</h2>
+            <p>{activeTasks.length ? `${activeTasks.length} in progress` : 'Application activity'}</p>
+          </div>
+          <Link to="/tasks">
+            View all <IconArrowRight size={18} aria-hidden="true" />
+          </Link>
         </div>
-        <strong>{number(diskUsedGb, ' GB')}</strong>
-        <small>{diskAvailable ? `of ${number(diskSizeGb, ' GB')} used in the Orbis core container` : 'Waiting for a filesystem reading'}</small>
-        <div className="workspace-meter">
-          <span style={{ width: `${Math.min(100, Math.max(0, diskPercent ?? 0))}%` }} />
-        </div>
-        <span className="workspace-drive-stack" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-      </Link>
+        {tasks.isError ? (
+          <p role="alert">Operation history is unavailable.</p>
+        ) : tasks.isPending ? (
+          <p>Loading operations…</p>
+        ) : tasks.data?.tasks.length ? (
+          <ol className="workspace-recent-tasks">
+            {tasks.data.tasks.slice(0, 2).map((task) => (
+              <li key={task.id}>
+                <Link to="/tasks">
+                  <span>
+                    <strong>
+                      {taskLabels[task.action]} {installed.find(({ info }) => info.urn === task.appUrn)?.info.name ?? task.appUrn.split(':')[0]}
+                    </strong>
+                    <small>{new Date(task.updatedAt).toLocaleTimeString()}</small>
+                  </span>
+                  <b data-status={task.status}>{taskStates[task.status]}</b>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="workspace-operations-empty">
+            New installs, updates, and backups appear here. Their outcomes stay available after you leave the workspace.
+          </p>
+        )}
+      </section>
     ),
     attention: (
       <section className="workspace-attention" aria-labelledby="workspace-attention-title">
-        <span className="workspace-panel-kicker">Operations / 04</span>
-        <span className={`workspace-attention-beacon ${attention > 0 ? 'has-attention' : ''}`} aria-hidden="true" />
         <h2 id="workspace-attention-title">Needs attention</h2>
+        {unhealthy > 0 ? (
+          <p>
+            {unhealthy} application{unhealthy === 1 ? '' : 's'} with an unhealthy Docker check.{' '}
+            <Link to="/monitor#containers">Inspect containers</Link>
+          </p>
+        ) : null}
         {apps.data ? (
           <p>
             {attention
@@ -270,14 +312,8 @@ export default function Dashboard() {
     <div className="workspace">
       <div className="workspace-heading">
         <div>
-          <p className="workspace-eyebrow">
-            Server desktop <span aria-hidden="true">/</span> Workspace
-          </p>
           <h1>{preferences.serverName}</h1>
-          <p className="workspace-subline">
-            {apps.data ? `${installed.length} installed · ${running} running` : 'Loading applications'}
-            {system.data?.sampledAt ? ` · System sampled ${new Date(system.data.sampledAt).toLocaleTimeString()}` : ''}
-          </p>
+          <p className="workspace-subline">{apps.data ? `${installed.length} installed · ${running} running` : 'Loading applications'}</p>
         </div>
         <div className="workspace-actions">
           <button
@@ -400,7 +436,15 @@ export default function Dashboard() {
         </section>
       ) : null}
 
-      <div className="workspace-grid">
+      <div
+        className="workspace-grid"
+        data-default-layout={
+          workspace.order.join(',') === 'applications,activity,storage,attention' &&
+          workspace.hidden.length === 0 &&
+          workspace.wide.length === 1 &&
+          workspace.wide[0] === 'applications'
+        }
+      >
         {workspace.order
           .filter((id) => !workspace.hidden.includes(id))
           .map((id) => (

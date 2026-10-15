@@ -17,6 +17,8 @@ Orbis should feel like an operating system for a personal server: a place with a
 - Make system readings feel like physical instruments: recessed live dials, an etched panel, a layered storage marker, and a state-driven operations beacon. These are CSS layers over real values, not a graphics engine.
 - CSS tokens drive wallpaper, ink, chrome, surfaces, accent, and headings. Presets may have different character; future full themes should replace all of these together, including app windows and instruments.
 - Status color describes actual state. The orange and green lights in the UI must come from connection and application data.
+- Future theme packs must replace the complete material, wallpaper, typography, icon, control, chart, menu, and motion treatment. The current presets are the foundation; an accent change alone is not a theme pack.
+- Keep the wallpaper rooted at the viewport edge while chrome and windows have deliberate insets. Top-level tools use one window title; do not repeat a route slug above the same title.
 
 ## Motion and performance
 

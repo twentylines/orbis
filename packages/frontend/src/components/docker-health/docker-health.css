@@ -1,0 +1,35 @@
+.docker-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 650;
+}
+.docker-health i {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #94a7a0;
+  box-shadow: 0 0 0 3px rgba(148, 167, 160, 0.12);
+}
+.docker-health[data-health="healthy"] i {
+  background: #64a87e;
+}
+.docker-health[data-health="unhealthy"] i {
+  background: #d17e65;
+}
+.docker-health[data-health="starting"] i,
+.docker-health[data-health="partial"] i {
+  background: #c59c5f;
+}
+.docker-health[data-health="stopped"] i {
+  background: #9c8f81;
+}
+.docker-health[data-health="running"] i {
+  background: #7da6af;
+}

@@ -232,13 +232,6 @@ export default function Updates() {
 
   return (
     <div className="desktop-updates">
-      <div className="desktop-view-heading">
-        <div>
-          <p>Maintenance</p>
-          <h1>Updates</h1>
-        </div>
-        <Link to="/dashboard">Back to workspace</Link>
-      </div>
       <p className="desktop-updates-intro">
         Review changes before applying them. Application, Orbis, and host updates follow separate installation paths.
       </p>
