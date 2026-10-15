@@ -25,8 +25,24 @@ import {
 } from './task-history.js';
 import type { ContainerReading, ContainerTelemetry } from './container-telemetry.js';
 import { metricHistoryRanges, type MetricHistoryRange, type MetricSummary, type MetricHistoryPoint, type MetricHistory } from './metric-history.js';
+import {
+  desktopWindowIds,
+  desktopWindowSchema,
+  desktopWindowsSchema,
+  type DesktopWindowId,
+  type DesktopWindowState,
+  type DesktopWindowBounds,
+  type DesktopWindows,
+} from './desktop-windows.js';
 
 export {
+  desktopWindowIds,
+  desktopWindowSchema,
+  desktopWindowsSchema,
+  type DesktopWindowId,
+  type DesktopWindowState,
+  type DesktopWindowBounds,
+  type DesktopWindows,
   parseComposeJson,
   convertLegacyToYaml,
   convertYamlToLegacy,

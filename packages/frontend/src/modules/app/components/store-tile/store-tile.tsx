@@ -23,7 +23,7 @@ export const StoreTile: React.FC<{ app: AppInfoSimple; isLoading: boolean }> = (
         </Skeleton>
         <div className="card-body">
           <div className="d-flex align-items-center" style={{ columnGap: '0.75rem' }}>
-            <h3 className="text-bold h-3 mb-2">
+            <h3 className="text-bold mb-2">
               <Skeleton loading={isLoading}>{limitText(app.name, 20)}</Skeleton>
             </h3>
             {isNew ? <div className="text-white badge me-1 bg-green">{t('APP_NEW')}</div> : null}

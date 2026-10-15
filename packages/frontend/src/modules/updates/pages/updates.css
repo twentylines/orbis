@@ -453,10 +453,7 @@
   color: var(--desktop-ink);
   border-color: var(--desktop-line);
 }
-.desktop:has(.desktop-updates) .desktop-dock {
-  display: none;
-}
-@media (max-width: 760px) {
+@container (max-width: 760px) {
   .desktop-update-markdown {
     max-height: none;
     overflow: visible;

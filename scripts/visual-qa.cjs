@@ -6,7 +6,9 @@ const inspectAppDetails = require('./app-detail-checks.cjs');
 const inspectWorkspaceAlignment = require('./workspace-alignment-checks.cjs');
 const inspectCommandSearch = require('./command-search-checks.cjs');
 const inspectHomeApps = require('./home-app-checks.cjs');
+const inspectWindowFlows = require('./window-flow-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
+const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
 
 const base = 'http://localhost:8080';
 const screenshotDir = process.env.ORBIS_VISUAL_SCREENSHOT_DIR || path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
@@ -396,6 +398,13 @@ async function main() {
       if (url.pathname === '/api/apps/installed') return respond({ installed: apps });
       if (url.pathname === '/api/apps/random-port') return respond({ port: 8123 });
       if (/^\/api\/apps\/[^/]+$/.test(url.pathname)) return respond(appDetailFixture(decodeURIComponent(url.pathname.split('/').at(-1))));
+      if (/^\/api\/apps\/[^/]+\/config$/.test(url.pathname))
+        return respond({
+          config: JSON.stringify({
+            'x-runtipi': { schema_version: 2 },
+            services: { web: { image: 'nginx:alpine', 'x-runtipi': { is_main: true, internal_port: 80 } } },
+          }),
+        });
       if (url.pathname.endsWith('/config-diff')) return respond({ current: 'SERVICE_LABEL=old', new: 'SERVICE_LABEL=new' });
       if (url.pathname.endsWith('/compose-diff')) return respond({ current: '{"services":{}}', new: '{"services":{}}' });
       if (url.pathname.startsWith('/api/backups/')) return respond({ currentPage: 1, data: [], lastPage: 1, total: 0 });
@@ -574,6 +583,15 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (windowsOnly) {
+      const windows = await inspectWindowFlows(page, {
+        getPreferences: () => preferences,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, windows, errors });
+      await page.close();
+      continue;
+    }
     if (homeOnly) {
       const homeApps = await inspectHomeApps(page, {
         apps,
@@ -586,6 +604,17 @@ async function main() {
       await page.close();
       continue;
     }
+    const ignoredApps = structuredClone(apps);
+    ignoredApps[0].metadata.latestVersion = 2;
+    ignoredApps[0].app.ignoredVersion = 2;
+    const ignoredHandler = (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ installed: ignoredApps }) });
+    await page.route('**/api/apps/installed', ignoredHandler);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('.workspace-attention').getByText('1 installed application stopped or ready to update.', { exact: true }).waitFor();
+    const ignoredUpdateExcluded = true;
+    await page.unroute('**/api/apps/installed', ignoredHandler);
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByText('Host CPU').waitFor();
     await page.getByText('Core network').waitFor();
     await page.getByText('Healthy', { exact: true }).waitFor();
@@ -729,7 +758,7 @@ async function main() {
     const tasksOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     await page.getByRole('button', { name: 'Needs review', exact: true }).click();
     const failedTaskFiltered = (await page.locator('.task-list > li[data-status="failed"]').count()) === 1;
-    await page.getByRole('link', { name: 'Back to workspace' }).click();
+    await page.locator('.desktop-window-dismiss').click();
     await page.getByRole('link', { name: 'Applications', exact: true }).click();
     await page
       .getByTestId('apps-list')
@@ -850,7 +879,7 @@ async function main() {
       await page.getByRole('button', { name: 'Review selected updates' }).click();
       await page.getByRole('region', { name: 'Review host package update' }).waitFor();
     }
-    const updatePlanDockHidden = !hostUpdateFixture || (await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden());
+    const updatePlanDockVisible = await page.getByRole('navigation', { name: 'Desktop tools' }).isVisible();
     await capture(page, `${viewport.name}-updates.png`);
     const updatesOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     let changelogAccessible = true;
@@ -867,17 +896,17 @@ async function main() {
       await capture(page, `${viewport.name}-host-packages.png`);
     }
     if (hostUpdateFixture) await page.getByRole('button', { name: 'Cancel' }).first().click();
-    await page.getByRole('link', { name: 'Back to workspace' }).click();
+    await page.locator('.desktop-window-dismiss').click();
     await page.getByRole('link', { name: 'Monitor', exact: true }).click();
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
-    await page.getByRole('link', { name: 'Back to workspace' }).click();
+    await page.locator('.desktop-window-dismiss').click();
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('tab', { name: 'Appearance' }).click();
     await page.getByRole('textbox', { name: 'Server name' }).waitFor();
     await capture(page, `${viewport.name}-appearance.png`);
     const settingsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     const windowInsets = await page
-      .locator('.desktop-view-app')
+      .locator('.desktop-window-content')
       .evaluate((element) => element.getBoundingClientRect().left >= 24 && Number.parseFloat(getComputedStyle(element).paddingLeft) >= 20);
     await page.getByRole('button', { name: 'Graphite Deep charcoal' }).click();
     await page.getByRole('button', { name: 'Tidal' }).click();
@@ -922,6 +951,7 @@ async function main() {
       cssViewportWidth: viewport.width,
       cssViewportHeight: viewport.height,
       orbisBrand,
+      ignoredUpdateExcluded,
       iconsLoaded,
       iconFallback,
       unavailableDockerHonest,
@@ -974,7 +1004,7 @@ async function main() {
       singleStoreTitle,
       windowInsets,
       updatesOverflow,
-      updatePlanDockHidden,
+      updatePlanDockVisible,
       changelogAccessible,
       settingsOverflow,
       graphitePersisted,
@@ -986,7 +1016,7 @@ async function main() {
     await Promise.race([page.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
-  if (homeOnly) {
+  if (homeOnly || windowsOnly) {
     if (reports.some((report) => report.errors.length)) process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     return;
@@ -1030,6 +1060,7 @@ async function main() {
         !report.pinnedAppFirst ||
         report.savingAfterPin !== 'Saving layout…' ||
         !report.orbisBrand ||
+        !report.ignoredUpdateExcluded ||
         !report.darkModePersisted ||
         report.monitorOverflow ||
         !report.monitor3DContained ||
@@ -1043,7 +1074,7 @@ async function main() {
         !report.singleStoreTitle ||
         !report.windowInsets ||
         report.updatesOverflow ||
-        !report.updatePlanDockHidden ||
+        !report.updatePlanDockVisible ||
         !report.changelogAccessible ||
         report.settingsOverflow ||
         report.graphitePersisted !== 'true' ||

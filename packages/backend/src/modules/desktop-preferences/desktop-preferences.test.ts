@@ -173,4 +173,56 @@ describe('desktop preferences', () => {
       .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace: { ...workspace, pinnedApps: [':migrated'] } });
     expect(malformed.status).toBe(400);
   });
+
+  it('round-trips independent window placements and supplies defaults for legacy accounts', async () => {
+    const windows = {
+      settings: { mode: 'floating', bounds: { x: 60, y: 120, width: 900, height: 600 } },
+      monitor: { mode: 'maximized', restoreMode: 'left', bounds: { x: 100, y: 160, width: 600, height: 480 } },
+    };
+    const saved = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, windows })
+      .expect(200);
+    expect(saved.body.windows).toEqual(windows);
+    const fetched = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+    expect(fetched.body.windows).toEqual(windows);
+    await fs.writeFile(
+      path.join(directory, 'state', 'desktop', '7.json'),
+      JSON.stringify({ serverName: 'Workshop', preset: 'forest', density: 'compact' }),
+    );
+    const legacy = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+    expect(legacy.body.windows).toEqual({});
+  });
+
+  it('stores only declared appearance and workspace fields', async () => {
+    const saved = await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({
+        ...DEFAULT_DESKTOP_PREFERENCES,
+        unrelated: 'do not store',
+        workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, unrelated: 'do not store' },
+      })
+      .expect(200);
+    expect(saved.body).toEqual(DEFAULT_DESKTOP_PREFERENCES);
+    const disk = JSON.parse(await fs.readFile(path.join(directory, 'state', 'desktop', '7.json'), 'utf8'));
+    expect(disk).toEqual(DEFAULT_DESKTOP_PREFERENCES);
+  });
+
+  it.each([
+    { terminal: { mode: 'focused', bounds: { x: 0, y: 0, width: 800, height: 500 } } },
+    { settings: { mode: 'unknown', bounds: { x: 0, y: 0, width: 800, height: 500 } } },
+    { settings: { mode: 'floating', bounds: { x: -1, y: 0, width: 800, height: 500 } } },
+    { settings: { mode: 'floating', bounds: { x: 0, y: 0, width: 800.5, height: 500 } } },
+    { settings: { mode: 'floating', bounds: { x: 0, y: 0, width: 9000, height: 500 } } },
+    { settings: { mode: 'floating', bounds: { x: 0, y: 0, width: 800, height: 500 }, draft: 'must not persist' } },
+    { settings: { mode: 'floating', bounds: { x: 0, y: 0, width: 800, height: 500, url: 'https://example.com' } } },
+  ])('rejects unsupported or unsafe window state %#', async (windows) => {
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, windows })
+      .expect(400);
+  });
 });

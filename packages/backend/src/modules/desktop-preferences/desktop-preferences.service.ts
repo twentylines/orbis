@@ -13,6 +13,7 @@ export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonN
   mode: 'light',
   density: 'comfortable',
   wallpaper: 'sandstone',
+  windows: {},
   workspace: {
     order: ['applications', 'activity', 'storage', 'attention'],
     hidden: [],

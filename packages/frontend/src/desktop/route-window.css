@@ -1,0 +1,204 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Window geometry overrides the shared route surface. */
+.desktop .desktop-route-window {
+  padding: 0;
+  animation: none;
+}
+.desktop-route-window[hidden] {
+  display: none;
+  view-transition-name: none;
+}
+.desktop-route-window .desktop-window-bar {
+  margin: 0;
+  padding: 17px 22px;
+  flex: none;
+}
+.desktop .desktop-window-bar:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.desktop-window-content {
+  min-width: 0;
+  padding: 27px 30px 30px;
+}
+.desktop-window-content > .card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.desktop-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  flex: none;
+}
+.desktop-window-label span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desktop .desktop-window-control {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(190, 221, 205, 0.2);
+  border-radius: 10px;
+  color: var(--desktop-chrome-ink);
+  background: rgba(196, 228, 212, 0.1);
+  box-shadow: inset 0 1px rgba(196, 228, 212, 0.05);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+.desktop .desktop-window-control:hover {
+  color: var(--desktop-chrome-ink);
+  background: rgba(196, 228, 212, 0.2);
+  border-color: rgba(190, 221, 205, 0.35);
+}
+.desktop .desktop-window-dismiss:hover {
+  background: rgba(184, 92, 65, 0.45);
+}
+.desktop-window-control svg,
+.desktop-window-resize svg {
+  display: block;
+}
+.desktop-route-window[data-window-positioned="true"] {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  z-index: 8;
+  animation: none;
+  border-radius: 22px;
+  box-shadow:
+    0 34px 85px rgba(5, 25, 22, 0.3),
+    inset 0 1px var(--desktop-highlight);
+}
+.desktop-route-window[data-window-positioned="true"][hidden] {
+  display: none;
+}
+.desktop-route-window[data-window-positioned="true"] .desktop-window-bar {
+  border-radius: 20px 20px 0 0;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.desktop-route-window[data-window-positioned="true"] .desktop-window-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-radius: 0 0 21px 21px;
+  container-type: inline-size;
+}
+.desktop-window-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px 0 19px 0;
+  background: var(--desktop-surface);
+  color: var(--desktop-muted);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.desktop-window-resume {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 26px;
+  padding: 14px 18px;
+  border: 1px solid var(--desktop-edge);
+  border-radius: 16px;
+  background: var(--desktop-surface);
+  box-shadow: 0 10px 25px rgba(7, 29, 23, 0.12);
+  color: var(--desktop-muted);
+  font-size: 13px;
+}
+.desktop-window-resume button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 9px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--desktop-edge);
+  background: var(--desktop-panel-dark);
+  color: var(--desktop-chrome-ink);
+  font-weight: 650;
+}
+.desktop-window-keyboard-help {
+  display: block;
+  flex: none;
+  padding: 10px 22px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  border-bottom: 1px solid var(--desktop-line);
+  font-size: 12px;
+}
+.desktop-window-menu-hint {
+  max-width: 240px;
+  padding: 4px 12px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--desktop-muted);
+}
+.desktop .desktop-dock-item.is-minimized::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  width: 18px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--desktop-chrome-ink);
+}
+.desktop .desktop-dock-item.is-minimized {
+  position: relative;
+}
+.desktop[data-desktop-density="compact"] .desktop-window-content {
+  padding: 24px 18px 18px;
+}
+@media (min-width: 900px) and (min-height: 540px) {
+  .desktop .desktop-main:has(> .desktop-route-window[data-window-positioned="true"]:not([hidden])) {
+    min-height: 0;
+    height: calc(100dvh - 88px);
+    padding: 0;
+  }
+}
+@media (max-width: 760px) {
+  .desktop-route-window .desktop-window-bar {
+    padding: 12px 14px;
+    gap: 9px;
+  }
+  .desktop-window-content {
+    padding: 24px 20px 20px;
+  }
+  .desktop-window-controls {
+    gap: 6px;
+  }
+  .desktop .desktop-window-label h1 {
+    font-size: 16px;
+    overflow-wrap: anywhere;
+  }
+}
+@media (max-width: 380px) {
+  .desktop-route-window .desktop-window-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+  }
+  .desktop-route-window .desktop-window-bar {
+    padding-inline: 12px;
+  }
+}

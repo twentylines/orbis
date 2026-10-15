@@ -12,6 +12,9 @@ import type { TranslatableError } from '@/types/error.types';
 import { useEffect, useId, useState } from 'react';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
 import type { Route } from './+types/app-edit-page';
+import { shouldRevalidateToolRoute } from '@/desktop/window-navigation';
+
+export const shouldRevalidate = shouldRevalidateToolRoute;
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const { appId, storeId } = params;

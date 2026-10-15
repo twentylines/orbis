@@ -10,7 +10,7 @@ The original product brief and subsequent user requests remain the scope. A publ
 | Integrated real monitoring | Host CPU/per-core/memory/swap/uptime when exposed; runtime storage/network; real per-container resources and health; CPU/memory rankings; bounded recorded aggregate history, time ranges and pointer/keyboard chart inspection | Host disks/network/I/O, exposed sensors/GPU, host-process consumers, precise source/staleness treatment |
 | App store and app management | Existing catalogue/search/categories/stores/forms/actions retained; all 248 catalogue/installed icons decoded on beta 18; real disposable app lifecycle; shared official/custom detail workspace with exact-app resources and operations, URL-driven sections and themed editors | Update/custom-store/architecture/error/recovery coverage, remaining edit/update forms and populated backup presentation |
 | Persistent task centre | Real queue request IDs, phases/outcomes/timestamps survive restart and beta 17→18 OTA; logs links; missing outcomes are explicit | More granular real worker phases and scoped logs where available, useful notification integration |
-| Practical desktop window model | Focused route panels, command palette, browser navigation | Focus/resize/minimise/maximise/snap, restored bounds, mobile touch/full-screen behaviour, safe third-party launch and framing coverage |
+| Practical desktop window model | Full-page and floating route tools; pointer/keyboard move/resize, minimize/restore, maximize/snap, private per-tool placement, mobile full-page fallback; command palette and browser navigation | Current window iteration publication/runtime checks; safe third-party launch and framing coverage; more than one retained tool window at a time is not implemented |
 | Complete personalisation | Saved light/dark, six presets, bundled wallpapers, density, workspace settings and validated non-secret export/import | Follow-system, accent, validated local wallpaper uploads and positioning/dimming/blur, bounded glass controls, text scale, dock placement/size/auto-hide/pins, effect preferences; full theme packs affect all surfaces and remain a later phase |
 | Motion, loading, accessibility and performance | Purposeful CSS motion, reduced-motion rules, bounded/shared collectors, background browser polling suspended, focus styles | Consistent skeletons and permission/reconnect states, focus restoration, chart keyboard inspection, contrast across all presets, attractive reduced-transparency/low-effects mode, comprehensive responsive checks |
 | Supporting tools after the core | Stock scoped app/instance logs and backups; reviewed core and Ubuntu package updates | Searchable scoped logs, notifications/thresholds; files/terminal only with explicit safe scope and real integration |
@@ -41,9 +41,9 @@ This iteration also addresses the user's UI inspection findings. Header geometry
 
 Hades remains reserved for the separately approved deployment phase. No production Docker daemon or data tree is used for development.
 
-## Current iteration: desktop interaction and Home apps
+## Previous iteration: desktop interaction and Home apps
 
-Implemented in the beta 21 branch. Publication/runtime verification follows protected checks.
+Published as beta 21. Protected checks and the isolated arm64 browser OTA passed; actual saved Home/search interactions, app lifecycle/resources/logs and all 248 icon decodes passed. Original preferences and stopped app state were restored.
 
 - Use smooth, directional section slides with consistent easing and reduced-motion support.
 - Make app pinning easy to discover; add saved show-all home mode. More than three visible apps compact Recent operations and Needs attention; both widgets remain independently hideable/restorable. When those widgets are enabled, the app list uses a contained scroller.
@@ -51,3 +51,13 @@ Implemented in the beta 21 branch. Publication/runtime verification follows prot
 - Keep one button design language, sufficient dock-label padding, and show the configured server IP in the connection status. Recheck all rendered controls after these changes.
 
 Local verification: measured background collection with every Orbis page closed; saved history survived a VM restart; an explicit core restart flushed the unsaved partial minute. Authenticated browser range selection, reload, keyboard inspection and desktop/mobile fit passed on the isolated arm64 build. Published-image verification follows the protected release gates.
+
+## Current iteration: practical desktop windows
+
+- Provide full-page, floating, maximized and snapped tools with consistent title-bar controls, saved per-tool bounds and keyboard alternatives. Clamp to the actual workspace; mobile uses full-page tools.
+- Preserve the current route and unsaved form during minimize/restore. Keep app tabs, Monitor ranges and unrelated query values. Do not re-run editor loaders for a visibility-only navigation.
+- Pause hidden-tool log readers, retries, metric history and polling. Keep global app events and task state live. Avoid unrelated app events discarding another tool's draft.
+- Adapt content to window width, including Store cards, Monitor, resource rankings, Updates and Appearance. Inspect internal scrolling, menus/dialogs, focus and all controls in both modes.
+- Correct system-log line IDs and bounds, accessible input labels, contextual create/edit/update titles and ignored-update Home counts.
+
+See `DESKTOP-WINDOWS.md` for route/state semantics. Browser verification and publication are recorded as they finish; this iteration does not complete the full acceptance checklist.

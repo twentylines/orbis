@@ -3,6 +3,9 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import { redirect, useParams } from 'react-router';
 import { AppWorkspace } from '../containers/app-workspace/app-workspace';
 import type { Route } from './+types/app-details-page';
+import { shouldRevalidateToolRoute } from '@/desktop/window-navigation';
+
+export const shouldRevalidate = shouldRevalidateToolRoute;
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const { storeId } = params;

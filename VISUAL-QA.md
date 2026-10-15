@@ -1,5 +1,24 @@
 # Orbis UI inspection
 
+## 2026-10-15: practical desktop windows
+
+Three independent agents inspected the production bundle with isolated API fixtures. The window matrix covers 24 viewport/mode combinations and 114 geometry samples at 1440/1024/900/768/390/320px, including 540px-high layouts. Final mode assertions pass for full page, floating, maximize/restore and both snaps. Maximized/snapped windows leave exactly 20px below the system bar and above the dock; snap halves have a 16px gap. Pointer drag/resize makes no preference writes during movement and one debounced write after release. Pointer/keyboard cancellation makes none. Bounds survive reload, remain independent per tool and recover after large/mobile/large viewport changes.
+
+The retained `window-flow-checks.cjs` suite passes at 1440/768/390/320 in both modes: unsaved Settings/custom-app/Compose drafts, editor loader suppression, exact route/query/hash restoration, Back/Forward, minimized reload, unrelated uninstall events, app/system log teardown/reconnect, pending retry cancellation, hidden Monitor/Updates polling and global task continuity. Reduced-motion and unavailable-WAAPI runs also pass with zero window animation calls. These log checks use instrumented fixture EventSources; they do not prove production reader teardown on their own.
+
+The route audit covers 46 window/content states, including minimum-width tools, snapped/maximized Monitor/Updates/Store, mobile, menus/dialogs, Docker rankings, Appearance and distribution changelogs. Source repairs include rejected optional placement state, geometry measured during entrance transforms, page-wide dock hiding, native focus outlines, viewport-based layouts inside small windows, a fixed-height Store title and long server subtitles. The final focused bundle verifies rendered Store text separation at 320/520, declared-field appearance import/export and legacy normalization, long labels at 320/390/768/520-window widths, and unchanged snap geometry. Final minimize/restore frame samples are monotonic, use one animation, avoid a competing CSS entrance and restore the exact rectangle.
+
+The full retained route regression exited 0 at 1440/768/390; the final bundle exited 0 at 320. Padding, ignored-update counts, search, history, scoped resources/tasks, install/update forms, dialogs and log limits pass without page errors. Focused final checks refreshed Store captures at all four widths. General route screenshots and representative window captures are in `screenshots/desktop-fixtures` and `screenshots/windows`.
+
+PR 19's protected gates passed frontend/backend/common builds/types, 323 backend tests, common tests, integration and dependency review. Published-image checks are recorded separately in `DEPLOYMENT.md`. These Chrome fixture results do not establish other-browser support, copied-data migration, every inherited recovery flow or full product acceptance.
+
+Reproduce the window flow checks with a bundled local preview on port 8080:
+
+```sh
+ORBIS_VISUAL_WINDOWS_ONLY=1 node scripts/visual-qa.cjs
+ORBIS_VISUAL_WINDOWS_ONLY=1 ORBIS_VISUAL_NARROW=1 node scripts/visual-qa.cjs
+```
+
 ## 2026-10-15: Home apps, search and section motion
 
 Independent Chrome inspections cover 1440/768/390/320 CSS px in both modes, with 14 installed apps and long names. Home defaults to 3 apps, selected 4 pins compact the lower cards, and Show all displays 14 in a bounded keyboard/wheel scroller while either lower card is enabled. Hiding both removes the bound; restoring the layout restores the cards. Preferences survive reload after clearing the local cache.
