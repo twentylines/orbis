@@ -78,7 +78,12 @@ const cookies = fs
     assert.equal(build?.version, release.tag, 'Reviewed update did not reach the target build');
     assert.equal(build.commit, release.commit);
     assert.equal(build.imageDigest, release.image.split('@')[1]);
-    const afterStatus = await read('/api/host-updates/status');
+    let afterStatus;
+    while (Date.now() < deadline) {
+      afterStatus = await read('/api/host-updates/status');
+      if (afterStatus.coreHealth === 'healthy' && afterStatus.job?.state === 'complete') break;
+      await page.waitForTimeout(1000);
+    }
     assert.equal(afterStatus.coreHealth, 'healthy');
     assert.equal(afterStatus.enrolled, true);
     assert.equal(afterStatus.imageMatches, true);

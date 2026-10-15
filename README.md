@@ -22,9 +22,9 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 
 [Floating tool](screenshots/windows/visual-1440x900-light-floating-settings.png) · [Dark floating tool](screenshots/windows/visual-1440x900-dark-floating-settings.png) · [Snapped Monitor](screenshots/windows/route-desktop-light-snapped-monitor.png) · [Minimized tool](screenshots/windows/desktop-light-window-minimized.png) · [Long-name phone layout](screenshots/windows/visual-320x800-dark-long-server.png)
 
-[Released beta 21 desktop](screenshots/live-beta21/workspace-desktop.png) · [Released phone workspace](screenshots/live-beta21/workspace-mobile.png) · [Released search](screenshots/live-beta21/search-mobile.png)
+[Released beta 22 floating tool](screenshots/live-beta22/floating-settings.png) · [Released phone workspace](screenshots/live-beta22/workspace-mobile.png) · [Released search](screenshots/live-beta22/search-mobile.png) · [Released minimized phone tool](screenshots/live-beta22/minimized-mobile.png)
 
-The current design screenshots above use labelled development fixture data. The beta 21 captures show the published image during isolated real-API checks. [A clean install captured in an isolated Docker VM](screenshots/live-smoke/workspace.png) and [older beta 11 live captures](screenshots/live-beta11/monitor-mobile.png) remain available as deployment evidence; they show earlier UI iterations.
+The current design screenshots above use labelled development fixture data. The beta 22 captures show the published image during isolated real-API checks. [Earlier beta 21](screenshots/live-beta21/workspace-desktop.png), [clean-install captures](screenshots/live-smoke/workspace.png) and [older beta 11 live captures](screenshots/live-beta11/monitor-mobile.png) remain available as historical deployment evidence.
 
 The original Runtipi project, licence, and contributor information follow for attribution. Its installation links install stock Runtipi, not Orbis.
 
