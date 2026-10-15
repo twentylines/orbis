@@ -13,6 +13,7 @@ UMask=0077
 EnvironmentFile=/etc/orbis/host-service.env
 RuntimeDirectory=orbis
 RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
 StateDirectory=orbis
 StateDirectoryMode=0700
 ExecStartPre=/usr/bin/install -d -m 0700 /var/lib/orbis/state /var/lib/orbis/snapshots

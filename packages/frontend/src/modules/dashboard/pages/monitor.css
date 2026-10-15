@@ -515,3 +515,6 @@
     transition: none;
   }
 }
+.desktop:has(.desktop-monitor) .desktop-dock {
+  display: none;
+}

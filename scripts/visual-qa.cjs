@@ -56,30 +56,6 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: 1 });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.stack || error.message));
-    await page.route(/^https:\/\/api\.github\.com\/repos\/twentylines\/orbis\/releases/, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(
-          hostUpdateFixture
-            ? [
-                {
-                  tag_name: 'v0.1.0-beta.8',
-                  html_url: 'https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.8',
-                  published_at: '2026-10-15T00:00:00Z',
-                  body: 'Fixture release notes.',
-                  assets: [
-                    {
-                      name: 'release-manifest.json',
-                      browser_download_url: 'https://github.com/twentylines/orbis/releases/download/v0.1.0-beta.8/release-manifest.json',
-                    },
-                  ],
-                },
-              ]
-            : [],
-        ),
-      }),
-    );
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
       const respond = (value) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(value) });
@@ -142,6 +118,18 @@ async function main() {
           imageDigest: null,
           runtipiCompatibility: '4.10.1',
         });
+      if (url.pathname === '/api/system/orbis-release')
+        return respond(
+          hostUpdateFixture
+            ? {
+                tag: 'v0.1.0-beta.8',
+                url: 'https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.8',
+                publishedAt: '2026-10-15T00:00:00Z',
+                body: 'Fixture release notes.',
+                imageManifestUrl: 'https://github.com/twentylines/orbis/releases/download/v0.1.0-beta.8/release-manifest.json',
+              }
+            : null,
+        );
       if (url.pathname === '/api/host-updates/status')
         return respond(
           hostUpdateFixture
@@ -221,6 +209,7 @@ async function main() {
     await page.getByRole('heading', { name: 'Host memory' }).waitFor();
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-monitor.png`), fullPage: true });
     const monitorOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    await page.getByRole('link', { name: 'Back to workspace' }).click();
     await page.getByRole('link', { name: 'Applications', exact: true }).click();
     await page
       .getByTestId('apps-list')
@@ -245,9 +234,21 @@ async function main() {
     const updatePlanDockHidden = !hostUpdateFixture || (await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden());
     await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates.png`), fullPage: true });
     const updatesOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    let changelogAccessible = true;
+    if (hostUpdateFixture) {
+      await page.getByText('Read changelog').click();
+      const changelog = page.getByRole('region', { name: 'v0.1.0-beta.8 changelog' });
+      changelogAccessible = await changelog.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return element.tabIndex === 0 && (window.innerWidth > 760 || (style.maxHeight === 'none' && style.overflow === 'visible'));
+      });
+      await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates-changelog.png`), fullPage: true });
+    }
     if (hostUpdateFixture) await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('link', { name: 'Back to workspace' }).click();
     await page.getByRole('link', { name: 'Monitor', exact: true }).click();
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
+    await page.getByRole('link', { name: 'Back to workspace' }).click();
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('tab', { name: 'Appearance' }).click();
     await page.getByRole('heading', { name: 'Appearance & workspace' }).waitFor();
@@ -288,6 +289,7 @@ async function main() {
       storeOverflow,
       updatesOverflow,
       updatePlanDockHidden,
+      changelogAccessible,
       settingsOverflow,
       graphitePersisted,
       wallpaperPersisted,
@@ -319,6 +321,7 @@ async function main() {
         report.storeOverflow ||
         report.updatesOverflow ||
         !report.updatePlanDockHidden ||
+        !report.changelogAccessible ||
         report.settingsOverflow ||
         report.graphitePersisted !== 'true' ||
         report.wallpaperPersisted !== 'true' ||

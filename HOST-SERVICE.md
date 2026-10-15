@@ -2,7 +2,7 @@
 
 The browser can now request a reviewed Orbis core update through an authenticated API and a separate host process. The host process listens on a Unix socket only. It accepts four fixed operations: read status, plan a published release, apply one short-lived plan, and recover one interrupted transaction. It has no shell endpoint or host package update action.
 
-This is currently a **disposable-host test path**. It has unit and socket transport tests and completed a published beta 7 → beta 8 update through the Linux VM's native socket. The Update Center read back the completed job in Chrome. The apply action was sent directly to the socket; a full browser-clicked update still needs rehearsal. Do not attach it to Hades or another production installation. See [DEPLOYMENT.md](DEPLOYMENT.md) for the transaction evidence and limits.
+This is currently a **disposable-host test path**. It has unit and socket transport tests, published beta 7 → beta 9 updates through the Linux VM's native socket, and a browser-clicked beta 9 → beta 10 update from the real Update Center. Its systemd unit survived a service restart and VM stop/start. Do not attach it to Hades or another production installation. See [DEPLOYMENT.md](DEPLOYMENT.md) for the transaction evidence and limits.
 
 ## Boundaries
 
@@ -39,8 +39,17 @@ services:
 
 The helper's socket is owned by the host process with mode `0600`. The container needs permission to connect through the mounted directory. A Compose change invalidates Orbis's saved enrollment fingerprint; a controlled core recreation and fresh enrollment are required before the host service can plan an update. The socket mount, host transaction, and systemd restart passed in the isolated VM. A mounted socket is a privileged control channel; never mount it into application containers or expose it through a TCP port.
 
-## Linux service unit
+## Linux service setup
 
-[packaging/systemd/orbis-host.service](packaging/systemd/orbis-host.service) supplies a systemd unit for a Linux host whose Orbis installation is already enrolled and whose core has the socket mount above. Put the service scripts in a stable, root-owned directory. The unit reads `/etc/orbis/host-service.env` with `ORBIS_SERVICE_SOURCE` set to the absolute `orbis-host-service.py` path, `ORBIS_ROOT` set to the exact installation root, and `ORBIS_DOCKER_CONTEXT` set to the enrolled Docker context. Install that file mode `0600` and the unit in `/etc/systemd/system`, then run `systemctl daemon-reload` and `systemctl enable --now orbis-host.service`. The unit creates the private socket, state, and snapshot directories and restarts after a process failure. Changing its source scripts or environment requires a controlled service restart; never replace them during a running update. In the isolated VM, `systemd-analyze verify`, a service restart, and a VM stop/start all passed; after boot the helper returned the saved job and the core returned to healthy. This is still a manual setup without an installer or real homelab data rehearsal.
+`scripts/orbis-host-service-setup.py` installs the helper on an **already enrolled** Linux systemd host whose running Orbis core has the read-only socket mount above. The socket directory must exist before that core container starts. The plan verifies the exact published image, saved enrollment, Docker context, merged Compose mount and environment, and host/container mount device and inode. A stale bind mount is rejected; recreate only the core under the reviewed Compose model before retrying. It does not edit Compose or adopt stock Runtipi.
+
+```sh
+python3 scripts/orbis-host-service-setup.py plan ROOT --docker-context CONTEXT
+sudo python3 scripts/orbis-host-service-setup.py install ROOT --docker-context CONTEXT --confirm-root ROOT
+```
+
+Replace both `ROOT` values with the same canonical absolute installation path and choose the enrolled Docker context. `install` takes the host-operation lock, copies the fixed helper script set to root-owned `/opt/orbis/host-service`, writes a private `/etc/orbis/host-service.env`, installs [packaging/systemd/orbis-host.service](packaging/systemd/orbis-host.service), verifies and enables the unit, then checks the socket both on the host and inside the Orbis core. It refuses an existing installation or an incorrect confirmation path. On a setup failure it disables the new unit and removes files it created. This first-install tool is not an in-place upgrader or uninstaller; do not replace its scripts during a running update.
+
+The unit keeps `/run/orbis` across service restarts, so a running container does not retain an orphaned bind mount. In the isolated VM, the corrected installer returned an active service with mode `0700` script, state, and snapshot directories and mode `0600` environment and socket; the core reached the socket after a unit restart and a full VM stop/start. It still requires an external-data rehearsal and independent backup before any production cutover.
 
 The UI remains read-only when `ORBIS_HOST_SOCKET` is absent, the socket cannot be reached, the running image differs from enrollment, or the host reports an interrupted job. An interrupted job exposes a specific recovery action. Host operating system package updates remain unimplemented and separate from this core updater.
