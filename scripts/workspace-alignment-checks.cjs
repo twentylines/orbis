@@ -52,6 +52,7 @@ module.exports = async function inspectWorkspaceAlignment(page) {
           icon: box(action.querySelector('svg')),
           label: box(action.querySelector('span')),
           lineHeight: getComputedStyle(action).lineHeight,
+          fontSize: getComputedStyle(action).fontSize,
         })),
         apps: [...document.querySelectorAll('.workspace-app')].map((card) => ({
           card: box(card),
@@ -124,7 +125,7 @@ module.exports = async function inspectWorkspaceAlignment(page) {
   }
   for (const action of initial.actions) {
     near(action.height, 44);
-    assert.equal(action.lineHeight, '20px');
+    near(Number.parseFloat(action.lineHeight), Number.parseFloat(action.fontSize) * 1.35);
     near((action.top + action.bottom) / 2, (action.icon.top + action.icon.bottom) / 2);
     near((action.top + action.bottom) / 2, (action.label.top + action.label.bottom) / 2);
     near((action.left + action.right) / 2, (action.icon.left + action.label.right) / 2);
@@ -157,6 +158,7 @@ module.exports = async function inspectWorkspaceAlignment(page) {
   });
   await page.evaluate(() => window.scrollTo(0, 0));
   await module.exports.inspectTextContainment(page);
+  await module.exports.inspectComfort(page);
   return {
     cards: true,
     actions: true,
@@ -166,7 +168,175 @@ module.exports = async function inspectWorkspaceAlignment(page) {
     headerClearance: true,
     uptime: true,
     usage: true,
+    comfort: true,
   };
+};
+
+module.exports.inspectComfort = async function inspectWorkspaceComfort(page, { textScale = 1 } = {}) {
+  const report = await page.evaluate(() => {
+    const rect = (node) => {
+      const { x, y, right, bottom, width, height } = node.getBoundingClientRect();
+      return { x, y, right, bottom, width, height };
+    };
+    const normalise = (value) => value.replace(/\s+/g, ' ').trim();
+    const ordinary = new Set([
+      'Hades',
+      'Applications',
+      'System status',
+      'Recent operations',
+      'Needs attention',
+      'Media',
+      'DNS',
+      'Backups',
+      'Healthy',
+      'No healthcheck',
+      'Stopped',
+      'No container',
+      'Pinned',
+      'Update Available',
+      'Edit workspace',
+      'Install an app',
+      'Host CPU',
+      'Host memory',
+    ]);
+    const words = [
+      ...document.querySelectorAll(
+        '.workspace-heading h1,.workspace-section-heading h2,.workspace-attention h2,.workspace-app-copy strong,.workspace-app-copy small,.workspace-app .docker-health,.workspace-actions > *,.workspace-gauge > span:last-child,.workspace-recent-tasks strong,.workspace-recent-tasks b',
+      ),
+    ]
+      .filter(
+        (node) =>
+          (node.matches('.workspace-app-copy strong,.workspace-app-copy small') && normalise(node.textContent)) ||
+          node.matches('.workspace-recent-tasks strong,.workspace-recent-tasks b') ||
+          ordinary.has(normalise(node.textContent)),
+      )
+      .map((node) => {
+        const lines = [];
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          const text = walker.currentNode;
+          if (text.parentElement.closest('svg,.visually-hidden,[hidden]')) continue;
+          for (let index = 0; index < text.length; index += 1) {
+            const range = document.createRange();
+            range.setStart(text, index);
+            range.setEnd(text, index + 1);
+            const bounds = range.getBoundingClientRect();
+            if (!bounds.width || !bounds.height) continue;
+            let line = lines.find((item) => Math.abs(item.y - bounds.y) < 1);
+            if (!line) {
+              line = { text: '', y: bounds.y };
+              lines.push(line);
+            }
+            line.text += text.textContent[index];
+          }
+        }
+        return {
+          text: normalise(node.textContent),
+          lines: lines.map((line) => normalise(line.text)),
+          truncated: node.scrollWidth > node.clientWidth + 1,
+          ellipsis: getComputedStyle(node).textOverflow === 'ellipsis' && getComputedStyle(node).overflow === 'hidden',
+          title: node.getAttribute('title'),
+          appName: node.matches('.workspace-app-copy strong'),
+          accessible: node.closest('.workspace-app')?.getAttribute('aria-label'),
+        };
+      });
+    const launcher = document.querySelector('.workspace-app-list');
+    const cards = [...launcher.querySelectorAll('.workspace-app')];
+    const copies = cards.map((card) => {
+      const copy = card.querySelector('.workspace-app-copy');
+      const style = getComputedStyle(card);
+      return {
+        card: rect(card),
+        width: rect(copy).width,
+        minimum: Math.min(
+          card.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight),
+          Number.parseFloat(getComputedStyle(copy).fontSize) * 8,
+        ),
+      };
+    });
+    const gauges = [...document.querySelectorAll('.workspace-gauge')].map((gauge) => {
+      const dial = gauge.querySelector('.workspace-dial');
+      const value = dial.querySelector('strong');
+      const label = gauge.lastElementChild;
+      const original = {
+        text: value.textContent,
+        progress: dial.style.getPropertyValue('--dial-progress'),
+        priority: dial.style.getPropertyPriority('--dial-progress'),
+      };
+      try {
+        value.textContent = '100%';
+        dial.style.setProperty('--dial-progress', '100%');
+        const bounds = rect(dial);
+        const range = document.createRange();
+        range.selectNodeContents(value);
+        const number = range.getBoundingClientRect();
+        const centre = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+        const radius = bounds.width / 2 - Number.parseFloat(getComputedStyle(dial, '::before').left);
+        const corners = [
+          [number.x, number.y],
+          [number.right, number.y],
+          [number.x, number.bottom],
+          [number.right, number.bottom],
+        ];
+        return {
+          gauge: rect(gauge),
+          dial: bounds,
+          label: rect(label),
+          valueFont: Number.parseFloat(getComputedStyle(value).fontSize),
+          innerRingRoom: radius - Math.max(...corners.map(([x, y]) => Math.hypot(x - centre.x, y - centre.y))),
+        };
+      } finally {
+        value.textContent = original.text;
+        if (original.progress) dial.style.setProperty('--dial-progress', original.progress, original.priority);
+        else dial.style.removeProperty('--dial-progress');
+      }
+    });
+    return {
+      width: innerWidth,
+      words,
+      copies,
+      appColumns: new Set(cards.map((card) => Math.round(card.getBoundingClientRect().x))).size,
+      actionHeights: [...document.querySelectorAll('.workspace-actions > *')].map((node) => rect(node).height),
+      gauges,
+      gaugeColumns: new Set(gauges.map((item) => Math.round(item.gauge.x))).size,
+    };
+  });
+  for (const label of [
+    'Hades',
+    'Applications',
+    'System status',
+    'Recent operations',
+    'Needs attention',
+    'Edit workspace',
+    'Install an app',
+    'Host CPU',
+    'Host memory',
+  ])
+    assert.ok(
+      report.words.some((word) => word.text === label),
+      `exercise the Home comfort label: ${label}`,
+    );
+  for (const word of report.words) assert.equal(word.lines.join(' '), word.text, `ordinary Home words must stay whole: ${JSON.stringify(word)}`);
+  for (const word of report.words.filter((word) => word.appName && word.truncated)) {
+    assert.ok(
+      word.ellipsis && word.title === word.text && word.accessible?.includes(word.text),
+      'long launcher names need explicit ellipsis and full hover/accessibility labels',
+    );
+    assert.ok(!['Media', 'DNS', 'Backups'].includes(word.text), 'ordinary short app names must remain fully visible');
+  }
+  assert.ok(Math.max(...report.actionHeights) - Math.min(...report.actionHeights) < 1, 'Home actions must have equal comfortable heights');
+  for (const copy of report.copies) assert.ok(copy.width >= copy.minimum - 1, 'app copy must wrap below its icon before becoming a narrow column');
+  if ([320, 390].includes(report.width)) {
+    assert.equal(report.appColumns, textScale === 2 || report.width === 320 ? 1 : 2, 'phone app columns must adapt to enlarged text');
+  }
+  assert.equal(report.gauges.length, 2);
+  if (report.width <= 768) assert.equal(report.gaugeColumns, textScale === 2 ? 1 : 2, 'enlarged narrow gauges need their own rows');
+  for (const gauge of report.gauges) {
+    assert.ok(gauge.dial.width >= gauge.valueFont * 3.5, 'gauges must scale with their numbers');
+    assert.ok(gauge.innerRingRoom >= 6, `100% needs clearance inside the circular inner ring: ${JSON.stringify(gauge)}`);
+    assert.ok(gauge.label.x >= gauge.gauge.x - 1 && gauge.label.right <= gauge.gauge.right + 1, 'gauge labels need their own readable column');
+  }
+  return report;
 };
 
 module.exports.inspectTextContainment = async function inspectWorkspaceTextContainment(page) {
@@ -230,4 +400,30 @@ module.exports.inspectTextContainment = async function inspectWorkspaceTextConta
     assert.ok(measurement.contained, `Home text escaped its surface: ${JSON.stringify(measurement)}`);
   }
   return measurements;
+};
+
+module.exports.inspectPinComfort = async function inspectPinComfort(page) {
+  const names = await page.locator('.workspace-pin-list button > span:not(.app-logo)').evaluateAll((elements) =>
+    elements.map((element) => {
+      const lines = [];
+      const text = element.firstChild;
+      for (let index = 0; index < text.length; index += 1) {
+        const range = document.createRange();
+        range.setStart(text, index);
+        range.setEnd(text, index + 1);
+        const bounds = range.getBoundingClientRect();
+        if (!bounds.width || !bounds.height) continue;
+        let line = lines.find((item) => Math.abs(item.y - bounds.y) < 1);
+        if (!line) {
+          line = { y: bounds.y, text: '' };
+          lines.push(line);
+        }
+        line.text += text.textContent[index];
+      }
+      return { text: element.textContent, lines: lines.map((line) => line.text.trim()), width: element.getBoundingClientRect().width };
+    }),
+  );
+  assert.ok(names.length >= 3, 'pin comfort requires installed fixture applications');
+  for (const name of names) assert.equal(name.lines.join(' '), name.text, `pin picker fractures an app name: ${JSON.stringify(name)}`);
+  return names;
 };

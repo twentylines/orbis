@@ -1,11 +1,12 @@
 const assert = require('node:assert/strict');
-const { inspectTextContainment } = require('./workspace-alignment-checks.cjs');
+const { inspectComfort, inspectTextContainment, inspectPinComfort } = require('./workspace-alignment-checks.cjs');
+const inspectRouteComfort = require('./route-comfort-checks.cjs');
 
 // Run: ORBIS_VISUAL_TEXT_ONLY=1 ORBIS_VISUAL_SCREENSHOT_DIR=/tmp/orbis-text node scripts/visual-qa.cjs
 // textScale2 doubles computed text/line-height while leaving root size, icons and CSS viewport unchanged.
 // ORBIS_VISUAL_TEXT_SCALE=1 checks the native viewport (for example3840x2160); default2 is text stress.
 // ORBIS_VISUAL_ZOOM instead approximates full-page zoom and must stay1 for this text-only mode.
-// The initial unscaled dock is checked before focus/scrolling; the stressed dock is then checked in both Tab directions.
+// Both resting docks must show complete labels before keyboard traversal.
 module.exports = async function inspectEnlargedText({ page, base, viewport, capture, resetPreferences, textScale = 2 }) {
   const origin = new URL(base);
   assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname) && origin.port === '8080', 'text checks require static8080 fixtures');
@@ -161,7 +162,7 @@ module.exports = async function inspectEnlargedText({ page, base, viewport, capt
             text: element.textContent.trim(),
             bounds: { x: item.x, right: item.right, y: item.y, bottom: item.bottom, width: item.width, height: item.height },
             labelPadding: { left: lr.x - item.x, right: item.right - lr.right },
-            fullyVisible: item.x >= r.x + 1 && item.right <= r.right - 1 && item.y >= 0 && item.bottom <= innerHeight,
+            fullyVisible: item.x >= r.x + 1 && item.right <= r.right - 1 && item.y >= r.y + 1 && item.bottom <= r.bottom - 1,
             labelComplete:
               getComputedStyle(label).display !== 'none' && label.scrollWidth <= label.clientWidth + 1 && lr.x >= r.x + 1 && lr.right <= r.right - 1,
           };
@@ -248,8 +249,18 @@ module.exports = async function inspectEnlargedText({ page, base, viewport, capt
         assert.ok(Math.abs(probe.enlarged - probe.normal * textScale) < 0.1, 'font scaling must not compound across states');
       const result = { mode, probes, initialDock, page: await assertPageFits(), header: await headerGeometry() };
       result.homeContent = await inspectTextContainment(page);
+      result.homeComfort = await inspectComfort(page, { textScale });
       result.homeActions = await measureText('.workspace-home-app-actions a', '.workspace-apps');
       assertContained(result.homeActions, 'Home View all');
+      result.stressedDock = await inspectInitialDock();
+      result.dockClearance = await page.evaluate(() => {
+        const dock = document.querySelector('.desktop-dock');
+        return {
+          reserved: Number.parseFloat(getComputedStyle(document.querySelector('.desktop-main')).paddingBottom),
+          required: dock.offsetHeight + Number.parseFloat(getComputedStyle(dock).bottom) + 16,
+        };
+      });
+      assert.ok(result.dockClearance.reserved >= result.dockClearance.required, 'the taller dock needs reserved page space');
       await shot(`${mode}-text-home`);
       result.dock = await inspectDock(mode);
 
@@ -274,6 +285,7 @@ module.exports = async function inspectEnlargedText({ page, base, viewport, capt
       await settle();
       result.pins = await measureText('.workspace-pin-list button');
       assertContained(result.pins, 'pin picker');
+      result.pinComfort = await inspectPinComfort(page);
       await page.locator('.workspace-pin-list').scrollIntoViewIfNeeded();
       await shot(`${mode}-text-pins`);
 
@@ -287,6 +299,7 @@ module.exports = async function inspectEnlargedText({ page, base, viewport, capt
       await page.getByRole('tablist', { name: 'Application sections', exact: true }).scrollIntoViewIfNeeded();
       await shot(`${mode}-text-tabs`);
       await assertPageFits();
+      if (page.viewportSize().width <= 390) result.routeComfort = await inspectRouteComfort({ page, base, open, capture, mode, textScale });
       report.modes.push(result);
     }
     assert.equal(report.mutations.length, 0, 'text/layout checks must not issue app or host mutations');

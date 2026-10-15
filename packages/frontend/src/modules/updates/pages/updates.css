@@ -356,11 +356,15 @@
 }
 .desktop-update-release-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 12px;
   margin-bottom: 13px;
 }
 .desktop-update-release-title strong {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   font-size: 21px;
 }
 .desktop-update-release-title time {
@@ -465,6 +469,28 @@
     grid-column: auto;
   }
   .desktop-updates-card {
-    padding: 18px;
+    padding: 14px;
+  }
+}
+@container (max-width: 540px) {
+  .desktop-host-package {
+    padding: 12px;
+  }
+  .desktop-host-package-title {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .desktop-host-package-title input {
+    margin-top: calc((1.45em - 18px) / 2);
+  }
+  .desktop-host-package-title strong {
+    font-size: inherit;
+  }
+  .desktop-host-package-title span {
+    grid-column: 2;
+    justify-self: start;
   }
 }

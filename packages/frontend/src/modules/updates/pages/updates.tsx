@@ -5,7 +5,7 @@ import { useAppContext } from '@/context/app-context';
 import { IconArrowRight, IconBrandGithub, IconPackage, IconServerCog } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import './updates.css';
 
@@ -509,7 +509,14 @@ export default function Updates() {
                               setReviewPackagePlan(null);
                             }}
                           />
-                          <strong>{item.name}</strong>
+                          <strong>
+                            {[...item.name.matchAll(/[^:-]*[:-]|[^:-]+$/g)].map((part) => (
+                              <Fragment key={part.index}>
+                                {part[0]}
+                                <wbr />
+                              </Fragment>
+                            ))}
+                          </strong>
                           {item.security ? <span>Security</span> : null}
                         </label>
                         <p>

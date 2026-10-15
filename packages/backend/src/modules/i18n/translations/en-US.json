@@ -381,7 +381,7 @@
   "AUTH_RESET_PASSWORD_TITLE": "Reset password",
   "AUTH_TOTP_INSTRUCTIONS": "Enter the code from your authenticator app",
   "AUTH_TOTP_SUBMIT": "Confirm",
-  "AUTH_TOTP_TITLE": "Two-factor authentication",
+  "AUTH_TOTP_TITLE": "Enter your code",
   "BACKUPS_LIST": "Backups list",
   "BACKUPS_LIST_BACKUP_NOW": "Backup now",
   "BACKUPS_LIST_ROW_TITLE_ID": "ID",

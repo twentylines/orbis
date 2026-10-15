@@ -94,6 +94,20 @@ module.exports = async function inspectHomeApps(page, { apps, resetPreferences, 
     await assertFits();
     return geometry;
   };
+  const scaleText = () =>
+    page.evaluate(() => {
+      const baseline = [...document.querySelectorAll('body,body *')]
+        .filter((element) => element instanceof HTMLElement && !['SCRIPT', 'STYLE', 'LINK', 'META'].includes(element.tagName))
+        .map((element) => {
+          const style = getComputedStyle(element);
+          return { element, font: Number.parseFloat(style.fontSize), line: style.lineHeight };
+        });
+      for (const { element, font, line } of baseline) {
+        if (!Number.isFinite(font)) continue;
+        element.style.setProperty('font-size', `${font * 2}px`, 'important');
+        if (line !== 'normal') element.style.setProperty('line-height', `${Number.parseFloat(line) * 2}px`, 'important');
+      }
+    });
 
   try {
     for (const mode of modes) {
@@ -212,6 +226,25 @@ module.exports = async function inspectHomeApps(page, { apps, resetPreferences, 
       const restoredToggle = await picker();
       assert.equal(await restoredToggle.getAttribute('aria-checked'), 'true');
       await closePicker();
+      let enlargedText;
+      if (page.viewportSize().width <= 390) {
+        await picker();
+        await scaleText();
+        await settle();
+        const names = await inspectWorkspaceAlignment.inspectPinComfort(page);
+        assert.equal(names.length, installed.length, 'stress every installed picker name');
+        await snapshot(`${mode}-home-picker-text200`, false);
+        // Fresh navigation drops temporary text styles before scaling the complete Home once.
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await waitForCount(installed.length);
+        await settle();
+        await scaleText();
+        await settle();
+        const home = await inspectWorkspaceAlignment.inspectComfort(page, { textScale: 2 });
+        await assertFits();
+        await snapshot(`${mode}-home-all-text200`, false);
+        enlargedText = { names, home };
+      }
       report.push({
         mode,
         defaultApps: 3,
@@ -227,6 +260,7 @@ module.exports = async function inspectHomeApps(page, { apps, resetPreferences, 
         reload: true,
         pickerFocus: true,
         switchSizing: true,
+        enlargedText,
       });
     }
   } finally {

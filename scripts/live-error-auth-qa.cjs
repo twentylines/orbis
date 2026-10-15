@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { chromium } = require('@playwright/test');
+const { inspectTextContainment } = require('./workspace-alignment-checks.cjs');
 const cookieFile = process.env.ORBIS_AUDIT_COOKIE_FILE;
 const releaseFile = process.env.ORBIS_AUDIT_RELEASE_FILE;
 const base = process.env.ORBIS_AUDIT_URL || 'http://127.0.0.1:18080';
@@ -92,7 +93,7 @@ const cookies = fs
     };
     for (const width of [1440, 390, 320]) {
       for (const mode of ['light', 'dark']) {
-        const preferences = { ...original, mode, windows: {} };
+        const preferences = { ...original, mode, windows: {}, workspace: { ...original.workspace, hidden: [] } };
         report.directPreferenceWrites += 1;
         const saved = await reader.request.put(`${base}/api/desktop-preferences`, { data: preferences, headers: { Origin: base } });
         assert.ok(saved.ok(), 'Could not prepare the disposable account appearance');
@@ -103,6 +104,93 @@ const cookies = fs
           await context.addInitScript((value) => localStorage.setItem('server-desktop-preferences-v1', JSON.stringify(value)), preferences);
           const page = await context.newPage();
           await watch(page);
+          await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+          await page
+            .locator('.workspace-activity .workspace-section-heading p')
+            .filter({ hasText: /^Uptime \d/ })
+            .waitFor();
+          await page.locator('.desktop-connection-dot.is-connected').waitFor();
+          await page.waitForTimeout(650);
+          const home = await page.evaluate(() => {
+            const box = (selector) => {
+              const bounds = document.querySelector(selector).getBoundingClientRect();
+              return { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, height: bounds.height };
+            };
+            const bar = box('.desktop-system-bar');
+            const logout = box('.desktop-icon-button');
+            const connection = document.querySelector('.desktop-connection');
+            return {
+              brand: box('.desktop-brand'),
+              heading: box('.workspace-heading'),
+              apps: box('.workspace-apps'),
+              grid: box('.workspace-grid'),
+              logout,
+              clearance: { top: logout.top - bar.top, right: bar.right - logout.right, bottom: bar.bottom - logout.bottom },
+              footer: getComputedStyle(connection).position === 'absolute' ? box('.desktop-connection') : null,
+              connection: { label: connection.textContent.trim(), aria: connection.getAttribute('aria-label') },
+              uptime: document.querySelector('.workspace-activity .workspace-section-heading p').textContent.trim(),
+              usage: document.querySelector('.container-resources-heading h2').textContent.trim(),
+              overflow: document.documentElement.scrollWidth > innerWidth,
+            };
+          });
+          assert.equal(home.overflow, false, 'Released Home overflows');
+          for (const bounds of [home.heading, home.apps, home.grid, home.footer].filter(Boolean))
+            assert.ok(Math.abs(bounds.left - home.brand.left) <= 1, 'Released Home/header content columns differ');
+          for (const bounds of [home.heading, home.grid])
+            assert.ok(Math.abs(bounds.right - home.logout.right) <= 1, 'Released Home/header right edges differ');
+          const clearances = Object.values(home.clearance);
+          assert.ok(Math.max(...clearances) - Math.min(...clearances) <= 1, 'Released logout clearance is asymmetric');
+          assert.equal(home.usage, 'Usage');
+          assert.equal(home.connection.aria, `Connected to server ${home.connection.label}`, 'Connected status must show only the server address');
+          const units = { d: 86400, h: 3600, m: 60, s: 1 };
+          const duration = [...home.uptime.matchAll(/(\d+)([dhms])/g)].reduce((total, match) => total + Number(match[1]) * units[match[2]], 0);
+          const telemetry = await read('/api/system/telemetry');
+          assert.equal(telemetry.cpu.scope, 'host-proc', 'The owned VM must expose host readings');
+          assert.ok(Math.abs(telemetry.cpu.uptimeSeconds - duration) < 65, 'Released uptime must match the sampled host duration');
+          await page.screenshot({ path: path.join(output, `workspace-${mode}-${width}.png`) });
+          report.states.push({ width, mode, home, sampledHostUptime: telemetry.cpu.uptimeSeconds });
+          await page.evaluate(() => {
+            const baseline = [...document.querySelectorAll('body,body *')]
+              .filter((element) => element instanceof HTMLElement && !['SCRIPT', 'STYLE', 'LINK', 'META'].includes(element.tagName))
+              .map((element) => ({
+                element,
+                font: Number.parseFloat(getComputedStyle(element).fontSize),
+                line: getComputedStyle(element).lineHeight,
+              }));
+            for (const { element, font, line } of baseline) {
+              if (!Number.isFinite(font)) continue;
+              element.style.setProperty('font-size', `${font * 2}px`, 'important');
+              if (line !== 'normal') element.style.setProperty('line-height', `${Number.parseFloat(line) * 2}px`, 'important');
+            }
+          });
+          await page.waitForTimeout(400);
+          const enlargedHome = await inspectTextContainment(page);
+          const enlargedDock = await page.locator('.desktop-dock').evaluate((dock) => {
+            const bounds = dock.getBoundingClientRect();
+            return {
+              overflow: document.documentElement.scrollWidth > innerWidth,
+              reserved: Number.parseFloat(getComputedStyle(document.querySelector('.desktop-main')).paddingBottom),
+              required: dock.offsetHeight + Number.parseFloat(getComputedStyle(dock).bottom) + 16,
+              labels: [...dock.querySelectorAll('.desktop-dock-item')].map((item) => {
+                const r = item.getBoundingClientRect();
+                const label = item.querySelector('span');
+                return {
+                  text: label.textContent,
+                  visible: r.x >= bounds.x + 1 && r.right <= bounds.right - 1 && r.y >= bounds.y + 1 && r.bottom <= bounds.bottom - 1,
+                  complete: label.scrollWidth <= label.clientWidth + 1,
+                };
+              }),
+            };
+          });
+          assert.equal(enlargedDock.overflow, false, 'Released enlarged Home overflows');
+          assert.equal(enlargedDock.labels.length, 6);
+          assert.ok(
+            enlargedDock.labels.every((label) => label.visible && label.complete),
+            'Released enlarged dock clips a resting label',
+          );
+          assert.ok(enlargedDock.reserved >= enlargedDock.required, 'Released enlarged dock needs more page clearance');
+          await page.screenshot({ path: path.join(output, `workspace-text200-${mode}-${width}.png`) });
+          report.states.push({ width, mode, enlargedHome, enlargedDock });
           let failing = true;
           await page.route('**/api/marketplace/all', (route) =>
             failing && route.request().method() === 'GET'

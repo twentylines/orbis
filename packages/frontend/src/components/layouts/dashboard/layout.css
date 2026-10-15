@@ -2,7 +2,7 @@
 /* biome-ignore-all lint/complexity/noImportantStyles: Tabler utilities and reduced-motion controls need stronger overrides. */
 
 html:has(.desktop) {
-  scroll-padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(var(--orbis-dock-height, 78px) + 54px + env(safe-area-inset-bottom, 0px));
 }
 
 .desktop {
@@ -264,7 +264,7 @@ html:has(.desktop) {
 .desktop-main {
   width: 100%;
   margin: 0 auto;
-  padding: 24px var(--desktop-inset) 154px;
+  padding: 24px var(--desktop-inset) max(154px, calc(var(--orbis-dock-height, 78px) + 64px + env(safe-area-inset-bottom, 0px)));
   min-height: calc(100vh - 78px);
 }
 .desktop-view {
@@ -391,11 +391,14 @@ html:has(.desktop) {
   height: 100%;
 }
 .desktop-view-app .catalogue-tile {
+  flex-wrap: wrap;
   gap: 15px;
   min-height: 104px;
   padding: 16px;
 }
 .desktop-view-app .catalogue-tile .card-body {
+  flex: 1 1 8em;
+  min-width: min(100%, 8em);
   padding: 0;
 }
 .desktop-view-app .catalogue-tile .logo {
@@ -409,7 +412,11 @@ html:has(.desktop) {
   font-weight: 600;
 }
 .desktop-view-app .app-tile .card-body {
+  flex-wrap: wrap;
   min-width: 0;
+}
+.desktop-view-app .button-tile .card-body {
+  flex-wrap: wrap;
 }
 .desktop-view-app .app-tile h3,
 .desktop-view-app .app-tile p {
@@ -463,6 +470,9 @@ html:has(.desktop) {
 }
 .desktop-settings > .card > [role="tabpanel"] > .card-body {
   padding: 24px 0 0;
+}
+.desktop-settings > .card > [role="tabpanel"] > .card-body > .card-body {
+  padding: 0;
 }
 .desktop-view-app .card-header {
   background: transparent;
@@ -566,7 +576,8 @@ html:has(.desktop) {
 }
 .desktop-installed-grid .app-tile .card-body > .d-flex.flex-column,
 .desktop-installed-grid .button-tile .card-body > div:last-child {
-  min-width: 0;
+  flex: 1 1 8em;
+  min-width: min(100%, 8em);
   overflow-wrap: anywhere;
 }
 @container (max-width: 540px) {
@@ -848,7 +859,7 @@ html:has(.desktop) {
     padding: 0;
   }
   .desktop-main {
-    padding: 30px 24px 124px;
+    padding: 30px 24px max(124px, calc(var(--orbis-dock-height, 71px) + 40px + env(safe-area-inset-bottom, 0px)));
   }
   .desktop-view-app {
     padding: 20px;
@@ -865,6 +876,9 @@ html:has(.desktop) {
     width: calc(100% - 22px);
     justify-content: space-around;
     gap: 0;
+    flex-wrap: wrap;
+    row-gap: 4px;
+    overflow: visible;
     border-radius: 16px;
   }
   .desktop .desktop-dock-item {
@@ -912,6 +926,9 @@ html:has(.desktop) {
   .desktop {
     --desktop-bar-inset: calc(6px + 1em);
   }
+  .desktop-product {
+    display: none;
+  }
   .desktop-guest-bar .desktop-brand span {
     display: none;
   }
@@ -949,7 +966,7 @@ html:has(.desktop) {
   .desktop-dock {
     width: calc(100% - 8px);
     max-width: calc(100% - 8px);
-    padding: 3px;
+    padding: 3px 2px;
     scroll-padding-inline: 3px;
   }
   .desktop .desktop-dock-item {

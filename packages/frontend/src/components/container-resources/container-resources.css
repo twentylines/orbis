@@ -203,7 +203,7 @@
 }
 @container (max-width: 650px) {
   .container-resources {
-    padding: 20px;
+    padding: 14px;
   }
   .container-resource-list > li {
     gap: 12px;

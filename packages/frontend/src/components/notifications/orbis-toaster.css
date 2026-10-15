@@ -1,4 +1,5 @@
 .orbis-notifications {
+  container: orbis-notices / inline-size;
   --notice-inset: var(--desktop-inset);
   --notice-top: 108px;
   position: fixed;
@@ -115,7 +116,21 @@ body:not(:has(.desktop)) .orbis-notifications {
 }
 @media (max-width: 600px) {
   .orbis-notifications {
-    --notice-top: 118px;
+    --notice-top: calc(90px + 2em);
+  }
+}
+@container orbis-notices (max-width: 18em) {
+  .orbis-notification-icon {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .orbis-notification-message {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .orbis-notification-dismiss {
+    grid-column: 3;
+    grid-row: 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {

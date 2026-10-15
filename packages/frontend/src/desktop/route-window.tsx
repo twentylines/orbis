@@ -101,8 +101,13 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       });
     };
     measure();
+    const observer = new ResizeObserver(measure);
+    for (const element of document.querySelectorAll('.desktop-system-bar,.desktop-dock')) observer.observe(element);
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
   }, [cancelGesture]);
 
   useEffect(

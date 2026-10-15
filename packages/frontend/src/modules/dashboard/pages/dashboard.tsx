@@ -216,7 +216,7 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
                   >
                     <AppLogo urn={info.urn} size={54} alt="" />
                     <span className="workspace-app-copy">
-                      <strong>{info.name}</strong>
+                      <strong title={info.name}>{info.name}</strong>
                       <small aria-hidden={!appUpdate && !workspace.pinnedApps.includes(info.urn) ? true : undefined}>
                         {`${workspace.pinnedApps.includes(info.urn) ? 'Pinned' : ''}${workspace.pinnedApps.includes(info.urn) && appUpdate ? ' · ' : ''}${appUpdate ? 'Update available' : ''}`}
                       </small>

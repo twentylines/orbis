@@ -343,7 +343,7 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
           await page.getByRole('textbox', { name: 'Email address', exact: true }).fill('fixture@example.com');
           await page.getByLabel('Password', { exact: true }).fill('synthetic-otp-audit');
           await page.getByRole('button', { name: 'Log in', exact: true }).click();
-          await page.getByRole('heading', { name: 'Two-factor authentication', exact: true }).waitFor();
+          await page.getByRole('heading', { name: 'Enter your code', exact: true }).waitFor();
         }
         await settle();
         const geometry = await measure('.desktop-auth');
@@ -425,7 +425,7 @@ module.exports = async function inspectErrorAuth({ page, base, capture }) {
           assert.equal(await confirm.isEnabled(), true);
           await confirm.click();
           await page.locator('.orbis-notification').getByText('Incorrect authentication code.', { exact: true }).waitFor();
-          await page.getByRole('heading', { name: 'Two-factor authentication', exact: true }).waitFor();
+          await page.getByRole('heading', { name: 'Enter your code', exact: true }).waitFor();
           report.totp.push({ mode, native, enlarged, keyboard: true, fixtureRejection: true });
         }
         report.auth.push({ mode, route, geometry });
