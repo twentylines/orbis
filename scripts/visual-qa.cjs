@@ -142,6 +142,7 @@ async function main() {
     await page.getByRole('button', { name: 'Hide Runtime filesystem' }).click();
     await page.getByRole('button', { name: 'Make System activity standard width' }).click();
     await page.getByRole('button', { name: 'Pin Backups' }).click();
+    const savingAfterPin = await page.locator('.workspace-editor-sync').innerText();
     const editedOrder = await page.locator('.workspace-widget').first().locator('h2').innerText();
     const storageHidden = (await page.locator('.workspace-storage').count()) === 0;
     const activityStandard = !(await page.locator('.workspace-widget').first().getAttribute('class')).includes('workspace-widget-wide');
@@ -224,6 +225,7 @@ async function main() {
       editOverflow,
       workspaceLayoutPersisted,
       pinnedAppFirst,
+      savingAfterPin,
       monitorOverflow,
       appsOverflow,
       storeOverflow,
@@ -252,6 +254,7 @@ async function main() {
         report.editOverflow ||
         !report.workspaceLayoutPersisted ||
         !report.pinnedAppFirst ||
+        report.savingAfterPin !== 'Saving layout…' ||
         !report.orbisBrand ||
         report.monitorOverflow ||
         report.appsOverflow ||
