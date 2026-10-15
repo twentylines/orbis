@@ -16,7 +16,7 @@ The retained helpers are `home-app-checks.cjs`, `command-search-checks.cjs` and 
 
 Retained release-candidate runs exited 0 for the full 1440/768/390/320 route matrix and the 14-app Home matrix in both modes. All search, geometry, persistence, form, history and focus assertions passed with no page errors. The many-app Home matrix was rerun after the 900px compact-grid refinement, and its screenshots were regenerated at the top of the page with the launcher scrolled to its beginning.
 
-Separate baseline route runs also exited 0 at 3840×2160 CSS px and at 720×1120 CSS px rendered at 2× scale (a 1440px-wide, 200% zoom layout simulation). These passed the retained assertions and had no page errors. This does not establish native browser zoom, text-only enlargement or every inherited flow. Beta 21 released-image verification follows publication.
+Separate baseline route runs also exited 0 at 3840×2160 CSS px and at 720×1120 CSS px rendered at 2× scale (a 1440px-wide, 200% zoom layout simulation). These passed the retained assertions and had no page errors. This does not establish native browser zoom, text-only enlargement or every inherited flow. Published beta 21 then passed the isolated arm64 OTA, actual saved Home/search interactions, real app start/stop/resources/logs and all 248 icon decodes. Original preferences and stopped app state were restored. `DEPLOYMENT.md` records the release identity and evidence limits.
 
 ## 2026-10-15: app workspace and further alignment corrections
 
