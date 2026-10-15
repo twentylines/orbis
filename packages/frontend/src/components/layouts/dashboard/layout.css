@@ -142,8 +142,8 @@
 }
 .desktop .desktop-task-trigger {
   position: relative;
-  width: 39px;
-  height: 39px;
+  width: 40px;
+  height: 40px;
   border-radius: 11px;
   color: var(--desktop-chrome-ink);
 }
@@ -174,7 +174,7 @@
 }
 .desktop-search-trigger {
   gap: 10px;
-  height: 39px;
+  height: 40px;
   min-width: 178px;
   padding: 0 10px;
   border-radius: 11px;
@@ -182,7 +182,7 @@
 }
 .desktop-mode-toggle {
   gap: 8px;
-  height: 39px;
+  height: 40px;
   width: 84px;
   padding: 0 11px;
   border-radius: 11px;
@@ -192,10 +192,10 @@
 }
 .desktop-mode-toggle svg {
   color: #e8c49a;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: color 0.2s ease;
 }
 .desktop-mode-toggle:hover svg {
-  transform: rotate(-22deg) scale(1.15);
+  color: #f3d6b6;
 }
 .desktop-search-trigger span {
   flex: 1;
@@ -210,8 +210,8 @@
   box-shadow: none;
 }
 .desktop-icon-button {
-  width: 39px;
-  height: 39px;
+  width: 40px;
+  height: 40px;
   border-radius: 11px;
 }
 .desktop-operation {
@@ -833,8 +833,8 @@
   }
   .desktop-search-trigger,
   .desktop-mode-toggle {
-    width: 39px;
-    min-width: 39px;
+    width: 40px;
+    min-width: 40px;
     padding: 0;
   }
 }
@@ -868,15 +868,15 @@
   }
   .desktop-search-trigger {
     min-width: 0;
-    width: 39px;
-    height: 39px;
+    width: 40px;
+    height: 40px;
     justify-content: center;
     padding: 0;
   }
   .desktop-mode-toggle {
-    width: 39px;
-    min-width: 39px;
-    height: 39px;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
     padding: 0;
   }
   .desktop-main {
@@ -930,9 +930,9 @@
   .desktop-search-trigger,
   .desktop-mode-toggle,
   .desktop-icon-button {
-    width: 35px;
-    min-width: 35px;
-    height: 35px;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
   }
   .desktop-view-app .catalogue-tile .logo,
   .desktop-view-app .catalogue-tile img.app-logo {

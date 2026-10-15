@@ -2,6 +2,10 @@
 
 ## Unreleased development preview
 
+- Redesigned official/custom app details around shared actions, Docker health, scoped resources and operations. Fixed section history/keyboard navigation, custom Update routing, missing custom Remove access and destructive-dialog backup-choice reset.
+- Aligned Workspace action buttons, app-card title/notice/health slots and header glyphs. Hover and focus feedback now preserve their geometry. Improved menus, tablet dialogs, backup empty states and light/dark editors after independent browser inspections.
+- Fixed stale log-stream retries after navigation and validated authenticated log requests before opening readers, with a 1–1000-line limit.
+
 - Corrected header hover alignment, toggle width changes and tablet overlaps; removed bright white rims and double dialog frames. Dialogs and menus now share Orbis tokens. Simplified Appearance and app controls after independent visual audits.
 
 - Added bounded server-side metric history with seven-day retention, inspectable charts, measured downsampling and responsive Monitor ranges. Full outstanding acceptance requirements are tracked in `ACCEPTANCE.md`.

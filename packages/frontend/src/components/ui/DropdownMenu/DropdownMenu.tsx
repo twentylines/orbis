@@ -32,7 +32,12 @@ const DropdownMenuSubContent = ({ className, ...props }: React.ComponentProps<ty
 
 const DropdownMenuContent = ({ className, sideOffset = 4, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) => (
   <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content sideOffset={sideOffset} className={clsx('orbis-dropdown-menu d-block position-relative', className)} {...props} />
+    <DropdownMenuPrimitive.Content
+      collisionPadding={16}
+      sideOffset={sideOffset}
+      className={clsx('orbis-dropdown-menu d-block position-relative', className)}
+      {...props}
+    />
   </DropdownMenuPrimitive.Portal>
 );
 

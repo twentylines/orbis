@@ -18,6 +18,7 @@ import { redirect, useLocation, useNavigate, useParams } from 'react-router';
 import type { Route } from './+types/app-update-page';
 import { getApp } from '@/api-client';
 import yaml from 'yaml';
+import { useDesktopPreferences } from '@/desktop/preferences';
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   if (!params.appId || !params.storeId) {
@@ -46,6 +47,8 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
   const params = useParams<{ storeId: string; appId: string }>();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { preferences } = useDesktopPreferences();
+  const editorTheme = preferences.mode === 'dark' ? copilot : 'light';
   const location = useLocation();
 
   const storeId = params.storeId;
@@ -142,7 +145,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                       value={configDiffQuery.data?.new ?? ''}
                       readOnly
                       height="400px"
-                      theme={copilot}
+                      theme={editorTheme}
                       extensions={[
                         unifiedMergeView({
                           original: configDiffQuery.data?.current ?? '',
@@ -163,7 +166,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                         value={yaml.stringify(JSON.parse(composeDiffQuery.data?.new ?? '{}'), { nullStr: '' }) ?? ''}
                         readOnly
                         height="400px"
-                        theme={copilot}
+                        theme={editorTheme}
                         extensions={[
                           unifiedMergeView({
                             original: yaml.stringify(JSON.parse(composeDiffQuery.data?.current ?? '{}'), { nullStr: '' }) ?? '',

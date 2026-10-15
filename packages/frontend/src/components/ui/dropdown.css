@@ -8,4 +8,18 @@
   border-radius: 10px;
   box-shadow: 0 12px 32px rgba(8, 24, 18, 0.18);
   font-size: 14px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+.orbis-dropdown-menu .dropdown-item {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 9px 12px;
+  line-height: 1.45;
+  white-space: normal;
+}
+.orbis-dropdown-menu .dropdown-divider {
+  height: 1px;
+  margin: 6px 4px;
+  border-top: 1px solid var(--desktop-line, var(--tblr-border-color));
 }

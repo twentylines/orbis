@@ -12,10 +12,27 @@ body:has(.desktop) {
   --desktop-edge: rgba(33, 64, 54, 0.2);
   --desktop-highlight: rgba(255, 255, 255, 0.18);
   --desktop-inset: 64px;
-  --desktop-accent: #ae6342;
+  --desktop-accent: #914725;
   --desktop-focus: #b75c3e;
+  --tblr-body-color: var(--desktop-ink);
+  --tblr-secondary: var(--desktop-muted);
+  --tblr-secondary-color: var(--desktop-muted);
+  --tblr-border-color: var(--desktop-line);
+  --tblr-border-active-color: var(--desktop-accent);
+  --tblr-bg-surface: var(--desktop-surface);
+  --tblr-bg-forms: var(--desktop-surface);
+  --tblr-bg-surface-secondary: rgba(115, 146, 127, 0.06);
+  --tblr-bg-surface-tertiary: rgba(115, 146, 127, 0.1);
+  --tblr-primary: #27584a;
+  --tblr-primary-rgb: 39, 88, 74;
+  --tblr-success: #27584a;
+  --tblr-success-darken: #306b59;
+  --tblr-shadow-input: none;
   --workspace-heading-ink: #132e2b;
   --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
+}
+body:has(.desktop) .form-select {
+  min-height: 40px;
 }
 
 .desktop[data-desktop-wallpaper="tidal"],
@@ -50,7 +67,7 @@ body:has(.desktop[data-desktop-preset="forest"]) {
   --desktop-chrome: rgba(22, 50, 37, 0.88);
   --desktop-panel-dark: rgba(17, 49, 35, 0.93);
   --desktop-line: rgba(22, 66, 43, 0.18);
-  --desktop-accent: #a25c3d;
+  --desktop-accent: #8d482b;
 }
 
 .desktop[data-desktop-preset="stone"],
@@ -61,7 +78,7 @@ body:has(.desktop[data-desktop-preset="stone"]) {
   --desktop-chrome: rgba(55, 43, 34, 0.88);
   --desktop-panel-dark: rgba(47, 38, 31, 0.93);
   --desktop-line: rgba(77, 59, 45, 0.17);
-  --desktop-accent: #9c5b3b;
+  --desktop-accent: #8e482c;
 }
 
 .desktop[data-desktop-preset="ocean"],
@@ -72,7 +89,7 @@ body:has(.desktop[data-desktop-preset="ocean"]) {
   --desktop-chrome: rgba(18, 48, 55, 0.89);
   --desktop-panel-dark: rgba(15, 45, 52, 0.94);
   --desktop-line: rgba(29, 75, 83, 0.17);
-  --desktop-accent: #a3553e;
+  --desktop-accent: #8f442d;
 }
 
 .desktop[data-desktop-preset="blush"],
@@ -83,11 +100,12 @@ body:has(.desktop[data-desktop-preset="blush"]) {
   --desktop-chrome: rgba(56, 36, 41, 0.89);
   --desktop-panel-dark: rgba(49, 33, 38, 0.94);
   --desktop-line: rgba(89, 52, 55, 0.17);
-  --desktop-accent: #9a4d48;
+  --desktop-accent: #8f3f3b;
 }
 
 .desktop[data-desktop-mode="dark"],
 body:has(.desktop[data-desktop-mode="dark"]) {
+  --desktop-accent: #e2b28d;
   --desktop-ink: #edf2ef;
   --desktop-muted: #b5c8bf;
   --desktop-surface: rgba(20, 36, 35, 0.95);
@@ -103,6 +121,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 
 .desktop[data-desktop-mode="light"][data-desktop-preset="graphite"],
 body:has(.desktop[data-desktop-mode="light"][data-desktop-preset="graphite"]) {
+  --desktop-accent: #914725;
   --desktop-ink: #20312c;
   --desktop-muted: #50655b;
   --desktop-surface: rgba(243, 248, 244, 0.94);
@@ -116,6 +135,8 @@ body:has(.desktop[data-desktop-mode="light"][data-desktop-preset="graphite"]) {
 
 body:has(.desktop) .modal-content,
 body:has(.desktop) .orbis-dropdown-menu {
+  --tblr-bg-surface: var(--desktop-surface);
+  --tblr-bg-surface-secondary: rgba(115, 146, 127, 0.06);
   --tblr-body-color: var(--desktop-ink);
   --tblr-secondary-color: var(--desktop-muted);
   --tblr-border-color: var(--desktop-line);
@@ -158,4 +179,35 @@ body:has(.desktop) :is(.modal-content, .orbis-dropdown-menu) :focus-visible {
   body:has(.desktop) .dimmed-background {
     animation-duration: 0.01ms;
   }
+}
+
+body:has(.desktop) .modal-dialog {
+  width: calc(100% - 32px);
+  max-width: 720px;
+  margin: 16px auto;
+  min-height: calc(100% - 32px);
+}
+body:has(.desktop) .modal-dialog.modal-sm {
+  max-width: 380px;
+}
+body:has(.desktop) .modal-dialog.modal-md {
+  max-width: 560px;
+}
+body:has(.desktop) .modal-dialog.modal-xl {
+  max-width: 1080px;
+}
+body:has(.desktop) .modal-content .btn-success {
+  --tblr-btn-bg: #27584a;
+  --tblr-btn-border-color: #27584a;
+  --tblr-btn-hover-bg: #306b59;
+  --tblr-btn-hover-border-color: #306b59;
+}
+body:has(.desktop) .form-check-input:checked,
+body:has(.desktop) .switch-root[data-state="checked"] {
+  background-color: #27584a;
+  border-color: #27584a;
+}
+body:has(.desktop) .modal-content :is(.form-control, .form-select):focus {
+  border-color: var(--desktop-accent);
+  box-shadow: none;
 }

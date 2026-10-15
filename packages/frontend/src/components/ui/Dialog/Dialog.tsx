@@ -19,7 +19,7 @@ const DialogTrigger = DialogPrimitive.Trigger;
 
 const DialogPortal = ({ children, ...props }: DialogPrimitive.DialogPortalProps & ModalProps) => (
   <DialogPrimitive.Portal {...props}>
-    <div className="modal modal-sm d-block dimmed-background">
+    <div className="modal d-block dimmed-background">
       <div className={clsx(`modal-dialog modal-dialog-centered modal-${props.size || 'lg'}`, 'zoom-in')}>
         <div className="orbis-modal-frame">
           <div
@@ -49,6 +49,7 @@ const DialogContent = ({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & ModalProps) => {
   const opener = useRef<HTMLElement | null>(null);
+  const focusFallback = useRef<HTMLElement | null>(null);
   return (
     <DialogPortal type={props.type} size={props.size}>
       <DialogOverlay />
@@ -56,14 +57,19 @@ const DialogContent = ({
         className={clsx('modal-content', className)}
         {...props}
         onOpenAutoFocus={(event) => {
-          opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          const menuTriggerId = active?.closest('[role="menu"]')?.getAttribute('aria-labelledby');
+          const menuTrigger = menuTriggerId ? document.getElementById(menuTriggerId) : null;
+          opener.current = menuTrigger ?? active;
+          focusFallback.current = opener.current?.closest<HTMLElement>('[data-dialog-focus-fallback]') ?? null;
           onOpenAutoFocus?.(event);
         }}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
-          if (!event.defaultPrevented && opener.current?.isConnected) {
+          const target = opener.current?.isConnected ? opener.current : focusFallback.current;
+          if (!event.defaultPrevented && target?.isConnected) {
             event.preventDefault();
-            opener.current.focus();
+            target.focus();
           }
         }}
       >

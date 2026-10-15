@@ -23,7 +23,7 @@ import {
 } from '@tabler/icons-react';
 import { useIsMutating, useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { Link, useLocation, useMatches, useNavigate } from 'react-router';
 import './layout.css';
 
 const navigation = [
@@ -54,6 +54,8 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const { isLoggedIn } = useUserContext();
   const { preferences, update } = useDesktopPreferences();
   const location = useLocation();
+  const matches = useMatches();
+  const isAppDetail = matches.some((match) => ['app-details', 'app-details-store', 'custom-app'].includes(match.id));
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -125,7 +127,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}`}
             title="Task centre"
           >
-            <IconActivity size={19} aria-hidden="true" />
+            <IconActivity size={20} aria-hidden="true" />
             {activeTasks > 0 ? <span>{activeTasks}</span> : null}
           </Link>
           <button
@@ -136,11 +138,11 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             title={`Switch to ${preferences.mode === 'dark' ? 'light' : 'dark'} mode`}
             onClick={() => update({ mode: preferences.mode === 'dark' ? 'light' : 'dark' })}
           >
-            {preferences.mode === 'dark' ? <IconSun size={18} aria-hidden="true" /> : <IconMoon size={18} aria-hidden="true" />}
+            {preferences.mode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
             <span>{preferences.mode === 'dark' ? 'Light' : 'Dark'}</span>
           </button>
           <button type="button" className="desktop-search-trigger" onClick={() => setPaletteOpen(true)} aria-label="Search tools and settings">
-            <IconSearch size={18} aria-hidden="true" />
+            <IconSearch size={20} aria-hidden="true" />
             <span>Search</span>
             <kbd>⌘/Ctrl K</kbd>
           </button>
@@ -162,7 +164,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             disabled={!isLoggedIn || logout.isPending || busy > 0}
             onClick={() => logout.mutate({})}
           >
-            <IconLogout size={19} aria-hidden="true" />
+            <IconLogout size={20} aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -183,7 +185,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               </Link>
             </div>
           ) : null}
-          {location.pathname.split('/').filter(Boolean).length > 1 ? (
+          {!isAppDetail && location.pathname.split('/').filter(Boolean).length > 1 ? (
             <div className="desktop-route-title">
               <PageTitle apps={apps} />
             </div>
