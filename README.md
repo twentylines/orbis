@@ -19,7 +19,9 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 
 [Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Search](screenshots/desktop-fixtures/desktop-search.png) · [Home app picker](screenshots/desktop-fixtures/desktop-dark-home-picker.png) · [All Home apps](screenshots/desktop-fixtures/desktop-dark-home-all-apps.png) · [Inspection record](VISUAL-QA.md)
 
-The current design screenshots use labelled development fixture data. [A clean install captured in an isolated Docker VM](screenshots/live-smoke/workspace.png) and [older beta 11 live captures](screenshots/live-beta11/monitor-mobile.png) remain available as deployment evidence; they show earlier UI iterations.
+[Released beta 21 desktop](screenshots/live-beta21/workspace-desktop.png) · [Released phone workspace](screenshots/live-beta21/workspace-mobile.png) · [Released search](screenshots/live-beta21/search-mobile.png)
+
+The current design screenshots above use labelled development fixture data. The beta 21 captures show the published image during isolated real-API checks. [A clean install captured in an isolated Docker VM](screenshots/live-smoke/workspace.png) and [older beta 11 live captures](screenshots/live-beta11/monitor-mobile.png) remain available as deployment evidence; they show earlier UI iterations.
 
 The original Runtipi project, licence, and contributor information follow for attribution. Its installation links install stock Runtipi, not Orbis.
 
