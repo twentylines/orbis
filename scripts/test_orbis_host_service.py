@@ -76,6 +76,16 @@ class HostServiceTests(unittest.TestCase):
         self.assertEqual(args[4], Path(job["snapshot"]))
         self.assertEqual(args[4].parent, self.snapshots)
 
+    def test_helper_maintenance_rejects_new_core_operations(self):
+        planned = self.service.plan(TARGET["tag"])
+        SERVICE.write_private(self.service.maintenance_file, {"schema": "orbis.helper-upgrade.v1"})
+        with self.assertRaisesRegex(ValueError, "maintenance"):
+            self.service.plan(TARGET["tag"])
+        with self.assertRaisesRegex(ValueError, "maintenance"):
+            self.service.apply(planned["planId"])
+        with self.assertRaisesRegex(ValueError, "maintenance"):
+            self.service.recover(planned["planId"])
+
     def test_plan_cannot_be_reused_after_installed_release_changes(self):
         planned = self.service.plan(TARGET["tag"])
         with mock.patch.object(self.service, "current_manifest", return_value=TARGET):

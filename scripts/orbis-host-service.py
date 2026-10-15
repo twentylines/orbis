@@ -108,6 +108,7 @@ class HostService:
         self.lock = threading.Lock()
         self.busy = False
         self.job_file = self.state_dir / "job.json"
+        self.maintenance_file = self.state_dir / "helper-maintenance.json"
         previous = read_private(self.job_file)
         if previous and previous.get("state") in {"running", "recovering"}:
             previous["state"] = "interrupted"
@@ -172,6 +173,8 @@ class HostService:
 
     def plan(self, tag: str) -> dict:
         with self.lock:
+            if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
+                raise ValueError("host helper maintenance is in progress")
             if self.busy:
                 raise ValueError("another host update is in progress")
             previous = read_private(self.job_file)
@@ -218,6 +221,8 @@ class HostService:
 
     def apply(self, plan_id: str) -> tuple[dict, Callable[[], None]]:
         with self.lock:
+            if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
+                raise ValueError("host helper maintenance is in progress")
             if self.busy:
                 raise ValueError("another host update is in progress")
             previous = read_private(self.job_file)
@@ -276,6 +281,8 @@ class HostService:
 
     def recover(self, job_id: str) -> tuple[dict, Callable[[], None]]:
         with self.lock:
+            if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
+                raise ValueError("host helper maintenance is in progress")
             if self.busy:
                 raise ValueError("another host update is in progress")
             job = read_private(self.job_file)

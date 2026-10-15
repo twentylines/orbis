@@ -48,8 +48,27 @@ python3 scripts/orbis-host-service-setup.py plan ROOT --docker-context CONTEXT
 sudo python3 scripts/orbis-host-service-setup.py install ROOT --docker-context CONTEXT --confirm-root ROOT
 ```
 
-Replace both `ROOT` values with the same canonical absolute installation path and choose the enrolled Docker context. `install` takes the host-operation lock, copies the fixed helper script set to root-owned `/opt/orbis/host-service`, writes a private `/etc/orbis/host-service.env`, installs [packaging/systemd/orbis-host.service](packaging/systemd/orbis-host.service), verifies and enables the unit, then checks the socket both on the host and inside the Orbis core. It refuses an existing installation or an incorrect confirmation path. On a setup failure it disables the new unit and removes files it created. This first-install tool is not an in-place upgrader or uninstaller; do not replace its scripts during a running update.
+Replace both `ROOT` values with the same canonical absolute installation path and choose the enrolled Docker context. `install` takes the host-operation lock, copies the fixed helper script set to root-owned `/opt/orbis/host-service`, writes a private `/etc/orbis/host-service.env`, installs [packaging/systemd/orbis-host.service](packaging/systemd/orbis-host.service), verifies and enables the unit, then checks the socket both on the host and inside the Orbis core. It refuses an existing installation or an incorrect confirmation path. On a setup failure it disables the new unit and removes files it created. A later helper upgrade uses the separate command below; do not replace its scripts during a running core update.
 
 The unit keeps `/run/orbis` across service restarts, so a running container does not retain an orphaned bind mount. In the isolated VM, the corrected installer returned an active service with mode `0700` script, state, and snapshot directories and mode `0600` environment and socket; the core reached the socket after a unit restart and a full VM stop/start. It still requires an external-data rehearsal and independent backup before any production cutover.
+
+## Upgrade an installed helper
+
+The Orbis container image does not replace files under `/opt/orbis/host-service`. Run [scripts/orbis-host-service-upgrade.py](scripts/orbis-host-service-upgrade.py) from a reviewed checkout on the Linux host after the first-install setup has succeeded:
+
+```sh
+python3 scripts/orbis-host-service-upgrade.py plan ROOT --docker-context CONTEXT
+sudo python3 scripts/orbis-host-service-upgrade.py upgrade ROOT --docker-context CONTEXT --confirm-root ROOT
+```
+
+The plan checks the enrolled image, Compose socket mount, live host/container mount identity, root-owned helper files, systemd unit and environment, and absence of a running or interrupted core update. It reports hashes of the installed and candidate scripts and unit. Identical hashes return without a service restart. Otherwise upgrade takes the host-operation lock, marks maintenance so the newer helper refuses new core operations, stops the old unit, replaces scripts and unit from a same-filesystem staging area, starts the unit, then checks the socket from both the host and core and checks the bind-mount identity. If startup or verification fails, it restores the previous scripts and unit. The environment and installation data tree are unchanged.
+
+If the upgrade command is interrupted, use the same checkout and exact root/context to recover the recorded helper transaction:
+
+```sh
+sudo python3 scripts/orbis-host-service-upgrade.py recover ROOT --docker-context CONTEXT --confirm-root ROOT
+```
+
+Recovery restores the previous helper when replacement did not finish, or finalizes a verified replacement. A failed rollback leaves its private maintenance record and staging directory in place for local inspection. The isolated VM passed an upgrade from the beta 11 installed helper, a deliberately broken replacement that restored the previous helper, a simulated interrupted setup, and finalization of an already verified replacement. The core stayed healthy at beta 12 and the saved core-update job remained complete. This is still a disposable-host result; do not apply it to Hades before the copied-data rehearsal and phase-two approval.
 
 The UI remains read-only when `ORBIS_HOST_SOCKET` is absent, the socket cannot be reached, the running image differs from enrollment, or the host reports an interrupted job. An interrupted job exposes a specific recovery action. Host operating system package updates remain unimplemented and separate from this core updater.
