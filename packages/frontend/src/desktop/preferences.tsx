@@ -126,8 +126,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => {
     if (!serverReady || !hydrated) return;
     const controller = new AbortController();
+    setSyncState('saving');
     const timer = window.setTimeout(async () => {
-      setSyncState('saving');
       try {
         const response = await fetch('/api/desktop-preferences', {
           method: 'PUT',
