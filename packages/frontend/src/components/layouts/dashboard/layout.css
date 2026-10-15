@@ -80,6 +80,32 @@
   --desktop-accent: #9a4d48;
   background-color: #d7bab6;
 }
+.desktop[data-desktop-mode="dark"] {
+  --desktop-ink: #edf2ef;
+  --desktop-muted: #b5c8bf;
+  --desktop-surface: rgba(20, 36, 35, 0.95);
+  --desktop-chrome: rgba(9, 23, 23, 0.92);
+  --desktop-chrome-ink: #f2f4ef;
+  --desktop-panel-dark: rgba(7, 19, 19, 0.96);
+  --desktop-line: rgba(224, 239, 228, 0.18);
+  --workspace-heading-ink: #edf2ef;
+  --workspace-heading-shadow: rgba(5, 18, 17, 0.8);
+  background-color: #142522;
+  background-image: linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), var(--desktop-wallpaper);
+}
+.desktop[data-desktop-mode="light"][data-desktop-preset="graphite"] {
+  --desktop-ink: #20312c;
+  --desktop-muted: #50655b;
+  --desktop-surface: rgba(243, 248, 244, 0.94);
+  --desktop-chrome: rgba(25, 46, 43, 0.87);
+  --desktop-chrome-ink: #f2f4ef;
+  --desktop-panel-dark: rgba(17, 36, 34, 0.94);
+  --desktop-line: rgba(45, 74, 57, 0.19);
+  --workspace-heading-ink: #20312c;
+  --workspace-heading-shadow: rgba(246, 251, 244, 0.62);
+  background-color: #bdc8bc;
+  background-image: var(--desktop-wallpaper);
+}
 .desktop a {
   color: inherit;
 }
@@ -157,6 +183,7 @@
   align-items: center;
 }
 .desktop-search-trigger,
+.desktop-mode-toggle,
 .desktop-icon-button {
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: var(--desktop-chrome-ink);
@@ -170,12 +197,14 @@
     transform 0.2s ease;
 }
 .desktop-search-trigger:hover,
+.desktop-mode-toggle:hover,
 .desktop-icon-button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.31);
   transform: translateY(-2px);
 }
 .desktop-search-trigger:active,
+.desktop-mode-toggle:active,
 .desktop-icon-button:active:not(:disabled) {
   transform: translateY(0) scale(0.96);
 }
@@ -186,6 +215,23 @@
   padding: 0 10px;
   border-radius: 11px;
   text-align: left;
+}
+.desktop-mode-toggle {
+  gap: 8px;
+  height: 39px;
+  min-width: 78px;
+  padding: 0 11px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 690;
+  cursor: pointer;
+}
+.desktop-mode-toggle svg {
+  color: #e8c49a;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.desktop-mode-toggle:hover svg {
+  transform: rotate(-22deg) scale(1.15);
 }
 .desktop-search-trigger span {
   flex: 1;
@@ -239,12 +285,15 @@
   min-width: 0;
 }
 .desktop-view-app {
+  position: relative;
+  isolation: isolate;
   background: var(--desktop-surface);
   border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 26px;
   padding: 30px;
   box-shadow:
     0 30px 70px rgba(12, 35, 32, 0.19),
+    0 0 0 5px rgba(13, 37, 34, 0.13),
     inset 0 1px rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(24px) saturate(1.2);
   -webkit-backdrop-filter: blur(24px) saturate(1.2);
@@ -255,9 +304,16 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: -9px -9px 27px;
-  padding: 5px 5px 19px;
-  border-bottom: 1px solid var(--desktop-line);
+  margin: -30px -30px 27px;
+  padding: 17px 22px;
+  min-height: 74px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 24px 24px 0 0;
+  color: var(--desktop-chrome-ink);
+  background: radial-gradient(circle at 20% -70%, rgba(157, 205, 172, 0.22), transparent 38%), var(--desktop-chrome);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.19),
+    0 13px 24px rgba(18, 43, 37, 0.12);
 }
 .desktop-window-icon {
   width: 38px;
@@ -266,8 +322,9 @@
   display: grid;
   place-items: center;
   border-radius: 11px;
-  color: var(--desktop-accent);
-  background: rgba(141, 117, 86, 0.1);
+  color: #e1b992;
+  background: rgba(243, 216, 185, 0.12);
+  border: 1px solid rgba(244, 219, 192, 0.17);
 }
 .desktop-window-label {
   display: flex;
@@ -280,7 +337,7 @@
   font-weight: 730;
 }
 .desktop-window-label span {
-  color: var(--desktop-muted);
+  color: rgba(242, 249, 244, 0.64);
   font-size: 11px;
 }
 .desktop .desktop-window-close {
@@ -289,18 +346,18 @@
   display: grid;
   place-items: center;
   margin-left: auto;
-  border: 1px solid var(--desktop-line);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 10px;
-  color: var(--desktop-muted);
-  background: rgba(255, 255, 255, 0.26);
+  color: #e9f2e9;
+  background: rgba(255, 255, 255, 0.1);
   transition:
     background 0.2s ease,
     color 0.2s ease,
     transform 0.22s ease;
 }
 .desktop .desktop-window-close:hover {
-  color: var(--desktop-ink);
-  background: rgba(255, 255, 255, 0.46);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.25);
   transform: rotate(90deg);
 }
 .desktop-view-app > .card,
@@ -543,7 +600,7 @@
 .desktop .desktop-brand:hover {
   color: #fff;
 }
-.desktop[data-desktop-preset="graphite"] .desktop-view-app {
+.desktop[data-desktop-mode="dark"] .desktop-view-app {
   border-color: rgba(255, 255, 255, 0.16);
   box-shadow:
     0 30px 70px rgba(4, 15, 15, 0.32),
@@ -745,6 +802,7 @@
   .desktop-operation,
   .desktop-connection-label,
   .desktop-search-trigger span,
+  .desktop-mode-toggle span,
   .desktop-search-trigger kbd {
     display: none;
   }
@@ -758,12 +816,24 @@
     justify-content: center;
     padding: 0;
   }
+  .desktop-mode-toggle {
+    width: 37px;
+    min-width: 37px;
+    height: 37px;
+    padding: 0;
+  }
   .desktop-main {
     padding: 34px 13px 112px;
   }
   .desktop-view-app {
     padding: 15px;
     border-radius: 18px;
+  }
+  .desktop-window-bar {
+    margin: -15px -15px 24px;
+    padding: 12px 14px;
+    min-height: 64px;
+    border-radius: 17px 17px 0 0;
   }
   .desktop-dock {
     bottom: 8px;

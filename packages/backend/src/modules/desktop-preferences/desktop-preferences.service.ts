@@ -10,6 +10,7 @@ export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonNullable<DesktopPreferences['workspace']> } = {
   serverName: 'Hades',
   preset: 'frost',
+  mode: 'light',
   density: 'comfortable',
   wallpaper: 'sandstone',
   workspace: {
@@ -39,6 +40,7 @@ export class DesktopPreferencesService {
         : {
             ...DEFAULT_DESKTOP_PREFERENCES,
             ...result,
+            mode: result.mode ?? (result.preset === 'graphite' ? 'dark' : 'light'),
             workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...result.workspace },
           };
     } catch (error) {
@@ -52,6 +54,7 @@ export class DesktopPreferencesService {
     const value = {
       ...DEFAULT_DESKTOP_PREFERENCES,
       ...preferences,
+      mode: preferences.mode ?? (preferences.preset === 'graphite' ? 'dark' : 'light'),
       workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...preferences.workspace },
     };
     await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
