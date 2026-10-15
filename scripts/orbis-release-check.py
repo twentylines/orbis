@@ -5,7 +5,9 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import subprocess
 import sys
+from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -18,6 +20,7 @@ PLAN = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PLAN)
 
 GITHUB_API = "https://api.github.com/repos/twentylines/orbis"
+GITHUB_REPO = "https://github.com/twentylines/orbis.git"
 GHCR = "https://ghcr.io"
 INDEX_TYPES = {"application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json"}
 USER_AGENT = "Orbis-release-check/1"
@@ -63,6 +66,44 @@ def tag_commit(tag_ref: object, tag_object: object | None = None) -> str:
     return target["sha"]
 
 
+def git_tag_commit(tag: str) -> str:
+    refs = (f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}")
+    try:
+        result = subprocess.run(["git", "ls-remote", GITHUB_REPO, *refs], capture_output=True, text=True, timeout=20, check=False)
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("GitHub tag lookup timed out") from error
+    if result.returncode:
+        raise ValueError("GitHub tag could not be resolved")
+    matches = dict(line.split("\t", 1)[::-1] for line in result.stdout.splitlines() if "\t" in line)
+    commit = matches.get(refs[1], matches.get(refs[0]))
+    if not isinstance(commit, str) or not PLAN.COMMIT.fullmatch(commit):
+        raise ValueError("GitHub tag does not resolve to a commit")
+    return commit
+
+
+def published_release(tag: str) -> tuple[str, str, str | None, str | None]:
+    asset_url = f"https://github.com/twentylines/orbis/releases/download/{quote(tag)}/release-manifest.json"
+    try:
+        release = read_json(f"{GITHUB_API}/releases/tags/{quote(tag)}", 512 * 1024, {"Accept": "application/vnd.github+json"})
+        release_asset(release, tag)
+        ref = read_json(f"{GITHUB_API}/git/ref/tags/{quote(tag)}", 16 * 1024, {"Accept": "application/vnd.github+json"})
+        tag_object = None
+        if isinstance(ref, dict) and isinstance(ref.get("object"), dict) and ref["object"].get("type") == "tag":
+            tag_sha = ref["object"].get("sha")
+            if not isinstance(tag_sha, str) or not PLAN.COMMIT.fullmatch(tag_sha):
+                raise ValueError("GitHub annotated tag identifier is invalid")
+            tag_object = read_json(f"{GITHUB_API}/git/tags/{tag_sha}", 16 * 1024, {"Accept": "application/vnd.github+json"})
+        return asset_url, tag_commit(ref, tag_object), release.get("published_at"), release.get("body")
+    except HTTPError as error:
+        if error.code not in {403, 429}:
+            raise
+        # The public API shares a small anonymous quota. The release asset still
+        # proves publication; Git's tag endpoint and the tagged notes avoid it.
+        commit = git_tag_commit(tag)
+        notes, _ = read_url(f"https://raw.githubusercontent.com/twentylines/orbis/{quote(tag)}/releases/{quote(tag)}.md", 64 * 1024)
+        return asset_url, commit, None, notes.decode("utf-8")
+
+
 def verify_index(body: bytes, header_digest: str | None, expected_digest: str) -> list[str]:
     actual = "sha256:" + hashlib.sha256(body).hexdigest()
     if actual != expected_digest or header_digest != expected_digest:
@@ -84,20 +125,11 @@ def verify_index(body: bytes, header_digest: str | None, expected_digest: str) -
 def check(tag: str) -> dict[str, object]:
     if not PLAN.TAG.fullmatch(tag):
         raise ValueError("release tag is invalid")
-    release = read_json(f"{GITHUB_API}/releases/tags/{quote(tag)}", 512 * 1024, {"Accept": "application/vnd.github+json"})
-    asset_url = release_asset(release, tag)
+    asset_url, commit, published_at, notes = published_release(tag)
     manifest = PLAN.validate_manifest(read_json(asset_url, 16 * 1024))
     if manifest["tag"] != tag:
         raise ValueError("release manifest tag did not match GitHub")
-
-    ref = read_json(f"{GITHUB_API}/git/ref/tags/{quote(tag)}", 16 * 1024, {"Accept": "application/vnd.github+json"})
-    tag_object = None
-    if isinstance(ref, dict) and isinstance(ref.get("object"), dict) and ref["object"].get("type") == "tag":
-        tag_sha = ref["object"].get("sha")
-        if not isinstance(tag_sha, str) or not PLAN.COMMIT.fullmatch(tag_sha):
-            raise ValueError("GitHub annotated tag identifier is invalid")
-        tag_object = read_json(f"{GITHUB_API}/git/tags/{tag_sha}", 16 * 1024, {"Accept": "application/vnd.github+json"})
-    if tag_commit(ref, tag_object) != manifest["commit"]:
+    if commit != manifest["commit"]:
         raise ValueError("release manifest commit did not match the Git tag")
 
     token_response = read_json(f"{GHCR}/token?scope=repository:twentylines/orbis:pull&service=ghcr.io", 16 * 1024)
@@ -116,9 +148,9 @@ def check(tag: str) -> dict[str, object]:
         "image": f"{manifest['image']}@{manifest['digest']}",
         "runtipiCompatibility": manifest["runtipiCompatibility"],
         "platforms": platforms,
-        "publishedAt": release.get("published_at") if isinstance(release, dict) else None,
-        "releaseUrl": release.get("html_url") if isinstance(release, dict) else None,
-        "notes": release.get("body") if isinstance(release, dict) else None,
+        "publishedAt": published_at,
+        "releaseUrl": f"https://github.com/twentylines/orbis/releases/tag/{quote(tag)}",
+        "notes": notes,
         "readOnly": True,
     }
 
