@@ -2,7 +2,7 @@
 
 The browser can now request a reviewed Orbis core update through an authenticated API and a separate host process. The host process listens on a Unix socket only. It accepts four fixed operations: read status, plan a published release, apply one short-lived plan, and recover one interrupted transaction. It has no shell endpoint or host package update action.
 
-This is currently a **disposable-host test path**. It has unit and socket transport tests, published beta 7 → beta 9 updates through the Linux VM's native socket, and browser-clicked beta 9 → beta 10 → beta 11 updates from the real Update Center. Its systemd unit survived a service restart and VM stop/start. Do not attach it to Hades or another production installation. See [DEPLOYMENT.md](DEPLOYMENT.md) for the transaction evidence and limits.
+This is currently a **disposable-host test path**. It has unit and socket transport tests, published beta 7 → beta 9 updates through the Linux VM's native socket, and browser-clicked beta 9 → beta 10 → beta 11 → beta 12 updates from the real Update Center. Its systemd unit survived a service restart and VM stop/start. Do not attach it to Hades or another production installation. See [DEPLOYMENT.md](DEPLOYMENT.md) for the transaction evidence and limits.
 
 ## Boundaries
 
