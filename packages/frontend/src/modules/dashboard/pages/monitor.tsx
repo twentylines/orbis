@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
 import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
 import './monitor.css';
+import { ContainerResources } from '@/components/container-resources/container-resources';
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return 'Unavailable';
@@ -119,17 +119,7 @@ export default function Monitor() {
 
   return (
     <div className="desktop-monitor">
-      <div className="desktop-view-heading">
-        <div>
-          <p>System</p>
-          <h1>Monitor</h1>
-        </div>
-        <Link to="/dashboard">Back to workspace</Link>
-      </div>
-      <p className="desktop-monitor-scope">
-        Current readings only. CPU uses host /proc when available; memory reads the host mount. Filesystems and network describe the Orbis core
-        container. No history is inferred before collection starts.
-      </p>
+      <p className="desktop-monitor-scope">Filesystem and network readings cover the Orbis core container. Charts collect while this view is open.</p>
       <div className="desktop-monitor-live-status">
         <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} />
         <strong>{telemetry.isError ? 'Connection interrupted' : 'Live readings'}</strong>
@@ -152,9 +142,8 @@ export default function Monitor() {
           </output>
           <section className="desktop-host-overview" aria-labelledby="desktop-host-overview-title">
             <div className="desktop-host-overview-copy">
-              <span className="desktop-host-overview-kicker">LOCAL SERVER · 01</span>
-              <h2 id="desktop-host-overview-title">The machine behind your workspace</h2>
-              <p>One server, sampled live. The hardware view follows the readings below; it does not estimate missing data.</p>
+              <span className="desktop-host-overview-kicker">LOCAL SERVER</span>
+              <h2 id="desktop-host-overview-title">Your server, live</h2>
               <div className="desktop-host-overview-readings">
                 <div>
                   <span>{sample.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU'}</span>
@@ -319,6 +308,7 @@ export default function Monitor() {
               )}
             </section>
           </div>
+          <ContainerResources />
         </>
       ) : null}
     </div>

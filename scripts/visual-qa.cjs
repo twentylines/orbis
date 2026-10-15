@@ -40,9 +40,107 @@ const catalogue = [
   { id: 'dns', urn: 'dns:official', name: 'DNS', short_desc: 'Manage network filtering', categories: ['network'], created_at: 0 },
   { id: 'photos', urn: 'photos:official', name: 'Photos', short_desc: 'Organise your photo library', categories: ['media'], created_at: 0 },
 ];
+const containerFixture = {
+  sampledAt: new Date().toISOString(),
+  available: true,
+  omitted: 0,
+  containers: [
+    {
+      id: 'media-container',
+      name: 'media-web',
+      appUrn: 'media:test',
+      service: 'web',
+      state: 'running',
+      health: 'healthy',
+      cpuPercent: 24.7,
+      memoryBytes: 268435456,
+      memoryLimitBytes: 2147483648,
+      receivedBytes: 8097152,
+      transmittedBytes: 2097152,
+      blockReadBytes: 1048576,
+      blockWriteBytes: 524288,
+      statsAvailable: true,
+    },
+    {
+      id: 'dns-container',
+      name: 'dns-server',
+      appUrn: 'dns:test',
+      service: 'server',
+      state: 'running',
+      health: 'not-configured',
+      cpuPercent: 1.3,
+      memoryBytes: 536870912,
+      memoryLimitBytes: 2147483648,
+      receivedBytes: 2097152,
+      transmittedBytes: 1048576,
+      blockReadBytes: 0,
+      blockWriteBytes: 0,
+      statsAvailable: true,
+    },
+    {
+      id: 'backup-container',
+      name: 'backup-worker',
+      appUrn: 'backup:test',
+      service: 'worker',
+      state: 'exited',
+      health: 'not-configured',
+      cpuPercent: null,
+      memoryBytes: null,
+      memoryLimitBytes: null,
+      receivedBytes: null,
+      transmittedBytes: null,
+      blockReadBytes: null,
+      blockWriteBytes: null,
+      statsAvailable: false,
+    },
+  ],
+};
+const taskFixture = {
+  sampledAt: new Date().toISOString(),
+  storage: 'persistent',
+  retentionDays: 30,
+  limit: 300,
+  tasks: [
+    {
+      id: '11111111-1111-4111-8111-111111111111',
+      appUrn: 'media:test',
+      action: 'backup',
+      status: 'running',
+      createdAt: '2026-10-15T01:00:00Z',
+      updatedAt: '2026-10-15T01:00:05Z',
+      startedAt: '2026-10-15T01:00:05Z',
+      finishedAt: null,
+    },
+    {
+      id: '22222222-2222-4222-8222-222222222222',
+      appUrn: 'backup:test',
+      action: 'start',
+      status: 'failed',
+      createdAt: '2026-10-15T00:45:00Z',
+      updatedAt: '2026-10-15T00:45:10Z',
+      startedAt: '2026-10-15T00:45:02Z',
+      finishedAt: '2026-10-15T00:45:10Z',
+    },
+    {
+      id: '33333333-3333-4333-8333-333333333333',
+      appUrn: 'dns:test',
+      action: 'update',
+      status: 'succeeded',
+      createdAt: '2026-10-15T00:30:00Z',
+      updatedAt: '2026-10-15T00:32:00Z',
+      startedAt: '2026-10-15T00:30:05Z',
+      finishedAt: '2026-10-15T00:32:00Z',
+    },
+  ],
+};
 const translations = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', 'packages', 'backend', 'src', 'modules', 'i18n', 'translations', 'en.json'), 'utf8'),
 );
+
+async function capture(page, name, { scrollTop = true } = {}) {
+  if (scrollTop) await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: path.join(screenshotDir, name), animations: 'disabled' });
+}
 
 async function main() {
   fs.mkdirSync(screenshotDir, { recursive: true });
@@ -73,12 +171,22 @@ async function main() {
       const respond = (value) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(value) });
       if (url.pathname.startsWith('/api/i18n/')) return respond(translations);
       if (url.pathname.startsWith('/api/sse/')) return route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
-      if (url.pathname.endsWith('/image'))
+      if (url.pathname.endsWith('/image')) {
+        const id = decodeURIComponent(url.pathname).split('/').at(-2)?.split(':')[0];
+        const glyphs = {
+          media: '<path d="M25 18 47 32 25 46Z" fill="#fff"/>',
+          dns: '<path d="M32 12 49 19v13c0 10-17 20-17 20S15 42 15 32V19Z" fill="none" stroke="#fff" stroke-width="4"/><path d="m24 31 6 6 12-13" fill="none" stroke="#fff" stroke-width="4"/>',
+          backup:
+            '<ellipse cx="32" cy="19" rx="18" ry="7" fill="none" stroke="#fff" stroke-width="3"/><path d="M14 19v24c0 9 36 9 36 0V19M14 31c0 9 36 9 36 0" fill="none" stroke="#fff" stroke-width="3"/>',
+          photos:
+            '<rect x="13" y="14" width="38" height="36" rx="5" fill="none" stroke="#fff" stroke-width="3"/><path d="m16 45 12-15 8 9 8-12 5 9" fill="none" stroke="#fff" stroke-width="3"/>',
+        };
         return route.fulfill({
           status: 200,
           contentType: 'image/svg+xml',
-          body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="13" fill="#79947f"/></svg>',
+          body: `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${id === 'media' ? '#5a90af' : id === 'dns' ? '#4d9374' : '#b48b62'}"/><stop offset="1" stop-color="#21423e"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#g)"/>${glyphs[id] || glyphs.photos}</svg>`,
         });
+      }
       if (url.pathname === '/api/user-context')
         return respond({
           version,
@@ -101,6 +209,8 @@ async function main() {
           updatesAvailable: 0,
         });
       if (url.pathname === '/api/apps/installed') return respond({ installed: apps });
+      if (url.pathname === '/api/system/containers') return respond(containerFixture);
+      if (url.pathname === '/api/tasks') return respond(taskFixture);
       if (url.pathname === '/api/links') return respond({ links: [] });
       if (url.pathname === '/api/system/load')
         return respond({ diskUsed: 43, diskSize: 256, percentUsed: 17, cpuLoad: 11.3, memoryTotal: 32, percentUsedMemory: 38 });
@@ -243,8 +353,18 @@ async function main() {
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
     await page.getByText('Host CPU').waitFor();
     await page.getByText('Core network').waitFor();
+    await page.getByText('Healthy', { exact: true }).waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll('img.app-logo')].every((img) => img.complete && img.naturalWidth > 0));
+    await page.locator('.desktop-system-bar').evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+    const iconsLoaded = await page
+      .locator('img.app-logo')
+      .evaluateAll((images) => images.length > 0 && images.every((img) => img.complete && img.naturalWidth > 0));
+    const desktopStartsAtTop = await page.locator('.desktop').evaluate((element) => element.getBoundingClientRect().top === 0);
+    const shellInset = await page
+      .locator('.desktop-system-bar')
+      .evaluate((element) => element.getBoundingClientRect().left >= 20 && element.getBoundingClientRect().top >= 20);
     const orbisBrand = (await page.title()) === 'Orbis' && (await page.getByRole('link', { name: 'Orbis workspace on Hades' }).isVisible());
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace.png`), fullPage: true, animations: 'disabled' });
+    await capture(page, `${viewport.name}-workspace.png`);
     await page.getByRole('button', { name: 'Switch to dark mode' }).click();
     await page.locator('.desktop[data-desktop-mode="dark"]').waitFor();
     for (let attempt = 0; attempt < 40 && preferences.mode !== 'dark'; attempt++) await page.waitForTimeout(50);
@@ -255,7 +375,7 @@ async function main() {
     const darkModePersisted =
       (await page.locator('.desktop').getAttribute('data-desktop-mode')) === 'dark' &&
       (await page.evaluate(() => document.body.dataset.bsTheme)) === 'dark';
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-dark.png`), fullPage: true, animations: 'disabled' });
+    await capture(page, `${viewport.name}-workspace-dark.png`);
     await page.getByRole('button', { name: 'Switch to light mode' }).click();
     await page.locator('.desktop[data-desktop-mode="light"]').waitFor();
     const workspaceOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
@@ -266,16 +386,16 @@ async function main() {
     if (viewport.name === 'narrow' && zoom === 1)
       await page.addStyleTag({ content: '.workspace-editor button,.workspace-editor-name,.workspace-editor p{font-size:200% !important}' });
     const dockHiddenWhileEditing = await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden();
-    await page.getByRole('button', { name: 'Move System activity up' }).focus();
+    await page.getByRole('button', { name: 'Move System status up' }).focus();
     await page.keyboard.press('Enter');
-    await page.getByRole('button', { name: 'Hide Runtime filesystem' }).click();
-    await page.getByRole('button', { name: 'Expand System activity wide' }).click();
+    await page.getByRole('button', { name: 'Hide Recent operations' }).click();
+    await page.getByRole('button', { name: 'Expand System status wide' }).click();
     await page.getByRole('button', { name: 'Pin Backups' }).click();
     const savingAfterPin = await page.locator('.workspace-editor-sync').innerText();
-    const editedOrder = await page.locator('.workspace-widget').first().locator('h2').innerText();
-    const storageHidden = (await page.locator('.workspace-storage').count()) === 0;
+    const editedOrder = await page.locator('.workspace-widget').first().locator('h2').first().innerText();
+    const storageHidden = (await page.locator('.workspace-operations').count()) === 0;
     const activityResized = (await page.locator('.workspace-widget').first().getAttribute('class')).includes('workspace-widget-wide');
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-edit.png`), fullPage: true, animations: 'disabled' });
+    await capture(page, `${viewport.name}-workspace-edit.png`);
     const editOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     for (
       let attempt = 0;
@@ -287,8 +407,8 @@ async function main() {
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
     const dockVisibleAfterReload = await page.getByRole('navigation', { name: 'Desktop tools' }).isVisible();
     const workspaceLayoutPersisted =
-      (await page.locator('.workspace-widget').first().locator('h2').innerText()) === 'System activity' &&
-      (await page.locator('.workspace-storage').count()) === 0;
+      (await page.locator('.workspace-widget').first().locator('h2').first().innerText()) === 'System status' &&
+      (await page.locator('.workspace-operations').count()) === 0;
     const pinnedAppFirst = (await page.locator('.workspace-app').first().locator('strong').innerText()) === 'Backups';
     await page.keyboard.press('Control+k');
     await page.getByRole('dialog', { name: 'Search tools' }).waitFor();
@@ -297,15 +417,31 @@ async function main() {
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
     await page.waitForTimeout(5200);
     await page.getByRole('heading', { name: 'Host memory' }).waitFor();
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-monitor.png`), fullPage: true, animations: 'disabled' });
+    const cpuRanked = (await page.locator('.container-resource-list > li').first().getAttribute('data-container')) === 'media-web';
+    await page.getByRole('group', { name: 'Rank containers by' }).getByRole('button', { name: 'Memory', exact: true }).click();
+    const memoryRanked = (await page.locator('.container-resource-list > li').first().getAttribute('data-container')) === 'dns-server';
+    await page.getByRole('group', { name: 'Rank containers by' }).getByRole('button', { name: 'CPU', exact: true }).click();
+    await capture(page, `${viewport.name}-monitor.png`);
+    await page.locator('.container-resources').scrollIntoViewIfNeeded();
+    await capture(page, `${viewport.name}-monitor-containers.png`, { scrollTop: false });
     const monitorOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    await page.getByRole('link', { name: 'Open task centre, 1 active operation' }).click();
+    await page.getByRole('heading', { name: 'Task centre', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Active', exact: true }).click();
+    const activeTaskFiltered = (await page.locator('.task-list > li').count()) === 1;
+    await page.locator('.task-list summary').click();
+    await page.getByText('This operation is running.', { exact: false }).waitFor();
+    await capture(page, `${viewport.name}-tasks.png`);
+    const tasksOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    await page.getByRole('button', { name: 'Needs review', exact: true }).click();
+    const failedTaskFiltered = (await page.locator('.task-list > li[data-status="failed"]').count()) === 1;
     await page.getByRole('link', { name: 'Back to workspace' }).click();
     await page.getByRole('link', { name: 'Applications', exact: true }).click();
     await page
       .getByTestId('apps-list')
       .waitFor({ timeout: 5000 })
       .catch(async (error) => {
-        await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-applications-error.png`), fullPage: true, animations: 'disabled' });
+        await capture(page, `${viewport.name}-applications-error.png`);
         console.error((await page.locator('body').innerText()).slice(0, 1800));
         throw error;
       });
@@ -314,7 +450,7 @@ async function main() {
       : null;
     const batchActionsStacked =
       !panelWidth || (await page.locator('.action-bar-content').evaluate((element) => getComputedStyle(element).flexDirection === 'column'));
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-applications.png`), fullPage: true, animations: 'disabled' });
+    await capture(page, `${viewport.name}-applications.png`);
     const appsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     const appTilesContained = await page
       .locator('.desktop-installed-grid .card-body')
@@ -342,8 +478,11 @@ async function main() {
     if (panelStyle) await panelStyle.evaluate((element) => element.remove());
     await page.getByRole('link', { name: 'App Store', exact: true }).click();
     await page.locator('.desktop-catalogue-grid').waitFor();
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-store.png`), fullPage: true, animations: 'disabled' });
+    await capture(page, `${viewport.name}-store.png`);
     const storeOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    const singleStoreTitle =
+      (await page.getByRole('heading', { name: 'App Store', exact: true }).count()) === 1 &&
+      (await page.locator('.desktop-route-title').count()) === 0;
     await page.getByRole('link', { name: 'Updates', exact: true }).click();
     await page.getByRole('heading', { name: 'Updates', exact: true }).waitFor();
     if (process.env.ORBIS_VISUAL_UPDATES_TEXT_SCALE === '2') await page.addStyleTag({ content: '.desktop-updates { font-size: 200% !important; }' });
@@ -355,7 +494,7 @@ async function main() {
       await page.getByRole('region', { name: 'Review host package update' }).waitFor();
     }
     const updatePlanDockHidden = !hostUpdateFixture || (await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden());
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates.png`), fullPage: true, animations: 'disabled' });
+    await capture(page, `${viewport.name}-updates.png`);
     const updatesOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     let changelogAccessible = true;
     if (hostUpdateFixture) {
@@ -365,10 +504,10 @@ async function main() {
         const style = getComputedStyle(element);
         return element.tabIndex === 0 && (window.innerWidth > 760 || (style.maxHeight === 'none' && style.overflow === 'visible'));
       });
-      await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-updates-changelog.png`), fullPage: true, animations: 'disabled' });
+      await capture(page, `${viewport.name}-updates-changelog.png`);
       await page.getByRole('button', { name: 'Read changelog' }).first().click();
       await page.getByRole('region', { name: 'linux-image-generic:arm64 changelog' }).waitFor();
-      await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-host-packages.png`), fullPage: true, animations: 'disabled' });
+      await capture(page, `${viewport.name}-host-packages.png`);
     }
     if (hostUpdateFixture) await page.getByRole('button', { name: 'Cancel' }).first().click();
     await page.getByRole('link', { name: 'Back to workspace' }).click();
@@ -378,15 +517,18 @@ async function main() {
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('tab', { name: 'Appearance' }).click();
     await page.getByRole('heading', { name: 'Appearance & workspace' }).waitFor();
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-appearance.png`), fullPage: true, animations: 'disabled' });
+    await capture(page, `${viewport.name}-appearance.png`);
     const settingsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    const windowInsets = await page
+      .locator('.desktop-view-app')
+      .evaluate((element) => element.getBoundingClientRect().left >= 24 && Number.parseFloat(getComputedStyle(element).paddingLeft) >= 20);
     await page.getByRole('button', { name: 'Graphite Deep charcoal' }).click();
     await page.getByRole('button', { name: 'Tidal' }).click();
     for (let attempt = 0; attempt < 40 && (preferences.preset !== 'graphite' || preferences.wallpaper !== 'tidal'); attempt++)
       await page.waitForTimeout(50);
     if (preferences.preset !== 'graphite') throw new Error('Graphite preference was not sent to the server fixture');
     if (preferences.wallpaper !== 'tidal') throw new Error('Tidal wallpaper was not sent to the server fixture');
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-graphite.png`), fullPage: true, animations: 'disabled' });
+    await capture(page, `${viewport.name}-graphite.png`);
     await page.reload();
     await page.getByRole('heading', { name: 'Appearance & workspace' }).waitFor();
     const graphitePersisted = await page.getByRole('button', { name: 'Graphite Deep charcoal' }).getAttribute('aria-pressed');
@@ -395,13 +537,44 @@ async function main() {
     await page.getByRole('link', { name: 'Workspace', exact: true }).click();
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
     const graphiteHeadingColor = await page.locator('.workspace-heading').evaluate((element) => getComputedStyle(element).color);
-    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-graphite.png`), fullPage: true, animations: 'disabled' });
+    await capture(page, `${viewport.name}-workspace-graphite.png`);
+    await page.route('**/api/marketplace/apps/**/image', async (route) => {
+      if (decodeURIComponent(route.request().url()).includes('/media:test/image')) return route.fulfill({ status: 404, body: '' });
+      return route.fallback();
+    });
+    await page.reload();
+    await page.locator('img.app-logo[src="/app-not-found.jpg"]').waitFor();
+    const iconFallback = await page
+      .locator('img.app-logo[src="/app-not-found.jpg"]')
+      .first()
+      .evaluate((img) => img.complete && img.naturalWidth > 0);
+    await page.route('**/api/system/containers', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sampledAt: new Date().toISOString(), available: false, containers: [], omitted: 0 }),
+      }),
+    );
+    await page.reload();
+    await page.getByText('Docker unavailable', { exact: true }).first().waitFor();
+    const unavailableDockerHonest = (await page.getByText('Healthy', { exact: true }).count()) === 0;
+    await capture(page, `${viewport.name}-disconnected.png`);
     reports.push({
       viewport: viewport.name,
       zoom,
       cssViewportWidth: viewport.width,
       cssViewportHeight: viewport.height,
       orbisBrand,
+      iconsLoaded,
+      iconFallback,
+      unavailableDockerHonest,
+      desktopStartsAtTop,
+      shellInset,
+      cpuRanked,
+      memoryRanked,
+      activeTaskFiltered,
+      failedTaskFiltered,
+      tasksOverflow,
       darkModePersisted,
       workspaceOverflow,
       workspaceBackgroundGap,
@@ -422,6 +595,8 @@ async function main() {
       appsDockClearance,
       appsDock,
       storeOverflow,
+      singleStoreTitle,
+      windowInsets,
       updatesOverflow,
       updatePlanDockHidden,
       changelogAccessible,
@@ -432,16 +607,25 @@ async function main() {
       graphiteHeadingColor,
       errors,
     });
-    await page.close();
+    await Promise.race([page.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
-  await browser.close();
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
   if (
     reports.some(
       (report) =>
         report.workspaceOverflow ||
         report.workspaceBackgroundGap ||
-        report.editedOrder !== 'System activity' ||
+        report.editedOrder !== 'System status' ||
+        !report.iconsLoaded ||
+        !report.iconFallback ||
+        !report.unavailableDockerHonest ||
+        !report.desktopStartsAtTop ||
+        !report.shellInset ||
+        !report.cpuRanked ||
+        !report.memoryRanked ||
+        !report.activeTaskFiltered ||
+        !report.failedTaskFiltered ||
+        report.tasksOverflow ||
         !report.dockHiddenWhileEditing ||
         !report.dockVisibleAfterReload ||
         !report.storageHidden ||
@@ -459,6 +643,8 @@ async function main() {
         !report.batchActionsStacked ||
         !report.appsDockClearance ||
         report.storeOverflow ||
+        !report.singleStoreTitle ||
+        !report.windowInsets ||
         report.updatesOverflow ||
         !report.updatePlanDockHidden ||
         !report.changelogAccessible ||
@@ -471,9 +657,12 @@ async function main() {
     )
   )
     process.exitCode = 1;
+  await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main()
+  .then(() => process.exit(process.exitCode || 0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

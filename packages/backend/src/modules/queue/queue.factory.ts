@@ -6,7 +6,7 @@ import * as Sentry from '@sentry/nestjs';
 import { type } from 'arktype';
 import { Connection } from 'rabbitmq-client';
 import { EventPublisher } from './event.publisher';
-import { type ArkTypeSchema, Queue } from './queue.entity';
+import { type ArkTypeSchema, Queue, type QueueObserver } from './queue.entity';
 
 @Injectable()
 export class QueueFactory {
@@ -101,7 +101,13 @@ export class QueueFactory {
     await this.initializeConnection();
   }
 
-  public async createQueue<T extends ArkTypeSchema>(params: { queueName: string; workers?: number; eventSchema: T; timeout?: number }) {
+  public async createQueue<T extends ArkTypeSchema>(params: {
+    queueName: string;
+    workers?: number;
+    eventSchema: T;
+    timeout?: number;
+    observer?: QueueObserver<T['infer']>;
+  }) {
     // Ensure connection is ready before creating queue
     if (!this.isReady()) {
       this.logger.warn('Queue connection not ready, waiting for initialization...');
@@ -121,6 +127,6 @@ export class QueueFactory {
       queues: [{ autoDelete: false, durable: true, queue: queueName }],
     });
 
-    return new Queue(this.rabbit, rpcClient, publisher, queueName, workers, eventSchema, resultSchema, this.logger);
+    return new Queue(this.rabbit, rpcClient, publisher, queueName, workers, eventSchema, resultSchema, this.logger, params.observer);
   }
 }

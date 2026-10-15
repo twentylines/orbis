@@ -13,7 +13,7 @@ Base: Runtipi v4.10.1, commit `5734817389df55aafb9afd571e42e12ab7e647e0`. This i
 | General settings, security, stores and logs | `modules/settings`, `app.controller`, app-store service | Existing settings tabs retained; appearance tab added |
 | Guest dashboard and certificates | `guest-dashboard`, `GuestHeader`, system controller | Existing guest route and certificate behavior retained |
 | Traefik, HTTPS and networking | Compose, network module, Docker builders | No backend rewrite; requires isolated integration testing |
-| Queue and event stream | `modules/queue`, `core/sse`, frontend SSE provider | Existing transport retained; visible persistent task history is pending |
+| Queue and event stream | `modules/queue`, `core/sse`, frontend SSE provider | Existing transport retained; persistent lifecycle task history added under `modules/tasks` |
 | System load | `modules/system` | Existing load endpoint retained; authenticated current telemetry endpoint added |
 
 ## Verification needed before replacement

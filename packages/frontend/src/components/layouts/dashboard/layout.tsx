@@ -6,6 +6,7 @@ import { Welcome } from '@/components/welcome/welcome';
 import { PageTitle } from '@/components/page-title/page-title';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { useConnectionStore } from '@/stores/connection-store';
+import { useTasks, taskIsActive } from '@/desktop/tasks';
 import {
   IconApps,
   IconBrandAppstore,
@@ -18,6 +19,7 @@ import {
   IconMoon,
   IconSun,
   IconX,
+  IconActivity,
 } from '@tabler/icons-react';
 import { useIsMutating, useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
@@ -31,6 +33,7 @@ const navigation = [
   { path: '/monitor', label: 'Monitor', Icon: IconDeviceDesktopAnalytics },
   { path: '/updates', label: 'Updates', Icon: IconRefresh },
   { path: '/settings', label: 'Settings', Icon: IconSettings },
+  { path: '/tasks', label: 'Task centre', Icon: IconActivity },
 ];
 
 export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => (
@@ -56,6 +59,8 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const [search, setSearch] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const busy = useIsMutating();
+  const tasks = useTasks();
+  const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
   const connectionStatus = useConnectionStore((state) => state.status);
   const searchableApps = useQuery({ ...getInstalledAppsOptions(), enabled: paletteOpen });
   const logout = useMutation({ ...logoutMutation(), onSuccess: () => window.location.reload() });
@@ -114,6 +119,15 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
           {current?.label ?? 'Application'}
         </span>
         <div className="desktop-system-actions">
+          <Link
+            to="/tasks"
+            className="desktop-task-trigger"
+            aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}`}
+            title="Task centre"
+          >
+            <IconActivity size={19} aria-hidden="true" />
+            {activeTasks > 0 ? <span>{activeTasks}</span> : null}
+          </Link>
           <button
             type="button"
             className="desktop-mode-toggle"
@@ -161,15 +175,15 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                 {current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}
               </span>
               <div className="desktop-window-label">
-                <strong>{current?.label ?? 'Application'}</strong>
+                <h1>{current?.label ?? 'Application'}</h1>
                 <span>{preferences.serverName} / Orbis</span>
               </div>
-              <Link to="/dashboard" className="desktop-window-close" aria-label={`Close ${current?.label ?? 'application'} and return to workspace`}>
+              <Link to="/dashboard" className="desktop-window-close" aria-label="Back to workspace" title="Back to workspace">
                 <IconX size={18} aria-hidden="true" />
               </Link>
             </div>
           ) : null}
-          {location.pathname !== '/dashboard' && location.pathname !== '/monitor' && location.pathname !== '/updates' ? (
+          {location.pathname.split('/').filter(Boolean).length > 1 ? (
             <div className="desktop-route-title">
               <PageTitle apps={apps} />
             </div>
@@ -179,19 +193,21 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
       </main>
 
       <nav className="desktop-dock" aria-label="Desktop tools">
-        {navigation.map(({ path, label, Icon, ...item }) => (
-          <Link
-            key={path}
-            to={path}
-            className={`desktop-dock-item ${current?.path === path ? 'is-active' : ''}`}
-            aria-label={label}
-            aria-current={current?.path === path ? 'page' : undefined}
-            title={label}
-          >
-            <Icon size={22} stroke={1.7} aria-hidden="true" />
-            <span>{'dockLabel' in item ? item.dockLabel : label}</span>
-          </Link>
-        ))}
+        {navigation
+          .filter((item) => item.path !== '/tasks')
+          .map(({ path, label, Icon, ...item }) => (
+            <Link
+              key={path}
+              to={path}
+              className={`desktop-dock-item ${current?.path === path ? 'is-active' : ''}`}
+              aria-label={label}
+              aria-current={current?.path === path ? 'page' : undefined}
+              title={label}
+            >
+              <Icon size={22} stroke={1.7} aria-hidden="true" />
+              <span>{'dockLabel' in item ? item.dockLabel : label}</span>
+            </Link>
+          ))}
       </nav>
 
       {paletteOpen && (

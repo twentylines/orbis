@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'react-tooltip';
 import { AppStatus } from '../app-status/app-status';
 import './app-tile.css';
+import { DockerHealth } from '@/components/docker-health/docker-health';
+import type { ContainerTelemetry } from '@runtipi/common/schemas';
 
 type AppTileInfo = Pick<AppInfo, 'urn' | 'name' | 'short_desc' | 'deprecated'>;
 
@@ -15,7 +17,8 @@ export const AppTile: React.FC<{
   status: AppStatusType;
   updateAvailable: boolean;
   pendingRestart?: boolean;
-}> = ({ info, status, updateAvailable, pendingRestart }) => {
+  docker?: { data?: ContainerTelemetry; stale: boolean };
+}> = ({ info, status, updateAvailable, pendingRestart, docker }) => {
   const { t } = useTranslation();
 
   var badge = null;
@@ -66,6 +69,7 @@ export const AppTile: React.FC<{
             <AppStatus lite status={status} />
           </div>
           <div className="text-muted">{limitText(info.short_desc, 50)}</div>
+          {docker ? <DockerHealth appUrn={info.urn} telemetry={docker.data} stale={docker.stale} /> : null}
         </div>
       </div>
       {badge}
