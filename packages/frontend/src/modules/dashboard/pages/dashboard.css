@@ -8,7 +8,7 @@
   justify-content: space-between;
   gap: 20px;
   margin: 0 0 26px;
-  color: #203029;
+  color: var(--desktop-ink);
 }
 .workspace-eyebrow {
   margin: 0 0 3px;

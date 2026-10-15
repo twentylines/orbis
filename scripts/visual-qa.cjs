@@ -200,6 +200,10 @@ async function main() {
     const graphitePersisted = await page.getByRole('button', { name: 'Graphite Deep charcoal' }).getAttribute('aria-pressed');
     const wallpaperPersisted = await page.getByRole('button', { name: 'Tidal' }).getAttribute('aria-pressed');
     const bodyTheme = await page.evaluate(() => document.body.dataset.bsTheme);
+    await page.getByRole('link', { name: 'Workspace', exact: true }).click();
+    await page.getByRole('heading', { name: 'Your server' }).waitFor();
+    const graphiteHeadingColor = await page.locator('.workspace-heading').evaluate((element) => getComputedStyle(element).color);
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-workspace-graphite.png`), fullPage: true });
     reports.push({
       viewport: viewport.name,
       orbisBrand,
@@ -220,6 +224,7 @@ async function main() {
       graphitePersisted,
       wallpaperPersisted,
       bodyTheme,
+      graphiteHeadingColor,
       errors,
     });
     await page.close();
@@ -247,6 +252,7 @@ async function main() {
         report.graphitePersisted !== 'true' ||
         report.wallpaperPersisted !== 'true' ||
         report.bodyTheme !== 'dark' ||
+        report.graphiteHeadingColor !== 'rgb(237, 242, 239)' ||
         report.errors.length,
     )
   )
