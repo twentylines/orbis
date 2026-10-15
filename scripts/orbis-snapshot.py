@@ -16,6 +16,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SCHEMA = "orbis.snapshot.v1"
+FAILURE_MESSAGES = {
+    "snapshot-source-read-failed": "The installation could not be read consistently for backup.",
+    "snapshot-copy-failed": "The installation backup could not be copied.",
+    "snapshot-source-changed": "Installation files changed while the backup was being copied.",
+    "snapshot-copy-mismatch": "The backup did not match the stopped installation.",
+    "snapshot-seal-failed": "The backup verification record could not be saved.",
+}
+
+
+class SnapshotError(RuntimeError):
+    def __init__(self, code: str):
+        self.code = code if code in FAILURE_MESSAGES else "snapshot-source-read-failed"
+        super().__init__(FAILURE_MESSAGES[self.code])
 
 
 def sidecar(snapshot: Path) -> Path:
@@ -141,15 +154,28 @@ def capture(root: Path, snapshot: Path, release: str, docker_context: str) -> di
     expanded = snapshot.expanduser()
     snapshot = expanded.parent.resolve(strict=True) / expanded.name
     preflight(root, snapshot)
-    before = fingerprint(root)
-    copied = subprocess.run(["cp", "-a", str(root), str(snapshot)], capture_output=True, check=False)
+    try:
+        before = fingerprint(root)
+    except (OSError, ValueError) as error:
+        raise SnapshotError("snapshot-source-read-failed") from error
+    try:
+        copied = subprocess.run(["cp", "-a", str(root), str(snapshot)], capture_output=True, check=False)
+    except OSError as error:
+        raise SnapshotError("snapshot-copy-failed") from error
     if copied.returncode:
-        raise RuntimeError("installation snapshot copy failed; inspect the incomplete destination locally")
-    after = fingerprint(root)
-    saved = fingerprint(snapshot)
-    if after != before or saved != before:
-        raise RuntimeError("snapshot did not match the stopped installation; do not use it for rollback")
-    os.chmod(snapshot, 0o700)
+        raise SnapshotError("snapshot-copy-failed")
+    try:
+        after = fingerprint(root)
+    except (OSError, ValueError) as error:
+        raise SnapshotError("snapshot-source-read-failed") from error
+    if after != before:
+        raise SnapshotError("snapshot-source-changed")
+    try:
+        saved = fingerprint(snapshot)
+    except (OSError, ValueError) as error:
+        raise SnapshotError("snapshot-copy-mismatch") from error
+    if saved != before:
+        raise SnapshotError("snapshot-copy-mismatch")
     record = {
         "schema": SCHEMA,
         "sourceRoot": str(root),
@@ -160,7 +186,11 @@ def capture(root: Path, snapshot: Path, release: str, docker_context: str) -> di
         "sourceRootMode": root_mode,
         **saved,
     }
-    write_sidecar(snapshot, record)
+    try:
+        os.chmod(snapshot, 0o700)
+        write_sidecar(snapshot, record)
+    except OSError as error:
+        raise SnapshotError("snapshot-seal-failed") from error
     return record
 
 

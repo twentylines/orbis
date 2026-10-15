@@ -293,11 +293,13 @@ class HostService:
             )
             if stage in {"complete", "rolled-back"} and healthy_expected:
                 job["state"] = "complete" if stage == "complete" else "rolled-back"
-                job["message"] = "Reviewed Orbis release is healthy." if stage == "complete" else "Previous Orbis release is healthy."
+                job.update(UPDATE.safe_failure(journal))
+                job["message"] = "Reviewed Orbis release is healthy." if stage == "complete" else f"{UPDATE.failure_message(journal)} Previous Orbis release is healthy.".strip()
                 job["finishedAt"] = time.time()
                 write_private(self.job_file, job)
             elif stage == "aborted":
                 job["state"] = "failed"
+                job.update(UPDATE.safe_failure(journal))
                 job["message"] = "Update stopped before service downtime."
                 job["finishedAt"] = time.time()
                 write_private(self.job_file, job)
@@ -309,7 +311,7 @@ class HostService:
             "coreState": core.get("state"),
             "coreHealth": core.get("health"),
             "imageMatches": bool(enrolled and saved and core.get("image") == f"{PLAN.IMAGE}@{saved.get('digest')}"),
-            "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")}
+            "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")} | UPDATE.safe_failure(job)
             if job
             else None,
         }
@@ -406,9 +408,10 @@ class HostService:
                 except (OSError, ValueError, json.JSONDecodeError):
                     journal = None
                 stage = journal.get("stage") if journal else None
+                job.update(UPDATE.safe_failure(journal))
                 job["state"] = "rolled-back" if stage == "rolled-back" else "failed" if stage in {None, "aborted"} else "interrupted"
                 job["message"] = (
-                    "The previous Orbis release was restored."
+                    f"{UPDATE.failure_message(journal)} The previous Orbis release was restored.".strip()
                     if job["state"] == "rolled-back"
                     else "Update stopped before service downtime."
                     if job["state"] == "failed"
@@ -450,7 +453,9 @@ class HostService:
             try:
                 UPDATE.recover(self.root, current, target, self.context, snapshot)
                 job["state"] = "rolled-back"
-                job["message"] = "Previous Orbis release is healthy."
+                journal = read_private(UPDATE.journal_path(snapshot))
+                job.update(UPDATE.safe_failure(journal))
+                job["message"] = f"{UPDATE.failure_message(journal)} Previous Orbis release is healthy.".strip()
             except Exception:
                 job["state"] = "interrupted"
                 job["message"] = "Recovery needs local inspection."

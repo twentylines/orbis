@@ -1,5 +1,17 @@
 # Orbis build and migration rehearsal
 
+## Beta 25 publication and update investigation (16 October 2026)
+
+[Beta 25](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.25) passed protected PR 23 and release workflow `38775867799`. The checker verified commit `95618c6002b15c9c04fe89c9f7c6d141dfbf5841`, the manifest and exact OCI index `sha256:daf14cd97068665a0c645679fd3bb51b63afc4e8e9c0bd6c708f07ad1ff9d0ce`, with linux/amd64 and linux/arm64 entries. Its compact error/authentication screens, wider desktop and enlarged-text fixes passed the fixture and independent browser matrices recorded in `VISUAL-QA.md`.
+
+The first browser-requested beta24→25 transaction, job `b5a627ba-cffd-4b83-a2f9-ec415ac222fc`, rolled back before staging the new image. The incomplete snapshot has no verification sidecar and has not been used for restoration. Beta24 returned healthy at its enrolled digest. The old helper discarded the underlying failure, so its exact cause is unconfirmed; publication is not evidence of a beta25 runtime pass.
+
+A separate guarded stopped-tree capture then passed all three fingerprints: source before copy, source after copy and saved copy matched, including contents, permissions and numeric ownership (3,576 entries,2,812 files,97,052,823 bytes). Beta24 restarted healthy. Disk space and inode capacity were sufficient. A metadata-only copy also returned success despite unsupported extended-attribute warnings from the mounted filesystem; those warnings alone do not explain the failed transaction.
+
+The current helper source now retains a fixed failure stage, code and exception category before rollback changes the journal stage. Snapshot read, copy, source-change, copy-mismatch and verification-record failures have distinct safe messages. Public diagnostics never include command stderr, file contents, paths from exceptions or arbitrary exception text. Strict fingerprint and sidecar requirements remain enforced. A replacement helper and subsequent published-image update must still be verified on the owned test host. Hades was not accessed.
+
+Read-only follow-up of beta24's app-upgrade rehearsal verified the data marker and user override hashes, the stable generated random value, the new default, and selected v1 files inside the pre-upgrade archive. It does not turn the failed retention assertion into a pass. Published beta25 app-retention preservation remains to be exercised.
+
 ## Published beta 24 runtime verification (16 October 2026)
 
 [Beta24](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.24) is published at source commit `13a5673ae9e0c758008695fca899f19570b7a304`. Release workflow `38763635611` succeeded; the release checker verified the exact OCI index `sha256:691a410cc5c673d153a15c61269d7b7969b8c7a1015135842fd3ab8121334953` with linux/amd64 and linux/arm64.

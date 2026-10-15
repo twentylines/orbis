@@ -136,6 +136,86 @@ class OrbisHostUpdateTests(unittest.TestCase):
         self.assertEqual(fake.states["runtipi"], "running")
         self.assertEqual(UPDATE.read_journal(self.snapshot, self.root, "test-daemon", CURRENT, TARGET)["stage"], "rolled-back")
 
+    def test_capture_failure_restarts_current_core_without_staging_or_restoring_partial_copy(self):
+        codes = (
+            "snapshot-source-read-failed",
+            "snapshot-copy-failed",
+            "snapshot-source-changed",
+            "snapshot-copy-mismatch",
+            "snapshot-seal-failed",
+        )
+        for code in codes:
+            with self.subTest(code=code):
+                snapshot = self.snapshot.with_name(code)
+                fake = FakeDocker(self.root)
+                secret = "PRIVATE_SNAPSHOT_CAUSE=must-not-be-exposed"
+
+                def fail_capture(root, destination, release, context):
+                    journal = UPDATE.read_journal(destination, root, context, CURRENT, TARGET)
+                    self.assertEqual(journal["stage"], "snapshotting")
+                    self.assertTrue(all(state == "exited" for state in fake.states.values()))
+                    destination.mkdir()
+                    (destination / "partial").write_text("incomplete snapshot fixture\n")
+                    raise UPDATE.SNAPSHOT.SnapshotError(code) from OSError(secret)
+
+                with (
+                    mock.patch.object(UPDATE.HOST, "docker", side_effect=fake),
+                    mock.patch.object(UPDATE.SNAPSHOT, "capture", side_effect=fail_capture),
+                    mock.patch.object(UPDATE.HOST.STAGE, "stage") as stage,
+                    mock.patch.object(UPDATE.subprocess, "run") as local_process,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "previous release was restored") as raised:
+                        UPDATE.apply_update(self.root, CURRENT, TARGET, "test-daemon", snapshot)
+
+                stage.assert_not_called()
+                local_process.assert_not_called()
+                self.assertFalse(UPDATE.SNAPSHOT.sidecar(snapshot).exists())
+                self.assertEqual(fake.image, CURRENT_IMAGE)
+                self.assertTrue(all(state == "running" for state in fake.states.values()))
+                starts = [call for call in fake.calls if call[0] == "compose" and "up" in call]
+                self.assertEqual(len(starts), 1)
+                self.assertIn("--force-recreate", starts[0])
+                self.assertEqual((self.root / "data" / "postgres" / "record").read_text(), "original database fixture\n")
+                self.assertIn(CURRENT["digest"], (self.root / "orbis-compose.yml").read_text())
+                journal = UPDATE.read_journal(snapshot, self.root, "test-daemon", CURRENT, TARGET)
+                self.assertEqual(journal["stage"], "rolled-back")
+                self.assertEqual(journal["failureStage"], "snapshotting")
+                self.assertEqual(journal["failureCode"], code)
+                self.assertEqual(journal["failureType"], "SnapshotError")
+                self.assertNotIn(secret, json.dumps(journal))
+                self.assertNotIn(secret, str(raised.exception))
+
+    def test_unrecognized_failure_code_and_unsafe_exception_type_are_not_copied_to_journal(self):
+        fake = FakeDocker(self.root)
+        secret = "PRIVATE_FAILURE=must-not-be-exposed"
+        unsafe_type = type("Unsafe\nFailure", (RuntimeError,), {})
+        failure = unsafe_type(secret)
+        failure.code = secret
+
+        def fail_capture(root, destination, release, context):
+            self.assertEqual(UPDATE.read_journal(destination, root, context, CURRENT, TARGET)["stage"], "snapshotting")
+            raise failure
+
+        with (
+            mock.patch.object(UPDATE.HOST, "docker", side_effect=fake),
+            mock.patch.object(UPDATE.SNAPSHOT, "capture", side_effect=fail_capture),
+            mock.patch.object(UPDATE.HOST.STAGE, "stage") as stage,
+            mock.patch.object(UPDATE.subprocess, "run") as local_process,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "previous release was restored"):
+                UPDATE.apply_update(self.root, CURRENT, TARGET, "test-daemon", self.snapshot)
+
+        stage.assert_not_called()
+        local_process.assert_not_called()
+        journal = UPDATE.read_journal(self.snapshot, self.root, "test-daemon", CURRENT, TARGET)
+        self.assertEqual(journal["stage"], "rolled-back")
+        self.assertEqual(journal["failureStage"], "snapshotting")
+        self.assertEqual(journal["failureCode"], "update-step-failed")
+        self.assertRegex(journal["failureType"], r"\A[A-Za-z_][A-Za-z0-9_]*\Z")
+        self.assertNotIn(secret, json.dumps(journal))
+        self.assertEqual(fake.image, CURRENT_IMAGE)
+        self.assertTrue(all(state == "running" for state in fake.states.values()))
+
     def test_refuses_a_running_managed_app_before_pull_or_stop(self):
         fake = FakeDocker(self.root)
         original = fake.__call__
