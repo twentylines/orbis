@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Published beta 30 text and OTA verification (16 October 2026)
+
+Source commit `58840f531a298afaa2eb8e2aa8d41e45411d54b6` passed main CI `38823880436` and integration `38823880336`. [Beta 30](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.30) points to that exact commit; release workflow `38824082927` passed its verification and publication. The read-only release checker matched the tag, commit and exact OCI index `sha256:43a49e9f3284aaedb915ecb807c26bda580228ab1709a90e4cd35cbc71de8bc6`, including linux/amd64 and linux/arm64. Source text/keyboard inspection and refreshed screenshots are recorded in `VISUAL-QA.md`.
+
+The browser reviewed that digest and submitted the owned arm64 beta29→30 update. Host job `61580da4-efb8-42da-8413-376e9115804b` completed; the core is healthy at the exact published digest. Both app records, account preferences and all 28 prior terminal task outcomes matched. The first audit attempt stopped at authentication before any update because its test session had expired; the private owned-account session was renewed and the complete rerun passed with no browser errors. Hades has not been accessed.
+
+The stopped beta29 snapshot independently verifies 3,579 entries, 2,815 files and 97,158,146 bytes, with tree hash `cb67f8e3b268293b9654e22560e52bdcd806464f22619ac46407285cbebdbf63`. A separate private before/after comparison of `apps`, `app-data` and `user-config` matches all 33 entries and 17 files, including content, modes, ownership and symlink targets; its tree hash is `97bdae7846371899fb35a996ba0765442605b640ba7592ab167e8e28d3ffc9ec`.
+
+`scripts/live-text-comfort-qa.cjs` passed 17 representative surface samples at 1440/768/320px on the exact published image. It exercises real HTML/assets, connected SSE and system/container reads, with clearly controlled long metadata, later connection events, appearance, log lines and install state. Native light and enlarged dark tablet/phone cases cover Home/header, search, timezone Select, log controls, security, installer and Compose. All 20 browser appearance writes were fulfilled locally; no real non-read request, browser error or cleanup failure occurred. Actual app/installed/preferences records matched before/after. [Released captures](screenshots/live-beta30) distinguish these controlled views from real runtime state. The default Docker context remained `default`. This remains an isolated synthetic-data rehearsal; copied-data migration and full production acceptance are open.
+
 ## Published beta 29 custom-store upgrade (16 October 2026)
 
 The same exact beta29 image recorded below passes a fresh owned stopped v2→v3 application upgrade. Settings Actions refreshed the private Git store once from `b68b528d021e309484615ea846b3c7141515e46b` to `ce01d8a84ca291a35b3e236c4e8b6a75a0f51b5e`. Refresh left the installed v2 files, generated environment, settings, data and user overrides unchanged. The real update wizard passed review, cancel-without-submission, backup default and minimize/restore choice checks at 1440/390/320px.
