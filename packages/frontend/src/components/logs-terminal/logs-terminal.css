@@ -1,6 +1,53 @@
+.log-terminal-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  min-width: 0;
+}
+
+.log-terminal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.log-terminal-toggle .form-check-input {
+  flex: none;
+  float: none;
+  margin: 0;
+}
+
+.log-terminal-toggle .form-check-label,
+.log-terminal-limit > span {
+  min-width: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.log-terminal-limit {
+  display: flex;
+  flex: 1 1 13em;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  margin: 0;
+}
+
+.log-terminal-limit .form-control {
+  flex: none;
+  width: calc(6ch + 2rem);
+  max-width: 100%;
+}
+
 .log-terminal {
   height: 300px;
-  overflow-y: scroll !important;
+  overflow-y: scroll;
 }
 
 .wrap-lines {

@@ -7,11 +7,16 @@ module.exports = async function inspectConnectionStatus(
   page,
   {
     setServerAddress,
+    setServerName,
     screenshotDir,
     captureHeader,
     modes = ['light', 'dark'],
     defaultAddress = '127.0.0.1',
+    defaultServerName = 'Hades',
+    serverNames = [defaultServerName],
+    textScales = [1],
     addresses = setServerAddress ? ['127.0.0.1', '2001:0db8:85a3:0000:0000:8a2e:0370:7334'] : [defaultAddress],
+    fallbackWidths = [761, 768],
     viewports = [
       { width: 1440, height: 1120 },
       { width: 1024, height: 900 },
@@ -26,6 +31,11 @@ module.exports = async function inspectConnectionStatus(
   const base = new URL(page.url()).origin;
   assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(new URL(base).hostname), 'connection checks require loopback fixtures');
   assert.ok(setServerAddress || addresses.every((address) => address === defaultAddress), 'different addresses require a fixture callback');
+  assert.ok(setServerName || serverNames.every((name) => name === defaultServerName), 'different server names require a fixture callback');
+  assert.ok(
+    textScales.every((scale) => [1, 2].includes(scale)),
+    'text scales must be native1 or computed2',
+  );
   const initialViewport = page.viewportSize();
   const mutations = [];
   const onRequest = (request) => {
@@ -77,6 +87,7 @@ module.exports = async function inspectConnectionStatus(
   });
 
   const report = [];
+  const modeWidths = new Map();
   const near = (a, b, message) => assert.ok(Math.abs(a - b) <= 0.6, `${message}: ${a} vs ${b}`);
   const settle = async () => {
     await page.locator('.desktop-system-bar').evaluate(async (element) => {
@@ -142,14 +153,28 @@ module.exports = async function inspectConnectionStatus(
       ]
         .filter(visible)
         .map(box);
+      const brand = bar.querySelector('.desktop-brand');
+      const brandPaint = [...brand.children].filter(visible).map((element) => {
+        const style = getComputedStyle(element);
+        if (element.tagName === 'IMG' || (style.overflowX === 'hidden' && style.textOverflow === 'ellipsis')) return box(element);
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return box({ getBoundingClientRect: () => range.getBoundingClientRect() });
+      });
+      const heading = document.querySelector('.workspace-heading');
       return {
         bar: box(bar),
+        brand: box(brand),
+        brandPaint,
+        heading: box(heading),
         output: box(connection),
         label: box(label),
         dot: box(dot),
         text: connection.innerText.trim(),
         title: connection.title,
         accessibleName: connection.getAttribute('aria-label'),
+        kind: connection.getAttribute('data-connection-kind'),
+        state: connection.getAttribute('data-connection-state'),
         labels: connection.querySelectorAll('.desktop-connection-label').length,
         small: connection.querySelectorAll('small').length,
         childElements: connection.children.length,
@@ -178,7 +203,7 @@ module.exports = async function inspectConnectionStatus(
       };
     });
   const check = async (state, address, context) => {
-    const text = state === 'connected' ? address : state === 'connecting' ? 'Connecting' : 'Reconnecting';
+    const text = state === 'connected' ? address || 'Address unavailable' : state === 'connecting' ? 'Connecting' : 'Reconnecting';
     await page.waitForFunction(
       ({ state, text }) =>
         document.querySelector(`.desktop-connection-dot.is-${state}`) && document.querySelector('.desktop-connection-label')?.textContent === text,
@@ -188,7 +213,9 @@ module.exports = async function inspectConnectionStatus(
     const result = await measure();
     assert.equal(result.text, text, `${context}: exact single visible label`);
     assert.equal(result.title, text, `${context}: title`);
-    assert.equal(result.accessibleName, state === 'connected' ? `Connected to server ${address}` : text, `${context}: accessible name`);
+    assert.equal(result.accessibleName, state === 'connected' && address ? `Connected to server ${address}` : text, `${context}: accessible name`);
+    assert.equal(result.kind, state === 'connected' && address ? 'address' : 'status', `${context}: distinguish address truncation from status text`);
+    assert.equal(result.state, state, `${context}: output connection state`);
     assert.equal(result.labels, 1, `${context}: one label`);
     assert.equal(result.small, 0, `${context}: no secondary small text`);
     assert.equal(result.childElements, 2, `${context}: only dot and label`);
@@ -203,7 +230,7 @@ module.exports = async function inspectConnectionStatus(
     }
     const ellipsized = result.labelScrollWidth > result.labelClientWidth + 1;
     if (ellipsized) {
-      assert.equal(state, 'connected', `${context}: transient connection status must remain fully visible`);
+      assert.ok(state === 'connected' && address, `${context}: status words and Address unavailable must remain fully visible`);
       assert.equal(result.clipping.whiteSpace, 'nowrap', `${context}: shortened IP must stay on one line`);
       assert.equal(result.clipping.overflowX, 'hidden', `${context}: shortened IP must contain its overflow`);
       assert.equal(result.clipping.textOverflow, 'ellipsis', `${context}: shortened IP needs a visible ellipsis`);
@@ -219,12 +246,24 @@ module.exports = async function inspectConnectionStatus(
     assert.ok(result.bar.x >= 0 && result.bar.right <= result.viewport.width + 0.6, `${context}: header must fit viewport`);
     assert.ok(result.documentWidth <= result.viewport.width, `${context}: no document overflow`);
     assert.equal(result.controls.length, 4, `${context}: all header controls present`);
+    for (const paint of result.brandPaint) {
+      assert.ok(paint.x >= result.brand.x - 0.6 && paint.right <= result.brand.right + 0.6, `${context}: painted brand must fit its link`);
+    }
+    assert.ok(Math.max(...result.brandPaint.map((paint) => paint.right)) + 4 <= result.controls[0].x, `${context}: brand needs control clearance`);
+    near(result.brand.x, result.heading.x, `${context}: Home and brand left column`);
+    near(result.controls.at(-1).right, result.heading.right, `${context}: Home and logout right column`);
     for (const control of result.controls) {
       near(control.cy, result.controls[0].cy, `${context}: controls aligned`);
       near(control.height, result.controls[0].height, `${context}: control heights`);
       near(control.glyph.cy, control.cy, `${context}: control icon centre`);
+      assert.ok(control.glyph.width >= 18 && control.glyph.height >= 18, `${context}: control glyph must not shrink`);
       assert.ok(control.x >= result.bar.x + 8 && control.right <= result.bar.right - 8, `${context}: control horizontal fit`);
       assert.ok(control.y >= result.bar.y && control.bottom <= result.bar.bottom, `${context}: control vertical fit`);
+    }
+    if (result.viewport.width > 600) {
+      const logout = result.controls.at(-1);
+      near(logout.y - result.bar.y, result.bar.right - logout.right, `${context}: logout top/right clearance`);
+      near(result.bar.bottom - logout.bottom, result.bar.right - logout.right, `${context}: logout bottom/right clearance`);
     }
     for (let i = 0; i < result.parts.length; i++) {
       for (const other of result.parts.slice(i + 1)) {
@@ -239,54 +278,80 @@ module.exports = async function inspectConnectionStatus(
 
   try {
     if (screenshotDir) fs.mkdirSync(screenshotDir, { recursive: true });
-    for (const address of addresses) {
-      if (setServerAddress) await setServerAddress(address);
-      const family = address.includes(':') ? 'ipv6' : 'ipv4';
-      for (const viewport of viewports) {
-        await page.setViewportSize(viewport);
-        for (const mode of modes) {
-          await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-          await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
-          await page.waitForFunction(() =>
-            window.__orbisConnectionFixtureStreams?.summary().some(({ url, state }) => new URL(url).pathname === '/api/sse/app' && state === 0),
-          );
-          if ((await page.locator('.desktop').getAttribute('data-desktop-mode')) !== mode) {
-            await page.getByRole('button', { name: `Switch to ${mode} mode`, exact: true }).click();
-            await page.locator(`.desktop[data-desktop-mode="${mode}"]`).waitFor();
-          }
-          const context = `${viewport.width}px ${mode} ${family}`;
-          const states = [];
-          for (const state of ['connecting', 'connected', 'reconnecting']) {
-            if (state === 'connected') assert.equal(await page.evaluate(() => window.__orbisConnectionFixtureStreams.open()), true);
-            if (state === 'reconnecting') assert.equal(await page.evaluate(() => window.__orbisConnectionFixtureStreams.fail()), true);
-            const result = await check(state, address, `${context} ${state}`);
-            if (states.length) {
-              assert.deepEqual(result.typography, states[0].geometry.typography, `${context}: status changes must preserve typography`);
-              result.controls.forEach((control, index) => {
-                near(control.y, states[0].geometry.controls[index].y, `${context}: status changes must preserve control baseline`);
-                near(control.height, states[0].geometry.controls[index].height, `${context}: status changes must preserve control height`);
-              });
+    for (const [nameIndex, serverName] of serverNames.entries()) {
+      if (setServerName) await setServerName(serverName);
+      for (const textScale of textScales) {
+        for (const address of addresses) {
+          if (!address && nameIndex > 0) continue;
+          if (setServerAddress) await setServerAddress(address);
+          const family = address === undefined ? 'missing' : address === '' ? 'empty' : address.includes(':') ? 'ipv6' : 'ipv4';
+          for (const viewport of viewports) {
+            if (!address && !fallbackWidths.includes(viewport.width)) continue;
+            await page.setViewportSize(viewport);
+            for (const mode of modes) {
+              await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+              await page.getByRole('heading', { name: serverName, exact: true }).waitFor();
+              await page.waitForFunction(() =>
+                window.__orbisConnectionFixtureStreams?.summary().some(({ url, state }) => new URL(url).pathname === '/api/sse/app' && state === 0),
+              );
+              if ((await page.locator('.desktop').getAttribute('data-desktop-mode')) !== mode) {
+                await page.getByRole('button', { name: `Switch to ${mode} mode`, exact: true }).click();
+                await page.locator(`.desktop[data-desktop-mode="${mode}"]`).waitFor();
+              }
+              await page.evaluate(() => document.fonts.ready);
+              if (textScale === 2) {
+                await page.evaluate(() => {
+                  const baseline = [...document.querySelectorAll('body,body *')]
+                    .filter((element) => element instanceof HTMLElement && !['SCRIPT', 'STYLE', 'LINK', 'META'].includes(element.tagName))
+                    .map((element) => {
+                      const style = getComputedStyle(element);
+                      return { element, font: Number.parseFloat(style.fontSize), line: Number.parseFloat(style.lineHeight) };
+                    });
+                  for (const { element, font, line } of baseline) {
+                    if (Number.isFinite(font)) element.style.setProperty('font-size', `${font * 2}px`, 'important');
+                    if (Number.isFinite(line)) element.style.setProperty('line-height', `${line * 2}px`, 'important');
+                  }
+                });
+              }
+              const context = `${viewport.width}px ${mode} ${family} text${textScale} ${serverName}`;
+              const states = [];
+              for (const state of ['connecting', 'connected', 'reconnecting']) {
+                if (state === 'connected') assert.equal(await page.evaluate(() => window.__orbisConnectionFixtureStreams.open()), true);
+                if (state === 'reconnecting') assert.equal(await page.evaluate(() => window.__orbisConnectionFixtureStreams.fail()), true);
+                const result = await check(state, address, `${context} ${state}`);
+                const modeKey = `${viewport.width}:${textScale}:${serverName}:${address}`;
+                const modeWidth = result.controls[1].width;
+                if (modeWidths.has(modeKey)) near(modeWidth, modeWidths.get(modeKey), `${context}: Light/Dark button width must remain stable`);
+                else modeWidths.set(modeKey, modeWidth);
+                if (states.length) {
+                  assert.deepEqual(result.typography, states[0].geometry.typography, `${context}: status changes must preserve typography`);
+                  result.controls.forEach((control, index) => {
+                    near(control.y, states[0].geometry.controls[index].y, `${context}: status changes must preserve control baseline`);
+                    near(control.height, states[0].geometry.controls[index].height, `${context}: status changes must preserve control height`);
+                  });
+                }
+                if (captureWidths.includes(viewport.width)) {
+                  const clip = {
+                    x: Math.max(0, Math.floor(result.bar.x) - 8),
+                    y: Math.max(0, Math.floor(result.bar.y) - 8),
+                    width: Math.min(viewport.width, Math.ceil(result.bar.width) + 16),
+                    height: Math.ceil(result.bar.height) + 16,
+                  };
+                  const name = `${prefix}-${viewport.width}-${mode}-${family}-text${textScale}-name${nameIndex}-${state}.png`;
+                  if (screenshotDir) await page.screenshot({ path: path.join(screenshotDir, name), clip, animations: 'disabled' });
+                  if (captureHeader) await captureHeader(name, { clip });
+                }
+                states.push({ state, geometry: result });
+              }
+              await page.evaluate(() => window.dispatchEvent(new Event('online')));
+              await page.waitForFunction(() =>
+                window.__orbisConnectionFixtureStreams.summary().some(({ url, state }) => new URL(url).pathname === '/api/sse/app' && state === 0),
+              );
+              assert.equal(await page.evaluate(() => window.__orbisConnectionFixtureStreams.open()), true);
+              await check('connected', address, `${context} recovered`);
+              report.push({ width: viewport.width, mode, address, serverName, textScale, states, recovered: true });
             }
-            if (captureWidths.includes(viewport.width)) {
-              const clip = {
-                x: Math.max(0, Math.floor(result.bar.x) - 8),
-                y: Math.max(0, Math.floor(result.bar.y) - 8),
-                width: Math.min(viewport.width, Math.ceil(result.bar.width) + 16),
-                height: Math.ceil(result.bar.height) + 16,
-              };
-              const name = `${prefix}-${viewport.width}-${mode}-${family}-${state}.png`;
-              if (screenshotDir) await page.screenshot({ path: path.join(screenshotDir, name), clip, animations: 'disabled' });
-              if (captureHeader) await captureHeader(name, { clip });
-            }
-            states.push({ state, geometry: result });
           }
-          await page.evaluate(() => window.dispatchEvent(new Event('online')));
-          await page.waitForFunction(() =>
-            window.__orbisConnectionFixtureStreams.summary().some(({ url, state }) => new URL(url).pathname === '/api/sse/app' && state === 0),
-          );
-          assert.equal(await page.evaluate(() => window.__orbisConnectionFixtureStreams.open()), true);
-          await check('connected', address, `${context} recovered`);
-          report.push({ width: viewport.width, mode, address, states, recovered: true });
         }
       }
     }
@@ -295,6 +360,7 @@ module.exports = async function inspectConnectionStatus(
   } finally {
     page.off('request', onRequest);
     if (setServerAddress) await setServerAddress(defaultAddress);
+    if (setServerName) await setServerName(defaultServerName);
     if (initialViewport) await page.setViewportSize(initialViewport);
   }
 };

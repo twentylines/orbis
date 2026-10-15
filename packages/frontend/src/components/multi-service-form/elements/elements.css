@@ -1,3 +1,54 @@
+.service-config-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  min-width: 0;
+}
+
+.service-config-toolbar > div {
+  flex: 1 1 12em;
+  min-width: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.service-config-toolbar > .btn {
+  flex: 0 1 auto;
+  min-width: min(100%, 10em);
+  max-width: 100%;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.table-responsive:has(> .service-config-table) {
+  scroll-padding-inline: 8px;
+}
+.service-config-table .service-config-actions-cell:last-child {
+  width: 64px;
+  min-width: 64px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+.service-config-table .service-config-actions-cell .btn.service-config-remove {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  scroll-margin-inline: 8px;
+}
+.service-config-table .service-config-remove svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
 .table-row-input {
   width: 100%;
   min-width: 200px;

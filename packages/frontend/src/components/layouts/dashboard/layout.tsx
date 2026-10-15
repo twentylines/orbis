@@ -137,7 +137,9 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
           <CommandSearch />
           <output
             className="desktop-connection"
-            aria-label={connectionStatus === 'connected' ? `Connected to server ${serverAddress}` : connectionLabel}
+            data-connection-kind={connectionStatus === 'connected' && userSettings.internalIp ? 'address' : 'status'}
+            data-connection-state={connectionStatus}
+            aria-label={connectionStatus === 'connected' && userSettings.internalIp ? `Connected to server ${serverAddress}` : connectionLabel}
             title={connectionLabel}
           >
             <span className={`desktop-connection-dot is-${connectionStatus}`} aria-hidden="true" />

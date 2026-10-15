@@ -1,0 +1,26 @@
+.settings-security {
+  min-width: 0;
+}
+.settings-security-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.settings-security-heading h2 {
+  flex: 1 1 12em;
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(16px, 2.4vw, 20px);
+  line-height: 1.35;
+}
+.settings-security-heading > svg {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  color: var(--desktop-accent);
+}
+.settings-security .form-label {
+  line-height: 1.45;
+}

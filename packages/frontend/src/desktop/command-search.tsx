@@ -1,5 +1,6 @@
 import { getInstalledAppsOptions, searchAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import * as Dialog from '@radix-ui/react-dialog';
 import { IconArrowUpRight, IconSearch, IconX } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
@@ -249,10 +250,19 @@ export function CommandSearch() {
                       </h3>
                       <div className="desktop-search-grid">
                         {items.map((result) => (
-                          <button data-search-result type="button" key={result.id} onKeyDown={handleResultKeyDown} onClick={() => close(result.path)}>
+                          <button
+                            data-search-result
+                            type="button"
+                            key={result.id}
+                            aria-label={`${result.label}${result.detail ? `, ${result.detail}` : ''}`}
+                            onKeyDown={handleResultKeyDown}
+                            onClick={() => close(result.path)}
+                          >
                             <span className="desktop-search-result-icon">{result.icon}</span>
                             <span className="desktop-search-result-text">
-                              <strong>{result.label}</strong>
+                              <strong title={result.label}>
+                                <WrapWords text={result.label} />
+                              </strong>
                               {result.detail ? <small>{result.detail}</small> : null}
                             </span>
                             <IconArrowUpRight size={18} aria-hidden="true" />

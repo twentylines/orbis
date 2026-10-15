@@ -2,6 +2,8 @@
 
 ## Unreleased development preview
 
+- Reflowed long Home headings, search results, Select menus, log controls, security fields and nested installer/Compose forms. Ordinary labels wrap between words; identifiers keep full accessible names. Compose table actions retain a complete keyboard focus marker inside their scroll area.
+- Verified a real custom-store v2 to v3 upgrade on the isolated server: the backed-up update stayed stopped, preserved settings and overrides, generated the new default before an explicit healthy two-service start, and returned to stopped state.
 - Aligned Home with the system bar's inner column, made logout clearance symmetric, replaced sample timestamps with system uptime and renamed Docker rankings to Usage.
 - Removed the login language selector's inherited bottom margin so it aligns with the theme toggle. Auth checks now measure both controls' heights and centre lines.
 - Reflowed two-factor code inputs into equal columns with enough inner width for entered digits on narrow screens.

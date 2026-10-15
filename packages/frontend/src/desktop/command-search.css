@@ -55,13 +55,16 @@
 .desktop-search-input input {
   min-width: 0;
   flex: 1;
-  height: 44px;
+  min-height: 44px;
+  height: auto;
+  padding: 6px 0;
   border: 0;
   outline: none;
   background: transparent;
   color: var(--desktop-ink);
   font: inherit;
   font-size: clamp(17px, 2vw, 23px);
+  line-height: 1.45;
 }
 .desktop-search-input input::placeholder {
   color: var(--desktop-muted);
@@ -122,8 +125,9 @@
 }
 .desktop-search-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22em), 1fr));
   gap: 10px;
+  container-type: inline-size;
 }
 .desktop-search-grid button {
   display: flex;
@@ -155,21 +159,22 @@
 }
 .desktop-search-result-text {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   min-width: 0;
   flex: 1;
 }
 .desktop-search-result-text strong {
-  font-size: 15px;
+  font-size: clamp(14px, 3.85vw, 15px);
   font-weight: 650;
-  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 .desktop-search-result-text small {
   color: var(--desktop-muted);
   font-size: 12px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .desktop-search-grid button > svg {
   flex: none;
@@ -178,6 +183,26 @@
 .desktop-search-feedback p {
   color: var(--desktop-muted);
   margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+@container (max-width: 20em) {
+  .desktop-search-grid button {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) 18px;
+  }
+  .desktop-search-result-icon {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .desktop-search-grid button > svg {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .desktop-search-result-text {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }
 .desktop-search-feedback button {
   color: var(--desktop-ink);

@@ -50,29 +50,32 @@ export const ChangePasswordForm = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="mb-4 w-100 ">
+    <form onSubmit={handleSubmit(onSubmit)} className="mb-4 w-100">
       <Input
         disabled={changePassword.isPending}
         {...register('currentPassword')}
         error={errors.currentPassword?.message}
         type="password"
-        placeholder={t('SETTINGS_SECURITY_FORM_CURRENT_PASSWORD')}
+        label={t('SETTINGS_SECURITY_FORM_CURRENT_PASSWORD')}
+        autoComplete="current-password"
       />
       <Input
         disabled={changePassword.isPending}
         {...register('newPassword')}
         error={errors.newPassword?.message}
-        className="mt-2"
+        className="mt-3"
         type="password"
-        placeholder={t('SETTINGS_SECURITY_FORM_NEW_PASSWORD')}
+        label={t('SETTINGS_SECURITY_FORM_NEW_PASSWORD')}
+        autoComplete="new-password"
       />
       <Input
         disabled={changePassword.isPending}
         {...register('newPasswordConfirm')}
         error={errors.newPasswordConfirm?.message}
-        className="mt-2"
+        className="mt-3"
         type="password"
-        placeholder={t('SETTINGS_SECURITY_FORM_CONFIRM_PASSWORD')}
+        label={t('SETTINGS_SECURITY_FORM_CONFIRM_PASSWORD')}
+        autoComplete="new-password"
       />
       <Button disabled={changePassword.isPending} className="mt-3" type="submit">
         {t('SETTINGS_SECURITY_FORM_CHANGE_PASSWORD_SUBMIT')}

@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import DOMPurify from 'dompurify';
 import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import './logs-terminal.css';
 
 type Props = {
@@ -36,34 +37,34 @@ export const LogsTerminal = (props: Props) => {
 
   return (
     <div>
-      <div className="row d-flex align-items-center ps-1">
-        <div className="col">
-          <label className="form-check form-switch mt-1" htmlFor={`${id}-follow`}>
-            <input id={`${id}-follow`} className="form-check-input" type="checkbox" checked={follow} onChange={() => setFollow(!follow)} />
-            <span className="form-check-label">{t('APP_LOGS_TAB_FOLLOW')}</span>
-          </label>
-        </div>
-        <div className="col">
-          <label className="form-check form-switch mt-1" htmlFor={`${id}-wrap`}>
-            <input id={`${id}-wrap`} className="form-check-input" type="checkbox" checked={wrapLines} onChange={() => setWrapLines(!wrapLines)} />
-            <span className="form-check-label">{t('APP_LOGS_TAB_WRAP_LINES')}</span>
-          </label>
-        </div>
-        <div className="col">
-          <div className="input-group mb-2">
-            <span className="input-group-text">{t('APP_LOGS_TAB_MAX_LINES')}</span>
-            <input
-              id={`${id}-max-lines`}
-              aria-label={t('APP_LOGS_TAB_MAX_LINES')}
-              min={1}
-              max={1000}
-              type="number"
-              className="form-control"
-              value={maxLines}
-              onChange={(e) => updateMaxLines(Number.parseInt(e.target.value, 10))}
-            />
-          </div>
-        </div>
+      <div className="log-terminal-controls">
+        <label className="form-check form-switch log-terminal-toggle" htmlFor={`${id}-follow`}>
+          <input id={`${id}-follow`} className="form-check-input" type="checkbox" checked={follow} onChange={() => setFollow(!follow)} />
+          <span className="form-check-label">
+            <WrapWords text={t('APP_LOGS_TAB_FOLLOW')} />
+          </span>
+        </label>
+        <label className="form-check form-switch log-terminal-toggle" htmlFor={`${id}-wrap`}>
+          <input id={`${id}-wrap`} className="form-check-input" type="checkbox" checked={wrapLines} onChange={() => setWrapLines(!wrapLines)} />
+          <span className="form-check-label">
+            <WrapWords text={t('APP_LOGS_TAB_WRAP_LINES')} />
+          </span>
+        </label>
+        <label className="log-terminal-limit" htmlFor={`${id}-max-lines`}>
+          <span>
+            <WrapWords text={t('APP_LOGS_TAB_MAX_LINES')} />
+          </span>
+          <input
+            id={`${id}-max-lines`}
+            aria-label={t('APP_LOGS_TAB_MAX_LINES')}
+            min={1}
+            max={1000}
+            type="number"
+            className="form-control"
+            value={maxLines}
+            onChange={(e) => updateMaxLines(Number.parseInt(e.target.value, 10))}
+          />
+        </label>
       </div>
       <pre
         id="log-terminal"

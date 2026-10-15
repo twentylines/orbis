@@ -32,11 +32,11 @@
 }
 .workspace-heading h1 {
   font-size: clamp(44px, 5.8vw, 72px);
-  line-height: 0.94;
+  line-height: 1.15;
   font-weight: 720;
   letter-spacing: -0.068em;
   margin: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
 }
 .workspace-subline {
   margin: 14px 0 0;
@@ -610,21 +610,32 @@
   background: rgba(140, 153, 137, 0.15);
 }
 .workspace-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
   padding-top: 23px;
   margin-top: 26px;
   border-top: 1px solid var(--desktop-line);
 }
 .workspace-links h3 {
+  flex-basis: 100%;
   font-size: 14px;
-  margin: 0 0 13px;
+  margin: 0;
 }
 .workspace-links a {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   font-size: 13px;
-  margin-right: 18px;
+  line-height: 1.5;
   text-decoration: none;
+}
+.workspace-links a > svg {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  vertical-align: middle;
 }
 .workspace-activity {
   padding: 28px 27px;
@@ -1120,7 +1131,15 @@
 }
 .workspace-recent-tasks strong {
   font-size: 13px;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+}
+.workspace-recent-app-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 .workspace-recent-tasks small {
   color: var(--desktop-muted);
@@ -1297,6 +1316,12 @@
   }
 }
 @media (max-width: 650px) {
+  .workspace-apps::after {
+    display: none;
+  }
+  .workspace-links a {
+    flex-basis: 100%;
+  }
   .workspace-heading {
     align-items: start;
     flex-direction: column;
@@ -1306,6 +1331,10 @@
     font-size: clamp(34px, 11vw, 46px);
     line-height: 1.15;
     letter-spacing: -0.05em;
+  }
+  .workspace-heading h1[data-long-name="true"] {
+    font-size: clamp(18px, 5.5vw, 28px);
+    letter-spacing: -0.035em;
   }
   .workspace-actions {
     display: grid;

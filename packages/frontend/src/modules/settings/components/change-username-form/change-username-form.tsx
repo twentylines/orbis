@@ -49,7 +49,7 @@ export const ChangeUsernameForm = ({ username }: Props) => {
 
   return (
     <div className="mb-4">
-      <Input disabled type="email" value={username} />
+      <Input disabled type="email" value={username} label={t('AUTH_FORM_EMAIL')} autoComplete="username" />
       <Button className="mt-3" onClick={() => changeUsernameDisclosure.open()}>
         {t('SETTINGS_SECURITY_CHANGE_USERNAME_TITLE')}
       </Button>
@@ -65,15 +65,17 @@ export const ChangeUsernameForm = ({ username }: Props) => {
                 error={formState.errors.newUsername?.message}
                 disabled={changeUsername.isPending}
                 type="email"
-                placeholder={t('SETTINGS_SECURITY_CHANGE_USERNAME_FORM_NEW_USERNAME')}
+                label={t('SETTINGS_SECURITY_CHANGE_USERNAME_FORM_NEW_USERNAME')}
+                autoComplete="username"
                 {...register('newUsername')}
               />
               <Input
-                className="mt-2"
+                className="mt-3"
                 error={formState.errors.password?.message}
                 disabled={changeUsername.isPending}
                 type="password"
-                placeholder={t('SETTINGS_SECURITY_CHANGE_USERNAME_FORM_PASSWORD')}
+                label={t('SETTINGS_SECURITY_CHANGE_USERNAME_FORM_PASSWORD')}
+                autoComplete="current-password"
                 {...register('password')}
               />
             </form>
