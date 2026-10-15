@@ -1,5 +1,5 @@
 .orbis-notifications {
-  --notice-inset: 64px;
+  --notice-inset: var(--desktop-inset);
   --notice-top: 108px;
   position: fixed;
   top: var(--notice-top);

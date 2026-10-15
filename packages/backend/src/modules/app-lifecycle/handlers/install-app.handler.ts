@@ -71,6 +71,7 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
       appStoreSlug: appStoreId,
       isVisibleOnGuestDashboard,
       enableAuth: parsedForm.enableAuth ?? false,
+      maxBackups: parsedForm.maxBackups ?? null,
       templateUrn: appUrn,
       lastTemplateSyncAt: Math.floor(Date.now() / 1000),
       templateVersion: appInfo.tipi_version,

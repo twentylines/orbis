@@ -48,8 +48,8 @@ export const AuthLayout = ({ children }: PropsWithChildren) => {
         </div>
         <div className="card card-md">
           <div className="card-body">{children}</div>
+          <p className="desktop-auth-credit">Orbis is built on Runtipi.</p>
         </div>
-        <p className="desktop-auth-credit">Orbis is built on Runtipi.</p>
       </div>
     </div>
   );

@@ -69,7 +69,9 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 }
 .desktop-auth-credit {
   text-align: center;
-  margin: 16px 0 0;
+  margin: 0;
+  padding: 16px 24px;
+  border-top: 1px solid var(--desktop-line);
   color: var(--desktop-muted);
   font-size: 12px;
 }
@@ -83,8 +85,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   color: #edf2ef;
 }
 .desktop-auth[data-desktop-mode="dark"] .desktop-auth-identity h1,
-.desktop-auth[data-desktop-mode="dark"] .desktop-auth-product,
-.desktop-auth[data-desktop-mode="dark"] .desktop-auth-credit {
+.desktop-auth[data-desktop-mode="dark"] .desktop-auth-product {
   color: #edf2ef;
 }
 .desktop-auth[data-desktop-preset="forest"] {
@@ -146,14 +147,15 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   background: var(--desktop-wallpaper) center / cover;
 }
 .desktop-fallback-panel {
-  width: min(100%, 640px);
-  padding: clamp(24px, 5vw, 48px);
+  width: min(100%, 480px);
+  padding: 28px;
   border: 1px solid var(--desktop-edge);
   border-radius: 24px;
   background: var(--desktop-surface);
   box-shadow: 0 20px 70px rgba(5, 22, 17, 0.2);
   backdrop-filter: blur(24px);
 }
+.desktop-auth pre,
 .desktop-fallback-panel pre {
   color: var(--desktop-ink);
   background: color-mix(in srgb, var(--desktop-surface) 85%, var(--desktop-ink));
@@ -164,4 +166,95 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   overflow-wrap: anywhere;
   max-height: 40vh;
   overflow-y: auto;
+}
+
+.desktop-auth pre code {
+  color: inherit;
+  background: transparent;
+  padding: 0;
+}
+
+.orbis-theme {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.orbis-error {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 20px 14px;
+  text-align: start;
+}
+.orbis-error-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: var(--desktop-negative);
+  background: color-mix(in srgb, var(--desktop-negative) 12%, transparent);
+}
+.orbis-error-copy h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+.orbis-error-copy p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.orbis-error-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.orbis-error-actions .btn {
+  flex: 1 1 auto;
+  min-height: 42px;
+  white-space: normal;
+}
+.orbis-error-details {
+  grid-column: 1 / -1;
+  padding-top: 14px;
+  border-top: 1px solid var(--desktop-line);
+  font-size: 13px;
+}
+.orbis-error-details summary {
+  cursor: pointer;
+  color: var(--desktop-muted);
+  width: fit-content;
+}
+.orbis-error-details dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 14px;
+  margin: 16px 0 0;
+  padding: 14px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-surface) 94%, var(--desktop-ink));
+}
+.orbis-error-details dt {
+  color: var(--desktop-muted);
+  font-weight: 550;
+}
+.orbis-error-details dd {
+  margin: 0;
+  min-width: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+@media (max-width: 380px) {
+  .desktop-fallback-panel {
+    padding: 22px;
+  }
+  .orbis-error {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
 }

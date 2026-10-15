@@ -10,11 +10,13 @@ const inspectWindowFlows = require('./window-flow-checks.cjs');
 const inspectAppUpdate = require('./app-update-checks.cjs');
 const inspectConnectionStatus = require('./connection-status-checks.cjs');
 const inspectNotifications = require('./notification-checks.cjs');
+const inspectErrorAuth = require('./error-auth-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
 const updatesOnly = process.env.ORBIS_VISUAL_UPDATES_ONLY === '1';
 const connectionOnly = process.env.ORBIS_VISUAL_CONNECTION_ONLY === '1';
 const notificationsOnly = process.env.ORBIS_VISUAL_NOTIFICATIONS_ONLY === '1';
+const errorsOnly = process.env.ORBIS_VISUAL_ERRORS_ONLY === '1';
 
 const base = 'http://localhost:8080';
 const screenshotDir = process.env.ORBIS_VISUAL_SCREENSHOT_DIR || path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
@@ -339,7 +341,7 @@ async function main() {
           { name: 'desktop', width: 1440, height: 1120 },
           { name: 'tablet', width: 768, height: 1024 },
           { name: 'mobile', width: 390, height: 844 },
-          ...(updatesOnly || notificationsOnly ? [{ name: 'narrow', width: 320, height: 800 }] : []),
+          ...(updatesOnly || notificationsOnly || errorsOnly ? [{ name: 'narrow', width: 320, height: 800 }] : []),
         ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
@@ -602,6 +604,16 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (errorsOnly) {
+      const errorAuth = await inspectErrorAuth({
+        page,
+        base,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, errorAuth, errors });
+      await page.close();
+      continue;
+    }
     if (notificationsOnly) {
       const notifications = await inspectNotifications({
         page,
@@ -1068,7 +1080,7 @@ async function main() {
     await Promise.race([page.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
-  if (homeOnly || windowsOnly || updatesOnly || connectionOnly || notificationsOnly) {
+  if (homeOnly || windowsOnly || updatesOnly || connectionOnly || notificationsOnly || errorsOnly) {
     if (reports.some((report) => report.errors.length)) process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     return;

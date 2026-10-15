@@ -1,4 +1,5 @@
-import { IconReload } from '@tabler/icons-react';
+import { IconAlertCircle, IconReload } from '@tabler/icons-react';
+import { Link } from 'react-router';
 import { Button } from '../ui/Button';
 import { readCachedDesktopPreferences } from '@/desktop/preferences';
 import type { PropsWithChildren } from 'react';
@@ -23,25 +24,36 @@ export const FallbackSurface = ({ children }: PropsWithChildren) => {
 };
 
 export const ErrorPage = ({ error, onReset }: ErrorPageProps) => {
+  const message = typeof error?.message === 'string' ? error.message.trim() : '';
   return (
     <FallbackSurface>
-      <div className="empty">
-        <h1 className="empty-title">Unable to load this page</h1>
-        <p className="empty-subtitle text-secondary">
-          Retry to load the page again. If it still fails, include the error below when reporting the problem.
-        </p>
-        <div className="empty-action">
+      <section className="orbis-error" aria-labelledby="orbis-error-title">
+        <span className="orbis-error-icon" aria-hidden="true">
+          <IconAlertCircle size={24} stroke={1.7} />
+        </span>
+        <div className="orbis-error-copy">
+          <h1 id="orbis-error-title">Unable to load this page</h1>
+          <p>Retry, or return to the workspace.</p>
+        </div>
+        <div className="orbis-error-actions">
           <Button intent="primary" onClick={onReset}>
-            <IconReload className="me-2" />
+            <IconReload size={18} aria-hidden="true" />
             Retry
           </Button>
+          <Link to="/dashboard" className="btn btn-outline-primary">
+            Open workspace
+          </Link>
         </div>
-        <pre className="mt-5" style={{ whiteSpace: 'normal' }}>
-          {error.message}
-          <br />
-          Location: {location.pathname}
-        </pre>
-      </div>
+        <details className="orbis-error-details">
+          <summary>Details</summary>
+          <dl>
+            <dt>Page</dt>
+            <dd>{typeof window === 'undefined' ? '/' : window.location.pathname}</dd>
+            <dt>Error</dt>
+            <dd>{message || 'No error details were returned.'}</dd>
+          </dl>
+        </details>
+      </section>
     </FallbackSurface>
   );
 };
