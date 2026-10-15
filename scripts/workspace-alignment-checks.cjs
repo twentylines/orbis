@@ -34,6 +34,15 @@ module.exports = async function inspectWorkspaceAlignment(page) {
       };
     });
   const initial = await measure();
+  const buttonStyles = await page.locator('.workspace-actions > *').evaluateAll((actions) =>
+    actions.map((action) => {
+      const style = getComputedStyle(action);
+      return ['backgroundColor', 'color', 'borderRadius', 'borderColor', 'fontSize', 'fontWeight', 'lineHeight', 'padding', 'gap', 'boxShadow'].map(
+        (key) => style[key],
+      );
+    }),
+  );
+  assert.deepEqual(buttonStyles[0], buttonStyles[1], 'workspace actions must share the same button styling');
   assert.ok(initial.apps.length >= 3, 'exercise both plain and update-notice cards');
   const near = (first, second) => assert.ok(Math.abs(first - second) < 0.1, `${first} does not align with ${second}`);
   for (const action of initial.actions) {

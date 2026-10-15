@@ -172,7 +172,7 @@
   transform: rotateY(-16deg) rotateX(6deg);
   transform-style: preserve-3d;
   transition: transform 340ms ease;
-  animation: desktop-machine-enter 550ms ease-out both;
+  animation: desktop-machine-enter 550ms ease-out backwards;
 }
 .desktop-host-overview:hover .desktop-host-machine {
   transform: rotateY(-9deg) rotateX(3deg);

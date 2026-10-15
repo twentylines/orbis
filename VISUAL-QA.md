@@ -1,5 +1,27 @@
 # Orbis UI inspection
 
+## 2026-10-15: app workspace and further alignment corrections
+
+Independent agents inspected 96 global route/size/mode states, plus app detail, form, menu and dialog interactions. Production-bundle Chrome checks used isolated API fixtures at 1440, 768, 390 and 320 CSS px in light and dark mode. Screenshots were inspected as well as measured; outer bounds alone missed clipped text and the 3D server's full silhouette.
+
+| Surface | Correction and verification |
+| --- | --- |
+| Home cards | Title, notice and Docker health use consistent slots. Tablet cards retain enough width for health/notice text. Same-row cards, icons, titles and health baselines align. |
+| Home actions | Both actions are 44 px high with centred icon/label groups and identical computed surface, text, border, spacing and shadow styles. Hover/focus preserves bounds; 320 px actions stack at equal full width. Bright inset ridges were removed. |
+| Header | All glyphs are 20 px and controls are 40/36 px. Theme hover no longer grows its icon. Long names truncate; configured IP and reconnecting status fit. |
+| Dock | Home label and responsive spacing preserve label padding. Visible 390 px labels have at least 8.23 px side insets; narrow layouts show icons with accessible names. |
+| Monitor illustration | Complete front/top/side envelope is centred. At 320 px, idle left/right panel spacing measures 19.94/20.07 px; at 390 px, 22.26/22.44 px. Restored hover tilt remains contained. |
+| App details | Shared official/custom layout, themed sections/editors and exact-URN resource/operation scope. Keyboard sections, URL history/reload, required install fields, normalized port, read-only Compose/update diff, custom Update/Remove and cancelled backup-removal choice pass. |
+| Menus/dialogs | Menu rows are at least 40 px and retain viewport insets. Tablet default dialogs use 720 px; mobile has 16 px insets. Escape restores More; install submission restores the action group when the original button is replaced. |
+| Settings | Inherited controls/tables use Orbis tokens. Regional language fallbacks, unique select IDs, keyboard sections and settled back/forward navigation pass. Update copy links to the real Update Center. |
+| Command search | Modal keyboard containment and focus restoration pass for Escape, close and shortcut. The newly requested full-workspace morph and catalogue search are subsequent interaction work. |
+
+Notice text contrast measured from rendered pixels is 5.97–6.15:1 light and 8.10–8.22:1 dark. Independent checks found no document overflow or page errors after the targeted corrections.
+
+The retained fixture harness now checks inner button centring, dock-label insets, installed/home card baselines, full server-face bounds and search focus, alongside the previous shell, theme, icon, history and responsive checks. These are local Chrome results. They do not establish released-image behaviour, real Docker lifecycle success, other-browser coverage, a complete enlarged-text pass or production readiness. Beta 19 remains the latest runtime-verified release until the next publication and isolated OTA check.
+
+Final retained harness runs passed at 1440/768/390/320 px with light/dark checks, no page errors and all required geometry/navigation/form assertions true. Desktop, tablet, phone and narrow fixture screenshots were regenerated from that final bundle.
+
 ## 2026-10-15: beta 19 corrections
 
 Two independent agents inspected the rendered production bundle. These checks use an isolated browser with development fixtures, not the user's personal browser or Hades.

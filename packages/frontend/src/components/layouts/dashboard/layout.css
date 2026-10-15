@@ -621,6 +621,9 @@
     transform 0.18s ease;
 }
 .desktop-dock-item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -910,6 +913,7 @@
     bottom: 8px;
     width: calc(100% - 22px);
     justify-content: space-around;
+    gap: 0;
     border-radius: 16px;
   }
   .desktop .desktop-dock-item {
@@ -954,7 +958,7 @@
     --app-logo-size: 56px;
   }
 }
-@media (max-width: 360px) {
+@media (max-width: 380px) {
   .desktop .desktop-dock-item {
     height: 45px;
   }

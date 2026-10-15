@@ -28,11 +28,27 @@ body:has(.desktop) {
   --tblr-success: #27584a;
   --tblr-success-darken: #306b59;
   --tblr-shadow-input: none;
+  --link-color: var(--desktop-accent);
   --workspace-heading-ink: #132e2b;
   --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
 }
 body:has(.desktop) .form-select {
   min-height: 40px;
+}
+body:has(.desktop) :is(.btn-outline-primary, .btn-ghost-primary) {
+  --tblr-btn-color: var(--desktop-ink);
+  --tblr-btn-hover-color: var(--desktop-ink);
+  --tblr-btn-hover-bg: rgba(115, 146, 127, 0.16);
+  --tblr-btn-active-color: var(--desktop-ink);
+  --tblr-btn-active-bg: rgba(115, 146, 127, 0.2);
+  --tblr-btn-disabled-color: var(--desktop-muted);
+}
+body:has(.desktop) .btn-outline-primary {
+  --tblr-btn-border-color: var(--desktop-line);
+  --tblr-btn-hover-border-color: var(--desktop-accent);
+}
+body:has(.desktop) .desktop-settings .dropdown-toggle {
+  color: var(--desktop-ink);
 }
 
 .desktop[data-desktop-wallpaper="tidal"],
