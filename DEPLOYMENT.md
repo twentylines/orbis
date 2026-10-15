@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Published beta 29 text verification (16 October 2026)
+
+[Beta 29](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.29) is published at source commit `1697920a0fe14ccea2cc791cc26b6d06244eee12`. Main CI `38810705798`, integration `38810705784` and release workflow `38810814153` passed. The read-only release checker verified the tag, commit and exact OCI index `sha256:84a8502cb31c56563af6df6353765581613808a1e6aa78d9aaac7d0353402905`, with linux/amd64 and linux/arm64 entries.
+
+The real browser reviewed and applied beta 28→29 on the owned arm64 stack. Host job `365c4747-1380-40a2-8648-ec0141728e27` completed at the exact healthy image. Preferences, 2 installed app records and 22 task outcomes were retained. The previous beta 28 snapshot independently verified 3,576 entries, 2,812 files and 97,105,722 bytes, including contents, permissions and numeric ownership. No restoration was performed.
+
+The published bundle then passed 60 long-text compositions at 1440/390/320px, both modes and native/doubled text: all four update review steps and app details. HTML, scripts, styles, system load and container health came from the real server. Long app metadata, review diffs and appearance changes were controlled inside the browser. All 27 preference writes were intercepted; there were zero real non-read requests, blocked mutations or browser errors. The actual full app-details response and account preferences matched before and after.
+
+The initial driver run stopped on a browser-storage error in its blank-page setup. Its completed desktop measurements were not counted as a passed run. Setup now applies only to the owned Orbis top-level origin; the complete subsequent run passed. [Released beta 29 captures](screenshots/live-beta29) distinguish controlled metadata from real runtime state. The default Docker context remained `default`; Hades was not accessed. Copied-data migration and full production acceptance remain open.
+
 ## Published beta 28 runtime verification (16 October 2026)
 
 [Beta 28](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.28) was pushed directly to main at source commit `546005bac38772cd67ed6dd3a548a023b0fa5ae8`. Main CI `38803958196`, integration `38803958284` and release workflow `38804241743` passed. The read-only checker verified the tag, manifest and exact OCI index `sha256:05e486cdde33a4f9aedfb9572487c541827e5622e0be292b13721867279dcaa4`, including linux/amd64 and linux/arm64. Beta 26/27 were published but were not installed on this owned server; the later text-comfort findings were resolved in beta 28 before deployment.

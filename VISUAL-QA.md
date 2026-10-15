@@ -10,6 +10,8 @@ The update flow audit also reproduced delayed acceptance navigating away after m
 
 The final flow matrix passes all eight width/mode groups, including uncached destination loading and inert-but-not-hidden minimize animation. It records 128 footer geometry samples, 56 intercepted fixture update requests (eight deliberate rejections), no browser errors and no real lifecycle changes. Functional app-detail checks also pass all four widths: scoped resources/operations, keyboard/history, log limits and cleanup, install validation, custom removal/update and read-only diffs. [Current long-text captures](screenshots/app-text) and the usual app-detail captures have been refreshed. The final frontend bundle, types and changed-file lint pass.
 
+Published beta 29 also passes 60 long-text compositions at 1440/390/320px in both modes, native/doubled text. It serves real HTML/assets and system/container reads with controlled app metadata, diffs and browser-only appearance responses. There are no browser errors or actual preference/lifecycle writes; the real app record and preferences match before/after. [Released captures](screenshots/live-beta29) and `DEPLOYMENT.md` record the exact image and OTA evidence. The ordinary update captures in `screenshots/app-updates` have also been refreshed.
+
 These checks establish the listed cases, not a guarantee that every possible app metadata string, language or browser is flawless. Production acceptance remains in `ACCEPTANCE.md`.
 
 ## 2026-10-16: text comfort and layout reflow
