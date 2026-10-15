@@ -167,7 +167,14 @@ module.exports = async function inspectHomeApps(page, { apps, resetPreferences, 
         true,
         'keyboard focus must scroll the last app into the pane',
       );
-      await snapshot(`${mode}-home-all-apps`, false);
+      await page.mouse.move(0, 0);
+      await page.locator(':focus').evaluateAll((elements) => {
+        for (const element of elements) element.blur();
+      });
+      await pane().evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await snapshot(`${mode}-home-all-apps`);
 
       await picker();
       await page.getByRole('button', { name: 'Hide Recent operations', exact: true }).click();

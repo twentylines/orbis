@@ -988,7 +988,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
   if (homeOnly) {
     if (reports.some((report) => report.errors.length)) process.exitCode = 1;
-    await browser.close();
+    await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     return;
   }
   if (

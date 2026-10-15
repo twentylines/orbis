@@ -16,6 +16,7 @@ module.exports = async function inspectWorkspaceAlignment(page) {
         launcher: box(document.querySelector('.workspace-app-list')),
         launcherPanel: box(document.querySelector('.workspace-apps')),
         operations: document.querySelector('.workspace-operations') ? box(document.querySelector('.workspace-operations')) : null,
+        attention: document.querySelector('.workspace-attention') ? box(document.querySelector('.workspace-attention')) : null,
         scrollApps: document.querySelector('.workspace-app-scroll')?.dataset.scroll === 'true',
         actions: [...document.querySelectorAll('.workspace-actions > *')].map((action) => ({
           ...box(action),
@@ -59,6 +60,10 @@ module.exports = async function inspectWorkspaceAlignment(page) {
     ) {
       near(initial.launcher.right, initial.operations.right);
     }
+  }
+  if (initial.operations && initial.attention && Math.abs(initial.operations.top - initial.attention.top) < 0.1) {
+    near(initial.launcherPanel.left, initial.operations.left);
+    near(initial.launcherPanel.right, initial.attention.right);
   }
   for (const action of initial.actions) {
     near(action.height, 44);

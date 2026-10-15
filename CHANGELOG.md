@@ -3,7 +3,7 @@
 ## Unreleased development preview
 
 - Added a saved show-all Home app mode, a direct pin picker and automatic compaction of Recent operations/Needs attention. App scrolling stays contained while either lower widget is enabled.
-- Added directional section slides and a full-workspace search expansion with installed apps, catalogue apps and Settings/Updates destinations. Keyboard and reduced-motion support are under final browser inspection.
+- Added directional section slides and a full-workspace search expansion with installed apps, catalogue apps and Settings/Updates destinations. Keyboard, interrupted motion, error/retry states and reduced-motion support passed independent browser inspection.
 - Moved log-query validation ahead of SSE interceptors so invalid requests return HTTP 400 JSON before headers or readers open. The regression fixture now includes a production-like interceptor.
 
 - Redesigned official/custom app details around shared actions, Docker health, scoped resources and operations. Fixed section history/keyboard navigation, custom Update routing, missing custom Remove access and destructive-dialog backup-choice reset.

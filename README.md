@@ -17,7 +17,7 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 
 [Dark workspace](screenshots/desktop-fixtures/desktop-workspace-dark.png) · [Phone workspace](screenshots/desktop-fixtures/mobile-workspace.png) · [Phone in dark mode](screenshots/desktop-fixtures/mobile-workspace-dark.png) · [Monitor](screenshots/desktop-fixtures/desktop-monitor.png) · [Appearance](screenshots/desktop-fixtures/desktop-appearance.png)
 
-[Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Inspection record](VISUAL-QA.md)
+[Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Search](screenshots/desktop-fixtures/desktop-search.png) · [Home app picker](screenshots/desktop-fixtures/desktop-dark-home-picker.png) · [All Home apps](screenshots/desktop-fixtures/desktop-dark-home-all-apps.png) · [Inspection record](VISUAL-QA.md)
 
 The current design screenshots use labelled development fixture data. [A clean install captured in an isolated Docker VM](screenshots/live-smoke/workspace.png) and [older beta 11 live captures](screenshots/live-beta11/monitor-mobile.png) remain available as deployment evidence; they show earlier UI iterations.
 

@@ -10,7 +10,13 @@ Search opening starts at the actual header trigger (measured 0px endpoint error)
 
 Section slides follow dock order (+1,+1,-1 measured during forward/back navigation), retain header/dock bounds, and do not run for Settings query changes. The first reduced-motion rule lost to named transition selectors; explicit named overrides now compute animation:none and 0s, with zero active animations. Responsive headers retain the server IP, including the phone status row.
 
+On layouts at least 900 px wide, more than 3 apps place Recent operations and Needs attention beside each other below a shorter launcher pane. Independent checks at 900/901/999/1024/1099/1440px found no header overlap or overflow; the status card no longer acquires a 345 px empty tail.
+
 The retained helpers are `home-app-checks.cjs`, `command-search-checks.cjs` and `workspace-alignment-checks.cjs`, used by `visual-qa.cjs`. These are isolated fixture checks. They do not establish real Docker lifecycle, released image behavior, other-browser coverage or copied-data migration.
+
+Retained release-candidate runs exited 0 for the full 1440/768/390/320 route matrix and the 14-app Home matrix in both modes. All search, geometry, persistence, form, history and focus assertions passed with no page errors. The many-app Home matrix was rerun after the 900px compact-grid refinement, and its screenshots were regenerated at the top of the page with the launcher scrolled to its beginning.
+
+Separate baseline route runs also exited 0 at 3840×2160 CSS px and at 720×1120 CSS px rendered at 2× scale (a 1440px-wide, 200% zoom layout simulation). These passed the retained assertions and had no page errors. This does not establish native browser zoom, text-only enlargement or every inherited flow. Beta 21 released-image verification follows publication.
 
 ## 2026-10-15: app workspace and further alignment corrections
 
