@@ -3,7 +3,7 @@
 Current compiled-source Chrome fixture captures. API responses are intercepted locally; these are not released-image or real homelab evidence.
 
 - [Tablet Settings crop](tablet-settings.png): the supplied gutter/divider defects corrected at 768px.
-- [Phone Settings](phone-settings.png) and [App Stores](phone-app-stores.png): ordinary pages with no window controls.
+- [Phone Settings](phone-settings.png) and [App Stores](phone-app-stores.png): ordinary pages with no window controls, captured at the actual 390×844 viewport rather than stitching fixed chrome through a long document.
 - [Enlarged phone tabs](phone-enlarged-tabs.png) and [320px tabs](narrow-enlarged-tabs.png): complete labels and a divider below every row.
 - [4K enlarged Settings](wide-enlarged-settings.png): centered content and aligned title icon.
 - [Short-screen light focus](short-light-keyboard-focus.png) and [dark focus](short-dark-keyboard-focus.png): native reverse Tab at 320×400 with doubled text, clear of the sticky bar and dock. Captures retain the actual scroll position.
