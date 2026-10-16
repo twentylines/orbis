@@ -1,8 +1,8 @@
 # Orbis desktop windows
 
-Orbis uses one current first-party route window. Normal browser URLs, authentication, app actions and account permissions remain authoritative. This keeps the desktop light enough for a server and avoids retaining multiple active editors and collectors.
+Orbis uses one current first-party route window on screens at least 1100px wide and 640px high. Smaller screens use ordinary full-page sections with dock navigation. Normal browser URLs, authentication, app actions and account permissions remain authoritative.
 
-## Controls
+## Large-screen controls
 
 - **Full page** is the default and fills the space between the system bar and dock. Content scrolls inside the window while the title bar stays visible. If the screen is too short for the title bar and useful content space, the whole window scrolls inside those same bounds.
 - **Floating window** provides a movable title bar, a bottom-right resize control and contained content scrolling.
@@ -12,9 +12,15 @@ Orbis uses one current first-party route window. Normal browser URLs, authentica
 - **Minimize** contracts the current tool toward the dock and opens Home. The current route stays mounted, so an unsaved form survives minimizing and restoring. The current dock item and the Home restore button reopen the exact route and query.
 - **Close** returns to Home and discards the current route instance. Choosing another tool follows normal navigation and also replaces the route instance. Unsaved forms are not retained across that navigation or a page reload.
 
-Home and the Orbis brand minimize an open tool. Repeatedly selecting Home while it is already minimized does not add history entries. Minimize and restore are explicit URL states, so Back/Forward can recover their visibility. A minimized URL can be reloaded; it restores saved account placement, not unsaved form content.
+On large screens, Home and the Orbis brand minimize an open tool. Repeatedly selecting Home while it is already minimized does not add history entries. Minimize and restore are explicit URL states, so Back/Forward can recover their visibility. A minimized URL can be reloaded; it restores saved account placement, not unsaved form content.
 
-Below 900px wide or 540px high, tools use the full-page layout with minimize and close controls. A desktop placement is retained for the next larger viewport. Windows clamp to the available workspace when the display changes. Unsupported browser APIs fall back to immediate visibility changes; reduced-motion preferences skip the dock animation.
+## Phones, tablets and short viewports
+
+Below either large-screen threshold, sections use a compact page heading and normal document scrolling. Home and the Orbis brand navigate to the workspace. The dock switches sections with the existing directional motion. Pages do not mount window controls or minimize/restore states.
+
+Opening a minimized desktop link on a small screen shows the requested section immediately, then removes its reserved visibility flag with a history replacement. Other query values and the hash are preserved. Resizing keeps the route/form subtree mounted and retains unsaved edits; saved desktop placement is restored when enough room is available again. An in-progress desktop window animation is canceled when the viewport becomes small.
+
+Native page focus clears the measured sticky system bar and fixed dock. On short screens, controls that fit between them are explicitly revealed if native nearest scrolling leaves an edge under the chrome. Focused page headings use the active theme. Desktop windows clamp to the available workspace when the display changes. Reduced-motion preferences skip window and section motion.
 
 ## Persistence and resource use
 

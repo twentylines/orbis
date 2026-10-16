@@ -18,7 +18,11 @@ The original product brief and subsequent user requests remain the scope. A publ
 | Multiple homelabs | Controller/agent and pairing requirements recorded in `MULTI-HOMELAB.md` | Later implementation and two-isolated-host testing, target-aware app install/launch, merged dashboards, disconnect/revoke/restart handling and efficient multi-server visualisation |
 | Final deliverables | GPL licence, upstream record, source/release repo, setup/migration notes, screenshots and test records | Reconcile instructions with final supported behaviour, complete requirement-by-requirement production acceptance audit |
 
-## Current iteration: text comfort
+## Current iteration: large-screen windows and small-screen pages
+
+Window navigation is reserved for viewports at least 1100px wide and 640px high. Phones, tablets and short viewports use ordinary page navigation, compact headings and document scrolling. Responsive transitions retain the mounted form and saved desktop placement; small screens normalize minimized desktop links without losing other URL values. [DESKTOP-WINDOWS.md](DESKTOP-WINDOWS.md) defines this source behavior; [VISUAL-QA.md](VISUAL-QA.md) records its verification. Published beta32 still uses the earlier mobile window model, so release-image verification remains required.
+
+## Previous iteration: text comfort
 
 Text fitting inside a bounding box does not establish a usable layout. The current pass rejects split ordinary words, crowded ring values and labels pressed against controls. Layouts adapt to doubled text across the Home launcher, cards, forms, update lists, core statistics, dialogs, authentication, notifications and error recovery. Retained measurements and direct screenshot inspection are recorded in `VISUAL-QA.md`.
 

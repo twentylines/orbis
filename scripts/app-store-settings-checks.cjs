@@ -128,24 +128,32 @@ module.exports = async function inspectAppStoreSettings({
       const frame = document.querySelector('.desktop-route-window');
       const content = frame.querySelector('.desktop-window-content');
       const toolbar = frame.querySelector('.desktop-window-bar');
+      const pageMode = frame.dataset.windowNavigation === 'page';
       const box = (element) => {
         const r = element.getBoundingClientRect();
         return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
       };
       const scrollsFrame = frame.dataset.windowScrollsFrame === 'true';
-      const scroller = scrollsFrame ? frame : content;
-      const viewport = box(scroller);
-      viewport.x += scroller.clientLeft;
-      viewport.y += scroller.clientTop;
-      viewport.right = viewport.x + scroller.clientWidth;
-      viewport.bottom = viewport.y + scroller.clientHeight;
+      const scroller = pageMode ? document.scrollingElement : scrollsFrame ? frame : content;
+      const systemBar = box(document.querySelector('.desktop-system-bar'));
+      const dock = box(document.querySelector('.desktop-dock'));
+      const viewport = pageMode ? { x: 0, y: systemBar.bottom + 6, right: innerWidth, bottom: dock.y - 6 } : box(scroller);
+      if (!pageMode) {
+        viewport.x += scroller.clientLeft;
+        viewport.y += scroller.clientTop;
+        viewport.right = viewport.x + scroller.clientWidth;
+        viewport.bottom = viewport.y + scroller.clientHeight;
+      }
       const active = document.activeElement;
       return {
         documentY: scrollY,
+        pageMode,
+        framePosition: getComputedStyle(frame).position,
+        windowControlCount: frame.querySelectorAll('.desktop-window-control,.desktop-window-resize').length,
         frame: box(frame),
         toolbar: box(toolbar),
-        systemBar: box(document.querySelector('.desktop-system-bar')),
-        dock: box(document.querySelector('.desktop-dock')),
+        systemBar,
+        dock,
         frameOverflow: getComputedStyle(frame).overflowY,
         scrollsFrame,
         scroller: { viewport, top: scroller.scrollTop, height: scroller.scrollHeight, clientHeight: scroller.clientHeight },
@@ -169,14 +177,14 @@ module.exports = async function inspectAppStoreSettings({
         (active.fallback
           ? verticalOverlap >= Math.min(44, active.box.height) - 1
           : active.box.y >= scroller.viewport.y - 1 && active.box.bottom <= scroller.viewport.bottom + 1);
-      return (
-        Math.abs(value.documentY) <= 1 &&
-        frame.y >= systemBar.bottom + 19 &&
-        frame.bottom <= dock.y - 19 &&
-        ['auto', 'hidden', 'clip'].includes(value.frameOverflow) &&
-        (scrollsFrame || (toolbar.y >= frame.y - 1 && toolbar.bottom <= frame.bottom + 1)) &&
-        (!focused || focusFits)
-      );
+      const layoutFits = value.pageMode
+        ? value.framePosition === 'relative' && value.windowControlCount === 0 && frame.x >= 23 && frame.right <= page.viewportSize().width - 23
+        : Math.abs(value.documentY) <= 1 &&
+          frame.y >= systemBar.bottom + 19 &&
+          frame.bottom <= dock.y - 19 &&
+          ['auto', 'hidden', 'clip'].includes(value.frameOverflow) &&
+          (scrollsFrame || (toolbar.y >= frame.y - 1 && toolbar.bottom <= frame.bottom + 1));
+      return layoutFits && (!focused || focusFits);
     };
     for (let attempt = 0; attempt < 40; attempt++) {
       geometry = await windowGeometry();
@@ -198,7 +206,12 @@ module.exports = async function inspectAppStoreSettings({
       await page.waitForFunction(
         (top) => {
           const frame = document.querySelector('.desktop-route-window');
-          const scroller = frame.dataset.windowScrollsFrame === 'true' ? frame : frame.querySelector('.desktop-window-content');
+          const scroller =
+            frame.dataset.windowNavigation === 'page'
+              ? document.scrollingElement
+              : frame.dataset.windowScrollsFrame === 'true'
+                ? frame
+                : frame.querySelector('.desktop-window-content');
           return scroller.scrollTop > top + 1;
         },
         before.scroller.top,
@@ -206,7 +219,7 @@ module.exports = async function inspectAppStoreSettings({
       );
     }
     const after = await checkWindow(sample, 'ordinary-wheel');
-    assert.ok(Math.abs(after.frame.y - before.frame.y) <= 1, 'ordinary wheel scrolling must not move the tool window');
+    if (!before.pageMode) assert.ok(Math.abs(after.frame.y - before.frame.y) <= 1, 'ordinary wheel scrolling must not move the tool window');
     await capture?.(`${sample.mode}-text${sample.textScale}-window-wheel`, { scrollTop: false });
   };
   const measure = (rootSelector) =>
@@ -323,7 +336,7 @@ module.exports = async function inspectAppStoreSettings({
     for (let index = 0; index < 10; index++) {
       const buttons = page.getByRole('button', { name: 'Dismiss notification' });
       if (!(await buttons.count())) return;
-      await buttons.first().click();
+      await buttons.first().evaluate((button) => button.click());
       await page.waitForTimeout(260);
     }
   };

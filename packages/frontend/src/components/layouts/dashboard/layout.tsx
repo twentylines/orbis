@@ -11,6 +11,7 @@ import { desktopNavigation as navigation } from '@/desktop/navigation';
 import { useSectionMotion } from '@/desktop/section-motion';
 import { RouteWindow, type RouteWindowControls } from '@/desktop/route-window';
 import { isWindowMinimized, windowSearch } from '@/desktop/window-navigation';
+import { DESKTOP_WINDOW_QUERY, revealPageFocus, useDesktopWindows } from '@/desktop/window-viewport';
 import { desktopWindowIds, type DesktopWindowId } from '@runtipi/common/schemas';
 import { IconApps, IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, useMutation } from '@tanstack/react-query';
@@ -46,6 +47,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const location = useLocation();
   const matches = useMatches();
   const windowControls = useRef<RouteWindowControls | null>(null);
+  const desktopWindows = useDesktopWindows();
   const dock = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     if (!user.hasSeenWelcome) return;
@@ -54,16 +56,32 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     const root = document.documentElement;
     const property = '--orbis-dock-height';
     const previous = root.style.getPropertyValue(property);
+    const bar = document.querySelector<HTMLElement>('.desktop-system-bar');
+    const barProperty = '--orbis-bar-bottom';
+    const previousBar = root.style.getPropertyValue(barProperty);
     const measure = () => {
       if (element.offsetHeight) root.style.setProperty(property, `${element.offsetHeight}px`);
+      if (bar?.offsetHeight) root.style.setProperty(barProperty, `${Math.ceil(Number.parseFloat(getComputedStyle(bar).top) + bar.offsetHeight)}px`);
+      const active = document.activeElement;
+      if (
+        !window.matchMedia(DESKTOP_WINDOW_QUERY).matches &&
+        active instanceof HTMLElement &&
+        active.closest('.desktop-route-window[data-window-navigation="page"] .desktop-window-content')
+      )
+        revealPageFocus(active);
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    if (bar) observer.observe(bar);
+    window.addEventListener('resize', measure);
     return () => {
       observer.disconnect();
+      window.removeEventListener('resize', measure);
       if (previous) root.style.setProperty(property, previous);
       else root.style.removeProperty(property);
+      if (previousBar) root.style.setProperty(barProperty, previousBar);
+      else root.style.removeProperty(barProperty);
     };
   }, [user.hasSeenWelcome]);
   const hasPageHeading = matches.some((match) =>
@@ -83,7 +101,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const current = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
   const windowId = current?.path.slice(1) as DesktopWindowId;
   const isTool = desktopWindowIds.includes(windowId);
-  const minimized = isTool && isWindowMinimized(location.search);
+  const minimized = desktopWindows && isTool && isWindowMinimized(location.search);
   return (
     <div
       className="desktop orbis-theme"
@@ -95,9 +113,9 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
       <header className="desktop-system-bar">
         <Link
           to="/dashboard"
-          viewTransition={!isTool}
+          viewTransition={!desktopWindows || !isTool}
           onClick={(event) => {
-            if (isTool) {
+            if (desktopWindows && isTool) {
               event.preventDefault();
               windowControls.current?.minimize();
             }
@@ -194,9 +212,9 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                   ? { pathname: location.pathname, search: windowSearch(location.search, false), hash: location.hash }
                   : path
               }
-              viewTransition={!(isTool && path === '/dashboard') && !(minimized && current?.path === path)}
+              viewTransition={!(desktopWindows && isTool && path === '/dashboard') && !(minimized && current?.path === path)}
               onClick={(event) => {
-                if (isTool && path === '/dashboard') {
+                if (desktopWindows && isTool && path === '/dashboard') {
                   event.preventDefault();
                   windowControls.current?.minimize();
                 }

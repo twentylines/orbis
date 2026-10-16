@@ -1,5 +1,21 @@
 # Orbis UI inspection
 
+## 2026-10-16: large-screen windows, page navigation and Settings alignment
+
+Window navigation now requires at least 1100×640px. Phones, tablets and short viewports use ordinary pages with compact headings, document scrolling and dock navigation. Window controls and toolbar semantics are absent. Resizing retains the mounted form and saved desktop placement; minimized desktop links become visible pages while preserving other query values and the hash.
+
+The supplied Settings crop exposed relationships that the earlier bounds checks missed. Tabler's inherited tab margins were −20px horizontally and −16px vertically; the divider crossed the active pill, while Appearance added a separate 6px inset. Settings now resets those margins and header sizing. Title icons, tabs, dividers and form content share a gutter; the divider follows every visible tab/More row. Wide Settings keeps its centered readable content and matching title icon. A retained checker compares those edges directly.
+
+Independent final inspection passes 20 Settings groups at 1440/768/390/320/3840px, light/dark and native/doubled text. Shared gutter differences are 0px; heading center differences are at most 0.008px; divider clearance is 12.5px; tab side padding is at least 13px. No ordinary labels fracture or clip. Eight additional phone App Stores captures confirm the heading, strip and table alignment. [Current captures and measurements](screenshots/page-navigation/README.md) include the corrected crop.
+
+Page checks cover wheel scrolling, native forward/reverse focus, real Home/brand navigation, minimized-link history replacement, both breakpoint edges and mounted-draft/placement preservation. An enlarged 320×400 case exposed native nearest scrolling leaving Import settings partly under the sticky bar: the control was larger than the preferred padded scroll region. Page focus now measures the physical space between the bar and dock and reveals a fitting control with 8px clearance. Independent Cancel and delayed-list probes also retain visible focus. Page headings use the theme's focus outline. Font-relative choice grids keep Graphite and Sandstone whole at enlarged phone sizes; the retained page checks inspect individual words and interior padding.
+
+The final native route runs pass at 1440/768/390/320px with no browser errors, and 108 route captures are refreshed. The app-store flow matrix passes all 16 width/theme/text groups: 240 rendered states, 384 window/page/focus checks and 160 intercepted operations, with no unexpected writes or text/padding findings. Nine selected store captures are refreshed. Final native modal-wheel checks show the complete enlarged error ending with at least 44px bottom room and a stationary reachable footer. The doubled-text route, window/page navigation and pending-update matrices also passed during this iteration. Bundle, frontend types, scoped Biome and seven geometry/navigation tests pass.
+
+Two fixture timing mistakes were corrected without relaxing their layout gates: the dock target check waits for its entry animation, and the Applications bottom-scroll check lets the previous summary focus RAF finish before deliberately scrolling to the end. An independent wheel/End/focus probe confirms 73.8px bottom clearance and a reachable last app action at 320px.
+
+These are compiled-source Chrome checks on static8080 with intercepted API responses. Published beta32 still uses the earlier mobile window model and has the previously documented scrolled-header defect. Publication and released-image verification of these changes remain required. Hades is untouched; physical devices and other browsers remain open acceptance items.
+
 ## 2026-10-16: focused tool scrolling and dialog restoration
 
 Direct beta32 screenshot inspection exposed a missed layout defect. The focused Settings tool used document scrolling, allowing its title bar to move behind the sticky system bar. At 390×844, ordinary wheel scrolling, native Tab to Add and closing the Add dialog independently moved the page 66px: the title bar moved from 129px to 63px while the system bar remained at 20–98px. Earlier passing layout checks did not establish this scrolled state was correct.

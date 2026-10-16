@@ -15,6 +15,6 @@ Updated 16 October 2026. This is a coarse estimate of the entire requested produ
 
 ## Current work
 
-The focused tool viewport and dialog focus cases found during screenshot and keyboard inspection are repaired, with retained regressions and refreshed screenshots. Source checks pass; publishing and testing the next release remain separate steps. [VISUAL-QA.md](VISUAL-QA.md) records the tested cases and limits.
+Window navigation is reserved for large screens. Phones, tablets and short viewports now use ordinary full-page sections with the same dock navigation and section motion. Responsive transitions retain mounted form drafts and saved desktop placement. Settings uses shared gutters and a divider below every tab row; retained checks now compare those relationships directly. Source verification and screenshot refresh cover these changes; publishing and testing the next release remain separate steps. [VISUAL-QA.md](VISUAL-QA.md) records the tested cases and limits.
 
 The remaining work is substantial, especially migration and multiple homelabs. A published beta or a passing screenshot matrix does not complete the full goal.

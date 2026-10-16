@@ -20,6 +20,7 @@ Orbis should feel like an operating system for a personal server: a place with a
 - Future theme packs must replace the complete material, wallpaper, typography, icon, control, chart, menu, and motion treatment. The current presets are the foundation; an accent change alone is not a theme pack.
 - Keep the wallpaper rooted at the viewport edge while chrome and windows have deliberate insets. Top-level tools use one window title; do not repeat a route slug above the same title.
 - Use a shared 24px outer inset for the system bar, workspace, full-page tools, notifications and expanded search. Ultra-wide Settings keeps a readable content width and an intrinsic focused window. Avoid a fixed desktop width cap that leaves large blank side margins. Keep readable control widths within each tool.
+- Reserve window navigation for large screens (at least 1100×640). Smaller viewports use full-page sections, compact headings, normal scrolling and dock navigation. Keep section motion, theme styling and comfortable content padding; preserve mounted forms when crossing the breakpoint.
 - Error cards use intrinsic content height, a compact heading/action group, and optional diagnostic details. A route path is supporting information, not a separate badge or panel. Verify that both retry and navigation recovery work.
 - Let enlarged text reflow headings, app tabs, resource rows and pin controls. Dock labels keep their full text; a scrollable dock must reveal the complete focused item.
 

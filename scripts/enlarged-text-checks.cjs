@@ -149,6 +149,9 @@ module.exports = async function inspectEnlargedText({ page, base, viewport, capt
     return geometry;
   };
   const inspectInitialDock = async () => {
+    await page
+      .locator('.desktop-dock')
+      .evaluate((dock) => Promise.all(dock.getAnimations().map((animation) => animation.finished.catch(() => undefined))));
     const geometry = await page.locator('.desktop-dock').evaluate((dock) => {
       const r = dock.getBoundingClientRect();
       return {

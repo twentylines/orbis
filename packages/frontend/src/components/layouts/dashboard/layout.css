@@ -2,6 +2,7 @@
 /* biome-ignore-all lint/complexity/noImportantStyles: Tabler utilities and reduced-motion controls need stronger overrides. */
 
 html:has(.desktop) {
+  scroll-padding-top: calc(var(--orbis-bar-bottom, 88px) + 16px);
   scroll-padding-bottom: calc(var(--orbis-dock-height, 78px) + 54px + env(safe-area-inset-bottom, 0px));
 }
 
@@ -454,6 +455,9 @@ html:has(.desktop) {
   max-width: 1600px;
   margin-inline: auto;
 }
+.desktop-route-window:has(.desktop-settings) .desktop-window-icon {
+  margin-inline-start: max(0px, calc((100% - 1600px) / 2));
+}
 .desktop-settings > .card {
   border: 0;
   background: transparent;
@@ -465,19 +469,29 @@ html:has(.desktop) {
   background: transparent;
 }
 .desktop-settings > .card > [role="tablist"] .card-header {
+  display: block;
+  min-height: 0;
   padding: 0;
   border-bottom: 1px solid var(--desktop-line);
 }
 .desktop-settings > .card > [role="tablist"] .nav-tabs {
   gap: 5px;
-  padding: 0 0 8px;
+  margin: 0;
+  padding: 0 0 12px;
   border: 0;
+  border-radius: 0;
 }
-.desktop-settings .trigger {
+.desktop-settings .trigger,
+.desktop-settings > .card > [role="tablist"] .dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: 0;
   border: 0;
   border-radius: 8px;
   color: var(--desktop-muted);
-  padding: 10px 13px;
+  padding: 12px 13px;
 }
 .desktop-settings .trigger[data-state="active"] {
   color: var(--desktop-ink);

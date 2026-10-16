@@ -2,7 +2,9 @@
 
 ## Unreleased development preview
 
-- Keep full-page tools between the system bar and dock, with content scrolling inside the window. Short screens can scroll the whole tool within those same bounds. Preserve the reading position through minimize/restore.
+- Align Settings title icons, tabs, dividers and forms to one gutter. Remove inherited negative tab margins and keep the divider below all tab rows. Preserve whole Appearance labels with enlarged text and reveal page controls clear of the sticky bar and dock.
+- Reserve window navigation for large screens. Phones, tablets and short viewports use full-page sections, compact headings and normal document scrolling. Resizing preserves form drafts and saved desktop placement; small screens open minimized desktop links as visible pages.
+- Keep large-screen tools between the system bar and dock, with content scrolling inside the window. Enlarged desktop chrome can use the whole window as its scroller. Preserve the reading position through minimize/restore.
 - Restore store-dialog focus to a surviving panel after deletion or when a pending operation has disabled its opener. Keep the focused control visible when refreshed rows move it. Retained checks cover native wheel/Tab, delayed list refresh and closing pending add/edit/delete requests.
 - Bound app-store Git transfers with a 30-second network idle limit and a ten-minute clone/fetch deadline. Cancellation aborts the transfer, waits for Git to settle and keeps repository locks through staging cleanup; failed refreshes retain the working checkout.
 - Verified published beta31 store failure and retry against real APIs and controlled Git/filesystem faults. Updated phone captures record retained inline errors and exact configuration/data preservation after native Compose restoration.

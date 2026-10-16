@@ -13,6 +13,8 @@ const inspectSwitchComfort = require('./switch-comfort-checks.cjs');
 const inspectCommandSearch = require('./command-search-checks.cjs');
 const inspectHomeApps = require('./home-app-checks.cjs');
 const inspectWindowFlows = require('./window-flow-checks.cjs');
+const inspectPageNavigation = require('./page-navigation-checks.cjs');
+const inspectCurrentSettingsAlignment = require('./settings-alignment-checks.cjs');
 const inspectAppUpdate = require('./app-update-checks.cjs');
 const inspectAppUpdateComfort = require('./app-update-comfort-checks.cjs');
 const inspectConnectionStatus = require('./connection-status-checks.cjs');
@@ -29,6 +31,7 @@ const storeSurfacesOnly = process.env.ORBIS_VISUAL_STORE_SURFACES_ONLY === '1';
 const storesOnly = process.env.ORBIS_VISUAL_STORES_ONLY === '1' || storeSurfacesOnly;
 const switchComfortOnly = process.env.ORBIS_VISUAL_SWITCH_COMFORT_ONLY === '1';
 const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
+const pagesOnly = process.env.ORBIS_VISUAL_PAGES_ONLY === '1';
 const updatesOnly = process.env.ORBIS_VISUAL_UPDATES_ONLY === '1';
 const updateComfortOnly = process.env.ORBIS_VISUAL_UPDATE_COMFORT_ONLY === '1';
 const appDetailsOnly = process.env.ORBIS_VISUAL_APP_DETAILS_ONLY === '1';
@@ -47,7 +50,7 @@ const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
 const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1' || textOnly || comfortOnly;
 const zoom = Number(process.env.ORBIS_VISUAL_ZOOM || 1);
 if (
-  (textOnly || compoundHomeOnly || searchComfortOnly || selectComfortOnly || nestedFormComfortOnly || storesOnly || switchComfortOnly) &&
+  (textOnly || compoundHomeOnly || searchComfortOnly || selectComfortOnly || nestedFormComfortOnly || storesOnly || switchComfortOnly || pagesOnly) &&
   zoom !== 1
 )
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
@@ -307,6 +310,12 @@ async function capture(page, name, { scrollTop = true, fullPage = false } = {}) 
   await page.screenshot({ path: path.join(screenshotDir, name), animations: 'disabled', fullPage });
 }
 
+async function returnToWorkspace(page) {
+  if ((await page.locator('.desktop-route-window').getAttribute('data-window-navigation')) === 'page')
+    await page.getByRole('navigation', { name: 'Desktop tools', exact: true }).getByRole('link', { name: 'Workspace', exact: true }).click();
+  else await page.locator('.desktop-window-dismiss').click();
+}
+
 async function chromeGeometry(page) {
   return page.locator('.desktop-system-bar').evaluate((bar) => {
     const controls = [...bar.querySelectorAll('.desktop-task-trigger, .desktop-mode-toggle, .desktop-search-trigger, .desktop-icon-button')];
@@ -372,30 +381,36 @@ async function main() {
     ? [{ name: 'connection', width: 1440, height: 1120 }]
     : process.env.ORBIS_VISUAL_NARROW
       ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
-      : compoundHomeOnly
+      : pagesOnly
         ? [
-            { name: 'desktop', width: 1440, height: 1120 },
             { name: 'tablet', width: 768, height: 1024 },
             { name: 'mobile', width: 390, height: 844 },
             { name: 'narrow', width: 320, height: 800 },
           ]
-        : searchComfortOnly || selectComfortOnly || nestedFormComfortOnly
+        : compoundHomeOnly
           ? [
+              { name: 'desktop', width: 1440, height: 1120 },
               { name: 'tablet', width: 768, height: 1024 },
               { name: 'mobile', width: 390, height: 844 },
               { name: 'narrow', width: 320, height: 800 },
             ]
-          : comfortOnly
+          : searchComfortOnly || selectComfortOnly || nestedFormComfortOnly
             ? [
-                { name: 'mobile', width: 390, height: 844 },
-                { name: 'narrow', width: 320, height: 800 },
-              ]
-            : [
-                { name: 'desktop', width: 1440, height: 1120 },
                 { name: 'tablet', width: 768, height: 1024 },
                 { name: 'mobile', width: 390, height: 844 },
                 { name: 'narrow', width: 320, height: 800 },
-              ];
+              ]
+            : comfortOnly
+              ? [
+                  { name: 'mobile', width: 390, height: 844 },
+                  { name: 'narrow', width: 320, height: 800 },
+                ]
+              : [
+                  { name: 'desktop', width: 1440, height: 1120 },
+                  { name: 'tablet', width: 768, height: 1024 },
+                  { name: 'mobile', width: 390, height: 844 },
+                  { name: 'narrow', width: 320, height: 800 },
+                ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: zoom });
@@ -804,13 +819,16 @@ async function main() {
       await page.close();
       continue;
     }
-    if (windowsOnly) {
-      const windows = await inspectWindowFlows(page, {
-        getPreferences: () => preferences,
-        checkPolling: viewport.width >= 900 && viewport.height >= 540,
-        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
-      });
-      reports.push({ viewport: viewport.name, windows, errors });
+    if (windowsOnly || pagesOnly) {
+      const desktopWindowing = viewport.width >= 1100 && viewport.height >= 640;
+      const options = { base, getPreferences: () => preferences, capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options) };
+      if (desktopWindowing && !pagesOnly) {
+        const windows = await inspectWindowFlows(page, { ...options, checkPolling: true });
+        reports.push({ viewport: viewport.name, windows, errors });
+      } else {
+        const pages = await inspectPageNavigation(page, { ...options, textScales: process.env.ORBIS_VISUAL_TEXT_SCALE ? [textScale] : [1] });
+        reports.push({ viewport: viewport.name, pages, errors });
+      }
       await page.close();
       continue;
     }
@@ -891,7 +909,7 @@ async function main() {
       () => (document.querySelector('.desktop')?.getBoundingClientRect().bottom ?? 0) < document.documentElement.scrollHeight - 1,
     );
     await page.getByRole('button', { name: 'Edit workspace' }).click();
-    if (viewport.name === 'narrow' && zoom === 1)
+    if (viewport.width <= 380 && zoom === 1)
       await page.addStyleTag({ content: '.workspace-editor button,.workspace-editor-name,.workspace-editor p{font-size:200% !important}' });
     const dockHiddenWhileEditing = await page.getByRole('navigation', { name: 'Desktop tools' }).isHidden();
     await page.getByRole('button', { name: 'Move System status up' }).focus();
@@ -980,7 +998,7 @@ async function main() {
     const tasksOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     await page.getByRole('button', { name: 'Needs review', exact: true }).click();
     const failedTaskFiltered = (await page.locator('.task-list > li[data-status="failed"]').count()) === 1;
-    await page.locator('.desktop-window-dismiss').click();
+    await returnToWorkspace(page);
     await page.getByRole('link', { name: 'Applications', exact: true }).click();
     await page
       .getByTestId('apps-list')
@@ -1051,10 +1069,17 @@ async function main() {
           const second = first.parentElement?.querySelectorAll('.app-link')[1];
           return second !== undefined && Math.abs(first.getBoundingClientRect().left - second.getBoundingClientRect().left) <= 1;
         }));
+    // Let the summary's focus reveal finish before explicitly checking the bottom of the page.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.evaluate(() => {
       const frame = document.querySelector('.desktop-route-window');
-      const scroller = frame.dataset.windowScrollsFrame === 'true' ? frame : frame.querySelector('.desktop-window-content');
-      scroller.scrollTop = scroller.scrollHeight;
+      const scroller =
+        frame.dataset.windowNavigation === 'page'
+          ? document.scrollingElement
+          : frame.dataset.windowScrollsFrame === 'true'
+            ? frame
+            : frame.querySelector('.desktop-window-content');
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'instant' });
     });
     await page.waitForTimeout(100);
     const appsDock = await page.evaluate(() => {
@@ -1122,14 +1147,15 @@ async function main() {
       await capture(page, `${viewport.name}-host-packages.png`);
     }
     if (hostUpdateFixture) await page.getByRole('button', { name: 'Cancel' }).first().click();
-    await page.locator('.desktop-window-dismiss').click();
+    await returnToWorkspace(page);
     await page.getByRole('link', { name: 'Monitor', exact: true }).click();
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
-    await page.locator('.desktop-window-dismiss').click();
+    await returnToWorkspace(page);
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('tab', { name: 'Appearance' }).click();
     await page.getByRole('textbox', { name: 'Server name' }).waitFor();
     await capture(page, `${viewport.name}-appearance.png`);
+    const settingsAlignment = await inspectCurrentSettingsAlignment(page);
     const settingsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     const windowInsets = await page
       .locator('.desktop-window-content')
@@ -1233,6 +1259,7 @@ async function main() {
       updatePlanDockVisible,
       changelogAccessible,
       settingsOverflow,
+      settingsAlignment,
       graphitePersisted,
       wallpaperPersisted,
       bodyTheme,
@@ -1251,6 +1278,7 @@ async function main() {
     storesOnly ||
     switchComfortOnly ||
     windowsOnly ||
+    pagesOnly ||
     updatesOnly ||
     updateComfortOnly ||
     appDetailsOnly ||

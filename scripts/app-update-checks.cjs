@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 // Requires visual-qa.cjs's loopback fixtures; lifecycle responses stay inside this page.
 module.exports = async function inspectAppUpdate({ page, base, capture, modes = ['light', 'dark'] }) {
   assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(new URL(base).hostname), 'update checks require loopback fixtures');
+  const desktopWindows = await page.evaluate(() => window.matchMedia('(min-width: 1100px) and (min-height: 640px)').matches);
   const updatePath = '/apps/test/media/update';
   const endpoints = {
     config: '/api/apps/media:test/config-diff',
@@ -90,6 +91,26 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
   const open = async () => {
     await page.goto(`${base}${updatePath}`, { waitUntil: 'domcontentloaded' });
     await wizard().waitFor();
+    const frame = page.locator(`.desktop-route-window[data-window-navigation="${desktopWindows ? 'desktop' : 'page'}"]`);
+    await frame.waitFor();
+    assert.equal(await frame.locator('.desktop-window-controls').count(), desktopWindows ? 1 : 0, 'window controls belong only on large screens');
+    if (!desktopWindows) {
+      assert.equal(await frame.getByRole('toolbar').count(), 0, 'page headings must not expose window toolbar semantics');
+      assert.equal(await page.getByRole('button', { name: 'Minimize Applications', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('button', { name: 'Restore Applications', exact: true }).count(), 0);
+      const layout = await frame.evaluate((element) => ({
+        position: getComputedStyle(element).position,
+        contentOverflow: getComputedStyle(element.querySelector('.desktop-window-content')).overflowY,
+        desktopOverflow: getComputedStyle(element.closest('.desktop')).overflowY,
+        hidden: element.hidden,
+        inert: element.inert,
+      }));
+      assert.deepEqual(
+        layout,
+        { position: 'relative', contentOverflow: 'visible', desktopOverflow: 'visible', hidden: false, inert: false },
+        'small-screen updates must use ordinary document layout and scrolling',
+      );
+    }
     assert.equal(await page.locator('.desktop-route-title').count(), 0, 'the wizard already has an update heading');
     await expectSteps();
     assert.equal(await active(), steps[0]);
@@ -108,6 +129,7 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
       return {
         footer: box(element),
         buttons: [...element.querySelectorAll('button')].map((node) => ({ text: node.textContent.trim(), ...box(node) })),
+        bar: box(document.querySelector('.desktop-system-bar')),
         dock: box(document.querySelector('.desktop-dock')),
         viewportHeight: innerHeight,
         outerOverflow: document.documentElement.scrollWidth > innerWidth,
@@ -119,6 +141,7 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
       assert.ok(button.height >= 40, `${phase}: ${button.text} needs a reachable target`);
       assert.ok(button.x >= measurements.footer.x - 1 && button.right <= measurements.footer.right + 1, `${phase}: footer button escapes its row`);
       assert.ok(button.y >= 0 && button.bottom <= measurements.viewportHeight, `${phase}: footer control must scroll into view`);
+      assert.ok(button.y >= measurements.bar.bottom + 4, `${phase}: footer must clear the system bar`);
       assert.ok(button.bottom <= measurements.dock.y - 4, `${phase}: footer must clear the dock`);
     }
     for (let left = 0; left < measurements.buttons.length; left += 1) {
@@ -206,13 +229,15 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
       await backup().click();
       assert.equal(await backup().getAttribute('aria-checked'), 'false');
       const reviewCount = reviews.length;
-      await page.getByRole('button', { name: 'Minimize Applications', exact: true }).click();
-      await page.getByRole('button', { name: 'Restore Applications', exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Restore Applications', exact: true }).click();
-      await wizard().waitFor();
+      if (desktopWindows) {
+        await page.getByRole('button', { name: 'Minimize Applications', exact: true }).click();
+        await page.getByRole('button', { name: 'Restore Applications', exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Restore Applications', exact: true }).click();
+        await wizard().waitFor();
+      }
       assert.equal(await active(), steps[3]);
-      assert.equal(await backup().getAttribute('aria-checked'), 'false', 'restore must retain the backup choice');
-      assert.equal(reviews.length, reviewCount, 'minimize/restore must retain the loaded review');
+      assert.equal(await backup().getAttribute('aria-checked'), 'false', 'the pending review must retain the backup choice');
+      assert.equal(reviews.length, reviewCount, 'the selected pending review must not reload');
       assert.equal(await submit().isDisabled(), true);
       composeGate.release();
       composeGate = null;
@@ -346,6 +371,7 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
         assert.equal(new URL(page.url()).pathname, updatePath, 'acceptance must not replace an in-progress Settings navigation');
         await wizard().locator('.app-update-submitted').waitFor();
         assert.equal(await submit().isDisabled(), true);
+        await submit().evaluate((node) => node.click());
         assert.equal(mutations.length, count + 1);
         await shot(mode, 'accepted-during-settings-navigation');
         settingsGate.release();
@@ -358,10 +384,15 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
         await page.unroute(settingsChunk, holdSettings);
       }
 
-      const animatedMinimize = await page.evaluate(
-        () => typeof Element.prototype.animate === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-      );
-      for (const departure of ['minimize', ...(animatedMinimize ? ['minimize-in-flight'] : []), 'close-other-tool']) {
+      const animatedMinimize =
+        desktopWindows &&
+        (await page.evaluate(
+          () => typeof Element.prototype.animate === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        ));
+      const departures = desktopWindows
+        ? ['minimize', ...(animatedMinimize ? ['minimize-in-flight'] : []), 'close-other-tool']
+        : ['page-home-other-tool'];
+      for (const departure of departures) {
         await open();
         await step(steps[3]);
         await page.waitForFunction(() => !document.querySelector('[data-testid="app-update"] .app-update-navigation button:last-child').disabled);
@@ -398,7 +429,17 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
             await page.getByRole('button', { name: 'Restore Applications', exact: true }).waitFor();
           }
         } else {
-          await page.getByRole('button', { name: 'Close Applications', exact: true }).click();
+          if (desktopWindows) await page.getByRole('button', { name: 'Close Applications', exact: true }).click();
+          else {
+            await page.locator('.desktop-dock').getByRole('link', { name: 'Workspace', exact: true }).click();
+            await page.waitForURL(`${base}/dashboard`);
+            await wizard().waitFor({ state: 'detached' });
+            assert.equal(
+              await page.getByRole('button', { name: 'Restore Applications', exact: true }).count(),
+              0,
+              'Home navigation on small screens must leave the update page, rather than minimize it',
+            );
+          }
           await page.locator('.desktop-dock').getByRole('link', { name: 'Settings', exact: true }).click();
           await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
           await page.getByRole('textbox', { name: 'Server name', exact: true }).fill('Unsaved server name');
@@ -409,7 +450,7 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
         updateGate = null;
         await accepted;
         await page.waitForTimeout(300);
-        assert.equal(page.url(), url, 'late update acceptance must not move the current tool or restore a minimized window');
+        assert.equal(page.url(), url, 'late update acceptance must not replace the selected destination or restore a minimized window');
         if (departure.startsWith('minimize')) {
           if (departure === 'minimize-in-flight') {
             await shot(mode, 'accepted-while-minimizing');
@@ -433,6 +474,7 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
       }
       results.push({
         mode,
+        navigationModel: desktopWindows ? 'desktop-window' : 'document-page',
         stableFourSteps: true,
         tabDoesNotActivate: true,
         themeFocus: true,
@@ -443,12 +485,17 @@ module.exports = async function inspectAppUpdate({ page, base, capture, modes = 
         rejectedUpdateRetainsWizardAndChoice: true,
         backupTrueAndFalse: true,
         acceptedUpdatesNavigate: true,
-        minimizeRestore: true,
-        acceptedWhileMinimizedDoesNotNavigate: true,
-        acceptedAfterClosePreservesOtherToolDraft: true,
-        acceptedRestorePreventsDuplicateSubmission: true,
+        minimizeRestore: desktopWindows ? true : 'not applicable: document-page navigation',
+        acceptedWhileMinimizedDoesNotNavigate: desktopWindows ? true : 'not applicable: document-page navigation',
+        acceptedAfterClosePreservesOtherToolDraft: desktopWindows ? true : 'not applicable: document-page navigation',
+        acceptedAfterPageNavigationPreservesOtherToolDraft: desktopWindows ? 'not applicable: desktop-window navigation' : true,
+        smallScreenHomeUnmountsWizard: desktopWindows ? 'not applicable: desktop-window navigation' : true,
+        acceptedRestorePreventsDuplicateSubmission: desktopWindows ? true : 'not applicable: document-page navigation',
         acceptedDuringUncachedNavigationPreservesDestination: true,
-        acceptedWhileMinimizingDoesNotNavigate: animatedMinimize ? true : 'not applicable: reduced motion or WAAPI unavailable',
+        acceptedDuringNavigationPreventsDuplicateSubmission: true,
+        acceptedWhileMinimizingDoesNotNavigate: animatedMinimize
+          ? true
+          : 'not applicable: document-page navigation, reduced motion, or WAAPI unavailable',
       });
     }
     return { results, mutations, geometry };
