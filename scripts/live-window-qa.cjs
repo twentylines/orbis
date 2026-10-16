@@ -1,72 +1,219 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
+const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const { isDeepStrictEqual } = require('node:util');
 const { chromium } = require('@playwright/test');
+
+const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
 const cookieFile = process.env.ORBIS_AUDIT_COOKIE_FILE;
 const releaseFile = process.env.ORBIS_AUDIT_RELEASE_FILE;
-if (!cookieFile || !releaseFile || process.env.ORBIS_ALLOW_PREFERENCE_AUDIT !== '1')
-  throw new Error('Set release/cookie files and ORBIS_ALLOW_PREFERENCE_AUDIT=1 for a disposable account.');
-const release = JSON.parse(fs.readFileSync(releaseFile, 'utf8'));
-const base = process.env.ORBIS_AUDIT_URL || 'http://127.0.0.1:18080';
-assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname), 'Window audit requires a loopback disposable stack');
-const screenshotDir = process.env.ORBIS_AUDIT_SCREENSHOT_DIR || path.join(os.tmpdir(), 'orbis-window-live');
-fs.mkdirSync(screenshotDir, { recursive: true });
-const cookies = fs
-  .readFileSync(cookieFile, 'utf8')
-  .split('\n')
-  .filter((line) => line && (!line.startsWith('#') || line.startsWith('#HttpOnly_')))
-  .map((line) => {
-    const [rawDomain, , path, secure, expires, name, value] = line.split('\t');
-    return {
-      domain: rawDomain.replace(/^#HttpOnly_/, ''),
-      path,
-      secure: secure === 'TRUE',
-      expires: Number(expires),
-      name,
-      value,
-      httpOnly: rawDomain.startsWith('#HttpOnly_'),
-    };
-  });
+const expectedTag = process.env.ORBIS_AUDIT_EXPECTED_TAG;
+const expectedCommit = process.env.ORBIS_AUDIT_EXPECTED_COMMIT;
+const baseUrl = (() => {
+  try {
+    return new URL(process.env.ORBIS_AUDIT_URL || 'http://127.0.0.1:18080');
+  } catch {
+    throw new Error('The audit URL must be a valid owned loopback origin.');
+  }
+})();
+const base = baseUrl.origin;
+const screenshotDir = process.env.ORBIS_AUDIT_SCREENSHOT_DIR || `/tmp/orbis-window-live-${expectedTag}`;
+const reportFile = process.env.ORBIS_AUDIT_REPORT_FILE || `/tmp/orbis-window-live-${expectedTag}.json`;
+const originalFile = process.env.ORBIS_AUDIT_BASELINE_FILE || `/tmp/orbis-window-live-${expectedTag}-original-${Date.now()}.json`;
+const same = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message);
+const clone = (value) => JSON.parse(JSON.stringify(value));
+const hash = (value) =>
+  crypto
+    .createHash('sha256')
+    .update(typeof value === 'string' ? value : JSON.stringify(value))
+    .digest('hex');
+const privateInput = (file, cookie = false) => {
+  assert.ok(typeof file === 'string' && path.isAbsolute(file) && path.resolve(file) === file, 'Input must be a canonical absolute path');
+  const stat = fs.lstatSync(file);
+  assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.uid === process.getuid(), 'Input must be an owned regular file');
+  const real = fs.realpathSync(file);
+  if (cookie) {
+    assert.equal(file, `${installRoot}/test-cookies.txt`, 'Only the owned isolated account cookie file is permitted');
+    assert.equal(real, file, 'Cookie input must not redirect');
+    assert.equal(stat.mode & 0o077, 0, 'Cookie input must remain private');
+  } else assert.ok(file.startsWith('/tmp/') && real.startsWith(`${fs.realpathSync('/tmp')}/`), 'Release checker must remain under /tmp');
+  return fs.readFileSync(file, 'utf8');
+};
+const outputGuard = (file) => {
+  assert.ok(path.isAbsolute(file) && path.resolve(file) === file && file.startsWith('/tmp/'), 'Audit evidence must remain under /tmp');
+  if (fs.existsSync(file)) {
+    const stat = fs.lstatSync(file);
+    assert.ok(!stat.isSymbolicLink() && stat.uid === process.getuid(), 'Evidence path must be owned and not a symlink');
+  }
+  let parent = file;
+  while (!fs.existsSync(parent)) parent = path.dirname(parent);
+  const real = fs.realpathSync(parent);
+  assert.ok(real === fs.realpathSync('/tmp') || real.startsWith(`${fs.realpathSync('/tmp')}/`), 'Evidence path escapes /tmp');
+};
+const identity = (url) => {
+  const value = new URL(url);
+  value.searchParams.delete('orbisWindow');
+  return { pathname: value.pathname, query: [...value.searchParams], hash: value.hash };
+};
 
 (async () => {
-  const browser = await chromium.launch({
-    headless: true,
-    executablePath: process.env.ORBIS_BROWSER_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1120 } });
-  await context.addCookies(cookies);
+  assert.equal(process.env.ORBIS_ALLOW_PREFERENCE_AUDIT, '1', 'Explicit preference audit opt-in is required');
+  assert.match(expectedTag || '', /^v\d+\.\d+\.\d+(?:-beta\.\d+)?$/, 'An explicit release tag is required');
+  assert.match(expectedCommit || '', /^[a-f0-9]{40}$/);
+  assert.ok(
+    ['127.0.0.1', 'localhost'].includes(baseUrl.hostname) &&
+      baseUrl.protocol === 'http:' &&
+      baseUrl.port === '18080' &&
+      baseUrl.pathname === '/' &&
+      !baseUrl.username &&
+      !baseUrl.password &&
+      !baseUrl.search &&
+      !baseUrl.hash,
+    'Only owned HTTP loopback18080 is allowed',
+  );
+  assert.equal(fs.realpathSync(installRoot), installRoot);
+  const release = JSON.parse(privateInput(releaseFile));
+  assert.ok(release.tag === expectedTag && release.commit === expectedCommit, 'Release checker differs from explicit tag/commit guards');
+  assert.match(release.image || '', /^ghcr\.io\/twentylines\/orbis@sha256:[a-f0-9]{64}$/);
+  const cookies = privateInput(cookieFile, true)
+    .split('\n')
+    .filter((line) => line && (!line.startsWith('#') || line.startsWith('#HttpOnly_')))
+    .map((line) => {
+      const fields = line.split('\t');
+      assert.equal(fields.length, 7, 'Invalid private cookie format');
+      const [rawDomain, , cookiePath, secure, expires, name, value] = fields;
+      const domain = rawDomain.replace(/^#HttpOnly_/, '');
+      assert.ok(['127.0.0.1', 'localhost', '::1', '[::1]'].includes(domain), 'Cookie domain is outside loopback');
+      return {
+        domain,
+        path: cookiePath,
+        secure: secure === 'TRUE',
+        expires: Number(expires) || -1,
+        name,
+        value,
+        httpOnly: rawDomain.startsWith('#HttpOnly_'),
+      };
+    });
+  assert.ok(
+    cookies.some((cookie) => cookie.name === 'runtipi-sid' && cookie.domain === baseUrl.hostname),
+    'A matching private isolated session is required',
+  );
+  for (const file of [screenshotDir, reportFile, originalFile]) outputGuard(file);
+  assert.ok(!fs.existsSync(originalFile), 'Original-preference backup must be new');
+  fs.mkdirSync(screenshotDir, { recursive: true, mode: 0o700 });
+  const report = {
+    passed: false,
+    source: `Published ${release.tag} HTML/assets and actual isolated APIs; only desktop-preference writes are permitted.`,
+    release: { tag: release.tag, commit: release.commit, image: release.image },
+    screenshots: screenshotDir,
+    originalPreferenceBackup: originalFile,
+    boundaryCases: [],
+    mobileThemes: [],
+    blockedMutations: [],
+    pageErrors: [],
+    preferenceWrites: 0,
+    restorationWrites: 0,
+    failedPreferenceRequests: 0,
+    originalPreferencesRestored: false,
+    protectedApiStatePreserved: false,
+    cleanupConfirmed: false,
+    cleanupFailures: [],
+  };
+  let browser;
+  let reader;
+  let context;
+  let page;
+  let original;
+  let protectedBefore;
+  let stage = 'preflight';
+  let writes = 0;
+  const pendingWrites = new Set();
+  const errors = report.pageErrors;
+  const save = () => {
+    outputGuard(reportFile);
+    fs.writeFileSync(reportFile, `${JSON.stringify({ ...report, stage }, null, 2)}\n`, { mode: 0o600 });
+    fs.chmodSync(reportFile, 0o600);
+  };
   const read = async (endpoint) => {
-    const response = await context.request.get(`${base}${endpoint}`);
-    assert.ok(response.ok(), `Read failed with ${response.status()}`);
+    assert.ok(endpoint.startsWith('/api/'), 'Only selected authenticated API reads are permitted');
+    const response = await reader.request.get(`${base}${endpoint}`, { maxRedirects: 0, timeout: 20000 });
+    assert.ok(response.ok(), 'Authenticated read failed');
     return response.json();
   };
   const waitFor = async (condition, message) => {
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 80; i++) {
       if (await condition()) return;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     throw new Error(message);
   };
-  let original;
-  let page;
-  let result;
-  const errors = [];
+  const settle = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const screenshot = async (name) => page.screenshot({ path: path.join(screenshotDir, `${name}.png`), animations: 'disabled' });
+  const protectedState = async () => {
+    const installed = await read('/api/apps/installed');
+    installed.installed.sort((a, b) => a.info.urn.localeCompare(b.info.urn));
+    const apps = {};
+    for (const item of installed.installed) apps[item.info.urn] = await read(`/api/apps/${encodeURIComponent(item.info.urn)}`);
+    const stores = (await read('/api/marketplace/all')).appStores.sort((a, b) => a.slug.localeCompare(b.slug));
+    const tasks = await read('/api/tasks').then(({ sampledAt: _sampledAt, ...stable }) => stable);
+    return { installed, apps, stores, tasks, links: await read('/api/links') };
+  };
+  const allowPreferenceBody = (body) => {
+    const stable = { ...body, mode: original.mode, windows: original.windows };
+    same(stable, original, 'An unexpected preference field or unsaved form value would be persisted');
+    assert.ok(
+      ['light', 'dark'].includes(body.mode) && body.windows && typeof body.windows === 'object' && !Array.isArray(body.windows),
+      'Invalid preference payload',
+    );
+    for (const key of new Set([...Object.keys(original.windows || {}), ...Object.keys(body.windows)]))
+      if (!['settings', 'monitor'].includes(key)) same(body.windows[key], original.windows?.[key], 'Another tool placement would be changed');
+  };
   try {
+    browser = await chromium.launch({
+      headless: true,
+      executablePath: process.env.ORBIS_BROWSER_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    });
+    reader = await browser.newContext({ serviceWorkers: 'block' });
+    await reader.addCookies(cookies);
     const build = await read('/api/system/build');
-    assert.equal(build.version, release.tag);
-    assert.equal(build.commit, release.commit);
-    assert.equal(build.imageDigest, release.image.split('@')[1]);
+    assert.ok(
+      build.version === release.tag && build.commit === release.commit && build.imageDigest === release.image.split('@')[1],
+      'Actual published build differs from the checker',
+    );
     original = await read('/api/desktop-preferences');
+    fs.writeFileSync(originalFile, `${JSON.stringify(original)}\n`, { mode: 0o600, flag: 'wx' });
+    protectedBefore = await protectedState();
+    report.protectedApiHashBefore = hash(protectedBefore);
     const serverIp = (await read('/api/app-context')).userSettings.internalIp;
     assert.ok(serverIp, 'Configured server IP is required');
-    page = await context.newPage();
-    page.on('pageerror', (error) => errors.push(error.message));
-    let writes = 0;
-    page.on('request', (request) => {
-      if (request.method() === 'PUT' && new URL(request.url()).pathname === '/api/desktop-preferences') writes++;
+    context = await browser.newContext({ viewport: { width: 1440, height: 1120 }, serviceWorkers: 'block' });
+    await context.addCookies(cookies);
+    await context.route('**/*', async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.origin !== base) return route.abort('blockedbyclient');
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method())) {
+        try {
+          assert.ok(request.method() === 'PUT' && url.pathname === '/api/desktop-preferences' && !url.search, 'Only preference PUT is allowed');
+          allowPreferenceBody(JSON.parse(request.postData() || '{}'));
+          pendingWrites.add(request);
+          writes++;
+          report.preferenceWrites++;
+        } catch {
+          report.blockedMutations.push({ method: request.method(), path: url.pathname });
+          return route.abort('blockedbyclient');
+        }
+      }
+      return route.continue();
     });
+    page = await context.newPage();
+    page.on('pageerror', (error) => errors.push(hash(error.message)));
+    page.on('requestfinished', (request) => pendingWrites.delete(request));
+    page.on('requestfailed', (request) => {
+      if (pendingWrites.delete(request)) report.failedPreferenceRequests++;
+    });
+    stage = 'desktop-windows';
     const frame = () => page.locator('.desktop-route-window');
     const layout = async (name, mode) => {
       await page.getByRole('button', { name: 'Window layout', exact: true }).click();
@@ -131,47 +278,270 @@ const cookies = fs
     const prefs = await read('/api/desktop-preferences');
     assert.equal(prefs.windows.settings.mode, 'floating');
     await page.screenshot({ path: path.join(screenshotDir, 'monitor.png'), animations: 'disabled' });
-    await page.goto(`${base}/settings?tab=appearance`, { waitUntil: 'domcontentloaded' });
+    stage = 'responsive-draft-and-placement';
+    const responsivePath = '/settings?tab=appearance&probe=space%20value&probe=second#draft';
+    await page.goto(`${base}${responsivePath}`, { waitUntil: 'domcontentloaded' });
     await input.waitFor();
-    await page.setViewportSize({ width: 390, height: 844 });
-    await waitFor(async () => (await frame().getAttribute('data-window-mode')) === 'focused', 'Mobile fallback did not apply');
-    assert.equal(await frame().getAttribute('data-window-mode'), 'focused');
-    assert.equal(await page.getByRole('button', { name: 'Window layout', exact: true }).count(), 0);
-    await page.locator('.desktop-connection-dot.is-connected').waitFor();
-    assert.equal((await page.locator('.desktop-connection').innerText()).trim(), serverIp);
+    await waitFor(async () => (await frame().getAttribute('data-window-mode')) === 'floating', 'Saved desktop placement did not load');
+    await page.waitForTimeout(700);
+    await page.getByText('Synced to your account', { exact: true }).waitFor();
+    await waitFor(async () => pendingWrites.size === 0, 'Initial preference synchronization did not settle');
+    const savedWindows = clone((await read('/api/desktop-preferences')).windows);
+    const draft = 'Unsaved responsive window audit draft';
+    await input.fill(draft);
+    const inputIdentity = await input.elementHandle();
+    const routeIdentity = identity(page.url());
+    const assertPreserved = async (label) => {
+      assert.ok(await inputIdentity.evaluate((element) => element.isConnected), `${label}: form DOM was remounted`);
+      assert.equal(await input.inputValue(), draft, `${label}: draft was discarded`);
+      same(identity(page.url()), routeIdentity, `${label}: route/query/hash changed`);
+      const current = await read('/api/desktop-preferences');
+      same(current.windows, savedWindows, `${label}: saved placements changed during resize`);
+      assert.equal(current.serverName, original.serverName, 'Unsaved server name reached the account');
+    };
+    const assertPage = async (label) => {
+      await page.locator('.desktop-route-window[data-window-navigation="page"][data-window-mode="page"]').waitFor();
+      await settle();
+      assert.equal(
+        await page.locator('.desktop-window-controls,.desktop-window-resize,.desktop-window-resume').count(),
+        0,
+        `${label}: small page exposed window controls`,
+      );
+      assert.equal(await frame().getByRole('toolbar').count(), 0, `${label}: small heading exposed toolbar semantics`);
+      const measurements = await frame().evaluate((element) => {
+        const heading = element.querySelector('.desktop-page-heading h1');
+        const content = element.querySelector('.desktop-window-content');
+        const style = getComputedStyle(heading);
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--desktop-ink)';
+        element.append(probe);
+        const expectedInk = getComputedStyle(probe).color;
+        probe.remove();
+        const text = document.createRange();
+        text.selectNodeContents(heading);
+        const ink = text.getBoundingClientRect();
+        const bounds = heading.getBoundingClientRect();
+        return {
+          position: getComputedStyle(element).position,
+          contentOverflow: getComputedStyle(content).overflowY,
+          desktopOverflow: getComputedStyle(element.closest('.desktop')).overflowY,
+          inlineGeometry: element.getAttribute('style'),
+          hidden: element.hidden,
+          inert: element.inert,
+          headingText: heading.textContent.trim(),
+          fontSize: Number.parseFloat(style.fontSize),
+          lineHeight: Number.parseFloat(style.lineHeight),
+          headingInk: style.color,
+          expectedInk,
+          headingFits: ink.left >= bounds.left - 1 && ink.right <= bounds.right + 1,
+          outerOverflow: document.documentElement.scrollWidth > innerWidth,
+          mode: element.closest('.desktop').dataset.desktopMode,
+        };
+      });
+      assert.ok(
+        measurements.position === 'relative' && measurements.contentOverflow === 'visible' && measurements.desktopOverflow === 'visible',
+        `${label}: page must scroll with the document`,
+      );
+      assert.ok(!measurements.hidden && !measurements.inert && !measurements.outerOverflow, `${label}: page is hidden, inert or overflows`);
+      assert.ok(
+        !/(?:^|;)\s*(?:left|right|top|width|height):/.test(measurements.inlineGeometry || ''),
+        `${label}: fixed window geometry leaked into a page`,
+      );
+      assert.ok(
+        measurements.headingText === 'Settings' &&
+          measurements.fontSize >= 18 &&
+          measurements.fontSize <= 24 &&
+          measurements.lineHeight >= measurements.fontSize * 1.25 &&
+          measurements.headingFits &&
+          measurements.headingInk === measurements.expectedInk,
+        `${label}: compact page heading must be complete and themed`,
+      );
+      report.boundaryCases.push({ label, viewport: page.viewportSize(), ...measurements });
+    };
+    const resizeWrites = report.preferenceWrites;
+    for (const [label, viewport, desktopMode] of [
+      ['below-width-threshold', { width: 1099, height: 640 }, false],
+      ['below-height-threshold', { width: 1100, height: 639 }, false],
+      ['desktop-boundary', { width: 1100, height: 640 }, true],
+      ['desktop-restored', { width: 1440, height: 1120 }, true],
+      ['mobile-page', { width: 390, height: 844 }, false],
+    ]) {
+      await page.setViewportSize(viewport);
+      if (desktopMode) await page.locator('.desktop-route-window[data-window-navigation="desktop"][data-window-mode="floating"]').waitFor();
+      else await assertPage(label);
+      await assertPreserved(label);
+      if (label === 'desktop-restored') same(await frame().boundingBox(), moved, 'Original floating geometry did not return after resizing');
+    }
+    await page.waitForTimeout(700);
+    assert.equal(report.preferenceWrites, resizeWrites, 'Resizing must not write a new placement or form draft');
+    await page.setViewportSize({ width: 1440, height: 1120 });
+    await page.getByRole('button', { name: 'Minimize Settings', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Minimize Settings', exact: true }).click();
     await frame().waitFor({ state: 'hidden' });
+    const historyLength = await page.evaluate(() => history.length);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForURL((url) => !url.searchParams.has('orbisWindow'));
+    await assertPage('minimized-desktop-to-mobile');
+    await assertPreserved('minimized-desktop-to-mobile');
+    assert.equal(await page.evaluate(() => history.length), historyLength, 'Small minimized cleanup must replace the current history entry');
+    stage = 'mobile-page-navigation';
+    await page.locator('.desktop-connection-dot.is-connected').waitFor();
+    assert.equal((await page.locator('.desktop-connection').innerText()).trim(), serverIp);
+    for (const mode of ['light', 'dark']) {
+      if (!(await page.locator(`.desktop[data-desktop-mode="${mode}"]`).count())) {
+        await page.getByRole('button', { name: `Switch to ${mode} mode`, exact: true }).click();
+        await page.locator(`.desktop[data-desktop-mode="${mode}"]`).waitFor();
+        await waitFor(async () => (await read('/api/desktop-preferences')).mode === mode, 'Theme did not persist');
+      }
+      await settle();
+      await page.evaluate(() => {
+        document.activeElement?.blur();
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      });
+      await assertPage(`mobile-${mode}`);
+      await assertPreserved(`mobile-${mode}`);
+      await screenshot(`mobile-${mode}-settings-page`);
+      const lastControl = page.getByRole('button', { name: 'Restore all defaults', exact: true });
+      await lastControl.focus();
+      await settle();
+      const scrolling = await lastControl.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const bar = document.querySelector('.desktop-system-bar').getBoundingClientRect();
+        const dock = document.querySelector('.desktop-dock').getBoundingClientRect();
+        return {
+          scrollY,
+          documentHeight: document.scrollingElement.scrollHeight,
+          viewportHeight: innerHeight,
+          top: bounds.top,
+          bottom: bounds.bottom,
+          barBottom: bar.bottom,
+          dockTop: dock.top,
+        };
+      });
+      assert.ok(
+        scrolling.scrollY > 0 &&
+          scrolling.documentHeight > scrolling.viewportHeight &&
+          scrolling.top >= scrolling.barBottom + 4 &&
+          scrolling.bottom <= scrolling.dockTop - 4,
+        'Last mobile control must be reachable through document scrolling without activating it',
+      );
+      report.mobileThemes.push({ mode, ...scrolling });
+      await screenshot(`mobile-${mode}-settings-document-scroll`);
+    }
+    await page.locator('.desktop-dock').getByRole('link', { name: 'Workspace', exact: true }).click();
+    await page.waitForURL(`${base}/dashboard`);
     await page.getByRole('heading', { name: original.serverName, exact: true }).waitFor();
-    await page.screenshot({ path: path.join(screenshotDir, 'minimized-mobile.png'), animations: 'disabled' });
-    await page.getByRole('button', { name: 'Restore Settings', exact: true }).click();
-    await frame().waitFor({ state: 'visible' });
-    assert.deepEqual(errors, []);
-    result = {
-      version: build.version,
-      digest: build.imageDigest,
+    assert.equal(await frame().count(), 0, 'Mobile Home must leave the Settings page');
+    assert.equal(await inputIdentity.evaluate((element) => element.isConnected), false, 'Mobile Home must unmount the departed form');
+    assert.equal(
+      await page.locator('.desktop-window-resume,.desktop-dock-item.is-minimized').count(),
+      0,
+      'Mobile Home must not keep a minimized window',
+    );
+    await screenshot('mobile-home-navigation');
+    await page.locator('.desktop-dock').getByRole('link', { name: 'Settings', exact: true }).click();
+    await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+    await input.waitFor();
+    assert.equal(await input.inputValue(), original.serverName, 'Returning through ordinary navigation must start a new form draft');
+    await assertPage('mobile-returned-settings');
+    const brandInput = await input.elementHandle();
+    await input.fill('Unsaved brand navigation draft');
+    await page.locator('.desktop-brand').click();
+    await page.waitForURL(`${base}/dashboard`);
+    await page.getByRole('heading', { name: original.serverName, exact: true }).waitFor();
+    assert.equal(await frame().count(), 0, 'Mobile brand must navigate to Home');
+    assert.equal(await brandInput.evaluate((element) => element.isConnected), false, 'Mobile brand must unmount the departed form');
+    assert.equal(await page.locator('.desktop-window-resume,.desktop-dock-item.is-minimized').count(), 0);
+    await inputIdentity.dispose();
+    await brandInput.dispose();
+    same((await read('/api/desktop-preferences')).windows, savedWindows, 'Page navigation overwrote desktop placements');
+    assert.equal((await read('/api/desktop-preferences')).serverName, original.serverName, 'A mobile draft was saved');
+    same(await protectedState(), protectedBefore, 'An app, store, task or link changed during the preference-only audit');
+    assert.deepEqual(report.blockedMutations, [], 'Unexpected product mutation was attempted');
+    assert.deepEqual(errors, [], 'Published UI raised a browser error');
+    Object.assign(report, {
       draftPreserved: true,
       dragWrites: 1,
       snapGap: 16,
       accountBoundsPersisted: true,
       perToolPlacement: true,
-      mobileFallback: true,
+      mobileDocumentPages: true,
+      responsiveDraftAndPlacementPreserved: true,
+      minimizedFlagNormalizedOnSmall: true,
+      mobileHomeAndBrandNavigate: true,
+      mobileNavigationUnmountsDraft: true,
       serverIpVisible: true,
-      pageErrors: errors,
-    };
+    });
+    report.passed = true;
+  } catch (error) {
+    report.failure = { stage, type: /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(error.name) ? error.name : 'Error', messageHash: hash(String(error.message)) };
   } finally {
-    try {
-      if (page && !page.isClosed()) await page.close();
-      if (original) {
-        const response = await context.request.put(`${base}/api/desktop-preferences`, { headers: { Origin: base }, data: original });
-        assert.ok(response.ok(), 'Preference restoration failed');
-        assert.ok(isDeepStrictEqual(await read('/api/desktop-preferences'), original), 'Original preferences were not restored');
+    stage = 'cleanup';
+    let writesSettled = true;
+    if (context) {
+      try {
+        if (page && !page.isClosed()) {
+          await page.waitForTimeout(750);
+          await waitFor(async () => pendingWrites.size === 0, 'Preference writes did not settle');
+        }
+      } catch {
+        writesSettled = false;
+        report.cleanupFailures.push('preference-writes-still-in-flight');
       }
-    } finally {
-      await browser.close();
+      try {
+        await context.close();
+      } catch {
+        writesSettled = false;
+        report.cleanupFailures.push('ui-context-close-failed');
+      }
     }
+    if (report.failedPreferenceRequests) {
+      writesSettled = false;
+      report.cleanupFailures.push('preference-request-outcome-unconfirmed');
+    }
+    if (original && reader) {
+      try {
+        const current = await read('/api/desktop-preferences');
+        allowPreferenceBody(current);
+        if (report.preferenceWrites) {
+          report.restorationWrites++;
+          const response = await reader.request.put(`${base}/api/desktop-preferences`, {
+            maxRedirects: 0,
+            timeout: 20000,
+            headers: { Origin: base },
+            data: original,
+          });
+          assert.ok(response.ok(), 'Original preference restoration failed');
+        }
+        same(await read('/api/desktop-preferences'), original, 'Original preferences were not restored');
+        await new Promise((resolve) => setTimeout(resolve, 750));
+        same(await read('/api/desktop-preferences'), original, 'A delayed write replaced restored preferences');
+        report.originalPreferencesRestored = true;
+      } catch {
+        report.cleanupFailures.push('original-preferences-restoration-unconfirmed');
+      }
+      if (protectedBefore) {
+        try {
+          const after = await protectedState();
+          same(after, protectedBefore, 'Protected API state changed');
+          report.protectedApiHashAfter = hash(after);
+          report.protectedApiStatePreserved = true;
+        } catch {
+          report.cleanupFailures.push('protected-api-state-changed-or-unconfirmed');
+        }
+      }
+      report.cleanupConfirmed =
+        writesSettled && report.originalPreferencesRestored && report.protectedApiStatePreserved && !report.cleanupFailures.length;
+    }
+    await reader?.close().catch(() => report.cleanupFailures.push('reader-close-failed'));
+    await browser?.close().catch(() => report.cleanupFailures.push('browser-close-failed'));
+    if (!report.cleanupConfirmed || report.cleanupFailures.length || report.blockedMutations.length || report.pageErrors.length)
+      report.passed = false;
+    save();
   }
-  process.stdout.write(`${JSON.stringify({ ...result, originalPreferencesRestored: true })}\n`);
-})().catch((error) => {
-  process.stderr.write(`${error.message}\n`);
+  process.stdout.write(`${JSON.stringify(report)}\n`);
+  if (!report.passed) process.exitCode = 1;
+})().catch(() => {
+  process.stderr.write('Published window audit could not complete; private session and API details were omitted.\n');
   process.exitCode = 1;
 });

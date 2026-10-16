@@ -1,3 +1,5 @@
+import { runtimeDependencies } from './scripts/package-runtime-dependencies';
+
 await Bun.build({
   entrypoints: ['./src/main.ts'],
   outdir: './dist',
@@ -12,8 +14,7 @@ await Bun.build({
     syntax: true,
   },
   external: [
-    'argon2',
-    'class-transformer',
+    ...runtimeDependencies,
     'cpu-features',
     '@nestjs/typeorm',
     '@nestjs/mongoose',
