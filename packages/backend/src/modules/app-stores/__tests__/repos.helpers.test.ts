@@ -82,6 +82,16 @@ describe('ReposHelpers staged clones and offline refresh', () => {
     expect(await helpers.deleteRepo(slug)).toEqual({ success: true, message: '' });
   });
 
+  it('does not mistake an inaccessible repository for an absent repository', async () => {
+    await writeCheckout(repoPath);
+    vi.spyOn(filesystem, 'pathExists').mockResolvedValue(false);
+    const remove = vi.spyOn(filesystem, 'removeDirectory').mockResolvedValue(false);
+
+    expect((await helpers.deleteRepo(slug)).success).toBe(false);
+    expect(remove).toHaveBeenCalledExactlyOnceWith(repoPath);
+    expect(await fs.promises.readFile(configPath, 'utf8')).toBe(oldConfig);
+  });
+
   it.each(['..', '.', '../owned-fixture', 'owned-fixture/..', '/owned-fixture', ''])('refuses unsafe repository removal %s', async (id) => {
     await writeCheckout(repoPath);
     const remove = vi.spyOn(filesystem, 'removeDirectory');
