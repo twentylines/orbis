@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Beta 34 candidate: frozen runtime packages (16 October 2026)
+
+Before the responsive UI release, inspection of the healthy beta32 image found `argon2@0.45.1`, while the tested frozen lockfile resolves `argon2@0.44.0`. The inherited Dockerfile installed runtime packages again through unversioned npm. Beta33 release workflow `38850772327` was canceled before its publish job ran. Its pushed tag remains unchanged; it is not a published release or an installed update.
+
+The replacement packaging step copies the required external packages and their resolved dependency closure from the frozen Bun builder. It preserves nested versions and internal cycle links, refuses missing mandatory dependencies and escaping symlinks, and records the source lockfile hash. The runner performs native hash/verification and transformer checks under Node during each architecture build.
+
+The 420 backend tests and seven packaging cases pass, along with backend types and scoped lint. A local Linux arm64 development image loads `argon2@0.44.0` and `class-transformer@0.5.1` under Node22.21.1. Its 13 packaged entries match lockfile hash `e690741d3b8a9b0169c6eeaab3bb957fea0f65c5a037a637148174c0f03e79db`. A network-disabled, read-only, unprivileged probe verifies native hashing, transformation and a synthetic password hash created by the existing beta32 library. This is development-image evidence, not publication, real-account login or OTA acceptance.
+
+The isolated installation remains on healthy beta32. A private pre-update fingerprint covers all 33 application/data/user-configuration entries and 17 files. Beta34 publication, reviewed OTA, independent snapshot verification, actual login and released-image UI checks are next. Hades remains untouched.
+
 ## Published beta 32 network recovery and OTA verification (16 October 2026)
 
 Source commit `350e219d0c0b95786c7246342936f4bc0a07ed1f` passed main CI `38837451431` and integration `38837451398`. CI reports 420 backend tests, 78 common tests and successful build/type/migration/release-planning gates. The preceding source run failed only in an HTTPS fixture that wrote OpenSSL output to `/dev/stdout`: an owned Linux Node22 probe reproduced exit1 for that path and exit0 with private temporary files. The corrected fixture passed before publication.

@@ -59,6 +59,7 @@ RUN echo "TIPI_VERSION: ${SENTRY_RELEASE}"
 RUN echo "LOCAL: ${LOCAL}"
 
 RUN bun run bundle
+RUN bun packages/backend/scripts/package-runtime-dependencies.ts /app/packages/backend /app/runtime-node-modules /app/bun.lock
 RUN --mount=type=secret,id=sentry_token,env=SENTRY_AUTH_TOKEN if [ "${LOCAL}" != "true" ]; then \
   cd ./packages/backend && \
   bun run sentry:sourcemaps; \
@@ -76,8 +77,9 @@ ENV ORBIS_COMMIT=${ORBIS_COMMIT}
 
 WORKDIR /app
 
-RUN npm install --no-save --omit=dev argon2 class-transformer
-
+COPY --from=builder /app/runtime-node-modules ./node_modules
+COPY --from=builder /app/packages/backend/scripts/verify-runtime-dependencies.cjs ./verify-runtime-dependencies.cjs
+RUN node ./verify-runtime-dependencies.cjs
 COPY --from=builder_base /deps/docker-binary /usr/local/bin/docker-compose
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/packages/backend/dist ./
