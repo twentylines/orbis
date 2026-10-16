@@ -1,5 +1,6 @@
 import { SSEModule } from '@/core/sse/sse.module';
 import { Module } from '@nestjs/common';
+import { AppStoreModule } from '../app-stores/app-store.module';
 import { AppsModule } from '../apps/apps.module';
 import { BackupManagerModule } from '../backups/backup-manager.module';
 import { DockerModule } from '../docker/docker.module';
@@ -25,7 +26,7 @@ import { RestoreAppHandler } from './handlers/restore-app.handler';
 import { TasksModule } from '../tasks/tasks.module';
 
 @Module({
-  imports: [QueueModule, AppsModule, EnvModule, DockerModule, MarketplaceModule, BackupManagerModule, SSEModule, TasksModule],
+  imports: [QueueModule, AppsModule, AppStoreModule, EnvModule, DockerModule, MarketplaceModule, BackupManagerModule, SSEModule, TasksModule],
   providers: [
     AppLifecycleService,
     AppLifecycleCommandFactory,

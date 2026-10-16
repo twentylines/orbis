@@ -223,16 +223,20 @@ export class ReposHelpers {
 
   private async deleteRepoUnlocked(id: string) {
     try {
+      if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+        return { success: false, message: 'Invalid repository ID' };
+      }
       const { dataDir } = this.configuration.get('directories');
       const repoPath = path.join(dataDir, 'repos', id);
 
       if (!(await this.filesystem.pathExists(repoPath))) {
         this.logger.info(`Repo ${id} does not exist`);
-        return { success: false, message: `Repo ${id} does not exist` };
+        return { success: true, message: '' };
       }
 
       this.logger.info(`Deleting repo ${id} from ${repoPath}`);
-      await this.filesystem.removeDirectory(repoPath);
+      const removed = await this.filesystem.removeDirectory(repoPath);
+      if (!removed) return { success: false, message: `Could not remove repo ${id}` };
 
       this.logger.info(`Deleted repo ${id} from ${repoPath}`);
       return { success: true, message: '' };
@@ -245,10 +249,11 @@ export class ReposHelpers {
     const { dataDir } = this.configuration.get('directories');
     const repos = await this.filesystem.listFiles(path.join(dataDir, 'repos'));
 
+    const failed: string[] = [];
     for (const repo of repos) {
-      await this.deleteRepo(repo);
+      if (!(await this.deleteRepo(repo)).success) failed.push(repo);
     }
 
-    return { success: true, message: '' };
+    return { success: failed.length === 0, message: failed.join(', ') };
   }
 }
