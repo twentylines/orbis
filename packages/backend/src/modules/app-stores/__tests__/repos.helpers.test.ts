@@ -69,6 +69,28 @@ describe('ReposHelpers staged clones and offline refresh', () => {
     helpers = new ReposHelpers(logger, configuration, filesystem);
   });
 
+  it('reports a failed filesystem removal and preserves the repository for retry', async () => {
+    await writeCheckout(repoPath);
+    vi.spyOn(filesystem, 'removeDirectory').mockResolvedValue(false);
+
+    expect((await helpers.deleteRepo(slug)).success).toBe(false);
+    expect(await fs.promises.readFile(configPath, 'utf8')).toBe(oldConfig);
+    expect(await fs.promises.readFile(refPath, 'utf8')).toBe(oldSha);
+  });
+
+  it('allows retrying metadata removal when its repository is already absent', async () => {
+    expect(await helpers.deleteRepo(slug)).toEqual({ success: true, message: '' });
+  });
+
+  it.each(['..', '.', '../owned-fixture', 'owned-fixture/..', '/owned-fixture', ''])('refuses unsafe repository removal %s', async (id) => {
+    await writeCheckout(repoPath);
+    const remove = vi.spyOn(filesystem, 'removeDirectory');
+
+    expect((await helpers.deleteRepo(id)).success).toBe(false);
+    expect(remove).not.toHaveBeenCalled();
+    expect(await fs.promises.readFile(configPath, 'utf8')).toBe(oldConfig);
+  });
+
   it('publishes a completed clone from staging and leaves no staging directories', async () => {
     git.clone.mockImplementation(async ({ dir }: { dir: string }) => {
       expect(dir).not.toBe(repoPath);

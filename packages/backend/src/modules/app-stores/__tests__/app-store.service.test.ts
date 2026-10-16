@@ -17,6 +17,8 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type MockProxy, mock } from 'vitest-mock-extended';
 import { fromAny } from '@total-typescript/shoehorn';
+import { AsyncMutex } from '@/utils/mutex/async-mutex';
+import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
 
 describe('AppStoreService', () => {
   let appStoreService: AppStoreService;
@@ -27,7 +29,7 @@ describe('AppStoreService', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     const moduleRef = await Test.createTestingModule({
-      providers: [AppStoreService],
+      providers: [AppStoreService, { provide: APP_ASYNC_MUTEX, useFactory: () => new AsyncMutex() }],
     })
       .useMocker(mock)
       .compile();
@@ -38,6 +40,7 @@ describe('AppStoreService', () => {
     moduleRef.get(LoggerService);
     repoQueue = moduleRef.get(RepoEventsQueue);
     moduleRef.get(ConfigurationService);
+    appStoreRepository.getAppStoreBySlug.mockImplementation(async (slug) => stores.find((store) => store.slug === slug));
   });
 
   it('rejects deleting an unknown app store slug before removing any repo', async () => {
@@ -68,6 +71,108 @@ describe('AppStoreService', () => {
     fromAny({ slug: 'offline', name: 'Offline', url: 'https://example.com/offline.git', enabled: true }),
     fromAny({ slug: 'backup', name: 'Backup', url: 'https://example.com/backup.git', enabled: true }),
   ];
+
+  it('keeps the store row when repository removal fails and permits a subsequent retry', async () => {
+    appStoreRepository.getAllAppStores.mockResolvedValue(stores);
+    appStoreRepository.getAppCountForStore.mockResolvedValue({ count: 0 });
+    repoHelpers.deleteRepo.mockResolvedValueOnce({ success: false, message: '/private/transport/path' });
+    repoHelpers.deleteRepo.mockResolvedValueOnce({ success: true, message: '' });
+
+    const failure = await appStoreService.deleteAppStore('primary').catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(TranslatableError);
+    expect((failure as TranslatableError).getStatus()).toBe(500);
+    expect((failure as TranslatableError).getResponse()).toEqual({ message: 'APP_STORE_DELETE_ERROR', intlParams: {} });
+    expect(appStoreRepository.removeAppStoreEntity).not.toHaveBeenCalled();
+
+    expect(await appStoreService.deleteAppStore('primary')).toEqual({ success: true });
+    expect(appStoreRepository.removeAppStoreEntity).toHaveBeenCalledExactlyOnceWith('primary');
+  });
+
+  it('removes the checkout before the row and releases the operation after a database failure', async () => {
+    appStoreRepository.getAllAppStores.mockResolvedValue(stores);
+    appStoreRepository.getAppCountForStore.mockResolvedValue({ count: 0 });
+    let removed = false;
+    repoHelpers.deleteRepo.mockImplementation(async () => {
+      removed = true;
+      return { success: true, message: '' };
+    });
+    appStoreRepository.removeAppStoreEntity.mockImplementationOnce(async () => {
+      expect(removed).toBe(true);
+      throw new Error('fixture database unavailable');
+    });
+
+    await expect(appStoreService.deleteAppStore('primary')).rejects.toThrow('fixture database unavailable');
+    expect(await appStoreService.deleteAppStore('primary')).toEqual({ success: true });
+    expect(repoHelpers.deleteRepo).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps one store when the last two are deleted concurrently', async () => {
+    let remaining = stores.slice(0, 2);
+    appStoreRepository.getAllAppStores.mockImplementation(async () => [...remaining]);
+    appStoreRepository.getAppCountForStore.mockResolvedValue({ count: 0 });
+    appStoreRepository.removeAppStoreEntity.mockImplementation(async (slug) => {
+      remaining = remaining.filter((store) => store.slug !== slug);
+      return fromAny(undefined);
+    });
+    repoHelpers.deleteRepo.mockResolvedValue({ success: true, message: '' });
+
+    const results = await Promise.allSettled(remaining.map((store) => appStoreService.deleteAppStore(store.slug)));
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((result) => result.status === 'rejected');
+    expect(rejected?.status === 'rejected' && rejected.reason.getResponse()).toEqual({
+      message: 'APP_STORE_DELETE_ERROR_LAST_STORE',
+      intlParams: {},
+    });
+    expect(remaining).toHaveLength(1);
+    expect(repoHelpers.deleteRepo).toHaveBeenCalledOnce();
+  });
+
+  it.each(['update_all', 'clone_all'] as const)('does not recreate a removed store from a stale %s enumeration', async (command) => {
+    let remaining = [...stores];
+    let releaseRemoval: () => void = () => undefined;
+    const removalPending = new Promise<void>((resolve) => {
+      releaseRemoval = resolve;
+    });
+    appStoreRepository.getAllAppStores.mockImplementation(async () => [...remaining]);
+    appStoreRepository.getEnabledAppStores.mockImplementation(async () => [...remaining]);
+    appStoreRepository.getAppStoreBySlug.mockImplementation(async (slug) => remaining.find((store) => store.slug === slug));
+    appStoreRepository.getAppCountForStore.mockResolvedValue({ count: 0 });
+    appStoreRepository.removeAppStoreEntity.mockImplementation(async (slug) => {
+      remaining = remaining.filter((store) => store.slug !== slug);
+      return fromAny(undefined);
+    });
+    repoHelpers.deleteRepo.mockImplementation(async () => {
+      await removalPending;
+      return { success: true, message: '' };
+    });
+    repoHelpers.pullRepo.mockResolvedValue({ success: true, message: '' });
+    repoHelpers.cloneRepo.mockResolvedValue({ success: true, message: '' });
+    const deletion = appStoreService.deleteAppStore('primary');
+    await vi.waitFor(() => expect(repoHelpers.deleteRepo).toHaveBeenCalledOnce());
+    const handler = repoQueue.onEvent.mock.calls[0]?.[0];
+    const reply = vi.fn(async () => undefined);
+    const refresh = handler?.({ command, eventId: 'stale-list' }, reply);
+    await vi.waitFor(() => expect(appStoreRepository.getEnabledAppStores).toHaveBeenCalledOnce());
+    releaseRemoval();
+    await Promise.all([deletion, refresh]);
+
+    const operation = command === 'update_all' ? repoHelpers.pullRepo : repoHelpers.cloneRepo;
+    expect(operation.mock.calls).toEqual(stores.slice(1).map((store) => [store.url, store.slug]));
+    expect(reply).toHaveBeenCalledExactlyOnceWith({ success: true, message: '' });
+  });
+
+  it('uses the current stored URL instead of stale queue data and rejects a removed queue target', async () => {
+    repoHelpers.pullRepo.mockResolvedValue({ success: true, message: '' });
+    const handler = repoQueue.onEvent.mock.calls[0]?.[0];
+    const reply = vi.fn(async () => undefined);
+    await handler?.({ command: 'update', id: 'primary', url: 'https://example.com/stale.git', eventId: 'stale-url' }, reply);
+    await handler?.({ command: 'update', id: 'removed', url: 'https://example.com/stale.git', eventId: 'removed-store' }, reply);
+
+    expect(repoHelpers.pullRepo).toHaveBeenCalledExactlyOnceWith(stores[0]?.url, 'primary');
+    expect(reply.mock.calls).toEqual([[{ success: true, message: '' }], [{ success: false, message: '' }]]);
+  });
 
   it('refreshes only the re-enabled store once before changing its database row', async () => {
     const current = { ...stores[0], enabled: false } as AppStore;

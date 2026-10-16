@@ -1,11 +1,14 @@
 import { TranslatableError } from '@/common/error/translatable-error';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
-import { BadRequestException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { AsyncMutex } from '@/utils/mutex/async-mutex';
+import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
+import { BadRequestException, HttpStatus, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import slugify from 'slugify';
 import type { UpdateAppStoreBodyDto } from '../marketplace/dto/marketplace.dto';
 import { RepoEventsQueue } from '../queue/entities/repo-events';
 import { AppStoreRepository } from './app-store.repository';
+import { APP_STORE_CATALOGUE_LOCK, appStoreLockKey } from './app-store-lock';
 import { ReposHelpers } from './repos.helpers';
 
 export const RESERVED_APP_STORE_SLUGS = ['_user'];
@@ -18,6 +21,7 @@ export class AppStoreService {
     private readonly repoHelpers: ReposHelpers,
     private readonly config: ConfigurationService,
     private readonly appStoreRepository: AppStoreRepository,
+    @Inject(APP_ASYNC_MUTEX) private readonly mutex: AsyncMutex,
   ) {
     this.repoQueue.onEvent(async (data, reply) => {
       switch (data.command) {
@@ -26,40 +30,50 @@ export class AppStoreService {
           break;
         }
         case 'clone_all': {
-          const stores = await this.appStoreRepository.getEnabledAppStores();
-          const failed: string[] = [];
-          for (const store of stores) {
-            const result = await this.repoHelpers.cloneRepo(store.url, store.slug);
-            if (!result.success) failed.push(store.name);
-          }
-          await reply({ success: failed.length === 0, message: failed.join(', ') });
+          await reply(await this.refreshRepositories('clone'));
           break;
         }
-        case 'clone': {
-          const { success, message } = await this.repoHelpers.cloneRepo(data.url, data.id);
-          await reply({ success, message });
-          break;
-        }
+        case 'clone':
         case 'update': {
-          const { success, message } = await this.repoHelpers.pullRepo(data.url, data.id);
-          await reply({ success, message });
+          await reply(await this.refreshStore(data.id, data.command));
           break;
         }
       }
     });
   }
 
-  public async pullRepositories() {
-    const repositories = await this.appStoreRepository.getEnabledAppStores();
-    const failed: string[] = [];
-
-    for (const repo of repositories) {
-      this.logger.debug(`Pulling repo ${repo.url}`);
-      const result = await this.repoHelpers.pullRepo(repo.url, repo.slug);
-      if (!result.success) failed.push(repo.name);
+  private async withLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    const release = await this.mutex.acquire(key);
+    try {
+      return await operation();
+    } finally {
+      release();
     }
+  }
 
+  private async refreshStore(slug: string, command: 'clone' | 'update', skipUnavailable = false) {
+    return this.withLock(appStoreLockKey(slug), async () => {
+      const store = await this.appStoreRepository.getAppStoreBySlug(slug);
+      if (!store || !store.enabled) return { success: skipUnavailable, message: '' };
+      this.logger.debug(`Refreshing app store ${store.slug}`);
+      const result =
+        command === 'clone' ? await this.repoHelpers.cloneRepo(store.url, store.slug) : await this.repoHelpers.pullRepo(store.url, store.slug);
+      return { success: result.success, message: result.success ? '' : store.name };
+    });
+  }
+
+  private async refreshRepositories(command: 'clone' | 'update') {
+    const stores = await this.appStoreRepository.getEnabledAppStores();
+    const failed: string[] = [];
+    for (const store of stores) {
+      const result = await this.refreshStore(store.slug, command, true);
+      if (!result.success) failed.push(store.name);
+    }
     return { success: failed.length === 0, message: failed.join(', ') };
+  }
+
+  public async pullRepositories() {
+    return this.refreshRepositories('update');
   }
 
   /**
@@ -97,13 +111,15 @@ export class AppStoreService {
    * @param body The new data to update the app store with
    */
   public async updateAppStore(slug: string, body: UpdateAppStoreBodyDto) {
-    const current = await this.appStoreRepository.getAppStoreBySlug(slug);
-    if (!current) throw new NotFoundException(`App store ${slug} not found`);
-    if (body.enabled && !current.enabled) {
-      const refreshed = await this.repoHelpers.pullRepo(current.url, current.slug);
-      if (!refreshed.success) throw new TranslatableError('APP_STORE_REFRESH_ERROR', { stores: current.name }, HttpStatus.BAD_GATEWAY);
-    }
-    return this.appStoreRepository.updateAppStore(slug, body);
+    return this.withLock(appStoreLockKey(slug), async () => {
+      const current = await this.appStoreRepository.getAppStoreBySlug(slug);
+      if (!current) throw new NotFoundException(`App store ${slug} not found`);
+      if (body.enabled && !current.enabled) {
+        const refreshed = await this.repoHelpers.pullRepo(current.url, current.slug);
+        if (!refreshed.success) throw new TranslatableError('APP_STORE_REFRESH_ERROR', { stores: current.name }, HttpStatus.BAD_GATEWAY);
+      }
+      return this.appStoreRepository.updateAppStore(slug, body);
+    });
   }
 
   /**
@@ -112,30 +128,28 @@ export class AppStoreService {
    * @param slug The ID of the app store to delete
    */
   public async deleteAppStore(slug: string) {
-    const stores = await this.appStoreRepository.getAllAppStores();
-    const store = stores.find((appStore) => appStore.slug === slug);
+    return this.withLock(APP_STORE_CATALOGUE_LOCK, () =>
+      this.withLock(appStoreLockKey(slug), async () => {
+        const stores = await this.appStoreRepository.getAllAppStores();
+        const store = stores.find((appStore) => appStore.slug === slug);
+        if (!store) throw new NotFoundException(`App store ${slug} not found`);
+        if (stores.length === 1) throw new TranslatableError('APP_STORE_DELETE_ERROR_LAST_STORE', {}, HttpStatus.BAD_REQUEST);
+        const count = await this.appStoreRepository.getAppCountForStore(slug);
+        if (count && count.count > 0) throw new TranslatableError('APP_STORE_DELETE_ERROR_APPS_EXIST', {}, HttpStatus.BAD_REQUEST);
 
-    if (!store) {
-      throw new NotFoundException(`App store ${slug} not found`);
-    }
-
-    if (stores.length === 1) {
-      throw new TranslatableError('APP_STORE_DELETE_ERROR_LAST_STORE', {}, HttpStatus.BAD_REQUEST);
-    }
-
-    const count = await this.appStoreRepository.getAppCountForStore(slug);
-
-    if (count && count.count > 0) {
-      throw new TranslatableError('APP_STORE_DELETE_ERROR_APPS_EXIST', {}, HttpStatus.BAD_REQUEST);
-    }
-
-    await this.appStoreRepository.removeAppStoreEntity(slug);
-    await this.repoHelpers.deleteRepo(slug);
-
-    return { success: true };
+        const removed = await this.repoHelpers.deleteRepo(slug);
+        if (!removed.success) throw new TranslatableError('APP_STORE_DELETE_ERROR', {}, HttpStatus.INTERNAL_SERVER_ERROR);
+        await this.appStoreRepository.removeAppStoreEntity(slug);
+        return { success: true };
+      }),
+    );
   }
 
   public async createAppStore(body: { url: string; name: string }) {
+    return this.withLock(APP_STORE_CATALOGUE_LOCK, () => this.createAppStoreLocked(body));
+  }
+
+  private async createAppStoreLocked(body: { url: string; name: string }) {
     if (this.config.get('demoMode')) {
       throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
     }
@@ -161,15 +175,15 @@ export class AppStoreService {
       throw new TranslatableError('SERVER_ERROR_DUPLICATE_APP_STORE_NAME', {}, HttpStatus.CONFLICT);
     }
 
-    const created = await this.appStoreRepository.createAppStore({ ...body, slug });
-    const { success } = await this.repoHelpers.cloneRepo(body.url, created.slug);
-
-    if (!success) {
-      await this.appStoreRepository.removeAppStoreEntity(created.slug);
-      throw new TranslatableError('APP_STORE_CLONE_ERROR', { url: body.url }, HttpStatus.BAD_REQUEST);
-    }
-
-    return created;
+    return this.withLock(appStoreLockKey(slug), async () => {
+      const created = await this.appStoreRepository.createAppStore({ ...body, slug });
+      const { success } = await this.repoHelpers.cloneRepo(body.url, created.slug);
+      if (!success) {
+        await this.appStoreRepository.removeAppStoreEntity(created.slug);
+        throw new TranslatableError('APP_STORE_CLONE_ERROR', {}, HttpStatus.BAD_REQUEST);
+      }
+      return created;
+    });
   }
 
   public async getAppCountForStore(slug: string) {
@@ -177,6 +191,7 @@ export class AppStoreService {
   }
 
   public async deleteAllRepos() {
-    await this.repoHelpers.deleteAllRepos();
+    const removed = await this.repoHelpers.deleteAllRepos();
+    if (!removed.success) throw new TranslatableError('APP_STORE_DELETE_ERROR', {}, HttpStatus.INTERNAL_SERVER_ERROR);
   }
 }

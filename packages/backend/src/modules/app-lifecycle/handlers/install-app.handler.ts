@@ -1,6 +1,10 @@
 import { TranslatableError } from '@/common/error/translatable-error';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { AsyncMutex } from '@/utils/mutex/async-mutex';
+import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
+import { AppStoreRepository } from '@/modules/app-stores/app-store.repository';
+import { appStoreLockKey } from '@/modules/app-stores/app-store-lock';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
 import { AppsRepository } from '../../apps/apps.repository';
@@ -26,6 +30,8 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
     private readonly validationService: AppValidationService,
     private readonly marketplaceService: MarketplaceService,
     private readonly startAppHandler: StartAppHandler,
+    private readonly appStoreRepository: AppStoreRepository,
+    @Inject(APP_ASYNC_MUTEX) private readonly mutex: AsyncMutex,
   ) {}
 
   async execute(appUrn: AppUrn, params?: InstallAppParams): Promise<HandlerResult> {
@@ -33,49 +39,13 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
 
     this.statusManager.emitEvent({ appUrn, event: 'status_change' });
 
-    const app = await this.appRepository.getAppByUrn(appUrn);
-
     const parsedForm = appFormSchema(form);
     if (parsedForm instanceof type.errors) {
       throw new TranslatableError('SYSTEM_ERROR_INVALID_BODY', undefined, HttpStatus.BAD_REQUEST, { cause: parsedForm });
     }
 
-    if (app) {
-      await this.appRepository.updateAppById(app.id, { config: parsedForm, ...parsedForm });
-      return this.startAppHandler.execute(appUrn);
-    }
-
-    const { isVisibleOnGuestDashboard } = parsedForm;
-
-    const appInfo = await this.marketplaceService.getAppInfoFromAppStoreOrInstalled(appUrn);
-
-    if (!appInfo) {
-      throw new TranslatableError('APP_ERROR_APP_NOT_FOUND', { id: appUrn }, HttpStatus.NOT_FOUND);
-    }
-
-    await this.validationService.validateInstallSettings(appUrn, appInfo, parsedForm);
-
-    const { appName, appStoreId } = extractAppUrn(appUrn);
-
-    const createdApp = await this.appRepository.createApp({
-      appName,
-      status: 'installing',
-      config: parsedForm,
-      port: parsedForm.port ?? appInfo.port,
-      version: appInfo.tipi_version,
-      exposed: parsedForm.exposed ?? false,
-      domain: parsedForm.domain ?? null,
-      localSubdomain: parsedForm.localSubdomain ?? null,
-      openPort: parsedForm.openPort ?? false,
-      exposedLocal: parsedForm.exposedLocal ?? false,
-      appStoreSlug: appStoreId,
-      isVisibleOnGuestDashboard,
-      enableAuth: parsedForm.enableAuth ?? false,
-      maxBackups: parsedForm.maxBackups ?? null,
-      templateUrn: appUrn,
-      lastTemplateSyncAt: Math.floor(Date.now() / 1000),
-      templateVersion: appInfo.tipi_version,
-    });
+    const createdApp = await this.reserveApp(appUrn, parsedForm);
+    if (!createdApp) return this.startAppHandler.execute(appUrn);
 
     const requestId = generateRequestId();
 
@@ -96,5 +66,51 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
       });
 
     return { requestId };
+  }
+
+  private async reserveApp(appUrn: AppUrn, parsedForm: typeof appFormSchema.infer) {
+    const { appName, appStoreId } = extractAppUrn(appUrn);
+    const release = await this.mutex.acquire(appStoreLockKey(appStoreId));
+    try {
+      const app = await this.appRepository.getAppByUrn(appUrn);
+      if (app) {
+        await this.appRepository.updateAppById(app.id, { config: parsedForm, ...parsedForm });
+        return undefined;
+      }
+
+      const store = await this.appStoreRepository.getAppStoreBySlug(appStoreId);
+      if (!store) throw new TranslatableError('APP_ERROR_APP_NOT_FOUND', { id: appUrn }, HttpStatus.NOT_FOUND);
+      const { isVisibleOnGuestDashboard } = parsedForm;
+
+      const appInfo = await this.marketplaceService.getAppInfoFromAppStoreOrInstalled(appUrn);
+
+      if (!appInfo) {
+        throw new TranslatableError('APP_ERROR_APP_NOT_FOUND', { id: appUrn }, HttpStatus.NOT_FOUND);
+      }
+
+      await this.validationService.validateInstallSettings(appUrn, appInfo, parsedForm);
+
+      return this.appRepository.createApp({
+        appName,
+        status: 'installing',
+        config: parsedForm,
+        port: parsedForm.port ?? appInfo.port,
+        version: appInfo.tipi_version,
+        exposed: parsedForm.exposed ?? false,
+        domain: parsedForm.domain ?? null,
+        localSubdomain: parsedForm.localSubdomain ?? null,
+        openPort: parsedForm.openPort ?? false,
+        exposedLocal: parsedForm.exposedLocal ?? false,
+        appStoreSlug: appStoreId,
+        isVisibleOnGuestDashboard,
+        enableAuth: parsedForm.enableAuth ?? false,
+        maxBackups: parsedForm.maxBackups ?? null,
+        templateUrn: appUrn,
+        lastTemplateSyncAt: Math.floor(Date.now() / 1000),
+        templateVersion: appInfo.tipi_version,
+      });
+    } finally {
+      release();
+    }
   }
 }
