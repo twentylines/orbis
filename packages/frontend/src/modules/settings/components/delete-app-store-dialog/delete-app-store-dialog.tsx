@@ -8,6 +8,9 @@ import { IconAlertTriangle } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { AppStoreError } from '../app-stores-table/app-store-error';
+import { revealTableAction } from '@/components/multi-service-form/elements/reveal-table-action';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 
 type Props = {
   appStore: AppStore;
@@ -19,9 +22,6 @@ export const DeleteAppStoreDialog = ({ appStore }: Props) => {
 
   const deleteAppStore = useMutation({
     ...deleteAppStoreMutation(),
-    onError: (e: TranslatableError) => {
-      toast.error(t(e.message, e.intlParams));
-    },
     onSuccess: () => {
       toast.success(t('APP_STORE_DELETE_SUCCESS'));
       deleteAppStoreDisclosure.close();
@@ -30,18 +30,36 @@ export const DeleteAppStoreDialog = ({ appStore }: Props) => {
 
   return (
     <div>
-      <Button size="sm" intent="danger" variant="ghost" disabled={deleteAppStore.isPending} onClick={() => deleteAppStoreDisclosure.open()}>
+      <Button
+        size="sm"
+        intent="danger"
+        variant="ghost"
+        disabled={deleteAppStore.isPending}
+        onFocus={revealTableAction}
+        onClick={() => {
+          if (deleteAppStore.isError) deleteAppStore.reset();
+          deleteAppStoreDisclosure.open();
+        }}
+      >
         {t('APP_STORE_TABLE_DELETE')}
       </Button>
-      <Dialog open={deleteAppStoreDisclosure.isOpen} onOpenChange={deleteAppStoreDisclosure.toggle}>
-        <DialogContent type="danger" size="sm">
+      <Dialog
+        open={deleteAppStoreDisclosure.isOpen}
+        onOpenChange={(open) => {
+          if (open && deleteAppStore.isError) deleteAppStore.reset();
+          deleteAppStoreDisclosure.toggle(open);
+        }}
+      >
+        <DialogContent type="danger" size="sm" className="app-store-dialog">
           <DialogHeader>
             <DialogTitle>{t('APP_STORE_DELETE_DIALOG_TITLE')}</DialogTitle>
           </DialogHeader>
-          <DialogDescription className="text-center py-4">
-            <IconAlertTriangle className="icon mb-2 text-danger icon-lg" />
-            <h3>{t('APP_STORE_DELETE_DIALOG_SUBTITLE')}</h3>
-            <span className="text-muted">{t('APP_STORE_DELETE_DIALOG_WARNING', { name: appStore.name })}</span>
+          <DialogDescription className="text-center">
+            <IconAlertTriangle size={32} className="text-danger" aria-hidden="true" />
+            <p className="app-store-delete-copy">
+              <WrapWords text={t('APP_STORE_DELETE_DIALOG_WARNING', { name: appStore.name })} />
+            </p>
+            <AppStoreError error={deleteAppStore.error as TranslatableError | null} />
           </DialogDescription>
           <DialogFooter>
             <Button loading={deleteAppStore.isPending} intent="danger" onClick={() => deleteAppStore.mutate({ path: { id: appStore.slug } })}>

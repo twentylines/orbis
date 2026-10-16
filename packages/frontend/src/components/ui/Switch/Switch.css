@@ -1,3 +1,21 @@
+.orbis-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-left: 0;
+}
+
+.orbis-switch > .switch-root {
+  float: none;
+  flex: none;
+  margin: 0;
+}
+
+.orbis-switch > .form-check-label {
+  min-width: 0;
+}
+
 .switch-root[data-state="checked"] {
   background-color: var(--tblr-primary);
   background-position: right center;

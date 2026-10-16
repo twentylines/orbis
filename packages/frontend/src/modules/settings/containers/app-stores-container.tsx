@@ -14,11 +14,10 @@ export const AppStoresContainer = () => {
 
   return (
     <div className="card-body">
-      <div className="d-flex align-items-center mb-2">
+      <div className="d-flex align-items-center mb-3">
         <IconBrandAppstore className="me-2" />
         <h2 className="mb-0">{t('SETTINGS_APPSTORES_TITLE')}</h2>
       </div>
-      <p className="text-muted">{t('SETTINGS_APPSTORES_SUBTITLE')}</p>
       <Alert variant="warning">
         <AlertIcon>
           <IconAlertCircle stroke={2} />

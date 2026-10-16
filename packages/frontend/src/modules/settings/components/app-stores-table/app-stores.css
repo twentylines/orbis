@@ -1,0 +1,116 @@
+.app-stores {
+  min-width: 0;
+}
+.app-stores .table-responsive {
+  scroll-padding-inline: 12px;
+}
+.app-stores-table {
+  table-layout: fixed;
+  min-width: 44em;
+}
+.app-stores-table :is(th, td) {
+  padding: 12px;
+}
+.app-stores-table .app-store-name {
+  width: 24%;
+}
+.app-stores-table .app-store-status {
+  width: 18%;
+}
+.app-stores-table .app-store-repository {
+  width: 36%;
+}
+.app-stores-table .app-store-actions-cell {
+  width: 22%;
+}
+.app-store-url {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-store-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.app-store-state-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--desktop-muted);
+}
+.app-store-state-dot[data-enabled="true"] {
+  background: var(--desktop-positive);
+}
+.app-store-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.app-store-actions .btn {
+  flex: none;
+  min-height: 40px;
+  margin: 0;
+  white-space: nowrap;
+  scroll-margin-inline: 4px;
+}
+.app-store-dialog {
+  max-height: calc(100dvh - 32px);
+}
+.app-store-dialog :is(.modal-header, .modal-footer) {
+  flex-shrink: 0;
+}
+.app-store-dialog .modal-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+.app-store-dialog .modal-footer .btn {
+  max-width: 100%;
+  min-height: 44px;
+  line-height: 1.35;
+  white-space: normal;
+}
+.app-store-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--desktop-negative) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-negative) 8%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  line-height: 1.5;
+  text-align: left;
+}
+.app-store-error > svg {
+  flex: none;
+  margin-top: 0.125em;
+  color: var(--desktop-negative);
+}
+.app-store-error > p {
+  min-width: 0;
+  margin: 0;
+}
+.app-store-delete-copy {
+  margin: 16px 0 0;
+  line-height: 1.5;
+  color: var(--desktop-muted);
+}
+@media (max-width: 450px) {
+  .app-store-dialog .modal-footer .btn {
+    width: 100%;
+  }
+  .app-store-error {
+    flex-wrap: wrap;
+  }
+  .app-store-error > p {
+    flex-basis: 100%;
+  }
+}
