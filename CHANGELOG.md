@@ -2,6 +2,8 @@
 
 ## Unreleased development preview
 
+- Bound app-store Git transfers with a 30-second network idle limit and a ten-minute clone/fetch deadline. Cancellation aborts the transfer, waits for Git to settle and keeps repository locks through staging cleanup; failed refreshes retain the working checkout.
+- Verified published beta31 store failure and retry against real APIs and controlled Git/filesystem faults. Updated phone captures record retained inline errors and exact configuration/data preservation after native Compose restoration.
 - Reflowed long Home headings, search results, Select menus, log controls, security fields and nested installer/Compose forms. Ordinary labels wrap between words; identifiers keep full accessible names. Compose table actions retain a complete keyboard focus marker inside their scroll area.
 - Verified a real custom-store v2 to v3 upgrade on the isolated server: the backed-up update stayed stopped, preserved settings and overrides, generated the new default before an explicit healthy two-service start, and returned to stopped state.
 - Aligned Home with the system bar's inner column, made logout clearance symmetric, replaced sample timestamps with system uptime and renamed Docker rankings to Usage.
