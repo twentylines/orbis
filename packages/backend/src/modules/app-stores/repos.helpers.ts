@@ -8,7 +8,7 @@ import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import git from 'isomorphic-git';
-import http from 'isomorphic-git/http/node';
+import { withGitHttp } from './git-http';
 
 @Injectable()
 export class ReposHelpers {
@@ -121,16 +121,19 @@ export class ReposHelpers {
       this.logger.debug(`Cloning repo ${repoUrl}${branch ? ` on branch ${branch}` : ''} to ${repoPath}`);
 
       await this.ensureDirectoryWithPermissions(path.dirname(repoPath));
-      stagingPath = await fs.promises.mkdtemp(path.join(path.dirname(repoPath), `.${id}-clone-`));
-      await git.clone({
-        fs,
-        http,
-        dir: stagingPath,
-        url: repoUrl,
-        singleBranch: true,
-        depth: 1,
-        ref: branch || undefined,
-      });
+      const clonePath = await fs.promises.mkdtemp(path.join(path.dirname(repoPath), `.${id}-clone-`));
+      stagingPath = clonePath;
+      await withGitHttp((http) =>
+        git.clone({
+          fs,
+          http,
+          dir: clonePath,
+          url: repoUrl,
+          singleBranch: true,
+          depth: 1,
+          ref: branch || undefined,
+        }),
+      );
 
       await fs.promises.rename(stagingPath, repoPath);
       stagingPath = undefined;
@@ -181,16 +184,18 @@ export class ReposHelpers {
       const previousSha = await git.resolveRef({ fs, dir: repoPath, ref: 'HEAD' });
       const remoteBranchRef = `origin/${currentBranch}`;
 
-      const fetchResult = await git.fetch({
-        fs,
-        http,
-        dir: repoPath,
-        url: remoteUrl,
-        ref: currentBranch,
-        depth: 1,
-        singleBranch: true,
-        tags: false,
-      });
+      const fetchResult = await withGitHttp((http) =>
+        git.fetch({
+          fs,
+          http,
+          dir: repoPath,
+          url: remoteUrl,
+          ref: currentBranch,
+          depth: 1,
+          singleBranch: true,
+          tags: false,
+        }),
+      );
       this.logger.debug('Fetch result:', fetchResult, 'Current branch:', currentBranch);
       const targetSha = await git.resolveRef({
         fs,
