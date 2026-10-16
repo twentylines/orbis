@@ -21,6 +21,8 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 
 [Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Search](screenshots/desktop-fixtures/desktop-search.png) · [Home app picker](screenshots/desktop-fixtures/desktop-dark-home-picker.png) · [All Home apps](screenshots/desktop-fixtures/desktop-dark-home-all-apps.png) · [Inspection record](VISUAL-QA.md)
 
+[Responsive pages and corrected Settings alignment](screenshots/page-navigation/README.md)
+
 [Floating tool](screenshots/windows/desktop-light-floating-settings.png) · [Dark floating tool](screenshots/windows/desktop-dark-floating-settings.png) · [Snapped tool](screenshots/windows/desktop-light-snap-left-settings.png) · [Maximized at4K](screenshots/windows/4k-dark-maximized-settings.png) · [Minimized tool](screenshots/windows/desktop-light-window-minimized.png)
 
 [Released beta 28 desktop](screenshots/live-beta28/workspace-desktop.png) · [Released phone workspace](screenshots/live-beta28/workspace-mobile.png) · [Released enlarged phone text](screenshots/live-beta28/workspace-text200-narrow.png) · [Released floating tool](screenshots/live-beta28/floating-settings.png) · [Released login](screenshots/live-beta28/login-mobile.png)

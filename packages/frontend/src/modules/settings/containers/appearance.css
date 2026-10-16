@@ -1,5 +1,5 @@
 .appearance {
-  padding: 8px 6px 20px;
+  padding: 8px 0 20px;
 }
 .appearance-note {
   display: block;
@@ -8,11 +8,15 @@
   font-size: 12px;
 }
 .appearance-section {
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
   gap: 28px;
   padding: 24px 0;
   border-top: 1px solid var(--desktop-line);
+}
+.appearance-section > * {
+  min-width: 0;
 }
 .appearance-section h2 {
   font-size: 18px;
@@ -37,7 +41,8 @@
 .appearance-name input {
   min-height: 42px;
   min-width: min(100%, 180px);
-  flex: 1;
+  flex: 1 1 180px;
+  max-width: 100%;
   border: 1px solid var(--desktop-line);
   border-radius: 8px;
   padding: 0 12px;
@@ -241,10 +246,16 @@
 }
 @container (max-width: 650px) {
   .appearance-section {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
   .appearance-modes {
     grid-template-columns: 1fr;
+  }
+}
+@container (max-width: 20em) {
+  .appearance-presets,
+  .appearance-wallpapers {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

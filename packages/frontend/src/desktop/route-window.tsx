@@ -11,6 +11,7 @@ import {
   type PointerEvent,
   type PropsWithChildren,
   type RefObject,
+  type HTMLAttributes,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { DesktopWindowBounds, DesktopWindowId, DesktopWindowState } from '@runtipi/common/schemas';
@@ -32,6 +33,7 @@ import { canSnapWindow, clampWindowBounds, defaultWindowBounds, placedWindowBoun
 import { WindowVisibilityContext } from './window-visibility';
 import './route-window.css';
 import { isWindowMinimized, windowSearch } from './window-navigation';
+import { DESKTOP_WINDOW_QUERY, revealPageFocus, useDesktopWindows } from './window-viewport';
 
 const Dashboard = lazy(() => import('@/modules/dashboard/pages/dashboard'));
 export type RouteWindowControls = { minimize: () => void };
@@ -55,11 +57,11 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
   const { preferences, updateWindow } = useDesktopPreferences();
   const location = useLocation();
   const navigate = useNavigate();
-  const minimized = isWindowMinimized(location.search);
+  const desktop = useDesktopWindows();
+  const minimized = desktop && isWindowMinimized(location.search);
   const frame = useRef<HTMLDivElement>(null);
   const titlebar = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState<WindowArea>({ x: 32, y: 112, width: 960, height: 640 });
-  const [desktop, setDesktop] = useState(false);
   const [scrollFrame, setScrollFrame] = useState(false);
   const [draft, setDraft] = useState<DesktopWindowState | null>(null);
   const [keyboardMode, setKeyboardMode] = useState<Gesture['kind'] | null>(null);
@@ -67,6 +69,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
   const gesture = useRef<Gesture | null>(null);
   const latestDraft = useRef<DesktopWindowState | null>(null);
   const pendingFrame = useRef<number | null>(null);
+  const focusFrame = useRef<number | null>(null);
   const motion = useRef<Animation | null>(null);
   const wasMinimized = useRef(minimized);
   const saved = preferences.windows[id];
@@ -84,6 +87,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
   }, []);
 
   useLayoutEffect(() => {
+    if (!desktop) return;
     const measure = () => {
       cancelGesture();
       const bar = document.querySelector<HTMLElement>('.desktop-system-bar');
@@ -93,7 +97,6 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       const dockTop = dock?.offsetHeight
         ? window.innerHeight - Number.parseFloat(getComputedStyle(dock).bottom) - dock.offsetHeight
         : window.innerHeight - 100;
-      setDesktop(window.innerWidth >= 900 && window.innerHeight >= 540);
       setArea({
         x,
         y,
@@ -109,13 +112,36 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       observer.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [cancelGesture]);
+  }, [desktop, cancelGesture]);
 
   useLayoutEffect(() => {
+    if (!desktop) {
+      motion.current?.cancel();
+      motion.current = null;
+      setHiding(false);
+      cancelGesture();
+      const pendingReveal = requestAnimationFrame(() => {
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && frame.current?.contains(active)) revealPageFocus(active);
+      });
+      return () => cancelAnimationFrame(pendingReveal);
+    }
+  }, [desktop, cancelGesture]);
+
+  useEffect(() => {
+    if (!desktop && !window.matchMedia(DESKTOP_WINDOW_QUERY).matches && isWindowMinimized(location.search))
+      void navigate(
+        { pathname: location.pathname, search: windowSearch(location.search, false), hash: location.hash },
+        { replace: true, preventScrollReset: true },
+      );
+  }, [desktop, location.pathname, location.search, location.hash, navigate]);
+
+  useLayoutEffect(() => {
+    if (!desktop) return;
     const element = frame.current;
     const header = titlebar.current;
     if (!element || !header) return;
-    // Short screens scroll the header within the frame to keep the content reachable.
+    // Enlarged desktop chrome can leave too little room for a separate content scroller.
     const measure = () => {
       if (!element.hidden) setScrollFrame(element.clientHeight - header.offsetHeight < 144);
     };
@@ -124,12 +150,13 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
     observer.observe(element);
     observer.observe(header);
     return () => observer.disconnect();
-  }, []);
+  }, [desktop]);
 
   useEffect(
     () => () => {
       motion.current?.cancel();
       if (pendingFrame.current !== null) cancelAnimationFrame(pendingFrame.current);
+      if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
     },
     [],
   );
@@ -163,6 +190,10 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
   const maximize = () => place(state.mode === 'maximized' ? (state.restoreMode ?? 'focused') : 'maximized');
   const restore = () => navigate({ pathname: location.pathname, search: windowSearch(location.search, false), hash: location.hash });
   const minimize = async () => {
+    if (!desktop) {
+      void navigate('/dashboard');
+      return;
+    }
     if (minimized || hiding || gesture.current) return;
     const element = frame.current;
     const target = dockBounds(id);
@@ -191,12 +222,18 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       motion.current = null;
       setHiding(false);
     }
-    navigate({ pathname: location.pathname, search: windowSearch(location.search, true), hash: location.hash });
+    if (window.matchMedia(DESKTOP_WINDOW_QUERY).matches)
+      navigate({ pathname: location.pathname, search: windowSearch(location.search, true), hash: location.hash });
   };
   useImperativeHandle(controlsRef, () => ({ minimize }));
 
   useLayoutEffect(() => {
     if (wasMinimized.current && !minimized && frame.current) {
+      if (!desktop) {
+        frame.current.querySelector<HTMLElement>('h1')?.focus();
+        wasMinimized.current = minimized;
+        return;
+      }
       titlebar.current?.focus({ preventScroll: true });
       const from = dockBounds(id);
       const to = frame.current.getBoundingClientRect();
@@ -214,7 +251,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       }
     }
     wasMinimized.current = minimized;
-  }, [minimized, id]);
+  }, [minimized, id, desktop]);
 
   const beginPointer = (event: PointerEvent<HTMLDivElement | HTMLButtonElement>, kind: Gesture['kind']) => {
     if (!desktop || event.button !== 0 || (kind === 'move' && (!positioned || (event.target as HTMLElement).closest('button, a, [role=menuitem]'))))
@@ -291,6 +328,27 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
     changeDraft({ ...state, mode: 'floating', bounds: clampWindowBounds(bounds, area) });
   };
 
+  const titlebarControls: HTMLAttributes<HTMLDivElement> = desktop
+    ? {
+        role: 'toolbar',
+        tabIndex: -1,
+        'aria-label': `${label} window`,
+        'aria-describedby': keyboardMode ? 'window-keyboard-help' : undefined,
+        onPointerDown: (event) => beginPointer(event, 'move'),
+        onPointerMove: movePointer,
+        onPointerUp: (event) => endPointer(event, true),
+        onPointerCancel: (event) => endPointer(event, false),
+        onLostPointerCapture: () => finishGesture(false),
+        onDoubleClick: (event) => {
+          if (!(event.target as HTMLElement).closest('button, a')) maximize();
+        },
+        onKeyDown: adjustKeyboard,
+        onBlur: (event) => {
+          if (keyboardMode && !event.currentTarget.contains(event.relatedTarget as Node | null)) finishGesture(true);
+        },
+      }
+    : {};
+
   return (
     <>
       {minimized ? (
@@ -310,119 +368,118 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       <div
         ref={frame}
         className="desktop-view desktop-view-app desktop-route-window"
-        data-window-mode={mode}
+        onFocusCapture={
+          desktop
+            ? undefined
+            : (event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement) || !event.currentTarget.contains(target)) return;
+                if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+                focusFrame.current = requestAnimationFrame(() => {
+                  focusFrame.current = null;
+                  if (document.activeElement === target) revealPageFocus(target);
+                });
+              }
+        }
+        data-window-navigation={desktop ? 'desktop' : 'page'}
+        data-window-mode={desktop ? mode : 'page'}
         data-window-positioned={positioned}
-        data-window-scrolls-frame={scrollFrame}
+        data-window-scrolls-frame={desktop && scrollFrame}
         data-window-minimized={minimized}
         hidden={minimized}
-        inert={minimized || hiding}
+        inert={desktop && (minimized || hiding)}
         style={
-          positioned
-            ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
-            : { left: area.x, right: area.x, top: area.y, width: area.width, height: area.height }
+          desktop
+            ? positioned
+              ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
+              : { left: area.x, right: area.x, top: area.y, width: area.width, height: area.height }
+            : undefined
         }
       >
-        <div
-          ref={titlebar}
-          role="toolbar"
-          className="desktop-window-bar"
-          tabIndex={-1}
-          aria-label={`${label} window`}
-          aria-describedby={keyboardMode ? 'window-keyboard-help' : undefined}
-          onPointerDown={(event) => beginPointer(event, 'move')}
-          onPointerMove={movePointer}
-          onPointerUp={(event) => endPointer(event, true)}
-          onPointerCancel={(event) => endPointer(event, false)}
-          onLostPointerCapture={() => finishGesture(false)}
-          onDoubleClick={(event) => {
-            if (desktop && !(event.target as HTMLElement).closest('button, a')) maximize();
-          }}
-          onKeyDown={adjustKeyboard}
-          onBlur={(event) => {
-            if (keyboardMode && !event.currentTarget.contains(event.relatedTarget as Node | null)) finishGesture(true);
-          }}
-        >
+        <div ref={titlebar} className={`desktop-window-bar${desktop ? '' : ' desktop-page-heading'}`} {...titlebarControls}>
           <span className="desktop-window-icon" aria-hidden="true">
             {icon}
           </span>
           <div className="desktop-window-label">
-            <h1>{label}</h1>
-            <span title={preferences.serverName}>{preferences.serverName}</span>
+            <h1 tabIndex={desktop ? undefined : -1}>{label}</h1>
+            {desktop ? <span title={preferences.serverName}>{preferences.serverName}</span> : null}
           </div>
-          <div className="desktop-window-controls">
-            {desktop ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className="desktop-window-control" aria-label="Window layout" title="Window layout">
-                    <IconLayout size={18} aria-hidden="true" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  onCloseAutoFocus={(event) => {
-                    if (gesture.current) event.preventDefault();
-                  }}
-                >
-                  <DropdownMenuLabel>Window layout</DropdownMenuLabel>
-                  <DropdownMenuItem onSelect={() => place('focused')}>
-                    <IconWindow size={18} aria-hidden="true" />
-                    Full page
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => place('floating')}>
-                    <IconWindow size={18} aria-hidden="true" />
-                    Floating window
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={!canSnapWindow(area)} onSelect={() => place('left')}>
-                    <IconLayoutSidebar size={18} aria-hidden="true" />
-                    Snap left
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={!canSnapWindow(area)} onSelect={() => place('right')}>
-                    <IconLayoutSidebarRight size={18} aria-hidden="true" />
-                    Snap right
-                  </DropdownMenuItem>
-                  {canSnapWindow(area) ? null : <p className="desktop-window-menu-hint">Snapping needs room for two 520px windows.</p>}
-                  <DropdownMenuItem onSelect={() => beginKeyboard('move')}>
-                    <IconArrowsMove size={18} aria-hidden="true" />
-                    Move with keyboard
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => beginKeyboard('resize')}>
-                    <IconResize size={18} aria-hidden="true" />
-                    Resize with keyboard
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-            <button
-              type="button"
-              className="desktop-window-control"
-              aria-label={`Minimize ${label}`}
-              title="Minimize"
-              disabled={hiding}
-              onClick={() => void minimize()}
-            >
-              <IconMinus size={18} aria-hidden="true" />
-            </button>
-            {desktop ? (
+          {desktop ? (
+            <div className="desktop-window-controls">
+              {desktop ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className="desktop-window-control" aria-label="Window layout" title="Window layout">
+                      <IconLayout size={18} aria-hidden="true" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    onCloseAutoFocus={(event) => {
+                      if (gesture.current) event.preventDefault();
+                    }}
+                  >
+                    <DropdownMenuLabel>Window layout</DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => place('focused')}>
+                      <IconWindow size={18} aria-hidden="true" />
+                      Full page
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => place('floating')}>
+                      <IconWindow size={18} aria-hidden="true" />
+                      Floating window
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canSnapWindow(area)} onSelect={() => place('left')}>
+                      <IconLayoutSidebar size={18} aria-hidden="true" />
+                      Snap left
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canSnapWindow(area)} onSelect={() => place('right')}>
+                      <IconLayoutSidebarRight size={18} aria-hidden="true" />
+                      Snap right
+                    </DropdownMenuItem>
+                    {canSnapWindow(area) ? null : <p className="desktop-window-menu-hint">Snapping needs room for two 520px windows.</p>}
+                    <DropdownMenuItem onSelect={() => beginKeyboard('move')}>
+                      <IconArrowsMove size={18} aria-hidden="true" />
+                      Move with keyboard
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => beginKeyboard('resize')}>
+                      <IconResize size={18} aria-hidden="true" />
+                      Resize with keyboard
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
               <button
                 type="button"
                 className="desktop-window-control"
-                aria-label={mode === 'maximized' ? `Restore ${label} size` : `Maximize ${label}`}
-                title={mode === 'maximized' ? 'Restore size' : 'Maximize'}
-                onClick={maximize}
+                aria-label={`Minimize ${label}`}
+                title="Minimize"
+                disabled={hiding}
+                onClick={() => void minimize()}
               >
-                {mode === 'maximized' ? <IconArrowsMinimize size={18} aria-hidden="true" /> : <IconArrowsMaximize size={18} aria-hidden="true" />}
+                <IconMinus size={18} aria-hidden="true" />
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="desktop-window-control desktop-window-dismiss"
-              aria-label={`Close ${label}`}
-              title="Close and return to workspace"
-              onClick={() => navigate('/dashboard')}
-            >
-              <IconX size={18} aria-hidden="true" />
-            </button>
-          </div>
+              {desktop ? (
+                <button
+                  type="button"
+                  className="desktop-window-control"
+                  aria-label={mode === 'maximized' ? `Restore ${label} size` : `Maximize ${label}`}
+                  title={mode === 'maximized' ? 'Restore size' : 'Maximize'}
+                  onClick={maximize}
+                >
+                  {mode === 'maximized' ? <IconArrowsMinimize size={18} aria-hidden="true" /> : <IconArrowsMaximize size={18} aria-hidden="true" />}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="desktop-window-control desktop-window-dismiss"
+                aria-label={`Close ${label}`}
+                title="Close and return to workspace"
+                onClick={() => navigate('/dashboard')}
+              >
+                <IconX size={18} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
         </div>
         {keyboardMode ? (
           <output id="window-keyboard-help" className="desktop-window-keyboard-help">

@@ -1,5 +1,7 @@
 # Focused tool scrolling
 
+The phone and short-screen captures below are historical. Current small screens use ordinary pages; see [page navigation](../page-navigation/README.md). Large-screen focused-window behavior remains current.
+
 Compiled-source Chrome fixture captures from the focused-tool correction after beta32. All API responses are intercepted locally; these are not released-image or real homelab evidence.
 
 - `phone-*-text100-add-focus.png`: native 390×844 Settings with Add focused and the title bar clear of the system bar.
