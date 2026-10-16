@@ -229,11 +229,6 @@ export class ReposHelpers {
       const { dataDir } = this.configuration.get('directories');
       const repoPath = path.join(dataDir, 'repos', id);
 
-      if (!(await this.filesystem.pathExists(repoPath))) {
-        this.logger.info(`Repo ${id} does not exist`);
-        return { success: true, message: '' };
-      }
-
       this.logger.info(`Deleting repo ${id} from ${repoPath}`);
       const removed = await this.filesystem.removeDirectory(repoPath);
       if (!removed) return { success: false, message: `Could not remove repo ${id}` };

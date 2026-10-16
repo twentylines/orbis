@@ -72,6 +72,19 @@ describe('AppStoreService', () => {
     fromAny({ slug: 'backup', name: 'Backup', url: 'https://example.com/backup.git', enabled: true }),
   ];
 
+  it('removes a failed first clone row and retains URL parameters for existing translations', async () => {
+    const body = { name: 'Retry', url: 'https://example.com/retry.git' };
+    repoHelpers.getRepoHash.mockReturnValue('retry-hash');
+    appStoreRepository.createAppStore.mockResolvedValue(fromAny({ ...body, slug: 'retry' }));
+    repoHelpers.cloneRepo.mockResolvedValue({ success: false, message: 'private transport error' });
+
+    const failure = await appStoreService.createAppStore(body).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(TranslatableError);
+    expect((failure as TranslatableError).getResponse()).toEqual({ message: 'APP_STORE_CLONE_ERROR', intlParams: { url: body.url } });
+    expect(appStoreRepository.removeAppStoreEntity).toHaveBeenCalledExactlyOnceWith('retry');
+  });
+
   it('keeps the store row when repository removal fails and permits a subsequent retry', async () => {
     appStoreRepository.getAllAppStores.mockResolvedValue(stores);
     appStoreRepository.getAppCountForStore.mockResolvedValue({ count: 0 });

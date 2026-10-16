@@ -180,7 +180,7 @@ export class AppStoreService {
       const { success } = await this.repoHelpers.cloneRepo(body.url, created.slug);
       if (!success) {
         await this.appStoreRepository.removeAppStoreEntity(created.slug);
-        throw new TranslatableError('APP_STORE_CLONE_ERROR', {}, HttpStatus.BAD_REQUEST);
+        throw new TranslatableError('APP_STORE_CLONE_ERROR', { url: body.url }, HttpStatus.BAD_REQUEST);
       }
       return created;
     });
