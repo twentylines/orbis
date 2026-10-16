@@ -1,6 +1,6 @@
 # Orbis build and migration rehearsal
 
-## Beta 34 candidate: frozen runtime packages (16 October 2026)
+## Published beta 34: frozen runtime packages and responsive UI (16 October 2026)
 
 Before the responsive UI release, inspection of the healthy beta32 image found `argon2@0.45.1`, while the tested frozen lockfile resolves `argon2@0.44.0`. The inherited Dockerfile installed runtime packages again through unversioned npm. Beta33 release workflow `38850772327` was canceled before its publish job ran. Its pushed tag remains unchanged; it is not a published release or an installed update.
 
@@ -8,7 +8,11 @@ The replacement packaging step copies the required external packages and their r
 
 The 420 backend tests and seven packaging cases pass, along with backend types and scoped lint. A local Linux arm64 development image loads `argon2@0.44.0` and `class-transformer@0.5.1` under Node22.21.1. Its 13 packaged entries match lockfile hash `e690741d3b8a9b0169c6eeaab3bb957fea0f65c5a037a637148174c0f03e79db`. A network-disabled, read-only, unprivileged probe verifies native hashing, transformation and a synthetic password hash created by the existing beta32 library. This is development-image evidence, not publication, real-account login or OTA acceptance.
 
-The isolated installation remains on healthy beta32. A private pre-update fingerprint covers all 33 application/data/user-configuration entries and 17 files. Beta34 publication, reviewed OTA, independent snapshot verification, actual login and released-image UI checks are next. Hades remains untouched.
+Release workflow `38852735805` passed all verification and publication gates for source `acfa8bb1da3ad3b904b42ce017765ebdd0754b53`. The read-only checker matched [beta34](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.34), both architectures and OCI index `sha256:f664228c65ff2044c34d1866bb5504d37d91934f0c289a8dbef4790adf9c302d`.
+
+The real browser reviewed and installed that exact image on the isolated arm64 stack. Host job `da50f6e3-79e0-45ae-ad9f-6f62c8e865b6` completed at healthy beta34. Both app records, account preferences and all 28 saved task outcomes matched. Its stopped beta32 snapshot independently verified 3,579 entries, 2,815 files and 97,248,643 bytes. The separate application/data/user-configuration comparison matched all 33 entries and 17 files, hash `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`. A fresh password login authenticated the real existing account, closed only its new session and preserved the original session/preferences.
+
+The released Settings image passes 20 width/theme/text groups. The window audit passed its functional draft, resize, placement and mobile navigation assertions, but two cancelled preference PUTs made cleanup unconfirmed; it was correctly recorded as failed despite original preferences and protected API state matching after restoration. Beta35 source serializes/coalesces saves and passes deliberately delayed/rejected response checks at four widths. Published beta35 OTA and its complete real window rerun remain required. Hades remains untouched.
 
 ## Published beta 32 network recovery and OTA verification (16 October 2026)
 
