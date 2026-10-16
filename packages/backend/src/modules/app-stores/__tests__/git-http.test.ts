@@ -1,6 +1,9 @@
 import { execFileSync } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { Agent as HttpAgent, type RequestListener, type Server, createServer } from 'node:http';
 import { Agent as HttpsAgent, createServer as createHttpsServer } from 'node:https';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 import git, { type GitHttpRequest, type GitHttpResponse } from 'isomorphic-git';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -143,33 +146,39 @@ describe('bounded Git HTTP transfers', () => {
   });
 
   it('uses HTTPS with the supplied trusted certificate agent', async () => {
-    const pem = execFileSync(
-      'openssl',
-      [
-        'req',
-        '-x509',
-        '-newkey',
-        'ec',
-        '-pkeyopt',
-        'ec_paramgen_curve:P-256',
-        '-nodes',
-        '-keyout',
-        '/dev/stdout',
-        '-out',
-        '/dev/stdout',
-        '-days',
-        '1',
-        '-subj',
-        '/CN=localhost',
-        '-addext',
-        'subjectAltName=IP:127.0.0.1',
-      ],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-    );
-    const key = pem.match(/-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/)?.[0];
-    const cert = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/)?.[0];
-    expect(key).toBeDefined();
-    expect(cert).toBeDefined();
+    const directory = await mkdtemp(path.join(tmpdir(), 'orbis-tls-test-'));
+    let key: string;
+    let cert: string;
+    try {
+      const keyPath = path.join(directory, 'fixture.key');
+      const certPath = path.join(directory, 'fixture.crt');
+      execFileSync(
+        'openssl',
+        [
+          'req',
+          '-x509',
+          '-newkey',
+          'ec',
+          '-pkeyopt',
+          'ec_paramgen_curve:P-256',
+          '-nodes',
+          '-keyout',
+          keyPath,
+          '-out',
+          certPath,
+          '-days',
+          '1',
+          '-subj',
+          '/CN=localhost',
+          '-addext',
+          'subjectAltName=IP:127.0.0.1',
+        ],
+        { stdio: 'ignore' },
+      );
+      [key, cert] = await Promise.all([readFile(keyPath, 'utf8'), readFile(certPath, 'utf8')]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
     const server = createHttpsServer({ key, cert }, (_request, response) => response.end('trusted fixture'));
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
