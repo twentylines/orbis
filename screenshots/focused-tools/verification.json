@@ -1,0 +1,19 @@
+{
+  "kind": "Compiled-source Chrome fixtures; no live homelab API traffic",
+  "widths": [1440, 768, 390, 320],
+  "groups": 16,
+  "renderedStates": 240,
+  "windowChecks": 384,
+  "interceptedMutations": 160,
+  "pendingCloseChecks": 96,
+  "findings": [],
+  "unexpectedWrites": [],
+  "browserErrors": [],
+  "documentScrollValues": [0],
+  "minBarClearance": 20,
+  "minDockClearance": 19.578125,
+  "nativeRouteWidths": 4,
+  "windowFlowGroups": 8,
+  "geometryNavigationUnitTests": 7,
+  "releaseCheck": "Pending; published beta32 still contains the original focused-header issue"
+}

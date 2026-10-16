@@ -60,6 +60,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
   const titlebar = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState<WindowArea>({ x: 32, y: 112, width: 960, height: 640 });
   const [desktop, setDesktop] = useState(false);
+  const [scrollFrame, setScrollFrame] = useState(false);
   const [draft, setDraft] = useState<DesktopWindowState | null>(null);
   const [keyboardMode, setKeyboardMode] = useState<Gesture['kind'] | null>(null);
   const [hiding, setHiding] = useState(false);
@@ -97,7 +98,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
         x,
         y,
         width: Math.floor(window.innerWidth - x * 2),
-        height: Math.max(200, Math.floor(dockTop - y - 20)),
+        height: Math.max(1, Math.floor(dockTop - y - 20)),
       });
     };
     measure();
@@ -109,6 +110,21 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       window.removeEventListener('resize', measure);
     };
   }, [cancelGesture]);
+
+  useLayoutEffect(() => {
+    const element = frame.current;
+    const header = titlebar.current;
+    if (!element || !header) return;
+    // Short screens scroll the header within the frame to keep the content reachable.
+    const measure = () => {
+      if (!element.hidden) setScrollFrame(element.clientHeight - header.offsetHeight < 144);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(
     () => () => {
@@ -296,10 +312,15 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
         className="desktop-view desktop-view-app desktop-route-window"
         data-window-mode={mode}
         data-window-positioned={positioned}
+        data-window-scrolls-frame={scrollFrame}
         data-window-minimized={minimized}
         hidden={minimized}
         inert={minimized || hiding}
-        style={positioned ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height } : undefined}
+        style={
+          positioned
+            ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
+            : { left: area.x, right: area.x, top: area.y, width: area.width, height: area.height }
+        }
       >
         <div
           ref={titlebar}

@@ -24,6 +24,7 @@ module.exports = async function inspectAppStoreSettings({
   const createUrl = `${initial[0].url}-additional-repository`;
   let mode = 'light';
   let listError = false;
+  let listDelay = 0;
   const pending = [];
   const requests = [];
   const unexpectedWrites = [];
@@ -42,10 +43,16 @@ module.exports = async function inspectAppStoreSettings({
         wallpaper: 'sandstone',
         workspace: { order: ['applications', 'activity', 'storage', 'attention'], hidden: [], wide: ['applications'], pinnedApps: [] },
       });
-    if (url.pathname === '/api/marketplace/all')
+    if (url.pathname === '/api/marketplace/all') {
+      if (listDelay) {
+        const delay = listDelay;
+        listDelay = 0;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
       return listError
         ? respond(route, { message: 'Unable to load app stores. Check the server connection and retry.' }, 500)
         : respond(route, { appStores: stores });
+    }
     if (['POST', 'PATCH', 'DELETE'].includes(method) && /^\/api\/marketplace\/(create|sync-qa|self-qa|added-qa)$/.test(url.pathname)) {
       const item = { method, path: url.pathname, body: JSON.parse(request.postData() || '{}'), reply: null };
       if (method === 'PATCH') {
@@ -59,9 +66,12 @@ module.exports = async function inspectAppStoreSettings({
         item.reply = resolve;
       });
       if (response.success) {
+        listDelay = 250;
         if (method === 'POST') stores.push({ ...item.body, slug: 'added-qa', enabled: true });
         if (method === 'PATCH') stores = stores.map((store) => (store.slug === url.pathname.split('/').at(-1) ? { ...store, ...item.body } : store));
-        if (method === 'DELETE') stores = stores.filter((store) => store.slug !== url.pathname.split('/').at(-1));
+        if (method === 'DELETE') {
+          stores = stores.filter((store) => store.slug !== url.pathname.split('/').at(-1));
+        }
       }
       return respond(
         route,
@@ -112,6 +122,92 @@ module.exports = async function inspectAppStoreSettings({
         if (Number.isFinite(line)) element.style.setProperty('line-height', `${line * 2}px`, 'important');
       }
     });
+  };
+  const windowGeometry = () =>
+    page.evaluate(() => {
+      const frame = document.querySelector('.desktop-route-window');
+      const content = frame.querySelector('.desktop-window-content');
+      const toolbar = frame.querySelector('.desktop-window-bar');
+      const box = (element) => {
+        const r = element.getBoundingClientRect();
+        return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+      };
+      const scrollsFrame = frame.dataset.windowScrollsFrame === 'true';
+      const scroller = scrollsFrame ? frame : content;
+      const viewport = box(scroller);
+      viewport.x += scroller.clientLeft;
+      viewport.y += scroller.clientTop;
+      viewport.right = viewport.x + scroller.clientWidth;
+      viewport.bottom = viewport.y + scroller.clientHeight;
+      const active = document.activeElement;
+      return {
+        documentY: scrollY,
+        frame: box(frame),
+        toolbar: box(toolbar),
+        systemBar: box(document.querySelector('.desktop-system-bar')),
+        dock: box(document.querySelector('.desktop-dock')),
+        frameOverflow: getComputedStyle(frame).overflowY,
+        scrollsFrame,
+        scroller: { viewport, top: scroller.scrollTop, height: scroller.scrollHeight, clientHeight: scroller.clientHeight },
+        active: {
+          inside: frame.contains(active),
+          tag: active.tagName,
+          text: active.textContent.trim().slice(0, 100),
+          fallback: active.hasAttribute('data-dialog-focus-fallback'),
+          box: box(active),
+        },
+      };
+    });
+  const checkWindow = async (sample, state, { focused = false, expected } = {}) => {
+    let geometry;
+    let expectedFocused = !expected;
+    const fits = (value) => {
+      const { frame, toolbar, systemBar, dock, active, scroller, scrollsFrame } = value;
+      const verticalOverlap = Math.min(active.box.bottom, scroller.viewport.bottom) - Math.max(active.box.y, scroller.viewport.y);
+      const focusFits =
+        active.inside &&
+        (active.fallback
+          ? verticalOverlap >= Math.min(44, active.box.height) - 1
+          : active.box.y >= scroller.viewport.y - 1 && active.box.bottom <= scroller.viewport.bottom + 1);
+      return (
+        Math.abs(value.documentY) <= 1 &&
+        frame.y >= systemBar.bottom + 19 &&
+        frame.bottom <= dock.y - 19 &&
+        ['auto', 'hidden', 'clip'].includes(value.frameOverflow) &&
+        (scrollsFrame || (toolbar.y >= frame.y - 1 && toolbar.bottom <= frame.bottom + 1)) &&
+        (!focused || focusFits)
+      );
+    };
+    for (let attempt = 0; attempt < 40; attempt++) {
+      geometry = await windowGeometry();
+      if (expected) expectedFocused = await expected.evaluate((element) => element === document.activeElement);
+      if (fits(geometry) && expectedFocused) break;
+      await page.waitForTimeout(50);
+    }
+    sample.windowChecks.push({ state, ...geometry, expectedFocused });
+    assert.ok(fits(geometry), `${state}: window chrome and focused content must stay inside the bar/dock workspace: ${JSON.stringify(geometry)}`);
+    assert.ok(expectedFocused, `${state}: dialog must return focus to its opener or surviving fallback`);
+    return geometry;
+  };
+  const checkWheel = async (sample) => {
+    const before = await checkWindow(sample, 'before-wheel');
+    const viewport = before.scroller.viewport;
+    await page.mouse.move(viewport.x + (viewport.right - viewport.x) / 2, viewport.y + (viewport.bottom - viewport.y) / 2);
+    await page.mouse.wheel(0, 160);
+    if (before.scroller.height > before.scroller.clientHeight + before.scroller.top + 1) {
+      await page.waitForFunction(
+        (top) => {
+          const frame = document.querySelector('.desktop-route-window');
+          const scroller = frame.dataset.windowScrollsFrame === 'true' ? frame : frame.querySelector('.desktop-window-content');
+          return scroller.scrollTop > top + 1;
+        },
+        before.scroller.top,
+        { timeout: 2000 },
+      );
+    }
+    const after = await checkWindow(sample, 'ordinary-wheel');
+    assert.ok(Math.abs(after.frame.y - before.frame.y) <= 1, 'ordinary wheel scrolling must not move the tool window');
+    await capture?.(`${sample.mode}-text${sample.textScale}-window-wheel`, { scrollTop: false });
   };
   const measure = (rootSelector) =>
     page
@@ -183,6 +279,7 @@ module.exports = async function inspectAppStoreSettings({
     for (const button of geometry.buttons)
       if (button.text && !button.busy?.includes('true') && (button.ink.x < button.box.x + 8 || button.ink.right > button.box.right - 8))
         sample.findings.push({ state, issue: 'button text lacks side room', button });
+    if (selector !== '[role="dialog"]' && selector !== '.orbis-error') await checkWindow(sample, state);
     if (selector === '[role="dialog"]') {
       const errorAlignments = await page
         .getByRole('dialog')
@@ -272,9 +369,11 @@ module.exports = async function inspectAppStoreSettings({
       for (const textScale of textScales) {
         stores = structuredClone(initial);
         listError = false;
-        const sample = { mode, textScale, states: [], findings: [], focusedActions: [] };
+        listDelay = 0;
+        const sample = { mode, textScale, states: [], findings: [], focusedActions: [], windowChecks: [] };
         await open();
         await scaleText(textScale);
+        await checkWheel(sample);
         await page.locator('.table-responsive').evaluate((element) => element.scrollIntoView({ block: 'center' }));
         await snap(sample, 'table');
         const repositories = await page.locator('.app-store-url').evaluateAll((links) =>
@@ -315,10 +414,24 @@ module.exports = async function inspectAppStoreSettings({
           if (focus.tag === 'BUTTON') {
             sample.focusedActions.push(focus);
             if (!focus.visible) sample.findings.push({ state: 'table keyboard', issue: 'focused action clipped', focus });
+            await checkWindow(sample, `table-keyboard-${sample.focusedActions.length}`, { focused: true });
           }
         }
         assert.equal(sample.focusedActions.length, await actionButtons.count(), 'Tab must reach every store action');
         await capture?.(`${sample.mode}-text${sample.textScale}-table-keyboard`, { scrollTop: false });
+        const addButton = page.getByRole('button', { name: 'Add app store', exact: true });
+        for (let tab = 0; tab < 8; tab++) {
+          if (await addButton.evaluate((element) => element === document.activeElement)) break;
+          await page.keyboard.press('Tab');
+        }
+        await checkWindow(sample, 'keyboard-to-add', { focused: true, expected: addButton });
+        await capture?.(`${sample.mode}-text${sample.textScale}-window-keyboard-add`, { scrollTop: false });
+        await page.keyboard.press('Enter');
+        await page.getByRole('dialog').waitFor();
+        await page.keyboard.press('Escape');
+        await page.getByRole('dialog').waitFor({ state: 'hidden' });
+        await checkWindow(sample, 'keyboard-add-close', { focused: true, expected: addButton });
+        await capture?.(`${sample.mode}-text${sample.textScale}-window-dialog-close`, { scrollTop: false });
         await restore();
         if (surfacesOnly) {
           await page.getByRole('button', { name: 'Add app store', exact: true }).click();
@@ -330,6 +443,7 @@ module.exports = async function inspectAppStoreSettings({
           await checkInlineError();
           await snap(sample, 'add-error', '[role="dialog"]');
           await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+          await checkWindow(sample, 'add-error-close', { focused: true, expected: addButton });
           await restore();
           await page.locator('.table-responsive tbody tr').first().getByRole('button', { name: 'Edit', exact: true }).click();
           await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Self Hosted Apps');
@@ -340,6 +454,10 @@ module.exports = async function inspectAppStoreSettings({
           await snap(sample, 'edit-error', '[role="dialog"]');
           await checkSwitch(sample);
           await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+          await checkWindow(sample, 'edit-error-close', {
+            focused: true,
+            expected: page.locator('.table-responsive tbody tr').first().getByRole('button', { name: 'Edit', exact: true }),
+          });
           await restore();
           await page.locator('.table-responsive tbody tr').first().getByRole('button', { name: 'Delete', exact: true }).click();
           await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
@@ -353,6 +471,10 @@ module.exports = async function inspectAppStoreSettings({
             .evaluate((element) => getComputedStyle(element).textAlign);
           assert.equal(errorAlignment, 'left', 'inline errors use the same left alignment in all store dialogs');
           await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+          await checkWindow(sample, 'delete-error-close', {
+            focused: true,
+            expected: page.locator('.table-responsive tbody tr').first().getByRole('button', { name: 'Delete', exact: true }),
+          });
           report.samples.push(sample);
           continue;
         }
@@ -376,12 +498,14 @@ module.exports = async function inspectAppStoreSettings({
         await settlePending({ success: false, message: 'APP_STORE_CLONE_ERROR', intlParams: { url: createUrl } });
         await checkInlineError();
         await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+        await checkWindow(sample, 'add-error-close', { focused: true, expected: addButton });
         await page.getByRole('button', { name: 'Add app store', exact: true }).click();
         assert.equal(await page.locator('.app-store-error').count(), 0, 'reopening add clears the old error');
         assert.equal(await page.getByRole('textbox', { name: 'App store URL', exact: true }).inputValue(), createUrl);
         await retry(page.getByRole('button', { name: 'Create new app store', exact: true }));
         await settlePending({ success: true });
         await page.getByRole('dialog').waitFor({ state: 'hidden' });
+        await checkWindow(sample, 'add-success-focus', { focused: true, expected: addButton });
         await snap(sample, 'add-success-toast', '.orbis-notifications');
         await dismiss();
         assert.equal(await page.locator('.table-responsive tbody tr').count(), 3, 'successful add refreshes the table');
@@ -402,6 +526,10 @@ module.exports = async function inspectAppStoreSettings({
         await retry(page.getByRole('button', { name: 'Save', exact: true }));
         await settlePending({ success: true });
         await page.getByRole('dialog').waitFor({ state: 'hidden' });
+        await checkWindow(sample, 'edit-success-focus', {
+          focused: true,
+          expected: page.locator('.table-responsive tbody tr').first().getByRole('button', { name: 'Edit', exact: true }),
+        });
         await snap(sample, 'edit-success-toast', '.orbis-notifications');
         await dismiss();
         await restore();
@@ -416,14 +544,71 @@ module.exports = async function inspectAppStoreSettings({
         await snap(sample, 'delete-error', '[role="dialog"]');
         assert.equal(await page.locator('.table-responsive tbody tr').count(), 3, 'failed delete preserves its store row');
         await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+        await checkWindow(sample, 'delete-error-close', {
+          focused: true,
+          expected: page.locator('.table-responsive tbody tr').first().getByRole('button', { name: 'Delete', exact: true }),
+        });
         await page.locator('.table-responsive tbody tr').first().getByRole('button', { name: 'Delete', exact: true }).click();
         assert.equal(await page.locator('.app-store-error').count(), 0, 'reopening delete clears the old error');
         await retry(page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }));
         await settlePending({ success: true });
         await page.getByRole('dialog').waitFor({ state: 'hidden' });
+        await page.waitForFunction(() => document.querySelectorAll('.table-responsive tbody tr').length === 2);
+        await checkWindow(sample, 'delete-success-focus', { focused: true, expected: page.locator('.app-stores') });
         await snap(sample, 'delete-success-toast', '.orbis-notifications');
         await dismiss();
         assert.equal(await page.locator('.table-responsive tbody tr').count(), 2, 'successful delete refreshes the table');
+        const tableRecords = () =>
+          page
+            .locator('.table-responsive tbody tr')
+            .evaluateAll((rows) => rows.map((row) => [...row.cells].slice(0, 3).map((cell) => cell.textContent.trim())));
+        const recordsBeforePendingClose = await tableRecords();
+        for (const operation of ['create', 'edit', 'delete']) {
+          await restore();
+          const opener =
+            operation === 'create'
+              ? page.getByRole('button', { name: 'Add app store', exact: true, includeHidden: true })
+              : page
+                  .locator('.table-responsive tbody tr')
+                  .first()
+                  .getByRole('button', { name: operation === 'edit' ? 'Edit' : 'Delete', exact: true, includeHidden: true });
+          await opener.click();
+          const dialog = page.getByRole('dialog');
+          await dialog.waitFor();
+          if (operation === 'create') {
+            await dialog.getByRole('textbox', { name: 'App store name', exact: true }).fill('Pending Store');
+            await dialog.getByRole('textbox', { name: 'App store URL', exact: true }).fill(createUrl);
+          } else if (operation === 'edit') {
+            await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Pending Rename');
+            await dialog.getByRole('switch', { name: 'Enabled', exact: true }).click();
+          }
+          await scaleText(textScale);
+          await dialog
+            .getByRole('button', {
+              name: operation === 'create' ? 'Create new app store' : operation === 'edit' ? 'Save' : 'Delete',
+              exact: true,
+            })
+            .click();
+          await waitPending();
+          await page.waitForFunction((element) => element?.disabled, await opener.elementHandle(), { timeout: 2000 });
+          assert.equal(await opener.isDisabled(), true, `${operation}: held request must disable its opener`);
+          await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+          await dialog.waitFor({ state: 'hidden' });
+          await checkWindow(sample, `${operation}-pending-close`, { focused: true, expected: page.locator('.app-stores') });
+          await settlePending({
+            success: false,
+            message:
+              operation === 'create'
+                ? 'APP_STORE_CLONE_ERROR'
+                : operation === 'edit'
+                  ? 'SERVER_ERROR_DUPLICATE_APP_STORE_NAME'
+                  : 'APP_STORE_DELETE_ERROR',
+            status: operation === 'edit' ? 400 : 500,
+          });
+          assert.equal(await dialog.count(), 0, `${operation}: a failed held request must not reopen the closed dialog`);
+          await checkWindow(sample, `${operation}-pending-closed-failure`, { focused: true, expected: page.locator('.app-stores') });
+          assert.deepEqual(await tableRecords(), recordsBeforePendingClose, `${operation}: failed held request must preserve displayed stores`);
+        }
         listError = true;
         await page.goto(`${base}/settings?tab=appstores`, { waitUntil: 'domcontentloaded' });
         await page.getByRole('button', { name: 'Retry', exact: true }).waitFor();

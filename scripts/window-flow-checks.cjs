@@ -143,12 +143,33 @@ module.exports = async function inspectWindowFlows(page, { capture, getPreferenc
       (name) => window.__orbisWindowFixtureStreams.summary().filter(({ url }) => new URL(url).pathname === `/api/sse/${name}`).length,
       topic,
     );
-  const assertFits = async () =>
+  const assertFits = async () => {
+    await frame().evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => undefined))));
     assert.equal(
       await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
       false,
       'window flow must not introduce horizontal overflow',
     );
+    const geometry = await frame().evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const bar = document.querySelector('.desktop-system-bar').getBoundingClientRect();
+      const dockBounds = document.querySelector('.desktop-dock').getBoundingClientRect();
+      const header = element.querySelector('.desktop-window-bar').getBoundingClientRect();
+      return {
+        documentY: scrollY,
+        top: bounds.top,
+        bottom: bounds.bottom,
+        barBottom: bar.bottom,
+        dockTop: dockBounds.top,
+        headerTop: header.top,
+        wholeFrameScroll: element.dataset.windowScrollsFrame === 'true',
+      };
+    });
+    assert.equal(geometry.documentY, 0, 'visible tool windows must not scroll the document');
+    assert.ok(geometry.top >= geometry.barBottom + 19, 'tool windows must clear the system bar');
+    assert.ok(geometry.bottom <= geometry.dockTop - 19, `tool windows must clear the dock: ${JSON.stringify(geometry)}`);
+    if (!geometry.wholeFrameScroll) assert.ok(geometry.headerTop >= geometry.top, 'the tool header must remain inside its frame');
+  };
   const report = [];
 
   try {
@@ -163,6 +184,11 @@ module.exports = async function inspectWindowFlows(page, { capture, getPreferenc
       const originalName = await name.inputValue();
       const draft = `unsaved-${mode}-window-draft`;
       await name.fill(draft);
+      const retainedScroll = await frame().evaluate((element) => {
+        const scroller = element.dataset.windowScrollsFrame === 'true' ? element : element.querySelector('.desktop-window-content');
+        scroller.scrollTop = Math.min(160, scroller.scrollHeight - scroller.clientHeight);
+        return { mode: element.dataset.windowScrollsFrame, top: scroller.scrollTop };
+      });
       const initialRoute = identity(page.url());
       const historyBefore = await page.evaluate(() => history.length);
       await minimize('Settings');
@@ -176,6 +202,14 @@ module.exports = async function inspectWindowFlows(page, { capture, getPreferenc
       assert.equal(await activeStreams('app'), 1, 'global lifecycle events must stay connected while minimized');
       await snapshot(`${mode}-window-minimized`);
       await restore('Settings');
+      assert.deepEqual(
+        await frame().evaluate((element) => {
+          const scroller = element.dataset.windowScrollsFrame === 'true' ? element : element.querySelector('.desktop-window-content');
+          return { mode: element.dataset.windowScrollsFrame, top: scroller.scrollTop };
+        }),
+        retainedScroll,
+        'minimize/restore must preserve the scroll container and reading position',
+      );
       assert.equal(await name.inputValue(), draft, 'minimize/restore must preserve an unsaved form draft');
       assert.deepEqual(identity(page.url()), initialRoute);
       assert.equal(await page.evaluate(() => history.length), historyBefore + 2);

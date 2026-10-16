@@ -807,6 +807,7 @@ async function main() {
     if (windowsOnly) {
       const windows = await inspectWindowFlows(page, {
         getPreferences: () => preferences,
+        checkPolling: viewport.width >= 900 && viewport.height >= 540,
         capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
       });
       reports.push({ viewport: viewport.name, windows, errors });
@@ -1050,7 +1051,11 @@ async function main() {
           const second = first.parentElement?.querySelectorAll('.app-link')[1];
           return second !== undefined && Math.abs(first.getBoundingClientRect().left - second.getBoundingClientRect().left) <= 1;
         }));
-    await page.evaluate(() => window.scrollTo(0, document.scrollingElement?.scrollHeight ?? 0));
+    await page.evaluate(() => {
+      const frame = document.querySelector('.desktop-route-window');
+      const scroller = frame.dataset.windowScrollsFrame === 'true' ? frame : frame.querySelector('.desktop-window-content');
+      scroller.scrollTop = scroller.scrollHeight;
+    });
     await page.waitForTimeout(100);
     const appsDock = await page.evaluate(() => {
       const lastTile = document.querySelector('.desktop-installed-grid .button-tile:last-child');

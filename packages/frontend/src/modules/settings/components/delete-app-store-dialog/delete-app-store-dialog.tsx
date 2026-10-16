@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { AppStoreError } from '../app-stores-table/app-store-error';
 import { revealTableAction } from '@/components/multi-service-form/elements/reveal-table-action';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
+import { useRef } from 'react';
 
 type Props = {
   appStore: AppStore;
@@ -19,10 +20,13 @@ type Props = {
 export const DeleteAppStoreDialog = ({ appStore }: Props) => {
   const { t } = useTranslation();
   const deleteAppStoreDisclosure = useDisclosure();
+  const focusFallback = useRef<HTMLElement | null>(null);
+  const deleted = useRef(false);
 
   const deleteAppStore = useMutation({
     ...deleteAppStoreMutation(),
     onSuccess: () => {
+      deleted.current = true;
       toast.success(t('APP_STORE_DELETE_SUCCESS'));
       deleteAppStoreDisclosure.close();
     },
@@ -36,7 +40,9 @@ export const DeleteAppStoreDialog = ({ appStore }: Props) => {
         variant="ghost"
         disabled={deleteAppStore.isPending}
         onFocus={revealTableAction}
-        onClick={() => {
+        onClick={(event) => {
+          focusFallback.current = event.currentTarget.closest<HTMLElement>('[data-dialog-focus-fallback]');
+          deleted.current = false;
           if (deleteAppStore.isError) deleteAppStore.reset();
           deleteAppStoreDisclosure.open();
         }}
@@ -50,7 +56,17 @@ export const DeleteAppStoreDialog = ({ appStore }: Props) => {
           deleteAppStoreDisclosure.toggle(open);
         }}
       >
-        <DialogContent type="danger" size="sm" className="app-store-dialog">
+        <DialogContent
+          type="danger"
+          size="sm"
+          className="app-store-dialog"
+          onCloseAutoFocus={(event) => {
+            if (deleted.current && focusFallback.current?.isConnected) {
+              event.preventDefault();
+              focusFallback.current.focus();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{t('APP_STORE_DELETE_DIALOG_TITLE')}</DialogTitle>
           </DialogHeader>
