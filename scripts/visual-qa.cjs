@@ -8,6 +8,8 @@ const inspectCompoundHomeComfort = require('./compound-home-comfort-checks.cjs')
 const inspectSearchComfort = require('./search-comfort-checks.cjs');
 const inspectSelectComfort = require('./select-comfort-checks.cjs');
 const inspectNestedFormComfort = require('./nested-form-comfort-checks.cjs');
+const inspectAppStoreSettings = require('./app-store-settings-checks.cjs');
+const inspectSwitchComfort = require('./switch-comfort-checks.cjs');
 const inspectCommandSearch = require('./command-search-checks.cjs');
 const inspectHomeApps = require('./home-app-checks.cjs');
 const inspectWindowFlows = require('./window-flow-checks.cjs');
@@ -23,6 +25,9 @@ const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
 const searchComfortOnly = process.env.ORBIS_VISUAL_SEARCH_COMFORT_ONLY === '1';
 const selectComfortOnly = process.env.ORBIS_VISUAL_SELECT_COMFORT_ONLY === '1';
 const nestedFormComfortOnly = process.env.ORBIS_VISUAL_NESTED_FORM_COMFORT_ONLY === '1';
+const storeSurfacesOnly = process.env.ORBIS_VISUAL_STORE_SURFACES_ONLY === '1';
+const storesOnly = process.env.ORBIS_VISUAL_STORES_ONLY === '1' || storeSurfacesOnly;
+const switchComfortOnly = process.env.ORBIS_VISUAL_SWITCH_COMFORT_ONLY === '1';
 const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
 const updatesOnly = process.env.ORBIS_VISUAL_UPDATES_ONLY === '1';
 const updateComfortOnly = process.env.ORBIS_VISUAL_UPDATE_COMFORT_ONLY === '1';
@@ -41,7 +46,10 @@ const screenshotDir = process.env.ORBIS_VISUAL_SCREENSHOT_DIR || path.join(__dir
 const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
 const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1' || textOnly || comfortOnly;
 const zoom = Number(process.env.ORBIS_VISUAL_ZOOM || 1);
-if ((textOnly || compoundHomeOnly || searchComfortOnly || selectComfortOnly || nestedFormComfortOnly) && zoom !== 1)
+if (
+  (textOnly || compoundHomeOnly || searchComfortOnly || selectComfortOnly || nestedFormComfortOnly || storesOnly || switchComfortOnly) &&
+  zoom !== 1
+)
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
 if (!Number.isInteger(zoom) || zoom < 1 || zoom > 3) throw new Error('ORBIS_VISUAL_ZOOM must be 1, 2, or 3');
 const narrowWidth = Number(process.env.ORBIS_VISUAL_WIDTH || 320);
@@ -649,6 +657,29 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (storesOnly) {
+      const stores = await inspectAppStoreSettings({
+        page,
+        base,
+        textScales: process.env.ORBIS_VISUAL_TEXT_SCALE ? [textScale] : [1, 2],
+        surfacesOnly: storeSurfacesOnly,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, stores, errors });
+      await page.close();
+      continue;
+    }
+    if (switchComfortOnly) {
+      const switchComfort = await inspectSwitchComfort({
+        page,
+        base,
+        textScales: process.env.ORBIS_VISUAL_TEXT_SCALE ? [textScale] : [1, 2],
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, switchComfort, errors });
+      await page.close();
+      continue;
+    }
     if (searchComfortOnly || selectComfortOnly || nestedFormComfortOnly) {
       const inspect = searchComfortOnly ? inspectSearchComfort : selectComfortOnly ? inspectSelectComfort : inspectNestedFormComfort;
       const result = await inspect({
@@ -1212,6 +1243,8 @@ async function main() {
     searchComfortOnly ||
     selectComfortOnly ||
     nestedFormComfortOnly ||
+    storesOnly ||
+    switchComfortOnly ||
     windowsOnly ||
     updatesOnly ||
     updateComfortOnly ||

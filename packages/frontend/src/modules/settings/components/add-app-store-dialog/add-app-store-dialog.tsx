@@ -11,13 +11,14 @@ import { useId } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { AppStoreError } from '../app-stores-table/app-store-error';
 
 export const AddAppStoreDialog = () => {
   const { t } = useTranslation();
   const addAppStoreDisclosure = useDisclosure();
 
   const schema = type({
-    name: 'string <= 16',
+    name: type('string').atLeastLength(1).atMostLength(16),
     url: 'string.url',
   });
 
@@ -29,9 +30,6 @@ export const AddAppStoreDialog = () => {
 
   const createAppStore = useMutation({
     ...createAppStoreMutation(),
-    onError: (e: TranslatableError) => {
-      toast.error(t(e.message, e.intlParams));
-    },
     onSuccess: () => {
       toast.success(t('APP_STORE_ADD_SUCCESS'));
       addAppStoreDisclosure.close();
@@ -47,11 +45,24 @@ export const AddAppStoreDialog = () => {
 
   return (
     <div className="mt-3 align-self-end">
-      <Button onClick={() => addAppStoreDisclosure.open()} intent="primary">
+      <Button
+        onClick={() => {
+          if (createAppStore.isError) createAppStore.reset();
+          addAppStoreDisclosure.open();
+        }}
+        intent="primary"
+        disabled={createAppStore.isPending}
+      >
         {t('APP_STORE_ADD_BUTTON')}
       </Button>
-      <Dialog open={addAppStoreDisclosure.isOpen} onOpenChange={addAppStoreDisclosure.toggle}>
-        <DialogContent>
+      <Dialog
+        open={addAppStoreDisclosure.isOpen}
+        onOpenChange={(open) => {
+          if (open && createAppStore.isError) createAppStore.reset();
+          addAppStoreDisclosure.toggle(open);
+        }}
+      >
+        <DialogContent className="app-store-dialog">
           <DialogHeader>
             <DialogTitle>{t('APP_STORE_ADD_DIALOG_TITLE')}</DialogTitle>
           </DialogHeader>
@@ -63,7 +74,11 @@ export const AddAppStoreDialog = () => {
                 disabled={createAppStore.isPending}
                 type="text"
                 placeholder="my-awesome-repo"
-                {...register('name')}
+                {...register('name', {
+                  onChange: () => {
+                    if (createAppStore.isError) createAppStore.reset();
+                  },
+                })}
               />
               <Input
                 label={t('APP_STORE_ADD_FORM_URL')}
@@ -72,9 +87,14 @@ export const AddAppStoreDialog = () => {
                 disabled={createAppStore.isPending}
                 type="text"
                 placeholder="https://github.com/myusername/my-awesome-repo"
-                {...register('url')}
+                {...register('url', {
+                  onChange: () => {
+                    if (createAppStore.isError) createAppStore.reset();
+                  },
+                })}
               />
             </form>
+            <AppStoreError error={createAppStore.error as TranslatableError | null} />
           </DialogDescription>
           <DialogFooter>
             <Button loading={createAppStore.isPending} type="submit" intent="success" form={formId}>

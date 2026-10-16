@@ -13,6 +13,8 @@ import { useId } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { AppStoreError } from '../app-stores-table/app-store-error';
+import { revealTableAction } from '@/components/multi-service-form/elements/reveal-table-action';
 
 type Props = {
   appStore: AppStore;
@@ -31,9 +33,6 @@ export const EditAppStoreDialog = ({ appStore }: Props) => {
 
   const editAppStore = useMutation({
     ...updateAppStoreMutation(),
-    onError: (e: TranslatableError) => {
-      toast.error(t(e.message, e.intlParams));
-    },
     onSuccess: () => {
       editAppStoreDisclosure.close();
       toast.success(t('APP_STORE_EDIT_DIALOG_SUCCESS'));
@@ -42,22 +41,37 @@ export const EditAppStoreDialog = ({ appStore }: Props) => {
 
   const { register, control, handleSubmit, formState } = useForm<FormValues>({
     resolver: arktypeResolver(schema),
-    values: appStore,
+    values: { name: appStore.name, enabled: appStore.enabled },
   });
 
   const validate = (values: FormValues) => {
-    editAppStore.mutate({ path: { id: appStore.slug }, body: values });
+    editAppStore.mutate({ path: { id: appStore.slug }, body: { name: values.name, enabled: values.enabled } });
   };
 
   const formId = useId();
 
   return (
     <div>
-      <Button loading={editAppStore.isPending} size="sm" variant="ghost" onClick={() => editAppStoreDisclosure.open()} className="me-2">
+      <Button
+        loading={editAppStore.isPending}
+        size="sm"
+        variant="ghost"
+        onFocus={revealTableAction}
+        onClick={() => {
+          if (editAppStore.isError) editAppStore.reset();
+          editAppStoreDisclosure.open();
+        }}
+      >
         {t('APP_STORE_TABLE_EDIT')}
       </Button>
-      <Dialog open={editAppStoreDisclosure.isOpen} onOpenChange={editAppStoreDisclosure.toggle}>
-        <DialogContent size="sm">
+      <Dialog
+        open={editAppStoreDisclosure.isOpen}
+        onOpenChange={(open) => {
+          if (open && editAppStore.isError) editAppStore.reset();
+          editAppStoreDisclosure.toggle(open);
+        }}
+      >
+        <DialogContent size="sm" className="app-store-dialog">
           <DialogHeader>
             <DialogTitle>{t('APP_STORE_EDIT_DIALOG_TITLE')}</DialogTitle>
           </DialogHeader>
@@ -70,7 +84,11 @@ export const EditAppStoreDialog = ({ appStore }: Props) => {
                 disabled={editAppStore.isPending}
                 type="text"
                 placeholder={appStore.name}
-                {...register('name')}
+                {...register('name', {
+                  onChange: () => {
+                    if (editAppStore.isError) editAppStore.reset();
+                  },
+                })}
               />
               <Controller
                 control={control}
@@ -79,15 +97,20 @@ export const EditAppStoreDialog = ({ appStore }: Props) => {
                 render={({ field: { onChange, value, ref, ...rest } }) => (
                   <Switch
                     className="mb-3"
+                    disabled={editAppStore.isPending}
                     ref={ref}
                     checked={Boolean(value)}
-                    onCheckedChange={onChange}
+                    onCheckedChange={(checked) => {
+                      if (editAppStore.isError) editAppStore.reset();
+                      onChange(checked);
+                    }}
                     {...rest}
                     label={t('APP_STORE_EDIT_DIALOG_ENABLED')}
                   />
                 )}
               />
             </form>
+            <AppStoreError error={editAppStore.error as TranslatableError | null} />
           </DialogDescription>
           <DialogFooter>
             <Button loading={editAppStore.isPending} type="submit" intent="success" form={formId}>

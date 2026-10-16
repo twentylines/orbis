@@ -1,46 +1,50 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import type { AppStore } from '@/types/app.types';
 import { AddAppStoreDialog } from '../add-app-store-dialog/add-app-store-dialog';
 import { DeleteAppStoreDialog } from '../delete-app-store-dialog/delete-app-store-dialog';
 import { EditAppStoreDialog } from '../edit-app-store-dialog/edit-app-store-dialog';
+import './app-stores.css';
 
 type Props = {
   appStores: AppStore[];
 };
 
 const EnabledBadge = ({ enabled }: { enabled: boolean }) => (
-  <div className="d-flex align-items-center">
-    <span className={`badge bg-${enabled ? 'success' : 'danger'} me-2`} />
+  <div className="app-store-state">
+    <span className="app-store-state-dot" data-enabled={enabled} aria-hidden="true" />
     <span>{enabled ? 'Enabled' : 'Disabled'}</span>
   </div>
 );
 
 export const AppStoresTable = ({ appStores }: Props) => {
   return (
-    <div className="d-flex flex-column">
-      <Table>
+    <div className="app-stores d-flex flex-column" data-dialog-focus-fallback="" tabIndex={-1}>
+      <Table className="app-stores-table">
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>URL</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead className="app-store-name">Name</TableHead>
+            <TableHead className="app-store-status">Status</TableHead>
+            <TableHead className="app-store-repository">URL</TableHead>
+            <TableHead className="app-store-actions-cell">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {appStores.map((appStore) => (
             <TableRow key={appStore.slug}>
-              <TableCell>{appStore.name}</TableCell>
-              <TableCell>
+              <TableCell className="app-store-name" title={appStore.name}>
+                <WrapWords text={appStore.name} />
+              </TableCell>
+              <TableCell className="app-store-status">
                 <EnabledBadge enabled={appStore.enabled} />
               </TableCell>
-              <TableCell>
-                <a href={appStore.url} target="_blank" rel="noreferrer noopener nofollow">
+              <TableCell className="app-store-repository">
+                <a className="app-store-url" title={appStore.url} href={appStore.url} target="_blank" rel="noreferrer noopener nofollow">
                   {appStore.url}
                 </a>
               </TableCell>
-              <TableCell>
-                <div className="d-flex flex-row">
+              <TableCell className="app-store-actions-cell">
+                <div className="app-store-actions">
                   <EditAppStoreDialog appStore={appStore} />
                   <DeleteAppStoreDialog appStore={appStore} />
                 </div>

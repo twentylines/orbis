@@ -1,5 +1,15 @@
 # Orbis UI inspection
 
+## 2026-10-16: app-store recovery dialogs and shared switches
+
+The app-store audit reproduced an enlarged-phone error notification covering the Create retry button and a keyboard-focused Delete action clipped at the table edge. Errors now stay inside add/edit/delete dialogs, with retained inputs and available retry actions. Tables bound repository identifiers, preserve their full accessible links, and reveal focused actions. The redundant section subtitle is removed; all three inline errors use consistent left alignment.
+
+The complete fixture flow matrix passes 16 width/theme/text groups at 1440/768/390/320px, light/dark, native/doubled text: 240 rendered states, 64 focused table actions and 112 intercepted store mutations. The final surface matrix passes another 64 table/error states and 64 focused actions. Both have no browser errors, unexpected writes, fractured ordinary words or padding findings. At 320px with doubled text, long content scrolls within the dialog while the footer remains fixed; end-of-content checks confirm 39px bottom room. A separate eight-case focus check confirms the Add button clears the dock after native scrolling settles.
+
+Independent screenshot review found the shared switch track 10px above its enlarged label. Negative controls reproduced that offset and the missing label/control association. The shared component now uses centered layout and stable associated IDs. Label text toggles the switch; tooltip hints retain their own behavior. The final focused matrix passes 16 groups, 80 enabled controls, 320 label/track/Space/Enter toggles, 64 help checks and 16 disabled-control checks. All 320 sampled geometries have 0px center difference, 10px separation and unchanged 32×20px tracks. IDs remain stable and ordinary words stay whole. There are no browser errors or app/host/auth writes; automatic appearance writes are blocked in these static fixtures.
+
+[Selected app-store captures](screenshots/app-stores) show the final rendering. These are compiled-source Chrome fixture checks. Released-image and actual filesystem recovery evidence is recorded separately in `DEPLOYMENT.md`.
+
 ## 2026-10-16: whole words, nested forms and connection states
 
 Further inspection found defects that the earlier route checks missed: fractured server and search names, crowded log controls, clipped security placeholders, overflowing installer suffixes, a fixed Compose sidebar and a partially clipped keyboard-focused Remove button. The fixes give text room through wrapping, stacked layouts and bounded scrolling. Security fields now keep visible labels. Long identifiers retain their complete accessible name and hover text when deliberate ellipsis is needed.
