@@ -71,7 +71,8 @@ const DialogContent = ({
         }}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
-          const target = opener.current?.isConnected ? opener.current : focusFallback.current;
+          const target =
+            opener.current?.isConnected && !opener.current.matches(':disabled,[aria-disabled="true"]') ? opener.current : focusFallback.current;
           if (!event.defaultPrevented && target?.isConnected) {
             event.preventDefault();
             target.focus();

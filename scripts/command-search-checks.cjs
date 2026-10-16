@@ -3,14 +3,30 @@ const assert = require('node:assert/strict');
 module.exports = async function inspectCommandSearch(page, capture) {
   const dialog = page.getByRole('dialog', { name: 'Search Orbis' });
   const trigger = page.getByRole('button', { name: 'Search apps and settings' });
+  const pauseNextMotion = () =>
+    page.evaluate(() => {
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (...args) {
+        const animation = animate.apply(this, args);
+        if (this.matches('.desktop-search-surface')) {
+          Element.prototype.animate = animate;
+          animation.pause();
+        }
+        return animation;
+      };
+    });
+  await pauseNextMotion();
   await page.keyboard.press('Control+k');
   await dialog.waitFor();
-  await page.waitForFunction(() =>
-    document
+  await page.waitForFunction(() => {
+    const animation = document
       .querySelector('.desktop-search-surface')
       ?.getAnimations()
-      .some((animation) => animation.effect.getKeyframes().some((frame) => frame.transform?.includes('scale'))),
-  );
+      .find((item) => item.effect.getKeyframes().some((frame) => frame.transform?.includes('scale')));
+    if (!animation) return false;
+    animation.pause();
+    return true;
+  });
   const opening = await dialog.evaluate((surface) => {
     const animation = surface.getAnimations().find((item) => item.effect.getKeyframes().some((frame) => frame.transform?.includes('scale')));
     animation.pause();
@@ -44,8 +60,16 @@ module.exports = async function inspectCommandSearch(page, capture) {
     await page.keyboard.press('Tab');
     assert.ok(await dialog.evaluate((surface) => surface.contains(document.activeElement)), 'search must contain keyboard focus');
   }
+  await pauseNextMotion();
   await dialog.getByRole('button', { name: 'Close search' }).click();
-  await page.waitForFunction(() => document.querySelector('.desktop-search-surface')?.dataset.closing === 'true');
+  await page.waitForFunction(() => {
+    const surface = document.querySelector('.desktop-search-surface');
+    if (surface?.dataset.closing !== 'true') return false;
+    const animation = surface.getAnimations().find((item) => item.effect.getKeyframes().some((frame) => frame.transform?.includes('scale')));
+    if (!animation) return false;
+    animation.pause();
+    return true;
+  });
   const closing = await dialog.evaluate((surface) => {
     const animation = surface.getAnimations().find((item) => item.effect.getKeyframes().some((frame) => frame.transform?.includes('scale')));
     animation.pause();

@@ -4,6 +4,7 @@ import type { AppStore } from '@/types/app.types';
 import { AddAppStoreDialog } from '../add-app-store-dialog/add-app-store-dialog';
 import { DeleteAppStoreDialog } from '../delete-app-store-dialog/delete-app-store-dialog';
 import { EditAppStoreDialog } from '../edit-app-store-dialog/edit-app-store-dialog';
+import { useLayoutEffect, useRef } from 'react';
 import './app-stores.css';
 
 type Props = {
@@ -18,8 +19,15 @@ const EnabledBadge = ({ enabled }: { enabled: boolean }) => (
 );
 
 export const AppStoresTable = ({ appStores }: Props) => {
+  const table = useRef<HTMLDivElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: List changes can move a focused control after dialog restoration.
+  useLayoutEffect(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== table.current && table.current?.contains(active))
+      active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+  }, [appStores]);
   return (
-    <div className="app-stores d-flex flex-column" data-dialog-focus-fallback="" tabIndex={-1}>
+    <div ref={table} className="app-stores d-flex flex-column" data-dialog-focus-fallback="" tabIndex={-1}>
       <Table className="app-stores-table">
         <TableHeader>
           <TableRow>

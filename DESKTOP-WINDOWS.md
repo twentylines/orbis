@@ -4,7 +4,7 @@ Orbis uses one current first-party route window. Normal browser URLs, authentica
 
 ## Controls
 
-- **Full page** is the default, with normal document scrolling.
+- **Full page** is the default and fills the space between the system bar and dock. Content scrolls inside the window while the title bar stays visible. If the screen is too short for the title bar and useful content space, the whole window scrolls inside those same bounds.
 - **Floating window** provides a movable title bar, a bottom-right resize control and contained content scrolling.
 - **Maximize** fits the available workspace between the system bar and dock. Restore returns to the previous placement.
 - **Snap left/right** divides that workspace into equal halves with a 16px gap. It requires room for two 520px windows.

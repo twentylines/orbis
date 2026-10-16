@@ -1,7 +1,22 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: Window geometry overrides the shared route surface. */
 .desktop .desktop-route-window {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 8;
   padding: 0;
   animation: none;
+}
+.desktop:has(.desktop-route-window:not([hidden])) {
+  height: 100dvh;
+  min-height: 0;
+  overflow: clip;
+}
+.desktop .desktop-main:has(> .desktop-route-window:not([hidden])) {
+  min-height: 0;
+  height: 0;
+  padding: 0;
 }
 .desktop-route-window[hidden] {
   display: none;
@@ -15,11 +30,29 @@
 }
 .desktop .desktop-window-bar:focus-visible {
   outline: 3px solid var(--desktop-focus);
-  outline-offset: 3px;
+  outline-offset: -4px;
 }
 .desktop-window-content {
+  flex: 1;
+  min-height: 0;
   min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-padding: 12px;
+  border-radius: 0 0 25px 25px;
+  container-type: inline-size;
   padding: 27px 30px 30px;
+}
+.desktop-route-window[data-window-scrolls-frame="true"] {
+  overflow: auto;
+  scrollbar-gutter: stable;
+  scroll-padding: 12px;
+}
+.desktop-route-window[data-window-scrolls-frame="true"] .desktop-window-content {
+  flex: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
 }
 .desktop-window-content > .card {
   background: transparent;
@@ -70,10 +103,6 @@
   display: block;
 }
 .desktop-route-window[data-window-positioned="true"] {
-  position: fixed;
-  display: flex;
-  flex-direction: column;
-  z-index: 8;
   animation: none;
   border-radius: 22px;
   box-shadow:
@@ -90,13 +119,7 @@
   touch-action: none;
 }
 .desktop-route-window[data-window-positioned="true"] .desktop-window-content {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
   border-radius: 0 0 21px 21px;
-  container-type: inline-size;
 }
 .desktop-window-resize {
   position: absolute;
@@ -172,13 +195,6 @@
 }
 .desktop[data-desktop-density="compact"] .desktop-window-content {
   padding: 24px 18px 18px;
-}
-@media (min-width: 900px) and (min-height: 540px) {
-  .desktop .desktop-main:has(> .desktop-route-window[data-window-positioned="true"]:not([hidden])) {
-    min-height: 0;
-    height: calc(100dvh - 88px);
-    padding: 0;
-  }
 }
 @media (max-width: 760px) {
   .desktop-route-window .desktop-window-bar {

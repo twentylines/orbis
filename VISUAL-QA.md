@@ -1,5 +1,17 @@
 # Orbis UI inspection
 
+## 2026-10-16: focused tool scrolling and dialog restoration
+
+Direct beta32 screenshot inspection exposed a missed layout defect. The focused Settings tool used document scrolling, allowing its title bar to move behind the sticky system bar. At 390×844, ordinary wheel scrolling, native Tab to Add and closing the Add dialog independently moved the page 66px: the title bar moved from 129px to 63px while the system bar remained at 20–98px. Earlier passing layout checks did not establish this scrolled state was correct.
+
+Focused tools now use the measured space between the system bar and dock, with contained content scrolling. Very short screens scroll the whole tool within that same clipped viewport. Hidden-window measurements do not change the retained scroll mode. Keyboard focus can reveal controls without moving the page. Settings retains its centered 1720px maximum on 4K screens; Home and minimized tools keep their document layout.
+
+Expanded retained checks also exposed delayed-refresh focus races. Successful deletion now restores to the persistent store panel before its button is removed. Closing a pending dialog uses that panel while the opener is disabled. A changed list reveals its currently focused descendant if new rows have moved the control below the visible area. Add/edit/delete fixtures delay their successful refetch 250ms and inspect focus after the rendered row update; pending close checks hold each request, close its dialog and reject it without changing the displayed records.
+
+Independent geometry checks cover 16 phone/short size, mode, text and tool combinations: 112 measured states and 40 captures. Page scroll remains 0; system-bar clearance is 20px and dock clearance 19.84–20px. Another bounded audit confirms centered4K Settings at native/doubled text in both modes, floating/maximize/restore, a 16px snap gap and refreshed phone captures. These are static Chrome fixtures; beta32 still contains the original scrolled-header defect, and a new released-image check remains required.
+
+The retained store matrix passes 16 width/theme/text groups: 240 rendered states, 384 window/focus checks and 160 intercepted mutations, including 96 pending-close/failure checks. It reports no browser errors, unexpected writes, fractured ordinary words or padding findings. The native route matrix and eight window-flow groups pass at1440/768/390/320px; minimized restoration retains the scroller and reading position. The doubled-text route matrix also passes those widths. Bundle, frontend types, scoped Biome and seven geometry/navigation unit tests pass. The gallery refresh includes108 route captures, seven store captures and the [focused tool examples](screenshots/focused-tools).
+
 ## 2026-10-16: app-store recovery dialogs and shared switches
 
 The app-store audit reproduced an enlarged-phone error notification covering the Create retry button and a keyboard-focused Delete action clipped at the table edge. Errors now stay inside add/edit/delete dialogs, with retained inputs and available retry actions. Tables bound repository identifiers, preserve their full accessible links, and reveal focused actions. The redundant section subtitle is removed; all three inline errors use consistent left alignment.

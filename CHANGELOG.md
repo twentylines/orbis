@@ -2,6 +2,8 @@
 
 ## Unreleased development preview
 
+- Keep full-page tools between the system bar and dock, with content scrolling inside the window. Short screens can scroll the whole tool within those same bounds. Preserve the reading position through minimize/restore.
+- Restore store-dialog focus to a surviving panel after deletion or when a pending operation has disabled its opener. Keep the focused control visible when refreshed rows move it. Retained checks cover native wheel/Tab, delayed list refresh and closing pending add/edit/delete requests.
 - Bound app-store Git transfers with a 30-second network idle limit and a ten-minute clone/fetch deadline. Cancellation aborts the transfer, waits for Git to settle and keeps repository locks through staging cleanup; failed refreshes retain the working checkout.
 - Verified published beta31 store failure and retry against real APIs and controlled Git/filesystem faults. Updated phone captures record retained inline errors and exact configuration/data preservation after native Compose restoration.
 - Reflowed long Home headings, search results, Select menus, log controls, security fields and nested installer/Compose forms. Ordinary labels wrap between words; identifiers keep full accessible names. Compose table actions retain a complete keyboard focus marker inside their scroll area.

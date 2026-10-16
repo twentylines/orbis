@@ -10,3 +10,4 @@
 - Check Connecting, Reconnecting and missing/empty server IP states with enlarged text. Status messages must remain complete; connected address identifiers may use accessible ellipsis.
 - Keyboard focus inside a scrolling table must reveal the entire control and its focus marker without moving the page vertically. Inspect resting tab labels as well as the active tab.
 - Inspect switch track and label centre lines at native and enlarged text sizes. Clicking the label must toggle its associated switch; help buttons retain their own action.
+- Check tool geometry after ordinary wheel scrolling, native Tab, dialog close and list refresh without resetting scroll for screenshots. Visible tools stay between the system bar and dock; minimized tools preserve their scroll container and reading position. Pending close and removed-openers must restore focus to a surviving target; list growth must keep the focused control visible.
