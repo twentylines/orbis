@@ -1,0 +1,101 @@
+{
+  "release": {
+    "tag": "v0.1.0-beta.32",
+    "commit": "350e219d0c0b95786c7246342936f4bc0a07ed1f",
+    "image": "ghcr.io/twentylines/orbis@sha256:84aa790cfc0b2b017d8ee0c1d560c273b81e298ae3be5c995e924c63aed75d64"
+  },
+  "source": "Published beta32 real complete clone and selective-enable network timeout/retry; root pauses/resumes only the owned Git fixture. Browser appearance writes are fulfilled locally.",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "mode": "dark",
+    "textScale": "native"
+  },
+  "cases": [
+    {
+      "case": "healthy complete selective clone",
+      "status": 201,
+      "source": "real UI/API and Git fsck",
+      "catalogueCount": 1,
+      "head": "ce01d8a84ca291a35b3e236c4e8b6a75a0f51b5e"
+    },
+    {
+      "case": "healthy app-free clone removal",
+      "status": 200,
+      "source": "real UI/API"
+    },
+    {
+      "case": "pending selective enable",
+      "source": "real UI/API",
+      "screenshot": "selective-enable-pending-390",
+      "controlsDisabled": true
+    },
+    {
+      "case": "real paused Git selective enable timeout",
+      "status": 502,
+      "errorKey": "APP_STORE_REFRESH_ERROR",
+      "source": "real API"
+    },
+    {
+      "case": "network idle bound",
+      "elapsedMs": 30047.6965,
+      "acceptedRangeMs": [25000, 60000],
+      "source": "real API with root-paused Git"
+    },
+    {
+      "case": "same-dialog enable retry after real network timeout",
+      "status": 200,
+      "source": "real UI/API",
+      "internalPullCount": "not measured"
+    }
+  ],
+  "uiAssertions": [
+    {
+      "phase": "selective-enable-timeout",
+      "screenshot": "selective-enable-timeout-390",
+      "inlineAlert": true,
+      "dialogRetained": true,
+      "retryEnabled": true,
+      "noSuccessNotice": true,
+      "fits": true,
+      "themed": true,
+      "ordinaryLabelsWhole": true
+    }
+  ],
+  "pageErrors": [],
+  "cleanupFailures": [],
+  "baselineMatched": {
+    "stores": true,
+    "installed": true,
+    "apps": true,
+    "catalogues": true,
+    "heads": true,
+    "containers": true,
+    "files": true,
+    "preferences": true,
+    "tasks": true
+  },
+  "protectedEntries": 2215,
+  "apps": 2,
+  "terminalTasks": 28,
+  "nativeComposeRestored": true,
+  "temporaryStoreRemoved": true,
+  "temporaryCloneStagingRemoved": true,
+  "temporaryRepositoryMounts": 0,
+  "gitFixtureRunning": true,
+  "gitFixturePaused": false,
+  "defaultDockerContext": "default",
+  "ota": {
+    "from": "v0.1.0-beta.31",
+    "version": "v0.1.0-beta.32",
+    "commit": "350e219d0c0b95786c7246342936f4bc0a07ed1f",
+    "digest": "sha256:84aa790cfc0b2b017d8ee0c1d560c273b81e298ae3be5c995e924c63aed75d64",
+    "jobId": "dd1a3192-e9f0-4f59-93c5-5b6ae2498a8f",
+    "preferencesRetained": true,
+    "appRecordsRetained": 2,
+    "taskOutcomesRetained": 28,
+    "healthy": true,
+    "pageErrors": []
+  },
+  "scope": "Owned isolated arm64 synthetic installation; Hades untouched; additional store hosts, copied-data and complete production acceptance remain open"
+}
