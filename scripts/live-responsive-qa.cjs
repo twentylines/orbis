@@ -396,6 +396,33 @@ async function main() {
         await page.goto(`${origin.origin}/settings?tab=${kind === 'stores' ? 'appstores' : 'appearance'}`, { waitUntil: 'domcontentloaded' });
         await page.locator(`.desktop[data-desktop-mode="${mode}"]`).waitFor();
         await page.locator('.desktop-settings').waitFor();
+        if (kind === 'stores') {
+          await page.getByRole('heading', { name: 'App Stores', exact: true }).waitFor();
+          await page.getByRole('button', { name: 'Add app store', exact: true }).waitFor();
+          await page.locator('.app-stores .table-responsive').waitFor();
+          await page.waitForFunction(
+            (expectedRows) => {
+              const settings = document.querySelector('.desktop-settings');
+              const body = settings?.querySelector('.card-body');
+              const table = body?.querySelector('.app-stores-table');
+              const heading = body?.querySelector('h2');
+              const add = [...(body?.querySelectorAll('button') ?? [])].find((button) => button.textContent.trim() === 'Add app store');
+              return (
+                table?.querySelectorAll('tbody tr').length === expectedRows &&
+                heading?.textContent.trim() === 'App Stores' &&
+                heading.getBoundingClientRect().width > 0 &&
+                table.getBoundingClientRect().width > 0 &&
+                add?.getBoundingClientRect().width > 0
+              );
+            },
+            before.stores.appStores.length,
+            { timeout: 15000 },
+          );
+        } else {
+          await page.getByRole('textbox', { name: 'Server name', exact: true }).waitFor();
+          await page.locator('.appearance-note').waitFor();
+          await page.locator('.appearance-section').first().waitFor();
+        }
         await page.evaluate(() => document.fonts.ready);
         await settle(page);
         await scaleText(page, textScale);

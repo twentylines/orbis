@@ -2,6 +2,7 @@
 
 ## Unreleased development preview
 
+- Serialize preference saves and coalesce superseded queued values instead of aborting mutations in flight. Skip redundant saves after account load and retain explicit failure/recovery feedback.
 - Package required runtime dependencies from the frozen Bun install, preserving resolved transitive versions. Verify native hashing and transformation under the production Node runtime during every image build.
 - Align Settings title icons, tabs, dividers and forms to one gutter. Remove inherited negative tab margins and keep the divider below all tab rows. Preserve whole Appearance labels with enlarged text and reveal page controls clear of the sticky bar and dock.
 - Reserve window navigation for large screens. Phones, tablets and short viewports use full-page sections, compact headings and normal document scrolling. Resizing preserves form drafts and saved desktop placement; small screens open minimized desktop links as visible pages.

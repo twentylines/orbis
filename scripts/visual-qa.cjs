@@ -15,6 +15,7 @@ const inspectHomeApps = require('./home-app-checks.cjs');
 const inspectWindowFlows = require('./window-flow-checks.cjs');
 const inspectPageNavigation = require('./page-navigation-checks.cjs');
 const inspectCurrentSettingsAlignment = require('./settings-alignment-checks.cjs');
+const inspectPreferenceSaves = require('./preference-save-checks.cjs');
 const inspectAppUpdate = require('./app-update-checks.cjs');
 const inspectAppUpdateComfort = require('./app-update-comfort-checks.cjs');
 const inspectConnectionStatus = require('./connection-status-checks.cjs');
@@ -32,6 +33,7 @@ const storesOnly = process.env.ORBIS_VISUAL_STORES_ONLY === '1' || storeSurfaces
 const switchComfortOnly = process.env.ORBIS_VISUAL_SWITCH_COMFORT_ONLY === '1';
 const windowsOnly = process.env.ORBIS_VISUAL_WINDOWS_ONLY === '1';
 const pagesOnly = process.env.ORBIS_VISUAL_PAGES_ONLY === '1';
+const preferenceSavesOnly = process.env.ORBIS_VISUAL_PREFERENCE_SAVES_ONLY === '1';
 const updatesOnly = process.env.ORBIS_VISUAL_UPDATES_ONLY === '1';
 const updateComfortOnly = process.env.ORBIS_VISUAL_UPDATE_COMFORT_ONLY === '1';
 const appDetailsOnly = process.env.ORBIS_VISUAL_APP_DETAILS_ONLY === '1';
@@ -672,6 +674,12 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (preferenceSavesOnly) {
+      const preferenceSaves = await inspectPreferenceSaves({ page, base, initial: freshPreferences() });
+      reports.push({ viewport: viewport.name, preferenceSaves, errors });
+      await page.close();
+      continue;
+    }
     if (storesOnly) {
       const stores = await inspectAppStoreSettings({
         page,
@@ -1279,6 +1287,7 @@ async function main() {
     switchComfortOnly ||
     windowsOnly ||
     pagesOnly ||
+    preferenceSavesOnly ||
     updatesOnly ||
     updateComfortOnly ||
     appDetailsOnly ||

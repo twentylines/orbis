@@ -28,6 +28,10 @@ const hash = (value) =>
     .createHash('sha256')
     .update(typeof value === 'string' ? value : JSON.stringify(value))
     .digest('hex');
+const canonical = (value) =>
+  JSON.stringify(value, (_key, item) =>
+    item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item,
+  );
 const privateInput = (file, cookie = false) => {
   assert.ok(typeof file === 'string' && path.isAbsolute(file) && path.resolve(file) === file, 'Input must be a canonical absolute path');
   const stat = fs.lstatSync(file);
@@ -115,6 +119,9 @@ const identity = (url) => {
     preferenceWrites: 0,
     restorationWrites: 0,
     failedPreferenceRequests: 0,
+    preferenceRequests: [],
+    preferenceBodyHashFormat: 'sha256 of canonical JSON; no preference values are recorded',
+    actionTrace: [],
     originalPreferencesRestored: false,
     protectedApiStatePreserved: false,
     cleanupConfirmed: false,
@@ -129,6 +136,26 @@ const identity = (url) => {
   let stage = 'preflight';
   let writes = 0;
   const pendingWrites = new Set();
+  const preferenceRequests = new Map();
+  const startedAt = performance.now();
+  const timestamp = () => Math.round((performance.now() - startedAt) * 100) / 100;
+  const markStage = (next) => {
+    stage = next;
+    report.actionTrace.push({ stage, atMs: timestamp() });
+  };
+  const requestDiagnostic = (body, source = 'browser') => {
+    const record = {
+      id: report.preferenceRequests.length + 1,
+      source,
+      startedStage: stage,
+      startedMs: timestamp(),
+      bodyHash: hash(canonical(body)),
+      outcome: 'in-flight',
+      responseStatus: null,
+    };
+    report.preferenceRequests.push(record);
+    return record;
+  };
   const errors = report.pageErrors;
   const save = () => {
     outputGuard(reportFile);
@@ -169,6 +196,29 @@ const identity = (url) => {
     for (const key of new Set([...Object.keys(original.windows || {}), ...Object.keys(body.windows)]))
       if (!['settings', 'monitor'].includes(key)) same(body.windows[key], original.windows?.[key], 'Another tool placement would be changed');
   };
+  const restoreOriginalPreferences = async () => {
+    const record = requestDiagnostic(original, 'restoration API');
+    try {
+      const response = await reader.request.put(`${base}/api/desktop-preferences`, {
+        maxRedirects: 0,
+        timeout: 20000,
+        headers: { Origin: base },
+        data: original,
+      });
+      Object.assign(record, { outcome: 'finished', responseStatus: response.status(), finishedMs: timestamp(), finishedStage: stage });
+      assert.ok(response.ok(), 'Original preference restoration failed');
+    } catch (error) {
+      if (record.outcome === 'in-flight')
+        Object.assign(record, {
+          outcome: 'failed',
+          failedStage: stage,
+          failedMs: timestamp(),
+          failureCode: 'restoration-api-error-redacted',
+          failureHash: hash(String(error.message)),
+        });
+      throw error;
+    }
+  };
   try {
     browser = await chromium.launch({
       headless: true,
@@ -196,7 +246,9 @@ const identity = (url) => {
       if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method())) {
         try {
           assert.ok(request.method() === 'PUT' && url.pathname === '/api/desktop-preferences' && !url.search, 'Only preference PUT is allowed');
-          allowPreferenceBody(JSON.parse(request.postData() || '{}'));
+          const body = JSON.parse(request.postData() || '{}');
+          allowPreferenceBody(body);
+          preferenceRequests.set(request, requestDiagnostic(body));
           pendingWrites.add(request);
           writes++;
           report.preferenceWrites++;
@@ -209,13 +261,34 @@ const identity = (url) => {
     });
     page = await context.newPage();
     page.on('pageerror', (error) => errors.push(hash(error.message)));
-    page.on('requestfinished', (request) => pendingWrites.delete(request));
-    page.on('requestfailed', (request) => {
-      if (pendingWrites.delete(request)) report.failedPreferenceRequests++;
+    page.on('response', (response) => {
+      const record = preferenceRequests.get(response.request());
+      if (record) Object.assign(record, { responseStatus: response.status(), responseMs: timestamp(), responseStage: stage });
     });
-    stage = 'desktop-windows';
+    page.on('requestfinished', (request) => {
+      pendingWrites.delete(request);
+      const record = preferenceRequests.get(request);
+      if (record) Object.assign(record, { outcome: 'finished', finishedMs: timestamp(), finishedStage: stage });
+    });
+    page.on('requestfailed', (request) => {
+      if (pendingWrites.delete(request)) {
+        report.failedPreferenceRequests++;
+        const error = request.failure()?.errorText || 'Unknown request failure';
+        const record = preferenceRequests.get(request);
+        if (record)
+          Object.assign(record, {
+            outcome: 'failed',
+            failedStage: stage,
+            failedMs: timestamp(),
+            failureCode: /^net::ERR_[A-Z0-9_]+$/.test(error) ? error : 'network-error-redacted',
+            failureHash: hash(error),
+          });
+      }
+    });
+    markStage('desktop-windows');
     const frame = () => page.locator('.desktop-route-window');
     const layout = async (name, mode) => {
+      markStage(`desktop-layout-${mode}`);
       await page.getByRole('button', { name: 'Window layout', exact: true }).click();
       await page.getByRole('menuitem', { name, exact: true }).click();
       await waitFor(async () => (await frame().getAttribute('data-window-mode')) === mode, 'Window layout did not apply');
@@ -226,9 +299,11 @@ const identity = (url) => {
     await input.waitFor();
     await layout('Floating window', 'floating');
     await input.fill('Unsaved window audit draft');
+    markStage('desktop-minimize-settings');
     await page.getByRole('button', { name: 'Minimize Settings', exact: true }).click();
     await frame().waitFor({ state: 'hidden' });
     await page.getByRole('heading', { name: original.serverName, exact: true }).waitFor();
+    markStage('desktop-restore-settings');
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await frame().waitFor({ state: 'visible' });
     assert.equal(await input.inputValue(), 'Unsaved window audit draft');
@@ -239,6 +314,7 @@ const identity = (url) => {
     await page.waitForTimeout(700);
     const before = await frame().boundingBox();
     const bar = await page.locator('.desktop-window-bar').boundingBox();
+    markStage('desktop-drag-settings');
     writes = 0;
     await page.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2);
     await page.mouse.down();
@@ -253,7 +329,9 @@ const identity = (url) => {
     assert.equal(writes, 1, 'A completed drag must make one debounced write');
     const moved = await frame().boundingBox();
     assert.equal(Math.round(moved.y - before.y), 30);
+    markStage('desktop-maximize-settings');
     await page.getByRole('button', { name: 'Maximize Settings', exact: true }).click();
+    markStage('desktop-restore-settings-size');
     await page.getByRole('button', { name: 'Restore Settings size', exact: true }).click();
     assert.ok(isDeepStrictEqual(await frame().boundingBox(), moved), 'Maximize restore lost floating bounds');
     await layout('Snap left', 'left');
@@ -263,6 +341,23 @@ const identity = (url) => {
     assert.equal(left.width, right.width);
     assert.equal(right.x - left.x - left.width, 16);
     await layout('Floating window', 'floating');
+    await page.getByText('Synced to your account', { exact: true }).waitFor();
+    await waitFor(async () => pendingWrites.size === 0, 'Preference requests must settle before the deliberate reload');
+    const acknowledged = report.preferenceRequests.filter((record) => record.source === 'browser').at(-1);
+    assert.ok(
+      acknowledged?.outcome === 'finished' && acknowledged.responseStatus >= 200 && acknowledged.responseStatus < 300,
+      'The latest preference request must be acknowledged before reload',
+    );
+    const acknowledgedHash = hash(canonical(await read('/api/desktop-preferences')));
+    assert.equal(acknowledgedHash, acknowledged.bodyHash, 'The exact latest preference payload must persist before reload');
+    report.reloadAcknowledgement = {
+      requestId: acknowledged.id,
+      bodyHash: acknowledged.bodyHash,
+      serverBodyHash: acknowledgedHash,
+      responseStatus: acknowledged.responseStatus,
+      observedMs: timestamp(),
+    };
+    markStage('desktop-account-placement-reload');
     await page.evaluate(() => localStorage.removeItem('server-desktop-preferences-v1'));
     await page.reload({ waitUntil: 'domcontentloaded' });
     await input.waitFor();
@@ -271,14 +366,16 @@ const identity = (url) => {
     assert.equal(await frame().getAttribute('data-window-mode'), 'floating');
     assert.ok(isDeepStrictEqual(await frame().boundingBox(), moved), 'Account-backed bounds did not survive reload');
     await page.screenshot({ path: path.join(screenshotDir, 'floating-settings.png'), animations: 'disabled' });
+    markStage('desktop-monitor-navigation');
     await page.getByRole('link', { name: 'Monitor', exact: true }).click();
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
+    markStage('desktop-maximize-monitor');
     await page.getByRole('button', { name: 'Maximize Monitor', exact: true }).click();
     await waitFor(async () => (await read('/api/desktop-preferences')).windows?.monitor?.mode === 'maximized', 'Monitor placement did not save');
     const prefs = await read('/api/desktop-preferences');
     assert.equal(prefs.windows.settings.mode, 'floating');
     await page.screenshot({ path: path.join(screenshotDir, 'monitor.png'), animations: 'disabled' });
-    stage = 'responsive-draft-and-placement';
+    markStage('responsive-draft-and-placement');
     const responsivePath = '/settings?tab=appearance&probe=space%20value&probe=second#draft';
     await page.goto(`${base}${responsivePath}`, { waitUntil: 'domcontentloaded' });
     await input.waitFor();
@@ -366,6 +463,7 @@ const identity = (url) => {
       ['desktop-restored', { width: 1440, height: 1120 }, true],
       ['mobile-page', { width: 390, height: 844 }, false],
     ]) {
+      markStage(`responsive-${label}`);
       await page.setViewportSize(viewport);
       if (desktopMode) await page.locator('.desktop-route-window[data-window-navigation="desktop"][data-window-mode="floating"]').waitFor();
       else await assertPage(label);
@@ -374,20 +472,23 @@ const identity = (url) => {
     }
     await page.waitForTimeout(700);
     assert.equal(report.preferenceWrites, resizeWrites, 'Resizing must not write a new placement or form draft');
+    markStage('responsive-desktop-minimize');
     await page.setViewportSize({ width: 1440, height: 1120 });
     await page.getByRole('button', { name: 'Minimize Settings', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Minimize Settings', exact: true }).click();
     await frame().waitFor({ state: 'hidden' });
     const historyLength = await page.evaluate(() => history.length);
+    markStage('responsive-minimized-to-mobile');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForURL((url) => !url.searchParams.has('orbisWindow'));
     await assertPage('minimized-desktop-to-mobile');
     await assertPreserved('minimized-desktop-to-mobile');
     assert.equal(await page.evaluate(() => history.length), historyLength, 'Small minimized cleanup must replace the current history entry');
-    stage = 'mobile-page-navigation';
+    markStage('mobile-page-navigation');
     await page.locator('.desktop-connection-dot.is-connected').waitFor();
     assert.equal((await page.locator('.desktop-connection').innerText()).trim(), serverIp);
     for (const mode of ['light', 'dark']) {
+      markStage(`mobile-theme-${mode}`);
       if (!(await page.locator(`.desktop[data-desktop-mode="${mode}"]`).count())) {
         await page.getByRole('button', { name: `Switch to ${mode} mode`, exact: true }).click();
         await page.locator(`.desktop[data-desktop-mode="${mode}"]`).waitFor();
@@ -428,6 +529,7 @@ const identity = (url) => {
       report.mobileThemes.push({ mode, ...scrolling });
       await screenshot(`mobile-${mode}-settings-document-scroll`);
     }
+    markStage('mobile-home-navigation');
     await page.locator('.desktop-dock').getByRole('link', { name: 'Workspace', exact: true }).click();
     await page.waitForURL(`${base}/dashboard`);
     await page.getByRole('heading', { name: original.serverName, exact: true }).waitFor();
@@ -439,6 +541,7 @@ const identity = (url) => {
       'Mobile Home must not keep a minimized window',
     );
     await screenshot('mobile-home-navigation');
+    markStage('mobile-settings-return');
     await page.locator('.desktop-dock').getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
     await input.waitFor();
@@ -446,6 +549,7 @@ const identity = (url) => {
     await assertPage('mobile-returned-settings');
     const brandInput = await input.elementHandle();
     await input.fill('Unsaved brand navigation draft');
+    markStage('mobile-brand-home-navigation');
     await page.locator('.desktop-brand').click();
     await page.waitForURL(`${base}/dashboard`);
     await page.getByRole('heading', { name: original.serverName, exact: true }).waitFor();
@@ -476,7 +580,7 @@ const identity = (url) => {
   } catch (error) {
     report.failure = { stage, type: /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(error.name) ? error.name : 'Error', messageHash: hash(String(error.message)) };
   } finally {
-    stage = 'cleanup';
+    markStage('cleanup');
     let writesSettled = true;
     if (context) {
       try {
@@ -505,13 +609,7 @@ const identity = (url) => {
         allowPreferenceBody(current);
         if (report.preferenceWrites) {
           report.restorationWrites++;
-          const response = await reader.request.put(`${base}/api/desktop-preferences`, {
-            maxRedirects: 0,
-            timeout: 20000,
-            headers: { Origin: base },
-            data: original,
-          });
-          assert.ok(response.ok(), 'Original preference restoration failed');
+          await restoreOriginalPreferences();
         }
         same(await read('/api/desktop-preferences'), original, 'Original preferences were not restored');
         await new Promise((resolve) => setTimeout(resolve, 750));

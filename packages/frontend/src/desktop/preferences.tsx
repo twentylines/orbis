@@ -114,6 +114,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const [serverReady, setServerReady] = useState(false);
   const [syncState, setSyncState] = useState<PreferenceContext['syncState']>('local');
   const revision = useRef(0);
+  const acknowledgedRevision = useRef(0);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     try {
@@ -147,7 +149,11 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         if (!response.ok) throw new Error('Preference load failed');
         const value: unknown = await response.json();
         if (!isPreferences(value)) throw new Error('Invalid server preferences');
-        if (revision.current === loadRevision) setPreferences(normalisePreferences(value));
+        if (controller.signal.aborted) return;
+        if (revision.current === loadRevision) {
+          acknowledgedRevision.current = loadRevision;
+          setPreferences(normalisePreferences(value));
+        }
         setServerReady(true);
         setSyncState(revision.current === loadRevision ? 'saved' : 'saving');
       })
@@ -158,30 +164,35 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   }, [isLoggedIn]);
 
   useEffect(() => {
-    if (!serverReady || !hydrated) return;
-    const controller = new AbortController();
+    if (!isLoggedIn || !serverReady || !hydrated || acknowledgedRevision.current === revision.current) return;
+    let superseded = false;
     const saveRevision = revision.current;
     setSyncState('saving');
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await fetch('/api/desktop-preferences', {
-          method: 'PUT',
-          credentials: 'include',
-          signal: controller.signal,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(preferences),
-        });
-        if (!response.ok) throw new Error('Preference save failed');
-        if (revision.current === saveRevision) setSyncState('saved');
-      } catch {
-        if (!controller.signal.aborted && revision.current === saveRevision) setSyncState('error');
-      }
+    const timer = window.setTimeout(() => {
+      const save = async () => {
+        if (superseded) return;
+        try {
+          const response = await fetch('/api/desktop-preferences', {
+            method: 'PUT',
+            credentials: 'include',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(preferences),
+          });
+          if (!response.ok) throw new Error('Preference save failed');
+          acknowledgedRevision.current = saveRevision;
+          if (!superseded && revision.current === saveRevision) setSyncState('saved');
+        } catch {
+          if (!superseded && revision.current === saveRevision) setSyncState('error');
+        }
+      };
+      saveQueue.current = saveQueue.current.then(save, save);
     }, 300);
     return () => {
+      superseded = true;
       window.clearTimeout(timer);
-      controller.abort();
     };
-  }, [preferences, serverReady, hydrated]);
+  }, [preferences, serverReady, hydrated, isLoggedIn]);
 
   const update = (value: Partial<DesktopPreferences>) => {
     if (!isPreferences({ ...preferences, ...value })) return;
