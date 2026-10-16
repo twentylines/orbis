@@ -1,0 +1,371 @@
+{
+  "release": {
+    "tag": "v0.1.0-beta.34",
+    "commit": "acfa8bb1da3ad3b904b42ce017765ebdd0754b53",
+    "image": "ghcr.io/twentylines/orbis@sha256:f664228c65ff2044c34d1866bb5504d37d91934f0c289a8dbef4790adf9c302d"
+  },
+  "scope": {
+    "live": ["Published image, authenticated HTML and assets", "Real account, host, installed apps, full app records and app-store reads"],
+    "controlled": [
+      "Browser-local preference GET/PUT shadow based on real preferences: light/dark mode and default focused placement",
+      "Computed text sizes doubled in the browser for text stress cases"
+    ],
+    "realPreferenceWrites": 0,
+    "realAppOrHostWrites": 0
+  },
+  "settingsGroups": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1120
+      },
+      "mode": "light",
+      "textScale": 1,
+      "navigation": "desktop",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1120
+      },
+      "mode": "light",
+      "textScale": 2,
+      "navigation": "desktop",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1120
+      },
+      "mode": "dark",
+      "textScale": 1,
+      "navigation": "desktop",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1120
+      },
+      "mode": "dark",
+      "textScale": 2,
+      "navigation": "desktop",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "mode": "light",
+      "textScale": 1,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "mode": "light",
+      "textScale": 2,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "mode": "dark",
+      "textScale": 1,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "mode": "dark",
+      "textScale": 2,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "light",
+      "textScale": 1,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "light",
+      "textScale": 2,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "dark",
+      "textScale": 1,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "dark",
+      "textScale": 2,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 320,
+        "height": 800
+      },
+      "mode": "light",
+      "textScale": 1,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0.0078125,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 320,
+        "height": 800
+      },
+      "mode": "light",
+      "textScale": 2,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0.0078125,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 320,
+        "height": 800
+      },
+      "mode": "dark",
+      "textScale": 1,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0.0078125,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 320,
+        "height": 800
+      },
+      "mode": "dark",
+      "textScale": 2,
+      "navigation": "page",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0.0078125,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 3840,
+        "height": 2160
+      },
+      "mode": "light",
+      "textScale": 1,
+      "navigation": "desktop",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 3840,
+        "height": 2160
+      },
+      "mode": "light",
+      "textScale": 2,
+      "navigation": "desktop",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 3840,
+        "height": 2160
+      },
+      "mode": "dark",
+      "textScale": 1,
+      "navigation": "desktop",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    },
+    {
+      "viewport": {
+        "width": 3840,
+        "height": 2160
+      },
+      "mode": "dark",
+      "textScale": 2,
+      "navigation": "desktop",
+      "leftGutterDelta": 0,
+      "headingCenterDelta": 0,
+      "dividerGap": 12.5,
+      "minimumTabSidePadding": 13,
+      "fracturedHeadingWords": 0,
+      "clippedHeadingWords": 0
+    }
+  ],
+  "storeGroups": 8,
+  "shortScreenGroups": 2,
+  "realRecordsUnchanged": true,
+  "actualPreferenceWrites": 0,
+  "actualAppOrHostWrites": 0,
+  "browserErrors": [],
+  "cleanupFailures": [],
+  "passed": true,
+  "ota": {
+    "from": "v0.1.0-beta.32",
+    "version": "v0.1.0-beta.34",
+    "commit": "acfa8bb1da3ad3b904b42ce017765ebdd0754b53",
+    "digest": "sha256:f664228c65ff2044c34d1866bb5504d37d91934f0c289a8dbef4790adf9c302d",
+    "jobId": "da50f6e3-79e0-45ae-ad9f-6f62c8e865b6",
+    "preferencesRetained": true,
+    "appRecordsRetained": 2,
+    "taskOutcomesRetained": 28,
+    "healthy": true,
+    "pageErrors": []
+  },
+  "freshPasswordLogin": {
+    "passed": true,
+    "tag": "v0.1.0-beta.34",
+    "commit": "acfa8bb1da3ad3b904b42ce017765ebdd0754b53",
+    "digest": "sha256:f664228c65ff2044c34d1866bb5504d37d91934f0c289a8dbef4790adf9c302d",
+    "loginPosts": 1,
+    "unchangedPreferenceWrites": 0,
+    "blockedMutations": [],
+    "pageErrors": [],
+    "newSessionClosed": true,
+    "originalSessionRetained": true,
+    "preferencesRetained": true
+  },
+  "applicationFiles": {
+    "entries": 33,
+    "files": 17,
+    "unchanged": true,
+    "sha256": "7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2"
+  },
+  "stoppedSnapshot": {
+    "release": "v0.1.0-beta.32",
+    "entries": 3579,
+    "files": 2815,
+    "bytes": 97248643,
+    "treeSha256": "c8304427c055a195c835f2e3a75c88021cfbd2b5074f9886c2281ab033b3c9ed",
+    "independentlyVerified": true
+  },
+  "limits": [
+    "Isolated synthetic arm64 installation; no Hades changes",
+    "Appearance modes and text stress controlled only in browser",
+    "Window audit on beta34 failed due cancelled PUTs and is not a passed flow; source fix is beta35",
+    "No physical-device, other-browser or full-production acceptance claim"
+  ]
+}
