@@ -3,6 +3,8 @@ import { createRequire } from 'node:module';
 import { createClient } from '../packages/frontend/src/api-client/client/client.gen';
 import { buildClientParams } from '../packages/frontend/src/api-client/core/params.gen';
 import { getApp, login } from '../packages/frontend/src/api-client/sdk.gen';
+import '../packages/frontend/src/api-client-config';
+import { TranslatableError } from '../packages/frontend/src/types/error.types';
 
 const frontendRequire = createRequire(new URL('../packages/frontend/package.json', import.meta.url));
 const HttpBackend = frontendRequire('i18next-http-backend');
@@ -29,6 +31,32 @@ describe('generated request parameters', () => {
 });
 
 describe('regenerated SDK transport', () => {
+  it('rejects direct API calls with the translated server error', async () => {
+    const result = login({
+      baseUrl: 'http://127.0.0.1:9999',
+      body: { username: 'fixture@example.test', password: 'fixture-only' },
+      fetch: async (request) => {
+        expect((request as Request).credentials).toBe('include');
+        return Response.json({ message: 'AUTH_ERROR_INVALID_CREDENTIALS', intlParams: { remaining: '2' } }, { status: 401 });
+      },
+    });
+    await expect(result).rejects.toBeInstanceOf(TranslatableError);
+    await expect(result).rejects.toMatchObject({ message: 'AUTH_ERROR_INVALID_CREDENTIALS', intlParams: { remaining: '2' } });
+  });
+
+  it('rejects direct API calls when the transport fails', async () => {
+    const failure = new TypeError('Fixture offline');
+    await expect(
+      getApp({
+        baseUrl: 'http://127.0.0.1:9999',
+        path: { urn: 'fixture:local' },
+        fetch: async () => {
+          throw failure;
+        },
+      }),
+    ).rejects.toBe(failure);
+  });
+
   it('preserves encoded app identifiers and credentials on a read', async () => {
     let sent: Request | undefined;
     const client = createClient({

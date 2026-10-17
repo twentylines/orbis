@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Published beta37: custom workspace rows and ORM update (18 October 2026)
+
+Release workflow `39079756805` passed for source `c02ea585a83cf846c836827d6652abae9821d20d`. Both architectures match the release checker and image digest `sha256:cae92aa631d95a1c0f6b0fcdd1598f4ac9fba9ef3723b0d8a52910498f7956bc`. Reviewed beta36→37 OTA job `474daa24-00e6-48ac-8d48-e3304a88b965` reached that exact healthy image. Both app records, preferences and all 28 task outcomes matched.
+
+The stopped beta36 snapshot independently verified 3,591 entries, 2,827 files and 149,785,692 bytes, tree hash `f91f2a644b5a0fcbe8ef5acb2b6bec1c13ce02bababb92b72a8491b71acc1231`. The separate 33-entry/17-file application/configuration/data comparison remains `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`.
+
+All 48 released native Home/Monitor theme compositions pass at 1440/390px across both modes and six presets. The expanded gate measures custom row edges and launcher height: all 24 Home samples fill their intended row width and have zero forced independent launcher blank height. The original both-wide arrangement is preserved. Actual records remain identical, and there are no page errors or real theme-run mutations. Fresh password login passes, closes only its new session and preserves the original session/preferences. [Released captures and sanitized assertions](screenshots/live-beta37/README.md) record the boundary.
+
+Beta37 includes the ORM escaping update. The later generator/translation changes on main are a separate candidate, with source checks and an error-policy compatibility correction before beta38 publication. The preceding beta36 actual window-flow proof remains applicable to its unchanged window styles; no duplicate preference-mutation window sequence was run here. Hades is untouched; production/migration and broader browser/device acceptance remain open.
+
 ## Published beta36: status themes and glass headers (18 October 2026)
 
 Release workflow `39077874705` passed for source `2ae0165246f022b6cca2c93b0ed7be6f5da286e4`. The release checker matched both architectures and image digest `sha256:093074760b2021cbf54604bccf3d8731d2c29d42d5b67c8d7d73735e62c49b39`. The real browser reviewed and applied beta35→36, job `bf231fa5-6d1f-47ad-93a5-a283d8061629`, reaching the exact healthy image. Both app records, account preferences and28 task outcomes matched.

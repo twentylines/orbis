@@ -3,28 +3,11 @@ import { OrbisToaster } from './components/notifications/orbis-toaster';
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, redirect } from 'react-router';
 import type { Route } from './+types/root';
 import { userContext } from './api-client';
-import { client } from './api-client/client.gen';
+import './api-client-config';
 import stylesheet from './app.css?url';
 import { Providers } from './components/providers/providers';
-import { TranslatableError } from './types/error.types';
 import { FallbackSurface } from './components/error/error-page';
 import { ConfirmationDialog } from './desktop/confirmation';
-
-client.interceptors.response.use(async (res) => {
-  if (res.status >= 400) {
-    const data = await res.json();
-    const error = new TranslatableError(data.message);
-    error.intlParams = data.intlParams ?? {};
-
-    throw error;
-  }
-
-  return res;
-});
-
-client.setConfig({
-  credentials: 'include',
-});
 
 export const links: Route.LinksFunction = () => [
   { rel: 'stylesheet', href: stylesheet },

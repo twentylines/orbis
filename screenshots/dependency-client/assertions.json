@@ -344,9 +344,137 @@
     }
   },
   "regressions": {
-    "tests": 9,
-    "assertions": 42,
+    "tests": 11,
+    "assertions": 46,
     "passed": true,
-    "network": "Controlled transports only"
+    "network": "Controlled transports only",
+    "directErrorPolicy": "Actual app client defaults to rejected requests; translated HTTP errors and network failures retain rejection semantics"
+  },
+  "configuredErrorFlow": {
+    "source": "Compiled static8080; fresh anonymous context; all API reads and two dummy login POSTs fulfilled locally; no actual server/account writes",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "requests": [
+      {
+        "path": "/api/i18n/locales/translation/en-GB.json",
+        "method": "GET"
+      },
+      {
+        "path": "/api/i18n/locales/translation/en.json",
+        "method": "GET"
+      },
+      {
+        "path": "/api/user-context",
+        "method": "GET"
+      },
+      {
+        "path": "/api/user-context",
+        "method": "GET"
+      },
+      {
+        "path": "/api/user-context",
+        "method": "GET"
+      },
+      {
+        "path": "/api/auth/login",
+        "method": "POST"
+      },
+      {
+        "path": "/api/auth/login",
+        "method": "POST"
+      },
+      {
+        "path": "/api/user-context",
+        "method": "GET"
+      },
+      {
+        "path": "/api/user-context",
+        "method": "GET"
+      },
+      {
+        "path": "/api/desktop-preferences",
+        "method": "GET"
+      },
+      {
+        "path": "/api/app-context",
+        "method": "GET"
+      },
+      {
+        "path": "/api/system/containers",
+        "method": "GET"
+      },
+      {
+        "path": "/api/tasks",
+        "method": "GET"
+      },
+      {
+        "path": "/api/system/telemetry",
+        "method": "GET"
+      },
+      {
+        "path": "/api/apps/installed",
+        "method": "GET"
+      },
+      {
+        "path": "/api/links",
+        "method": "GET"
+      },
+      {
+        "path": "/api/marketplace/apps/search",
+        "method": "GET"
+      },
+      {
+        "path": "/api/system/load",
+        "method": "GET"
+      },
+      {
+        "path": "/api/sse/app",
+        "method": "GET"
+      }
+    ],
+    "loginResponses": [
+      {
+        "attempt": 1,
+        "status": 400,
+        "message": "AUTH_ERROR_INVALID_CREDENTIALS"
+      },
+      {
+        "attempt": 2,
+        "status": 200,
+        "success": true
+      }
+    ],
+    "blockedMutations": [],
+    "unknownReads": [],
+    "errors": [],
+    "rejection": {
+      "text": "Incorrect email address or password.",
+      "type": "error",
+      "color": "rgb(25, 44, 41)",
+      "background": "rgba(248, 250, 246, 0.92)",
+      "expectedInk": "rgb(25, 44, 41)",
+      "expectedSurface": "rgba(248, 250, 246, 0.92)",
+      "box": {
+        "left": 36,
+        "right": 366,
+        "top": 94,
+        "bottom": 166
+      },
+      "documentWidth": 390,
+      "remainedOnLogin": true,
+      "retryEnabled": true,
+      "inputsPreserved": true
+    },
+    "retry": {
+      "attempts": 2,
+      "authenticatedFixture": true,
+      "path": "/dashboard",
+      "heading": "Hades",
+      "applicationReadRendered": true,
+      "systemReadRendered": "11%",
+      "documentWidth": 390
+    }
   }
 }
