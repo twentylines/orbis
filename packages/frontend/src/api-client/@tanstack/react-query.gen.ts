@@ -4,7 +4,7 @@ import { type DefaultError, type InfiniteData, infiniteQueryOptions, queryOption
 
 import { client } from '../client.gen';
 import { acknowledgeWelcome, appContext, appEvents, appLogsEvents, backupAllApps, backupApp, changePassword, changeUsername, check, createAppStore, createCustomApp, createLink, deleteAppBackup, deleteAppStore, deleteLink, disableTotp, disableUserConfig, downloadBackup, downloadLocalCertificate, editLink, enableUserConfig, forwardAuth, getAllAppStores, getApp, getAppBackups, getAppComposeDiff, getAppConfigDiff, getEditableAppConfig, getEnabledAppStores, getGuestApps, getGuestLinks, getImage, getInstalledApps, getLinks, getRandomPort, getTemplateDiff, getTotpUri, getTranslation, getUserConfig, ignoreAppVersion, incrementAllAppVersions, installApp, login, logout, type Options, pullAppStores, register, resetApp, resetPassword, restartAllApps, restartApp, restoreAppBackup, runtipiLogsEvents, searchApps, seedDatabase, setAllAppSubnetToNull, setAllAppUpdateAvailable, setupTotp, startAllApps, startAllApps2, startApp, stopAllApps, stopApp, syncWithTemplate, systemLoad, traefik, unignoreAppVersion, uninstallAllApps, uninstallApp, updateAllApps, updateApp, updateAppMetadata, updateAppSettings, updateAppStore, updateCustomApp, updateEditableAppConfig, updateUserConfig, updateUserSettings, uploadAppImage, uploadBackup, userContext, verifyTotp } from '../sdk.gen';
-import type { AcknowledgeWelcomeData, AppContextData, AppEventsData, AppLogsEventsData, BackupAllAppsData, BackupAppData, BackupAppResponse, ChangePasswordData, ChangeUsernameData, CheckData, CreateAppStoreData, CreateAppStoreResponse, CreateCustomAppData, CreateCustomAppResponse, CreateLinkData, DeleteAppBackupData, DeleteAppStoreData, DeleteLinkData, DisableTotpData, DisableUserConfigData, DownloadBackupData, DownloadLocalCertificateData, EditLinkData, EnableUserConfigData, ForwardAuthData, GetAllAppStoresData, GetAppBackupsData, GetAppBackupsResponse, GetAppComposeDiffData, GetAppConfigDiffData, GetAppData, GetEditableAppConfigData, GetEnabledAppStoresData, GetGuestAppsData, GetGuestLinksData, GetImageData, GetInstalledAppsData, GetLinksData, GetRandomPortData, GetRandomPortResponse, GetTemplateDiffData, GetTotpUriData, GetTotpUriResponse, GetTranslationData, GetUserConfigData, IgnoreAppVersionData, IncrementAllAppVersionsData, InstallAppData, InstallAppResponse, LoginData, LoginResponse, LogoutData, PullAppStoresData, PullAppStoresResponse, RegisterData, RegisterResponse, ResetAppData, ResetAppResponse, ResetPasswordData, ResetPasswordResponse, RestartAllAppsData, RestartAppData, RestartAppResponse, RestoreAppBackupData, RestoreAppBackupResponse, RuntipiLogsEventsData, SearchAppsData, SearchAppsResponse, SeedDatabaseData, SetAllAppSubnetToNullData, SetAllAppUpdateAvailableData, SetupTotpData, StartAllApps2Data, StartAllAppsData, StartAppData, StartAppResponse, StopAllAppsData, StopAppData, StopAppResponse, SyncWithTemplateData, SyncWithTemplateResponse, SystemLoadData, TraefikData, UnignoreAppVersionData, UninstallAllAppsData, UninstallAppData, UninstallAppResponse, UpdateAllAppsData, UpdateAppData, UpdateAppMetadataData, UpdateAppResponse, UpdateAppSettingsData, UpdateAppSettingsResponse, UpdateAppStoreData, UpdateAppStoreResponse, UpdateCustomAppData, UpdateEditableAppConfigData, UpdateEditableAppConfigResponse, UpdateUserConfigData, UpdateUserSettingsData, UploadAppImageData, UploadBackupData, UserContextData, VerifyTotpData, VerifyTotpResponse } from '../types.gen';
+import type { AcknowledgeWelcomeData, AppContextData, AppContextResponse, AppEventsData, AppLogsEventsData, BackupAllAppsData, BackupAppData, BackupAppResponse, ChangePasswordData, ChangeUsernameData, CheckData, CheckError, CheckResponse, CreateAppStoreData, CreateAppStoreResponse, CreateCustomAppData, CreateCustomAppResponse, CreateLinkData, DeleteAppBackupData, DeleteAppStoreData, DeleteLinkData, DisableTotpData, DisableUserConfigData, DownloadBackupData, DownloadLocalCertificateData, EditLinkData, EnableUserConfigData, ForwardAuthData, GetAllAppStoresData, GetAllAppStoresResponse, GetAppBackupsData, GetAppBackupsResponse, GetAppComposeDiffData, GetAppComposeDiffResponse, GetAppConfigDiffData, GetAppConfigDiffResponse, GetAppData, GetAppResponse, GetEditableAppConfigData, GetEditableAppConfigResponse, GetEnabledAppStoresData, GetEnabledAppStoresResponse, GetGuestAppsData, GetGuestAppsResponse, GetGuestLinksData, GetGuestLinksResponse, GetImageData, GetInstalledAppsData, GetInstalledAppsResponse, GetLinksData, GetLinksResponse, GetRandomPortData, GetRandomPortResponse, GetTemplateDiffData, GetTemplateDiffResponse, GetTotpUriData, GetTotpUriResponse, GetTranslationData, GetUserConfigData, GetUserConfigResponse, IgnoreAppVersionData, IncrementAllAppVersionsData, InstallAppData, InstallAppResponse, LoginData, LoginResponse, LogoutData, PullAppStoresData, PullAppStoresResponse, RegisterData, RegisterResponse, ResetAppData, ResetAppResponse, ResetPasswordData, ResetPasswordResponse, RestartAllAppsData, RestartAppData, RestartAppResponse, RestoreAppBackupData, RestoreAppBackupResponse, RuntipiLogsEventsData, SearchAppsData, SearchAppsResponse, SeedDatabaseData, SetAllAppSubnetToNullData, SetAllAppUpdateAvailableData, SetupTotpData, StartAllApps2Data, StartAllAppsData, StartAppData, StartAppResponse, StopAllAppsData, StopAppData, StopAppResponse, SyncWithTemplateData, SyncWithTemplateResponse, SystemLoadData, SystemLoadResponse, TraefikData, UnignoreAppVersionData, UninstallAllAppsData, UninstallAppData, UninstallAppResponse, UpdateAllAppsData, UpdateAppData, UpdateAppMetadataData, UpdateAppResponse, UpdateAppSettingsData, UpdateAppSettingsResponse, UpdateAppStoreData, UpdateAppStoreResponse, UpdateCustomAppData, UpdateEditableAppConfigData, UpdateEditableAppConfigResponse, UpdateUserConfigData, UpdateUserSettingsData, UploadAppImageData, UploadBackupData, UserContextData, UserContextResponse, VerifyTotpData, VerifyTotpResponse } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -36,44 +36,38 @@ const createQueryKey = <TOptions extends Options>(id: string, options?: TOptions
     if (options?.query) {
         params.query = options.query;
     }
-    return [
-        params
-    ];
+    return [params];
 };
 
 export const userContextQueryKey = (options?: Options<UserContextData>) => createQueryKey('userContext', options);
 
-export const userContextOptions = (options?: Options<UserContextData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await userContext({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: userContextQueryKey(options)
-    });
-};
+export const userContextOptions = (options?: Options<UserContextData>) => queryOptions<UserContextResponse, DefaultError, UserContextResponse, ReturnType<typeof userContextQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await userContext({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: userContextQueryKey(options)
+});
 
 export const appContextQueryKey = (options?: Options<AppContextData>) => createQueryKey('appContext', options);
 
-export const appContextOptions = (options?: Options<AppContextData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await appContext({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: appContextQueryKey(options)
-    });
-};
+export const appContextOptions = (options?: Options<AppContextData>) => queryOptions<AppContextResponse, DefaultError, AppContextResponse, ReturnType<typeof appContextQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await appContext({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: appContextQueryKey(options)
+});
 
 export const updateUserSettingsMutation = (options?: Partial<Options<UpdateUserSettingsData>>): UseMutationOptions<unknown, DefaultError, Options<UpdateUserSettingsData>> => {
     const mutationOptions: UseMutationOptions<unknown, DefaultError, Options<UpdateUserSettingsData>> = {
@@ -105,54 +99,48 @@ export const acknowledgeWelcomeMutation = (options?: Partial<Options<Acknowledge
 
 export const systemLoadQueryKey = (options?: Options<SystemLoadData>) => createQueryKey('systemLoad', options);
 
-export const systemLoadOptions = (options?: Options<SystemLoadData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await systemLoad({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: systemLoadQueryKey(options)
-    });
-};
+export const systemLoadOptions = (options?: Options<SystemLoadData>) => queryOptions<SystemLoadResponse, DefaultError, SystemLoadResponse, ReturnType<typeof systemLoadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await systemLoad({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: systemLoadQueryKey(options)
+});
 
 export const downloadLocalCertificateQueryKey = (options?: Options<DownloadLocalCertificateData>) => createQueryKey('downloadLocalCertificate', options);
 
-export const downloadLocalCertificateOptions = (options?: Options<DownloadLocalCertificateData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await downloadLocalCertificate({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: downloadLocalCertificateQueryKey(options)
-    });
-};
+export const downloadLocalCertificateOptions = (options?: Options<DownloadLocalCertificateData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof downloadLocalCertificateQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await downloadLocalCertificate({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: downloadLocalCertificateQueryKey(options)
+});
 
 export const getTranslationQueryKey = (options: Options<GetTranslationData>) => createQueryKey('getTranslation', options);
 
-export const getTranslationOptions = (options: Options<GetTranslationData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getTranslation({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getTranslationQueryKey(options)
-    });
-};
+export const getTranslationOptions = (options: Options<GetTranslationData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof getTranslationQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getTranslation({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getTranslationQueryKey(options)
+});
 
 export const loginMutation = (options?: Partial<Options<LoginData>>): UseMutationOptions<LoginResponse, DefaultError, Options<LoginData>> => {
     const mutationOptions: UseMutationOptions<LoginResponse, DefaultError, Options<LoginData>> = {
@@ -310,54 +298,48 @@ export const resetPasswordMutation = (options?: Partial<Options<ResetPasswordDat
 
 export const traefikQueryKey = (options?: Options<TraefikData>) => createQueryKey('traefik', options);
 
-export const traefikOptions = (options?: Options<TraefikData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await traefik({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: traefikQueryKey(options)
-    });
-};
+export const traefikOptions = (options?: Options<TraefikData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof traefikQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await traefik({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: traefikQueryKey(options)
+});
 
 export const getInstalledAppsQueryKey = (options?: Options<GetInstalledAppsData>) => createQueryKey('getInstalledApps', options);
 
-export const getInstalledAppsOptions = (options?: Options<GetInstalledAppsData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getInstalledApps({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getInstalledAppsQueryKey(options)
-    });
-};
+export const getInstalledAppsOptions = (options?: Options<GetInstalledAppsData>) => queryOptions<GetInstalledAppsResponse, DefaultError, GetInstalledAppsResponse, ReturnType<typeof getInstalledAppsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getInstalledApps({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getInstalledAppsQueryKey(options)
+});
 
 export const getGuestAppsQueryKey = (options?: Options<GetGuestAppsData>) => createQueryKey('getGuestApps', options);
 
-export const getGuestAppsOptions = (options?: Options<GetGuestAppsData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getGuestApps({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getGuestAppsQueryKey(options)
-    });
-};
+export const getGuestAppsOptions = (options?: Options<GetGuestAppsData>) => queryOptions<GetGuestAppsResponse, DefaultError, GetGuestAppsResponse, ReturnType<typeof getGuestAppsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getGuestApps({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getGuestAppsQueryKey(options)
+});
 
 export const getRandomPortMutation = (options?: Partial<Options<GetRandomPortData>>): UseMutationOptions<GetRandomPortResponse, DefaultError, Options<GetRandomPortData>> => {
     const mutationOptions: UseMutationOptions<GetRandomPortResponse, DefaultError, Options<GetRandomPortData>> = {
@@ -375,54 +357,48 @@ export const getRandomPortMutation = (options?: Partial<Options<GetRandomPortDat
 
 export const getAppQueryKey = (options: Options<GetAppData>) => createQueryKey('getApp', options);
 
-export const getAppOptions = (options: Options<GetAppData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getApp({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getAppQueryKey(options)
-    });
-};
+export const getAppOptions = (options: Options<GetAppData>) => queryOptions<GetAppResponse, DefaultError, GetAppResponse, ReturnType<typeof getAppQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getApp({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getAppQueryKey(options)
+});
 
 export const getAppComposeDiffQueryKey = (options: Options<GetAppComposeDiffData>) => createQueryKey('getAppComposeDiff', options);
 
-export const getAppComposeDiffOptions = (options: Options<GetAppComposeDiffData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getAppComposeDiff({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getAppComposeDiffQueryKey(options)
-    });
-};
+export const getAppComposeDiffOptions = (options: Options<GetAppComposeDiffData>) => queryOptions<GetAppComposeDiffResponse, DefaultError, GetAppComposeDiffResponse, ReturnType<typeof getAppComposeDiffQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getAppComposeDiff({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getAppComposeDiffQueryKey(options)
+});
 
 export const getAppConfigDiffQueryKey = (options: Options<GetAppConfigDiffData>) => createQueryKey('getAppConfigDiff', options);
 
-export const getAppConfigDiffOptions = (options: Options<GetAppConfigDiffData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getAppConfigDiff({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getAppConfigDiffQueryKey(options)
-    });
-};
+export const getAppConfigDiffOptions = (options: Options<GetAppConfigDiffData>) => queryOptions<GetAppConfigDiffResponse, DefaultError, GetAppConfigDiffResponse, ReturnType<typeof getAppConfigDiffQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getAppConfigDiff({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getAppConfigDiffQueryKey(options)
+});
 
 export const ignoreAppVersionMutation = (options?: Partial<Options<IgnoreAppVersionData>>): UseMutationOptions<unknown, DefaultError, Options<IgnoreAppVersionData>> => {
     const mutationOptions: UseMutationOptions<unknown, DefaultError, Options<IgnoreAppVersionData>> = {
@@ -454,25 +430,21 @@ export const unignoreAppVersionMutation = (options?: Partial<Options<UnignoreApp
 
 export const searchAppsQueryKey = (options?: Options<SearchAppsData>) => createQueryKey('searchApps', options);
 
-export const searchAppsOptions = (options?: Options<SearchAppsData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await searchApps({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: searchAppsQueryKey(options)
-    });
-};
+export const searchAppsOptions = (options?: Options<SearchAppsData>) => queryOptions<SearchAppsResponse, DefaultError, SearchAppsResponse, ReturnType<typeof searchAppsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await searchApps({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: searchAppsQueryKey(options)
+});
 
 const createInfiniteParams = <K extends Pick<QueryKey<Options>[0], 'body' | 'headers' | 'path' | 'query'>>(queryKey: QueryKey<Options>, page: K) => {
-    const params = {
-        ...queryKey[0]
-    };
+    const params = { ...queryKey[0] };
     if (page.body) {
         params.body = {
             ...queryKey[0].body as any,
@@ -502,46 +474,42 @@ const createInfiniteParams = <K extends Pick<QueryKey<Options>[0], 'body' | 'hea
 
 export const searchAppsInfiniteQueryKey = (options?: Options<SearchAppsData>): QueryKey<Options<SearchAppsData>> => createQueryKey('searchApps', options, true);
 
-export const searchAppsInfiniteOptions = (options?: Options<SearchAppsData>) => {
-    return infiniteQueryOptions<SearchAppsResponse, DefaultError, InfiniteData<SearchAppsResponse>, QueryKey<Options<SearchAppsData>>, string | Pick<QueryKey<Options<SearchAppsData>>[0], 'body' | 'headers' | 'path' | 'query'>>(
-    // @ts-ignore
-    {
-        queryFn: async ({ pageParam, queryKey, signal }) => {
-            // @ts-ignore
-            const page: Pick<QueryKey<Options<SearchAppsData>>[0], 'body' | 'headers' | 'path' | 'query'> = typeof pageParam === 'object' ? pageParam : {
-                query: {
-                    cursor: pageParam
-                }
-            };
-            const params = createInfiniteParams(queryKey, page);
-            const { data } = await searchApps({
-                ...options,
-                ...params,
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: searchAppsInfiniteQueryKey(options)
-    });
-};
+export const searchAppsInfiniteOptions = (options?: Options<SearchAppsData>) => infiniteQueryOptions<SearchAppsResponse, DefaultError, InfiniteData<SearchAppsResponse>, QueryKey<Options<SearchAppsData>>, string | Pick<QueryKey<Options<SearchAppsData>>[0], 'body' | 'headers' | 'path' | 'query'>>(
+// @ts-ignore
+{
+    queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<QueryKey<Options<SearchAppsData>>[0], 'body' | 'headers' | 'path' | 'query'> = typeof pageParam === 'object' ? pageParam : {
+            query: {
+                cursor: pageParam
+            }
+        };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await searchApps({
+            ...options,
+            ...params,
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: searchAppsInfiniteQueryKey(options)
+});
 
 export const getImageQueryKey = (options: Options<GetImageData>) => createQueryKey('getImage', options);
 
-export const getImageOptions = (options: Options<GetImageData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getImage({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getImageQueryKey(options)
-    });
-};
+export const getImageOptions = (options: Options<GetImageData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof getImageQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getImage({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getImageQueryKey(options)
+});
 
 export const pullAppStoresMutation = (options?: Partial<Options<PullAppStoresData>>): UseMutationOptions<PullAppStoresResponse, DefaultError, Options<PullAppStoresData>> => {
     const mutationOptions: UseMutationOptions<PullAppStoresResponse, DefaultError, Options<PullAppStoresData>> = {
@@ -573,37 +541,33 @@ export const createAppStoreMutation = (options?: Partial<Options<CreateAppStoreD
 
 export const getAllAppStoresQueryKey = (options?: Options<GetAllAppStoresData>) => createQueryKey('getAllAppStores', options);
 
-export const getAllAppStoresOptions = (options?: Options<GetAllAppStoresData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getAllAppStores({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getAllAppStoresQueryKey(options)
-    });
-};
+export const getAllAppStoresOptions = (options?: Options<GetAllAppStoresData>) => queryOptions<GetAllAppStoresResponse, DefaultError, GetAllAppStoresResponse, ReturnType<typeof getAllAppStoresQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getAllAppStores({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getAllAppStoresQueryKey(options)
+});
 
 export const getEnabledAppStoresQueryKey = (options?: Options<GetEnabledAppStoresData>) => createQueryKey('getEnabledAppStores', options);
 
-export const getEnabledAppStoresOptions = (options?: Options<GetEnabledAppStoresData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getEnabledAppStores({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getEnabledAppStoresQueryKey(options)
-    });
-};
+export const getEnabledAppStoresOptions = (options?: Options<GetEnabledAppStoresData>) => queryOptions<GetEnabledAppStoresResponse, DefaultError, GetEnabledAppStoresResponse, ReturnType<typeof getEnabledAppStoresQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getEnabledAppStores({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getEnabledAppStoresQueryKey(options)
+});
 
 export const deleteAppStoreMutation = (options?: Partial<Options<DeleteAppStoreData>>): UseMutationOptions<unknown, DefaultError, Options<DeleteAppStoreData>> => {
     const mutationOptions: UseMutationOptions<unknown, DefaultError, Options<DeleteAppStoreData>> = {
@@ -845,63 +809,57 @@ export const deleteAppBackupMutation = (options?: Partial<Options<DeleteAppBacku
 
 export const getAppBackupsQueryKey = (options: Options<GetAppBackupsData>) => createQueryKey('getAppBackups', options);
 
-export const getAppBackupsOptions = (options: Options<GetAppBackupsData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getAppBackups({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getAppBackupsQueryKey(options)
-    });
-};
+export const getAppBackupsOptions = (options: Options<GetAppBackupsData>) => queryOptions<GetAppBackupsResponse, DefaultError, GetAppBackupsResponse, ReturnType<typeof getAppBackupsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getAppBackups({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getAppBackupsQueryKey(options)
+});
 
 export const getAppBackupsInfiniteQueryKey = (options: Options<GetAppBackupsData>): QueryKey<Options<GetAppBackupsData>> => createQueryKey('getAppBackups', options, true);
 
-export const getAppBackupsInfiniteOptions = (options: Options<GetAppBackupsData>) => {
-    return infiniteQueryOptions<GetAppBackupsResponse, DefaultError, InfiniteData<GetAppBackupsResponse>, QueryKey<Options<GetAppBackupsData>>, number | string | Pick<QueryKey<Options<GetAppBackupsData>>[0], 'body' | 'headers' | 'path' | 'query'>>(
-    // @ts-ignore
-    {
-        queryFn: async ({ pageParam, queryKey, signal }) => {
-            // @ts-ignore
-            const page: Pick<QueryKey<Options<GetAppBackupsData>>[0], 'body' | 'headers' | 'path' | 'query'> = typeof pageParam === 'object' ? pageParam : {
-                query: {
-                    page: pageParam
-                }
-            };
-            const params = createInfiniteParams(queryKey, page);
-            const { data } = await getAppBackups({
-                ...options,
-                ...params,
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getAppBackupsInfiniteQueryKey(options)
-    });
-};
+export const getAppBackupsInfiniteOptions = (options: Options<GetAppBackupsData>) => infiniteQueryOptions<GetAppBackupsResponse, DefaultError, InfiniteData<GetAppBackupsResponse>, QueryKey<Options<GetAppBackupsData>>, number | string | Pick<QueryKey<Options<GetAppBackupsData>>[0], 'body' | 'headers' | 'path' | 'query'>>(
+// @ts-ignore
+{
+    queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<QueryKey<Options<GetAppBackupsData>>[0], 'body' | 'headers' | 'path' | 'query'> = typeof pageParam === 'object' ? pageParam : {
+            query: {
+                page: pageParam
+            }
+        };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await getAppBackups({
+            ...options,
+            ...params,
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getAppBackupsInfiniteQueryKey(options)
+});
 
 export const downloadBackupQueryKey = (options: Options<DownloadBackupData>) => createQueryKey('downloadBackup', options);
 
-export const downloadBackupOptions = (options: Options<DownloadBackupData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await downloadBackup({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: downloadBackupQueryKey(options)
-    });
-};
+export const downloadBackupOptions = (options: Options<DownloadBackupData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof downloadBackupQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await downloadBackup({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: downloadBackupQueryKey(options)
+});
 
 export const uploadBackupMutation = (options?: Partial<Options<UploadBackupData>>): UseMutationOptions<unknown, DefaultError, Options<UploadBackupData>> => {
     const mutationOptions: UseMutationOptions<unknown, DefaultError, Options<UploadBackupData>> = {
@@ -919,88 +877,78 @@ export const uploadBackupMutation = (options?: Partial<Options<UploadBackupData>
 
 export const appEventsQueryKey = (options?: Options<AppEventsData>) => createQueryKey('appEvents', options);
 
-export const appEventsOptions = (options?: Options<AppEventsData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await appEvents({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: appEventsQueryKey(options)
-    });
-};
+export const appEventsOptions = (options?: Options<AppEventsData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof appEventsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await appEvents({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: appEventsQueryKey(options)
+});
 
 export const appLogsEventsQueryKey = (options?: Options<AppLogsEventsData>) => createQueryKey('appLogsEvents', options);
 
-export const appLogsEventsOptions = (options?: Options<AppLogsEventsData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await appLogsEvents({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: appLogsEventsQueryKey(options)
-    });
-};
+export const appLogsEventsOptions = (options?: Options<AppLogsEventsData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof appLogsEventsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await appLogsEvents({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: appLogsEventsQueryKey(options)
+});
 
 export const runtipiLogsEventsQueryKey = (options?: Options<RuntipiLogsEventsData>) => createQueryKey('runtipiLogsEvents', options);
 
-export const runtipiLogsEventsOptions = (options?: Options<RuntipiLogsEventsData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await runtipiLogsEvents({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: runtipiLogsEventsQueryKey(options)
-    });
-};
+export const runtipiLogsEventsOptions = (options?: Options<RuntipiLogsEventsData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof runtipiLogsEventsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await runtipiLogsEvents({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: runtipiLogsEventsQueryKey(options)
+});
 
 export const getGuestLinksQueryKey = (options?: Options<GetGuestLinksData>) => createQueryKey('getGuestLinks', options);
 
-export const getGuestLinksOptions = (options?: Options<GetGuestLinksData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getGuestLinks({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getGuestLinksQueryKey(options)
-    });
-};
+export const getGuestLinksOptions = (options?: Options<GetGuestLinksData>) => queryOptions<GetGuestLinksResponse, DefaultError, GetGuestLinksResponse, ReturnType<typeof getGuestLinksQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getGuestLinks({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getGuestLinksQueryKey(options)
+});
 
 export const getLinksQueryKey = (options?: Options<GetLinksData>) => createQueryKey('getLinks', options);
 
-export const getLinksOptions = (options?: Options<GetLinksData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getLinks({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getLinksQueryKey(options)
-    });
-};
+export const getLinksOptions = (options?: Options<GetLinksData>) => queryOptions<GetLinksResponse, DefaultError, GetLinksResponse, ReturnType<typeof getLinksQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getLinks({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getLinksQueryKey(options)
+});
 
 export const createLinkMutation = (options?: Partial<Options<CreateLinkData>>): UseMutationOptions<unknown, DefaultError, Options<CreateLinkData>> => {
     const mutationOptions: UseMutationOptions<unknown, DefaultError, Options<CreateLinkData>> = {
@@ -1046,40 +994,36 @@ export const editLinkMutation = (options?: Partial<Options<EditLinkData>>): UseM
 
 export const checkQueryKey = (options?: Options<CheckData>) => createQueryKey('check', options);
 
-export const checkOptions = (options?: Options<CheckData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await check({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: checkQueryKey(options)
-    });
-};
+export const checkOptions = (options?: Options<CheckData>) => queryOptions<CheckResponse, CheckError, CheckResponse, ReturnType<typeof checkQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await check({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: checkQueryKey(options)
+});
 
 export const getUserConfigQueryKey = (options: Options<GetUserConfigData>) => createQueryKey('getUserConfig', options);
 
 /**
  * Get the user configuration for an app
  */
-export const getUserConfigOptions = (options: Options<GetUserConfigData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getUserConfig({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getUserConfigQueryKey(options)
-    });
-};
+export const getUserConfigOptions = (options: Options<GetUserConfigData>) => queryOptions<GetUserConfigResponse, DefaultError, GetUserConfigResponse, ReturnType<typeof getUserConfigQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getUserConfig({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getUserConfigQueryKey(options)
+});
 
 /**
  * Update the user configuration for an app
@@ -1190,20 +1134,18 @@ export const updateAppMetadataMutation = (options?: Partial<Options<UpdateAppMet
 
 export const getEditableAppConfigQueryKey = (options: Options<GetEditableAppConfigData>) => createQueryKey('getEditableAppConfig', options);
 
-export const getEditableAppConfigOptions = (options: Options<GetEditableAppConfigData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getEditableAppConfig({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getEditableAppConfigQueryKey(options)
-    });
-};
+export const getEditableAppConfigOptions = (options: Options<GetEditableAppConfigData>) => queryOptions<GetEditableAppConfigResponse, DefaultError, GetEditableAppConfigResponse, ReturnType<typeof getEditableAppConfigQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getEditableAppConfig({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getEditableAppConfigQueryKey(options)
+});
 
 export const updateEditableAppConfigMutation = (options?: Partial<Options<UpdateEditableAppConfigData>>): UseMutationOptions<UpdateEditableAppConfigResponse, DefaultError, Options<UpdateEditableAppConfigData>> => {
     const mutationOptions: UseMutationOptions<UpdateEditableAppConfigResponse, DefaultError, Options<UpdateEditableAppConfigData>> = {
@@ -1221,20 +1163,18 @@ export const updateEditableAppConfigMutation = (options?: Partial<Options<Update
 
 export const getTemplateDiffQueryKey = (options: Options<GetTemplateDiffData>) => createQueryKey('getTemplateDiff', options);
 
-export const getTemplateDiffOptions = (options: Options<GetTemplateDiffData>) => {
-    return queryOptions({
-        queryFn: async ({ queryKey, signal }) => {
-            const { data } = await getTemplateDiff({
-                ...options,
-                ...queryKey[0],
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: getTemplateDiffQueryKey(options)
-    });
-};
+export const getTemplateDiffOptions = (options: Options<GetTemplateDiffData>) => queryOptions<GetTemplateDiffResponse, DefaultError, GetTemplateDiffResponse, ReturnType<typeof getTemplateDiffQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getTemplateDiff({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getTemplateDiffQueryKey(options)
+});
 
 export const syncWithTemplateMutation = (options?: Partial<Options<SyncWithTemplateData>>): UseMutationOptions<SyncWithTemplateResponse, DefaultError, Options<SyncWithTemplateData>> => {
     const mutationOptions: UseMutationOptions<SyncWithTemplateResponse, DefaultError, Options<SyncWithTemplateData>> = {

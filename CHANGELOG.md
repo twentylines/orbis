@@ -2,6 +2,7 @@
 
 ## Unreleased development preview
 
+- Update the API generator and regenerate its runtime templates to prevent parameter prototype substitution. Update translation URL validation and check normal request transport, preserved SDK routes and rejected unsafe language/namespace values.
 - Fill custom workspace rows while preserving wide/normal proportions. Remove forced launcher blank height; retain the default layout and contained all-app scrolling. Check native and doubled text across four widths and seven arrangements.
 - Raise the ORM's minimum version past the quoted-identifier security fix; lock both workspaces to 0.45.4 and verify embedded quotes in PostgreSQL identifiers and aliases. Remaining generator/translation dependency work is recorded in `DEPENDENCY-SECURITY.md`.
 - Keep desktop headers outside the section animation snapshot so backdrop blur samples the wallpaper; retain directional content slides and phone page transitions.

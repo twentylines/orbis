@@ -1,0 +1,352 @@
+{
+  "source": "Compiled source on static localhost:8080 with intercepted synthetic APIs; no live server or credential submission",
+  "generation": {
+    "generatedFiles": 17,
+    "repeatGenerationIdentical": true,
+    "sdkExportsPreserved": 81,
+    "sdkRoutesPreserved": 81,
+    "source": "Frozen Bun install; actual generator output, types, SDK transport and URL regression checks"
+  },
+  "routes": {
+    "viewports": [
+      {
+        "viewport": "desktop",
+        "errors": []
+      },
+      {
+        "viewport": "tablet",
+        "errors": []
+      },
+      {
+        "viewport": "mobile",
+        "errors": []
+      },
+      {
+        "viewport": "narrow",
+        "errors": []
+      }
+    ],
+    "groups": 4,
+    "captures": 108,
+    "errors": [],
+    "flagAudit": {
+      "requiredPositiveFlags": 312,
+      "allRequiredPositiveTrue": true,
+      "expectedNegativeFlags": 36,
+      "allExpectedNegativeFalse": true,
+      "intentionalTabSelectionStatesKeptSeparate": true
+    }
+  },
+  "flagAudit": [
+    {
+      "viewport": "desktop",
+      "requiredPositiveFlags": 78,
+      "allRequiredPositiveTrue": true,
+      "expectedNegativeFlags": [
+        {
+          "path": "tasksOverflow",
+          "value": false
+        },
+        {
+          "path": "workspaceOverflow",
+          "value": false
+        },
+        {
+          "path": "workspaceBackgroundGap",
+          "value": false
+        },
+        {
+          "path": "editOverflow",
+          "value": false
+        },
+        {
+          "path": "monitorOverflow",
+          "value": false
+        },
+        {
+          "path": "appsOverflow",
+          "value": false
+        },
+        {
+          "path": "storeOverflow",
+          "value": false
+        },
+        {
+          "path": "updatesOverflow",
+          "value": false
+        },
+        {
+          "path": "settingsOverflow",
+          "value": false
+        }
+      ],
+      "allExpectedNegativeFalse": true,
+      "intentionalTabSelectionStates": [
+        ["settingsAlignment.tabs.0.active", false],
+        ["settingsAlignment.tabs.1.active", true],
+        ["settingsAlignment.tabs.2.active", false],
+        ["settingsAlignment.tabs.3.active", false],
+        ["settingsAlignment.tabs.4.active", false],
+        ["settingsAlignment.tabs.5.active", false]
+      ],
+      "expectedStringStates": {
+        "editedOrder": "System status",
+        "savingAfterPin": "Saving layout\u2026",
+        "graphitePersisted": "true",
+        "wallpaperPersisted": "true",
+        "bodyTheme": "dark",
+        "graphiteHeadingColor": "rgb(237, 242, 239)"
+      },
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "requiredPositiveFlags": 78,
+      "allRequiredPositiveTrue": true,
+      "expectedNegativeFlags": [
+        {
+          "path": "tasksOverflow",
+          "value": false
+        },
+        {
+          "path": "workspaceOverflow",
+          "value": false
+        },
+        {
+          "path": "workspaceBackgroundGap",
+          "value": false
+        },
+        {
+          "path": "editOverflow",
+          "value": false
+        },
+        {
+          "path": "monitorOverflow",
+          "value": false
+        },
+        {
+          "path": "appsOverflow",
+          "value": false
+        },
+        {
+          "path": "storeOverflow",
+          "value": false
+        },
+        {
+          "path": "updatesOverflow",
+          "value": false
+        },
+        {
+          "path": "settingsOverflow",
+          "value": false
+        }
+      ],
+      "allExpectedNegativeFalse": true,
+      "intentionalTabSelectionStates": [
+        ["settingsAlignment.tabs.0.active", false],
+        ["settingsAlignment.tabs.1.active", true],
+        ["settingsAlignment.tabs.2.active", false],
+        ["settingsAlignment.tabs.3.active", false],
+        ["settingsAlignment.tabs.4.active", false],
+        ["settingsAlignment.tabs.5.active", false]
+      ],
+      "expectedStringStates": {
+        "editedOrder": "System status",
+        "savingAfterPin": "Saving layout\u2026",
+        "graphitePersisted": "true",
+        "wallpaperPersisted": "true",
+        "bodyTheme": "dark",
+        "graphiteHeadingColor": "rgb(237, 242, 239)"
+      },
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "requiredPositiveFlags": 78,
+      "allRequiredPositiveTrue": true,
+      "expectedNegativeFlags": [
+        {
+          "path": "tasksOverflow",
+          "value": false
+        },
+        {
+          "path": "workspaceOverflow",
+          "value": false
+        },
+        {
+          "path": "workspaceBackgroundGap",
+          "value": false
+        },
+        {
+          "path": "editOverflow",
+          "value": false
+        },
+        {
+          "path": "monitorOverflow",
+          "value": false
+        },
+        {
+          "path": "appsOverflow",
+          "value": false
+        },
+        {
+          "path": "storeOverflow",
+          "value": false
+        },
+        {
+          "path": "updatesOverflow",
+          "value": false
+        },
+        {
+          "path": "settingsOverflow",
+          "value": false
+        }
+      ],
+      "allExpectedNegativeFalse": true,
+      "intentionalTabSelectionStates": [
+        ["settingsAlignment.tabs.0.active", false],
+        ["settingsAlignment.tabs.1.active", true],
+        ["settingsAlignment.tabs.2.active", false],
+        ["settingsAlignment.tabs.3.active", false],
+        ["settingsAlignment.tabs.4.active", false]
+      ],
+      "expectedStringStates": {
+        "editedOrder": "System status",
+        "savingAfterPin": "Saving layout\u2026",
+        "graphitePersisted": "true",
+        "wallpaperPersisted": "true",
+        "bodyTheme": "dark",
+        "graphiteHeadingColor": "rgb(237, 242, 239)"
+      },
+      "errors": []
+    },
+    {
+      "viewport": "narrow",
+      "requiredPositiveFlags": 78,
+      "allRequiredPositiveTrue": true,
+      "expectedNegativeFlags": [
+        {
+          "path": "tasksOverflow",
+          "value": false
+        },
+        {
+          "path": "workspaceOverflow",
+          "value": false
+        },
+        {
+          "path": "workspaceBackgroundGap",
+          "value": false
+        },
+        {
+          "path": "editOverflow",
+          "value": false
+        },
+        {
+          "path": "monitorOverflow",
+          "value": false
+        },
+        {
+          "path": "appsOverflow",
+          "value": false
+        },
+        {
+          "path": "storeOverflow",
+          "value": false
+        },
+        {
+          "path": "updatesOverflow",
+          "value": false
+        },
+        {
+          "path": "settingsOverflow",
+          "value": false
+        }
+      ],
+      "allExpectedNegativeFalse": true,
+      "intentionalTabSelectionStates": [
+        ["settingsAlignment.tabs.0.active", false],
+        ["settingsAlignment.tabs.1.active", true],
+        ["settingsAlignment.tabs.2.active", false],
+        ["settingsAlignment.tabs.3.active", false],
+        ["settingsAlignment.tabs.4.active", false]
+      ],
+      "expectedStringStates": {
+        "editedOrder": "System status",
+        "savingAfterPin": "Saving layout\u2026",
+        "graphitePersisted": "true",
+        "wallpaperPersisted": "true",
+        "bodyTheme": "dark",
+        "graphiteHeadingColor": "rgb(237, 242, 239)"
+      },
+      "errors": []
+    }
+  ],
+  "login": {
+    "source": "Static8080 assets; fresh anonymous browser context; all API requests fulfilled/blocked locally; no credentials entered or submitted",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "requests": [
+      {
+        "path": "/api/i18n/locales/translation/en-GB.json",
+        "method": "GET"
+      },
+      {
+        "path": "/api/i18n/locales/translation/en.json",
+        "method": "GET"
+      },
+      {
+        "path": "/api/user-context",
+        "method": "GET"
+      },
+      {
+        "path": "/api/user-context",
+        "method": "GET"
+      },
+      {
+        "path": "/api/user-context",
+        "method": "GET"
+      }
+    ],
+    "translationResponses": [
+      {
+        "path": "/api/i18n/locales/translation/en-GB.json",
+        "status": 200,
+        "keyCount": 667,
+        "emailLabel": "Email address",
+        "submit": "Log in"
+      }
+    ],
+    "blockedMutations": [],
+    "errors": [],
+    "rendered": {
+      "text": "Log in to your account\nEmail address\nPassword\nLog in\nForgot password?\n\nOrbis is built on Runtipi.",
+      "box": {
+        "left": 15,
+        "right": 375,
+        "top": 334.453125,
+        "bottom": 716.09375
+      },
+      "inputs": [
+        {
+          "type": "email",
+          "hasLabel": true,
+          "width": 318
+        },
+        {
+          "type": "password",
+          "hasLabel": true,
+          "width": 318
+        }
+      ],
+      "documentWidth": 390
+    }
+  },
+  "regressions": {
+    "tests": 9,
+    "assertions": 42,
+    "passed": true,
+    "network": "Controlled transports only"
+  }
+}

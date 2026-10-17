@@ -610,15 +610,7 @@ export type CreateCustomAppDto = {
                     internal_port?: number | string;
                     is_main?: boolean;
                 };
-                [key: string]: unknown | string | {
-                    [key: string]: number | string | boolean;
-                } | Array<string> | {
-                    [key: string]: unknown;
-                } | Array<string> | Array<unknown> | {
-                    add_to_main_network?: boolean;
-                    internal_port?: number | string;
-                    is_main?: boolean;
-                } | undefined;
+                [key: string]: unknown;
             };
         };
         'x-runtipi': {
@@ -640,15 +632,7 @@ export type CreateCustomAppDto = {
                             internal_port?: number | string;
                             is_main?: boolean;
                         };
-                        [key: string]: unknown | string | {
-                            [key: string]: number | string | boolean;
-                        } | Array<string> | {
-                            [key: string]: unknown;
-                        } | Array<string> | Array<unknown> | {
-                            add_to_main_network?: boolean;
-                            internal_port?: number | string;
-                            is_main?: boolean;
-                        } | undefined;
+                        [key: string]: unknown;
                     };
                 };
             }>;
@@ -656,65 +640,7 @@ export type CreateCustomAppDto = {
         networks?: {
             [key: string]: unknown;
         };
-        [key: string]: unknown | {
-            [key: string]: {
-                image: string;
-                labels?: {
-                    [key: string]: number | string | boolean;
-                } | Array<string>;
-                networks?: {
-                    [key: string]: unknown;
-                } | Array<string>;
-                ports?: Array<unknown>;
-                'x-runtipi'?: {
-                    add_to_main_network?: boolean;
-                    internal_port?: number | string;
-                    is_main?: boolean;
-                };
-                [key: string]: unknown | string | {
-                    [key: string]: number | string | boolean;
-                } | Array<string> | {
-                    [key: string]: unknown;
-                } | Array<string> | Array<unknown> | {
-                    add_to_main_network?: boolean;
-                    internal_port?: number | string;
-                    is_main?: boolean;
-                } | undefined;
-            };
-        } | {
-            schema_version: 1 | 2;
-            overrides?: Array<{
-                architecture: 'amd64' | 'arm64';
-                services: {
-                    [key: string]: {
-                        image: string;
-                        labels?: {
-                            [key: string]: number | string | boolean;
-                        } | Array<string>;
-                        networks?: {
-                            [key: string]: unknown;
-                        } | Array<string>;
-                        ports?: Array<unknown>;
-                        'x-runtipi'?: {
-                            add_to_main_network?: boolean;
-                            internal_port?: number | string;
-                            is_main?: boolean;
-                        };
-                        [key: string]: unknown | string | {
-                            [key: string]: number | string | boolean;
-                        } | Array<string> | {
-                            [key: string]: unknown;
-                        } | Array<string> | Array<unknown> | {
-                            add_to_main_network?: boolean;
-                            internal_port?: number | string;
-                            is_main?: boolean;
-                        } | undefined;
-                    };
-                };
-            }>;
-        } | {
-            [key: string]: unknown;
-        } | undefined;
+        [key: string]: unknown;
     };
     name: string;
 };
@@ -742,15 +668,7 @@ export type UpdateCustomAppDto = {
                     internal_port?: number | string;
                     is_main?: boolean;
                 };
-                [key: string]: unknown | string | {
-                    [key: string]: number | string | boolean;
-                } | Array<string> | {
-                    [key: string]: unknown;
-                } | Array<string> | Array<unknown> | {
-                    add_to_main_network?: boolean;
-                    internal_port?: number | string;
-                    is_main?: boolean;
-                } | undefined;
+                [key: string]: unknown;
             };
         };
         'x-runtipi': {
@@ -772,15 +690,7 @@ export type UpdateCustomAppDto = {
                             internal_port?: number | string;
                             is_main?: boolean;
                         };
-                        [key: string]: unknown | string | {
-                            [key: string]: number | string | boolean;
-                        } | Array<string> | {
-                            [key: string]: unknown;
-                        } | Array<string> | Array<unknown> | {
-                            add_to_main_network?: boolean;
-                            internal_port?: number | string;
-                            is_main?: boolean;
-                        } | undefined;
+                        [key: string]: unknown;
                     };
                 };
             }>;
@@ -788,65 +698,7 @@ export type UpdateCustomAppDto = {
         networks?: {
             [key: string]: unknown;
         };
-        [key: string]: unknown | {
-            [key: string]: {
-                image: string;
-                labels?: {
-                    [key: string]: number | string | boolean;
-                } | Array<string>;
-                networks?: {
-                    [key: string]: unknown;
-                } | Array<string>;
-                ports?: Array<unknown>;
-                'x-runtipi'?: {
-                    add_to_main_network?: boolean;
-                    internal_port?: number | string;
-                    is_main?: boolean;
-                };
-                [key: string]: unknown | string | {
-                    [key: string]: number | string | boolean;
-                } | Array<string> | {
-                    [key: string]: unknown;
-                } | Array<string> | Array<unknown> | {
-                    add_to_main_network?: boolean;
-                    internal_port?: number | string;
-                    is_main?: boolean;
-                } | undefined;
-            };
-        } | {
-            schema_version: 1 | 2;
-            overrides?: Array<{
-                architecture: 'amd64' | 'arm64';
-                services: {
-                    [key: string]: {
-                        image: string;
-                        labels?: {
-                            [key: string]: number | string | boolean;
-                        } | Array<string>;
-                        networks?: {
-                            [key: string]: unknown;
-                        } | Array<string>;
-                        ports?: Array<unknown>;
-                        'x-runtipi'?: {
-                            add_to_main_network?: boolean;
-                            internal_port?: number | string;
-                            is_main?: boolean;
-                        };
-                        [key: string]: unknown | string | {
-                            [key: string]: number | string | boolean;
-                        } | Array<string> | {
-                            [key: string]: unknown;
-                        } | Array<string> | Array<unknown> | {
-                            add_to_main_network?: boolean;
-                            internal_port?: number | string;
-                            is_main?: boolean;
-                        } | undefined;
-                    };
-                };
-            }>;
-        } | {
-            [key: string]: unknown;
-        } | undefined;
+        [key: string]: unknown;
     };
 };
 
@@ -1696,19 +1548,19 @@ export type CheckErrors = {
         info?: {
             [key: string]: {
                 status: string;
-                [key: string]: unknown | string;
+                [key: string]: unknown;
             };
         };
         error?: {
             [key: string]: {
                 status: string;
-                [key: string]: unknown | string;
+                [key: string]: unknown;
             };
         };
         details?: {
             [key: string]: {
                 status: string;
-                [key: string]: unknown | string;
+                [key: string]: unknown;
             };
         };
     };
@@ -1725,19 +1577,19 @@ export type CheckResponses = {
         info?: {
             [key: string]: {
                 status: string;
-                [key: string]: unknown | string;
+                [key: string]: unknown;
             };
         };
         error?: {
             [key: string]: {
                 status: string;
-                [key: string]: unknown | string;
+                [key: string]: unknown;
             };
         };
         details?: {
             [key: string]: {
                 status: string;
-                [key: string]: unknown | string;
+                [key: string]: unknown;
             };
         };
     };
