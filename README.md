@@ -25,6 +25,8 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 
 [Responsive pages and corrected Settings alignment](screenshots/page-navigation/README.md)
 
+[Published beta36 status themes, window/layout measurements and fresh login](screenshots/live-beta36/README.md)
+
 [Published beta34 Settings/Store alignment, short-screen focus and fresh login](screenshots/live-beta34/README.md)
 
 [Floating tool](screenshots/windows/desktop-light-floating-settings.png) · [Dark floating tool](screenshots/windows/desktop-dark-floating-settings.png) · [Snapped tool](screenshots/windows/desktop-light-snap-left-settings.png) · [Maximized at4K](screenshots/windows/4k-dark-maximized-settings.png) · [Minimized tool](screenshots/windows/desktop-light-window-minimized.png)

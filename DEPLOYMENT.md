@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Published beta36: status themes and glass headers (18 October 2026)
+
+Release workflow `39077874705` passed for source `2ae0165246f022b6cca2c93b0ed7be6f5da286e4`. The release checker matched both architectures and image digest `sha256:093074760b2021cbf54604bccf3d8731d2c29d42d5b67c8d7d73735e62c49b39`. The real browser reviewed and applied beta35→36, job `bf231fa5-6d1f-47ad-93a5-a283d8061629`, reaching the exact healthy image. Both app records, account preferences and28 task outcomes matched.
+
+The stopped beta35 snapshot independently verified 3,591 entries, 2,827 files and 149,778,677 bytes, tree hash `9a02092057ec311c1090e1665f644f3db118ebeaccee8e9f003e520d94457463`. The separate33-entry/17-file application/configuration/data comparison still matches `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`.
+
+The unmodified released-image window flow passes with17px sampled heading padding, zero frame scroll and Home at scrollY0. Eight real saves plus restoration complete with no cancelled requests; protected API state and original preferences match. Fresh password login passes and closes only its new session.48 released Home/Monitor compositions pass at1440/390px across all six presets and both modes, using actual APIs and browser-only appearance shadows. No page error or real mutation occurs in that theme run; full records match. [Selected released captures and sanitized assertions](screenshots/live-beta36/README.md) record this scope.
+
+Manual inspection found a separate saved-Home layout issue: setting both Applications and System status wide leaves empty columns and excess launcher height. This remains a concrete follow-up and is not covered by the theme pass. The source ORM patch on later main commit `e74924f1` passes CI/integration and closes both high dependency alerts on main; it is not in beta36. Other dependency work and full production acceptance remain open. Hades is untouched.
+
 ## Published beta35 and beta36 visual correction (16 October 2026)
 
 Release workflow `38854620521` passed for source `fe6f25b0c56c5d427cff77be771cecf6b6911774`; both image architectures matched the read-only checker and OCI index `sha256:f89c283e5f5c18aea1a9ee33a0a757c6ab088cc00a7714232b18c66f8785f87b`. The real browser reviewed and applied beta34→35, job `9836e222-24cc-417e-ba59-b9e66b88b108`, reaching the exact healthy image. Both app records, preferences and 28 task outcomes matched. Its stopped beta34 snapshot independently verified 3,579 entries, 2,815 files, 97,254,261 bytes and tree hash `d62997685ce3576288afaff632d83f5e383165a4246faf2a5ae247529a9234dd`. The separate 33-entry/17-file application/configuration/data hash still matched `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`. Fresh actual password login passed and closed only its new session.

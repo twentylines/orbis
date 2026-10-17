@@ -1,0 +1,103 @@
+{
+  "source": {
+    "live": [
+      "Published authenticated HTML, JavaScript, CSS and actual API reads",
+      "Actual account/server name, workspace, installed/full app records, stores and host telemetry"
+    ],
+    "controlled": [
+      "Browser-only preference GET/PUT shadow: requested mode/preset and empty desktop placement; actual serverName/workspace unchanged",
+      "Browser-only restrictive connect-src self response header; published HTML/JS/CSS bodies remain unchanged, response headers are not claimed identical"
+    ],
+    "realPreferenceWrites": 0,
+    "realAppHostOrSessionWrites": 0,
+    "capture": "Native viewport captures at natural route top; Home adds separately labelled CDP full-card clips without scrolling"
+  },
+  "release": {
+    "tag": "v0.1.0-beta.36",
+    "commit": "2ae0165246f022b6cca2c93b0ed7be6f5da286e4",
+    "image": "ghcr.io/twentylines/orbis@sha256:093074760b2021cbf54604bccf3d8731d2c29d42d5b67c8d7d73735e62c49b39"
+  },
+  "ota": {
+    "from": "v0.1.0-beta.35",
+    "version": "v0.1.0-beta.36",
+    "commit": "2ae0165246f022b6cca2c93b0ed7be6f5da286e4",
+    "digest": "sha256:093074760b2021cbf54604bccf3d8731d2c29d42d5b67c8d7d73735e62c49b39",
+    "jobId": "bf231fa5-6d1f-47ad-93a5-a283d8061629",
+    "preferencesRetained": true,
+    "appRecordsRetained": 2,
+    "taskOutcomesRetained": 28,
+    "healthy": true,
+    "pageErrors": []
+  },
+  "stoppedSnapshot": {
+    "release": "v0.1.0-beta.35",
+    "dockerContext": "default",
+    "treeSha256": "9a02092057ec311c1090e1665f644f3db118ebeaccee8e9f003e520d94457463",
+    "entries": 3591,
+    "files": 2827,
+    "bytes": 149778677
+  },
+  "protectedApplicationFiles": {
+    "matched": true,
+    "entries": 33,
+    "files": 17,
+    "sha256": "7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2"
+  },
+  "window": {
+    "passed": true,
+    "browserLocalClipFramePreview": false,
+    "captureHeaders": [
+      {
+        "stage": "desktop-account-placement-reload",
+        "frameTop": 185,
+        "barTop": 186,
+        "scrollTop": 0,
+        "topPadding": 17
+      },
+      {
+        "stage": "desktop-maximize-monitor",
+        "frameTop": 108,
+        "barTop": 109,
+        "scrollTop": 0,
+        "topPadding": 17
+      }
+    ],
+    "mobileHomeStartsAtTop": {
+      "top": 128,
+      "barBottom": 98,
+      "scrollY": 0
+    },
+    "preferenceWrites": 8,
+    "restorationWrites": 1,
+    "failedPreferenceRequests": 0,
+    "originalPreferencesRestored": true,
+    "protectedApiStatePreserved": true,
+    "cleanupConfirmed": true
+  },
+  "login": {
+    "passed": true,
+    "tag": "v0.1.0-beta.36",
+    "commit": "2ae0165246f022b6cca2c93b0ed7be6f5da286e4",
+    "digest": "sha256:093074760b2021cbf54604bccf3d8731d2c29d42d5b67c8d7d73735e62c49b39",
+    "loginPosts": 1,
+    "unchangedPreferenceWrites": 0,
+    "blockedMutations": [],
+    "pageErrors": [],
+    "newSessionClosed": true,
+    "originalSessionRetained": true,
+    "preferencesRetained": true
+  },
+  "themes": {
+    "compositions": 48,
+    "recordsUnchanged": true,
+    "pageErrors": [],
+    "blockedMutations": [],
+    "cleanupFailures": [],
+    "realPreferenceWrites": 0,
+    "realAppHostOrSessionWrites": 0,
+    "distinctPresetsPerMode": 6,
+    "modes": ["light", "dark"],
+    "viewports": [1440, 390]
+  },
+  "remainingFinding": "Saved Home with Applications and System status both wide leaves unused columns and a 374px minimum app panel height. Follow-up required; theme pass does not accept that complete Home layout."
+}
