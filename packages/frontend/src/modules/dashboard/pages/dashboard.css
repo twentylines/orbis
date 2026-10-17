@@ -216,6 +216,7 @@
   margin-top: 12px;
 }
 .workspace-all-hidden {
+  flex: 1 1 100%;
   grid-column: 1 / -1;
   padding: 32px;
   border: 1px solid var(--desktop-line);
@@ -255,14 +256,14 @@
   box-shadow: inset 0 2px 8px rgba(15, 43, 37, 0.16);
 }
 .workspace-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-flow: row dense;
+  display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
   gap: 18px;
 }
 .workspace-widget {
   min-width: 0;
+  flex: 1 1 calc((100% - 36px) / 3);
   grid-column: span 4;
   animation: orbis-panel-enter 0.56s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -283,17 +284,21 @@
 }
 .workspace-widget-activity,
 .workspace-widget-applications {
+  flex-basis: calc((100% - 18px) * 5 / 12);
   grid-column: span 5;
 }
 .workspace-widget-wide {
+  flex-basis: calc((100% - 18px) * 7 / 12);
   grid-column: span 7;
 }
 .workspace-widget-storage,
 .workspace-widget-attention {
+  flex-basis: calc((100% - 18px) / 2);
   grid-column: span 6;
 }
 .workspace-widget-storage.workspace-widget-wide,
 .workspace-widget-attention.workspace-widget-wide {
+  flex-basis: calc((100% - 18px) * 8 / 12);
   grid-column: span 8;
 }
 .workspace-apps,
@@ -321,7 +326,7 @@
 }
 .workspace-apps {
   padding: 28px 0 31px;
-  min-height: 374px;
+  min-height: 0;
   position: relative;
   overflow: clip;
   background: transparent;
@@ -1169,6 +1174,7 @@
   color: var(--workspace-heading-ink);
 }
 :where([data-default-layout="true"]).workspace-grid {
+  display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   grid-template-rows: auto auto 1fr;
 }
@@ -1301,6 +1307,7 @@
     grid-template-columns: 1fr;
   }
   .workspace-grid {
+    display: grid;
     grid-template-columns: 1fr;
   }
   :where([data-default-layout="true"]).workspace-grid {

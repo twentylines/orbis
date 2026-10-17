@@ -99,5 +99,26 @@
     "modes": ["light", "dark"],
     "viewports": [1440, 390]
   },
-  "remainingFinding": "Saved Home with Applications and System status both wide leaves unused columns and a 374px minimum app panel height. Follow-up required; theme pass does not accept that complete Home layout."
+  "remainingFinding": "Saved Home with Applications and System status both wide leaves unused columns and a 374px minimum app panel height. Follow-up required; theme pass does not accept that complete Home layout.",
+  "stylesheets": {
+    "publishedCount": 15,
+    "byteIdenticalToBlurVerifiedSourceBundle": 15,
+    "sha256": [
+      "01128cae1825d5d392e08b425d0c23eb0b7e28bfc31b091c6f2ae775e51e06b9",
+      "051f3f60041c000dda5da66c958c3608889db67b6583698eb2b02faff8ecbe1f",
+      "12022342a917bbf7081ad5b0af9d4626189b62ac6b6f5ec6b761819eb76c1b6b",
+      "14ca02b82225c8548c1b223cbca8968e39a8ea1314f795d3045823237fba904b",
+      "1e683d7b81d4f6cf46c96271762eb550d7b2d56104b9bb0a6803de6b8ea2fb86",
+      "28bc7c46a3e6c9ca2bbabf57ece28aa68b2466d30a74df11a2f83557ab82cd12",
+      "36451f7ba12fd6061a24c1dce0213b36f86d8bd4a28b7dc30fa1dc4e9b2e10a5",
+      "3d1d6cd24b99c8e4dd55f8433d44690375c9fb8259a17d54dc9a3d28ab4a829c",
+      "50aaf3dbd9142cb3bb66976021a852a314535bd4cbb248b680cc19b68641e680",
+      "9fa400f4474ff628100e97e745804fe86910217f1c337013ed26b71a2e599c39",
+      "c27ddd3e6223fd3ce22d06e0f292d39e30b4f252ab87c6cc2e28e4e65622d5cf",
+      "cb1b5312444ed46c7c4df2564634e2eab44e99a93cb6736266d0cec612ea3d97",
+      "f9a70947174ab91390271d4a55ee083e750a403d7c82411679b8a8e91010da44",
+      "fc798ff18662b2e329078f7728b6352151d83612068e88962a1074142d723ebf",
+      "ff897180b22337aae96c053215682c38b78180b0e273b89d7473cfcc0f7dd6b5"
+    ]
+  }
 }

@@ -25,6 +25,7 @@ const inspectEnlargedText = require('./enlarged-text-checks.cjs');
 const inspectSurfaceComfort = require('./surface-comfort-checks.cjs');
 const inspectMonitorThemes = require('./monitor-theme-checks.cjs');
 const inspectHomeStatusThemes = require('./home-status-theme-checks.cjs');
+const inspectCustomWorkspace = require('./custom-workspace-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
 const searchComfortOnly = process.env.ORBIS_VISUAL_SEARCH_COMFORT_ONLY === '1';
@@ -47,6 +48,7 @@ const textOnly = process.env.ORBIS_VISUAL_TEXT_ONLY === '1';
 const comfortOnly = process.env.ORBIS_VISUAL_COMFORT_ONLY === '1';
 const monitorThemesOnly = process.env.ORBIS_VISUAL_MONITOR_THEMES_ONLY === '1';
 const homeStatusThemesOnly = process.env.ORBIS_VISUAL_HOME_STATUS_THEMES_ONLY === '1';
+const customWorkspaceOnly = process.env.ORBIS_VISUAL_CUSTOM_WORKSPACE_ONLY === '1';
 const textScale = Number(process.env.ORBIS_VISUAL_TEXT_SCALE || 2);
 if (![1, 2].includes(textScale)) throw new Error('ORBIS_VISUAL_TEXT_SCALE must be 1 or 2');
 
@@ -65,7 +67,8 @@ if (
     switchComfortOnly ||
     pagesOnly ||
     monitorThemesOnly ||
-    homeStatusThemesOnly) &&
+    homeStatusThemesOnly ||
+    customWorkspaceOnly) &&
   zoom !== 1
 )
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
@@ -693,6 +696,18 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (customWorkspaceOnly) {
+      const customWorkspace = await inspectCustomWorkspace({
+        page,
+        base,
+        fixtures: { preferences: freshPreferences(), apps },
+        negativeControl: process.env.ORBIS_VISUAL_CUSTOM_WORKSPACE_NEGATIVE === '1',
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, customWorkspace, errors });
+      await page.close();
+      continue;
+    }
     if (homeStatusThemesOnly) {
       const homeStatusThemes = await inspectHomeStatusThemes({
         page,
@@ -1343,7 +1358,8 @@ async function main() {
     textOnly ||
     comfortOnly ||
     monitorThemesOnly ||
-    homeStatusThemesOnly
+    homeStatusThemesOnly ||
+    customWorkspaceOnly
   ) {
     if (reports.some((report) => report.errors.length)) process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);

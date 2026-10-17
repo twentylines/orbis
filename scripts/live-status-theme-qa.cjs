@@ -301,6 +301,9 @@ async function inspectSurface(page, surface) {
     ]
       .filter((node) => !node.closest('[aria-hidden="true"]') && node.clientWidth > 0 && node.scrollWidth > node.clientWidth + 1)
       .map((node) => ({ tag: node.tagName, className: node.className }));
+    const grid = kind === 'home' ? document.querySelector('.workspace-grid') : null;
+    const launcher = grid?.querySelector('.workspace-apps');
+    const launcherEnd = launcher?.lastElementChild;
     return {
       surface: kind,
       card: surfaceBox,
@@ -327,6 +330,26 @@ async function inspectSurface(page, surface) {
       dock: box(dock),
       outerScroll: { x: scrollX, y: scrollY },
       documentWidth: document.documentElement.scrollWidth,
+      workspace: grid
+        ? {
+            grid: box(grid),
+            defaultLayout: grid.dataset.defaultLayout === 'true',
+            gap: Number.parseFloat(getComputedStyle(grid).columnGap),
+            widgets: [...grid.querySelectorAll(':scope > .workspace-widget')].map((node) => ({
+              id: node.dataset.widget,
+              ...box(node),
+            })),
+            launcher: launcher
+              ? {
+                  ...box(launcher),
+                  minHeight: getComputedStyle(launcher).minHeight,
+                  forcedBlank: launcherEnd
+                    ? Math.max(0, box(launcher).bottom - box(launcherEnd).bottom - Number.parseFloat(getComputedStyle(launcher).paddingBottom))
+                    : null,
+                }
+              : null,
+          }
+        : null,
       frame: frame
         ? {
             ...box(frame),
@@ -379,6 +402,33 @@ function checkSurface(metrics, viewport) {
     for (const label of ['Core network', 'Storage', 'Orbis core filesystem'])
       assert.ok(metrics.labels.includes(label), 'Home status labels must be complete');
     assert.equal(metrics.frame, null, 'Home must remain the normal workspace');
+    const { workspace } = metrics;
+    assert.ok(workspace?.widgets.length, 'Actual workspace widgets must be measured');
+    if (!workspace.defaultLayout) {
+      const rows = [];
+      for (const widget of workspace.widgets) {
+        let row = rows.find((items) => Math.abs(items[0].top - widget.top) < 1);
+        if (!row) {
+          row = [];
+          rows.push(row);
+        }
+        row.push(widget);
+      }
+      for (const row of rows) {
+        row.sort((left, right) => left.left - right.left);
+        assert.ok(Math.abs(row[0].left - workspace.grid.left) < 1, 'Custom row must align with the workspace left edge');
+        assert.ok(Math.abs(row.at(-1).right - workspace.grid.right) < 1, 'Custom row must fill the workspace width');
+        for (let index = 1; index < row.length; index++)
+          assert.ok(Math.abs(row[index].left - row[index - 1].right - workspace.gap) < 1, 'Custom card gaps must remain consistent');
+      }
+    }
+    if (workspace.launcher) {
+      assert.equal(workspace.launcher.minHeight, '0px', 'Launcher must not impose empty minimum height');
+      const sharesRow = workspace.widgets.some(
+        (widget) => Math.abs(widget.top - workspace.launcher.top) < 1 && Math.abs(widget.left - workspace.launcher.left) >= 1,
+      );
+      if (!sharesRow) assert.ok(workspace.launcher.forcedBlank < 1, 'An independent launcher must use its natural content height');
+    }
   } else {
     assert.ok(metrics.frame, 'Monitor must use the actual tool frame');
     assert.equal(metrics.frame.scrollTop, 0, 'Monitor frame must start at its native top');

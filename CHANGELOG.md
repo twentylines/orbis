@@ -2,6 +2,7 @@
 
 ## Unreleased development preview
 
+- Fill custom workspace rows while preserving wide/normal proportions. Remove forced launcher blank height; retain the default layout and contained all-app scrolling. Check native and doubled text across four widths and seven arrangements.
 - Raise the ORM's minimum version past the quoted-identifier security fix; lock both workspaces to 0.45.4 and verify embedded quotes in PostgreSQL identifiers and aliases. Remaining generator/translation dependency work is recorded in `DEPENDENCY-SECURITY.md`.
 - Keep desktop headers outside the section animation snapshot so backdrop blur samples the wallpaper; retain directional content slides and phone page transitions.
 - Remove bright white chrome rims and nested corner seams. Give top bars and coloured desktop headers the dock's palette-aware glass blur, with a readable opaque fallback.

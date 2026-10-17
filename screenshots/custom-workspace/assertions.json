@@ -1,0 +1,120 @@
+{
+  "samples": 112,
+  "viewports": [
+    {
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1120,
+      "samples": 28
+    },
+    {
+      "viewport": "tablet",
+      "width": 768,
+      "height": 1024,
+      "samples": 28
+    },
+    {
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "samples": 28
+    },
+    {
+      "viewport": "narrow",
+      "width": 320,
+      "height": 800,
+      "samples": 28
+    }
+  ],
+  "scenarios": [
+    "exact-saved-wide-two",
+    "default-two",
+    "half-two",
+    "mixed-seven-five-two",
+    "wide-empty",
+    "wide-eight-bounded",
+    "wide-eight-unbounded"
+  ],
+  "native": 56,
+  "doubled": 56,
+  "captures": 122,
+  "keyboardScrollCases": 10,
+  "failedChecks": [],
+  "errors": [],
+  "shadowWrites": [],
+  "blockedMutations": [],
+  "exactDesktop": {
+    "grid": {
+      "left": 36,
+      "right": 1404,
+      "top": 257.359375,
+      "bottom": 1403.40625,
+      "width": 1368,
+      "height": 1146.046875,
+      "display": "flex",
+      "defaultLayout": "false",
+      "gap": 18
+    },
+    "launcher": {
+      "left": 36,
+      "right": 1404,
+      "top": 257.359375,
+      "bottom": 474.9375,
+      "width": 1368,
+      "height": 217.578125,
+      "minHeight": "0px",
+      "paddingBottom": 31,
+      "lastChild": {
+        "left": 36,
+        "right": 1404,
+        "top": 350.359375,
+        "bottom": 443.9375,
+        "width": 1368,
+        "height": 93.578125
+      },
+      "forcedBlank": 0,
+      "emptyVisible": false,
+      "tiles": 2
+    },
+    "widgets": [
+      {
+        "id": "applications",
+        "width": 1368,
+        "left": 36,
+        "right": 1404,
+        "top": 257.359375,
+        "bottom": 474.9375
+      },
+      {
+        "id": "activity",
+        "width": 1368,
+        "left": 36,
+        "right": 1404,
+        "top": 492.9375,
+        "bottom": 1137.3125
+      },
+      {
+        "id": "storage",
+        "width": 675,
+        "left": 36,
+        "right": 711,
+        "top": 1155.3125,
+        "bottom": 1403.40625
+      },
+      {
+        "id": "attention",
+        "width": 675,
+        "left": 729,
+        "right": 1404,
+        "top": 1155.3125,
+        "bottom": 1403.40625
+      }
+    ]
+  },
+  "source": "Compiled source on static localhost:8080 with synthetic API data and browser-only workspace preferences; no live account writes",
+  "negativeControl": {
+    "source": "Prior beta36 source bundle, exact saved wide layout at 1440px",
+    "unusedRowWidth": 577.5,
+    "forcedLauncherBlankHeight": 156.421875
+  }
+}
