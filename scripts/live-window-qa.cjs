@@ -10,6 +10,7 @@ const cookieFile = process.env.ORBIS_AUDIT_COOKIE_FILE;
 const releaseFile = process.env.ORBIS_AUDIT_RELEASE_FILE;
 const expectedTag = process.env.ORBIS_AUDIT_EXPECTED_TAG;
 const expectedCommit = process.env.ORBIS_AUDIT_EXPECTED_COMMIT;
+const clipFramePreview = process.env.ORBIS_AUDIT_CLIP_FRAME_PREVIEW === '1';
 const baseUrl = (() => {
   try {
     return new URL(process.env.ORBIS_AUDIT_URL || 'http://127.0.0.1:18080');
@@ -108,8 +109,9 @@ const identity = (url) => {
   fs.mkdirSync(screenshotDir, { recursive: true, mode: 0o700 });
   const report = {
     passed: false,
-    source: `Published ${release.tag} HTML/assets and actual isolated APIs; only desktop-preference writes are permitted.`,
+    source: `Published ${release.tag} HTML/assets and actual isolated APIs; only desktop-preference writes are permitted.${clipFramePreview ? ' Browser-local overflow:clip preview; this is not unmodified release acceptance.' : ''}`,
     release: { tag: release.tag, commit: release.commit, image: release.image },
+    browserLocalClipFramePreview: clipFramePreview,
     screenshots: screenshotDir,
     originalPreferenceBackup: originalFile,
     boundaryCases: [],
@@ -119,6 +121,7 @@ const identity = (url) => {
     preferenceWrites: 0,
     restorationWrites: 0,
     failedPreferenceRequests: 0,
+    captureHeaders: [],
     preferenceRequests: [],
     preferenceBodyHashFormat: 'sha256 of canonical JSON; no preference values are recorded',
     actionTrace: [],
@@ -176,7 +179,51 @@ const identity = (url) => {
     throw new Error(message);
   };
   const settle = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const screenshot = async (name) => page.screenshot({ path: path.join(screenshotDir, `${name}.png`), animations: 'disabled' });
+  const settleCapture = async () => {
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      await Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation.effect?.getComputedTiming().iterations !== Number.POSITIVE_INFINITY)
+          .map((animation) => animation.finished.catch(() => undefined)),
+      );
+      let previous = '';
+      let stable = 0;
+      for (let attempt = 0; attempt < 60; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const frame = document.querySelector('.desktop-route-window');
+        const heading = document.querySelector('.desktop-window-bar') || document.querySelector('.workspace-heading');
+        const rect = heading?.getBoundingClientRect();
+        const current = JSON.stringify([scrollX, scrollY, frame?.scrollTop, rect?.x, rect?.y, rect?.width, rect?.height]);
+        stable = previous === current ? stable + 1 : 0;
+        previous = current;
+        if (stable >= 3) return;
+      }
+      throw new Error('Capture geometry did not settle');
+    });
+    const metrics = await page.evaluate(() => {
+      const frame = document.querySelector('.desktop-route-window[data-window-navigation="desktop"]');
+      if (!frame || frame.dataset.windowScrollsFrame === 'true') return null;
+      const bounds = frame.getBoundingClientRect();
+      const bar = frame.querySelector('.desktop-window-bar').getBoundingClientRect();
+      const icon = frame.querySelector('.desktop-window-icon').getBoundingClientRect();
+      const label = frame.querySelector('.desktop-window-label').getBoundingClientRect();
+      return { frameTop: bounds.top, barTop: bar.top, scrollTop: frame.scrollTop, topPadding: Math.min(icon.top, label.top) - bar.top };
+    });
+    if (metrics) {
+      report.captureHeaders.push({ stage, ...metrics });
+      assert.ok(
+        Math.abs(metrics.barTop - metrics.frameTop - 1) <= 1 && metrics.scrollTop === 0,
+        'The settled desktop header must not scroll under its frame',
+      );
+      assert.ok(metrics.topPadding >= 16, 'The settled desktop heading must retain its interior padding');
+    }
+  };
+  const screenshot = async (name) => {
+    await settleCapture();
+    await page.screenshot({ path: path.join(screenshotDir, `${name}.png`) });
+  };
   const protectedState = async () => {
     const installed = await read('/api/apps/installed');
     installed.installed.sort((a, b) => a.info.urn.localeCompare(b.info.urn));
@@ -239,6 +286,19 @@ const identity = (url) => {
     assert.ok(serverIp, 'Configured server IP is required');
     context = await browser.newContext({ viewport: { width: 1440, height: 1120 }, serviceWorkers: 'block' });
     await context.addCookies(cookies);
+    if (clipFramePreview)
+      await context.addInitScript(() => {
+        document.addEventListener(
+          'DOMContentLoaded',
+          () => {
+            const style = document.createElement('style');
+            style.textContent =
+              '.desktop-route-window[data-window-navigation="desktop"]:not([data-window-scrolls-frame="true"]){overflow:clip!important}';
+            document.head.append(style);
+          },
+          { once: true },
+        );
+      });
     await context.route('**/*', async (route) => {
       const request = route.request();
       const url = new URL(request.url());
@@ -365,7 +425,7 @@ const identity = (url) => {
     assert.equal(await input.inputValue(), original.serverName, 'Reload should discard an unsaved form draft');
     assert.equal(await frame().getAttribute('data-window-mode'), 'floating');
     assert.ok(isDeepStrictEqual(await frame().boundingBox(), moved), 'Account-backed bounds did not survive reload');
-    await page.screenshot({ path: path.join(screenshotDir, 'floating-settings.png'), animations: 'disabled' });
+    await screenshot('floating-settings');
     markStage('desktop-monitor-navigation');
     await page.getByRole('link', { name: 'Monitor', exact: true }).click();
     await page.getByRole('heading', { name: 'Monitor', exact: true }).waitFor();
@@ -374,7 +434,7 @@ const identity = (url) => {
     await waitFor(async () => (await read('/api/desktop-preferences')).windows?.monitor?.mode === 'maximized', 'Monitor placement did not save');
     const prefs = await read('/api/desktop-preferences');
     assert.equal(prefs.windows.settings.mode, 'floating');
-    await page.screenshot({ path: path.join(screenshotDir, 'monitor.png'), animations: 'disabled' });
+    await screenshot('monitor');
     markStage('responsive-draft-and-placement');
     const responsivePath = '/settings?tab=appearance&probe=space%20value&probe=second#draft';
     await page.goto(`${base}${responsivePath}`, { waitUntil: 'domcontentloaded' });
@@ -533,6 +593,11 @@ const identity = (url) => {
     await page.locator('.desktop-dock').getByRole('link', { name: 'Workspace', exact: true }).click();
     await page.waitForURL(`${base}/dashboard`);
     await page.getByRole('heading', { name: original.serverName, exact: true }).waitFor();
+    await page
+      .locator('.workspace-activity .workspace-section-heading p')
+      .filter({ hasText: /^Uptime / })
+      .waitFor();
+    await page.getByText('Reading Docker containers…', { exact: true }).waitFor({ state: 'hidden' });
     assert.equal(await frame().count(), 0, 'Mobile Home must leave the Settings page');
     assert.equal(await inputIdentity.evaluate((element) => element.isConnected), false, 'Mobile Home must unmount the departed form');
     assert.equal(
@@ -540,6 +605,17 @@ const identity = (url) => {
       0,
       'Mobile Home must not keep a minimized window',
     );
+    await settleCapture();
+    const homePosition = await page.getByRole('heading', { name: original.serverName, exact: true }).evaluate((heading) => ({
+      top: heading.getBoundingClientRect().top,
+      barBottom: document.querySelector('.desktop-system-bar').getBoundingClientRect().bottom,
+      scrollY,
+    }));
+    assert.ok(
+      homePosition.scrollY === 0 && homePosition.top > homePosition.barBottom,
+      'Ordinary Home navigation must restore the document top and reveal its heading',
+    );
+    report.mobileHomeStartsAtTop = homePosition;
     await screenshot('mobile-home-navigation');
     markStage('mobile-settings-return');
     await page.locator('.desktop-dock').getByRole('link', { name: 'Settings', exact: true }).click();

@@ -23,6 +23,8 @@ const inspectNotifications = require('./notification-checks.cjs');
 const inspectErrorAuth = require('./error-auth-checks.cjs');
 const inspectEnlargedText = require('./enlarged-text-checks.cjs');
 const inspectSurfaceComfort = require('./surface-comfort-checks.cjs');
+const inspectMonitorThemes = require('./monitor-theme-checks.cjs');
+const inspectHomeStatusThemes = require('./home-status-theme-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
 const searchComfortOnly = process.env.ORBIS_VISUAL_SEARCH_COMFORT_ONLY === '1';
@@ -43,6 +45,8 @@ const notificationsOnly = process.env.ORBIS_VISUAL_NOTIFICATIONS_ONLY === '1';
 const errorsOnly = process.env.ORBIS_VISUAL_ERRORS_ONLY === '1';
 const textOnly = process.env.ORBIS_VISUAL_TEXT_ONLY === '1';
 const comfortOnly = process.env.ORBIS_VISUAL_COMFORT_ONLY === '1';
+const monitorThemesOnly = process.env.ORBIS_VISUAL_MONITOR_THEMES_ONLY === '1';
+const homeStatusThemesOnly = process.env.ORBIS_VISUAL_HOME_STATUS_THEMES_ONLY === '1';
 const textScale = Number(process.env.ORBIS_VISUAL_TEXT_SCALE || 2);
 if (![1, 2].includes(textScale)) throw new Error('ORBIS_VISUAL_TEXT_SCALE must be 1 or 2');
 
@@ -52,7 +56,16 @@ const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
 const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1' || textOnly || comfortOnly;
 const zoom = Number(process.env.ORBIS_VISUAL_ZOOM || 1);
 if (
-  (textOnly || compoundHomeOnly || searchComfortOnly || selectComfortOnly || nestedFormComfortOnly || storesOnly || switchComfortOnly || pagesOnly) &&
+  (textOnly ||
+    compoundHomeOnly ||
+    searchComfortOnly ||
+    selectComfortOnly ||
+    nestedFormComfortOnly ||
+    storesOnly ||
+    switchComfortOnly ||
+    pagesOnly ||
+    monitorThemesOnly ||
+    homeStatusThemesOnly) &&
   zoom !== 1
 )
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
@@ -383,36 +396,42 @@ async function main() {
     ? [{ name: 'connection', width: 1440, height: 1120 }]
     : process.env.ORBIS_VISUAL_NARROW
       ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
-      : pagesOnly
+      : monitorThemesOnly || homeStatusThemesOnly
         ? [
-            { name: 'tablet', width: 768, height: 1024 },
+            { name: 'desktop', width: 1440, height: 1120 },
             { name: 'mobile', width: 390, height: 844 },
             { name: 'narrow', width: 320, height: 800 },
           ]
-        : compoundHomeOnly
+        : pagesOnly
           ? [
-              { name: 'desktop', width: 1440, height: 1120 },
               { name: 'tablet', width: 768, height: 1024 },
               { name: 'mobile', width: 390, height: 844 },
               { name: 'narrow', width: 320, height: 800 },
             ]
-          : searchComfortOnly || selectComfortOnly || nestedFormComfortOnly
+          : compoundHomeOnly
             ? [
+                { name: 'desktop', width: 1440, height: 1120 },
                 { name: 'tablet', width: 768, height: 1024 },
                 { name: 'mobile', width: 390, height: 844 },
                 { name: 'narrow', width: 320, height: 800 },
               ]
-            : comfortOnly
+            : searchComfortOnly || selectComfortOnly || nestedFormComfortOnly
               ? [
-                  { name: 'mobile', width: 390, height: 844 },
-                  { name: 'narrow', width: 320, height: 800 },
-                ]
-              : [
-                  { name: 'desktop', width: 1440, height: 1120 },
                   { name: 'tablet', width: 768, height: 1024 },
                   { name: 'mobile', width: 390, height: 844 },
                   { name: 'narrow', width: 320, height: 800 },
-                ];
+                ]
+              : comfortOnly
+                ? [
+                    { name: 'mobile', width: 390, height: 844 },
+                    { name: 'narrow', width: 320, height: 800 },
+                  ]
+                : [
+                    { name: 'desktop', width: 1440, height: 1120 },
+                    { name: 'tablet', width: 768, height: 1024 },
+                    { name: 'mobile', width: 390, height: 844 },
+                    { name: 'narrow', width: 320, height: 800 },
+                  ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: zoom });
@@ -674,6 +693,33 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (homeStatusThemesOnly) {
+      const homeStatusThemes = await inspectHomeStatusThemes({
+        page,
+        base,
+        capture: async (name, options) => {
+          if (options?.element)
+            await page.locator(options.element).screenshot({
+              path: path.join(screenshotDir, `${viewport.name}-${name}.png`),
+              animations: 'disabled',
+            });
+          else await capture(page, `${viewport.name}-${name}.png`, options);
+        },
+      });
+      reports.push({ viewport: viewport.name, homeStatusThemes, errors });
+      await page.close();
+      continue;
+    }
+    if (monitorThemesOnly) {
+      const monitorThemes = await inspectMonitorThemes({
+        page,
+        base,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, monitorThemes, errors });
+      await page.close();
+      continue;
+    }
     if (preferenceSavesOnly) {
       const preferenceSaves = await inspectPreferenceSaves({ page, base, initial: freshPreferences() });
       reports.push({ viewport: viewport.name, preferenceSaves, errors });
@@ -1295,7 +1341,9 @@ async function main() {
     notificationsOnly ||
     errorsOnly ||
     textOnly ||
-    comfortOnly
+    comfortOnly ||
+    monitorThemesOnly ||
+    homeStatusThemesOnly
   ) {
     if (reports.some((report) => report.errors.length)) process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);

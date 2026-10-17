@@ -1,0 +1,254 @@
+{
+  "source": "Compiled local source with development fixtures, not published-image acceptance",
+  "home": {
+    "groups": 30,
+    "native": 24,
+    "text200": 6,
+    "captures": 60,
+    "minimumContrast": 5.191623916639548,
+    "byViewport": [
+      {
+        "viewport": "desktop",
+        "groups": 12,
+        "minimumContrast": 5.191623916639548,
+        "preferenceWrites": 0,
+        "blockedWrites": [],
+        "errors": []
+      },
+      {
+        "viewport": "mobile",
+        "groups": 12,
+        "minimumContrast": 5.191623916639548,
+        "preferenceWrites": 0,
+        "blockedWrites": [],
+        "errors": []
+      },
+      {
+        "viewport": "narrow",
+        "groups": 6,
+        "minimumContrast": 5.191623916639548,
+        "preferenceWrites": 0,
+        "blockedWrites": [],
+        "errors": []
+      }
+    ],
+    "maxDocumentWidthExtra": 0
+  },
+  "monitor": {
+    "groups": 30,
+    "native": 24,
+    "text200": 6,
+    "captures": 43,
+    "minimumContrast": 6.126288171763837,
+    "maximumFrameScrollAfterFocus": 0,
+    "fallback": {
+      "overflowY": "auto",
+      "scrollTop": 2247,
+      "restoredOverflow": "clip",
+      "restoredScroll": 0
+    },
+    "errors": [],
+    "blockedWrites": [],
+    "preferenceWrites": 0,
+    "desktopTransitionNames": {
+      "frame": "none",
+      "content": "orbis-section"
+    }
+  },
+  "phoneScroll": [
+    {
+      "width": 390,
+      "textScale": 1,
+      "groups": 2,
+      "regions": [
+        {
+          "name": "frost-light-text100-status-card-native-clip",
+          "region": "upper",
+          "barClearance": 15.640625,
+          "dockClearance": 626.984375,
+          "scrollY": 642
+        },
+        {
+          "name": "frost-light-text100-status-card-native-clip",
+          "region": "lower",
+          "barClearance": 616.078125,
+          "dockClearance": 16.5,
+          "scrollY": 754
+        },
+        {
+          "name": "frost-dark-text100-status-card-native-clip",
+          "region": "upper",
+          "barClearance": 15.640625,
+          "dockClearance": 626.984375,
+          "scrollY": 642
+        },
+        {
+          "name": "frost-dark-text100-status-card-native-clip",
+          "region": "lower",
+          "barClearance": 616.078125,
+          "dockClearance": 16.5,
+          "scrollY": 754
+        }
+      ],
+      "errors": [],
+      "writes": 0,
+      "blockedWrites": []
+    },
+    {
+      "width": 320,
+      "textScale": 2,
+      "groups": 2,
+      "regions": [
+        {
+          "name": "frost-light-text200-status-card-native-clip",
+          "region": "upper",
+          "barClearance": 16.4375,
+          "dockClearance": 416.40625,
+          "scrollY": 1257
+        },
+        {
+          "name": "frost-light-text200-status-card-native-clip",
+          "region": "lower",
+          "barClearance": 361.375,
+          "dockClearance": 15.75,
+          "scrollY": 2656
+        },
+        {
+          "name": "frost-dark-text200-status-card-native-clip",
+          "region": "upper",
+          "barClearance": 16.4375,
+          "dockClearance": 416.40625,
+          "scrollY": 1257
+        },
+        {
+          "name": "frost-dark-text200-status-card-native-clip",
+          "region": "lower",
+          "barClearance": 361.375,
+          "dockClearance": 15.75,
+          "scrollY": 2656
+        }
+      ],
+      "errors": [],
+      "writes": 0,
+      "blockedWrites": []
+    }
+  ],
+  "nativeRouteRefresh": {
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 1120,
+        "pageErrors": []
+      },
+      {
+        "width": 768,
+        "height": 1024,
+        "pageErrors": []
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "pageErrors": []
+      },
+      {
+        "width": 320,
+        "height": 800,
+        "pageErrors": []
+      }
+    ],
+    "updatedTrackedCaptures": 108
+  },
+  "chrome": {
+    "source": "Actual compiled r2 source, no CSS injection; development API fixtures",
+    "cases": 8,
+    "desktopCornerSamples": 6,
+    "paleArcPixels": 0,
+    "motion": [
+      {
+        "before": [
+          {
+            "class": "desktop-system-bar",
+            "name": "orbis-header"
+          },
+          {
+            "class": "desktop-window-content",
+            "name": "orbis-section"
+          },
+          {
+            "class": "desktop-dock",
+            "name": "orbis-dock"
+          }
+        ],
+        "errors": [],
+        "ready": true,
+        "finished": true,
+        "after": [
+          {
+            "class": "desktop-system-bar",
+            "name": "orbis-header"
+          },
+          {
+            "class": "desktop-window-content",
+            "name": "orbis-section"
+          },
+          {
+            "class": "desktop-dock",
+            "name": "orbis-dock"
+          }
+        ],
+        "direction": -1,
+        "animation": {
+          "name": "orbis-section-in",
+          "duration": "0.38s"
+        }
+      },
+      {
+        "before": [
+          {
+            "class": "desktop-system-bar",
+            "name": "orbis-header"
+          },
+          {
+            "class": "desktop-window-content",
+            "name": "orbis-section"
+          },
+          {
+            "class": "desktop-dock",
+            "name": "orbis-dock"
+          }
+        ],
+        "errors": [],
+        "ready": true,
+        "finished": true,
+        "after": [
+          {
+            "class": "desktop-system-bar",
+            "name": "orbis-header"
+          },
+          {
+            "class": "desktop-window-content",
+            "name": "orbis-section"
+          },
+          {
+            "class": "desktop-dock",
+            "name": "orbis-dock"
+          }
+        ],
+        "direction": 1,
+        "animation": {
+          "name": "orbis-section-in",
+          "duration": "0.38s"
+        }
+      }
+    ],
+    "blur": {
+      "matchedEdgeSamples": 150,
+      "meanEdge": 0.14666666666666667,
+      "unfilteredExpectedEdge": 0.7941999999999987,
+      "errorVsBlurred": 0.14959999999999998,
+      "errorVsUnfiltered": 0.7907333333333321,
+      "frameTransitionName": "none",
+      "contentTransitionName": "orbis-section"
+    }
+  }
+}

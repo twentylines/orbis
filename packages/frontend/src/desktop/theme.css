@@ -5,6 +5,15 @@ body:has(.orbis-theme) {
   --desktop-ink: #192c29;
   --desktop-muted: #536b65;
   --desktop-surface: rgba(248, 250, 246, 0.92);
+  --desktop-preset-tint: #597b73;
+  --desktop-status-muted: color-mix(in srgb, var(--desktop-muted) 60%, var(--desktop-ink));
+  --desktop-glass-filter: blur(28px) saturate(1.45);
+  --desktop-chrome-opaque: color-mix(in srgb, var(--desktop-preset-tint) 25%, #102322);
+  --desktop-status-background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--desktop-preset-tint) 8%, var(--desktop-surface)),
+    color-mix(in srgb, var(--desktop-preset-tint) 20%, var(--desktop-surface))
+  );
   --desktop-chrome: rgba(17, 38, 36, 0.82);
   --desktop-chrome-ink: #f5f8f2;
   --desktop-panel-dark: rgba(14, 35, 34, 0.92);
@@ -75,6 +84,7 @@ body:has(.orbis-theme[data-desktop-wallpaper="canopy"]) {
 
 .orbis-theme[data-desktop-preset="graphite"],
 body:has(.orbis-theme[data-desktop-preset="graphite"]) {
+  --desktop-preset-tint: #667176;
   --desktop-ink: #edf2ef;
   --desktop-muted: #aebbb3;
   --desktop-surface: rgba(24, 38, 37, 0.94);
@@ -89,6 +99,7 @@ body:has(.orbis-theme[data-desktop-preset="graphite"]) {
 
 .orbis-theme[data-desktop-preset="forest"],
 body:has(.orbis-theme[data-desktop-preset="forest"]) {
+  --desktop-preset-tint: #608069;
   --desktop-ink: #142b23;
   --desktop-muted: #4b6559;
   --desktop-surface: rgba(244, 248, 239, 0.97);
@@ -100,6 +111,7 @@ body:has(.orbis-theme[data-desktop-preset="forest"]) {
 
 .orbis-theme[data-desktop-preset="stone"],
 body:has(.orbis-theme[data-desktop-preset="stone"]) {
+  --desktop-preset-tint: #a68c74;
   --desktop-ink: #302924;
   --desktop-muted: #71685e;
   --desktop-surface: rgba(250, 245, 237, 0.97);
@@ -111,6 +123,7 @@ body:has(.orbis-theme[data-desktop-preset="stone"]) {
 
 .orbis-theme[data-desktop-preset="ocean"],
 body:has(.orbis-theme[data-desktop-preset="ocean"]) {
+  --desktop-preset-tint: #5a8b99;
   --desktop-ink: #172b32;
   --desktop-muted: #4d6972;
   --desktop-surface: rgba(244, 250, 249, 0.97);
@@ -122,6 +135,7 @@ body:has(.orbis-theme[data-desktop-preset="ocean"]) {
 
 .orbis-theme[data-desktop-preset="blush"],
 body:has(.orbis-theme[data-desktop-preset="blush"]) {
+  --desktop-preset-tint: #ae7e8a;
   --desktop-ink: #352828;
   --desktop-muted: #705f62;
   --desktop-surface: rgba(253, 248, 246, 0.97);

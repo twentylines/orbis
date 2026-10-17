@@ -642,9 +642,10 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: radial-gradient(circle at 68% 10%, rgba(92, 158, 137, 0.22), transparent 35%), var(--desktop-panel-dark);
-  border-color: rgba(242, 249, 241, 0.16);
-  color: #f2f7f0;
+  background: var(--desktop-status-background);
+  background-color: var(--desktop-surface);
+  border-color: var(--desktop-edge);
+  color: var(--desktop-ink);
   box-shadow:
     0 26px 58px rgba(7, 34, 31, 0.29),
     inset 0 1px rgba(255, 255, 255, 0.1);
@@ -656,8 +657,8 @@
   inset: 0;
   opacity: 0.48;
   background:
-    repeating-linear-gradient(0deg, transparent 0 22px, rgba(213, 245, 223, 0.035) 23px 24px),
-    repeating-linear-gradient(90deg, transparent 0 22px, rgba(213, 245, 223, 0.025) 23px 24px);
+    repeating-linear-gradient(0deg, transparent 0 22px, color-mix(in srgb, var(--desktop-ink) 6%, transparent) 23px 24px),
+    repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--desktop-ink) 4%, transparent) 23px 24px);
   mask-image: linear-gradient(to bottom, transparent, #000 45%);
 }
 .workspace-activity::after {
@@ -668,19 +669,24 @@
   height: 50%;
   left: -5%;
   top: -55%;
-  background: linear-gradient(transparent, rgba(132, 205, 168, 0.06), transparent);
+  background: linear-gradient(transparent, color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent), transparent);
   transform: translateY(0);
   animation: orbis-scan 11s linear infinite;
   pointer-events: none;
 }
 .workspace-activity .workspace-panel-kicker {
-  color: #d9a989;
+  color: var(--desktop-accent);
 }
 .workspace-activity .workspace-section-heading p {
-  color: #a5c0b8;
+  color: var(--desktop-status-muted);
 }
 .desktop .workspace-activity .workspace-section-heading a {
-  color: #d3e2d8;
+  color: var(--desktop-status-muted);
+}
+.workspace-activity .workspace-message {
+  border-color: color-mix(in srgb, var(--desktop-negative) 50%, var(--desktop-line));
+  background: color-mix(in srgb, var(--desktop-negative) 8%, var(--desktop-surface));
+  color: var(--desktop-ink);
 }
 .workspace-metrics {
   display: grid;
@@ -702,7 +708,7 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  color: #e6f0e8;
+  color: var(--desktop-ink);
   font-size: 12px;
   font-weight: 620;
   text-decoration: none;
@@ -717,7 +723,7 @@
 }
 .workspace-gauge:hover,
 .workspace-network:hover {
-  color: #fff;
+  color: var(--desktop-ink);
   text-decoration: none;
 }
 .workspace-dial {
@@ -730,19 +736,23 @@
   gap: 1px;
   position: relative;
   border-radius: 50%;
-  background: conic-gradient(from -90deg, #e8b880 var(--dial-progress), rgba(221, 239, 228, 0.15) 0);
-  color: #f5f7ef;
+  background: conic-gradient(from -90deg, var(--desktop-accent) var(--dial-progress), var(--desktop-line) 0);
+  color: var(--desktop-ink);
   box-shadow:
-    0 15px 20px rgba(2, 15, 13, 0.36),
-    inset 0 2px 1px rgba(255, 255, 255, 0.28),
-    0 0 0 1px rgba(195, 225, 204, 0.18);
+    0 15px 20px rgba(2, 15, 13, 0.18),
+    inset 0 2px 1px var(--desktop-highlight),
+    0 0 0 1px var(--desktop-edge);
 }
 .workspace-dial::before {
   content: "";
   position: absolute;
   inset: 7px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 25%, #31534a, #102522 69%);
+  background: radial-gradient(
+    circle at 35% 25%,
+    color-mix(in srgb, var(--desktop-preset-tint) 15%, var(--desktop-surface)),
+    var(--desktop-surface) 69%
+  );
   box-shadow:
     inset 0 8px 13px rgba(0, 0, 0, 0.32),
     inset 0 1px rgba(255, 255, 255, 0.13);
@@ -751,7 +761,7 @@
   position: relative;
 }
 .workspace-dial svg {
-  color: #adccbb;
+  color: var(--desktop-status-muted);
 }
 .workspace-dial strong {
   font-size: clamp(17px, 2vw, 23px);
@@ -765,10 +775,10 @@
   gap: 5px 14px;
   align-items: center;
   padding: 12px;
-  border: 1px solid rgba(218, 237, 223, 0.12);
+  border: 1px solid var(--desktop-line);
   border-radius: 15px;
-  background: rgba(220, 241, 225, 0.07);
-  color: #e5f0e8;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, var(--desktop-surface));
+  color: var(--desktop-ink);
   text-decoration: none;
   transition:
     transform 0.2s ease,
@@ -776,7 +786,7 @@
 }
 .workspace-network:hover {
   transform: translateY(-3px);
-  background: rgba(220, 241, 225, 0.12);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
 }
 .workspace-network-heading {
   display: inline-flex;
@@ -785,7 +795,7 @@
   grid-column: 1 / -1;
   font-size: 12px;
   font-weight: 660;
-  color: #b7d0c3;
+  color: var(--desktop-status-muted);
 }
 .workspace-network-rate {
   min-width: 0;
@@ -794,7 +804,7 @@
   font-variant-numeric: tabular-nums;
 }
 .workspace-network-rate b {
-  color: #d8aa83;
+  color: var(--desktop-accent);
 }
 .workspace-meter {
   grid-column: 1 / -1;
@@ -1026,9 +1036,9 @@
   gap: 5px 14px;
   margin: 20px 0;
   padding-top: 18px;
-  border-top: 1px solid rgba(218, 237, 223, 0.15);
+  border-top: 1px solid var(--desktop-line);
   text-decoration: none;
-  color: #e5f0e8;
+  color: var(--desktop-ink);
 }
 .workspace-status-storage > span {
   display: flex;
@@ -1054,23 +1064,23 @@
 }
 .workspace-status-storage strong small {
   font-size: 12px;
-  color: #adc7bc;
+  color: var(--desktop-status-muted);
   font-weight: 500;
 }
 .workspace-status-storage > small {
   font-size: 10px;
-  color: #adc7bc;
+  color: var(--desktop-status-muted);
 }
 .workspace-status-storage .workspace-meter {
   flex-basis: 100%;
   margin: 5px 0;
-  background: rgba(185, 218, 199, 0.14);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 14%, var(--desktop-surface));
 }
 .workspace-status-storage .workspace-meter span {
-  background: #a9c8b6;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 75%, var(--desktop-ink));
 }
 .desktop .workspace-status-storage:hover {
-  color: #f5fcf3;
+  color: var(--desktop-ink);
 }
 .workspace-operations {
   padding: 28px;

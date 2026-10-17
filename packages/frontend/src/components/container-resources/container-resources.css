@@ -3,7 +3,7 @@
   margin-top: 24px;
   border: 1px solid var(--desktop-line);
   border-radius: 20px;
-  background: rgba(113, 146, 127, 0.06);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
   scroll-margin-top: 110px;
 }
 .container-resources-heading {
@@ -40,7 +40,7 @@
   font-weight: 650;
 }
 .container-resources-sort button[aria-pressed="true"] {
-  background: rgba(130, 159, 137, 0.22);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 20%, transparent);
 }
 .container-resources-sort > span {
   margin-left: auto;
@@ -119,7 +119,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #839e8d;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 75%, var(--desktop-ink));
   transition: width 0.2s ease;
 }
 .container-resource-details {
@@ -158,20 +158,20 @@
   margin: 0;
   padding: 20px 0 0;
   border: 0;
-  border-top: 1px solid rgba(218, 237, 223, 0.15);
+  border-top: 1px solid var(--desktop-line);
   border-radius: 0;
   background: transparent;
-  color: #e9f3ed;
+  color: var(--desktop-ink);
 }
 .is-compact .container-resources-heading h2 {
   font-size: 14px;
   letter-spacing: 0;
 }
 .desktop .container-resources.is-compact a {
-  color: #e5f0e8;
+  color: var(--desktop-ink);
 }
 .desktop .container-resources.is-compact a:hover {
-  color: #fff;
+  color: var(--desktop-ink);
 }
 .is-compact .container-resources-sort {
   margin: 12px 0 2px;
@@ -179,7 +179,7 @@
 .is-compact .container-resource-list > li {
   padding: 13px 0;
   gap: 8px 14px;
-  border-color: rgba(218, 237, 223, 0.12);
+  border-color: var(--desktop-line);
 }
 .is-compact .container-resource-values {
   gap: 14px;
@@ -195,11 +195,13 @@
 }
 .is-compact .container-resource-name small,
 .is-compact .container-resource-values small,
-.is-compact .container-resources-sort > span {
-  color: #adc7bc;
+.is-compact .container-resources-sort > span,
+.is-compact .container-resources-note,
+.is-compact .container-resource-details {
+  color: var(--desktop-status-muted);
 }
 .is-compact .container-resources-sort button {
-  border-color: rgba(218, 237, 223, 0.18);
+  border-color: var(--desktop-line);
 }
 @container (max-width: 650px) {
   .container-resources {

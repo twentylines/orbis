@@ -71,13 +71,11 @@ html:has(.desktop) {
   z-index: 20;
   color: var(--desktop-chrome-ink);
   background: var(--desktop-chrome);
-  border: 1px solid rgba(190, 221, 205, 0.16);
+  border: 1px solid transparent;
   border-radius: 18px;
-  box-shadow:
-    0 16px 42px rgba(6, 27, 26, 0.22),
-    inset 0 1px rgba(196, 228, 212, 0.06);
-  backdrop-filter: blur(26px) saturate(1.45);
-  -webkit-backdrop-filter: blur(26px) saturate(1.45);
+  box-shadow: 0 16px 42px rgba(6, 27, 26, 0.22);
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
   animation: orbis-chrome-enter 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 .desktop-brand {
@@ -313,10 +311,11 @@ html:has(.desktop) {
   border-bottom: 1px solid rgba(190, 221, 205, 0.12);
   border-radius: 24px 24px 0 0;
   color: var(--desktop-chrome-ink);
-  background: radial-gradient(circle at 20% -70%, rgba(157, 205, 172, 0.22), transparent 38%), var(--desktop-chrome);
-  box-shadow:
-    inset 0 1px rgba(196, 228, 212, 0.06),
-    0 13px 24px rgba(18, 43, 37, 0.12);
+  background:
+    radial-gradient(circle at 20% -70%, color-mix(in srgb, var(--desktop-preset-tint) 18%, transparent), transparent 38%), var(--desktop-chrome);
+  box-shadow: 0 13px 24px rgba(18, 43, 37, 0.12);
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
 }
 .desktop-window-icon {
   width: 38px;
@@ -663,14 +662,12 @@ html:has(.desktop) {
   scrollbar-width: thin;
   gap: 4px;
   padding: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid transparent;
   border-radius: 20px;
   background: var(--desktop-chrome);
-  box-shadow:
-    0 18px 45px rgba(6, 27, 26, 0.34),
-    inset 0 1px rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(28px) saturate(1.45);
-  -webkit-backdrop-filter: blur(28px) saturate(1.45);
+  box-shadow: 0 18px 45px rgba(6, 27, 26, 0.34);
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
   animation: orbis-dock-enter 0.55s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .desktop .desktop-dock-item {
@@ -1028,10 +1025,11 @@ html:has(.desktop) {
 }
 @supports not (backdrop-filter: blur(1px)) {
   .desktop-system-bar,
-  .desktop-dock {
+  .desktop-dock,
+  .desktop-route-window[data-window-navigation="desktop"] .desktop-window-bar {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    background: var(--desktop-surface);
+    background: var(--desktop-chrome-opaque);
   }
 }
 

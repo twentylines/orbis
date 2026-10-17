@@ -2,6 +2,10 @@
 
 ## Unreleased development preview
 
+- Keep desktop headers outside the section animation snapshot so backdrop blur samples the wallpaper; retain directional content slides and phone page transitions.
+- Remove bright white chrome rims and nested corner seams. Give top bars and coloured desktop headers the dock's palette-aware glass blur, with a readable opaque fallback.
+- Make System status surfaces, labels and 3D server materials follow light/dark mode and colour presets. Theme Monitor retry messages and meters; preserve semantic live/stale indicators.
+- Prevent desktop frame focus from scrolling a fixed header under its rounded edge. Retain internal tool scrolling and the separate whole-frame fallback for tall headers; verify settled capture geometry and Home scroll restoration.
 - Serialize preference saves and coalesce superseded queued values instead of aborting mutations in flight. Skip redundant saves after account load and retain explicit failure/recovery feedback.
 - Package required runtime dependencies from the frozen Bun install, preserving resolved transitive versions. Verify native hashing and transformation under the production Node runtime during every image build.
 - Align Settings title icons, tabs, dividers and forms to one gutter. Remove inherited negative tab margins and keep the divider below all tab rows. Preserve whole Appearance labels with enlarged text and reveal page controls clear of the sticky bar and dock.
