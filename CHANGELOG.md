@@ -2,6 +2,7 @@
 
 ## Unreleased development preview
 
+- Raise the ORM's minimum version past the quoted-identifier security fix; lock both workspaces to 0.45.4 and verify embedded quotes in PostgreSQL identifiers and aliases. Remaining generator/translation dependency work is recorded in `DEPENDENCY-SECURITY.md`.
 - Keep desktop headers outside the section animation snapshot so backdrop blur samples the wallpaper; retain directional content slides and phone page transitions.
 - Remove bright white chrome rims and nested corner seams. Give top bars and coloured desktop headers the dock's palette-aware glass blur, with a readable opaque fallback.
 - Make System status surfaces, labels and 3D server materials follow light/dark mode and colour presets. Theme Monitor retry messages and meters; preserve semantic live/stale indicators.
