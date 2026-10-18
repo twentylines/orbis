@@ -1,5 +1,5 @@
 import i18n from 'i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
+import { createStorageSafeLanguageDetector } from '@/lib/i18n/language-detector';
 import HttpBackend from 'i18next-http-backend';
 import type { PropsWithChildren } from 'react';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
@@ -10,7 +10,7 @@ const Backend = new HttpBackend(null, {
 
 i18n
   .use(Backend)
-  .use(LanguageDetector)
+  .use(createStorageSafeLanguageDetector())
   .use(initReactI18next)
   .init({
     debug: false,

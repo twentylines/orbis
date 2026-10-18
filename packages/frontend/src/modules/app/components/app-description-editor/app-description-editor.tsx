@@ -13,7 +13,7 @@ type Props = {
 };
 
 export const AppDescriptionEditor = ({ isEditing, meta, setMeta }: Props) => {
-  const { preferences } = useDesktopPreferences();
+  const { resolvedMode } = useDesktopPreferences();
   return (
     <AnimatePresence mode="wait">
       <motion.div key={isEditing ? 1 : 0} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -23,7 +23,7 @@ export const AppDescriptionEditor = ({ isEditing, meta, setMeta }: Props) => {
             value={meta}
             height="400px"
             onChange={(e) => setMeta(e)}
-            theme={preferences.mode === 'dark' ? copilot : 'light'}
+            theme={resolvedMode === 'dark' ? copilot : 'light'}
             extensions={[markdown()]}
           />
         ) : (

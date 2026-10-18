@@ -26,8 +26,8 @@ const validateJson = ajv.compile(jsonSchema);
 
 export const ComposeEditor = ({ onChange, initialFormat = 'yaml' }: Props) => {
   const { t } = useTranslation();
-  const { preferences } = useDesktopPreferences();
-  const editorTheme = preferences.mode === 'dark' ? copilot : 'light';
+  const { resolvedMode } = useDesktopPreferences();
+  const editorTheme = resolvedMode === 'dark' ? copilot : 'light';
   const { services, composeExtras, setIsDirty, isDirty: isDirtyStore } = useMultiServiceStore();
   const [error, setError] = useState<string | undefined>(undefined);
   const [format, setFormat] = useState<'yaml' | 'json'>(initialFormat);

@@ -10,11 +10,11 @@ type BaseDashboardLayoutProps = PropsWithChildren<{
 }>;
 
 export const BaseDashboardLayout = ({ header, pageTitle, layoutActions, showPageHeader = true, children }: BaseDashboardLayoutProps) => {
-  const { preferences } = useDesktopPreferences();
+  const { preferences, resolvedMode } = useDesktopPreferences();
   return (
     <div
       className="desktop desktop-guest orbis-theme"
-      data-desktop-mode={preferences.mode}
+      data-desktop-mode={resolvedMode}
       data-desktop-preset={preferences.preset}
       data-desktop-wallpaper={preferences.wallpaper}
     >

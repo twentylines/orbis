@@ -20,11 +20,11 @@ import { Link, useLocation, useMatches } from 'react-router';
 import './layout.css';
 
 export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => {
-  const { preferences } = useDesktopPreferences();
+  const { preferences, resolvedMode } = useDesktopPreferences();
   return (
     <div
       className="desktop desktop-loading orbis-theme"
-      data-desktop-mode={preferences.mode}
+      data-desktop-mode={resolvedMode}
       data-desktop-preset={preferences.preset}
       data-desktop-wallpaper={preferences.wallpaper}
     >
@@ -43,7 +43,7 @@ export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => {
 export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const { userSettings, user, apps } = useAppContext();
   const { isLoggedIn } = useUserContext();
-  const { preferences, update } = useDesktopPreferences();
+  const { preferences, resolvedMode, update } = useDesktopPreferences();
   const location = useLocation();
   const matches = useMatches();
   const windowControls = useRef<RouteWindowControls | null>(null);
@@ -106,7 +106,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     <div
       className="desktop orbis-theme"
       data-desktop-preset={preferences.preset}
-      data-desktop-mode={preferences.mode}
+      data-desktop-mode={resolvedMode}
       data-desktop-density={preferences.density}
       data-desktop-wallpaper={preferences.wallpaper}
     >
@@ -144,13 +144,13 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
           <button
             type="button"
             className="desktop-mode-toggle"
-            aria-label={`Switch to ${preferences.mode === 'dark' ? 'light' : 'dark'} mode`}
-            aria-pressed={preferences.mode === 'dark'}
-            title={`Switch to ${preferences.mode === 'dark' ? 'light' : 'dark'} mode`}
-            onClick={() => update({ mode: preferences.mode === 'dark' ? 'light' : 'dark' })}
+            aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+            aria-pressed={resolvedMode === 'dark'}
+            title={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+            onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
           >
-            {preferences.mode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
-            <span>{preferences.mode === 'dark' ? 'Light' : 'Dark'}</span>
+            {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
+            <span>{resolvedMode === 'dark' ? 'Light' : 'Dark'}</span>
           </button>
           <CommandSearch />
           <output

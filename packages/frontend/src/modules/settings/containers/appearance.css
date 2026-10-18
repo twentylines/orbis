@@ -72,7 +72,7 @@
 }
 .appearance-modes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12em), 1fr));
   gap: 12px;
 }
 .appearance .appearance-mode {
@@ -99,6 +99,7 @@
 }
 .appearance-mode span {
   display: grid;
+  min-width: 0;
   gap: 3px;
 }
 .appearance-mode strong {
@@ -115,6 +116,10 @@
 .appearance .appearance-mode-dark {
   color: #edf5ed;
   background: radial-gradient(circle at 78% 14%, rgba(126, 194, 183, 0.48), transparent 43%), linear-gradient(140deg, #314c49, #0d1c21);
+}
+.appearance .appearance-mode-system {
+  color: var(--desktop-ink);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--desktop-preset-tint) 18%, transparent), transparent), var(--desktop-surface);
 }
 .appearance-mode-light small {
   color: #3d554b;

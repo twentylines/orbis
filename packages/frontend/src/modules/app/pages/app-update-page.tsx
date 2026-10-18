@@ -51,8 +51,8 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
   const params = useParams<{ storeId: string; appId: string }>();
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { preferences } = useDesktopPreferences();
-  const editorTheme = preferences.mode === 'dark' ? copilot : 'light';
+  const { resolvedMode } = useDesktopPreferences();
+  const editorTheme = resolvedMode === 'dark' ? copilot : 'light';
   const location = useLocation();
   const navigation = useNavigation();
   const navigationState = useRef(navigation.state);

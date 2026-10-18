@@ -2,6 +2,7 @@ import { IconAlertCircle, IconReload } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import { Button } from '../ui/Button';
 import { readCachedDesktopPreferences } from '@/desktop/preferences';
+import { useResolvedColourMode } from '@/desktop/colour-mode';
 import type { PropsWithChildren } from 'react';
 
 type ErrorPageProps = {
@@ -11,10 +12,11 @@ type ErrorPageProps = {
 
 export const FallbackSurface = ({ children }: PropsWithChildren) => {
   const preferences = readCachedDesktopPreferences();
+  const resolvedMode = useResolvedColourMode(preferences.mode);
   return (
     <div
       className="desktop desktop-fallback orbis-theme"
-      data-desktop-mode={preferences.mode}
+      data-desktop-mode={resolvedMode}
       data-desktop-preset={preferences.preset}
       data-desktop-wallpaper={preferences.wallpaper}
     >

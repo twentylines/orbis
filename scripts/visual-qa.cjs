@@ -27,6 +27,7 @@ const inspectMonitorThemes = require('./monitor-theme-checks.cjs');
 const inspectHomeStatusThemes = require('./home-status-theme-checks.cjs');
 const inspectCustomWorkspace = require('./custom-workspace-checks.cjs');
 const inspectTileComfort = require('./tile-comfort-checks.cjs');
+const inspectSystemMode = require('./system-mode-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
 const searchComfortOnly = process.env.ORBIS_VISUAL_SEARCH_COMFORT_ONLY === '1';
@@ -51,6 +52,7 @@ const monitorThemesOnly = process.env.ORBIS_VISUAL_MONITOR_THEMES_ONLY === '1';
 const homeStatusThemesOnly = process.env.ORBIS_VISUAL_HOME_STATUS_THEMES_ONLY === '1';
 const customWorkspaceOnly = process.env.ORBIS_VISUAL_CUSTOM_WORKSPACE_ONLY === '1';
 const tilesOnly = process.env.ORBIS_VISUAL_TILES_ONLY === '1';
+const systemModeOnly = process.env.ORBIS_VISUAL_SYSTEM_MODE_ONLY === '1';
 const textScale = Number(process.env.ORBIS_VISUAL_TEXT_SCALE || 2);
 if (![1, 2].includes(textScale)) throw new Error('ORBIS_VISUAL_TEXT_SCALE must be 1 or 2');
 
@@ -71,7 +73,8 @@ if (
     monitorThemesOnly ||
     homeStatusThemesOnly ||
     customWorkspaceOnly ||
-    tilesOnly) &&
+    tilesOnly ||
+    systemModeOnly) &&
   zoom !== 1
 )
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
@@ -398,46 +401,47 @@ async function main() {
   });
   let preferences = freshPreferences();
   const reports = [];
-  const viewports = connectionOnly
-    ? [{ name: 'connection', width: 1440, height: 1120 }]
-    : process.env.ORBIS_VISUAL_NARROW
-      ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
-      : monitorThemesOnly || homeStatusThemesOnly
-        ? [
-            { name: 'desktop', width: 1440, height: 1120 },
-            { name: 'mobile', width: 390, height: 844 },
-            { name: 'narrow', width: 320, height: 800 },
-          ]
-        : pagesOnly
+  const viewports =
+    connectionOnly || systemModeOnly
+      ? [{ name: systemModeOnly ? 'system-mode' : 'connection', width: 1440, height: 1120 }]
+      : process.env.ORBIS_VISUAL_NARROW
+        ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
+        : monitorThemesOnly || homeStatusThemesOnly
           ? [
-              { name: 'tablet', width: 768, height: 1024 },
+              { name: 'desktop', width: 1440, height: 1120 },
               { name: 'mobile', width: 390, height: 844 },
               { name: 'narrow', width: 320, height: 800 },
             ]
-          : compoundHomeOnly
+          : pagesOnly
             ? [
-                { name: 'desktop', width: 1440, height: 1120 },
                 { name: 'tablet', width: 768, height: 1024 },
                 { name: 'mobile', width: 390, height: 844 },
                 { name: 'narrow', width: 320, height: 800 },
               ]
-            : searchComfortOnly || selectComfortOnly || nestedFormComfortOnly
+            : compoundHomeOnly
               ? [
+                  { name: 'desktop', width: 1440, height: 1120 },
                   { name: 'tablet', width: 768, height: 1024 },
                   { name: 'mobile', width: 390, height: 844 },
                   { name: 'narrow', width: 320, height: 800 },
                 ]
-              : comfortOnly
+              : searchComfortOnly || selectComfortOnly || nestedFormComfortOnly
                 ? [
-                    { name: 'mobile', width: 390, height: 844 },
-                    { name: 'narrow', width: 320, height: 800 },
-                  ]
-                : [
-                    { name: 'desktop', width: 1440, height: 1120 },
                     { name: 'tablet', width: 768, height: 1024 },
                     { name: 'mobile', width: 390, height: 844 },
                     { name: 'narrow', width: 320, height: 800 },
-                  ];
+                  ]
+                : comfortOnly
+                  ? [
+                      { name: 'mobile', width: 390, height: 844 },
+                      { name: 'narrow', width: 320, height: 800 },
+                    ]
+                  : [
+                      { name: 'desktop', width: 1440, height: 1120 },
+                      { name: 'tablet', width: 768, height: 1024 },
+                      { name: 'mobile', width: 390, height: 844 },
+                      { name: 'narrow', width: 320, height: 800 },
+                    ];
   for (const viewport of viewports) {
     preferences = freshPreferences();
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: zoom });
@@ -699,6 +703,17 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (systemModeOnly) {
+      const systemMode = await inspectSystemMode({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, systemMode, errors });
+      await page.close();
+      continue;
+    }
     if (tilesOnly) {
       const tileComfort = await inspectTileComfort({
         page,
@@ -1375,9 +1390,13 @@ async function main() {
     monitorThemesOnly ||
     homeStatusThemesOnly ||
     customWorkspaceOnly ||
-    tilesOnly
+    tilesOnly ||
+    systemModeOnly
   ) {
-    if (reports.some((report) => report.errors.length || (tilesOnly && !report.tileComfort?.passed))) process.exitCode = 1;
+    if (
+      reports.some((report) => report.errors.length || (tilesOnly && !report.tileComfort?.passed) || (systemModeOnly && !report.systemMode?.passed))
+    )
+      process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     return;
   }

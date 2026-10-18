@@ -2,6 +2,9 @@
 
 ## Unreleased development preview
 
+- Add Follow system colour mode without replacing the chosen preset. Track device changes across status instruments, desktop/auth/guest/recovery surfaces, notifications and editors; keep the raw account/export preference as system and avoid preference writes for device changes.
+- Guard language detection, theme cookies and preference storage when JavaScript storage access fails. Keep the page usable and report whether changes are synced, cached or temporary. Let mode cards reflow with enlarged text.
+
 - Align installed app, custom-link and action-card rows at every column count. Share Store filter/card gutters, keep complete app copy and wrap long links without orphan letters. Scale the notice reserve with text so Docker health labels stay aligned.
 - Recheck unfinished GitHub release manifests after 30 seconds while retaining the normal cache for ready releases.
 - Return HTTP400 for incorrect, expired or reused authenticator challenges and incorrect enrollment codes; preserve HTTP429 after repeated invalid attempts.

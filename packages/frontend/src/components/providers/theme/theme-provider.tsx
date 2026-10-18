@@ -25,19 +25,20 @@ export const ThemeProvider = (props: Props) => {
       document.body.dataset.bsThemePrimary = themeColor;
     }
 
-    if (theme) {
-      Cookies.set('theme', theme || initialTheme || 'light', { path: '/', expires: 365 });
-      document.body.dataset.bsTheme = theme;
-    } else if (!Cookies.get('theme')) {
-      // Detect system theme
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      setDarkMode(systemTheme === 'dark');
-      Cookies.set('theme', systemTheme, { path: '/', expires: 365 });
-      document.body.dataset.bsTheme = systemTheme;
+    let cachedTheme: string | undefined;
+    try {
+      cachedTheme = Cookies.get('theme');
+    } catch {
+      cachedTheme = undefined;
     }
-
-    const cookieTheme = Cookies.get('theme');
-    setDarkMode(cookieTheme === 'dark');
+    const resolved = theme ?? initialTheme ?? cachedTheme ?? 'light';
+    document.body.dataset.bsTheme = resolved;
+    if (!theme) setDarkMode(resolved === 'dark');
+    try {
+      Cookies.set('theme', resolved, { path: '/', expires: 365 });
+    } catch {
+      // Theme rendering does not require cookie storage.
+    }
   }, [initialTheme, setDarkMode, theme, themeBase, themeColor]);
 
   return children;

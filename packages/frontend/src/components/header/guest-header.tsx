@@ -4,7 +4,7 @@ import { useDesktopPreferences } from '@/desktop/preferences';
 import { useTranslation } from 'react-i18next';
 
 export const GuestHeader = () => {
-  const { preferences, update } = useDesktopPreferences();
+  const { resolvedMode, update } = useDesktopPreferences();
   const { t } = useTranslation();
   return (
     <header className="desktop-system-bar desktop-guest-bar">
@@ -46,10 +46,10 @@ export const GuestHeader = () => {
         <button
           className="desktop-icon-button"
           type="button"
-          aria-label={`Switch to ${preferences.mode === 'dark' ? 'light' : 'dark'} mode`}
-          onClick={() => update({ mode: preferences.mode === 'dark' ? 'light' : 'dark' })}
+          aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+          onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
         >
-          {preferences.mode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
+          {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
         </button>
         <Link to="/login" className="desktop-icon-button" aria-label={t('HEADER_LOGIN')} title={t('HEADER_LOGIN')}>
           <IconLogin size={20} aria-hidden="true" />

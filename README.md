@@ -8,6 +8,7 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 - [Isolated build and migration rehearsal](DEPLOYMENT.md)
 - [Released workspace and theme captures](screenshots/live-beta37/README.md)
 - [Released Apps/Store, glass chrome, update and login checks](screenshots/live-beta40/README.md)
+- [Follow system, enlarged text and browser storage checks](screenshots/system-mode/README.md)
 - [Multi-homelab phase](MULTI-HOMELAB.md)
 - [Update Center contract](UPDATES.md)
 - [Authentication verification and remaining cases](AUTHENTICATION-QA.md)
@@ -20,7 +21,7 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 
 ![Orbis desktop in light mode with development fixture data](screenshots/desktop-fixtures/desktop-workspace.png)
 
-[Dark workspace](screenshots/desktop-fixtures/desktop-workspace-dark.png) · [Phone workspace](screenshots/desktop-fixtures/mobile-workspace.png) · [Phone in dark mode](screenshots/desktop-fixtures/mobile-workspace-dark.png) · [Monitor](screenshots/desktop-fixtures/desktop-monitor.png) · [Appearance](screenshots/desktop-fixtures/desktop-appearance.png)
+[Dark workspace](screenshots/desktop-fixtures/desktop-workspace-dark.png) · [Phone workspace](screenshots/desktop-fixtures/mobile-workspace.png) · [Phone in dark mode](screenshots/desktop-fixtures/mobile-workspace-dark.png) · [Monitor](screenshots/desktop-fixtures/desktop-monitor.png) · [Appearance](screenshots/system-mode/1440-light-native.png)
 
 [Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Search](screenshots/desktop-fixtures/desktop-search.png) · [Home app picker](screenshots/desktop-fixtures/desktop-dark-home-picker.png) · [All Home apps](screenshots/desktop-fixtures/desktop-dark-home-all-apps.png) · [Inspection record](VISUAL-QA.md)
 

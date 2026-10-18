@@ -7,7 +7,7 @@ import { useDesktopPreferences } from '@/desktop/preferences';
 import './orbis-toaster.css';
 
 export function OrbisToaster() {
-  const { preferences } = useDesktopPreferences();
+  const { preferences, resolvedMode } = useDesktopPreferences();
   const { toasts, handlers } = useToaster({
     duration: 5000,
     error: { duration: 8000 },
@@ -54,7 +54,7 @@ export function OrbisToaster() {
       className="orbis-notifications orbis-theme"
       aria-label="Notifications"
       aria-live="off"
-      data-desktop-mode={preferences.mode}
+      data-desktop-mode={resolvedMode}
       data-desktop-preset={preferences.preset}
       onMouseEnter={handlers.startPause}
       onMouseLeave={() => {

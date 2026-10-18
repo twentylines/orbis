@@ -5,6 +5,7 @@ import { buildClientParams } from '../packages/frontend/src/api-client/core/para
 import { getApp, login } from '../packages/frontend/src/api-client/sdk.gen';
 import '../packages/frontend/src/api-client-config';
 import { TranslatableError } from '../packages/frontend/src/types/error.types';
+import { createStorageSafeLanguageDetector } from '../packages/frontend/src/lib/i18n/language-detector';
 
 const frontendRequire = createRequire(new URL('../packages/frontend/package.json', import.meta.url));
 const HttpBackend = frontendRequire('i18next-http-backend');
@@ -130,5 +131,86 @@ describe('translation URL validation', () => {
       expect(result.error).toBeInstanceOf(Error);
       expect(backend.urls).toEqual([]);
     }
+  });
+});
+
+describe('language detection with unavailable browser storage', () => {
+  const withStorage = (
+    run: (browser: { readsDenied: boolean; writesDenied: boolean; cookiesDenied: boolean; values: Map<string, string> }) => void,
+  ) => {
+    const browser = { readsDenied: false, writesDenied: false, cookiesDenied: false, values: new Map<string, string>() };
+    const descriptors = new Map(['window', 'document', 'navigator'].map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+    const storage = {
+      getItem(key: string) {
+        if (browser.readsDenied) throw new DOMException('Fixture read denied', 'SecurityError');
+        return browser.values.get(key) ?? null;
+      },
+      setItem(key: string, value: string) {
+        if (browser.writesDenied) throw new DOMException('Fixture write denied', 'QuotaExceededError');
+        browser.values.set(key, value);
+      },
+      removeItem(key: string) {
+        browser.values.delete(key);
+      },
+    };
+    Object.defineProperties(globalThis, {
+      window: { configurable: true, value: { localStorage: storage, sessionStorage: storage, location: { search: '', hash: '' } } },
+      document: {
+        configurable: true,
+        value: {
+          documentElement: { lang: 'en' },
+          get cookie() {
+            if (browser.cookiesDenied) throw new DOMException('Fixture cookie denied', 'SecurityError');
+            return '';
+          },
+        },
+      },
+      navigator: { configurable: true, value: { languages: ['en'], language: 'en' } },
+    });
+    try {
+      run(browser);
+    } finally {
+      for (const [name, descriptor] of descriptors) {
+        if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+        else Reflect.deleteProperty(globalThis, name);
+      }
+    }
+  };
+
+  it('keeps an existing browser language and saves a changed selection', () => {
+    withStorage(({ values }) => {
+      values.set('i18nextLng', 'de');
+      const detector = createStorageSafeLanguageDetector();
+      expect(detector.detect()).toBe('de');
+      detector.cacheUserLanguage('en');
+      expect(values.get('i18nextLng')).toBe('en');
+    });
+  });
+
+  it('falls back when reads fail even though the storage write probe succeeds', () => {
+    withStorage((browser) => {
+      browser.readsDenied = true;
+      const detector = createStorageSafeLanguageDetector();
+      expect(detector.detect()).toBe('en');
+    });
+  });
+
+  it('keeps language caching optional when writes become unavailable after startup', () => {
+    withStorage((browser) => {
+      const detector = createStorageSafeLanguageDetector();
+      expect(detector.detect()).toBe('en');
+      browser.writesDenied = true;
+      expect(() => detector.cacheUserLanguage('de')).not.toThrow();
+      expect(detector.detect()).toBe('en');
+    });
+  });
+
+  it('continues detecting languages when cookie access fails', () => {
+    withStorage((browser) => {
+      browser.cookiesDenied = true;
+      browser.values.set('i18nextLng', 'de');
+      const detector = createStorageSafeLanguageDetector();
+      expect(detector.detect()).toBe('de');
+    });
   });
 });

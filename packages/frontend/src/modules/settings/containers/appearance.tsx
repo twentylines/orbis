@@ -6,7 +6,7 @@ import {
   type DesktopPreferences,
 } from '@/desktop/preferences';
 import { useEffect, useRef, useState } from 'react';
-import { IconMoonStars, IconSunHigh } from '@tabler/icons-react';
+import { IconDeviceDesktop, IconMoonStars, IconSunHigh } from '@tabler/icons-react';
 import './appearance.css';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
@@ -25,7 +25,7 @@ const wallpapers: { value: DesktopPreferences['wallpaper']; title: string }[] = 
 ];
 
 export const Appearance = () => {
-  const { preferences, update, reset, syncState } = useDesktopPreferences();
+  const { preferences, cacheAvailable, update, reset, syncState } = useDesktopPreferences();
   const [name, setName] = useState(preferences.serverName);
   const [message, setMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -33,7 +33,7 @@ export const Appearance = () => {
   useEffect(() => setName(preferences.serverName), [preferences.serverName]);
 
   const changePreset = (preset: DesktopPreferences['preset']) => {
-    update({ preset, mode: preset === 'graphite' ? 'dark' : 'light' });
+    update({ preset, mode: preferences.mode === 'system' ? 'system' : preset === 'graphite' ? 'dark' : 'light' });
     setMessage(`${presets.find((item) => item.value === preset)?.title} applied.`);
   };
 
@@ -85,8 +85,12 @@ export const Appearance = () => {
             : syncState === 'loading'
               ? 'Loading your preferences…'
               : syncState === 'error'
-                ? 'Sync unavailable. Changes are cached in this browser.'
-                : 'Saved in this browser'}
+                ? cacheAvailable
+                  ? 'Sync unavailable. Changes are cached in this browser.'
+                  : 'Sync unavailable. Changes will be lost when this page closes.'
+                : cacheAvailable
+                  ? 'Saved in this browser'
+                  : 'Changes will be lost when this page closes.'}
       </output>
       <section className="appearance-section" aria-labelledby="appearance-server-name">
         <div>
@@ -131,7 +135,8 @@ export const Appearance = () => {
       </section>
       <section className="appearance-section" aria-labelledby="appearance-mode">
         <div>
-          <h2 id="appearance-mode">Light & dark</h2>
+          <h2 id="appearance-mode">Colour mode</h2>
+          <p>Follow this device's setting, or choose a mode.</p>
         </div>
         <div className="appearance-modes">
           <button
@@ -154,6 +159,17 @@ export const Appearance = () => {
             <IconMoonStars size={24} stroke={1.5} aria-hidden="true" />
             <span>
               <strong>Dark</strong>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="appearance-mode appearance-mode-system"
+            aria-pressed={preferences.mode === 'system'}
+            onClick={() => update({ mode: 'system' })}
+          >
+            <IconDeviceDesktop size={24} stroke={1.5} aria-hidden="true" />
+            <span>
+              <strong>Follow system</strong>
             </span>
           </button>
         </div>

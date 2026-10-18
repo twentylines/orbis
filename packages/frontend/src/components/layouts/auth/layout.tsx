@@ -12,22 +12,22 @@ export const AuthLayout = ({ children }: PropsWithChildren) => {
   const locale = i18next.language;
 
   const { allowAutoThemes } = useUserContext();
-  const { preferences, update } = useDesktopPreferences();
+  const { preferences, resolvedMode, update } = useDesktopPreferences();
   return (
     <div
       className="page page-center desktop-auth orbis-theme"
       data-desktop-preset={preferences.preset}
-      data-desktop-mode={preferences.mode}
+      data-desktop-mode={resolvedMode}
       data-desktop-wallpaper={preferences.wallpaper}
     >
       <div className="desktop-auth-toolbar">
         <Button
           size="icon"
           variant="outline"
-          aria-label={`Switch to ${preferences.mode === 'dark' ? 'light' : 'dark'} mode`}
-          onClick={() => update({ mode: preferences.mode === 'dark' ? 'light' : 'dark' })}
+          aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+          onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
         >
-          {preferences.mode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
+          {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
         </Button>
         <LanguageSelector locale={locale as Locale} className="mb-0" />
       </div>

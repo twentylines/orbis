@@ -48,8 +48,8 @@ export const AppUserConfig = (props: AppUserConfigProps) => {
 
 export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose, initialSourceCompose, initialIsEnabled }: AppUserConfigProps) => {
   const { t } = useTranslation();
-  const { preferences } = useDesktopPreferences();
-  const editorTheme = preferences.mode === 'dark' ? copilot : 'light';
+  const { resolvedMode } = useDesktopPreferences();
+  const editorTheme = resolvedMode === 'dark' ? copilot : 'light';
   const [activeTab, setActiveTab] = useState('docker-compose');
 
   const [dockerCompose, setDockerCompose] = useState(initialDockerCompose ?? '');

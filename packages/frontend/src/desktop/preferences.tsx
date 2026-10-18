@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type PropsWithC
 import { useUserContext } from '@/context/user-context';
 import { useUIStore } from '@/stores/ui-store';
 import { desktopWindowsSchema, type DesktopWindows, type DesktopWindowId, type DesktopWindowState } from '@runtipi/common/schemas';
+import { useResolvedColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
@@ -10,7 +11,7 @@ export type WorkspacePreferences = { order: WidgetId[]; hidden: WidgetId[]; wide
 export type DesktopPreferences = {
   serverName: string;
   preset: 'frost' | 'graphite' | 'forest' | 'stone' | 'ocean' | 'blush';
-  mode: 'light' | 'dark';
+  mode: ColourMode;
   density: 'comfortable' | 'compact';
   wallpaper: 'sandstone' | 'tidal' | 'canopy';
   workspace: WorkspacePreferences;
@@ -61,7 +62,7 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
     candidate.serverName.length >= 1 &&
     candidate.serverName.length <= 40 &&
     ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'].includes(String(candidate.preset)) &&
-    (candidate.mode === undefined || ['light', 'dark'].includes(String(candidate.mode))) &&
+    (candidate.mode === undefined || ['light', 'dark', 'system'].includes(String(candidate.mode))) &&
     ['comfortable', 'compact'].includes(String(candidate.density)) &&
     (candidate.wallpaper === undefined || ['sandstone', 'tidal', 'canopy'].includes(String(candidate.wallpaper))) &&
     (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace)) &&
@@ -99,6 +100,8 @@ export function readCachedDesktopPreferences(): DesktopPreferences {
 
 type PreferenceContext = {
   preferences: DesktopPreferences;
+  resolvedMode: ResolvedColourMode;
+  cacheAvailable: boolean;
   update: (value: Partial<DesktopPreferences>) => void;
   updateWindow: (id: DesktopWindowId, value: DesktopWindowState) => void;
   reset: () => void;
@@ -110,6 +113,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const { isLoggedIn } = useUserContext();
   const setDarkMode = useUIStore((state) => state.setDarkMode);
   const [preferences, setPreferences] = useState(defaultDesktopPreferences);
+  const resolvedMode = useResolvedColourMode(preferences.mode);
+  const [cacheAvailable, setCacheAvailable] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [serverReady, setServerReady] = useState(false);
   const [syncState, setSyncState] = useState<PreferenceContext['syncState']>('local');
@@ -122,18 +127,25 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
       if (isPreferences(saved)) setPreferences(normalisePreferences(saved));
     } catch {
-      // Invalid local preferences safely fall back to defaults.
+      setCacheAvailable(false);
     }
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    if (!hydrated) return;
+    try {
+      const stored = JSON.stringify(preferences);
+      localStorage.setItem(STORAGE_KEY, stored);
+      setCacheAvailable(localStorage.getItem(STORAGE_KEY) === stored);
+    } catch {
+      setCacheAvailable(false);
+    }
   }, [hydrated, preferences]);
 
   useEffect(() => {
-    if (hydrated) setDarkMode(preferences.mode === 'dark');
-  }, [hydrated, preferences.mode, setDarkMode]);
+    if (hydrated) setDarkMode(resolvedMode === 'dark');
+  }, [hydrated, resolvedMode, setDarkMode]);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -197,7 +209,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const update = (value: Partial<DesktopPreferences>) => {
     if (!isPreferences({ ...preferences, ...value })) return;
     revision.current += 1;
-    setSyncState('saving');
+    setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
     setPreferences((previous) => {
       const next = { ...previous, ...value };
       return isPreferences(next) ? next : previous;
@@ -206,18 +218,20 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
 
   const reset = () => {
     revision.current += 1;
-    setSyncState('saving');
+    setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
     setPreferences({ ...defaultDesktopPreferences, workspace: { ...defaultDesktopPreferences.workspace } });
   };
 
   const updateWindow = (id: DesktopWindowId, value: DesktopWindowState) => {
     if (!desktopWindowsSchema.allows({ [id]: value })) return;
     revision.current += 1;
-    setSyncState('saving');
+    setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
     setPreferences((previous) => ({ ...previous, windows: { ...previous.windows, [id]: value } }));
   };
 
-  return <Context.Provider value={{ preferences, update, updateWindow, reset, syncState }}>{children}</Context.Provider>;
+  return (
+    <Context.Provider value={{ preferences, resolvedMode, cacheAvailable, update, updateWindow, reset, syncState }}>{children}</Context.Provider>
+  );
 };
 
 export const useDesktopPreferences = () => {

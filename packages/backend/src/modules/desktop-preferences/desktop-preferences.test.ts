@@ -106,6 +106,18 @@ describe('desktop preferences', () => {
     expect(invalid.status).toBe(400);
   });
 
+  it('persists the system colour preference without resolving it on the server', async () => {
+    const value = { ...DEFAULT_DESKTOP_PREFERENCES, mode: 'system', preset: 'blush' };
+    const saved = await request(app.getHttpServer()).put('/desktop-preferences').set('Authorization', 'Bearer test').send(value);
+    expect(saved.status).toBe(200);
+    expect(saved.body.mode).toBe('system');
+    const stored = JSON.parse(await fs.readFile(path.join(directory, 'state', 'desktop', '7.json'), 'utf8'));
+    expect(stored.mode).toBe('system');
+    const fetched = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');
+    expect(fetched.body.mode).toBe('system');
+    expect(fetched.body.preset).toBe('blush');
+  });
+
   it('saves a widget layout and rejects duplicate or unknown widget IDs', async () => {
     const workspace = { order: ['activity', 'applications', 'storage', 'attention'], hidden: ['attention'], wide: ['applications'] };
     const saved = await request(app.getHttpServer())
