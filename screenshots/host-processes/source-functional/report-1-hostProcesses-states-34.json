@@ -1,0 +1,121 @@
+{
+  "width": 320,
+  "mode": "dark",
+  "scale": 2,
+  "variant": "collecting",
+  "metrics": {
+    "width": 320,
+    "documentWidth": 320,
+    "root": {
+      "left": 45,
+      "right": 275,
+      "top": 130.515625,
+      "bottom": 894.890625,
+      "width": 230,
+      "height": 764.375
+    },
+    "monitor": {
+      "left": 45,
+      "right": 275,
+      "top": -11663.203125,
+      "bottom": 894.890625,
+      "width": 230,
+      "height": 12558.09375
+    },
+    "inner": {
+      "left": 64,
+      "right": 256
+    },
+    "padding": [18, 18],
+    "heading": {
+      "left": 64,
+      "right": 256,
+      "top": 149.515625,
+      "bottom": 281.515625,
+      "width": 192,
+      "height": 132
+    },
+    "peerHeading": {
+      "left": 64,
+      "right": 213.21875,
+      "top": -1980.796875,
+      "bottom": -1924.796875,
+      "width": 149.21875,
+      "height": 56
+    },
+    "words": [],
+    "overflowInk": [],
+    "buttons": [
+      {
+        "text": "CPU",
+        "box": {
+          "left": 64,
+          "right": 139.390625,
+          "top": 389.921875,
+          "bottom": 440.203125,
+          "width": 75.390625,
+          "height": 50.28125
+        },
+        "ink": [
+          {
+            "left": 77,
+            "right": 126.390625,
+            "top": 400.921875,
+            "bottom": 428.921875
+          }
+        ],
+        "padding": ["12px", "12px"]
+      },
+      {
+        "text": "Memory",
+        "box": {
+          "left": 64,
+          "right": 181.265625,
+          "top": 450.203125,
+          "bottom": 500.484375,
+          "width": 117.265625,
+          "height": 50.28125
+        },
+        "ink": [
+          {
+            "left": 77,
+            "right": 168.265625,
+            "top": 461.203125,
+            "bottom": 489.203125
+          }
+        ],
+        "padding": ["12px", "12px"]
+      }
+    ],
+    "rows": [],
+    "notice": "Collecting process readings.Retry",
+    "chrome": {
+      "bar": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "dock": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "frame": {
+        "background": "rgba(20, 36, 35, 0.95)",
+        "blur": "blur(24px) saturate(1.2)",
+        "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "header": {
+        "background": "rgba(0, 0, 0, 0)",
+        "blur": "none",
+        "shadow": "none",
+        "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+      },
+      "navigation": "page"
+    }
+  },
+  "passed": true
+}

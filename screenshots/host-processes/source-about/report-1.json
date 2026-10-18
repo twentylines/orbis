@@ -1,0 +1,140 @@
+{
+  "viewport": "host-processes",
+  "hostProcesses": {
+    "passed": true,
+    "layouts": [
+      {
+        "$ref": "report-1-hostProcesses-layouts-1.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-2.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-3.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-4.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-5.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-6.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-7.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-8.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-9.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-10.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-11.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-12.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-13.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-14.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-15.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-layouts-16.json"
+      }
+    ],
+    "states": [],
+    "retries": [],
+    "warm": [],
+    "refresh": [],
+    "polling": [],
+    "requests": [
+      {
+        "scenario": "ready",
+        "at": 1792296444423
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296446600
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296448946
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296451147
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296453555
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296455557
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296458235
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296460207
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296462541
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296464653
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296466932
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296469045
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296471373
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296473460
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296475732
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296477866
+      }
+    ],
+    "preferencePuts": 0,
+    "mutations": [],
+    "errors": [],
+    "scope": "About paragraph capture clearance only",
+    "current": "320-dark-text2-ocean-ready",
+    "cleanup": {
+      "textRestored": true,
+      "routesRestored": true,
+      "listenersRestored": true,
+      "viewportRestored": true
+    },
+    "cleanupFailures": []
+  },
+  "errors": []
+}

@@ -207,6 +207,9 @@
   .container-resources {
     padding: 14px;
   }
+  .desktop-monitor .container-resources {
+    padding: 18px;
+  }
   .container-resource-list > li {
     gap: 12px;
   }

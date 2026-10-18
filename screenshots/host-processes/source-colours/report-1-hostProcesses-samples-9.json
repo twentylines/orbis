@@ -1,0 +1,2210 @@
+{
+  "preset": "ocean",
+  "mode": "light",
+  "samples": [
+    {
+      "family": "fact label",
+      "token": "--desktop-status-muted",
+      "labels": [
+        {
+          "text": "CPU",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "Memory",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "CPU",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "Memory",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "CPU",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "Memory",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "CPU",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "Memory",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "CPU",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "Memory",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "CPU",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "Memory",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "CPU",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "Memory",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "CPU",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "Memory",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        }
+      ]
+    },
+    {
+      "family": "process PID",
+      "token": "--desktop-status-muted",
+      "labels": [
+        {
+          "text": "PID 10",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "PID 11",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "PID 2147483647",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "PID 22",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "PID 30",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "PID 31",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "PID 7",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "PID 8",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        }
+      ]
+    },
+    {
+      "family": "rank note",
+      "token": "--desktop-status-muted",
+      "labels": [
+        {
+          "text": "Highest first",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        }
+      ]
+    },
+    {
+      "family": "coverage",
+      "token": "--desktop-status-muted",
+      "labels": [
+        {
+          "text": "8 shown · 8 readable processes · 8 CPU comparisons",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        }
+      ]
+    },
+    {
+      "family": "about",
+      "token": "--desktop-status-muted",
+      "labels": [
+        {
+          "text": "CPU: 100% is one core. Rankings need two recent samples of the same process.",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        },
+        {
+          "text": "Memory is resident memory (RSS). It is approximate and can include shared pages. Processes inside containers also appear here, so their readings overlap the Docker list.",
+          "foreground": [55, 80, 88, 255],
+          "expected": [55, 80, 88, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.132253569106657
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [55, 80, 88, 255],
+              "ratio": 7.632239583510068
+            }
+          ],
+          "minimum": 7.132253569106657
+        }
+      ]
+    },
+    {
+      "family": "stale",
+      "token": "--desktop-warning",
+      "labels": [
+        {
+          "text": "Readings delayed",
+          "foreground": [130, 85, 30, 255],
+          "expected": [130, 85, 30, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [130, 85, 30, 255],
+              "ratio": 5.349934483193662
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [130, 85, 30, 255],
+              "ratio": 5.724976171441773
+            }
+          ],
+          "minimum": 5.349934483193662
+        },
+        {
+          "text": "Last process sample: 18/10/2026, 12:03:08. Values may be stale.",
+          "foreground": [130, 85, 30, 255],
+          "expected": [130, 85, 30, 255],
+          "layers": [
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [85, 136, 153, 15],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [244, 250, 249, 247],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [173, 199, 200, 255],
+              "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")"
+            },
+            {
+              "color": [0, 0, 0, 0],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            },
+            {
+              "color": [155, 174, 167, 255],
+              "image": "none"
+            }
+          ],
+          "effective": [
+            {
+              "background": [227.44244521337947, 235.9123414071511, 236.00069204152248, 255],
+              "text": [130, 85, 30, 255],
+              "ratio": 5.349934483193662
+            },
+            {
+              "background": [234.97185697808536, 243.441753171857, 243.53010380622837, 255],
+              "text": [130, 85, 30, 255],
+              "ratio": 5.724976171441773
+            }
+          ],
+          "minimum": 5.349934483193662
+        }
+      ]
+    }
+  ]
+}

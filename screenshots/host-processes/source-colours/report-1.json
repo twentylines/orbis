@@ -1,0 +1,114 @@
+{
+  "viewport": "host-processes",
+  "hostProcesses": {
+    "passed": true,
+    "layouts": [],
+    "states": [],
+    "retries": [],
+    "warm": [],
+    "refresh": [],
+    "polling": [],
+    "requests": [
+      {
+        "scenario": "stale",
+        "at": 1792296212760
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296215626
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296218166
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296220738
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296223443
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296226012
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296228598
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296231137
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296233700
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296236254
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296238796
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296241316
+      }
+    ],
+    "preferencePuts": 0,
+    "mutations": [],
+    "errors": [],
+    "samples": [
+      {
+        "$ref": "report-1-hostProcesses-samples-1.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-2.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-3.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-4.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-5.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-6.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-7.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-8.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-9.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-10.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-11.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-samples-12.json"
+      }
+    ],
+    "issues": [],
+    "current": "1440-dark-text1-blush-stale",
+    "minimum": 4.813995808743809,
+    "cleanup": {
+      "textRestored": true,
+      "routesRestored": true,
+      "listenersRestored": true,
+      "viewportRestored": true
+    },
+    "cleanupFailures": []
+  },
+  "errors": []
+}

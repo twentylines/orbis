@@ -1,0 +1,825 @@
+{
+  "width": 1440,
+  "mode": "light",
+  "scale": 1,
+  "variant": "unreadable",
+  "metrics": {
+    "width": 1440,
+    "documentWidth": 1440,
+    "root": {
+      "left": 55,
+      "right": 1385,
+      "top": 840.40625,
+      "bottom": 2005.0625,
+      "width": 1330,
+      "height": 1164.65625
+    },
+    "monitor": {
+      "left": 55,
+      "right": 1385,
+      "top": -2483.25,
+      "bottom": 2005.0625,
+      "width": 1330,
+      "height": 4488.3125
+    },
+    "inner": {
+      "left": 84,
+      "right": 1356
+    },
+    "padding": [28, 28],
+    "heading": {
+      "left": 84,
+      "right": 228.9375,
+      "top": 869.40625,
+      "bottom": 902.40625,
+      "width": 144.9375,
+      "height": 33
+    },
+    "peerHeading": {
+      "left": 84,
+      "right": 174.15625,
+      "top": 127.140625,
+      "bottom": 155.140625,
+      "width": 90.15625,
+      "height": 28
+    },
+    "words": [],
+    "overflowInk": [],
+    "buttons": [
+      {
+        "text": "CPU",
+        "box": {
+          "left": 84,
+          "right": 135.921875,
+          "top": 920.40625,
+          "bottom": 956.40625,
+          "width": 51.921875,
+          "height": 36
+        },
+        "ink": [
+          {
+            "left": 97,
+            "right": 122.921875,
+            "top": 930.828125,
+            "bottom": 945.828125
+          }
+        ],
+        "padding": ["12px", "12px"]
+      },
+      {
+        "text": "Memory",
+        "box": {
+          "left": 145.921875,
+          "right": 220.609375,
+          "top": 920.40625,
+          "bottom": 956.40625,
+          "width": 74.6875,
+          "height": 36
+        },
+        "ink": [
+          {
+            "left": 158.921875,
+            "right": 207.609375,
+            "top": 930.828125,
+            "bottom": 945.828125
+          }
+        ],
+        "padding": ["12px", "12px"]
+      }
+    ],
+    "rows": [
+      {
+        "pid": 10,
+        "box": {
+          "left": 84,
+          "right": 1356,
+          "top": 1014,
+          "bottom": 1122.984375,
+          "width": 1272,
+          "height": 108.984375
+        },
+        "name": {
+          "text": "media-transcoding-worker-production-secondary-archive-0123456789",
+          "title": "media-transcoding-worker-production-secondary-archive-0123456789",
+          "bdi": true,
+          "box": {
+            "left": 84,
+            "right": 678,
+            "top": 1034,
+            "bottom": 1056.390625,
+            "width": 594,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "text": "12500.5%",
+            "box": {
+              "left": 706,
+              "right": 1019,
+              "top": 1034,
+              "bottom": 1081.984375,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 706,
+                "right": 731.53125,
+                "top": 1036,
+                "bottom": 1051
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 706,
+                "right": 779.609375,
+                "top": 1061.59375,
+                "bottom": 1078.59375
+              }
+            ],
+            "overflow": false
+          },
+          {
+            "label": "Memory",
+            "text": "8192.0 TB",
+            "box": {
+              "left": 1043,
+              "right": 1356,
+              "top": 1034,
+              "bottom": 1081.984375,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 1043,
+                "right": 1089.875,
+                "top": 1036,
+                "bottom": 1051
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 1043,
+                "right": 1115.390625,
+                "top": 1061.59375,
+                "bottom": 1078.59375
+              }
+            ],
+            "overflow": false
+          }
+        ]
+      },
+      {
+        "pid": 11,
+        "box": {
+          "left": 84,
+          "right": 1356,
+          "top": 1122.984375,
+          "bottom": 1231.96875,
+          "width": 1272,
+          "height": 108.984375
+        },
+        "name": {
+          "text": "backup-verification",
+          "title": "backup-verification",
+          "bdi": true,
+          "box": {
+            "left": 84,
+            "right": 678,
+            "top": 1142.984375,
+            "bottom": 1165.375,
+            "width": 594,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "text": "12500.5%",
+            "box": {
+              "left": 706,
+              "right": 1019,
+              "top": 1142.984375,
+              "bottom": 1190.96875,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 706,
+                "right": 731.53125,
+                "top": 1144.984375,
+                "bottom": 1159.984375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 706,
+                "right": 779.609375,
+                "top": 1170.578125,
+                "bottom": 1187.578125
+              }
+            ],
+            "overflow": false
+          },
+          {
+            "label": "Memory",
+            "text": "16.0 GB",
+            "box": {
+              "left": 1043,
+              "right": 1356,
+              "top": 1142.984375,
+              "bottom": 1190.96875,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 1043,
+                "right": 1089.875,
+                "top": 1144.984375,
+                "bottom": 1159.984375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 1043,
+                "right": 1098.515625,
+                "top": 1170.578125,
+                "bottom": 1187.578125
+              }
+            ],
+            "overflow": false
+          }
+        ]
+      },
+      {
+        "pid": 2147483647,
+        "box": {
+          "left": 84,
+          "right": 1356,
+          "top": 1231.96875,
+          "bottom": 1340.953125,
+          "width": 1272,
+          "height": 108.984375
+        },
+        "name": {
+          "text": "postgres-database",
+          "title": "postgres-database",
+          "bdi": true,
+          "box": {
+            "left": 84,
+            "right": 678,
+            "top": 1251.96875,
+            "bottom": 1274.359375,
+            "width": 594,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "text": "207.6%",
+            "box": {
+              "left": 706,
+              "right": 1019,
+              "top": 1251.96875,
+              "bottom": 1299.953125,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 706,
+                "right": 731.53125,
+                "top": 1253.96875,
+                "bottom": 1268.96875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 706,
+                "right": 761.3125,
+                "top": 1279.5625,
+                "bottom": 1296.5625
+              }
+            ],
+            "overflow": false
+          },
+          {
+            "label": "Memory",
+            "text": "64.0 GB",
+            "box": {
+              "left": 1043,
+              "right": 1356,
+              "top": 1251.96875,
+              "bottom": 1299.953125,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 1043,
+                "right": 1089.875,
+                "top": 1253.96875,
+                "bottom": 1268.96875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 1043,
+                "right": 1098.515625,
+                "top": 1279.5625,
+                "bottom": 1296.5625
+              }
+            ],
+            "overflow": false
+          }
+        ]
+      },
+      {
+        "pid": 22,
+        "box": {
+          "left": 84,
+          "right": 1356,
+          "top": 1340.953125,
+          "bottom": 1449.9375,
+          "width": 1272,
+          "height": 108.984375
+        },
+        "name": {
+          "text": "archive-indexer",
+          "title": "archive-indexer",
+          "bdi": true,
+          "box": {
+            "left": 84,
+            "right": 678,
+            "top": 1360.953125,
+            "bottom": 1383.34375,
+            "width": 594,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "text": "95.6%",
+            "box": {
+              "left": 706,
+              "right": 1019,
+              "top": 1360.953125,
+              "bottom": 1408.9375,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 706,
+                "right": 731.53125,
+                "top": 1362.953125,
+                "bottom": 1377.953125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 706,
+                "right": 752.15625,
+                "top": 1388.546875,
+                "bottom": 1405.546875
+              }
+            ],
+            "overflow": false
+          },
+          {
+            "label": "Memory",
+            "text": "1.5 TB",
+            "box": {
+              "left": 1043,
+              "right": 1356,
+              "top": 1360.953125,
+              "bottom": 1408.9375,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 1043,
+                "right": 1089.875,
+                "top": 1362.953125,
+                "bottom": 1377.953125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 1043,
+                "right": 1087.9375,
+                "top": 1388.546875,
+                "bottom": 1405.546875
+              }
+            ],
+            "overflow": false
+          }
+        ]
+      },
+      {
+        "pid": 30,
+        "box": {
+          "left": 84,
+          "right": 1356,
+          "top": 1449.9375,
+          "bottom": 1558.921875,
+          "width": 1272,
+          "height": 108.984375
+        },
+        "name": {
+          "text": "jellyfin-Διαχείριση",
+          "title": "jellyfin-Διαχείριση",
+          "bdi": true,
+          "box": {
+            "left": 84,
+            "right": 678,
+            "top": 1469.9375,
+            "bottom": 1492.328125,
+            "width": 594,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "text": "12.3%",
+            "box": {
+              "left": 706,
+              "right": 1019,
+              "top": 1469.9375,
+              "bottom": 1517.921875,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 706,
+                "right": 731.53125,
+                "top": 1471.9375,
+                "bottom": 1486.9375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 706,
+                "right": 752.15625,
+                "top": 1497.53125,
+                "bottom": 1514.53125
+              }
+            ],
+            "overflow": false
+          },
+          {
+            "label": "Memory",
+            "text": "2.0 GB",
+            "box": {
+              "left": 1043,
+              "right": 1356,
+              "top": 1469.9375,
+              "bottom": 1517.921875,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 1043,
+                "right": 1089.875,
+                "top": 1471.9375,
+                "bottom": 1486.9375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 1043,
+                "right": 1089.359375,
+                "top": 1497.53125,
+                "bottom": 1514.53125
+              }
+            ],
+            "overflow": false
+          }
+        ]
+      },
+      {
+        "pid": 31,
+        "box": {
+          "left": 84,
+          "right": 1356,
+          "top": 1558.921875,
+          "bottom": 1667.90625,
+          "width": 1272,
+          "height": 108.984375
+        },
+        "name": {
+          "text": "application-server",
+          "title": "application-server",
+          "bdi": true,
+          "box": {
+            "left": 84,
+            "right": 678,
+            "top": 1578.921875,
+            "bottom": 1601.3125,
+            "width": 594,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "text": "5.1%",
+            "box": {
+              "left": 706,
+              "right": 1019,
+              "top": 1578.921875,
+              "bottom": 1626.90625,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 706,
+                "right": 731.53125,
+                "top": 1580.921875,
+                "bottom": 1595.921875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 706,
+                "right": 743,
+                "top": 1606.515625,
+                "bottom": 1623.515625
+              }
+            ],
+            "overflow": false
+          },
+          {
+            "label": "Memory",
+            "text": "48.0 GB",
+            "box": {
+              "left": 1043,
+              "right": 1356,
+              "top": 1578.921875,
+              "bottom": 1626.90625,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 1043,
+                "right": 1089.875,
+                "top": 1580.921875,
+                "bottom": 1595.921875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 1043,
+                "right": 1098.515625,
+                "top": 1606.515625,
+                "bottom": 1623.515625
+              }
+            ],
+            "overflow": false
+          }
+        ]
+      },
+      {
+        "pid": 7,
+        "box": {
+          "left": 84,
+          "right": 1356,
+          "top": 1667.90625,
+          "bottom": 1776.890625,
+          "width": 1272,
+          "height": 108.984375
+        },
+        "name": {
+          "text": "systemd",
+          "title": "systemd",
+          "bdi": true,
+          "box": {
+            "left": 84,
+            "right": 678,
+            "top": 1687.90625,
+            "bottom": 1710.296875,
+            "width": 594,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "text": "0.0%",
+            "box": {
+              "left": 706,
+              "right": 1019,
+              "top": 1687.90625,
+              "bottom": 1735.890625,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 706,
+                "right": 731.53125,
+                "top": 1689.90625,
+                "bottom": 1704.90625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 706,
+                "right": 743,
+                "top": 1715.5,
+                "bottom": 1732.5
+              }
+            ],
+            "overflow": false
+          },
+          {
+            "label": "Memory",
+            "text": "32.0 MB",
+            "box": {
+              "left": 1043,
+              "right": 1356,
+              "top": 1687.90625,
+              "bottom": 1735.890625,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 1043,
+                "right": 1089.875,
+                "top": 1689.90625,
+                "bottom": 1704.90625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 1043,
+                "right": 1100.515625,
+                "top": 1715.5,
+                "bottom": 1732.5
+              }
+            ],
+            "overflow": false
+          }
+        ]
+      },
+      {
+        "pid": 8,
+        "box": {
+          "left": 84,
+          "right": 1356,
+          "top": 1776.890625,
+          "bottom": 1884.875,
+          "width": 1272,
+          "height": 107.984375
+        },
+        "name": {
+          "text": "idle-worker",
+          "title": "idle-worker",
+          "bdi": true,
+          "box": {
+            "left": 84,
+            "right": 678,
+            "top": 1796.890625,
+            "bottom": 1819.28125,
+            "width": 594,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "text": "0.0%",
+            "box": {
+              "left": 706,
+              "right": 1019,
+              "top": 1796.890625,
+              "bottom": 1844.875,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 706,
+                "right": 731.53125,
+                "top": 1798.890625,
+                "bottom": 1813.890625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 706,
+                "right": 743,
+                "top": 1824.484375,
+                "bottom": 1841.484375
+              }
+            ],
+            "overflow": false
+          },
+          {
+            "label": "Memory",
+            "text": "0 B",
+            "box": {
+              "left": 1043,
+              "right": 1356,
+              "top": 1796.890625,
+              "bottom": 1844.875,
+              "width": 313,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 1043,
+                "right": 1089.875,
+                "top": 1798.890625,
+                "bottom": 1813.890625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 1043,
+                "right": 1065.15625,
+                "top": 1824.484375,
+                "bottom": 1841.484375
+              }
+            ],
+            "overflow": false
+          }
+        ]
+      }
+    ],
+    "chrome": {
+      "bar": {
+        "background": "rgba(18, 48, 55, 0.89)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "dock": {
+        "background": "rgba(18, 48, 55, 0.89)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "frame": {
+        "background": "rgba(0, 0, 0, 0)",
+        "blur": "none",
+        "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "header": {
+        "background": "rgba(18, 48, 55, 0.89)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(18, 43, 37, 0.12) 0px 13px 24px 0px",
+        "borders": ["rgb(245, 248, 242)", "rgb(245, 248, 242)", "rgba(190, 221, 205, 0.12)", "rgb(245, 248, 242)"]
+      },
+      "navigation": "desktop"
+    }
+  },
+  "passed": true
+}

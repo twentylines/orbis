@@ -1,0 +1,2406 @@
+{
+  "viewport": "host-processes",
+  "hostProcesses": {
+    "passed": true,
+    "layouts": [],
+    "states": [
+      {
+        "$ref": "report-1-hostProcesses-states-1.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-2.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-3.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-4.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-5.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-6.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-7.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-8.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-9.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-10.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-11.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-12.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-13.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-14.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-15.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-16.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-17.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-18.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-19.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-20.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-21.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-22.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-23.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-24.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-25.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-26.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-27.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-28.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-29.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-30.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-31.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-32.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-33.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-34.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-35.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-36.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-37.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-38.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-39.json"
+      },
+      {
+        "$ref": "report-1-hostProcesses-states-40.json"
+      }
+    ],
+    "retries": [
+      {
+        "width": 1440,
+        "mode": "light",
+        "scale": 1,
+        "variant": "missing",
+        "pending": true,
+        "rejected": false,
+        "before": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 2727
+        },
+        "after": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 2727
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "desktop",
+          "desktopQuery": true,
+          "documentScroll": {
+            "scrollHeight": 1120,
+            "clientHeight": 1120,
+            "scrollTop": 0,
+            "maxScroll": 0
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 0,
+            "content": 2727
+          },
+          "top": 842.40625,
+          "bottom": 875.40625,
+          "documentTop": 842.40625,
+          "chromeBottom": 189.75,
+          "dockTop": 1022,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      {
+        "width": 1440,
+        "mode": "light",
+        "scale": 1,
+        "variant": "error",
+        "pending": true,
+        "rejected": true,
+        "before": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 2727
+        },
+        "after": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 2727
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "desktop",
+          "desktopQuery": true,
+          "documentScroll": {
+            "scrollHeight": 1120,
+            "clientHeight": 1120,
+            "scrollTop": 0,
+            "maxScroll": 0
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 0,
+            "content": 2727
+          },
+          "top": 842.40625,
+          "bottom": 875.40625,
+          "documentTop": 842.40625,
+          "chromeBottom": 189.75,
+          "dockTop": 1022,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      {
+        "width": 768,
+        "mode": "dark",
+        "scale": 2,
+        "variant": "missing",
+        "pending": true,
+        "rejected": false,
+        "before": {
+          "x": 0,
+          "y": 7075,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 7075,
+          "frame": 0,
+          "content": 0
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 10122,
+            "clientHeight": 1024,
+            "scrollTop": 7075,
+            "maxScroll": 9098
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 7075,
+            "content": 0
+          },
+          "top": 493.515625,
+          "bottom": 559.515625,
+          "documentTop": 7568.515625,
+          "chromeBottom": 88,
+          "dockTop": 919.578125,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      {
+        "width": 768,
+        "mode": "dark",
+        "scale": 2,
+        "variant": "error",
+        "pending": true,
+        "rejected": true,
+        "before": {
+          "x": 0,
+          "y": 7075,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 7075,
+          "frame": 0,
+          "content": 0
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 10122,
+            "clientHeight": 1024,
+            "scrollTop": 7075,
+            "maxScroll": 9098
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 7075,
+            "content": 0
+          },
+          "top": 493.515625,
+          "bottom": 559.515625,
+          "documentTop": 7568.515625,
+          "chromeBottom": 88,
+          "dockTop": 919.578125,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      {
+        "width": 390,
+        "mode": "dark",
+        "scale": 1,
+        "variant": "missing",
+        "pending": true,
+        "rejected": false,
+        "before": {
+          "x": 0,
+          "y": 6407,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 6407,
+          "frame": 0,
+          "content": 0
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 8593,
+            "clientHeight": 844,
+            "scrollTop": 6407,
+            "maxScroll": 7749
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 6407,
+            "content": 0
+          },
+          "top": 389.984375,
+          "bottom": 422.984375,
+          "documentTop": 6796.984375,
+          "chromeBottom": 98,
+          "dockTop": 765,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      {
+        "width": 390,
+        "mode": "dark",
+        "scale": 1,
+        "variant": "error",
+        "pending": true,
+        "rejected": true,
+        "before": {
+          "x": 0,
+          "y": 6407,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 6407,
+          "frame": 0,
+          "content": 0
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 8593,
+            "clientHeight": 844,
+            "scrollTop": 6407,
+            "maxScroll": 7749
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 6407,
+            "content": 0
+          },
+          "top": 389.984375,
+          "bottom": 422.984375,
+          "documentTop": 6796.984375,
+          "chromeBottom": 98,
+          "dockTop": 765,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      {
+        "width": 320,
+        "mode": "light",
+        "scale": 2,
+        "variant": "missing",
+        "pending": true,
+        "rejected": false,
+        "before": {
+          "x": 0,
+          "y": 12351,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 11940,
+          "frame": 0,
+          "content": 0
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 15910,
+            "clientHeight": 800,
+            "scrollTop": 11940,
+            "maxScroll": 15110
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 11940,
+            "content": 0
+          },
+          "top": 141.515625,
+          "bottom": 273.515625,
+          "documentTop": 12081.515625,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      {
+        "width": 320,
+        "mode": "light",
+        "scale": 2,
+        "variant": "error",
+        "pending": true,
+        "rejected": true,
+        "before": {
+          "x": 0,
+          "y": 12331,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 11940,
+          "frame": 0,
+          "content": 0
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 15910,
+            "clientHeight": 800,
+            "scrollTop": 11940,
+            "maxScroll": 15110
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 11940,
+            "content": 0
+          },
+          "top": 141.515625,
+          "bottom": 273.515625,
+          "documentTop": 12081.515625,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      {
+        "width": 320,
+        "mode": "dark",
+        "scale": 2,
+        "variant": "missing",
+        "pending": true,
+        "rejected": false,
+        "before": {
+          "x": 0,
+          "y": 12351,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 11940,
+          "frame": 0,
+          "content": 0
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 15910,
+            "clientHeight": 800,
+            "scrollTop": 11940,
+            "maxScroll": 15110
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 11940,
+            "content": 0
+          },
+          "top": 141.515625,
+          "bottom": 273.515625,
+          "documentTop": 12081.515625,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      {
+        "width": 320,
+        "mode": "dark",
+        "scale": 2,
+        "variant": "error",
+        "pending": true,
+        "rejected": true,
+        "before": {
+          "x": 0,
+          "y": 12331,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 11940,
+          "frame": 0,
+          "content": 0
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 15910,
+            "clientHeight": 800,
+            "scrollTop": 11940,
+            "maxScroll": 15110
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host processes",
+          "scroll": {
+            "y": 11940,
+            "content": 0
+          },
+          "top": 141.515625,
+          "bottom": 273.515625,
+          "documentTop": 12081.515625,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      }
+    ],
+    "warm": [
+      {
+        "width": 1440,
+        "mode": "light",
+        "scale": 1,
+        "variant": "collecting",
+        "interval": 2009
+      },
+      {
+        "width": 1440,
+        "mode": "light",
+        "scale": 1,
+        "variant": "first-cpu",
+        "interval": 2009
+      },
+      {
+        "width": 768,
+        "mode": "dark",
+        "scale": 2,
+        "variant": "collecting",
+        "interval": 2010
+      },
+      {
+        "width": 768,
+        "mode": "dark",
+        "scale": 2,
+        "variant": "first-cpu",
+        "interval": 2009
+      },
+      {
+        "width": 390,
+        "mode": "dark",
+        "scale": 1,
+        "variant": "collecting",
+        "interval": 2008
+      },
+      {
+        "width": 390,
+        "mode": "dark",
+        "scale": 1,
+        "variant": "first-cpu",
+        "interval": 2009
+      },
+      {
+        "width": 320,
+        "mode": "light",
+        "scale": 2,
+        "variant": "collecting",
+        "interval": 2010
+      },
+      {
+        "width": 320,
+        "mode": "light",
+        "scale": 2,
+        "variant": "first-cpu",
+        "interval": 2006
+      },
+      {
+        "width": 320,
+        "mode": "dark",
+        "scale": 2,
+        "variant": "collecting",
+        "interval": 2008
+      },
+      {
+        "width": 320,
+        "mode": "dark",
+        "scale": 2,
+        "variant": "first-cpu",
+        "interval": 2005
+      }
+    ],
+    "refresh": [
+      {
+        "width": 1440,
+        "mode": "light",
+        "scale": 1,
+        "before": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 3681
+        },
+        "after": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 3681
+        },
+        "interval": 10011,
+        "oldOrder": ["10", "11", "2147483647", "22", "30", "31", "7", "8"],
+        "order": ["22", "10", "11", "2147483647", "30", "31", "7", "8"]
+      },
+      {
+        "width": 768,
+        "mode": "dark",
+        "scale": 2,
+        "before": {
+          "x": 0,
+          "y": 8083,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 8083,
+          "frame": 0,
+          "content": 0
+        },
+        "interval": 10008,
+        "oldOrder": ["10", "11", "2147483647", "22", "30", "31", "7", "8"],
+        "order": ["22", "10", "11", "2147483647", "30", "31", "7", "8"]
+      },
+      {
+        "width": 390,
+        "mode": "dark",
+        "scale": 1,
+        "before": {
+          "x": 0,
+          "y": 7160,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 7160,
+          "frame": 0,
+          "content": 0
+        },
+        "interval": 10008,
+        "oldOrder": ["10", "11", "2147483647", "22", "30", "31", "7", "8"],
+        "order": ["22", "10", "11", "2147483647", "30", "31", "7", "8"]
+      },
+      {
+        "width": 320,
+        "mode": "light",
+        "scale": 2,
+        "before": {
+          "x": 0,
+          "y": 13073,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 13073,
+          "frame": 0,
+          "content": 0
+        },
+        "interval": 10005,
+        "oldOrder": ["10", "11", "2147483647", "22", "30", "31", "7", "8"],
+        "order": ["22", "10", "11", "2147483647", "30", "31", "7", "8"]
+      },
+      {
+        "width": 320,
+        "mode": "dark",
+        "scale": 2,
+        "before": {
+          "x": 0,
+          "y": 13073,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 13073,
+          "frame": 0,
+          "content": 0
+        },
+        "interval": 10005,
+        "oldOrder": ["10", "11", "2147483647", "22", "30", "31", "7", "8"],
+        "order": ["22", "10", "11", "2147483647", "30", "31", "7", "8"]
+      }
+    ],
+    "growth": [
+      {
+        "width": 1440,
+        "mode": "light",
+        "scale": 1,
+        "before": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 3681
+        },
+        "after": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 4988
+        },
+        "beforeFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "desktop",
+          "desktopQuery": true,
+          "documentScroll": {
+            "scrollHeight": 1120,
+            "clientHeight": 1120,
+            "scrollTop": 0,
+            "maxScroll": 0
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 0,
+            "content": 3681
+          },
+          "top": 921.875,
+          "bottom": 957.46875,
+          "documentTop": 921.875,
+          "chromeBottom": 189.75,
+          "dockTop": 1022,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "afterFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "desktop",
+          "desktopQuery": true,
+          "documentScroll": {
+            "scrollHeight": 1120,
+            "clientHeight": 1120,
+            "scrollTop": 0,
+            "maxScroll": 0
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 0,
+            "content": 4988
+          },
+          "top": 922.6875,
+          "bottom": 958.28125,
+          "documentTop": 922.6875,
+          "chromeBottom": 189.75,
+          "dockTop": 1022,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "interval": 10006,
+        "count": 20
+      },
+      {
+        "width": 768,
+        "mode": "dark",
+        "scale": 2,
+        "before": {
+          "x": 0,
+          "y": 9098,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 12181,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 10122,
+            "clientHeight": 1024,
+            "scrollTop": 9098,
+            "maxScroll": 9098
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 9098,
+            "content": 0
+          },
+          "top": 755,
+          "bottom": 810.203125,
+          "documentTop": 9853,
+          "chromeBottom": 88,
+          "dockTop": 919.578125,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "afterFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 13245,
+            "clientHeight": 1024,
+            "scrollTop": 12181,
+            "maxScroll": 12221
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 12181,
+            "content": 0
+          },
+          "top": 794.828125,
+          "bottom": 850.03125,
+          "documentTop": 12975.828125,
+          "chromeBottom": 88,
+          "dockTop": 919.578125,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "interval": 10006,
+        "count": 20
+      },
+      {
+        "width": 390,
+        "mode": "dark",
+        "scale": 1,
+        "before": {
+          "x": 0,
+          "y": 7749,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 9825,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 8593,
+            "clientHeight": 844,
+            "scrollTop": 7749,
+            "maxScroll": 7749
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 7749,
+            "content": 0
+          },
+          "top": 644.515625,
+          "bottom": 680.109375,
+          "documentTop": 8393.515625,
+          "chromeBottom": 98,
+          "dockTop": 765,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "afterFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 10669,
+            "clientHeight": 844,
+            "scrollTop": 9825,
+            "maxScroll": 9825
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 9825,
+            "content": 0
+          },
+          "top": 644.140625,
+          "bottom": 679.734375,
+          "documentTop": 10469.140625,
+          "chromeBottom": 98,
+          "dockTop": 765,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "interval": 10008,
+        "count": 20
+      },
+      {
+        "width": 320,
+        "mode": "light",
+        "scale": 2,
+        "before": {
+          "x": 0,
+          "y": 15111,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 19466,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 15911,
+            "clientHeight": 800,
+            "scrollTop": 15111,
+            "maxScroll": 15111
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 15111,
+            "content": 0
+          },
+          "top": 482.296875,
+          "bottom": 576.703125,
+          "documentTop": 15593.296875,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "afterFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 20266,
+            "clientHeight": 800,
+            "scrollTop": 19466,
+            "maxScroll": 19466
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 19466,
+            "content": 0
+          },
+          "top": 482.734375,
+          "bottom": 577.140625,
+          "documentTop": 19948.734375,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "interval": 10004,
+        "count": 20
+      },
+      {
+        "width": 320,
+        "mode": "dark",
+        "scale": 2,
+        "before": {
+          "x": 0,
+          "y": 15111,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 19466,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 15911,
+            "clientHeight": 800,
+            "scrollTop": 15111,
+            "maxScroll": 15111
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 15111,
+            "content": 0
+          },
+          "top": 482.296875,
+          "bottom": 576.703125,
+          "documentTop": 15593.296875,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "afterFocus": {
+          "tag": "SUMMARY",
+          "owner": "tool",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 20266,
+            "clientHeight": 800,
+            "scrollTop": 19466,
+            "maxScroll": 19466
+          },
+          "expectedRevealDelta": 0,
+          "text": "About these readings",
+          "scroll": {
+            "y": 19466,
+            "content": 0
+          },
+          "top": 482.734375,
+          "bottom": 577.140625,
+          "documentTop": 19948.734375,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "interval": 10003,
+        "count": 20
+      }
+    ],
+    "polling": [
+      {
+        "kind": "minimized",
+        "reads": 0,
+        "duration": 10600
+      },
+      {
+        "kind": "hidden-route",
+        "reads": 0,
+        "duration": 10600
+      }
+    ],
+    "requests": [
+      {
+        "scenario": "missing",
+        "at": 1792296702653
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296705214
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296707857
+      },
+      {
+        "scenario": "error",
+        "at": 1792296710241
+      },
+      {
+        "scenario": "error",
+        "at": 1792296712765
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296714208
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296716846
+      },
+      {
+        "scenario": "limited",
+        "at": 1792296719238
+      },
+      {
+        "scenario": "unreadable",
+        "at": 1792296721639
+      },
+      {
+        "scenario": "empty",
+        "at": 1792296724034
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296726425
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296728870
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296730879
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296731364
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296733373
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296733850
+      },
+      {
+        "scenario": "refreshed",
+        "at": 1792296743861
+      },
+      {
+        "scenario": "growth",
+        "at": 1792296753867
+      },
+      {
+        "scenario": "missing",
+        "at": 1792296755826
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296759428
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296761978
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296763984
+      },
+      {
+        "scenario": "error",
+        "at": 1792296765077
+      },
+      {
+        "scenario": "error",
+        "at": 1792296768339
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296769763
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296772367
+      },
+      {
+        "scenario": "limited",
+        "at": 1792296775494
+      },
+      {
+        "scenario": "unreadable",
+        "at": 1792296778640
+      },
+      {
+        "scenario": "empty",
+        "at": 1792296781760
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296784897
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296788050
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296790060
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296790555
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296792564
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296793071
+      },
+      {
+        "scenario": "refreshed",
+        "at": 1792296803079
+      },
+      {
+        "scenario": "growth",
+        "at": 1792296813085
+      },
+      {
+        "scenario": "missing",
+        "at": 1792296815062
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296818098
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296820622
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296822628
+      },
+      {
+        "scenario": "error",
+        "at": 1792296823544
+      },
+      {
+        "scenario": "error",
+        "at": 1792296826599
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296828012
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296830493
+      },
+      {
+        "scenario": "limited",
+        "at": 1792296833437
+      },
+      {
+        "scenario": "unreadable",
+        "at": 1792296836376
+      },
+      {
+        "scenario": "empty",
+        "at": 1792296839317
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296842273
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296845235
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296847243
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296847718
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296849727
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296850238
+      },
+      {
+        "scenario": "refreshed",
+        "at": 1792296860246
+      },
+      {
+        "scenario": "growth",
+        "at": 1792296870254
+      },
+      {
+        "scenario": "missing",
+        "at": 1792296872157
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296876226
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296878759
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296880765
+      },
+      {
+        "scenario": "error",
+        "at": 1792296882640
+      },
+      {
+        "scenario": "error",
+        "at": 1792296886643
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296888057
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296890558
+      },
+      {
+        "scenario": "limited",
+        "at": 1792296894474
+      },
+      {
+        "scenario": "unreadable",
+        "at": 1792296898347
+      },
+      {
+        "scenario": "empty",
+        "at": 1792296902301
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296906177
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296908181
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296910126
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296912136
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296912620
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296914626
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296915095
+      },
+      {
+        "scenario": "refreshed",
+        "at": 1792296925100
+      },
+      {
+        "scenario": "growth",
+        "at": 1792296935104
+      },
+      {
+        "scenario": "missing",
+        "at": 1792296936965
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296941025
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296943568
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296945574
+      },
+      {
+        "scenario": "error",
+        "at": 1792296947457
+      },
+      {
+        "scenario": "error",
+        "at": 1792296951494
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296952906
+      },
+      {
+        "scenario": "stale",
+        "at": 1792296955394
+      },
+      {
+        "scenario": "limited",
+        "at": 1792296959300
+      },
+      {
+        "scenario": "unreadable",
+        "at": 1792296963190
+      },
+      {
+        "scenario": "empty",
+        "at": 1792296967095
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296970980
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296972988
+      },
+      {
+        "scenario": "collecting",
+        "at": 1792296974938
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296976946
+      },
+      {
+        "scenario": "first-cpu",
+        "at": 1792296977402
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296979407
+      },
+      {
+        "scenario": "ready",
+        "at": 1792296979901
+      },
+      {
+        "scenario": "refreshed",
+        "at": 1792296989906
+      },
+      {
+        "scenario": "growth",
+        "at": 1792296999909
+      },
+      {
+        "scenario": "missing",
+        "at": 1792297001853
+      },
+      {
+        "scenario": "ready",
+        "at": 1792297002717
+      },
+      {
+        "scenario": "ready",
+        "at": 1792297003411
+      },
+      {
+        "scenario": "ready",
+        "at": 1792297015257
+      },
+      {
+        "scenario": "core-missing",
+        "at": 1792297027217
+      }
+    ],
+    "preferencePuts": 0,
+    "mutations": [],
+    "errors": [],
+    "scope": "Host process state, focus and polling only",
+    "provenance": {
+      "preview": "http://localhost:8080",
+      "controlledFixtures": true,
+      "widths": [],
+      "modes": ["light", "dark"],
+      "textScales": [1, 2],
+      "stateGroups": [
+        {
+          "width": 1440,
+          "mode": "light",
+          "scale": 1
+        },
+        {
+          "width": 768,
+          "mode": "dark",
+          "scale": 2
+        },
+        {
+          "width": 390,
+          "mode": "dark",
+          "scale": 1
+        },
+        {
+          "width": 320,
+          "mode": "light",
+          "scale": 2
+        },
+        {
+          "width": 320,
+          "mode": "dark",
+          "scale": 2
+        }
+      ],
+      "interactions": true,
+      "build": "R5"
+    },
+    "current": "390-dark-text1-ocean-core-missing",
+    "pendingFocus": {
+      "tag": "SUMMARY",
+      "owner": "tool",
+      "frameMode": "page",
+      "desktopQuery": false,
+      "documentScroll": {
+        "scrollHeight": 20266,
+        "clientHeight": 800,
+        "scrollTop": 19466,
+        "maxScroll": 19466
+      },
+      "expectedRevealDelta": 0,
+      "text": "About these readings",
+      "scroll": {
+        "y": 19466,
+        "content": 0
+      },
+      "top": 482.734375,
+      "bottom": 577.140625,
+      "documentTop": 19948.734375,
+      "chromeBottom": 126,
+      "dockTop": 648.84375,
+      "outline": "rgb(183, 92, 62) solid 3px",
+      "shadow": "none"
+    },
+    "focusAffinity": true,
+    "coreIndependent": {
+      "width": 390,
+      "documentWidth": 390,
+      "root": {
+        "left": 45,
+        "right": 345,
+        "top": 453.28125,
+        "bottom": 2123.40625,
+        "width": 300,
+        "height": 1670.125
+      },
+      "monitor": {
+        "left": 45,
+        "right": 345,
+        "top": 232,
+        "bottom": 2123.40625,
+        "width": 300,
+        "height": 1891.40625
+      },
+      "inner": {
+        "left": 64,
+        "right": 326
+      },
+      "padding": [18, 18],
+      "heading": {
+        "left": 64,
+        "right": 208.9375,
+        "top": 472.28125,
+        "bottom": 505.28125,
+        "width": 144.9375,
+        "height": 33
+      },
+      "peerHeading": null,
+      "words": [],
+      "overflowInk": [],
+      "buttons": [
+        {
+          "text": "CPU",
+          "box": {
+            "left": 64,
+            "right": 115.921875,
+            "top": 554.875,
+            "bottom": 590.875,
+            "width": 51.921875,
+            "height": 36
+          },
+          "ink": [
+            {
+              "left": 77,
+              "right": 102.921875,
+              "top": 565.296875,
+              "bottom": 580.296875
+            }
+          ],
+          "padding": ["12px", "12px"]
+        },
+        {
+          "text": "Memory",
+          "box": {
+            "left": 125.921875,
+            "right": 200.609375,
+            "top": 554.875,
+            "bottom": 590.875,
+            "width": 74.6875,
+            "height": 36
+          },
+          "ink": [
+            {
+              "left": 138.921875,
+              "right": 187.609375,
+              "top": 565.296875,
+              "bottom": 580.296875
+            }
+          ],
+          "padding": ["12px", "12px"]
+        }
+      ],
+      "rows": [
+        {
+          "pid": 10,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 610.875,
+            "bottom": 783.84375,
+            "width": 262,
+            "height": 172.96875
+          },
+          "name": {
+            "text": "media-transcoding-worker-production-secondary-archive-0123456789",
+            "title": "media-transcoding-worker-production-secondary-archive-0123456789",
+            "bdi": true,
+            "box": {
+              "left": 64,
+              "right": 326,
+              "top": 630.875,
+              "bottom": 653.265625,
+              "width": 262,
+              "height": 22.390625
+            },
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          "facts": [
+            {
+              "label": "CPU",
+              "text": "12500.5%",
+              "box": {
+                "left": 64,
+                "right": 183,
+                "top": 694.859375,
+                "bottom": 742.84375,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 64,
+                  "right": 89.53125,
+                  "top": 696.859375,
+                  "bottom": 711.859375
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 64,
+                  "right": 137.609375,
+                  "top": 722.453125,
+                  "bottom": 739.453125
+                }
+              ],
+              "overflow": false
+            },
+            {
+              "label": "Memory",
+              "text": "8192.0 TB",
+              "box": {
+                "left": 207,
+                "right": 326,
+                "top": 694.859375,
+                "bottom": 742.84375,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 207,
+                  "right": 253.875,
+                  "top": 696.859375,
+                  "bottom": 711.859375
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 207,
+                  "right": 279.390625,
+                  "top": 722.453125,
+                  "bottom": 739.453125
+                }
+              ],
+              "overflow": false
+            }
+          ]
+        },
+        {
+          "pid": 11,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 783.84375,
+            "bottom": 956.8125,
+            "width": 262,
+            "height": 172.96875
+          },
+          "name": {
+            "text": "backup-verification",
+            "title": "backup-verification",
+            "bdi": true,
+            "box": {
+              "left": 64,
+              "right": 326,
+              "top": 803.84375,
+              "bottom": 826.234375,
+              "width": 262,
+              "height": 22.390625
+            },
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          "facts": [
+            {
+              "label": "CPU",
+              "text": "12500.5%",
+              "box": {
+                "left": 64,
+                "right": 183,
+                "top": 867.828125,
+                "bottom": 915.8125,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 64,
+                  "right": 89.53125,
+                  "top": 869.828125,
+                  "bottom": 884.828125
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 64,
+                  "right": 137.609375,
+                  "top": 895.421875,
+                  "bottom": 912.421875
+                }
+              ],
+              "overflow": false
+            },
+            {
+              "label": "Memory",
+              "text": "16.0 GB",
+              "box": {
+                "left": 207,
+                "right": 326,
+                "top": 867.828125,
+                "bottom": 915.8125,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 207,
+                  "right": 253.875,
+                  "top": 869.828125,
+                  "bottom": 884.828125
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 207,
+                  "right": 262.515625,
+                  "top": 895.421875,
+                  "bottom": 912.421875
+                }
+              ],
+              "overflow": false
+            }
+          ]
+        },
+        {
+          "pid": 2147483647,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 956.8125,
+            "bottom": 1129.78125,
+            "width": 262,
+            "height": 172.96875
+          },
+          "name": {
+            "text": "postgres-database",
+            "title": "postgres-database",
+            "bdi": true,
+            "box": {
+              "left": 64,
+              "right": 326,
+              "top": 976.8125,
+              "bottom": 999.203125,
+              "width": 262,
+              "height": 22.390625
+            },
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          "facts": [
+            {
+              "label": "CPU",
+              "text": "207.6%",
+              "box": {
+                "left": 64,
+                "right": 183,
+                "top": 1040.796875,
+                "bottom": 1088.78125,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 64,
+                  "right": 89.53125,
+                  "top": 1042.796875,
+                  "bottom": 1057.796875
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 64,
+                  "right": 119.3125,
+                  "top": 1068.390625,
+                  "bottom": 1085.390625
+                }
+              ],
+              "overflow": false
+            },
+            {
+              "label": "Memory",
+              "text": "64.0 GB",
+              "box": {
+                "left": 207,
+                "right": 326,
+                "top": 1040.796875,
+                "bottom": 1088.78125,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 207,
+                  "right": 253.875,
+                  "top": 1042.796875,
+                  "bottom": 1057.796875
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 207,
+                  "right": 262.515625,
+                  "top": 1068.390625,
+                  "bottom": 1085.390625
+                }
+              ],
+              "overflow": false
+            }
+          ]
+        },
+        {
+          "pid": 22,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1129.78125,
+            "bottom": 1302.75,
+            "width": 262,
+            "height": 172.96875
+          },
+          "name": {
+            "text": "archive-indexer",
+            "title": "archive-indexer",
+            "bdi": true,
+            "box": {
+              "left": 64,
+              "right": 326,
+              "top": 1149.78125,
+              "bottom": 1172.171875,
+              "width": 262,
+              "height": 22.390625
+            },
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          "facts": [
+            {
+              "label": "CPU",
+              "text": "95.6%",
+              "box": {
+                "left": 64,
+                "right": 183,
+                "top": 1213.765625,
+                "bottom": 1261.75,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 64,
+                  "right": 89.53125,
+                  "top": 1215.765625,
+                  "bottom": 1230.765625
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 64,
+                  "right": 110.15625,
+                  "top": 1241.359375,
+                  "bottom": 1258.359375
+                }
+              ],
+              "overflow": false
+            },
+            {
+              "label": "Memory",
+              "text": "1.5 TB",
+              "box": {
+                "left": 207,
+                "right": 326,
+                "top": 1213.765625,
+                "bottom": 1261.75,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 207,
+                  "right": 253.875,
+                  "top": 1215.765625,
+                  "bottom": 1230.765625
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 207,
+                  "right": 251.9375,
+                  "top": 1241.359375,
+                  "bottom": 1258.359375
+                }
+              ],
+              "overflow": false
+            }
+          ]
+        },
+        {
+          "pid": 30,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1302.75,
+            "bottom": 1475.71875,
+            "width": 262,
+            "height": 172.96875
+          },
+          "name": {
+            "text": "jellyfin-Διαχείριση",
+            "title": "jellyfin-Διαχείριση",
+            "bdi": true,
+            "box": {
+              "left": 64,
+              "right": 326,
+              "top": 1322.75,
+              "bottom": 1345.140625,
+              "width": 262,
+              "height": 22.390625
+            },
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          "facts": [
+            {
+              "label": "CPU",
+              "text": "12.3%",
+              "box": {
+                "left": 64,
+                "right": 183,
+                "top": 1386.734375,
+                "bottom": 1434.71875,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 64,
+                  "right": 89.53125,
+                  "top": 1388.734375,
+                  "bottom": 1403.734375
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 64,
+                  "right": 110.15625,
+                  "top": 1414.328125,
+                  "bottom": 1431.328125
+                }
+              ],
+              "overflow": false
+            },
+            {
+              "label": "Memory",
+              "text": "2.0 GB",
+              "box": {
+                "left": 207,
+                "right": 326,
+                "top": 1386.734375,
+                "bottom": 1434.71875,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 207,
+                  "right": 253.875,
+                  "top": 1388.734375,
+                  "bottom": 1403.734375
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 207,
+                  "right": 253.359375,
+                  "top": 1414.328125,
+                  "bottom": 1431.328125
+                }
+              ],
+              "overflow": false
+            }
+          ]
+        },
+        {
+          "pid": 31,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1475.71875,
+            "bottom": 1648.6875,
+            "width": 262,
+            "height": 172.96875
+          },
+          "name": {
+            "text": "application-server",
+            "title": "application-server",
+            "bdi": true,
+            "box": {
+              "left": 64,
+              "right": 326,
+              "top": 1495.71875,
+              "bottom": 1518.109375,
+              "width": 262,
+              "height": 22.390625
+            },
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          "facts": [
+            {
+              "label": "CPU",
+              "text": "5.1%",
+              "box": {
+                "left": 64,
+                "right": 183,
+                "top": 1559.703125,
+                "bottom": 1607.6875,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 64,
+                  "right": 89.53125,
+                  "top": 1561.703125,
+                  "bottom": 1576.703125
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 64,
+                  "right": 101,
+                  "top": 1587.296875,
+                  "bottom": 1604.296875
+                }
+              ],
+              "overflow": false
+            },
+            {
+              "label": "Memory",
+              "text": "48.0 GB",
+              "box": {
+                "left": 207,
+                "right": 326,
+                "top": 1559.703125,
+                "bottom": 1607.6875,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 207,
+                  "right": 253.875,
+                  "top": 1561.703125,
+                  "bottom": 1576.703125
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 207,
+                  "right": 262.515625,
+                  "top": 1587.296875,
+                  "bottom": 1604.296875
+                }
+              ],
+              "overflow": false
+            }
+          ]
+        },
+        {
+          "pid": 7,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1648.6875,
+            "bottom": 1821.65625,
+            "width": 262,
+            "height": 172.96875
+          },
+          "name": {
+            "text": "systemd",
+            "title": "systemd",
+            "bdi": true,
+            "box": {
+              "left": 64,
+              "right": 326,
+              "top": 1668.6875,
+              "bottom": 1691.078125,
+              "width": 262,
+              "height": 22.390625
+            },
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          "facts": [
+            {
+              "label": "CPU",
+              "text": "0.0%",
+              "box": {
+                "left": 64,
+                "right": 183,
+                "top": 1732.671875,
+                "bottom": 1780.65625,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 64,
+                  "right": 89.53125,
+                  "top": 1734.671875,
+                  "bottom": 1749.671875
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 64,
+                  "right": 101,
+                  "top": 1760.265625,
+                  "bottom": 1777.265625
+                }
+              ],
+              "overflow": false
+            },
+            {
+              "label": "Memory",
+              "text": "32.0 MB",
+              "box": {
+                "left": 207,
+                "right": 326,
+                "top": 1732.671875,
+                "bottom": 1780.65625,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 207,
+                  "right": 253.875,
+                  "top": 1734.671875,
+                  "bottom": 1749.671875
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 207,
+                  "right": 264.515625,
+                  "top": 1760.265625,
+                  "bottom": 1777.265625
+                }
+              ],
+              "overflow": false
+            }
+          ]
+        },
+        {
+          "pid": 8,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1821.65625,
+            "bottom": 1993.625,
+            "width": 262,
+            "height": 171.96875
+          },
+          "name": {
+            "text": "idle-worker",
+            "title": "idle-worker",
+            "bdi": true,
+            "box": {
+              "left": 64,
+              "right": 326,
+              "top": 1841.65625,
+              "bottom": 1864.046875,
+              "width": 262,
+              "height": 22.390625
+            },
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          "facts": [
+            {
+              "label": "CPU",
+              "text": "0.0%",
+              "box": {
+                "left": 64,
+                "right": 183,
+                "top": 1905.640625,
+                "bottom": 1953.625,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 64,
+                  "right": 89.53125,
+                  "top": 1907.640625,
+                  "bottom": 1922.640625
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 64,
+                  "right": 101,
+                  "top": 1933.234375,
+                  "bottom": 1950.234375
+                }
+              ],
+              "overflow": false
+            },
+            {
+              "label": "Memory",
+              "text": "0 B",
+              "box": {
+                "left": 207,
+                "right": 326,
+                "top": 1905.640625,
+                "bottom": 1953.625,
+                "width": 119,
+                "height": 47.984375
+              },
+              "labelInk": [
+                {
+                  "left": 207,
+                  "right": 253.875,
+                  "top": 1907.640625,
+                  "bottom": 1922.640625
+                }
+              ],
+              "valueInk": [
+                {
+                  "left": 207,
+                  "right": 229.15625,
+                  "top": 1933.234375,
+                  "bottom": 1950.234375
+                }
+              ],
+              "overflow": false
+            }
+          ]
+        }
+      ],
+      "chrome": {
+        "bar": {
+          "background": "rgba(9, 23, 23, 0.92)",
+          "blur": "blur(28px) saturate(1.45)",
+          "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+          "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+        },
+        "dock": {
+          "background": "rgba(9, 23, 23, 0.92)",
+          "blur": "blur(28px) saturate(1.45)",
+          "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+          "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+        },
+        "frame": {
+          "background": "rgba(20, 36, 35, 0.95)",
+          "blur": "blur(24px) saturate(1.2)",
+          "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+          "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+        },
+        "header": {
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "none",
+          "shadow": "none",
+          "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+        },
+        "navigation": "page"
+      }
+    },
+    "cleanup": {
+      "textRestored": true,
+      "routesRestored": true,
+      "listenersRestored": true,
+      "viewportRestored": true
+    },
+    "cleanupFailures": []
+  },
+  "errors": []
+}

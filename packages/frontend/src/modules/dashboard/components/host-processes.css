@@ -1,0 +1,156 @@
+.host-processes {
+  --process-muted: var(--desktop-status-muted);
+  margin-top: 24px;
+  padding: 28px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
+  container-type: inline-size;
+  scroll-margin-block: 16px;
+}
+.host-processes-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+.host-processes .host-processes-heading h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.5;
+  letter-spacing: -0.035em;
+}
+.host-processes-heading h2:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 5px;
+  border-radius: 4px;
+}
+.host-processes-state,
+.host-processes .host-processes-coverage,
+.host-processes-about,
+.host-process-identity > span,
+.host-process-values dt {
+  font-size: 0.875em;
+  color: var(--process-muted);
+  line-height: 1.6;
+}
+.host-processes-state[data-stale="true"],
+.host-processes-stale {
+  color: var(--desktop-warning);
+}
+.host-processes-stale {
+  display: block;
+  margin-bottom: 20px;
+}
+.host-processes .host-processes-sort {
+  gap: 10px;
+}
+.host-processes .host-processes-sort > span {
+  color: var(--process-muted);
+  font-size: 0.875em;
+}
+.host-processes-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-block: 20px;
+}
+.host-processes-notice p {
+  flex: 1 1 20em;
+  margin: 0;
+}
+.host-process-list {
+  list-style: none;
+  /* A moving PID must not become the browser's reading-position anchor. */
+  overflow-anchor: none;
+  padding: 0;
+  margin: 20px 0;
+}
+.host-process-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 28px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.host-process-list > li:last-child {
+  border-bottom: 0;
+}
+.host-process-identity {
+  flex: 1 1 12em;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.host-process-identity strong {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 650;
+  line-height: 1.6;
+}
+.host-process-values {
+  flex: 1 1 16em;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7em), 1fr));
+  gap: 16px 24px;
+  max-width: 100%;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.host-process-values > div {
+  min-width: 0;
+}
+.host-process-values dt {
+  font-weight: 400;
+}
+.host-process-values dd {
+  margin: 6px 0 0;
+  font-weight: 650;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+.host-process-bar {
+  flex-basis: 100%;
+  height: 4px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 15%, transparent);
+  overflow: hidden;
+}
+.host-process-bar i {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 75%, var(--desktop-ink));
+  transition: width 200ms ease;
+}
+.host-processes-about summary {
+  width: fit-content;
+  padding: 8px 0;
+  cursor: pointer;
+}
+.host-processes .host-processes-about p {
+  margin: 12px 0 0;
+  color: var(--process-muted);
+}
+@container (max-width: 30em) {
+  .host-process-identity,
+  .host-process-values {
+    flex-basis: 100%;
+  }
+}
+@container (max-width: 650px) {
+  .host-processes {
+    padding: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .host-process-bar i {
+    transition: none;
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "encoding": "Replace each single-key $ref object with the referenced JSON, relative to this directory.",
+  "losslessObjectVerified": true,
+  "originalObjectSha256": "f000aa1ea9dd798fce8696f88c7d0307556ae5d23ee885faecdefb3748c27823",
+  "report": [
+    {
+      "$ref": "report-1.json"
+    }
+  ]
+}

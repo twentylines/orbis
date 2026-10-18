@@ -1,0 +1,209 @@
+{
+  "width": 768,
+  "mode": "dark",
+  "scale": 2,
+  "variant": "error",
+  "metrics": {
+    "width": 768,
+    "documentWidth": 768,
+    "root": {
+      "left": 55,
+      "right": 713,
+      "top": 464.515625,
+      "bottom": 908,
+      "width": 658,
+      "height": 443.484375
+    },
+    "monitor": {
+      "left": 55,
+      "right": 713,
+      "top": -6834,
+      "bottom": 908,
+      "width": 658,
+      "height": 7742
+    },
+    "inner": {
+      "left": 84,
+      "right": 684
+    },
+    "padding": [28, 28],
+    "heading": {
+      "left": 84,
+      "right": 370.359375,
+      "top": 493.515625,
+      "bottom": 559.515625,
+      "width": 286.359375,
+      "height": 66
+    },
+    "peerHeading": {
+      "left": 84,
+      "right": 233.21875,
+      "top": -630.296875,
+      "bottom": -574.296875,
+      "width": 149.21875,
+      "height": 56
+    },
+    "words": [],
+    "overflowInk": [],
+    "buttons": [
+      {
+        "text": "CPU",
+        "box": {
+          "left": 84,
+          "right": 159.390625,
+          "top": 577.515625,
+          "bottom": 627.796875,
+          "width": 75.390625,
+          "height": 50.28125
+        },
+        "ink": [
+          {
+            "left": 97,
+            "right": 146.390625,
+            "top": 588.515625,
+            "bottom": 616.515625
+          }
+        ],
+        "padding": ["12px", "12px"]
+      },
+      {
+        "text": "Memory",
+        "box": {
+          "left": 169.390625,
+          "right": 286.65625,
+          "top": 577.515625,
+          "bottom": 627.796875,
+          "width": 117.265625,
+          "height": 50.28125
+        },
+        "ink": [
+          {
+            "left": 182.390625,
+            "right": 273.65625,
+            "top": 588.515625,
+            "bottom": 616.515625
+          }
+        ],
+        "padding": ["12px", "12px"]
+      }
+    ],
+    "rows": [],
+    "notice": "Process readings could not be refreshed. Previous values may be stale.Retry",
+    "chrome": {
+      "bar": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "dock": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "frame": {
+        "background": "rgba(20, 36, 35, 0.95)",
+        "blur": "blur(24px) saturate(1.2)",
+        "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "header": {
+        "background": "rgba(0, 0, 0, 0)",
+        "blur": "none",
+        "shadow": "none",
+        "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+      },
+      "navigation": "page"
+    }
+  },
+  "passed": true,
+  "nativeFocus": {
+    "tag": "BUTTON",
+    "owner": "tool",
+    "frameMode": "page",
+    "desktopQuery": false,
+    "documentScroll": {
+      "scrollHeight": 8168,
+      "clientHeight": 1024,
+      "scrollTop": 7075,
+      "maxScroll": 7144
+    },
+    "expectedRevealDelta": 0,
+    "text": "Retry",
+    "scroll": {
+      "y": 7075,
+      "content": 0
+    },
+    "top": 743.796875,
+    "bottom": 803.796875,
+    "documentTop": 7818.796875,
+    "chromeBottom": 88,
+    "dockTop": 919.578125,
+    "outline": "rgb(183, 92, 62) solid 3px",
+    "shadow": "none"
+  },
+  "rejectedFocus": {
+    "tag": "BUTTON",
+    "owner": "tool",
+    "frameMode": "page",
+    "desktopQuery": false,
+    "documentScroll": {
+      "scrollHeight": 8148,
+      "clientHeight": 1024,
+      "scrollTop": 7075,
+      "maxScroll": 7124
+    },
+    "expectedRevealDelta": 0,
+    "text": "Retry",
+    "scroll": {
+      "y": 7075,
+      "content": 0
+    },
+    "top": 743.796875,
+    "bottom": 783.796875,
+    "documentTop": 7818.796875,
+    "chromeBottom": 88,
+    "dockTop": 919.578125,
+    "outline": "rgb(183, 92, 62) solid 3px",
+    "shadow": "none"
+  },
+  "pending": "Host processesCPU and resident memoryRank host processes byCPUMemoryHighest firstLoading host processes…About these readingsCPU: 100% is one core. Rankings need two recent samples of the same process.Memory is resident memory (RSS). It is approximate and can include shared pages. Processes inside containers also appear here, so their readings overlap the Docker list.",
+  "successFocus": {
+    "tag": "H2",
+    "owner": "tool",
+    "frameMode": "page",
+    "desktopQuery": false,
+    "documentScroll": {
+      "scrollHeight": 10122,
+      "clientHeight": 1024,
+      "scrollTop": 7075,
+      "maxScroll": 9098
+    },
+    "expectedRevealDelta": 0,
+    "text": "Host processes",
+    "scroll": {
+      "y": 7075,
+      "content": 0
+    },
+    "top": 493.515625,
+    "bottom": 559.515625,
+    "documentTop": 7568.515625,
+    "chromeBottom": 88,
+    "dockTop": 919.578125,
+    "outline": "rgb(183, 92, 62) solid 3px",
+    "shadow": "none"
+  },
+  "before": {
+    "x": 0,
+    "y": 7075,
+    "frame": 0,
+    "content": 0
+  },
+  "after": {
+    "x": 0,
+    "y": 7075,
+    "frame": 0,
+    "content": 0
+  }
+}

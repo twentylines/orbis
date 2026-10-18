@@ -1,0 +1,184 @@
+{
+  "width": 390,
+  "mode": "dark",
+  "scale": 1,
+  "variant": "missing",
+  "metrics": {
+    "width": 390,
+    "documentWidth": 390,
+    "root": {
+      "left": 45,
+      "right": 345,
+      "top": 370.984375,
+      "bottom": 699.171875,
+      "width": 300,
+      "height": 328.1875
+    },
+    "monitor": {
+      "left": 45,
+      "right": 345,
+      "top": -6175,
+      "bottom": 699.171875,
+      "width": 300,
+      "height": 6874.171875
+    },
+    "inner": {
+      "left": 64,
+      "right": 326
+    },
+    "padding": [18, 18],
+    "heading": {
+      "left": 64,
+      "right": 208.9375,
+      "top": 389.984375,
+      "bottom": 422.984375,
+      "width": 144.9375,
+      "height": 33
+    },
+    "peerHeading": {
+      "left": 64,
+      "right": 154.15625,
+      "top": -537.6875,
+      "bottom": -509.6875,
+      "width": 90.15625,
+      "height": 28
+    },
+    "words": [],
+    "overflowInk": [],
+    "buttons": [
+      {
+        "text": "CPU",
+        "box": {
+          "left": 64,
+          "right": 115.921875,
+          "top": 472.578125,
+          "bottom": 508.578125,
+          "width": 51.921875,
+          "height": 36
+        },
+        "ink": [
+          {
+            "left": 77,
+            "right": 102.921875,
+            "top": 483,
+            "bottom": 498
+          }
+        ],
+        "padding": ["12px", "12px"]
+      },
+      {
+        "text": "Memory",
+        "box": {
+          "left": 125.921875,
+          "right": 200.609375,
+          "top": 472.578125,
+          "bottom": 508.578125,
+          "width": 74.6875,
+          "height": 36
+        },
+        "ink": [
+          {
+            "left": 138.921875,
+            "right": 187.609375,
+            "top": 483,
+            "bottom": 498
+          }
+        ],
+        "padding": ["12px", "12px"]
+      }
+    ],
+    "rows": [],
+    "notice": "The Orbis host service is not connected. Check the host service and try again.Retry",
+    "chrome": {
+      "bar": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "dock": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "frame": {
+        "background": "rgba(20, 36, 35, 0.95)",
+        "blur": "blur(24px) saturate(1.2)",
+        "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "header": {
+        "background": "rgba(0, 0, 0, 0)",
+        "blur": "none",
+        "shadow": "none",
+        "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+      },
+      "navigation": "page"
+    }
+  },
+  "passed": true,
+  "nativeFocus": {
+    "tag": "BUTTON",
+    "owner": "tool",
+    "frameMode": "page",
+    "desktopQuery": false,
+    "documentScroll": {
+      "scrollHeight": 7251,
+      "clientHeight": 844,
+      "scrollTop": 6407,
+      "maxScroll": 6407
+    },
+    "expectedRevealDelta": 0,
+    "text": "Retry",
+    "scroll": {
+      "y": 6407,
+      "content": 0
+    },
+    "top": 584.578125,
+    "bottom": 624.578125,
+    "documentTop": 6991.578125,
+    "chromeBottom": 98,
+    "dockTop": 765,
+    "outline": "rgb(183, 92, 62) solid 3px",
+    "shadow": "none"
+  },
+  "pending": "Host processesCPU and resident memoryRank host processes byCPUMemoryHighest firstThe Orbis host service is not connected. Check the host service and try again.Checking…About these readingsCPU: 100% is one core. Rankings need two recent samples of the same process.Memory is resident memory (RSS). It is approximate and can include shared pages. Processes inside containers also appear here, so their readings overlap the Docker list.",
+  "successFocus": {
+    "tag": "H2",
+    "owner": "tool",
+    "frameMode": "page",
+    "desktopQuery": false,
+    "documentScroll": {
+      "scrollHeight": 8593,
+      "clientHeight": 844,
+      "scrollTop": 6407,
+      "maxScroll": 7749
+    },
+    "expectedRevealDelta": 0,
+    "text": "Host processes",
+    "scroll": {
+      "y": 6407,
+      "content": 0
+    },
+    "top": 389.984375,
+    "bottom": 422.984375,
+    "documentTop": 6796.984375,
+    "chromeBottom": 98,
+    "dockTop": 765,
+    "outline": "rgb(183, 92, 62) solid 3px",
+    "shadow": "none"
+  },
+  "before": {
+    "x": 0,
+    "y": 6407,
+    "frame": 0,
+    "content": 0
+  },
+  "after": {
+    "x": 0,
+    "y": 6407,
+    "frame": 0,
+    "content": 0
+  }
+}

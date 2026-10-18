@@ -1,0 +1,16 @@
+{
+  "layoutColourAboutSource": {
+    "packages/frontend/src/modules/dashboard/components/host-processes.tsx": "285e00b5028ef6604cfef33b9312baba16e1e8b1e3cdc00646c576b8f88bf62b",
+    "packages/frontend/src/modules/dashboard/components/host-processes.css": "fe23043afe52d0a7fda5f282099e84f74fa2a865f5910323eed6c37bfa7513e6",
+    "packages/frontend/src/components/container-resources/container-resources.css": "b0cf9c58efadb7abeecf32e844b320f062feca8c128965f0224511c1d18d75ff",
+    "packages/frontend/src/modules/dashboard/pages/monitor.tsx": "5f7fb93af086793a0315b5497b29d6a5d33eaea10ffab603b46329ff2d4647d1"
+  },
+  "functionalSource": {
+    "packages/frontend/src/modules/dashboard/components/host-processes.tsx": "285e00b5028ef6604cfef33b9312baba16e1e8b1e3cdc00646c576b8f88bf62b",
+    "packages/frontend/src/modules/dashboard/components/host-processes.css": "57e3e2d53ac74f1b4ac902bb12add8f2ca6db6f502c8cd52e433a704488d12a5",
+    "packages/frontend/src/components/container-resources/container-resources.css": "b0cf9c58efadb7abeecf32e844b320f062feca8c128965f0224511c1d18d75ff",
+    "packages/frontend/src/modules/dashboard/pages/monitor.tsx": "5f7fb93af086793a0315b5497b29d6a5d33eaea10ffab603b46329ff2d4647d1"
+  },
+  "onlyDifference": "The moving process list disables native scroll anchoring; painting and geometry declarations are unchanged.",
+  "cssWithoutAnchorAdditionMatchesLayoutSource": true
+}

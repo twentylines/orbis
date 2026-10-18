@@ -9,6 +9,7 @@ import './monitor.css';
 import { ContainerResources } from '@/components/container-resources/container-resources';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { HostDevices } from '../components/host-devices';
+import { HostProcessesView } from '../components/host-processes';
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return 'Unavailable';
@@ -295,6 +296,7 @@ export default function Monitor() {
           <ContainerResources />
         </>
       ) : null}
+      <HostProcessesView />
     </div>
   );
 }
