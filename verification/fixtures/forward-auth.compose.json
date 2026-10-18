@@ -1,0 +1,66 @@
+{
+  "services": {
+    "one": {
+      "image": "ghcr.io/twentylines/orbis@sha256:6fe65ed92e6c43e96d60a133e7d52450366bb46a0419bcb5b30b377080e38a47",
+      "container_name": "orbis-auth-app-one",
+      "entrypoint": [
+        "node",
+        "-e",
+        "const http=require('node:http');http.createServer((q,s)=>{const u=new URL(q.url,'http://fixture');s.writeHead(q.method==='GET'?200:405,{'Content-Type':'application/json','Cache-Control':'no-store'});s.end(JSON.stringify({fixture:\"orbis-auth-app-one\",path:u.pathname,hasGrantParam:u.searchParams.has('runtipi_forward_auth'),hasDashboardCookie:/(?:^|;\\s*)runtipi-sid=/.test(q.headers.cookie||'')}));}).listen(8080,'0.0.0.0');"
+      ],
+      "command": [],
+      "user": "1000:1000",
+      "read_only": true,
+      "cap_drop": ["ALL"],
+      "security_opt": ["no-new-privileges:true"],
+      "mem_limit": "128m",
+      "cpus": 0.25,
+      "pids_limit": 64,
+      "networks": ["qa"],
+      "labels": {
+        "traefik.enable": "true",
+        "traefik.docker.network": "runtipi_tipi_main_network",
+        "traefik.http.routers.orbis-auth-app-one.rule": "Host(`one.orbis-auth.local`)",
+        "traefik.http.routers.orbis-auth-app-one.entrypoints": "websecure",
+        "traefik.http.routers.orbis-auth-app-one.tls": "true",
+        "traefik.http.routers.orbis-auth-app-one.middlewares": "runtipi@docker",
+        "traefik.http.routers.orbis-auth-app-one.service": "orbis-auth-app-one",
+        "traefik.http.services.orbis-auth-app-one.loadbalancer.server.port": "8080"
+      }
+    },
+    "two": {
+      "image": "ghcr.io/twentylines/orbis@sha256:6fe65ed92e6c43e96d60a133e7d52450366bb46a0419bcb5b30b377080e38a47",
+      "container_name": "orbis-auth-app-two",
+      "entrypoint": [
+        "node",
+        "-e",
+        "const http=require('node:http');http.createServer((q,s)=>{const u=new URL(q.url,'http://fixture');s.writeHead(q.method==='GET'?200:405,{'Content-Type':'application/json','Cache-Control':'no-store'});s.end(JSON.stringify({fixture:\"orbis-auth-app-two\",path:u.pathname,hasGrantParam:u.searchParams.has('runtipi_forward_auth'),hasDashboardCookie:/(?:^|;\\s*)runtipi-sid=/.test(q.headers.cookie||'')}));}).listen(8080,'0.0.0.0');"
+      ],
+      "command": [],
+      "user": "1000:1000",
+      "read_only": true,
+      "cap_drop": ["ALL"],
+      "security_opt": ["no-new-privileges:true"],
+      "mem_limit": "128m",
+      "cpus": 0.25,
+      "pids_limit": 64,
+      "networks": ["qa"],
+      "labels": {
+        "traefik.enable": "true",
+        "traefik.docker.network": "runtipi_tipi_main_network",
+        "traefik.http.routers.orbis-auth-app-two.rule": "Host(`two.orbis-auth.local`)",
+        "traefik.http.routers.orbis-auth-app-two.entrypoints": "websecure",
+        "traefik.http.routers.orbis-auth-app-two.tls": "true",
+        "traefik.http.routers.orbis-auth-app-two.middlewares": "runtipi@docker",
+        "traefik.http.routers.orbis-auth-app-two.service": "orbis-auth-app-two",
+        "traefik.http.services.orbis-auth-app-two.loadbalancer.server.port": "8080"
+      }
+    }
+  },
+  "networks": {
+    "qa": {
+      "external": true,
+      "name": "runtipi_tipi_main_network"
+    }
+  }
+}

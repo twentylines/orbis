@@ -168,7 +168,7 @@
     "knownDefect": "Inherited wrong/expired/enrollment TOTP input errors return 500; source correction and release verification required.",
     "scope": "Actual cloned synthetic stock account/config/database and verified loopback HTTPS in an emulated owned x86 guest. Not real-data or complete browser/forward-auth production acceptance. Hades unchanged."
   },
-  "scope": "New synthetic stock account, copied configuration/database, verified loopback HTTPS and actual API transport in the owned emulated x86 guest. HTTP classification is a recorded failure, not accepted auth completion. Forward-auth/browser/production acceptance remains open.",
+  "scope": "Historical stock and beta39 rejection evidence is preserved alongside passing beta40 copied-account API/browser results. Seeds, QR data, passwords, session IDs and raw database records are excluded. Actual two-host proxy proof is in authentication-forward-auth.json. These are isolated synthetic fixtures, not real homelab migration or production acceptance.",
   "browserBeta39": {
     "passed": true,
     "tag": "v0.1.0-beta.39",
@@ -188,5 +188,182 @@
     "directLogoutPosts": 1,
     "newSessionClosed": true,
     "browsersClosed": true
-  }
+  },
+  "adoptionBeta40": {
+    "started": true,
+    "manualCopiedImageAdoption": true,
+    "notReviewedOta": true,
+    "context": "colima-orbis-amd64-test",
+    "tag": "v0.1.0-beta.40",
+    "image": "ghcr.io/twentylines/orbis@sha256:6fe65ed92e6c43e96d60a133e7d52450366bb46a0419bcb5b30b377080e38a47",
+    "snapshot": {
+      "release": "v0.1.0-beta.39",
+      "dockerContext": "default",
+      "treeSha256": "9e646baa607e6b97e1cc7fd134e98df6b85fd375bc197f95394aa9cbe634af1f",
+      "entries": 3503,
+      "files": 2771,
+      "bytes": 79507050,
+      "copyIdenticalBeforePathChanges": true
+    },
+    "priorStockAndBeta39TreesRetained": true,
+    "accountBaselineSha256": "b280a53de6eeb542616b22da88cdd21c82b574ce765eb57330420f008cd057c9",
+    "signingAndDatabaseCredentialsRetained": true
+  },
+  "apiBeta40": {
+    "passed": true,
+    "migrationPassed": true,
+    "httpErrorClassificationAccepted": true,
+    "tag": "v0.1.0-beta.40",
+    "commit": "7999a8900ae97a9a7e61868f7b8f226262ff8de8",
+    "digest": "sha256:6fe65ed92e6c43e96d60a133e7d52450366bb46a0419bcb5b30b377080e38a47",
+    "architecture": "linux/amd64",
+    "tlsCertificateAndHostnameVerified": true,
+    "stockPasswordAndEncryptedSecretRetained": true,
+    "reenrollmentRequests": 0,
+    "accountBaselineSha256": "b280a53de6eeb542616b22da88cdd21c82b574ce765eb57330420f008cd057c9",
+    "passwordAloneSignedOut": true,
+    "wrongCodeRejected": true,
+    "wrongCodeHttpStatus": 400,
+    "correctRetainedCodeAuthenticated": true,
+    "replayedChallengeRejected": true,
+    "replayHttpStatus": 400,
+    "invalidAttemptStatuses": [400, 400, 400, 400, 429],
+    "exhaustedChallengeCannotAuthenticate": true,
+    "newSessionClosed": true,
+    "cookieFlags": [
+      {
+        "httpOnly": true,
+        "secure": true,
+        "sameSite": "lax",
+        "hostOnly": true,
+        "path": "/"
+      }
+    ],
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/api/user-context",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/login",
+        "status": 201
+      },
+      {
+        "method": "GET",
+        "path": "/api/user-context",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 400
+      },
+      {
+        "method": "GET",
+        "path": "/api/user-context",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 201
+      },
+      {
+        "method": "GET",
+        "path": "/api/user-context",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/build",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 400
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/login",
+        "status": 201
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 400
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 400
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 400
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 400
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 429
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 400
+      },
+      {
+        "method": "GET",
+        "path": "/api/user-context",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/user-context",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/logout",
+        "status": 204
+      },
+      {
+        "method": "GET",
+        "path": "/api/user-context",
+        "status": 200
+      }
+    ],
+    "correctedClassification": "Wrong and consumed/exhausted challenges return400; fifth invalid attempt remains429.",
+    "scope": "Actual cloned synthetic stock account/config/database and verified loopback HTTPS in an emulated owned x86 guest. Not real-data or complete browser/forward-auth production acceptance. Hades unchanged."
+  },
+  "browserBeta40": {
+    "passed": true,
+    "tag": "v0.1.0-beta.40",
+    "scope": "Real copied stock TOTP account in owned x86 test guest; actual HTTPS UI/auth requests. Browser trust pinned to the fixture public key, API chain/hostname verified separately. Preference writes shadowed only in browser. No seed, password or valid code screenshots.",
+    "loginPosts": 1,
+    "verifyPosts": 2,
+    "logoutPosts": 0,
+    "preferenceShadows": 0,
+    "blockedMutations": [],
+    "blockedExternal": [],
+    "pageErrors": [],
+    "passwordAloneSignedOut": true,
+    "secureBrowserContext": true,
+    "rejectedCodeStatus": 400,
+    "translatedRetry": true,
+    "retainedSecretUiLogin": true,
+    "directLogoutPosts": 1,
+    "newSessionClosed": true,
+    "browsersClosed": true
+  },
+  "latestAcceptedTag": "v0.1.0-beta.40",
+  "latestAccountAdoptionAccepted": true
 }

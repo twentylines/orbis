@@ -1,0 +1,669 @@
+{
+  "release": {
+    "tag": "v0.1.0-beta.40",
+    "commit": "7999a8900ae97a9a7e61868f7b8f226262ff8de8",
+    "image": "ghcr.io/twentylines/orbis@sha256:6fe65ed92e6c43e96d60a133e7d52450366bb46a0419bcb5b30b377080e38a47",
+    "platforms": ["linux/amd64", "linux/arm64"],
+    "releaseUrl": "https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.40",
+    "readOnly": true
+  },
+  "ota": {
+    "from": "v0.1.0-beta.39",
+    "version": "v0.1.0-beta.40",
+    "commit": "7999a8900ae97a9a7e61868f7b8f226262ff8de8",
+    "digest": "sha256:6fe65ed92e6c43e96d60a133e7d52450366bb46a0419bcb5b30b377080e38a47",
+    "jobId": "e4bc42f6-7df7-43e0-9aef-764afbddcac4",
+    "preferencesRetained": true,
+    "appRecordsRetained": 2,
+    "taskOutcomesRetained": 28,
+    "healthy": true,
+    "pageErrors": []
+  },
+  "stoppedSnapshot": {
+    "release": "v0.1.0-beta.39",
+    "dockerContext": "default",
+    "treeSha256": "4da203e8a667177db4c424d65e44ac00212de1c112d9f0aac8e84b1c7adf659d",
+    "entries": 3591,
+    "files": 2827,
+    "bytes": 149805097
+  },
+  "snapshotContextExplanation": "The snapshot tool runs inside the isolated guest and records its internal default context. The Mac used colima-runtipi-test; its default Docker context was unchanged.",
+  "protectedFiles": {
+    "matched": true,
+    "entries": 33,
+    "files": 17,
+    "sha256": "7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2"
+  },
+  "passwordLogin": {
+    "passed": true,
+    "tag": "v0.1.0-beta.40",
+    "commit": "7999a8900ae97a9a7e61868f7b8f226262ff8de8",
+    "digest": "sha256:6fe65ed92e6c43e96d60a133e7d52450366bb46a0419bcb5b30b377080e38a47",
+    "loginPosts": 2,
+    "validPasswordPosts": 1,
+    "rejectedPasswordPosts": 1,
+    "rejectionRequested": true,
+    "rejectionKeptSignedOut": true,
+    "unchangedPreferenceWrites": 0,
+    "blockedMutations": [],
+    "pageErrors": [],
+    "newSessionClosed": true,
+    "originalSessionRetained": true,
+    "preferencesRetained": true,
+    "rejectionNotice": {
+      "translated": true,
+      "phoneBounds": {
+        "x": 36,
+        "y": 94,
+        "width": 330,
+        "height": 72
+      },
+      "retryEnabled": true,
+      "fieldsPreserved": true
+    }
+  },
+  "releasedTiles": {
+    "passed": true,
+    "views": [
+      {
+        "viewport": {
+          "width": 1440,
+          "height": 1120
+        },
+        "route": "apps",
+        "records": {
+          "installedLinksMatch": true,
+          "count": 2,
+          "individualPaintedRowsAndFilterGutters": true
+        },
+        "documentWidth": 1440,
+        "headingIcon": {
+          "left": 55,
+          "right": 93,
+          "top": 129.875,
+          "bottom": 167.875,
+          "width": 38,
+          "height": 38
+        },
+        "region": {
+          "left": 55,
+          "right": 937.65625,
+          "top": 280.75,
+          "bottom": 411.078125,
+          "width": 882.65625,
+          "height": 130.328125
+        },
+        "chrome": {
+          "bar": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-header"
+          },
+          "dock": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-dock"
+          },
+          "frame": {
+            "background": "rgba(0, 0, 0, 0)",
+            "backgroundAlpha": 0,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "none",
+            "boxShadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "none"
+          },
+          "header": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "radial-gradient(circle at 20% -70%, color(srgb 0.34902 0.482353 0.45098 / 0.18), rgba(0, 0, 0, 0) 38%), none",
+            "imageAlphas": [46, 0],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(18, 43, 37, 0.12) 0px 13px 24px 0px",
+            "borderAlphas": [255, 255, 31, 255],
+            "transitionName": "none"
+          },
+          "content": {
+            "background": "rgba(20, 36, 35, 0.95)",
+            "backgroundAlpha": 242,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "none",
+            "boxShadow": "none",
+            "borderAlphas": [255, 255, 255, 255],
+            "transitionName": "orbis-section"
+          },
+          "contentBox": {
+            "left": 25,
+            "right": 1415,
+            "top": 189.75,
+            "bottom": 1001,
+            "width": 1390,
+            "height": 811.25
+          }
+        },
+        "images": [
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          }
+        ],
+        "ordinaryWordIssues": [],
+        "paintIssues": []
+      },
+      {
+        "viewport": {
+          "width": 1440,
+          "height": 1120
+        },
+        "route": "store",
+        "records": {
+          "catalogueReadMatched": true,
+          "rendered": 24,
+          "actualFetched": 24,
+          "individualPaintedRowsAndFilterGutters": true
+        },
+        "documentWidth": 1440,
+        "headingIcon": {
+          "left": 55,
+          "right": 93,
+          "top": 129.875,
+          "bottom": 167.875,
+          "width": 38,
+          "height": 38
+        },
+        "region": {
+          "left": 55,
+          "right": 1385,
+          "top": 300.75,
+          "bottom": 1443.75,
+          "width": 1330,
+          "height": 1143
+        },
+        "chrome": {
+          "bar": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-header"
+          },
+          "dock": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-dock"
+          },
+          "frame": {
+            "background": "rgba(0, 0, 0, 0)",
+            "backgroundAlpha": 0,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "none",
+            "boxShadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "none"
+          },
+          "header": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "radial-gradient(circle at 20% -70%, color(srgb 0.34902 0.482353 0.45098 / 0.18), rgba(0, 0, 0, 0) 38%), none",
+            "imageAlphas": [46, 0],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(18, 43, 37, 0.12) 0px 13px 24px 0px",
+            "borderAlphas": [255, 255, 31, 255],
+            "transitionName": "none"
+          },
+          "content": {
+            "background": "rgba(20, 36, 35, 0.95)",
+            "backgroundAlpha": 242,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "none",
+            "boxShadow": "none",
+            "borderAlphas": [255, 255, 255, 255],
+            "transitionName": "orbis-section"
+          },
+          "contentBox": {
+            "left": 25,
+            "right": 1415,
+            "top": 189.75,
+            "bottom": 1001,
+            "width": 1390,
+            "height": 811.25
+          }
+        },
+        "images": [
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          }
+        ],
+        "ordinaryWordIssues": [],
+        "paintIssues": []
+      },
+      {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "route": "apps",
+        "records": {
+          "installedLinksMatch": true,
+          "count": 2,
+          "individualPaintedRowsAndFilterGutters": true
+        },
+        "documentWidth": 390,
+        "headingIcon": {
+          "left": 45,
+          "right": 83,
+          "top": 149,
+          "bottom": 187,
+          "width": 38,
+          "height": 38
+        },
+        "region": {
+          "left": 45,
+          "right": 345,
+          "top": 296,
+          "bottom": 608.65625,
+          "width": 300,
+          "height": 312.65625
+        },
+        "chrome": {
+          "bar": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-header"
+          },
+          "dock": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-dock"
+          },
+          "frame": {
+            "background": "rgba(20, 36, 35, 0.95)",
+            "backgroundAlpha": 242,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(24px) saturate(1.2)",
+            "boxShadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-section"
+          },
+          "header": {
+            "background": "rgba(0, 0, 0, 0)",
+            "backgroundAlpha": 0,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "none",
+            "boxShadow": "none",
+            "borderAlphas": [255, 255, 46, 255],
+            "transitionName": "none"
+          },
+          "content": {
+            "background": "rgba(0, 0, 0, 0)",
+            "backgroundAlpha": 0,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "none",
+            "boxShadow": "none",
+            "borderAlphas": [255, 255, 255, 255],
+            "transitionName": "none"
+          },
+          "contentBox": {
+            "left": 25,
+            "right": 365,
+            "top": 208,
+            "bottom": 840.65625,
+            "width": 340,
+            "height": 632.65625
+          }
+        },
+        "images": [
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          }
+        ],
+        "ordinaryWordIssues": [],
+        "paintIssues": []
+      },
+      {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "route": "store",
+        "records": {
+          "catalogueReadMatched": true,
+          "rendered": 24,
+          "actualFetched": 24,
+          "individualPaintedRowsAndFilterGutters": true
+        },
+        "documentWidth": 390,
+        "headingIcon": {
+          "left": 45,
+          "right": 83,
+          "top": 149,
+          "bottom": 187,
+          "width": 38,
+          "height": 38
+        },
+        "region": {
+          "left": 45,
+          "right": 345,
+          "top": 412,
+          "bottom": 3971,
+          "width": 300,
+          "height": 3559
+        },
+        "chrome": {
+          "bar": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-header"
+          },
+          "dock": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "backgroundAlpha": 235,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(28px) saturate(1.45)",
+            "boxShadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-dock"
+          },
+          "frame": {
+            "background": "rgba(20, 36, 35, 0.95)",
+            "backgroundAlpha": 242,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "blur(24px) saturate(1.2)",
+            "boxShadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+            "borderAlphas": [0, 0, 0, 0],
+            "transitionName": "orbis-section"
+          },
+          "header": {
+            "background": "rgba(0, 0, 0, 0)",
+            "backgroundAlpha": 0,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "none",
+            "boxShadow": "none",
+            "borderAlphas": [255, 255, 46, 255],
+            "transitionName": "none"
+          },
+          "content": {
+            "background": "rgba(0, 0, 0, 0)",
+            "backgroundAlpha": 0,
+            "image": "none",
+            "imageAlphas": [],
+            "backdropFilter": "none",
+            "boxShadow": "none",
+            "borderAlphas": [255, 255, 255, 255],
+            "transitionName": "none"
+          },
+          "contentBox": {
+            "left": 25,
+            "right": 365,
+            "top": 208,
+            "bottom": 3991,
+            "width": 340,
+            "height": 3783
+          }
+        },
+        "images": [
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          },
+          {
+            "complete": true,
+            "loaded": true
+          }
+        ],
+        "ordinaryWordIssues": [],
+        "paintIssues": []
+      }
+    ],
+    "recordsUnchanged": true,
+    "realWrites": 0,
+    "pageErrors": [],
+    "apiReadResponses": 98,
+    "allReadResponsesSucceeded": true,
+    "assetFailures": [],
+    "blockedMutations": [],
+    "scope": {
+      "live": ["Published HTML/JS/CSS bodies and actual authenticated API GET responses", "Actual workspace, installed/full app and store records"],
+      "controlled": [
+        "Browser-only preference GET/PUT shadow retains original values except windows:{}",
+        "Browser-only connect-src self response header; published document bodies unchanged"
+      ],
+      "realWrites": 0,
+      "capture": "Native viewport and naturally settled scroll positions; no resets, resizing, text scaling or image edits"
+    }
+  },
+  "scope": "Published arm64 OTA, stopped snapshot/protected files, real password rejection/retry and bounded four-view Apps/Store review. Original Dark/Frost mode; only browser window placement/preferences responses shadowed. No repeated48-theme/window matrix. Copied x86 TOTP adoption is a separate test. Hades unchanged."
+}

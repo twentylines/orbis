@@ -1,0 +1,129 @@
+{
+  "browserProxy": {
+    "passed": true,
+    "release": {
+      "tag": "v0.1.0-beta.40",
+      "commit": "7999a8900ae97a9a7e61868f7b8f226262ff8de8",
+      "digest": "sha256:6fe65ed92e6c43e96d60a133e7d52450366bb46a0419bcb5b30b377080e38a47"
+    },
+    "scope": "Actual published core and existing runtipi@docker middleware, two read-only non-root fixture services, scoped HTTPS, real browser app-host requests and isolated authentication sessions/grants. No production state or enrollment calls.",
+    "rootRequests": [
+      {
+        "method": "POST",
+        "path": "/api/auth/login",
+        "status": 201
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/verify-totp",
+        "status": 201
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/build",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/desktop-preferences",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/forward-auth",
+        "status": 201
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/forward-auth",
+        "status": 201
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/forward-auth",
+        "status": 201
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/build",
+        "status": 401
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/forward-auth",
+        "status": 201
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/forward-auth",
+        "status": 201
+      },
+      {
+        "method": "GET",
+        "path": "/api/desktop-preferences",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/logout",
+        "status": 204
+      },
+      {
+        "method": "GET",
+        "path": "/api/user-context",
+        "status": 200
+      }
+    ],
+    "browserRequests": 774,
+    "blockedRequests": [],
+    "pageErrors": [],
+    "checks": {
+      "unsignedHostsRequireLogin": true,
+      "appOneGrantCookieAndReload": true,
+      "consumedGrantRejected": true,
+      "appTwoIndependentCookieAndReload": true,
+      "transplantedAppCookieRejected": true,
+      "crossHostGrantRejectedAndConsumed": true,
+      "appCookieCannotAuthenticateDashboardApi": true,
+      "expiredGrantRejected": true,
+      "newRootSessionClosed": true,
+      "logoutRevokesBothAppSessionsAndPendingGrant": true,
+      "accountAndPreferencesRetained": true
+    },
+    "expiryWaitMs": 66067,
+    "accountBaselineSha256": "b280a53de6eeb542616b22da88cdd21c82b574ce765eb57330420f008cd057c9",
+    "browsersClosed": true
+  },
+  "cleanup": {
+    "passed": true,
+    "fixtureServicesRemoved": 2,
+    "coreHealthy": true,
+    "remainingCoreServices": 4,
+    "defaultContextUnchanged": true
+  },
+  "retainedRunnerOutputGuard": {
+    "passed": true,
+    "existingOutputRejected": true,
+    "existingReportUnchanged": true,
+    "authenticationRequests": 0,
+    "runnerSha256": "e8d3871dfbf6708c582b850486ef704dc949f14cc68ffea6d326a86b5a9f344a"
+  },
+  "fixture": {
+    "image": "ghcr.io/twentylines/orbis@sha256:6fe65ed92e6c43e96d60a133e7d52450366bb46a0419bcb5b30b377080e38a47",
+    "proxyVersion": "3.6.14",
+    "middleware": "Existing runtipi@docker, with copied fixture trustForwardHeader=false, authRequestHeaders=Cookie and maxResponseBodySize=8192",
+    "readOnlyNonRootServices": 2,
+    "hostPorts": 0,
+    "hostBinds": 0,
+    "productionWrites": 0
+  },
+  "scope": "Two synthetic app hosts on an isolated copied stock-account installation, actual published core and proxy. This is not copied real-data migration, arbitrary external proxy-chain coverage, public certificate issuance, full application installation acceptance or session-duration expiry testing. The real grant expiry wait is separate from source/session TTL checks. Hades unchanged.",
+  "retainedFixtureSmoke": {
+    "passed": true,
+    "retainedFixtureStartsAndStops": true,
+    "onlyOwnedFixtureServicesChanged": true,
+    "coreContainerUnchanged": true,
+    "coreHealthy": true,
+    "remainingCoreServices": 4
+  }
+}
