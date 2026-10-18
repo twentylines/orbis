@@ -32,6 +32,8 @@ const inspectHostDevices = require('./host-devices-checks.cjs');
 const inspectHostProcesses = require('./host-processes-checks.cjs');
 const inspectHostHistory = require('./host-device-history-checks.cjs');
 const inspectCachedRetry = require('./cached-retry-focus-checks.cjs');
+const inspectMonitorRefresh = require('./monitor-refresh-checks.cjs');
+const monitorRefreshOnly = process.env.ORBIS_VISUAL_MONITOR_REFRESH_ONLY === '1';
 const cachedRetryOnly = process.env.ORBIS_VISUAL_CACHED_RETRY_ONLY === '1';
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
@@ -127,7 +129,8 @@ if (
     hostDevicesOnly ||
     hostProcessesOnly ||
     hostHistoryOnly ||
-    cachedRetryOnly) &&
+    cachedRetryOnly ||
+    monitorRefreshOnly) &&
   zoom !== 1
 )
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
@@ -455,20 +458,22 @@ async function main() {
   let preferences = freshPreferences();
   const reports = [];
   const viewports =
-    connectionOnly || systemModeOnly || hostDevicesOnly || hostProcessesOnly || hostHistoryOnly || cachedRetryOnly
+    connectionOnly || systemModeOnly || hostDevicesOnly || hostProcessesOnly || hostHistoryOnly || cachedRetryOnly || monitorRefreshOnly
       ? [
           {
-            name: cachedRetryOnly
-              ? 'cached-retry'
-              : hostHistoryOnly
-                ? 'host-history'
-                : hostProcessesOnly
-                  ? 'host-processes'
-                  : hostDevicesOnly
-                    ? 'host-devices'
-                    : systemModeOnly
-                      ? 'system-mode'
-                      : 'connection',
+            name: monitorRefreshOnly
+              ? 'monitor-refresh'
+              : cachedRetryOnly
+                ? 'cached-retry'
+                : hostHistoryOnly
+                  ? 'host-history'
+                  : hostProcessesOnly
+                    ? 'host-processes'
+                    : hostDevicesOnly
+                      ? 'host-devices'
+                      : systemModeOnly
+                        ? 'system-mode'
+                        : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -776,6 +781,17 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (monitorRefreshOnly) {
+      const monitorRefresh = await inspectMonitorRefresh({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, monitorRefresh, errors });
+      await page.close();
+      continue;
+    }
     if (cachedRetryOnly) {
       const cachedRetry = await inspectCachedRetry({
         page,
@@ -1537,7 +1553,8 @@ async function main() {
     hostDevicesOnly ||
     hostProcessesOnly ||
     hostHistoryOnly ||
-    cachedRetryOnly
+    cachedRetryOnly ||
+    monitorRefreshOnly
   ) {
     if (
       reports.some(
@@ -1548,7 +1565,8 @@ async function main() {
           (hostDevicesOnly && !report.hostDevices?.passed) ||
           (hostProcessesOnly && !report.hostProcesses?.passed) ||
           (hostHistoryOnly && !report.hostHistory?.passed) ||
-          (cachedRetryOnly && !report.cachedRetry?.passed),
+          (cachedRetryOnly && !report.cachedRetry?.passed) ||
+          (monitorRefreshOnly && !report.monitorRefresh?.passed),
       )
     )
       process.exitCode = 1;

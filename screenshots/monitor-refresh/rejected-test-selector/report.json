@@ -1,0 +1,756 @@
+[
+  {
+    "viewport": "monitor-refresh",
+    "monitorRefresh": {
+      "passed": false,
+      "cases": [
+        {
+          "width": 1440,
+          "height": 1120,
+          "mode": "light",
+          "scale": 1,
+          "name": "docker-focused-row-removal",
+          "endpoint": "/api/system/containers",
+          "passed": false,
+          "before": {
+            "at": 1792308776985,
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "frame": 0,
+              "content": 2968
+            },
+            "scroller": {
+              "scrollHeight": 4906,
+              "clientHeight": 811,
+              "maxScroll": 4095,
+              "overflowAnchor": "auto"
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "target": {
+              "top": 578.0625,
+              "bottom": 613.25,
+              "left": 84,
+              "right": 227.921875,
+              "width": 143.921875,
+              "height": 35.1875,
+              "position": 3356.3125
+            },
+            "raster": {
+              "devicePixelRatio": 1,
+              "comfortToleranceCssPixels": 0.5
+            },
+            "clearance": {
+              "focusTop": 382.3125,
+              "focusBottom": 381.75,
+              "inspectionTop": null,
+              "inspectionBottom": null
+            },
+            "focus": {
+              "active": true,
+              "outline": "rgb(183, 92, 62) solid 3px",
+              "outlineOffset": "3px",
+              "shadow": "none",
+              "outset": 6,
+              "top": 572.0625,
+              "bottom": 619.25
+            },
+            "inspection": null,
+            "inspectedAt": null,
+            "inspectedValue": null,
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "box": {
+                  "top": -2751.25,
+                  "bottom": -2731.25,
+                  "left": 55,
+                  "right": 672.28125,
+                  "width": 617.28125,
+                  "height": 20,
+                  "position": 27
+                }
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "box": {
+                  "top": -2715.25,
+                  "bottom": -2698.109375,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 17.140625,
+                  "position": 63
+                }
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "box": {
+                  "top": -2676.109375,
+                  "bottom": -2658.96875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 17.140625,
+                  "position": 102.140625
+                }
+              },
+              {
+                "classes": "desktop-host-overview",
+                "box": {
+                  "top": -2646.96875,
+                  "bottom": -2316.96875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 330,
+                  "position": 131.28125
+                }
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "box": {
+                  "top": -2292.96875,
+                  "bottom": -2242.96875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 50,
+                  "position": 485.28125
+                }
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "box": {
+                  "top": -2222.96875,
+                  "bottom": -3.859375,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 2219.109375,
+                  "position": 555.28125
+                }
+              },
+              {
+                "classes": "container-resources ",
+                "box": {
+                  "top": 20.140625,
+                  "bottom": 1128.171875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 1108.03125,
+                  "position": 2798.390625
+                }
+              },
+              {
+                "classes": "host-device-history",
+                "box": {
+                  "top": 1152.171875,
+                  "bottom": 1709.828125,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 557.65625,
+                  "position": 3930.421875
+                }
+              },
+              {
+                "classes": "host-processes",
+                "box": {
+                  "top": 1733.828125,
+                  "bottom": 2098,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 364.171875,
+                  "position": 4512.078125
+                }
+              }
+            ],
+            "dockerRows": [
+              {
+                "name": "worker-a",
+                "box": {
+                  "top": 203.515625,
+                  "bottom": 347.09375,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 2981.765625
+                }
+              },
+              {
+                "name": "worker-b",
+                "box": {
+                  "top": 347.09375,
+                  "bottom": 490.671875,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 3125.34375
+                }
+              },
+              {
+                "name": "worker-c",
+                "box": {
+                  "top": 490.671875,
+                  "bottom": 634.25,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 3268.921875
+                }
+              },
+              {
+                "name": "worker-d",
+                "box": {
+                  "top": 634.25,
+                  "bottom": 777.828125,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 3412.5
+                }
+              },
+              {
+                "name": "worker-e",
+                "box": {
+                  "top": 777.828125,
+                  "bottom": 921.40625,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 3556.078125
+                }
+              },
+              {
+                "name": "worker-f",
+                "box": {
+                  "top": 921.40625,
+                  "bottom": 1063.984375,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 142.578125,
+                  "position": 3699.65625
+                }
+              }
+            ]
+          },
+          "headingBefore": {
+            "at": 1792308776988,
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "frame": 0,
+              "content": 2968
+            },
+            "scroller": {
+              "scrollHeight": 4906,
+              "clientHeight": 811,
+              "maxScroll": 4095,
+              "overflowAnchor": "auto"
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "target": {
+              "top": 49.140625,
+              "bottom": 77.140625,
+              "left": 84,
+              "right": 174.15625,
+              "width": 90.15625,
+              "height": 28,
+              "position": 2827.390625
+            },
+            "raster": {
+              "devicePixelRatio": 1,
+              "comfortToleranceCssPixels": 0.5
+            },
+            "clearance": {
+              "focusTop": -140.609375,
+              "focusBottom": 923.859375,
+              "inspectionTop": null,
+              "inspectionBottom": null
+            },
+            "focus": {
+              "active": false,
+              "outline": "rgb(23, 43, 50) none 3px",
+              "outlineOffset": "0px",
+              "shadow": "none",
+              "outset": 0,
+              "top": 49.140625,
+              "bottom": 77.140625
+            },
+            "inspection": null,
+            "inspectedAt": null,
+            "inspectedValue": null,
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "box": {
+                  "top": -2751.25,
+                  "bottom": -2731.25,
+                  "left": 55,
+                  "right": 672.28125,
+                  "width": 617.28125,
+                  "height": 20,
+                  "position": 27
+                }
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "box": {
+                  "top": -2715.25,
+                  "bottom": -2698.109375,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 17.140625,
+                  "position": 63
+                }
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "box": {
+                  "top": -2676.109375,
+                  "bottom": -2658.96875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 17.140625,
+                  "position": 102.140625
+                }
+              },
+              {
+                "classes": "desktop-host-overview",
+                "box": {
+                  "top": -2646.96875,
+                  "bottom": -2316.96875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 330,
+                  "position": 131.28125
+                }
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "box": {
+                  "top": -2292.96875,
+                  "bottom": -2242.96875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 50,
+                  "position": 485.28125
+                }
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "box": {
+                  "top": -2222.96875,
+                  "bottom": -3.859375,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 2219.109375,
+                  "position": 555.28125
+                }
+              },
+              {
+                "classes": "container-resources ",
+                "box": {
+                  "top": 20.140625,
+                  "bottom": 1128.171875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 1108.03125,
+                  "position": 2798.390625
+                }
+              },
+              {
+                "classes": "host-device-history",
+                "box": {
+                  "top": 1152.171875,
+                  "bottom": 1709.828125,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 557.65625,
+                  "position": 3930.421875
+                }
+              },
+              {
+                "classes": "host-processes",
+                "box": {
+                  "top": 1733.828125,
+                  "bottom": 2098,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 364.171875,
+                  "position": 4512.078125
+                }
+              }
+            ],
+            "dockerRows": [
+              {
+                "name": "worker-a",
+                "box": {
+                  "top": 203.515625,
+                  "bottom": 347.09375,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 2981.765625
+                }
+              },
+              {
+                "name": "worker-b",
+                "box": {
+                  "top": 347.09375,
+                  "bottom": 490.671875,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 3125.34375
+                }
+              },
+              {
+                "name": "worker-c",
+                "box": {
+                  "top": 490.671875,
+                  "bottom": 634.25,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 3268.921875
+                }
+              },
+              {
+                "name": "worker-d",
+                "box": {
+                  "top": 634.25,
+                  "bottom": 777.828125,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 3412.5
+                }
+              },
+              {
+                "name": "worker-e",
+                "box": {
+                  "top": 777.828125,
+                  "bottom": 921.40625,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 3556.078125
+                }
+              },
+              {
+                "name": "worker-f",
+                "box": {
+                  "top": 921.40625,
+                  "bottom": 1063.984375,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 142.578125,
+                  "position": 3699.65625
+                }
+              }
+            ]
+          },
+          "waited": 3632,
+          "after": {
+            "at": 1792308781374,
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "frame": 0,
+              "content": 2811
+            },
+            "scroller": {
+              "scrollHeight": 4332,
+              "clientHeight": 811,
+              "maxScroll": 3521,
+              "overflowAnchor": "auto"
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "target": {
+              "top": 206.140625,
+              "bottom": 234.140625,
+              "left": 84,
+              "right": 174.15625,
+              "width": 90.15625,
+              "height": 28,
+              "position": 2827.390625
+            },
+            "raster": {
+              "devicePixelRatio": 1,
+              "comfortToleranceCssPixels": 0.5
+            },
+            "clearance": {
+              "focusTop": 8.390625,
+              "focusBottom": 758.859375,
+              "inspectionTop": null,
+              "inspectionBottom": null
+            },
+            "focus": {
+              "active": true,
+              "outline": "rgb(183, 92, 62) solid 3px",
+              "outlineOffset": "5px",
+              "shadow": "none",
+              "outset": 8,
+              "top": 198.140625,
+              "bottom": 242.140625
+            },
+            "inspection": null,
+            "inspectedAt": null,
+            "inspectedValue": null,
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "box": {
+                  "top": -2594.25,
+                  "bottom": -2574.25,
+                  "left": 55,
+                  "right": 672.28125,
+                  "width": 617.28125,
+                  "height": 20,
+                  "position": 27
+                }
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "box": {
+                  "top": -2558.25,
+                  "bottom": -2541.109375,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 17.140625,
+                  "position": 63
+                }
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "box": {
+                  "top": -2519.109375,
+                  "bottom": -2501.96875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 17.140625,
+                  "position": 102.140625
+                }
+              },
+              {
+                "classes": "desktop-host-overview",
+                "box": {
+                  "top": -2489.96875,
+                  "bottom": -2159.96875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 330,
+                  "position": 131.28125
+                }
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "box": {
+                  "top": -2135.96875,
+                  "bottom": -2085.96875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 50,
+                  "position": 485.28125
+                }
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "box": {
+                  "top": -2065.96875,
+                  "bottom": 153.140625,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 2219.109375,
+                  "position": 555.28125
+                }
+              },
+              {
+                "classes": "container-resources ",
+                "box": {
+                  "top": 177.140625,
+                  "bottom": 710.859375,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 533.71875,
+                  "position": 2798.390625
+                }
+              },
+              {
+                "classes": "host-device-history",
+                "box": {
+                  "top": 734.859375,
+                  "bottom": 1292.515625,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 557.65625,
+                  "position": 3356.109375
+                }
+              },
+              {
+                "classes": "host-processes",
+                "box": {
+                  "top": 1316.515625,
+                  "bottom": 1680.6875,
+                  "left": 55,
+                  "right": 1385,
+                  "width": 1330,
+                  "height": 364.171875,
+                  "position": 3937.765625
+                }
+              }
+            ],
+            "dockerRows": [
+              {
+                "name": "worker-a",
+                "box": {
+                  "top": 360.515625,
+                  "bottom": 504.09375,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 143.578125,
+                  "position": 2981.765625
+                }
+              },
+              {
+                "name": "worker-b",
+                "box": {
+                  "top": 504.09375,
+                  "bottom": 646.671875,
+                  "left": 84,
+                  "right": 1356,
+                  "width": 1272,
+                  "height": 142.578125,
+                  "position": 3125.34375
+                }
+              }
+            ]
+          },
+          "removedControlAbsent": true,
+          "movedAway": {
+            "wasOnRemovedRow": true
+          }
+        }
+      ],
+      "requests": [
+        {
+          "path": "/api/system/host-history",
+          "version": 0,
+          "at": 1792308775951
+        },
+        {
+          "path": "/api/system/host-processes",
+          "version": 0,
+          "at": 1792308775951
+        },
+        {
+          "path": "/api/system/host-telemetry",
+          "version": 0,
+          "at": 1792308775967
+        },
+        {
+          "path": "/api/system/containers",
+          "version": 0,
+          "at": 1792308775968
+        },
+        {
+          "path": "/api/system/containers",
+          "version": 1,
+          "at": 1792308780985
+        },
+        {
+          "path": "/api/system/host-history",
+          "version": 0,
+          "at": 1792308785960
+        },
+        {
+          "path": "/api/system/host-processes",
+          "version": 0,
+          "at": 1792308785961
+        },
+        {
+          "path": "/api/system/host-telemetry",
+          "version": 0,
+          "at": 1792308785970
+        },
+        {
+          "path": "/api/system/containers",
+          "version": 2,
+          "at": 1792308785988
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "preferencePuts": 0,
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": [],
+      "provenance": {
+        "controlledFixtures": true,
+        "maximumCases": 3,
+        "updateMechanism": "Actual existing5s/10s query timers; no injected query client or DOM layout changes",
+        "history": "Fixed recorded history isolates upstream/below-card layout updates",
+        "oracle": "Stable actual viewport anchors and full native focus/inspection clearance; raw offsets reported separately",
+        "stop": "First concrete failure; no post-update scrolling/focusing or screenshot reset",
+        "scope": "Removed focused Docker row and moved-away focus at1440native/1100x640native/320text2",
+        "preparation": "Native wheel maximizes feasible3px focus-marker/8px inspection slack before updates; no blanket20px envelope precondition",
+        "spacingOracle": "Hard complete visibility; comfort spacing alone allows half a physical pixel (0.5/DPR CSS px); anchors remain<=1px"
+      },
+      "current": "1440-light-text1-docker-focused-row-removal",
+      "failure": {
+        "phase": "1440-light-text1-docker-focused-row-removal",
+        "name": "Error",
+        "message": "locator.focus: Error: strict mode violation: locator('.container-resources-sort button:first-of-type') resolved to 2 elements:\n    1) <button type=\"button\" aria-pressed=\"true\">CPU</button> aka getByLabel('Docker resource usage').getByRole('button', { name: 'CPU' })\n    2) <button type=\"button\" aria-pressed=\"true\">CPU</button> aka getByLabel('Host processes').getByRole('button', { name: 'CPU' })\n\nCall log:\n\u001b[2m  - waiting for locator('.container-resources-sort button:first-of-type')\u001b[22m\n"
+      }
+    },
+    "errors": []
+  }
+]

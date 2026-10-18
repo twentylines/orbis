@@ -1,0 +1,410 @@
+{
+  "requests": [
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308355728
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308355729
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 0,
+      "at": 1792308355748
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308355750
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308360770
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308365740
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308365741
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 1,
+      "at": 1792308365771
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308365773
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308370782
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308375748
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308375749
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 2,
+      "at": 1792308375773
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308375786
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308380790
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308385756
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308385760
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 3,
+      "at": 1792308385775
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308385794
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308390799
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308395766
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308395768
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 4,
+      "at": 1792308395782
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308395804
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308400808
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308405772
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 5,
+      "at": 1792308405775
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 4,
+      "at": 1792308405802
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308405811
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308410819
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308415779
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308415780
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 4,
+      "at": 1792308415806
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308415823
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308417784
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308419789
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 7,
+      "at": 1792308420826
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308421797
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308423802
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308425785
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308425807
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 4,
+      "at": 1792308425811
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 8,
+      "at": 1792308425830
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308427859
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308429863
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 9,
+      "at": 1792308430834
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308431919
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308433922
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308435791
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 4,
+      "at": 1792308435821
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 10,
+      "at": 1792308435838
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 6,
+      "at": 1792308435925
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308437583
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308437584
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 0,
+      "at": 1792308437601
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308437602
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308442607
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308447593
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308447595
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 11,
+      "at": 1792308447613
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308447613
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308452621
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308457601
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308457605
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 12,
+      "at": 1792308457619
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308457630
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308462637
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308467607
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308467609
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 13,
+      "at": 1792308467623
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308467650
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308472653
+    },
+    {
+      "path": "/api/system/host-history",
+      "version": 0,
+      "at": 1792308477613
+    },
+    {
+      "path": "/api/system/host-processes",
+      "version": 0,
+      "at": 1792308477614
+    },
+    {
+      "path": "/api/system/host-telemetry",
+      "version": 14,
+      "at": 1792308477627
+    },
+    {
+      "path": "/api/system/containers",
+      "version": 0,
+      "at": 1792308477656
+    }
+  ],
+  "errors": [],
+  "mutations": [],
+  "preferencePuts": 0,
+  "cleanup": {
+    "textRestored": true,
+    "routesRestored": true,
+    "listenersRestored": true,
+    "viewportRestored": true
+  },
+  "cleanupFailures": [],
+  "provenance": {
+    "controlledFixtures": true,
+    "maximumCases": 20,
+    "updateMechanism": "Actual existing5s/10s query timers; no injected query client or DOM layout changes",
+    "history": "Fixed recorded history isolates upstream/below-card layout updates",
+    "oracle": "Stable actual viewport anchors and full native focus/inspection clearance; raw offsets reported separately",
+    "stop": "First concrete failure; no post-update scrolling/focusing or screenshot reset",
+    "scope": "1440light native and320dark computed text2",
+    "preparation": "Native wheel solves the actual3px focus-marker/8px inspection clearance constraints; no blanket20px envelope precondition"
+  },
+  "current": "320-dark-text2-host-unavailable",
+  "failure": {
+    "phase": "320-dark-text2-host-unavailable",
+    "name": "AssertionError",
+    "message": "Complete inspected reading remains visible with breathing room"
+  }
+}

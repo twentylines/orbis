@@ -1,0 +1,57 @@
+[
+  {
+    "viewport": "monitor-refresh",
+    "monitorRefresh": {
+      "passed": false,
+      "cases": [],
+      "requests": [
+        {
+          "path": "/api/system/host-history",
+          "version": 0,
+          "at": 1792307890463
+        },
+        {
+          "path": "/api/system/host-processes",
+          "version": 0,
+          "at": 1792307890464
+        },
+        {
+          "path": "/api/system/host-telemetry",
+          "version": 0,
+          "at": 1792307890489
+        },
+        {
+          "path": "/api/system/containers",
+          "version": 0,
+          "at": 1792307890490
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "preferencePuts": 0,
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": [],
+      "provenance": {
+        "controlledFixtures": true,
+        "maximumCases": 20,
+        "updateMechanism": "Actual existing5s/10s query timers; no injected query client or DOM layout changes",
+        "history": "Fixed recorded history isolates upstream/below-card layout updates",
+        "oracle": "Stable actual viewport anchors and full native focus/inspection clearance; raw offsets reported separately",
+        "stop": "First concrete failure; no post-update scrolling/focusing or screenshot reset",
+        "scope": "1440light native and320dark computed text2"
+      },
+      "current": "320-dark-text2-host-grow",
+      "failure": {
+        "phase": "320-dark-text2-host-grow",
+        "name": "AssertionError",
+        "message": "Before refresh simultaneous-fit geometry: {\"at\":1792307891696,\"navigation\":\"page\",\"rawScroll\":{\"x\":0,\"y\":15396,\"frame\":0,\"content\":0},\"scroller\":{\"scrollHeight\":18052,\"clientHeight\":800,\"maxScroll\":17252,\"overflowAnchor\":\"auto\"},\"clip\":{\"top\":126,\"bottom\":648.84375},\"target\":{\"top\":224.609375,\"bottom\":519.625,\"left\":64,\"right\":256,\"width\":192,\"height\":295.015625,\"position\":15620.609375},\"focus\":{\"active\":true,\"outline\":\"rgb(183, 92, 62) solid 3px\",\"outlineOffset\":\"3px\",\"shadow\":\"none\",\"outset\":6,\"top\":218.609375,\"bottom\":525.625},\"inspection\":{\"top\":531.625,\"bottom\":729.21875,\"left\":64,\"right\":256,\"width\":192,\"height\":197.59375,\"position\":15927.625},\"inspectedAt\":\"2026-10-18T07:18:00.000Z\",\"inspectedValue\":\"18/10/2026, 15:18:00, eth0 download 100 B/s, 1 sample\",\"sections\":[{\"classes\":\"desktop-monitor-scope\",\"box\":{\"top\":-15127.203125,\"bottom\":-14967.203125,\"left\":45,\"right\":275,\"width\":230,\"height\":160,\"position\":268.796875}},{\"classes\":\"desktop-monitor-live-status\",\"box\":{\"top\":-14951.203125,\"bottom\":-14839.359375,\"left\":45,\"right\":275,\"width\":230,\"height\":111.84375,\"position\":444.796875}},{\"classes\":\"desktop-monitor-time\",\"box\":{\"top\":-14817.359375,\"bottom\":-14783.078125,\"left\":45,\"right\":275,\"width\":230,\"height\":34.28125,\"position\":578.640625}},{\"classes\":\"desktop-host-overview\",\"box\":{\"top\":-14771.078125,\"bottom\":-14194.625,\"left\":45,\"right\":275,\"width\":230,\"height\":576.453125,\"position\":624.921875}},{\"classes\":\"monitor-history-toolbar\",\"box\":{\"top\":-14170.625,\"bottom\":-13832.6875,\"left\":45,\"right\":275,\"width\":230,\"height\":337.9375,\"position\":1225.375}},{\"classes\":\"desktop-telemetry-grid\",\"box\":{\"top\":-13812.6875,\"bottom\":-3483.421875,\"left\":45,\"right\":275,\"width\":230,\"height\":10329.265625,\"position\":1583.3125}},{\"classes\":\"container-resources \",\"box\":{\"top\":-3459.421875,\"bottom\":-730.71875,\"left\":45,\"right\":275,\"width\":230,\"height\":2728.703125,\"position\":11936.578125}},{\"classes\":\"host-device-history\",\"box\":{\"top\":-706.71875,\"bottom\":1325.234375,\"left\":45,\"right\":275,\"width\":230,\"height\":2031.953125,\"position\":14689.28125}},{\"classes\":\"host-processes\",\"box\":{\"top\":1349.234375,\"bottom\":2452.421875,\"left\":45,\"right\":275,\"width\":230,\"height\":1103.1875,\"position\":16745.234375}}],\"dockerRows\":[{\"name\":\"worker-a\",\"box\":{\"top\":-2650.75,\"bottom\":-2342.8125,\"left\":64,\"right\":256,\"width\":192,\"height\":307.9375,\"position\":12745.25}},{\"name\":\"worker-b\",\"box\":{\"top\":-2342.8125,\"bottom\":-2034.875,\"left\":64,\"right\":256,\"width\":192,\"height\":307.9375,\"position\":13053.1875}},{\"name\":\"worker-c\",\"box\":{\"top\":-2034.875,\"bottom\":-1726.9375,\"left\":64,\"right\":256,\"width\":192,\"height\":307.9375,\"position\":13361.125}},{\"name\":\"worker-d\",\"box\":{\"top\":-1726.9375,\"bottom\":-1419,\"left\":64,\"right\":256,\"width\":192,\"height\":307.9375,\"position\":13669.0625}},{\"name\":\"worker-e\",\"box\":{\"top\":-1419,\"bottom\":-1111.0625,\"left\":64,\"right\":256,\"width\":192,\"height\":307.9375,\"position\":13977}},{\"name\":\"worker-f\",\"box\":{\"top\":-1111.0625,\"bottom\":-804.125,\"left\":64,\"right\":256,\"width\":192,\"height\":306.9375,\"position\":14284.9375}}]}"
+      }
+    },
+    "errors": []
+  }
+]

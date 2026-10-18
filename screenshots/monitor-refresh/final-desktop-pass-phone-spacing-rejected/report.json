@@ -1,0 +1,9 @@
+[
+  {
+    "viewport": "monitor-refresh",
+    "monitorRefresh": {
+      "$orbis_object_parts": ["part-001.json", "part-002.json"]
+    },
+    "errors": []
+  }
+]

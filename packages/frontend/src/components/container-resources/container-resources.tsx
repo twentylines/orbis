@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { appDockerHealth, useContainerTelemetry } from '@/desktop/containers';
-import { IconArrowUpRight, IconBrandDocker } from '@tabler/icons-react';
+import { IconArrowUpRight, IconBrandDocker, IconChevronRight } from '@tabler/icons-react';
+import { ContainerResourceFocus } from './container-resource-focus';
 import './container-resources.css';
 import '../docker-health/docker-health.css';
 
@@ -18,6 +19,8 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
   const telemetry = useContainerTelemetry();
   const apps = useQuery(getInstalledAppsOptions());
   const [sort, setSort] = useState<'cpuPercent' | 'memoryBytes'>('cpuPercent');
+  const list = useRef<HTMLOListElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const names = new Map(apps.data?.installed.map(({ info }) => [info.urn, info.name]));
   const ordered = (telemetry.data?.containers ?? [])
     .filter((item) => !appUrn || item.appUrn === appUrn)
@@ -33,7 +36,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
       aria-label="Docker resource usage"
     >
       <div className="container-resources-heading">
-        <h2>
+        <h2 ref={heading} tabIndex={-1}>
           <IconBrandDocker size={20} aria-hidden="true" />
           Usage
         </h2>
@@ -71,80 +74,87 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
       {!telemetry.isPending && !unavailable && !visible.length ? (
         <p>{appUrn ? 'No containers found for this app.' : compact ? 'No running containers.' : 'No Docker containers found.'}</p>
       ) : null}
-      <ol className="container-resource-list">
-        {visible.map((item) => {
-          const label = item.appUrn ? (names.get(item.appUrn) ?? item.name) : item.name;
-          const health = appDockerHealth([item]);
-          const cpu =
-            item.cpuPercent === null
-              ? item.state === 'running'
-                ? item.statsAvailable
-                  ? 'Sampling…'
-                  : 'Unavailable'
-                : '—'
-              : `${item.cpuPercent.toFixed(1)}%`;
-          const memory = item.memoryBytes === null ? '—' : resourceBytes(item.memoryBytes);
-          return (
-            <li key={item.id} data-container={item.name}>
-              <div className="container-resource-name">
-                <strong>{label}</strong>
-                {label !== item.name ? <small>{item.name}</small> : null}
-                {compact ? null : (
-                  <span className="docker-health" data-health={health.state}>
-                    <i aria-hidden="true" />
-                    <span>{health.label}</span>
+      <ContainerResourceFocus list={list} fallback={heading}>
+        <ol className="container-resource-list" ref={list}>
+          {visible.map((item) => {
+            const label = item.appUrn ? (names.get(item.appUrn) ?? item.name) : item.name;
+            const health = appDockerHealth([item]);
+            const cpu =
+              item.cpuPercent === null
+                ? item.state === 'running'
+                  ? item.statsAvailable
+                    ? 'Sampling…'
+                    : 'Unavailable'
+                  : '—'
+                : `${item.cpuPercent.toFixed(1)}%`;
+            const memory = item.memoryBytes === null ? '—' : resourceBytes(item.memoryBytes);
+            return (
+              <li key={item.id} data-container={item.name}>
+                <div className="container-resource-name">
+                  <strong>{label}</strong>
+                  {label !== item.name ? <small>{item.name}</small> : null}
+                  {compact ? null : (
+                    <span className="docker-health" data-health={health.state}>
+                      <i aria-hidden="true" />
+                      <span>{health.label}</span>
+                    </span>
+                  )}
+                </div>
+                <div className="container-resource-values">
+                  <span>
+                    <small>CPU</small>
+                    <b>{cpu}</b>
                   </span>
+                  <span>
+                    <small>Memory</small>
+                    <b>{memory}</b>
+                  </span>
+                </div>
+                <div className="container-resource-bar" aria-hidden="true">
+                  <i style={{ width: `${(Math.max(0, item[sort] ?? 0) / maximum) * 100}%` }} />
+                </div>
+                {compact ? null : (
+                  <details className="container-resource-details">
+                    <summary>
+                      <IconChevronRight size={16} aria-hidden="true" />
+                      <span>Container details</span>
+                    </summary>
+                    <dl>
+                      <div>
+                        <dt>State</dt>
+                        <dd>{item.state}</dd>
+                      </div>
+                      <div>
+                        <dt>Memory limit</dt>
+                        <dd>{resourceBytes(item.memoryLimitBytes)}</dd>
+                      </div>
+                      <div>
+                        <dt>Network received / sent</dt>
+                        <dd>
+                          {resourceBytes(item.receivedBytes)} / {resourceBytes(item.transmittedBytes)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Disk read / written</dt>
+                        <dd>
+                          {resourceBytes(item.blockReadBytes)} / {resourceBytes(item.blockWriteBytes)}
+                        </dd>
+                      </div>
+                    </dl>
+                    {!appUrn && item.appUrn && names.has(item.appUrn) ? (
+                      <Link
+                        to={`/apps/${encodeURIComponent(item.appUrn.split(':')[1] ?? '')}/${encodeURIComponent(item.appUrn.split(':')[0] ?? '')}`}
+                      >
+                        Open application
+                      </Link>
+                    ) : null}
+                  </details>
                 )}
-              </div>
-              <div className="container-resource-values">
-                <span>
-                  <small>CPU</small>
-                  <b>{cpu}</b>
-                </span>
-                <span>
-                  <small>Memory</small>
-                  <b>{memory}</b>
-                </span>
-              </div>
-              <div className="container-resource-bar" aria-hidden="true">
-                <i style={{ width: `${(Math.max(0, item[sort] ?? 0) / maximum) * 100}%` }} />
-              </div>
-              {compact ? null : (
-                <details className="container-resource-details">
-                  <summary>Container details</summary>
-                  <dl>
-                    <div>
-                      <dt>State</dt>
-                      <dd>{item.state}</dd>
-                    </div>
-                    <div>
-                      <dt>Memory limit</dt>
-                      <dd>{resourceBytes(item.memoryLimitBytes)}</dd>
-                    </div>
-                    <div>
-                      <dt>Network received / sent</dt>
-                      <dd>
-                        {resourceBytes(item.receivedBytes)} / {resourceBytes(item.transmittedBytes)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Disk read / written</dt>
-                      <dd>
-                        {resourceBytes(item.blockReadBytes)} / {resourceBytes(item.blockWriteBytes)}
-                      </dd>
-                    </div>
-                  </dl>
-                  {!appUrn && item.appUrn && names.has(item.appUrn) ? (
-                    <Link to={`/apps/${encodeURIComponent(item.appUrn.split(':')[1] ?? '')}/${encodeURIComponent(item.appUrn.split(':')[0] ?? '')}`}>
-                      Open application
-                    </Link>
-                  ) : null}
-                </details>
-              )}
-            </li>
-          );
-        })}
-      </ol>
+              </li>
+            );
+          })}
+        </ol>
+      </ContainerResourceFocus>
       {!compact && telemetry.data ? (
         <p className="container-resources-note">
           Sampled {new Date(telemetry.data.sampledAt).toLocaleTimeString()}

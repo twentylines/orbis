@@ -1,0 +1,83 @@
+{
+  "final-removal-pass": {
+    "originalReportSha256": "63a978d853efd9179fcb3cbeb8c755b4401a4d259ede421ffa656ca952820603",
+    "parsedReportSha256": "b5fd2af0500862fb9e491c7283532d68689317110d8fbb50c06c40b4fc466472",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 107754,
+    "status": true,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "rejected-docker-focus": {
+    "originalReportSha256": "36cbe8dead9fab8a92f4ab8bc684f79924a15f809760778c2c831657627978a5",
+    "parsedReportSha256": "84ee4bbe68335c9dbfcd1134baa04b335b9e4c450bbe1a70331d00802d04a671",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 122212,
+    "status": false,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "interim-desktop-pass-phone-preparation-rejected": {
+    "originalReportSha256": "16c229cbb3fd2020bcfe229c6416e797287b16c6d436546be6d5ddb7428c1793",
+    "parsedReportSha256": "520f0db4906a573bf64ebd1ee1cfcb6ac21d9faf9c28981893372dd8542b3be9",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 154745,
+    "status": false,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "interim-phone-pass": {
+    "originalReportSha256": "82b5eb43bafa8a40e1dfe583c0fc5632b43be9b06677a8280d6286d521c61aa7",
+    "parsedReportSha256": "9a3ecec43062ffc513ee4012ddbfa1924192f2bc99805866b74a1dd9f528f35d",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 154877,
+    "status": true,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "rejected-test-preparation": {
+    "originalReportSha256": "a3a2325c0303f9c52b26831992dedcca7ef861e330276cd326d5d22a4c2ee4a4",
+    "parsedReportSha256": "c1869fb20c8a99ff1890d01ac7854468d5f82dc086e007bfabd246b68464f80d",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 5108,
+    "status": false,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "rejected-fallback-clearance": {
+    "originalReportSha256": "91725fd74de38e5b7c43c0c9d4d4180597c1e7087b0d1b84df8b792e52fc5243",
+    "parsedReportSha256": "534274155654960b91d92c6bde76fd33cbf96aea334d341db9653521e9cfe089",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 21512,
+    "status": false,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "final-desktop-pass-phone-spacing-rejected": {
+    "originalReportSha256": "1963a40fd4723fdfb621071a0efe355552631a78a762de32eed7d83061df043a",
+    "parsedReportSha256": "bb167a6da23f459d56e2009dd466ebf4b4494e0604c3a3150578b1009b12d17c",
+    "completeParsedReportRestored": true,
+    "parts": 2,
+    "originalBytes": 218825,
+    "status": false,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "final-phone-pass": {
+    "originalReportSha256": "0e2e1d9f0d9b613d9e8ff781beb3fba0366622c3e6110164e85074da6e7cf434",
+    "parsedReportSha256": "4ddd088c64e304d16aefc95ee5f368101670261ab5310171fbf0b7d5d115456d",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 163592,
+    "status": true,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "rejected-test-selector": {
+    "originalReportSha256": "eb4bc6be4fd4af84b7ee7432a150122921d0d495ed7e7a7e279e745ab8fc2b87",
+    "parsedReportSha256": "5a14376efffeac8fe3f7a190bff145f31faab175cff9a5999d2eeb21a3eee9ab",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 23590,
+    "status": false,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  }
+}
