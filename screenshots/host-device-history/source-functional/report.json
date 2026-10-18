@@ -1,0 +1,9 @@
+[
+  {
+    "viewport": "host-history",
+    "hostHistory": {
+      "$orbis_object_parts": ["part-007.json", "part-008.json"]
+    },
+    "errors": []
+  }
+]

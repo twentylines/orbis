@@ -1,0 +1,242 @@
+[
+  {
+    "viewport": "host-history",
+    "hostHistory": {
+      "passed": false,
+      "layouts": [],
+      "states": [],
+      "retries": [],
+      "ranges": [],
+      "refresh": [],
+      "polling": [],
+      "requests": [
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": null,
+          "at": 1792300290346
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": "disk:dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "at": 1792300291299
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "preferencePuts": 0,
+      "delayed": [
+        {
+          "width": 1440,
+          "mode": "light",
+          "scale": 1,
+          "kind": "device",
+          "before": {
+            "x": 0,
+            "y": 0,
+            "frame": 0,
+            "content": 3271
+          },
+          "after": {
+            "x": 0,
+            "y": 0,
+            "frame": 0,
+            "content": 3271
+          },
+          "pending": {
+            "focus": "<body data-bs-theme-base=\"slate\" data-bs-theme-primary=\"blue\" data-bs-theme=\"light\" style=\"\"><main id=\"root\"><div class=\"desktop orbis-theme\" data-desktop-preset=\"ocean\" data-desktop-mode=\"light\" data-desktop-density=\"comfortable\" data-desktop-wallpaper=\"sandstone\"><header class=\"desktop-system-bar\"><a class=\"desktop-brand\" aria-label=\"Orbis workspace on Hades\" href=\"/dashboard\" data-discover=\"tru",
+            "selectedDisabled": true,
+            "charts": 0,
+            "loading": true,
+            "focusedSelector": false
+          },
+          "metrics": {
+            "width": 1440,
+            "documentWidth": 1440,
+            "root": {
+              "left": 55,
+              "right": 1385,
+              "top": 443.40625,
+              "bottom": 680.796875,
+              "width": 1330,
+              "height": 237.390625
+            },
+            "monitor": {
+              "left": 55,
+              "right": 1385,
+              "top": -3054.25,
+              "bottom": 1831.859375,
+              "width": 1330,
+              "height": 4886.109375
+            },
+            "inner": {
+              "left": 84,
+              "right": 1356
+            },
+            "padding": [28, 28],
+            "heading": {
+              "left": 84,
+              "right": 215.84375,
+              "top": 472.40625,
+              "bottom": 505.40625,
+              "width": 131.84375,
+              "height": 33
+            },
+            "peer": {
+              "left": 84,
+              "right": 228.9375,
+              "top": 733.796875,
+              "bottom": 766.796875,
+              "width": 144.9375,
+              "height": 33
+            },
+            "words": [],
+            "edgeInk": [],
+            "label": {
+              "text": "Host device",
+              "box": {
+                "left": 84,
+                "right": 692,
+                "top": 529.40625,
+                "bottom": 551.796875,
+                "width": 608,
+                "height": 22.390625
+              },
+              "ink": [
+                {
+                  "left": 84,
+                  "right": 162.234375,
+                  "top": 531.40625,
+                  "bottom": 548.40625
+                }
+              ]
+            },
+            "trigger": {
+              "text": "Loading devices…",
+              "box": {
+                "left": 84,
+                "right": 692,
+                "top": 561.796875,
+                "bottom": 607.796875,
+                "width": 608,
+                "height": 46
+              },
+              "ink": [
+                {
+                  "left": 101,
+                  "right": 643,
+                  "top": 574.796875,
+                  "bottom": 594.796875
+                },
+                {
+                  "left": 101,
+                  "right": 216.828125,
+                  "top": 575.796875,
+                  "bottom": 592.796875
+                }
+              ],
+              "title": "",
+              "disabled": true
+            },
+            "buttons": [
+              {
+                "text": "5 min",
+                "box": {
+                  "left": 726,
+                  "right": 786.890625,
+                  "top": 563.796875,
+                  "bottom": 601.796875,
+                  "width": 60.890625,
+                  "height": 38
+                },
+                "ink": [
+                  {
+                    "left": 740,
+                    "right": 772.890625,
+                    "top": 575.21875,
+                    "bottom": 590.21875
+                  }
+                ]
+              },
+              {
+                "text": "1 hour",
+                "box": {
+                  "left": 792.890625,
+                  "right": 857.515625,
+                  "top": 563.796875,
+                  "bottom": 601.796875,
+                  "width": 64.625,
+                  "height": 38
+                },
+                "ink": [
+                  {
+                    "left": 806.890625,
+                    "right": 843.515625,
+                    "top": 575.21875,
+                    "bottom": 590.21875
+                  }
+                ]
+              },
+              {
+                "text": "24 hours",
+                "box": {
+                  "left": 863.515625,
+                  "right": 944.359375,
+                  "top": 563.796875,
+                  "bottom": 601.796875,
+                  "width": 80.84375,
+                  "height": 38
+                },
+                "ink": [
+                  {
+                    "left": 877.515625,
+                    "right": 930.359375,
+                    "top": 575.21875,
+                    "bottom": 590.21875
+                  }
+                ]
+              },
+              {
+                "text": "7 days",
+                "box": {
+                  "left": 950.359375,
+                  "right": 1016.84375,
+                  "top": 563.796875,
+                  "bottom": 601.796875,
+                  "width": 66.484375,
+                  "height": 38
+                },
+                "ink": [
+                  {
+                    "left": 964.359375,
+                    "right": 1002.84375,
+                    "top": 575.21875,
+                    "bottom": 590.21875
+                  }
+                ]
+              }
+            ],
+            "choices": [],
+            "charts": [],
+            "notices": []
+          }
+        }
+      ],
+      "current": "1440-light-text1-ocean-1h-network-ready",
+      "failure": {
+        "phase": "1440-light-text1-ocean-1h-network-ready",
+        "name": "AssertionError",
+        "message": "Device loading must retain the native Select opener focus\n\nfalse !== true\n"
+      },
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": []
+    },
+    "errors": []
+  }
+]

@@ -1131,13 +1131,17 @@ module.exports.charts = async function inspectHostDeviceCharts({ page, base, pre
       next: box(chart.nextElementSibling),
       plot: box(chart.querySelector('.metric-chart-plot')),
       svg: box(chart.querySelector('svg')),
+      compactAxis: getComputedStyle(chart.querySelector('svg')).gridRowStart === '2',
+      scalePrefix: getComputedStyle(chart.querySelector('.metric-chart-scale span'), '::before').content,
       scaleBox: box(chart.querySelector('.metric-chart-scale')),
-      labels: [...chart.querySelectorAll('.metric-chart-scale span')].map((element) => ({
-        text: element.textContent,
-        box: box(element),
-        ink: ink(element),
-        font: getComputedStyle(element).fontSize,
-      })),
+      labels: [...chart.querySelectorAll('.metric-chart-scale span')]
+        .filter((element) => element.getClientRects().length)
+        .map((element) => ({
+          text: element.textContent,
+          box: box(element),
+          ink: ink(element),
+          font: getComputedStyle(element).fontSize,
+        })),
       times: [...chart.querySelectorAll('.metric-chart-times span')]
         .filter((element) => element.getClientRects().length)
         .map((element) => ({ text: element.textContent, box: box(element), ink: ink(element) })),
@@ -1166,6 +1170,12 @@ module.exports.charts = async function inspectHostDeviceCharts({ page, base, pre
     assert.equal(metrics.scrollBehavior, 'auto');
     assert.ok(metrics.documentWidth <= metrics.viewportWidth, 'Chart must not overflow the document');
     assert.deepEqual(metrics.words, [], 'Chart labels and inspection text must retain whole ordinary words');
+    if (metrics.compactAxis) {
+      assert.equal(metrics.labels.length, 1, 'Compact charts show one complete scale range');
+      assert.ok(metrics.scalePrefix.includes('0 – '), 'The compact scale explicitly starts at zero');
+      assert.ok(metrics.scaleBox.bottom <= metrics.svg.top - 10, 'The scale must clear the full-width graph');
+      assert.ok(metrics.svg.width >= metrics.plot.width - 28, 'Narrow graphs must fill the padded plot width');
+    }
     for (const label of metrics.labels) {
       assert.ok(new Set(label.ink.map((r) => Math.round(r.top))).size === 1, 'Axis values must remain on one readable line');
       for (const rect of label.ink) {
@@ -1173,7 +1183,7 @@ module.exports.charts = async function inspectHostDeviceCharts({ page, base, pre
           rect.left >= metrics.scaleBox.left - 1 && rect.right <= metrics.scaleBox.right + 1,
           'Complete axis ink must fit its intrinsic column',
         );
-        assert.ok(rect.right <= metrics.svg.left - 8, 'Axis ink must retain a comfortable graph gap');
+        if (!metrics.compactAxis) assert.ok(rect.right <= metrics.svg.left - 8, 'Axis ink must retain a comfortable graph gap');
       }
     }
     assert.ok(metrics.svg.width >= 40, 'Intrinsic axis must leave a usable graph width');

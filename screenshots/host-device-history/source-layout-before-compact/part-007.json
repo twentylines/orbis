@@ -1,0 +1,4003 @@
+[
+  {
+    "width": 768,
+    "mode": "dark",
+    "scale": 1,
+    "open": {
+      "menu": {
+        "box": {
+          "left": 84,
+          "right": 684,
+          "top": 538,
+          "bottom": 819.9375,
+          "width": 600,
+          "height": 281.9375
+        },
+        "viewport": {
+          "left": 89,
+          "right": 679,
+          "top": 543,
+          "bottom": 814.9375,
+          "width": 590,
+          "height": 271.9375
+        },
+        "focused": {
+          "left": 93,
+          "right": 675,
+          "top": 547,
+          "bottom": 612.984375,
+          "width": 582,
+          "height": 65.984375
+        }
+      },
+      "textScale": 1,
+      "width": 768,
+      "documentWidth": 768,
+      "root": {
+        "left": 55,
+        "right": 713,
+        "top": 345.25,
+        "bottom": 1248,
+        "width": 658,
+        "height": 902.75
+      },
+      "monitor": {
+        "left": 55,
+        "right": 713,
+        "top": -4610,
+        "bottom": 2399.0625,
+        "width": 658,
+        "height": 7009.0625
+      },
+      "inner": {
+        "left": 84,
+        "right": 684
+      },
+      "padding": [28, 28],
+      "heading": {
+        "left": 84,
+        "right": 215.84375,
+        "top": 374.25,
+        "bottom": 407.25,
+        "width": 131.84375,
+        "height": 33
+      },
+      "peer": {
+        "left": 84,
+        "right": 228.9375,
+        "top": 1301,
+        "bottom": 1334,
+        "width": 144.9375,
+        "height": 33
+      },
+      "words": [],
+      "edgeInk": [],
+      "label": {
+        "text": "Host device",
+        "box": {
+          "left": 84,
+          "right": 684,
+          "top": 431.25,
+          "bottom": 453.640625,
+          "width": 600,
+          "height": 22.390625
+        },
+        "ink": [
+          {
+            "left": 84,
+            "right": 162.234375,
+            "top": 433.25,
+            "bottom": 450.25
+          }
+        ],
+        "font": 14,
+        "expectedFont": null
+      },
+      "trigger": {
+        "text": "Networkenp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+        "box": {
+          "left": 84,
+          "right": 684,
+          "top": 463.640625,
+          "bottom": 531.625,
+          "width": 600,
+          "height": 67.984375
+        },
+        "ink": [
+          {
+            "left": 101,
+            "right": 635,
+            "top": 476.640625,
+            "bottom": 518.625
+          },
+          {
+            "left": 101,
+            "right": 149.21875,
+            "top": 478.640625,
+            "bottom": 493.640625
+          },
+          {
+            "left": 101,
+            "right": 986.703125,
+            "top": 498.234375,
+            "bottom": 515.234375
+          },
+          {
+            "left": 101,
+            "right": 619.5625,
+            "top": 498.234375,
+            "bottom": 515.234375
+          }
+        ],
+        "font": 14,
+        "expectedFont": null,
+        "title": "Network: enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+        "disabled": false
+      },
+      "buttons": [
+        {
+          "text": "5 min",
+          "box": {
+            "left": 90,
+            "right": 150.890625,
+            "top": 557.625,
+            "bottom": 595.625,
+            "width": 60.890625,
+            "height": 38
+          },
+          "ink": [
+            {
+              "left": 104,
+              "right": 136.890625,
+              "top": 569.046875,
+              "bottom": 584.046875
+            }
+          ],
+          "font": 12,
+          "expectedFont": null
+        },
+        {
+          "text": "1 hour",
+          "box": {
+            "left": 156.890625,
+            "right": 221.515625,
+            "top": 557.625,
+            "bottom": 595.625,
+            "width": 64.625,
+            "height": 38
+          },
+          "ink": [
+            {
+              "left": 170.890625,
+              "right": 207.515625,
+              "top": 569.046875,
+              "bottom": 584.046875
+            }
+          ],
+          "font": 12,
+          "expectedFont": null
+        },
+        {
+          "text": "24 hours",
+          "box": {
+            "left": 227.515625,
+            "right": 308.359375,
+            "top": 557.625,
+            "bottom": 595.625,
+            "width": 80.84375,
+            "height": 38
+          },
+          "ink": [
+            {
+              "left": 241.515625,
+              "right": 294.359375,
+              "top": 569.046875,
+              "bottom": 584.046875
+            }
+          ],
+          "font": 12,
+          "expectedFont": null
+        },
+        {
+          "text": "7 days",
+          "box": {
+            "left": 314.359375,
+            "right": 380.84375,
+            "top": 557.625,
+            "bottom": 595.625,
+            "width": 66.484375,
+            "height": 38
+          },
+          "ink": [
+            {
+              "left": 328.359375,
+              "right": 366.84375,
+              "top": 569.046875,
+              "bottom": 584.046875
+            }
+          ],
+          "font": 12,
+          "expectedFont": null
+        }
+      ],
+      "choices": [
+        {
+          "box": {
+            "left": 101,
+            "right": 635,
+            "top": 476.640625,
+            "bottom": 518.625,
+            "width": 534,
+            "height": 41.984375
+          },
+          "text": "Networkenp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+          "title": "Network: enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+          "option": null,
+          "kind": {
+            "text": "Network",
+            "box": {
+              "left": 101,
+              "right": 635,
+              "top": 476.640625,
+              "bottom": 496.234375,
+              "width": 534,
+              "height": 19.59375
+            },
+            "ink": [
+              {
+                "left": 101,
+                "right": 149.21875,
+                "top": 478.640625,
+                "bottom": 493.640625
+              }
+            ],
+            "font": 12.25,
+            "expectedFont": null
+          },
+          "identifier": {
+            "text": "enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+            "box": {
+              "left": 101,
+              "right": 635,
+              "top": 496.234375,
+              "bottom": 518.625,
+              "width": 534,
+              "height": 22.390625
+            },
+            "overflow": "hidden",
+            "ellipsis": "ellipsis",
+            "nowrap": "nowrap",
+            "truncated": true
+          }
+        },
+        {
+          "box": {
+            "left": 105,
+            "right": 631,
+            "top": 559,
+            "bottom": 600.984375,
+            "width": 526,
+            "height": 41.984375
+          },
+          "text": "Networkenp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+          "title": "Network: enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+          "parentRole": "option",
+          "accessibleName": "Network enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+          "option": {
+            "left": 93,
+            "right": 675,
+            "top": 547,
+            "bottom": 612.984375,
+            "width": 582,
+            "height": 65.984375
+          },
+          "kind": {
+            "text": "Network",
+            "box": {
+              "left": 105,
+              "right": 631,
+              "top": 559,
+              "bottom": 578.59375,
+              "width": 526,
+              "height": 19.59375
+            },
+            "ink": [
+              {
+                "left": 105,
+                "right": 153.21875,
+                "top": 561,
+                "bottom": 576
+              }
+            ],
+            "font": 12.25,
+            "expectedFont": null
+          },
+          "identifier": {
+            "text": "enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+            "box": {
+              "left": 105,
+              "right": 631,
+              "top": 578.59375,
+              "bottom": 600.984375,
+              "width": 526,
+              "height": 22.390625
+            },
+            "overflow": "hidden",
+            "ellipsis": "ellipsis",
+            "nowrap": "nowrap",
+            "truncated": true
+          }
+        },
+        {
+          "box": {
+            "left": 105,
+            "right": 631,
+            "top": 624.984375,
+            "bottom": 666.96875,
+            "width": 526,
+            "height": 41.984375
+          },
+          "text": "Networketh0:1",
+          "title": "Network: eth0:1",
+          "parentRole": "option",
+          "accessibleName": "Network eth0:1",
+          "option": {
+            "left": 93,
+            "right": 675,
+            "top": 612.984375,
+            "bottom": 678.96875,
+            "width": 582,
+            "height": 65.984375
+          },
+          "kind": {
+            "text": "Network",
+            "box": {
+              "left": 105,
+              "right": 631,
+              "top": 624.984375,
+              "bottom": 644.578125,
+              "width": 526,
+              "height": 19.59375
+            },
+            "ink": [
+              {
+                "left": 105,
+                "right": 153.21875,
+                "top": 626.984375,
+                "bottom": 641.984375
+              }
+            ],
+            "font": 12.25,
+            "expectedFont": null
+          },
+          "identifier": {
+            "text": "eth0:1",
+            "box": {
+              "left": 105,
+              "right": 631,
+              "top": 644.578125,
+              "bottom": 666.96875,
+              "width": 526,
+              "height": 22.390625
+            },
+            "overflow": "hidden",
+            "ellipsis": "ellipsis",
+            "nowrap": "nowrap",
+            "truncated": false
+          }
+        },
+        {
+          "box": {
+            "left": 105,
+            "right": 631,
+            "top": 690.96875,
+            "bottom": 732.953125,
+            "width": 526,
+            "height": 41.984375
+          },
+          "text": "Diskdm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "title": "Disk: dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "parentRole": "option",
+          "accessibleName": "Disk dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "option": {
+            "left": 93,
+            "right": 675,
+            "top": 678.96875,
+            "bottom": 744.953125,
+            "width": 582,
+            "height": 65.984375
+          },
+          "kind": {
+            "text": "Disk",
+            "box": {
+              "left": 105,
+              "right": 631,
+              "top": 690.96875,
+              "bottom": 710.5625,
+              "width": 526,
+              "height": 19.59375
+            },
+            "ink": [
+              {
+                "left": 105,
+                "right": 129.921875,
+                "top": 692.96875,
+                "bottom": 707.96875
+              }
+            ],
+            "font": 12.25,
+            "expectedFont": null
+          },
+          "identifier": {
+            "text": "dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+            "box": {
+              "left": 105,
+              "right": 631,
+              "top": 710.5625,
+              "bottom": 732.953125,
+              "width": 526,
+              "height": 22.390625
+            },
+            "overflow": "hidden",
+            "ellipsis": "ellipsis",
+            "nowrap": "nowrap",
+            "truncated": true
+          }
+        },
+        {
+          "box": {
+            "left": 105,
+            "right": 631,
+            "top": 756.953125,
+            "bottom": 798.9375,
+            "width": 526,
+            "height": 41.984375
+          },
+          "text": "Disknvme0n1",
+          "title": "Disk: nvme0n1",
+          "parentRole": "option",
+          "accessibleName": "Disk nvme0n1",
+          "option": {
+            "left": 93,
+            "right": 675,
+            "top": 744.953125,
+            "bottom": 810.9375,
+            "width": 582,
+            "height": 65.984375
+          },
+          "kind": {
+            "text": "Disk",
+            "box": {
+              "left": 105,
+              "right": 631,
+              "top": 756.953125,
+              "bottom": 776.546875,
+              "width": 526,
+              "height": 19.59375
+            },
+            "ink": [
+              {
+                "left": 105,
+                "right": 129.921875,
+                "top": 758.953125,
+                "bottom": 773.953125
+              }
+            ],
+            "font": 12.25,
+            "expectedFont": null
+          },
+          "identifier": {
+            "text": "nvme0n1",
+            "box": {
+              "left": 105,
+              "right": 631,
+              "top": 776.546875,
+              "bottom": 798.9375,
+              "width": 526,
+              "height": 22.390625
+            },
+            "overflow": "hidden",
+            "ellipsis": "ellipsis",
+            "nowrap": "nowrap",
+            "truncated": false
+          }
+        }
+      ],
+      "charts": [
+        {
+          "box": {
+            "left": 84,
+            "right": 684,
+            "top": 661.21875,
+            "bottom": 908.3125,
+            "width": 600,
+            "height": 247.09375
+          },
+          "heading": {
+            "left": 84,
+            "right": 151,
+            "top": 661.21875,
+            "bottom": 683.609375,
+            "width": 67,
+            "height": 22.390625
+          },
+          "headerValue": {
+            "text": "10.0 MB/s",
+            "box": {
+              "left": 617.765625,
+              "right": 684,
+              "top": 661.21875,
+              "bottom": 683.609375,
+              "width": 66.234375,
+              "height": 22.390625
+            },
+            "ink": [
+              {
+                "left": 617.765625,
+                "right": 684,
+                "top": 663.21875,
+                "bottom": 680.21875
+              }
+            ],
+            "font": 14,
+            "expectedFont": null
+          },
+          "metric": "host-inbound",
+          "plot": {
+            "left": 84,
+            "right": 684,
+            "top": 701.609375,
+            "bottom": 888.3125,
+            "width": 600,
+            "height": 186.703125
+          },
+          "svg": {
+            "left": 162.6875,
+            "right": 671,
+            "top": 714.609375,
+            "bottom": 854.609375,
+            "width": 508.3125,
+            "height": 140
+          },
+          "scale": {
+            "left": 97,
+            "right": 150.6875,
+            "top": 714.609375,
+            "bottom": 854.609375,
+            "width": 53.6875,
+            "height": 140
+          },
+          "labels": [
+            {
+              "text": "16.5 MB/s",
+              "box": {
+                "left": 97,
+                "right": 150.6875,
+                "top": 714.609375,
+                "bottom": 728.90625,
+                "width": 53.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 150.6875,
+                  "top": 714.609375,
+                  "bottom": 727.609375
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "8.3 MB/s",
+              "box": {
+                "left": 97,
+                "right": 150.6875,
+                "top": 777.46875,
+                "bottom": 791.765625,
+                "width": 53.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 777.46875,
+                  "bottom": 790.46875
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "0",
+              "box": {
+                "left": 97,
+                "right": 150.6875,
+                "top": 840.3125,
+                "bottom": 854.609375,
+                "width": 53.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 104,
+                  "top": 840.3125,
+                  "bottom": 853.3125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "times": [
+            {
+              "text": "12:26",
+              "box": {
+                "left": 162.6875,
+                "right": 194,
+                "top": 863.609375,
+                "bottom": 879.3125,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 162.6875,
+                  "right": 194,
+                  "top": 864.609375,
+                  "bottom": 877.609375
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "12:56",
+              "box": {
+                "left": 401.1875,
+                "right": 432.5,
+                "top": 863.609375,
+                "bottom": 879.3125,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 401.1875,
+                  "right": 432.5,
+                  "top": 864.609375,
+                  "bottom": 877.609375
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "13:26",
+              "box": {
+                "left": 639.6875,
+                "right": 671,
+                "top": 863.609375,
+                "bottom": 879.3125,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 864.609375,
+                  "bottom": 877.609375
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "lines": ["480.0,124.5 490.0,117.0", "510.0,101.9 520.0,94.4", "530.0,86.9 540.0,79.4", "570.0,71.9 580.0,64.4 590.0,56.8"],
+          "segments": 4,
+          "tooltip": null,
+          "empty": null
+        },
+        {
+          "box": {
+            "left": 84,
+            "right": 684,
+            "top": 936.3125,
+            "bottom": 1183.40625,
+            "width": 600,
+            "height": 247.09375
+          },
+          "heading": {
+            "left": 84,
+            "right": 132.015625,
+            "top": 936.3125,
+            "bottom": 958.703125,
+            "width": 48.015625,
+            "height": 22.390625
+          },
+          "headerValue": {
+            "text": "5.0 MB/s",
+            "box": {
+              "left": 626.4375,
+              "right": 684,
+              "top": 936.3125,
+              "bottom": 958.703125,
+              "width": 57.5625,
+              "height": 22.390625
+            },
+            "ink": [
+              {
+                "left": 626.4375,
+                "right": 684,
+                "top": 938.3125,
+                "bottom": 955.3125
+              }
+            ],
+            "font": 14,
+            "expectedFont": null
+          },
+          "metric": "host-outbound",
+          "plot": {
+            "left": 84,
+            "right": 684,
+            "top": 976.703125,
+            "bottom": 1163.40625,
+            "width": 600,
+            "height": 186.703125
+          },
+          "svg": {
+            "left": 155.6875,
+            "right": 671,
+            "top": 989.703125,
+            "bottom": 1129.703125,
+            "width": 515.3125,
+            "height": 140
+          },
+          "scale": {
+            "left": 97,
+            "right": 143.6875,
+            "top": 989.703125,
+            "bottom": 1129.703125,
+            "width": 46.6875,
+            "height": 140
+          },
+          "labels": [
+            {
+              "text": "8.3 MB/s",
+              "box": {
+                "left": 97,
+                "right": 143.6875,
+                "top": 989.703125,
+                "bottom": 1004,
+                "width": 46.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 989.703125,
+                  "bottom": 1002.703125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "4.1 MB/s",
+              "box": {
+                "left": 97,
+                "right": 143.6875,
+                "top": 1052.5625,
+                "bottom": 1066.859375,
+                "width": 46.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 1052.5625,
+                  "bottom": 1065.5625
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "0",
+              "box": {
+                "left": 97,
+                "right": 143.6875,
+                "top": 1115.40625,
+                "bottom": 1129.703125,
+                "width": 46.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 104,
+                  "top": 1115.40625,
+                  "bottom": 1128.40625
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "times": [
+            {
+              "text": "12:26",
+              "box": {
+                "left": 155.6875,
+                "right": 187,
+                "top": 1138.703125,
+                "bottom": 1154.40625,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 155.6875,
+                  "right": 187,
+                  "top": 1139.703125,
+                  "bottom": 1152.703125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "12:56",
+              "box": {
+                "left": 397.6875,
+                "right": 429,
+                "top": 1138.703125,
+                "bottom": 1154.40625,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 397.6875,
+                  "right": 429,
+                  "top": 1139.703125,
+                  "bottom": 1152.703125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "13:26",
+              "box": {
+                "left": 639.6875,
+                "right": 671,
+                "top": 1138.703125,
+                "bottom": 1154.40625,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 1139.703125,
+                  "bottom": 1152.703125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "lines": ["480.0,124.5 490.0,117.0", "510.0,101.9 520.0,94.4", "530.0,86.9 540.0,79.4", "570.0,71.9 580.0,64.4 590.0,56.8"],
+          "segments": 4,
+          "tooltip": null,
+          "empty": null
+        }
+      ],
+      "notices": []
+    },
+    "selectorFocus": {
+      "tag": "BUTTON",
+      "owner": "tool",
+      "frameMode": "page",
+      "desktopQuery": false,
+      "documentScroll": {
+        "scrollHeight": 7421,
+        "clientHeight": 1024,
+        "scrollTop": 4837,
+        "maxScroll": 6397
+      },
+      "expectedRevealDelta": 0,
+      "text": "Networkenp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+      "scroll": {
+        "y": 4837,
+        "content": 0
+      },
+      "top": 463.640625,
+      "bottom": 531.625,
+      "documentTop": 5300.640625,
+      "chromeBottom": 88,
+      "dockTop": 926,
+      "outline": "rgb(183, 92, 62) solid 3px",
+      "shadow": "color(srgb 0.886275 0.698039 0.552941 / 0.14) 0px 0px 0px 3px"
+    },
+    "network": {
+      "keyboard": [
+        {
+          "index": 0,
+          "pointer": [0, 9],
+          "focus": {
+            "tag": "DIV",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 7546,
+              "clientHeight": 1024,
+              "scrollTop": 4837,
+              "maxScroll": 6522
+            },
+            "expectedRevealDelta": 0,
+            "text": "16.5 MB/s8.3 MB/s012:2612:5613:26",
+            "scroll": {
+              "y": 4837,
+              "content": 0
+            },
+            "top": 701.609375,
+            "bottom": 888.3125,
+            "documentTop": 5538.609375,
+            "chromeBottom": 88,
+            "dockTop": 926,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          }
+        },
+        {
+          "index": 0,
+          "key": "Home",
+          "expected": 0,
+          "value": "18/10/2026, 13:14:10, enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s download 1.0 MB/s, peak 1.5 MB/s, 6 samples"
+        },
+        {
+          "index": 0,
+          "key": "End",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:10, enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s download 10.0 MB/s, peak 15.0 MB/s, 6 samples"
+        },
+        {
+          "index": 0,
+          "key": "ArrowLeft",
+          "expected": 8,
+          "value": "18/10/2026, 13:24:10, enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s download 9.0 MB/s, peak 13.5 MB/s, 6 samples"
+        },
+        {
+          "index": 0,
+          "key": "ArrowRight",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:10, enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s download 10.0 MB/s, peak 15.0 MB/s, 6 samples"
+        },
+        {
+          "index": 1,
+          "pointer": [0, 9],
+          "focus": {
+            "tag": "DIV",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 7546,
+              "clientHeight": 1024,
+              "scrollTop": 5534,
+              "maxScroll": 6522
+            },
+            "expectedRevealDelta": 0,
+            "text": "8.3 MB/s4.1 MB/s012:2612:5613:26",
+            "scroll": {
+              "y": 5534,
+              "content": 0
+            },
+            "top": 279.703125,
+            "bottom": 466.40625,
+            "documentTop": 5813.703125,
+            "chromeBottom": 88,
+            "dockTop": 926,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          }
+        },
+        {
+          "index": 1,
+          "key": "Home",
+          "expected": 0,
+          "value": "18/10/2026, 13:14:10, enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s upload 512.0 KB/s, peak 768.0 KB/s, 6 samples"
+        },
+        {
+          "index": 1,
+          "key": "End",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:10, enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s upload 5.0 MB/s, peak 7.5 MB/s, 6 samples"
+        },
+        {
+          "index": 1,
+          "key": "ArrowLeft",
+          "expected": 8,
+          "value": "18/10/2026, 13:24:10, enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s upload 4.5 MB/s, peak 6.8 MB/s, 6 samples"
+        },
+        {
+          "index": 1,
+          "key": "ArrowRight",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:10, enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s upload 5.0 MB/s, peak 7.5 MB/s, 6 samples"
+        }
+      ],
+      "metrics": {
+        "menu": null,
+        "textScale": 1,
+        "width": 768,
+        "documentWidth": 768,
+        "root": {
+          "left": 55,
+          "right": 713,
+          "top": -351.75,
+          "bottom": 675.59375,
+          "width": 658,
+          "height": 1027.34375
+        },
+        "monitor": {
+          "left": 55,
+          "right": 713,
+          "top": -5307,
+          "bottom": 1826.65625,
+          "width": 658,
+          "height": 7133.65625
+        },
+        "inner": {
+          "left": 84,
+          "right": 684
+        },
+        "padding": [28, 28],
+        "heading": {
+          "left": 84,
+          "right": 215.84375,
+          "top": -322.75,
+          "bottom": -289.75,
+          "width": 131.84375,
+          "height": 33
+        },
+        "peer": {
+          "left": 84,
+          "right": 228.9375,
+          "top": 728.59375,
+          "bottom": 761.59375,
+          "width": 144.9375,
+          "height": 33
+        },
+        "words": [],
+        "edgeInk": [],
+        "label": {
+          "text": "Host device",
+          "box": {
+            "left": 84,
+            "right": 684,
+            "top": -265.75,
+            "bottom": -243.359375,
+            "width": 600,
+            "height": 22.390625
+          },
+          "ink": [
+            {
+              "left": 84,
+              "right": 162.234375,
+              "top": -263.75,
+              "bottom": -246.75
+            }
+          ],
+          "font": 14,
+          "expectedFont": null
+        },
+        "trigger": {
+          "text": "Networkenp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+          "box": {
+            "left": 84,
+            "right": 684,
+            "top": -233.359375,
+            "bottom": -165.375,
+            "width": 600,
+            "height": 67.984375
+          },
+          "ink": [
+            {
+              "left": 101,
+              "right": 635,
+              "top": -220.359375,
+              "bottom": -178.375
+            },
+            {
+              "left": 101,
+              "right": 149.21875,
+              "top": -218.359375,
+              "bottom": -203.359375
+            },
+            {
+              "left": 101,
+              "right": 986.703125,
+              "top": -198.765625,
+              "bottom": -181.765625
+            },
+            {
+              "left": 101,
+              "right": 619.5625,
+              "top": -198.765625,
+              "bottom": -181.765625
+            }
+          ],
+          "font": 14,
+          "expectedFont": null,
+          "title": "Network: enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+          "disabled": false
+        },
+        "buttons": [
+          {
+            "text": "5 min",
+            "box": {
+              "left": 90,
+              "right": 150.890625,
+              "top": -139.375,
+              "bottom": -101.375,
+              "width": 60.890625,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 104,
+                "right": 136.890625,
+                "top": -127.953125,
+                "bottom": -112.953125
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          },
+          {
+            "text": "1 hour",
+            "box": {
+              "left": 156.890625,
+              "right": 221.515625,
+              "top": -139.375,
+              "bottom": -101.375,
+              "width": 64.625,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 170.890625,
+                "right": 207.515625,
+                "top": -127.953125,
+                "bottom": -112.953125
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          },
+          {
+            "text": "24 hours",
+            "box": {
+              "left": 227.515625,
+              "right": 308.359375,
+              "top": -139.375,
+              "bottom": -101.375,
+              "width": 80.84375,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 241.515625,
+                "right": 294.359375,
+                "top": -127.953125,
+                "bottom": -112.953125
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          },
+          {
+            "text": "7 days",
+            "box": {
+              "left": 314.359375,
+              "right": 380.84375,
+              "top": -139.375,
+              "bottom": -101.375,
+              "width": 66.484375,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 328.359375,
+                "right": 366.84375,
+                "top": -127.953125,
+                "bottom": -112.953125
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          }
+        ],
+        "choices": [
+          {
+            "box": {
+              "left": 101,
+              "right": 635,
+              "top": -220.359375,
+              "bottom": -178.375,
+              "width": 534,
+              "height": 41.984375
+            },
+            "text": "Networkenp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+            "title": "Network: enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+            "option": null,
+            "kind": {
+              "text": "Network",
+              "box": {
+                "left": 101,
+                "right": 635,
+                "top": -220.359375,
+                "bottom": -200.765625,
+                "width": 534,
+                "height": 19.59375
+              },
+              "ink": [
+                {
+                  "left": 101,
+                  "right": 149.21875,
+                  "top": -218.359375,
+                  "bottom": -203.359375
+                }
+              ],
+              "font": 12.25,
+              "expectedFont": null
+            },
+            "identifier": {
+              "text": "enp193s0f0np0.4094:storage-replication-backup-storage-replication-backup-storage-replication-backup-storage-replication-backup-s",
+              "box": {
+                "left": 101,
+                "right": 635,
+                "top": -200.765625,
+                "bottom": -178.375,
+                "width": 534,
+                "height": 22.390625
+              },
+              "overflow": "hidden",
+              "ellipsis": "ellipsis",
+              "nowrap": "nowrap",
+              "truncated": true
+            }
+          }
+        ],
+        "charts": [
+          {
+            "box": {
+              "left": 84,
+              "right": 684,
+              "top": -35.78125,
+              "bottom": 211.3125,
+              "width": 600,
+              "height": 247.09375
+            },
+            "heading": {
+              "left": 84,
+              "right": 151,
+              "top": -35.78125,
+              "bottom": -13.390625,
+              "width": 67,
+              "height": 22.390625
+            },
+            "headerValue": {
+              "text": "10.0 MB/s",
+              "box": {
+                "left": 617.765625,
+                "right": 684,
+                "top": -35.78125,
+                "bottom": -13.390625,
+                "width": 66.234375,
+                "height": 22.390625
+              },
+              "ink": [
+                {
+                  "left": 617.765625,
+                  "right": 684,
+                  "top": -33.78125,
+                  "bottom": -16.78125
+                }
+              ],
+              "font": 14,
+              "expectedFont": null
+            },
+            "metric": "host-inbound",
+            "plot": {
+              "left": 84,
+              "right": 684,
+              "top": 4.609375,
+              "bottom": 191.3125,
+              "width": 600,
+              "height": 186.703125
+            },
+            "svg": {
+              "left": 162.6875,
+              "right": 671,
+              "top": 17.609375,
+              "bottom": 157.609375,
+              "width": 508.3125,
+              "height": 140
+            },
+            "scale": {
+              "left": 97,
+              "right": 150.6875,
+              "top": 17.609375,
+              "bottom": 157.609375,
+              "width": 53.6875,
+              "height": 140
+            },
+            "labels": [
+              {
+                "text": "16.5 MB/s",
+                "box": {
+                  "left": 97,
+                  "right": 150.6875,
+                  "top": 17.609375,
+                  "bottom": 31.90625,
+                  "width": 53.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 150.6875,
+                    "top": 17.609375,
+                    "bottom": 30.609375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "8.3 MB/s",
+                "box": {
+                  "left": 97,
+                  "right": 150.6875,
+                  "top": 80.46875,
+                  "bottom": 94.765625,
+                  "width": 53.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 143.6875,
+                    "top": 80.46875,
+                    "bottom": 93.46875
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "0",
+                "box": {
+                  "left": 97,
+                  "right": 150.6875,
+                  "top": 143.3125,
+                  "bottom": 157.609375,
+                  "width": 53.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 104,
+                    "top": 143.3125,
+                    "bottom": 156.3125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "times": [
+              {
+                "text": "12:26",
+                "box": {
+                  "left": 162.6875,
+                  "right": 194,
+                  "top": 166.609375,
+                  "bottom": 182.3125,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 162.6875,
+                    "right": 194,
+                    "top": 167.609375,
+                    "bottom": 180.609375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "12:56",
+                "box": {
+                  "left": 401.1875,
+                  "right": 432.5,
+                  "top": 166.609375,
+                  "bottom": 182.3125,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 401.1875,
+                    "right": 432.5,
+                    "top": 167.609375,
+                    "bottom": 180.609375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "13:26",
+                "box": {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 166.609375,
+                  "bottom": 182.3125,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 639.6875,
+                    "right": 671,
+                    "top": 167.609375,
+                    "bottom": 180.609375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "lines": ["480.0,124.5 490.0,117.0", "510.0,101.9 520.0,94.4", "530.0,86.9 540.0,79.4", "570.0,71.9 580.0,64.4 590.0,56.8"],
+            "segments": 4,
+            "tooltip": null,
+            "empty": null
+          },
+          {
+            "box": {
+              "left": 84,
+              "right": 684,
+              "top": 239.3125,
+              "bottom": 611,
+              "width": 600,
+              "height": 371.6875
+            },
+            "heading": {
+              "left": 84,
+              "right": 132.015625,
+              "top": 239.3125,
+              "bottom": 261.703125,
+              "width": 48.015625,
+              "height": 22.390625
+            },
+            "headerValue": {
+              "text": "5.0 MB/s",
+              "box": {
+                "left": 626.4375,
+                "right": 684,
+                "top": 239.3125,
+                "bottom": 261.703125,
+                "width": 57.5625,
+                "height": 22.390625
+              },
+              "ink": [
+                {
+                  "left": 626.4375,
+                  "right": 684,
+                  "top": 241.3125,
+                  "bottom": 258.3125
+                }
+              ],
+              "font": 14,
+              "expectedFont": null
+            },
+            "metric": "host-outbound",
+            "plot": {
+              "left": 84,
+              "right": 684,
+              "top": 279.703125,
+              "bottom": 466.40625,
+              "width": 600,
+              "height": 186.703125
+            },
+            "svg": {
+              "left": 155.6875,
+              "right": 671,
+              "top": 292.703125,
+              "bottom": 432.703125,
+              "width": 515.3125,
+              "height": 140
+            },
+            "scale": {
+              "left": 97,
+              "right": 143.6875,
+              "top": 292.703125,
+              "bottom": 432.703125,
+              "width": 46.6875,
+              "height": 140
+            },
+            "labels": [
+              {
+                "text": "8.3 MB/s",
+                "box": {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 292.703125,
+                  "bottom": 307,
+                  "width": 46.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 143.6875,
+                    "top": 292.703125,
+                    "bottom": 305.703125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "4.1 MB/s",
+                "box": {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 355.5625,
+                  "bottom": 369.859375,
+                  "width": 46.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 143.6875,
+                    "top": 355.5625,
+                    "bottom": 368.5625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "0",
+                "box": {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 418.40625,
+                  "bottom": 432.703125,
+                  "width": 46.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 104,
+                    "top": 418.40625,
+                    "bottom": 431.40625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "times": [
+              {
+                "text": "12:26",
+                "box": {
+                  "left": 155.6875,
+                  "right": 187,
+                  "top": 441.703125,
+                  "bottom": 457.40625,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 155.6875,
+                    "right": 187,
+                    "top": 442.703125,
+                    "bottom": 455.703125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "12:56",
+                "box": {
+                  "left": 397.6875,
+                  "right": 429,
+                  "top": 441.703125,
+                  "bottom": 457.40625,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 397.6875,
+                    "right": 429,
+                    "top": 442.703125,
+                    "bottom": 455.703125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "13:26",
+                "box": {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 441.703125,
+                  "bottom": 457.40625,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 639.6875,
+                    "right": 671,
+                    "top": 442.703125,
+                    "bottom": 455.703125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "lines": ["480.0,124.5 490.0,117.0", "510.0,101.9 520.0,94.4", "530.0,86.9 540.0,79.4", "570.0,71.9 580.0,64.4 590.0,56.8"],
+            "segments": 4,
+            "tooltip": {
+              "text": "18/10/2026, 13:25:10 – 13:26:005.0 MB/s averagePeak 7.5 MB/s · 6 samples← → inspect samples",
+              "box": {
+                "left": 84,
+                "right": 684,
+                "top": 478.40625,
+                "bottom": 591,
+                "width": 600,
+                "height": 112.59375
+              },
+              "ink": [
+                {
+                  "left": 99,
+                  "right": 669,
+                  "top": 491.40625,
+                  "bottom": 505.40625
+                },
+                {
+                  "left": 99,
+                  "right": 207.34375,
+                  "top": 492.40625,
+                  "bottom": 504.40625
+                },
+                {
+                  "left": 207.34375,
+                  "right": 263.828125,
+                  "top": 492.40625,
+                  "bottom": 504.40625
+                },
+                {
+                  "left": 99,
+                  "right": 669,
+                  "top": 511.40625,
+                  "bottom": 535.203125
+                },
+                {
+                  "left": 99,
+                  "right": 169.765625,
+                  "top": 512.40625,
+                  "bottom": 532.40625
+                },
+                {
+                  "left": 169.765625,
+                  "right": 237.328125,
+                  "top": 512.40625,
+                  "bottom": 532.40625
+                },
+                {
+                  "left": 99,
+                  "right": 669,
+                  "top": 541.203125,
+                  "bottom": 558
+                },
+                {
+                  "left": 99,
+                  "right": 129.828125,
+                  "top": 541.203125,
+                  "bottom": 556.203125
+                },
+                {
+                  "left": 129.828125,
+                  "right": 180.203125,
+                  "top": 541.203125,
+                  "bottom": 556.203125
+                },
+                {
+                  "left": 180.203125,
+                  "right": 190.515625,
+                  "top": 541.203125,
+                  "bottom": 556.203125
+                },
+                {
+                  "left": 190.515625,
+                  "right": 198.078125,
+                  "top": 541.203125,
+                  "bottom": 556.203125
+                },
+                {
+                  "left": 198.078125,
+                  "right": 248.296875,
+                  "top": 541.203125,
+                  "bottom": 556.203125
+                },
+                {
+                  "left": 99,
+                  "right": 669,
+                  "top": 564,
+                  "bottom": 578
+                },
+                {
+                  "left": 99,
+                  "right": 201.5,
+                  "top": 565,
+                  "bottom": 577
+                }
+              ],
+              "font": 12,
+              "expectedFont": null,
+              "position": "static",
+              "children": [
+                {
+                  "text": "18/10/2026, 13:25:10 – 13:26:00",
+                  "box": {
+                    "left": 99,
+                    "right": 669,
+                    "top": 491.40625,
+                    "bottom": 505.40625,
+                    "width": 570,
+                    "height": 14
+                  },
+                  "ink": [
+                    {
+                      "left": 99,
+                      "right": 207.34375,
+                      "top": 492.40625,
+                      "bottom": 504.40625
+                    },
+                    {
+                      "left": 207.34375,
+                      "right": 263.828125,
+                      "top": 492.40625,
+                      "bottom": 504.40625
+                    }
+                  ],
+                  "font": 10,
+                  "expectedFont": null
+                },
+                {
+                  "text": "5.0 MB/s average",
+                  "box": {
+                    "left": 99,
+                    "right": 669,
+                    "top": 511.40625,
+                    "bottom": 535.203125,
+                    "width": 570,
+                    "height": 23.796875
+                  },
+                  "ink": [
+                    {
+                      "left": 99,
+                      "right": 169.765625,
+                      "top": 512.40625,
+                      "bottom": 532.40625
+                    },
+                    {
+                      "left": 169.765625,
+                      "right": 237.328125,
+                      "top": 512.40625,
+                      "bottom": 532.40625
+                    }
+                  ],
+                  "font": 17,
+                  "expectedFont": null
+                },
+                {
+                  "text": "Peak 7.5 MB/s · 6 samples",
+                  "box": {
+                    "left": 99,
+                    "right": 669,
+                    "top": 541.203125,
+                    "bottom": 558,
+                    "width": 570,
+                    "height": 16.796875
+                  },
+                  "ink": [
+                    {
+                      "left": 99,
+                      "right": 129.828125,
+                      "top": 541.203125,
+                      "bottom": 556.203125
+                    },
+                    {
+                      "left": 129.828125,
+                      "right": 180.203125,
+                      "top": 541.203125,
+                      "bottom": 556.203125
+                    },
+                    {
+                      "left": 180.203125,
+                      "right": 190.515625,
+                      "top": 541.203125,
+                      "bottom": 556.203125
+                    },
+                    {
+                      "left": 190.515625,
+                      "right": 198.078125,
+                      "top": 541.203125,
+                      "bottom": 556.203125
+                    },
+                    {
+                      "left": 198.078125,
+                      "right": 248.296875,
+                      "top": 541.203125,
+                      "bottom": 556.203125
+                    }
+                  ],
+                  "font": 12,
+                  "expectedFont": null
+                },
+                {
+                  "text": "← → inspect samples",
+                  "box": {
+                    "left": 99,
+                    "right": 669,
+                    "top": 564,
+                    "bottom": 578,
+                    "width": 570,
+                    "height": 14
+                  },
+                  "ink": [
+                    {
+                      "left": 99,
+                      "right": 201.5,
+                      "top": 565,
+                      "bottom": 577
+                    }
+                  ],
+                  "font": 10,
+                  "expectedFont": null
+                }
+              ]
+            },
+            "empty": null
+          }
+        ],
+        "notices": []
+      }
+    },
+    "networkInspection": {
+      "top": 104,
+      "bottom": 910,
+      "target": {
+        "top": 478.40625,
+        "bottom": 591
+      },
+      "x": 134,
+      "y": 204
+    },
+    "disk": {
+      "keyboard": [
+        {
+          "index": 0,
+          "pointer": [0, 9],
+          "focus": {
+            "tag": "DIV",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 7821,
+              "clientHeight": 1024,
+              "scrollTop": 4837,
+              "maxScroll": 6797
+            },
+            "expectedRevealDelta": 0,
+            "text": "16.5 MB/s8.3 MB/s012:2612:5613:26",
+            "scroll": {
+              "y": 4837,
+              "content": 0
+            },
+            "top": 701.609375,
+            "bottom": 888.3125,
+            "documentTop": 5538.609375,
+            "chromeBottom": 88,
+            "dockTop": 926,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          }
+        },
+        {
+          "index": 0,
+          "key": "Home",
+          "expected": 0,
+          "value": "18/10/2026, 13:14:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba read 1.0 MB/s, peak 1.5 MB/s, 6 samples"
+        },
+        {
+          "index": 0,
+          "key": "End",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba read 10.0 MB/s, peak 15.0 MB/s, 6 samples"
+        },
+        {
+          "index": 0,
+          "key": "ArrowLeft",
+          "expected": 8,
+          "value": "18/10/2026, 13:24:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba read 9.0 MB/s, peak 13.5 MB/s, 6 samples"
+        },
+        {
+          "index": 0,
+          "key": "ArrowRight",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba read 10.0 MB/s, peak 15.0 MB/s, 6 samples"
+        },
+        {
+          "index": 1,
+          "pointer": [0, 9],
+          "focus": {
+            "tag": "DIV",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 7821,
+              "clientHeight": 1024,
+              "scrollTop": 5534,
+              "maxScroll": 6797
+            },
+            "expectedRevealDelta": 0,
+            "text": "8.3 MB/s4.1 MB/s012:2612:5613:26",
+            "scroll": {
+              "y": 5534,
+              "content": 0
+            },
+            "top": 279.703125,
+            "bottom": 466.40625,
+            "documentTop": 5813.703125,
+            "chromeBottom": 88,
+            "dockTop": 926,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          }
+        },
+        {
+          "index": 1,
+          "key": "Home",
+          "expected": 0,
+          "value": "18/10/2026, 13:14:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba write 512.0 KB/s, peak 768.0 KB/s, 6 samples"
+        },
+        {
+          "index": 1,
+          "key": "End",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba write 5.0 MB/s, peak 7.5 MB/s, 6 samples"
+        },
+        {
+          "index": 1,
+          "key": "ArrowLeft",
+          "expected": 8,
+          "value": "18/10/2026, 13:24:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba write 4.5 MB/s, peak 6.8 MB/s, 6 samples"
+        },
+        {
+          "index": 1,
+          "key": "ArrowRight",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba write 5.0 MB/s, peak 7.5 MB/s, 6 samples"
+        },
+        {
+          "index": 2,
+          "pointer": [0, 9],
+          "focus": {
+            "tag": "DIV",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 7821,
+              "clientHeight": 1024,
+              "scrollTop": 5534,
+              "maxScroll": 6797
+            },
+            "expectedRevealDelta": 0,
+            "text": "100.0%50.0%012:2612:5613:26",
+            "scroll": {
+              "y": 5534,
+              "content": 0
+            },
+            "top": 554.796875,
+            "bottom": 741.5,
+            "documentTop": 6088.796875,
+            "chromeBottom": 88,
+            "dockTop": 926,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          }
+        },
+        {
+          "index": 2,
+          "key": "Home",
+          "expected": 0,
+          "value": "18/10/2026, 13:14:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba active time 5.0%, peak 7.5%, 6 samples"
+        },
+        {
+          "index": 2,
+          "key": "End",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba active time 50.0%, peak 75.0%, 6 samples"
+        },
+        {
+          "index": 2,
+          "key": "ArrowLeft",
+          "expected": 8,
+          "value": "18/10/2026, 13:24:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba active time 45.0%, peak 67.5%, 6 samples"
+        },
+        {
+          "index": 2,
+          "key": "ArrowRight",
+          "expected": 9,
+          "value": "18/10/2026, 13:25:20, dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba active time 50.0%, peak 75.0%, 6 samples"
+        }
+      ],
+      "metrics": {
+        "menu": null,
+        "textScale": 1,
+        "width": 768,
+        "documentWidth": 768,
+        "root": {
+          "left": 55,
+          "right": 713,
+          "top": -351.75,
+          "bottom": 950.6875,
+          "width": 658,
+          "height": 1302.4375
+        },
+        "monitor": {
+          "left": 55,
+          "right": 713,
+          "top": -5307,
+          "bottom": 2101.75,
+          "width": 658,
+          "height": 7408.75
+        },
+        "inner": {
+          "left": 84,
+          "right": 684
+        },
+        "padding": [28, 28],
+        "heading": {
+          "left": 84,
+          "right": 215.84375,
+          "top": -322.75,
+          "bottom": -289.75,
+          "width": 131.84375,
+          "height": 33
+        },
+        "peer": {
+          "left": 84,
+          "right": 228.9375,
+          "top": 1003.6875,
+          "bottom": 1036.6875,
+          "width": 144.9375,
+          "height": 33
+        },
+        "words": [],
+        "edgeInk": [],
+        "label": {
+          "text": "Host device",
+          "box": {
+            "left": 84,
+            "right": 684,
+            "top": -265.75,
+            "bottom": -243.359375,
+            "width": 600,
+            "height": 22.390625
+          },
+          "ink": [
+            {
+              "left": 84,
+              "right": 162.234375,
+              "top": -263.75,
+              "bottom": -246.75
+            }
+          ],
+          "font": 14,
+          "expectedFont": null
+        },
+        "trigger": {
+          "text": "Diskdm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "box": {
+            "left": 84,
+            "right": 684,
+            "top": -233.359375,
+            "bottom": -165.375,
+            "width": 600,
+            "height": 67.984375
+          },
+          "ink": [
+            {
+              "left": 101,
+              "right": 635,
+              "top": -220.359375,
+              "bottom": -178.375
+            },
+            {
+              "left": 101,
+              "right": 125.921875,
+              "top": -218.359375,
+              "bottom": -203.359375
+            },
+            {
+              "left": 101,
+              "right": 1008.625,
+              "top": -198.765625,
+              "bottom": -181.765625
+            },
+            {
+              "left": 101,
+              "right": 618.671875,
+              "top": -198.765625,
+              "bottom": -181.765625
+            }
+          ],
+          "font": 14,
+          "expectedFont": null,
+          "title": "Disk: dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "disabled": false
+        },
+        "buttons": [
+          {
+            "text": "5 min",
+            "box": {
+              "left": 90,
+              "right": 150.890625,
+              "top": -139.375,
+              "bottom": -101.375,
+              "width": 60.890625,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 104,
+                "right": 136.890625,
+                "top": -127.953125,
+                "bottom": -112.953125
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          },
+          {
+            "text": "1 hour",
+            "box": {
+              "left": 156.890625,
+              "right": 221.515625,
+              "top": -139.375,
+              "bottom": -101.375,
+              "width": 64.625,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 170.890625,
+                "right": 207.515625,
+                "top": -127.953125,
+                "bottom": -112.953125
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          },
+          {
+            "text": "24 hours",
+            "box": {
+              "left": 227.515625,
+              "right": 308.359375,
+              "top": -139.375,
+              "bottom": -101.375,
+              "width": 80.84375,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 241.515625,
+                "right": 294.359375,
+                "top": -127.953125,
+                "bottom": -112.953125
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          },
+          {
+            "text": "7 days",
+            "box": {
+              "left": 314.359375,
+              "right": 380.84375,
+              "top": -139.375,
+              "bottom": -101.375,
+              "width": 66.484375,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 328.359375,
+                "right": 366.84375,
+                "top": -127.953125,
+                "bottom": -112.953125
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          }
+        ],
+        "choices": [
+          {
+            "box": {
+              "left": 101,
+              "right": 635,
+              "top": -220.359375,
+              "bottom": -178.375,
+              "width": 534,
+              "height": 41.984375
+            },
+            "text": "Diskdm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+            "title": "Disk: dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+            "option": null,
+            "kind": {
+              "text": "Disk",
+              "box": {
+                "left": 101,
+                "right": 635,
+                "top": -220.359375,
+                "bottom": -200.765625,
+                "width": 534,
+                "height": 19.59375
+              },
+              "ink": [
+                {
+                  "left": 101,
+                  "right": 125.921875,
+                  "top": -218.359375,
+                  "bottom": -203.359375
+                }
+              ],
+              "font": 12.25,
+              "expectedFont": null
+            },
+            "identifier": {
+              "text": "dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+              "box": {
+                "left": 101,
+                "right": 635,
+                "top": -200.765625,
+                "bottom": -178.375,
+                "width": 534,
+                "height": 22.390625
+              },
+              "overflow": "hidden",
+              "ellipsis": "ellipsis",
+              "nowrap": "nowrap",
+              "truncated": true
+            }
+          }
+        ],
+        "charts": [
+          {
+            "box": {
+              "left": 84,
+              "right": 684,
+              "top": -35.78125,
+              "bottom": 211.3125,
+              "width": 600,
+              "height": 247.09375
+            },
+            "heading": {
+              "left": 84,
+              "right": 118,
+              "top": -35.78125,
+              "bottom": -13.390625,
+              "width": 34,
+              "height": 22.390625
+            },
+            "headerValue": {
+              "text": "10.0 MB/s",
+              "box": {
+                "left": 617.765625,
+                "right": 684,
+                "top": -35.78125,
+                "bottom": -13.390625,
+                "width": 66.234375,
+                "height": 22.390625
+              },
+              "ink": [
+                {
+                  "left": 617.765625,
+                  "right": 684,
+                  "top": -33.78125,
+                  "bottom": -16.78125
+                }
+              ],
+              "font": 14,
+              "expectedFont": null
+            },
+            "metric": "host-inbound",
+            "plot": {
+              "left": 84,
+              "right": 684,
+              "top": 4.609375,
+              "bottom": 191.3125,
+              "width": 600,
+              "height": 186.703125
+            },
+            "svg": {
+              "left": 162.6875,
+              "right": 671,
+              "top": 17.609375,
+              "bottom": 157.609375,
+              "width": 508.3125,
+              "height": 140
+            },
+            "scale": {
+              "left": 97,
+              "right": 150.6875,
+              "top": 17.609375,
+              "bottom": 157.609375,
+              "width": 53.6875,
+              "height": 140
+            },
+            "labels": [
+              {
+                "text": "16.5 MB/s",
+                "box": {
+                  "left": 97,
+                  "right": 150.6875,
+                  "top": 17.609375,
+                  "bottom": 31.90625,
+                  "width": 53.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 150.6875,
+                    "top": 17.609375,
+                    "bottom": 30.609375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "8.3 MB/s",
+                "box": {
+                  "left": 97,
+                  "right": 150.6875,
+                  "top": 80.46875,
+                  "bottom": 94.765625,
+                  "width": 53.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 143.6875,
+                    "top": 80.46875,
+                    "bottom": 93.46875
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "0",
+                "box": {
+                  "left": 97,
+                  "right": 150.6875,
+                  "top": 143.3125,
+                  "bottom": 157.609375,
+                  "width": 53.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 104,
+                    "top": 143.3125,
+                    "bottom": 156.3125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "times": [
+              {
+                "text": "12:26",
+                "box": {
+                  "left": 162.6875,
+                  "right": 194,
+                  "top": 166.609375,
+                  "bottom": 182.3125,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 162.6875,
+                    "right": 194,
+                    "top": 167.609375,
+                    "bottom": 180.609375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "12:56",
+                "box": {
+                  "left": 401.1875,
+                  "right": 432.5,
+                  "top": 166.609375,
+                  "bottom": 182.3125,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 401.1875,
+                    "right": 432.5,
+                    "top": 167.609375,
+                    "bottom": 180.609375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "13:26",
+                "box": {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 166.609375,
+                  "bottom": 182.3125,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 639.6875,
+                    "right": 671,
+                    "top": 167.609375,
+                    "bottom": 180.609375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "lines": ["480.0,124.5 490.0,117.0", "510.0,101.9 520.0,94.4", "530.0,86.9 540.0,79.4", "570.0,71.9 580.0,64.4 590.0,56.8"],
+            "segments": 4,
+            "tooltip": null,
+            "empty": null
+          },
+          {
+            "box": {
+              "left": 84,
+              "right": 684,
+              "top": 239.3125,
+              "bottom": 486.40625,
+              "width": 600,
+              "height": 247.09375
+            },
+            "heading": {
+              "left": 84,
+              "right": 120.15625,
+              "top": 239.3125,
+              "bottom": 261.703125,
+              "width": 36.15625,
+              "height": 22.390625
+            },
+            "headerValue": {
+              "text": "5.0 MB/s",
+              "box": {
+                "left": 626.4375,
+                "right": 684,
+                "top": 239.3125,
+                "bottom": 261.703125,
+                "width": 57.5625,
+                "height": 22.390625
+              },
+              "ink": [
+                {
+                  "left": 626.4375,
+                  "right": 684,
+                  "top": 241.3125,
+                  "bottom": 258.3125
+                }
+              ],
+              "font": 14,
+              "expectedFont": null
+            },
+            "metric": "host-outbound",
+            "plot": {
+              "left": 84,
+              "right": 684,
+              "top": 279.703125,
+              "bottom": 466.40625,
+              "width": 600,
+              "height": 186.703125
+            },
+            "svg": {
+              "left": 155.6875,
+              "right": 671,
+              "top": 292.703125,
+              "bottom": 432.703125,
+              "width": 515.3125,
+              "height": 140
+            },
+            "scale": {
+              "left": 97,
+              "right": 143.6875,
+              "top": 292.703125,
+              "bottom": 432.703125,
+              "width": 46.6875,
+              "height": 140
+            },
+            "labels": [
+              {
+                "text": "8.3 MB/s",
+                "box": {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 292.703125,
+                  "bottom": 307,
+                  "width": 46.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 143.6875,
+                    "top": 292.703125,
+                    "bottom": 305.703125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "4.1 MB/s",
+                "box": {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 355.5625,
+                  "bottom": 369.859375,
+                  "width": 46.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 143.6875,
+                    "top": 355.5625,
+                    "bottom": 368.5625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "0",
+                "box": {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 418.40625,
+                  "bottom": 432.703125,
+                  "width": 46.6875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 104,
+                    "top": 418.40625,
+                    "bottom": 431.40625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "times": [
+              {
+                "text": "12:26",
+                "box": {
+                  "left": 155.6875,
+                  "right": 187,
+                  "top": 441.703125,
+                  "bottom": 457.40625,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 155.6875,
+                    "right": 187,
+                    "top": 442.703125,
+                    "bottom": 455.703125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "12:56",
+                "box": {
+                  "left": 397.6875,
+                  "right": 429,
+                  "top": 441.703125,
+                  "bottom": 457.40625,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 397.6875,
+                    "right": 429,
+                    "top": 442.703125,
+                    "bottom": 455.703125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "13:26",
+                "box": {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 441.703125,
+                  "bottom": 457.40625,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 639.6875,
+                    "right": 671,
+                    "top": 442.703125,
+                    "bottom": 455.703125
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "lines": ["480.0,124.5 490.0,117.0", "510.0,101.9 520.0,94.4", "530.0,86.9 540.0,79.4", "570.0,71.9 580.0,64.4 590.0,56.8"],
+            "segments": 4,
+            "tooltip": null,
+            "empty": null
+          },
+          {
+            "box": {
+              "left": 84,
+              "right": 684,
+              "top": 514.40625,
+              "bottom": 886.09375,
+              "width": 600,
+              "height": 371.6875
+            },
+            "heading": {
+              "left": 84,
+              "right": 159.5625,
+              "top": 514.40625,
+              "bottom": 536.796875,
+              "width": 75.5625,
+              "height": 22.390625
+            },
+            "headerValue": {
+              "text": "50.0%",
+              "box": {
+                "left": 641.171875,
+                "right": 684,
+                "top": 514.40625,
+                "bottom": 536.796875,
+                "width": 42.828125,
+                "height": 22.390625
+              },
+              "ink": [
+                {
+                  "left": 641.171875,
+                  "right": 684,
+                  "top": 516.40625,
+                  "bottom": 533.40625
+                }
+              ],
+              "font": 14,
+              "expectedFont": null
+            },
+            "metric": "host-busy",
+            "plot": {
+              "left": 84,
+              "right": 684,
+              "top": 554.796875,
+              "bottom": 741.5,
+              "width": 600,
+              "height": 186.703125
+            },
+            "svg": {
+              "left": 150.546875,
+              "right": 671,
+              "top": 567.796875,
+              "bottom": 707.796875,
+              "width": 520.453125,
+              "height": 140
+            },
+            "scale": {
+              "left": 97,
+              "right": 138.546875,
+              "top": 567.796875,
+              "bottom": 707.796875,
+              "width": 41.546875,
+              "height": 140
+            },
+            "labels": [
+              {
+                "text": "100.0%",
+                "box": {
+                  "left": 97,
+                  "right": 138.546875,
+                  "top": 567.796875,
+                  "bottom": 582.09375,
+                  "width": 41.546875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 138.546875,
+                    "top": 567.796875,
+                    "bottom": 580.796875
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "50.0%",
+                "box": {
+                  "left": 97,
+                  "right": 138.546875,
+                  "top": 630.65625,
+                  "bottom": 644.953125,
+                  "width": 41.546875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 131.5625,
+                    "top": 630.65625,
+                    "bottom": 643.65625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "0",
+                "box": {
+                  "left": 97,
+                  "right": 138.546875,
+                  "top": 693.5,
+                  "bottom": 707.796875,
+                  "width": 41.546875,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 104,
+                    "top": 693.5,
+                    "bottom": 706.5
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "times": [
+              {
+                "text": "12:26",
+                "box": {
+                  "left": 150.546875,
+                  "right": 181.859375,
+                  "top": 716.796875,
+                  "bottom": 732.5,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 150.546875,
+                    "right": 181.859375,
+                    "top": 717.796875,
+                    "bottom": 730.796875
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "12:56",
+                "box": {
+                  "left": 395.125,
+                  "right": 426.4375,
+                  "top": 716.796875,
+                  "bottom": 732.5,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 395.125,
+                    "right": 426.4375,
+                    "top": 717.796875,
+                    "bottom": 730.796875
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": "13:26",
+                "box": {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 716.796875,
+                  "bottom": 732.5,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 639.6875,
+                    "right": 671,
+                    "top": 717.796875,
+                    "bottom": 730.796875
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "lines": ["480.0,125.8 490.0,119.6", "510.0,107.2 520.0,101.0", "530.0,94.8 540.0,88.6", "570.0,82.4 580.0,76.2 590.0,70.0"],
+            "segments": 4,
+            "tooltip": {
+              "text": "18/10/2026, 13:25:20 – 13:26:1050.0% averagePeak 75.0% · 6 samples← → inspect samples",
+              "box": {
+                "left": 84,
+                "right": 684,
+                "top": 753.5,
+                "bottom": 866.09375,
+                "width": 600,
+                "height": 112.59375
+              },
+              "ink": [
+                {
+                  "left": 99,
+                  "right": 669,
+                  "top": 766.5,
+                  "bottom": 780.5
+                },
+                {
+                  "left": 99,
+                  "right": 207.34375,
+                  "top": 767.5,
+                  "bottom": 779.5
+                },
+                {
+                  "left": 207.34375,
+                  "right": 263.828125,
+                  "top": 767.5,
+                  "bottom": 779.5
+                },
+                {
+                  "left": 99,
+                  "right": 669,
+                  "top": 786.5,
+                  "bottom": 810.296875
+                },
+                {
+                  "left": 99,
+                  "right": 153,
+                  "top": 787.5,
+                  "bottom": 807.5
+                },
+                {
+                  "left": 153,
+                  "right": 220.5625,
+                  "top": 787.5,
+                  "bottom": 807.5
+                },
+                {
+                  "left": 99,
+                  "right": 669,
+                  "top": 816.296875,
+                  "bottom": 833.09375
+                },
+                {
+                  "left": 99,
+                  "right": 129.828125,
+                  "top": 816.296875,
+                  "bottom": 831.296875
+                },
+                {
+                  "left": 129.828125,
+                  "right": 167.171875,
+                  "top": 816.296875,
+                  "bottom": 831.296875
+                },
+                {
+                  "left": 167.171875,
+                  "right": 177.484375,
+                  "top": 816.296875,
+                  "bottom": 831.296875
+                },
+                {
+                  "left": 177.484375,
+                  "right": 185.046875,
+                  "top": 816.296875,
+                  "bottom": 831.296875
+                },
+                {
+                  "left": 185.046875,
+                  "right": 235.265625,
+                  "top": 816.296875,
+                  "bottom": 831.296875
+                },
+                {
+                  "left": 99,
+                  "right": 669,
+                  "top": 839.09375,
+                  "bottom": 853.09375
+                },
+                {
+                  "left": 99,
+                  "right": 201.5,
+                  "top": 840.09375,
+                  "bottom": 852.09375
+                }
+              ],
+              "font": 12,
+              "expectedFont": null,
+              "position": "static",
+              "children": [
+                {
+                  "text": "18/10/2026, 13:25:20 – 13:26:10",
+                  "box": {
+                    "left": 99,
+                    "right": 669,
+                    "top": 766.5,
+                    "bottom": 780.5,
+                    "width": 570,
+                    "height": 14
+                  },
+                  "ink": [
+                    {
+                      "left": 99,
+                      "right": 207.34375,
+                      "top": 767.5,
+                      "bottom": 779.5
+                    },
+                    {
+                      "left": 207.34375,
+                      "right": 263.828125,
+                      "top": 767.5,
+                      "bottom": 779.5
+                    }
+                  ],
+                  "font": 10,
+                  "expectedFont": null
+                },
+                {
+                  "text": "50.0% average",
+                  "box": {
+                    "left": 99,
+                    "right": 669,
+                    "top": 786.5,
+                    "bottom": 810.296875,
+                    "width": 570,
+                    "height": 23.796875
+                  },
+                  "ink": [
+                    {
+                      "left": 99,
+                      "right": 153,
+                      "top": 787.5,
+                      "bottom": 807.5
+                    },
+                    {
+                      "left": 153,
+                      "right": 220.5625,
+                      "top": 787.5,
+                      "bottom": 807.5
+                    }
+                  ],
+                  "font": 17,
+                  "expectedFont": null
+                },
+                {
+                  "text": "Peak 75.0% · 6 samples",
+                  "box": {
+                    "left": 99,
+                    "right": 669,
+                    "top": 816.296875,
+                    "bottom": 833.09375,
+                    "width": 570,
+                    "height": 16.796875
+                  },
+                  "ink": [
+                    {
+                      "left": 99,
+                      "right": 129.828125,
+                      "top": 816.296875,
+                      "bottom": 831.296875
+                    },
+                    {
+                      "left": 129.828125,
+                      "right": 167.171875,
+                      "top": 816.296875,
+                      "bottom": 831.296875
+                    },
+                    {
+                      "left": 167.171875,
+                      "right": 177.484375,
+                      "top": 816.296875,
+                      "bottom": 831.296875
+                    },
+                    {
+                      "left": 177.484375,
+                      "right": 185.046875,
+                      "top": 816.296875,
+                      "bottom": 831.296875
+                    },
+                    {
+                      "left": 185.046875,
+                      "right": 235.265625,
+                      "top": 816.296875,
+                      "bottom": 831.296875
+                    }
+                  ],
+                  "font": 12,
+                  "expectedFont": null
+                },
+                {
+                  "text": "← → inspect samples",
+                  "box": {
+                    "left": 99,
+                    "right": 669,
+                    "top": 839.09375,
+                    "bottom": 853.09375,
+                    "width": 570,
+                    "height": 14
+                  },
+                  "ink": [
+                    {
+                      "left": 99,
+                      "right": 201.5,
+                      "top": 840.09375,
+                      "bottom": 852.09375
+                    }
+                  ],
+                  "font": 10,
+                  "expectedFont": null
+                }
+              ]
+            },
+            "empty": null
+          }
+        ],
+        "notices": []
+      }
+    },
+    "diskInspection": {
+      "top": 104,
+      "bottom": 910,
+      "target": {
+        "top": 753.5,
+        "bottom": 866.09375
+      },
+      "x": 134,
+      "y": 204
+    },
+    "about": {
+      "menu": null,
+      "textScale": 1,
+      "width": 768,
+      "documentWidth": 768,
+      "root": {
+        "left": 55,
+        "right": 713,
+        "top": -381.75,
+        "bottom": 949.65625,
+        "width": 658,
+        "height": 1331.40625
+      },
+      "monitor": {
+        "left": 55,
+        "right": 713,
+        "top": -5337,
+        "bottom": 2100.71875,
+        "width": 658,
+        "height": 7437.71875
+      },
+      "inner": {
+        "left": 84,
+        "right": 684
+      },
+      "padding": [28, 28],
+      "heading": {
+        "left": 84,
+        "right": 215.84375,
+        "top": -352.75,
+        "bottom": -319.75,
+        "width": 131.84375,
+        "height": 33
+      },
+      "peer": {
+        "left": 84,
+        "right": 228.9375,
+        "top": 1002.65625,
+        "bottom": 1035.65625,
+        "width": 144.9375,
+        "height": 33
+      },
+      "words": [],
+      "edgeInk": [],
+      "label": {
+        "text": "Host device",
+        "box": {
+          "left": 84,
+          "right": 684,
+          "top": -295.75,
+          "bottom": -273.359375,
+          "width": 600,
+          "height": 22.390625
+        },
+        "ink": [
+          {
+            "left": 84,
+            "right": 162.234375,
+            "top": -293.75,
+            "bottom": -276.75
+          }
+        ],
+        "font": 14,
+        "expectedFont": null
+      },
+      "trigger": {
+        "text": "Diskdm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+        "box": {
+          "left": 84,
+          "right": 684,
+          "top": -263.359375,
+          "bottom": -195.375,
+          "width": 600,
+          "height": 67.984375
+        },
+        "ink": [
+          {
+            "left": 101,
+            "right": 635,
+            "top": -250.359375,
+            "bottom": -208.375
+          },
+          {
+            "left": 101,
+            "right": 125.921875,
+            "top": -248.359375,
+            "bottom": -233.359375
+          },
+          {
+            "left": 101,
+            "right": 1008.625,
+            "top": -228.765625,
+            "bottom": -211.765625
+          },
+          {
+            "left": 101,
+            "right": 618.671875,
+            "top": -228.765625,
+            "bottom": -211.765625
+          }
+        ],
+        "font": 14,
+        "expectedFont": null,
+        "title": "Disk: dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+        "disabled": false
+      },
+      "buttons": [
+        {
+          "text": "5 min",
+          "box": {
+            "left": 90,
+            "right": 150.890625,
+            "top": -169.375,
+            "bottom": -131.375,
+            "width": 60.890625,
+            "height": 38
+          },
+          "ink": [
+            {
+              "left": 104,
+              "right": 136.890625,
+              "top": -157.953125,
+              "bottom": -142.953125
+            }
+          ],
+          "font": 12,
+          "expectedFont": null
+        },
+        {
+          "text": "1 hour",
+          "box": {
+            "left": 156.890625,
+            "right": 221.515625,
+            "top": -169.375,
+            "bottom": -131.375,
+            "width": 64.625,
+            "height": 38
+          },
+          "ink": [
+            {
+              "left": 170.890625,
+              "right": 207.515625,
+              "top": -157.953125,
+              "bottom": -142.953125
+            }
+          ],
+          "font": 12,
+          "expectedFont": null
+        },
+        {
+          "text": "24 hours",
+          "box": {
+            "left": 227.515625,
+            "right": 308.359375,
+            "top": -169.375,
+            "bottom": -131.375,
+            "width": 80.84375,
+            "height": 38
+          },
+          "ink": [
+            {
+              "left": 241.515625,
+              "right": 294.359375,
+              "top": -157.953125,
+              "bottom": -142.953125
+            }
+          ],
+          "font": 12,
+          "expectedFont": null
+        },
+        {
+          "text": "7 days",
+          "box": {
+            "left": 314.359375,
+            "right": 380.84375,
+            "top": -169.375,
+            "bottom": -131.375,
+            "width": 66.484375,
+            "height": 38
+          },
+          "ink": [
+            {
+              "left": 328.359375,
+              "right": 366.84375,
+              "top": -157.953125,
+              "bottom": -142.953125
+            }
+          ],
+          "font": 12,
+          "expectedFont": null
+        }
+      ],
+      "choices": [
+        {
+          "box": {
+            "left": 101,
+            "right": 635,
+            "top": -250.359375,
+            "bottom": -208.375,
+            "width": 534,
+            "height": 41.984375
+          },
+          "text": "Diskdm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "title": "Disk: dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "option": null,
+          "kind": {
+            "text": "Disk",
+            "box": {
+              "left": 101,
+              "right": 635,
+              "top": -250.359375,
+              "bottom": -230.765625,
+              "width": 534,
+              "height": 19.59375
+            },
+            "ink": [
+              {
+                "left": 101,
+                "right": 125.921875,
+                "top": -248.359375,
+                "bottom": -233.359375
+              }
+            ],
+            "font": 12.25,
+            "expectedFont": null
+          },
+          "identifier": {
+            "text": "dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+            "box": {
+              "left": 101,
+              "right": 635,
+              "top": -230.765625,
+              "bottom": -208.375,
+              "width": 534,
+              "height": 22.390625
+            },
+            "overflow": "hidden",
+            "ellipsis": "ellipsis",
+            "nowrap": "nowrap",
+            "truncated": true
+          }
+        }
+      ],
+      "charts": [
+        {
+          "box": {
+            "left": 84,
+            "right": 684,
+            "top": -65.78125,
+            "bottom": 181.3125,
+            "width": 600,
+            "height": 247.09375
+          },
+          "heading": {
+            "left": 84,
+            "right": 118,
+            "top": -65.78125,
+            "bottom": -43.390625,
+            "width": 34,
+            "height": 22.390625
+          },
+          "headerValue": {
+            "text": "10.0 MB/s",
+            "box": {
+              "left": 617.765625,
+              "right": 684,
+              "top": -65.78125,
+              "bottom": -43.390625,
+              "width": 66.234375,
+              "height": 22.390625
+            },
+            "ink": [
+              {
+                "left": 617.765625,
+                "right": 684,
+                "top": -63.78125,
+                "bottom": -46.78125
+              }
+            ],
+            "font": 14,
+            "expectedFont": null
+          },
+          "metric": "host-inbound",
+          "plot": {
+            "left": 84,
+            "right": 684,
+            "top": -25.390625,
+            "bottom": 161.3125,
+            "width": 600,
+            "height": 186.703125
+          },
+          "svg": {
+            "left": 162.6875,
+            "right": 671,
+            "top": -12.390625,
+            "bottom": 127.609375,
+            "width": 508.3125,
+            "height": 140
+          },
+          "scale": {
+            "left": 97,
+            "right": 150.6875,
+            "top": -12.390625,
+            "bottom": 127.609375,
+            "width": 53.6875,
+            "height": 140
+          },
+          "labels": [
+            {
+              "text": "16.5 MB/s",
+              "box": {
+                "left": 97,
+                "right": 150.6875,
+                "top": -12.390625,
+                "bottom": 1.90625,
+                "width": 53.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 150.6875,
+                  "top": -12.390625,
+                  "bottom": 0.609375
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "8.3 MB/s",
+              "box": {
+                "left": 97,
+                "right": 150.6875,
+                "top": 50.46875,
+                "bottom": 64.765625,
+                "width": 53.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 50.46875,
+                  "bottom": 63.46875
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "0",
+              "box": {
+                "left": 97,
+                "right": 150.6875,
+                "top": 113.3125,
+                "bottom": 127.609375,
+                "width": 53.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 104,
+                  "top": 113.3125,
+                  "bottom": 126.3125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "times": [
+            {
+              "text": "12:26",
+              "box": {
+                "left": 162.6875,
+                "right": 194,
+                "top": 136.609375,
+                "bottom": 152.3125,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 162.6875,
+                  "right": 194,
+                  "top": 137.609375,
+                  "bottom": 150.609375
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "12:56",
+              "box": {
+                "left": 401.1875,
+                "right": 432.5,
+                "top": 136.609375,
+                "bottom": 152.3125,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 401.1875,
+                  "right": 432.5,
+                  "top": 137.609375,
+                  "bottom": 150.609375
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "13:26",
+              "box": {
+                "left": 639.6875,
+                "right": 671,
+                "top": 136.609375,
+                "bottom": 152.3125,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 137.609375,
+                  "bottom": 150.609375
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "lines": ["480.0,124.5 490.0,117.0", "510.0,101.9 520.0,94.4", "530.0,86.9 540.0,79.4", "570.0,71.9 580.0,64.4 590.0,56.8"],
+          "segments": 4,
+          "tooltip": null,
+          "empty": null
+        },
+        {
+          "box": {
+            "left": 84,
+            "right": 684,
+            "top": 209.3125,
+            "bottom": 456.40625,
+            "width": 600,
+            "height": 247.09375
+          },
+          "heading": {
+            "left": 84,
+            "right": 120.15625,
+            "top": 209.3125,
+            "bottom": 231.703125,
+            "width": 36.15625,
+            "height": 22.390625
+          },
+          "headerValue": {
+            "text": "5.0 MB/s",
+            "box": {
+              "left": 626.4375,
+              "right": 684,
+              "top": 209.3125,
+              "bottom": 231.703125,
+              "width": 57.5625,
+              "height": 22.390625
+            },
+            "ink": [
+              {
+                "left": 626.4375,
+                "right": 684,
+                "top": 211.3125,
+                "bottom": 228.3125
+              }
+            ],
+            "font": 14,
+            "expectedFont": null
+          },
+          "metric": "host-outbound",
+          "plot": {
+            "left": 84,
+            "right": 684,
+            "top": 249.703125,
+            "bottom": 436.40625,
+            "width": 600,
+            "height": 186.703125
+          },
+          "svg": {
+            "left": 155.6875,
+            "right": 671,
+            "top": 262.703125,
+            "bottom": 402.703125,
+            "width": 515.3125,
+            "height": 140
+          },
+          "scale": {
+            "left": 97,
+            "right": 143.6875,
+            "top": 262.703125,
+            "bottom": 402.703125,
+            "width": 46.6875,
+            "height": 140
+          },
+          "labels": [
+            {
+              "text": "8.3 MB/s",
+              "box": {
+                "left": 97,
+                "right": 143.6875,
+                "top": 262.703125,
+                "bottom": 277,
+                "width": 46.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 262.703125,
+                  "bottom": 275.703125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "4.1 MB/s",
+              "box": {
+                "left": 97,
+                "right": 143.6875,
+                "top": 325.5625,
+                "bottom": 339.859375,
+                "width": 46.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 143.6875,
+                  "top": 325.5625,
+                  "bottom": 338.5625
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "0",
+              "box": {
+                "left": 97,
+                "right": 143.6875,
+                "top": 388.40625,
+                "bottom": 402.703125,
+                "width": 46.6875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 104,
+                  "top": 388.40625,
+                  "bottom": 401.40625
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "times": [
+            {
+              "text": "12:26",
+              "box": {
+                "left": 155.6875,
+                "right": 187,
+                "top": 411.703125,
+                "bottom": 427.40625,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 155.6875,
+                  "right": 187,
+                  "top": 412.703125,
+                  "bottom": 425.703125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "12:56",
+              "box": {
+                "left": 397.6875,
+                "right": 429,
+                "top": 411.703125,
+                "bottom": 427.40625,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 397.6875,
+                  "right": 429,
+                  "top": 412.703125,
+                  "bottom": 425.703125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "13:26",
+              "box": {
+                "left": 639.6875,
+                "right": 671,
+                "top": 411.703125,
+                "bottom": 427.40625,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 412.703125,
+                  "bottom": 425.703125
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "lines": ["480.0,124.5 490.0,117.0", "510.0,101.9 520.0,94.4", "530.0,86.9 540.0,79.4", "570.0,71.9 580.0,64.4 590.0,56.8"],
+          "segments": 4,
+          "tooltip": null,
+          "empty": null
+        },
+        {
+          "box": {
+            "left": 84,
+            "right": 684,
+            "top": 484.40625,
+            "bottom": 731.5,
+            "width": 600,
+            "height": 247.09375
+          },
+          "heading": {
+            "left": 84,
+            "right": 159.5625,
+            "top": 484.40625,
+            "bottom": 506.796875,
+            "width": 75.5625,
+            "height": 22.390625
+          },
+          "headerValue": {
+            "text": "50.0%",
+            "box": {
+              "left": 641.171875,
+              "right": 684,
+              "top": 484.40625,
+              "bottom": 506.796875,
+              "width": 42.828125,
+              "height": 22.390625
+            },
+            "ink": [
+              {
+                "left": 641.171875,
+                "right": 684,
+                "top": 486.40625,
+                "bottom": 503.40625
+              }
+            ],
+            "font": 14,
+            "expectedFont": null
+          },
+          "metric": "host-busy",
+          "plot": {
+            "left": 84,
+            "right": 684,
+            "top": 524.796875,
+            "bottom": 711.5,
+            "width": 600,
+            "height": 186.703125
+          },
+          "svg": {
+            "left": 150.546875,
+            "right": 671,
+            "top": 537.796875,
+            "bottom": 677.796875,
+            "width": 520.453125,
+            "height": 140
+          },
+          "scale": {
+            "left": 97,
+            "right": 138.546875,
+            "top": 537.796875,
+            "bottom": 677.796875,
+            "width": 41.546875,
+            "height": 140
+          },
+          "labels": [
+            {
+              "text": "100.0%",
+              "box": {
+                "left": 97,
+                "right": 138.546875,
+                "top": 537.796875,
+                "bottom": 552.09375,
+                "width": 41.546875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 138.546875,
+                  "top": 537.796875,
+                  "bottom": 550.796875
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "50.0%",
+              "box": {
+                "left": 97,
+                "right": 138.546875,
+                "top": 600.65625,
+                "bottom": 614.953125,
+                "width": 41.546875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 131.5625,
+                  "top": 600.65625,
+                  "bottom": 613.65625
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "0",
+              "box": {
+                "left": 97,
+                "right": 138.546875,
+                "top": 663.5,
+                "bottom": 677.796875,
+                "width": 41.546875,
+                "height": 14.296875
+              },
+              "ink": [
+                {
+                  "left": 97,
+                  "right": 104,
+                  "top": 663.5,
+                  "bottom": 676.5
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "times": [
+            {
+              "text": "12:26",
+              "box": {
+                "left": 150.546875,
+                "right": 181.859375,
+                "top": 686.796875,
+                "bottom": 702.5,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 150.546875,
+                  "right": 181.859375,
+                  "top": 687.796875,
+                  "bottom": 700.796875
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "12:56",
+              "box": {
+                "left": 395.125,
+                "right": 426.4375,
+                "top": 686.796875,
+                "bottom": 702.5,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 395.125,
+                  "right": 426.4375,
+                  "top": 687.796875,
+                  "bottom": 700.796875
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            },
+            {
+              "text": "13:26",
+              "box": {
+                "left": 639.6875,
+                "right": 671,
+                "top": 686.796875,
+                "bottom": 702.5,
+                "width": 31.3125,
+                "height": 15.703125
+              },
+              "ink": [
+                {
+                  "left": 639.6875,
+                  "right": 671,
+                  "top": 687.796875,
+                  "bottom": 700.796875
+                }
+              ],
+              "font": 11,
+              "expectedFont": null
+            }
+          ],
+          "lines": ["480.0,125.8 490.0,119.6", "510.0,107.2 520.0,101.0", "530.0,94.8 540.0,88.6", "570.0,82.4 580.0,76.2 590.0,70.0"],
+          "segments": 4,
+          "tooltip": null,
+          "empty": null
+        }
+      ],
+      "notices": []
+    },
+    "clearance": {
+      "top": 104,
+      "bottom": 910,
+      "target": {
+        "top": 895.0625,
+        "bottom": 910.0625
+      },
+      "x": 134,
+      "y": 204
+    },
+    "passed": true
+  }
+]

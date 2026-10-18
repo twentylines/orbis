@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "source": "host-history-layouts-r6/report.json",
+  "combinations": 16,
+  "charts": 80,
+  "assertions": ["exact independent metric direction", "latest average", "inspection average", "peak", "six measured samples"],
+  "fixturesOnly": true
+}

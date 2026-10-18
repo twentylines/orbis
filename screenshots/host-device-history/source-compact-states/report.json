@@ -1,0 +1,222 @@
+[
+  {
+    "viewport": "host-history",
+    "hostHistory": {
+      "passed": true,
+      "layouts": [],
+      "states": {
+        "$orbis_array_parts": ["part-001.json", "part-002.json", "part-003.json"]
+      },
+      "retries": [],
+      "ranges": [],
+      "refresh": [],
+      "polling": [],
+      "requests": [
+        {
+          "variant": "empty-range",
+          "range": "1h",
+          "device": null,
+          "at": 1792301751920
+        },
+        {
+          "variant": "null",
+          "range": "1h",
+          "device": null,
+          "at": 1792301755146
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": null,
+          "at": 1792301757734
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": "disk:dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "at": 1792301760869
+        },
+        {
+          "variant": "empty-range",
+          "range": "1h",
+          "device": null,
+          "at": 1792301763960
+        },
+        {
+          "variant": "null",
+          "range": "1h",
+          "device": null,
+          "at": 1792301767779
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": null,
+          "at": 1792301770525
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": "disk:dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "at": 1792301774236
+        },
+        {
+          "variant": "empty-range",
+          "range": "1h",
+          "device": null,
+          "at": 1792301777984
+        },
+        {
+          "variant": "null",
+          "range": "1h",
+          "device": null,
+          "at": 1792301781068
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": null,
+          "at": 1792301783689
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": "disk:dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "at": 1792301786642
+        },
+        {
+          "variant": "empty-range",
+          "range": "1h",
+          "device": null,
+          "at": 1792301789618
+        },
+        {
+          "variant": "null",
+          "range": "1h",
+          "device": null,
+          "at": 1792301793529
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": null,
+          "at": 1792301796382
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": "disk:dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "at": 1792301800182
+        },
+        {
+          "variant": "empty-range",
+          "range": "1h",
+          "device": null,
+          "at": 1792301803952
+        },
+        {
+          "variant": "null",
+          "range": "1h",
+          "device": null,
+          "at": 1792301807042
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": null,
+          "at": 1792301809647
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": "disk:dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "at": 1792301812780
+        },
+        {
+          "variant": "empty-range",
+          "range": "1h",
+          "device": null,
+          "at": 1792301815878
+        },
+        {
+          "variant": "null",
+          "range": "1h",
+          "device": null,
+          "at": 1792301820354
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": null,
+          "at": 1792301823777
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": "disk:dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "at": 1792301827932
+        },
+        {
+          "variant": "empty-range",
+          "range": "1h",
+          "device": null,
+          "at": 1792301832047
+        },
+        {
+          "variant": "null",
+          "range": "1h",
+          "device": null,
+          "at": 1792301835100
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": null,
+          "at": 1792301837693
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": "disk:dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "at": 1792301840604
+        },
+        {
+          "variant": "empty-range",
+          "range": "1h",
+          "device": null,
+          "at": 1792301843575
+        },
+        {
+          "variant": "null",
+          "range": "1h",
+          "device": null,
+          "at": 1792301847828
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": null,
+          "at": 1792301850575
+        },
+        {
+          "variant": "ready",
+          "range": "1h",
+          "device": "disk:dm-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-backup-production-archive-ba",
+          "at": 1792301854752
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "preferencePuts": 0,
+      "current": "320-dark-text2-ocean-1h-disk-ready",
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": []
+    },
+    "errors": []
+  }
+]

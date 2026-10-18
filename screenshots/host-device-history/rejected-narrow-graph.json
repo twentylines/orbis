@@ -1,0 +1,54 @@
+{
+  "accepted": false,
+  "reason": "Manual review rejects graph widths near55pixels despite readable labels. Narrow containers need the graph to occupy their full inner width.",
+  "sourceSha256": {
+    "packages/frontend/src/modules/dashboard/components/host-device-history.tsx": "2096ed7de33be9beadd7e486093580111a8f2786028a3df36face4b7c14bcd5b",
+    "packages/frontend/src/modules/dashboard/components/host-device-history.css": "7d112aab498167793324b27b509d23bd7f2d0ae63f39300edc1f279cc90393f9",
+    "packages/frontend/src/components/metric-chart/metric-chart.tsx": "9a4363bfccd3b90057ea19e07314f9142faf80cc9609facd593c9c0116f0145b",
+    "packages/frontend/src/components/metric-chart/metric-plot.tsx": "7c3f22064365f42216b43524aaf9ef88b02f757f0a83b5cd95980fb8c7383425",
+    "packages/frontend/src/components/metric-chart/metric-chart.css": "760fbc84f175fc0370beff19b6d73e0b2b3296440ebe31a8e1d0243a08db80e8",
+    "packages/frontend/src/modules/dashboard/pages/monitor.tsx": "4e93957a30c33fe80a375956230aa9b69b861b4aed035d623c8b08851d58ad26",
+    "packages/frontend/src/modules/dashboard/components/host-devices.tsx": "2c5137b0fbaa24db84aed8181815717ff48d0c6d4d225aae160bf46c7fb4732f",
+    "packages/frontend/src/modules/dashboard/components/host-processes.tsx": "7fb838a8f4df6b68339a79ca390badaa0aee897c373601edfc081762ea0c4afc"
+  },
+  "measurements": [
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "charts": [
+        {
+          "metric": "host-inbound",
+          "plotWidth": 192,
+          "scaleWidth": 99.109375,
+          "graphWidth": 54.890625
+        },
+        {
+          "metric": "host-outbound",
+          "plotWidth": 192,
+          "scaleWidth": 85.796875,
+          "graphWidth": 68.203125
+        }
+      ]
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "charts": [
+        {
+          "metric": "host-inbound",
+          "plotWidth": 192,
+          "scaleWidth": 99.109375,
+          "graphWidth": 54.890625
+        },
+        {
+          "metric": "host-outbound",
+          "plotWidth": 192,
+          "scaleWidth": 85.796875,
+          "graphWidth": 68.203125
+        }
+      ]
+    }
+  ]
+}

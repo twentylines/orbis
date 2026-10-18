@@ -1,0 +1,1074 @@
+[
+  {
+    "viewport": "cached-retry",
+    "cachedRetry": {
+      "passed": true,
+      "cases": [
+        {
+          "surface": "history",
+          "width": 1440,
+          "height": 1120,
+          "mode": "light",
+          "scale": 1,
+          "rowCount": 2,
+          "before": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 0,
+              "content": 2801
+            },
+            "top": 575.0625,
+            "bottom": 615.0625,
+            "documentTop": 575.0625,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "beforeVisible": true,
+          "rejectedRetained": true,
+          "rejectedVisible": true,
+          "rejectedFocus": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 0,
+              "content": 2801
+            },
+            "top": 575.0625,
+            "bottom": 615.0625,
+            "documentTop": 575.0625,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "successHeading": true,
+          "successVisible": true,
+          "successFocus": {
+            "tag": "H2",
+            "owner": "tool",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "Device history",
+            "scroll": {
+              "y": 0,
+              "content": 2801
+            },
+            "top": 393.6875,
+            "bottom": 426.6875,
+            "documentTop": 393.6875,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "noSteal": true,
+          "movedFocus": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "5 min",
+            "scroll": {
+              "y": 0,
+              "content": 2801
+            },
+            "top": 507.0625,
+            "bottom": 545.0625,
+            "documentTop": 507.0625,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "rgba(19, 43, 27, 0.12) 0px 2px 7px 0px"
+          }
+        },
+        {
+          "surface": "devices",
+          "width": 1440,
+          "height": 1120,
+          "mode": "light",
+          "scale": 1,
+          "rowCount": 1,
+          "before": {
+            "tag": "BUTTON",
+            "owner": "host-devices",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 0,
+              "content": 694
+            },
+            "top": 661.703125,
+            "bottom": 701.703125,
+            "documentTop": 661.703125,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "beforeVisible": true,
+          "rejectedRetained": true,
+          "rejectedVisible": true,
+          "rejectedFocus": {
+            "tag": "BUTTON",
+            "owner": "host-devices",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 0,
+              "content": 694
+            },
+            "top": 661.703125,
+            "bottom": 701.703125,
+            "documentTop": 661.703125,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "successHeading": true,
+          "successVisible": true,
+          "successFocus": {
+            "tag": "H2",
+            "owner": "host-devices",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "Host devices",
+            "scroll": {
+              "y": 0,
+              "content": 694
+            },
+            "top": 609.703125,
+            "bottom": 637.703125,
+            "documentTop": 609.703125,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "noSteal": true,
+          "movedFocus": {
+            "tag": "A",
+            "owner": "host-devices",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "View history",
+            "scroll": {
+              "y": 0,
+              "content": 1108
+            },
+            "top": 496.0625,
+            "bottom": 536.0625,
+            "documentTop": 496.0625,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface": "processes",
+          "width": 1440,
+          "height": 1120,
+          "mode": "light",
+          "scale": 1,
+          "rowCount": 1,
+          "before": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 0,
+              "content": 3241
+            },
+            "top": 642.34375,
+            "bottom": 682.34375,
+            "documentTop": 642.34375,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "beforeVisible": true,
+          "rejectedRetained": true,
+          "rejectedVisible": true,
+          "rejectedFocus": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 0,
+              "content": 3241
+            },
+            "top": 642.34375,
+            "bottom": 682.34375,
+            "documentTop": 642.34375,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "successHeading": true,
+          "successVisible": true,
+          "successFocus": {
+            "tag": "H2",
+            "owner": "tool",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "Host processes",
+            "scroll": {
+              "y": 0,
+              "content": 3141
+            },
+            "top": 635.34375,
+            "bottom": 668.34375,
+            "documentTop": 635.34375,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "noSteal": true,
+          "movedFocus": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "text": "CPU",
+            "scroll": {
+              "y": 0,
+              "content": 3141
+            },
+            "top": 686.34375,
+            "bottom": 722.34375,
+            "documentTop": 686.34375,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface": "history",
+          "width": 320,
+          "height": 800,
+          "mode": "dark",
+          "scale": 2,
+          "rowCount": 2,
+          "before": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12446,
+              "clientHeight": 800,
+              "scrollTop": 9692,
+              "maxScroll": 11646
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 9692,
+              "content": 0
+            },
+            "top": 342.640625,
+            "bottom": 402.640625,
+            "documentTop": 10034.640625,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "beforeVisible": true,
+          "rejectedRetained": true,
+          "rejectedVisible": true,
+          "rejectedFocus": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12446,
+              "clientHeight": 800,
+              "scrollTop": 9692,
+              "maxScroll": 11646
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 9692,
+              "content": 0
+            },
+            "top": 342.640625,
+            "bottom": 402.640625,
+            "documentTop": 10034.640625,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "successHeading": true,
+          "successVisible": true,
+          "successFocus": {
+            "tag": "H2",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12081,
+              "clientHeight": 800,
+              "scrollTop": 8910,
+              "maxScroll": 11281
+            },
+            "expectedRevealDelta": 0,
+            "text": "Device history",
+            "scroll": {
+              "y": 8910,
+              "content": 0
+            },
+            "top": 141.53125,
+            "bottom": 273.53125,
+            "documentTop": 9051.53125,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "noSteal": true,
+          "movedFocus": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12081,
+              "clientHeight": 800,
+              "scrollTop": 9153,
+              "maxScroll": 11281
+            },
+            "expectedRevealDelta": 0,
+            "text": "5 min",
+            "scroll": {
+              "y": 9153,
+              "content": 0
+            },
+            "top": 347.734375,
+            "bottom": 398.015625,
+            "documentTop": 9500.734375,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "rgba(19, 43, 27, 0.12) 0px 2px 7px 0px"
+          }
+        },
+        {
+          "surface": "devices",
+          "width": 320,
+          "height": 800,
+          "mode": "dark",
+          "scale": 2,
+          "rowCount": 1,
+          "before": {
+            "tag": "BUTTON",
+            "owner": "host-devices",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12532,
+              "clientHeight": 800,
+              "scrollTop": 3578,
+              "maxScroll": 11732
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 3578,
+              "content": 0
+            },
+            "top": 342.84375,
+            "bottom": 402.84375,
+            "documentTop": 3920.84375,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "beforeVisible": true,
+          "rejectedRetained": true,
+          "rejectedVisible": true,
+          "rejectedFocus": {
+            "tag": "BUTTON",
+            "owner": "host-devices",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12532,
+              "clientHeight": 800,
+              "scrollTop": 3578,
+              "maxScroll": 11732
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 3578,
+              "content": 0
+            },
+            "top": 342.84375,
+            "bottom": 402.84375,
+            "documentTop": 3920.84375,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "successHeading": true,
+          "successVisible": true,
+          "successFocus": {
+            "tag": "H2",
+            "owner": "host-devices",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12081,
+              "clientHeight": 800,
+              "scrollTop": 3126,
+              "maxScroll": 11281
+            },
+            "expectedRevealDelta": 0,
+            "text": "Host devices",
+            "scroll": {
+              "y": 3126,
+              "content": 0
+            },
+            "top": 353.671875,
+            "bottom": 465.671875,
+            "documentTop": 3479.671875,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "noSteal": true,
+          "movedFocus": {
+            "tag": "A",
+            "owner": "host-devices",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12081,
+              "clientHeight": 800,
+              "scrollTop": 4421,
+              "maxScroll": 11281
+            },
+            "expectedRevealDelta": 0,
+            "text": "View history",
+            "scroll": {
+              "y": 4421,
+              "content": 0
+            },
+            "top": 322.484375,
+            "bottom": 422.484375,
+            "documentTop": 4743.484375,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface": "processes",
+          "width": 320,
+          "height": 800,
+          "mode": "dark",
+          "scale": 2,
+          "rowCount": 1,
+          "before": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12638,
+              "clientHeight": 800,
+              "scrollTop": 11083,
+              "maxScroll": 11838
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 11083,
+              "content": 0
+            },
+            "top": 342.46875,
+            "bottom": 402.46875,
+            "documentTop": 11425.46875,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "beforeVisible": true,
+          "rejectedRetained": true,
+          "rejectedVisible": true,
+          "rejectedFocus": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12638,
+              "clientHeight": 800,
+              "scrollTop": 11083,
+              "maxScroll": 11838
+            },
+            "expectedRevealDelta": 0,
+            "text": "Retry",
+            "scroll": {
+              "y": 11083,
+              "content": 0
+            },
+            "top": 342.46875,
+            "bottom": 402.46875,
+            "documentTop": 11425.46875,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "successHeading": true,
+          "successVisible": true,
+          "successFocus": {
+            "tag": "H2",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12081,
+              "clientHeight": 800,
+              "scrollTop": 10651,
+              "maxScroll": 11281
+            },
+            "expectedRevealDelta": 0,
+            "text": "Host processes",
+            "scroll": {
+              "y": 10651,
+              "content": 0
+            },
+            "top": 141.703125,
+            "bottom": 273.703125,
+            "documentTop": 10792.703125,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          },
+          "noSteal": true,
+          "movedFocus": {
+            "tag": "BUTTON",
+            "owner": "tool",
+            "frameMode": "page",
+            "desktopQuery": false,
+            "documentScroll": {
+              "scrollHeight": 12081,
+              "clientHeight": 800,
+              "scrollTop": 10647,
+              "maxScroll": 11281
+            },
+            "expectedRevealDelta": 0,
+            "text": "CPU",
+            "scroll": {
+              "y": 10647,
+              "content": 0
+            },
+            "top": 386.109375,
+            "bottom": 436.390625,
+            "documentTop": 11033.109375,
+            "chromeBottom": 126,
+            "dockTop": 648.84375,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none"
+          }
+        }
+      ],
+      "failures": [],
+      "requests": [
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792300927523
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792300927524
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792300927545
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792300937531
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792300937562
+        },
+        {
+          "surface": "history",
+          "status": 503,
+          "at": 1792300937564
+        },
+        {
+          "surface": "history",
+          "status": 503,
+          "at": 1792300938728
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792300940597
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792300947537
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792300947567
+        },
+        {
+          "surface": "history",
+          "status": 503,
+          "at": 1792300950608
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792300951205
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792300953580
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792300953581
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792300953599
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792300963588
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792300963609
+        },
+        {
+          "surface": "devices",
+          "status": 503,
+          "at": 1792300963609
+        },
+        {
+          "surface": "devices",
+          "status": 503,
+          "at": 1792300964778
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792300966827
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792300973592
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792300973613
+        },
+        {
+          "surface": "devices",
+          "status": 503,
+          "at": 1792300976855
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792300977443
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792300979951
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792300979952
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792300979981
+        },
+        {
+          "surface": "processes",
+          "status": 503,
+          "at": 1792300989971
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792300989996
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792300990013
+        },
+        {
+          "surface": "processes",
+          "status": 503,
+          "at": 1792300991127
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792300992991
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792300999998
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301000020
+        },
+        {
+          "surface": "processes",
+          "status": 503,
+          "at": 1792301002998
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301003598
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301005998
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301005999
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792301006023
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301016006
+        },
+        {
+          "surface": "history",
+          "status": 503,
+          "at": 1792301016028
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792301016030
+        },
+        {
+          "surface": "history",
+          "status": 503,
+          "at": 1792301017373
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301019212
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301026012
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792301026040
+        },
+        {
+          "surface": "history",
+          "status": 503,
+          "at": 1792301029222
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301029986
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301032293
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301032294
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792301032311
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301042307
+        },
+        {
+          "surface": "devices",
+          "status": 503,
+          "at": 1792301042328
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301042350
+        },
+        {
+          "surface": "devices",
+          "status": 503,
+          "at": 1792301043653
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792301045460
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301052313
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301052357
+        },
+        {
+          "surface": "devices",
+          "status": 503,
+          "at": 1792301055469
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792301056258
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301058638
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301058639
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792301058657
+        },
+        {
+          "surface": "processes",
+          "status": 503,
+          "at": 1792301068649
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301068665
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792301068666
+        },
+        {
+          "surface": "processes",
+          "status": 503,
+          "at": 1792301070001
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301071806
+        },
+        {
+          "surface": "history",
+          "status": 200,
+          "at": 1792301078687
+        },
+        {
+          "surface": "devices",
+          "status": 200,
+          "at": 1792301078688
+        },
+        {
+          "surface": "processes",
+          "status": 503,
+          "at": 1792301081815
+        },
+        {
+          "surface": "processes",
+          "status": 200,
+          "at": 1792301082591
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "preferencePuts": 0,
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": [],
+      "provenance": {
+        "controlledFixtures": true,
+        "base": "http://localhost:8080",
+        "textStress": "computed font/line-height doubled without changing root size"
+      },
+      "current": "processes-320-dark-text2"
+    },
+    "errors": []
+  }
+]

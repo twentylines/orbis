@@ -10,6 +10,7 @@ import { ContainerResources } from '@/components/container-resources/container-r
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { HostDevices } from '../components/host-devices';
 import { HostProcessesView } from '../components/host-processes';
+import { HostDeviceHistoryView } from '../components/host-device-history';
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return 'Unavailable';
@@ -58,7 +59,7 @@ export default function Monitor() {
 
   return (
     <div className="desktop-monitor">
-      <p className="desktop-monitor-scope">History charts show CPU, host memory and Orbis core network traffic.</p>
+      <p className="desktop-monitor-scope">CPU, memory, host devices and Orbis core network readings.</p>
       <div className="desktop-monitor-live-status">
         <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} />
         <strong>{telemetry.isError ? 'Connection interrupted' : 'Live readings'}</strong>
@@ -144,7 +145,7 @@ export default function Monitor() {
                   onClick={() => {
                     const next = new URLSearchParams(searchParams);
                     next.set('range', value);
-                    setSearchParams(next, { replace: true });
+                    setSearchParams(next, { replace: true, preventScrollReset: true });
                   }}
                 >
                   {label}
@@ -296,6 +297,7 @@ export default function Monitor() {
           <ContainerResources />
         </>
       ) : null}
+      <HostDeviceHistoryView />
       <HostProcessesView />
     </div>
   );

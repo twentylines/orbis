@@ -93,6 +93,9 @@
 .host-device-kind {
   margin: 4px 0 0;
 }
+.host-device-history-action {
+  margin-top: 18px;
+}
 .host-device-link {
   display: inline-flex;
   align-items: center;

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Fragment, useEffect, useRef } from 'react';
 import type { HostTelemetry } from '@runtipi/common/schemas';
+import { Link, useSearchParams } from 'react-router';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import './host-devices.css';
 
@@ -12,6 +13,23 @@ function bytes(value: number | null) {
   return `${amount.toFixed(index && amount < 10 ? 1 : 0)} ${units[index]}`;
 }
 const rate = (value: number | null) => (value === null ? 'Unavailable' : `${bytes(value)}/s`);
+
+function HistoryLink({ kind, name }: { kind: 'network' | 'disk'; name: string }) {
+  const [params] = useSearchParams();
+  const next = new URLSearchParams(params);
+  next.set('hostDevice', `${kind}:${name}`);
+  return (
+    <Link
+      className="btn btn-secondary host-device-history-action"
+      to={{ search: next.toString(), hash: '#device-history' }}
+      preventScrollReset
+      state={{ focusHostHistory: true }}
+      aria-label={`View history for ${name}`}
+    >
+      View history
+    </Link>
+  );
+}
 
 async function loadHostDevices(signal: AbortSignal): Promise<HostTelemetry> {
   const response = await fetch('/api/system/host-telemetry', { credentials: 'include', signal });
@@ -83,8 +101,8 @@ export function HostDevices() {
     retryFocus.current = false;
     const active = document.activeElement;
     if (active !== document.body && active !== retry.current) return;
-    (ready ? heading.current : retry.current)?.focus({ preventScroll: true });
-  }, [query.isFetching, ready]);
+    (ready && !query.isError ? heading.current : retry.current)?.focus({ preventScroll: true });
+  }, [query.isFetching, query.isError, ready]);
   return (
     <section className="desktop-host-devices" aria-labelledby="host-devices-title">
       <header className="host-devices-heading">
@@ -176,6 +194,7 @@ export function HostDevices() {
                         ['Sent', bytes(item.transmittedBytes)],
                       ]}
                     />
+                    <HistoryLink kind="network" name={item.interface} />
                   </article>
                 ))}
               </div>
@@ -198,6 +217,7 @@ export function HostDevices() {
                         ['In progress', disk.inFlight === null ? 'Unavailable' : disk.inFlight.toLocaleString()],
                       ]}
                     />
+                    <HistoryLink kind="disk" name={disk.device} />
                   </article>
                 ))}
               </div>

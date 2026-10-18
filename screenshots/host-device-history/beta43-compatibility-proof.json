@@ -1,0 +1,36 @@
+{
+  "passed": true,
+  "scope": "Read-only published beta43 backward compatibility after rehearsal helper upgrade; device-history core API is not installed yet",
+  "anonymousStatus": 401,
+  "authenticatedStatus": 200,
+  "actualBuildPinsMatch": true,
+  "hostReadingsStillAvailable": true,
+  "oldCoreSelectsItsOriginalFields": true,
+  "interfaces": 8,
+  "disks": 3,
+  "boundedWarmupStates": [
+    {
+      "available": true,
+      "stale": true
+    },
+    {
+      "available": true,
+      "stale": true
+    },
+    {
+      "available": true,
+      "stale": true
+    },
+    {
+      "available": true,
+      "stale": false
+    }
+  ],
+  "priorVerifiedRecordsStillMatch": {
+    "preferences": true,
+    "installed": true,
+    "stores": true,
+    "fullApps": true
+  },
+  "noMutationRequests": true
+}

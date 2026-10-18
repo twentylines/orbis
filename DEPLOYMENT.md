@@ -1,5 +1,13 @@
 # Orbis build and migration rehearsal
 
+## Device-history helper rehearsal (18 October 2026)
+
+The owned arm64 rehearsal helper now supplies opaque device identities for the next core iteration. Before the guarded upgrade, a private dated 14-entry archive verifies every member byte, root ownership and directory 0700/archive 0600: `/var/lib/orbis/snapshots/helper-before-device-history-20261018T053642Z.tar.gz`, SHA-256 `6bf69144907a111acc9d0c36f44a467769fbb442fc9e5dee49c1b9aabfadaeaa`.
+
+Only `orbis-host-telemetry.py` changes; environment, systemd unit and all other modules match the backup. Installed hashes/modes, active service/socket and absent maintenance record pass. Two actual readings from eight interfaces and three disks match independently kernel-derived identities; comparison rates are available and host/core Unix socket responses match. Arbitrary query paths return 404 and raw boot identifiers are not exposed.
+
+The core remains healthy on exact published beta43. Its existing authenticated current-device API remains compatible, separate anonymous/authenticated reads return 401/200, and full preferences, installed/full-app and store records match the prior verified baseline. An idle on-demand collector explicitly reports stale during bounded warmup before fresh readings arrive. No core update occurs in this helper rehearsal. [Sanitized backup, installed-helper and compatibility proofs](screenshots/host-device-history/README.md) retain the boundary. Real new-backend history collection/restart and published API/UI are still required. Hades and the copied x86 authenticator fixture are unchanged.
+
 ## Published beta43: host processes and arm64 OTA (18 October 2026)
 
 Direct-main source `aa7cb6afa15abe5e56075fc4ca2d6a8f5ccc3722` passes CI `39096716857` and integration `39096716863`. Release workflow `39096810638` passes and publishes the immutable beta43 tag, manifest and both Linux architectures, independently matching OCI index `sha256:85466caef871350b9034287d024fe71dfea27ae670c12197b61df1bfdcdeee86`.

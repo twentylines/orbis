@@ -39,8 +39,8 @@ export function HostProcessesView() {
     if (query.isFetching || !restoreFocus.current) return;
     restoreFocus.current = false;
     if (document.activeElement !== document.body && document.activeElement !== retry.current) return;
-    (ready ? heading.current : retry.current)?.focus({ preventScroll: true });
-  }, [query.isFetching, ready]);
+    (ready && !query.isError ? heading.current : retry.current)?.focus({ preventScroll: true });
+  }, [query.isFetching, query.isError, ready]);
 
   return (
     <section className="host-processes" id="processes" aria-labelledby="host-processes-title">

@@ -105,6 +105,36 @@
     grid-column: 1 / -1;
   }
 }
+@container (max-width: 20em) {
+  .metric-chart-plot {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+  }
+  .metric-chart-scale {
+    display: block;
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .metric-chart-scale span {
+    display: none;
+  }
+  .metric-chart-scale span:first-child {
+    display: block;
+    white-space: normal;
+  }
+  .metric-chart-scale span:first-child::before {
+    content: "0 – ";
+  }
+  .metric-chart-plot svg,
+  .metric-chart-empty {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .metric-chart-times {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
 @media (max-width: 480px) {
   .metric-chart-plot svg {
     height: 180px;

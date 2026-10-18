@@ -30,6 +30,9 @@ const inspectTileComfort = require('./tile-comfort-checks.cjs');
 const inspectSystemMode = require('./system-mode-checks.cjs');
 const inspectHostDevices = require('./host-devices-checks.cjs');
 const inspectHostProcesses = require('./host-processes-checks.cjs');
+const inspectHostHistory = require('./host-device-history-checks.cjs');
+const inspectCachedRetry = require('./cached-retry-focus-checks.cjs');
+const cachedRetryOnly = process.env.ORBIS_VISUAL_CACHED_RETRY_ONLY === '1';
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
 const searchComfortOnly = process.env.ORBIS_VISUAL_SEARCH_COMFORT_ONLY === '1';
@@ -55,6 +58,40 @@ const homeStatusThemesOnly = process.env.ORBIS_VISUAL_HOME_STATUS_THEMES_ONLY ==
 const customWorkspaceOnly = process.env.ORBIS_VISUAL_CUSTOM_WORKSPACE_ONLY === '1';
 const tilesOnly = process.env.ORBIS_VISUAL_TILES_ONLY === '1';
 const systemModeOnly = process.env.ORBIS_VISUAL_SYSTEM_MODE_ONLY === '1';
+const hostHistoryPhonesOnly = process.env.ORBIS_VISUAL_HOST_HISTORY_PHONES_ONLY === '1';
+const hostHistoryLayoutsOnly = process.env.ORBIS_VISUAL_HOST_HISTORY_LAYOUTS_ONLY === '1';
+const hostHistoryCompactStatesOnly = process.env.ORBIS_VISUAL_HOST_HISTORY_COMPACT_STATES_ONLY === '1';
+const hostHistoryNarrowOnly = process.env.ORBIS_VISUAL_HOST_HISTORY_NARROW_ONLY === '1';
+const hostHistoryOverviewOnly = process.env.ORBIS_VISUAL_HOST_HISTORY_OVERVIEW_ONLY === '1';
+const hostHistorySelectionOnly = process.env.ORBIS_VISUAL_HOST_HISTORY_SELECTION_ONLY === '1';
+const hostHistoryDelayedOnly = process.env.ORBIS_VISUAL_HOST_HISTORY_DELAYED_ONLY === '1';
+const hostHistoryColorsOnly = process.env.ORBIS_VISUAL_HOST_HISTORY_COLORS_ONLY === '1';
+const hostHistoryFunctionalOnly = process.env.ORBIS_VISUAL_HOST_HISTORY_FUNCTIONAL_ONLY === '1';
+const hostHistoryOnly =
+  process.env.ORBIS_VISUAL_HOST_HISTORY_ONLY === '1' ||
+  hostHistoryColorsOnly ||
+  hostHistoryFunctionalOnly ||
+  hostHistoryDelayedOnly ||
+  hostHistoryPhonesOnly ||
+  hostHistoryLayoutsOnly ||
+  hostHistoryCompactStatesOnly ||
+  hostHistoryNarrowOnly ||
+  hostHistoryOverviewOnly ||
+  hostHistorySelectionOnly;
+if (
+  [
+    hostHistoryColorsOnly,
+    hostHistoryFunctionalOnly,
+    hostHistoryDelayedOnly,
+    hostHistoryPhonesOnly,
+    hostHistoryLayoutsOnly,
+    hostHistoryCompactStatesOnly,
+    hostHistoryNarrowOnly,
+    hostHistoryOverviewOnly,
+    hostHistorySelectionOnly,
+  ].filter(Boolean).length > 1
+)
+  throw new Error('Choose one focused host-history QA mode');
 const hostDeviceColorsOnly = process.env.ORBIS_VISUAL_HOST_DEVICES_COLORS_ONLY === '1';
 const hostDeviceChartsOnly = process.env.ORBIS_VISUAL_HOST_DEVICES_CHARTS_ONLY === '1';
 const hostDevicesOnly = process.env.ORBIS_VISUAL_HOST_DEVICES_ONLY === '1' || hostDeviceColorsOnly || hostDeviceChartsOnly;
@@ -88,7 +125,9 @@ if (
     tilesOnly ||
     systemModeOnly ||
     hostDevicesOnly ||
-    hostProcessesOnly) &&
+    hostProcessesOnly ||
+    hostHistoryOnly ||
+    cachedRetryOnly) &&
   zoom !== 1
 )
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
@@ -416,10 +455,20 @@ async function main() {
   let preferences = freshPreferences();
   const reports = [];
   const viewports =
-    connectionOnly || systemModeOnly || hostDevicesOnly || hostProcessesOnly
+    connectionOnly || systemModeOnly || hostDevicesOnly || hostProcessesOnly || hostHistoryOnly || cachedRetryOnly
       ? [
           {
-            name: hostProcessesOnly ? 'host-processes' : hostDevicesOnly ? 'host-devices' : systemModeOnly ? 'system-mode' : 'connection',
+            name: cachedRetryOnly
+              ? 'cached-retry'
+              : hostHistoryOnly
+                ? 'host-history'
+                : hostProcessesOnly
+                  ? 'host-processes'
+                  : hostDevicesOnly
+                    ? 'host-devices'
+                    : systemModeOnly
+                      ? 'system-mode'
+                      : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -582,6 +631,8 @@ async function main() {
         return respond({ diskUsed: 43, diskSize: 256, percentUsed: 17, cpuLoad: 11.3, memoryTotal: 32, percentUsedMemory: 38 });
       if (url.pathname === '/api/system/host-telemetry') return respond(inspectHostDevices.fixture());
       if (url.pathname === '/api/system/host-processes') return respond(inspectHostProcesses.fixture());
+      if (url.pathname === '/api/system/host-history')
+        return respond(inspectHostHistory.fixture(url.searchParams.get('range') || '1h', url.searchParams.get('device')));
       if (url.pathname === '/api/system/telemetry')
         return respond({
           sampledAt: new Date().toISOString(),
@@ -725,6 +776,48 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (cachedRetryOnly) {
+      const cachedRetry = await inspectCachedRetry({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, cachedRetry, errors });
+      await page.close();
+      continue;
+    }
+    if (hostHistoryOnly) {
+      const inspect = hostHistoryDelayedOnly
+        ? inspectHostHistory.delayed
+        : hostHistoryColorsOnly
+          ? inspectHostHistory.contrast
+          : hostHistoryCompactStatesOnly
+            ? inspectHostHistory.compactStates
+            : hostHistoryNarrowOnly
+              ? inspectHostHistory.narrow
+              : hostHistoryOverviewOnly
+                ? inspectHostHistory.overview
+                : hostHistorySelectionOnly
+                  ? inspectHostHistory.selection
+                  : inspectHostHistory;
+      const hostHistory = await inspect({
+        page,
+        base,
+        preferences: freshPreferences(),
+        ...(hostHistoryFunctionalOnly
+          ? { widths: [] }
+          : hostHistoryPhonesOnly
+            ? { widths: [390, 320], interactions: false, stateGroups: [] }
+            : hostHistoryLayoutsOnly
+              ? { interactions: false, stateGroups: [] }
+              : {}),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, hostHistory, errors });
+      await page.close();
+      continue;
+    }
     if (hostProcessesOnly) {
       const inspect = hostProcessColorsOnly ? inspectHostProcesses.contrast : inspectHostProcesses;
       const hostProcesses = await inspect({
@@ -1442,7 +1535,9 @@ async function main() {
     tilesOnly ||
     systemModeOnly ||
     hostDevicesOnly ||
-    hostProcessesOnly
+    hostProcessesOnly ||
+    hostHistoryOnly ||
+    cachedRetryOnly
   ) {
     if (
       reports.some(
@@ -1451,7 +1546,9 @@ async function main() {
           (tilesOnly && !report.tileComfort?.passed) ||
           (systemModeOnly && !report.systemMode?.passed) ||
           (hostDevicesOnly && !report.hostDevices?.passed) ||
-          (hostProcessesOnly && !report.hostProcesses?.passed),
+          (hostProcessesOnly && !report.hostProcesses?.passed) ||
+          (hostHistoryOnly && !report.hostHistory?.passed) ||
+          (cachedRetryOnly && !report.cachedRetry?.passed),
       )
     )
       process.exitCode = 1;

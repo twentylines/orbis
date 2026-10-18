@@ -1,0 +1,3854 @@
+[
+  {
+    "preset": "forest",
+    "mode": "light",
+    "samples": [
+      {
+        "family": "collection interval",
+        "labels": [
+          {
+            "text": "Recorded every 10 seconds",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [228.44244521337947, 234.0890426758939, 224.79584775086505, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.397171838409124
+              },
+              {
+                "background": [235.97185697808536, 241.61845444059978, 232.32525951557093, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.919285722026864
+              }
+            ],
+            "minimum": 7.397171838409124
+          }
+        ]
+      },
+      {
+        "family": "selected device state",
+        "labels": [
+          {
+            "text": "Current device · 1 min averages",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [228.44244521337947, 234.0890426758939, 224.79584775086505, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.397171838409124
+              },
+              {
+                "background": [235.97185697808536, 241.61845444059978, 232.32525951557093, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.919285722026864
+              }
+            ],
+            "minimum": 7.397171838409124
+          }
+        ]
+      },
+      {
+        "family": "device kind",
+        "labels": [
+          {
+            "text": "Network",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e\"), none",
+                "decorativeSelectArrow": true
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [243.51191984983151, 247.5635778094398, 239.52300698826244, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 8.377948364212603
+              },
+              {
+                "background": [243.74813668950856, 247.79979464911685, 239.75922382793948, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 8.395276266811837
+              }
+            ],
+            "minimum": 8.377948364212603
+          }
+        ]
+      },
+      {
+        "family": "coverage",
+        "labels": [
+          {
+            "text": "4 additional devices were not collected. 19 older device records were removed to keep history within its 64-device limit.",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [228.44244521337947, 234.0890426758939, 224.79584775086505, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.397171838409124
+              },
+              {
+                "background": [235.97185697808536, 241.61845444059978, 232.32525951557093, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.919285722026864
+              }
+            ],
+            "minimum": 7.397171838409124
+          }
+        ]
+      },
+      {
+        "family": "about",
+        "labels": [
+          {
+            "text": "Collection continues when this page is closed. History is retained for seven days. Longer ranges show sample averages and peaks; use the pointer or arrow keys to inspect each chart.",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [228.44244521337947, 234.0890426758939, 224.79584775086505, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.397171838409124
+              },
+              {
+                "background": [235.97185697808536, 241.61845444059978, 232.32525951557093, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.919285722026864
+              }
+            ],
+            "minimum": 7.397171838409124
+          },
+          {
+            "text": "Gaps indicate missing readings or a device change. A reboot starts a new series. Disk active time is approximate; layered disks and virtual interfaces can share the same traffic.",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [228.44244521337947, 234.0890426758939, 224.79584775086505, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.397171838409124
+              },
+              {
+                "background": [235.97185697808536, 241.61845444059978, 232.32525951557093, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.919285722026864
+              }
+            ],
+            "minimum": 7.397171838409124
+          },
+          {
+            "text": "Saved through 18/10/2026, 13:21:50. Recent samples stay in memory. Saved summaries survive a restart.",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [228.44244521337947, 234.0890426758939, 224.79584775086505, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.397171838409124
+              },
+              {
+                "background": [235.97185697808536, 241.61845444059978, 232.32525951557093, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.919285722026864
+              }
+            ],
+            "minimum": 7.397171838409124
+          }
+        ]
+      },
+      {
+        "family": "axis",
+        "labels": [
+          {
+            "text": "16.5 MB/s",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "8.3 MB/s",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "0",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "8.3 MB/s",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "4.1 MB/s",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "0",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          }
+        ]
+      },
+      {
+        "family": "axis time",
+        "labels": [
+          {
+            "text": "12:22",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "12:52",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "13:22",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "12:22",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "12:52",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          },
+          {
+            "text": "13:22",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [223.59198679241015, 230.97931926634556, 221.09485039690617, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.161190859333195
+              },
+              {
+                "background": [230.7966004025601, 238.1839328764955, 228.29946400705612, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 7.650512635868784
+              }
+            ],
+            "minimum": 7.161190859333195
+          }
+        ]
+      },
+      {
+        "family": "inspection time",
+        "labels": [
+          {
+            "text": "18/10/2026, 13:21:50 – 13:22:40",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [243.51191984983151, 247.5635778094398, 239.52300698826244, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 8.377948364212603
+              },
+              {
+                "background": [243.74813668950856, 247.79979464911685, 239.75922382793948, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 8.395276266811837
+              }
+            ],
+            "minimum": 8.377948364212603
+          }
+        ]
+      },
+      {
+        "family": "inspection hint",
+        "labels": [
+          {
+            "text": "← → inspect samples",
+            "foreground": [53, 78, 67, 255],
+            "expected": [53, 78, 67, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [244, 248, 240, 247],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [168, 192, 164, 255],
+                "image": "url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [155, 174, 167, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [243.51191984983151, 247.5635778094398, 239.52300698826244, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 8.377948364212603
+              },
+              {
+                "background": [243.74813668950856, 247.79979464911685, 239.75922382793948, 255],
+                "text": [53, 78, 67, 255],
+                "ratio": 8.395276266811837
+              }
+            ],
+            "minimum": 8.377948364212603
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "preset": "forest",
+    "mode": "dark",
+    "samples": [
+      {
+        "family": "collection interval",
+        "labels": [
+          {
+            "text": "Recorded every 10 seconds",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [23.863898500576703, 40.155017301038065, 37.26182237600922, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.498456767460782
+              },
+              {
+                "background": [36.09919261822377, 52.39031141868513, 49.497116493656286, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.892654278888758
+              }
+            ],
+            "minimum": 8.892654278888758
+          }
+        ]
+      },
+      {
+        "family": "selected device state",
+        "labels": [
+          {
+            "text": "Current device · 1 min averages",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [23.863898500576703, 40.155017301038065, 37.26182237600922, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.498456767460782
+              },
+              {
+                "background": [36.09919261822377, 52.39031141868513, 49.497116493656286, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.892654278888758
+              }
+            ],
+            "minimum": 8.892654278888758
+          }
+        ]
+      },
+      {
+        "family": "device kind",
+        "labels": [
+          {
+            "text": "Network",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e5e7eb' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e\"), none",
+                "decorativeSelectArrow": true
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [20.196983060813714, 36.21182441142547, 35.11530859171811, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.992891619005114
+              },
+              {
+                "background": [20.820743153085917, 36.835584503697675, 35.73906868399032, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.91165551369832
+              }
+            ],
+            "minimum": 10.91165551369832
+          }
+        ]
+      },
+      {
+        "family": "coverage",
+        "labels": [
+          {
+            "text": "4 additional devices were not collected. 19 older device records were removed to keep history within its 64-device limit.",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [23.863898500576703, 40.155017301038065, 37.26182237600922, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.498456767460782
+              },
+              {
+                "background": [36.09919261822377, 52.39031141868513, 49.497116493656286, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.892654278888758
+              }
+            ],
+            "minimum": 8.892654278888758
+          }
+        ]
+      },
+      {
+        "family": "about",
+        "labels": [
+          {
+            "text": "Collection continues when this page is closed. History is retained for seven days. Longer ranges show sample averages and peaks; use the pointer or arrow keys to inspect each chart.",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [23.863898500576703, 40.155017301038065, 37.26182237600922, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.498456767460782
+              },
+              {
+                "background": [36.09919261822377, 52.39031141868513, 49.497116493656286, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.892654278888758
+              }
+            ],
+            "minimum": 8.892654278888758
+          },
+          {
+            "text": "Gaps indicate missing readings or a device change. A reboot starts a new series. Disk active time is approximate; layered disks and virtual interfaces can share the same traffic.",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [23.863898500576703, 40.155017301038065, 37.26182237600922, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.498456767460782
+              },
+              {
+                "background": [36.09919261822377, 52.39031141868513, 49.497116493656286, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.892654278888758
+              }
+            ],
+            "minimum": 8.892654278888758
+          },
+          {
+            "text": "Saved through 18/10/2026, 13:22:00. Recent samples stay in memory. Saved summaries survive a restart.",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [23.863898500576703, 40.155017301038065, 37.26182237600922, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.498456767460782
+              },
+              {
+                "background": [36.09919261822377, 52.39031141868513, 49.497116493656286, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.892654278888758
+              }
+            ],
+            "minimum": 8.892654278888758
+          }
+        ]
+      },
+      {
+        "family": "axis",
+        "labels": [
+          {
+            "text": "16.5 MB/s",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "8.3 MB/s",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "0",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "8.3 MB/s",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "4.1 MB/s",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "0",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          }
+        ]
+      },
+      {
+        "family": "axis time",
+        "labels": [
+          {
+            "text": "12:23",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "12:53",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "13:23",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "12:23",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "12:53",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          },
+          {
+            "text": "13:23",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [116, 162, 139, 11],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [27.83839699663026, 45.411075378248185, 41.65052807743628, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 9.835958890205369
+              },
+              {
+                "background": [39.54589411312392, 57.118572494741855, 53.35802519392993, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 8.330084990496536
+              }
+            ],
+            "minimum": 8.330084990496536
+          }
+        ]
+      },
+      {
+        "family": "inspection time",
+        "labels": [
+          {
+            "text": "18/10/2026, 13:22:00 – 13:22:50",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [20.196983060813714, 36.21182441142547, 35.11530859171811, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.992891619005114
+              },
+              {
+                "background": [20.820743153085917, 36.835584503697675, 35.73906868399032, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.91165551369832
+              }
+            ],
+            "minimum": 10.91165551369832
+          }
+        ]
+      },
+      {
+        "family": "inspection hint",
+        "labels": [
+          {
+            "text": "← → inspect samples",
+            "foreground": [203, 217, 210, 255],
+            "expected": [203, 217, 210, 255],
+            "layers": [
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [102, 136, 102, 15],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 36, 35, 242],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), url(\"http://localhost:8080/wallpapers/orbis-horizon.webp\")",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [0, 0, 0, 0],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              },
+              {
+                "color": [20, 37, 34, 255],
+                "image": "none",
+                "decorativeSelectArrow": false
+              }
+            ],
+            "effective": [
+              {
+                "background": [20.196983060813714, 36.21182441142547, 35.11530859171811, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.992891619005114
+              },
+              {
+                "background": [20.820743153085917, 36.835584503697675, 35.73906868399032, 255],
+                "text": [203, 217, 210, 255],
+                "ratio": 10.91165551369832
+              }
+            ],
+            "minimum": 10.91165551369832
+          }
+        ]
+      }
+    ]
+  }
+]
