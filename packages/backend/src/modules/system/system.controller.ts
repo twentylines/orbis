@@ -9,6 +9,7 @@ import { ContainerTelemetryService } from './container-telemetry.service';
 import { MetricHistoryService } from './metric-history.service';
 import { HostTelemetryService } from './host-telemetry.service';
 import { HostProcessesService } from './host-processes.service';
+import { HostSensorsService } from './host-sensors.service';
 import { HostDeviceHistoryService } from './host-device-history.service';
 import { parseHostHistorySelection } from './host-device-history.model';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
@@ -23,6 +24,7 @@ export class SystemController {
     private readonly host: HostTelemetryService,
     private readonly processes: HostProcessesService,
     private readonly hostHistory: HostDeviceHistoryService,
+    private readonly sensors: HostSensorsService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -55,6 +57,12 @@ export class SystemController {
   @Get('/host-processes')
   hostProcesses() {
     return this.processes.read();
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/host-sensors')
+  hostSensors() {
+    return this.sensors.read();
   }
 
   @UseGuards(AuthGuard)

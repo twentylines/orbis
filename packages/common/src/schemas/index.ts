@@ -27,6 +27,7 @@ import type { ContainerReading, ContainerTelemetry } from './container-telemetry
 import type { HostFilesystem, HostNetwork, HostDisk, HostTelemetry } from './host-telemetry.js';
 import type { HostHistorySelection, HostHistoryDevice, HostHistoryPoint, HostDeviceHistory } from './host-device-history.js';
 import type { HostProcess, HostProcesses } from './host-processes.js';
+import type { HostSensorStatus, HostTemperature, HostFan, HostGpu, HostSensors } from './host-sensors.js';
 import { metricHistoryRanges, type MetricHistoryRange, type MetricSummary, type MetricHistoryPoint, type MetricHistory } from './metric-history.js';
 import {
   desktopWindowIds,
@@ -99,6 +100,11 @@ export {
   type HostDeviceHistory,
   type HostProcess,
   type HostProcesses,
+  type HostSensorStatus,
+  type HostTemperature,
+  type HostFan,
+  type HostGpu,
+  type HostSensors,
   metricHistoryRanges,
   type MetricHistoryRange,
   type MetricSummary,

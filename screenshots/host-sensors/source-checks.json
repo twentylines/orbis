@@ -1,0 +1,51 @@
+{
+  "passed": true,
+  "scope": "Source/fixture acceptance only. No installed-helper upgrade, physical sensor/GPU, published UI or Hades acceptance.",
+  "independentTests": {
+    "python": 30,
+    "backend": 25,
+    "backendTypes": true,
+    "lint": true
+  },
+  "completeLocalSuites": {
+    "backend": 622,
+    "backendFiles": 52,
+    "python": 156,
+    "backendRuntimePackaging": 7,
+    "backendBundle": true
+  },
+  "sourceSha256": {
+    "scripts/test_orbis_host_sensors.py": "50ea867f34457a72311c000ea942be49659a0d5a1807d832fffff2ab83c1107e",
+    "packages/backend/src/modules/system/__tests__/host-sensors.test.ts": "0746cecefa1939e839a4cdf4122d53c773ea8b55c4a3f298baca382e0d544f9b",
+    "scripts/orbis-host-sensors.py": "5b2455a30a22f401f732f9cfa2eaba431e53d8eb2b3391a812fb1f8d4dad9bed",
+    "packages/backend/src/modules/system/host-sensors.service.ts": "bcc97fe179cf5a8e1e07dcf241c717a559603789368c4b22e4153eaa13d346cd",
+    "packages/common/src/schemas/host-sensors.ts": "d288b34e7f23cfcec6bb2409de77dd24597af5875d077279779f62e1d5170b0f"
+  },
+  "privateLogSha256": {
+    "python.log": "cf80d5460a3b7f93259b07141bab6ff3533c5ad57bfa0df990a6304ce9146706",
+    "backend.log": "7e8bfed870c384ae5c44e871b3105f65f63255d6c632ad1e9f97f9eced7b26c5",
+    "types.log": "65f8c2639262c418d996e65dbea0b7a9a238b723798a09b6f82583e7835e900f",
+    "lint.log": "33353f822e3661e592d0de0d247a9c3022da057b2ad30f5002c78ed7047bec55",
+    "summary.json": "f0997d7eb8b581358f47ee9615086372a28423f675a4f5f088cb89e1e847a706"
+  },
+  "fullLocalLogSha256": {
+    "orbis-sensors-backend-full-r1.log": "08fc27351fed671028955e76b676fdb1887fe312470d0d755bdf62395d12616e",
+    "orbis-sensors-python-full-r1.log": "ceb3c2bb20ec7b23fa47490c859a3224afdba548ad5a982809b7aee64926e4bd",
+    "orbis-sensors-backend-bundle-r1.log": "3eb8b14c538a0616b10b83821eedd6eee3117144896a67fc01bb1c9d393676e8"
+  },
+  "actualRejectedDefects": [
+    "Cached source-age threshold remained fresh inside cache; now recalculated without probing or cache extension.",
+    "DRM aliases inflated omitted physical GPU counts, including aliases of omitted devices; now all encountered physical IDs are deduplicated before the row cap."
+  ],
+  "testHarnessCorrection": "r1 cached-value identity was overly strict after stale recalculation; deep equality plus unchanged exact socket count and pending promise identity are the contract.",
+  "guardedCases": [
+    "Temporary actual sysfs tree units/zero/fault/disabled/invalid readings",
+    "Escaped symlinks, FIFO/nonregular and oversized inputs",
+    "Distinct absent hardware and failed-group coverage",
+    "32row,512directory,4096total-entry,2048read and work-deadline bounds",
+    "One blocked worker with100prompt readers,30second refresh,90second stale",
+    "Strict parser selection/counts/IDs/timestamps/status-value consistency and AMDGPU metric scope",
+    "Fixed socket operation, concurrency, failure backoff, source-age cache boundary",
+    "Authenticated backend read and exact zero-argument helper route"
+  ]
+}

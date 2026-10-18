@@ -44,6 +44,7 @@ SCRIPTS = (
     "orbis-host-package-worker.py",
     "orbis-host-telemetry.py",
     "orbis-host-processes.py",
+    "orbis-host-sensors.py",
 )
 INSTALL_DIR = Path("/opt/orbis/host-service")
 ENV_FILE = Path("/etc/orbis/host-service.env")

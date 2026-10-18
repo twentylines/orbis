@@ -3,7 +3,7 @@ import path from 'node:path';
 
 export async function readHostSocket<T>(
   socketPath: string | undefined,
-  endpoint: '/v1/telemetry' | '/v1/processes',
+  endpoint: '/v1/telemetry' | '/v1/processes' | '/v1/sensors',
   parse: (value: unknown) => T,
   unavailable: (reason?: 'missing' | 'older') => T,
 ): Promise<T> {

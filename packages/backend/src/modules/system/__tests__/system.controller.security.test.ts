@@ -12,6 +12,7 @@ import { ContainerTelemetryService } from '../container-telemetry.service';
 import { MetricHistoryService } from '../metric-history.service';
 import { HostTelemetryService } from '../host-telemetry.service';
 import { HostProcessesService } from '../host-processes.service';
+import { HostSensorsService } from '../host-sensors.service';
 import { HostDeviceHistoryService } from '../host-device-history.service';
 
 describe('SystemController certificate security', () => {
@@ -23,6 +24,7 @@ describe('SystemController certificate security', () => {
   const history = mock<MetricHistoryService>();
   const host = mock<HostTelemetryService>();
   const processes = mock<HostProcessesService>();
+  const sensors = mock<HostSensorsService>();
   const hostHistory = mock<HostDeviceHistoryService>();
 
   beforeAll(async () => {
@@ -34,6 +36,7 @@ describe('SystemController certificate security', () => {
         { provide: MetricHistoryService, useValue: history },
         { provide: HostTelemetryService, useValue: host },
         { provide: HostProcessesService, useValue: processes },
+        { provide: HostSensorsService, useValue: sensors },
         { provide: HostDeviceHistoryService, useValue: hostHistory },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         {
@@ -128,6 +131,17 @@ describe('SystemController certificate security', () => {
     expect(result.status).toBe(200);
     expect(result.body.reason).toBe('Collecting process readings.');
     expect(processes.read).toHaveBeenCalledOnce();
+  });
+
+  it('authenticates sensor reads before calling the fixed helper operation', async () => {
+    expect((await request(app.getHttpServer()).get('/system/host-sensors?path=/etc/shadow')).status).toBe(401);
+    expect(sensors.read).not.toHaveBeenCalled();
+    sensors.read.mockResolvedValue({ available: false, reason: 'Collecting sensor readings.' });
+    const result = await request(app.getHttpServer()).get('/system/host-sensors').set('Authorization', 'Bearer cli-token');
+    expect(result.status).toBe(200);
+    expect(result.body.reason).toBe('Collecting sensor readings.');
+    expect(sensors.read).toHaveBeenCalledOnce();
+    expect(sensors.read).toHaveBeenCalledWith();
   });
 
   it('requires authentication for build metadata and reports the installed version', async () => {

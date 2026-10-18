@@ -8,6 +8,7 @@ import { AppsModule } from '../apps/apps.module';
 import { MetricHistoryService } from './metric-history.service';
 import { HostTelemetryService } from './host-telemetry.service';
 import { HostProcessesService } from './host-processes.service';
+import { HostSensorsService } from './host-sensors.service';
 import { HostDeviceHistoryService } from './host-device-history.service';
 
 @Module({
@@ -20,6 +21,7 @@ import { HostDeviceHistoryService } from './host-device-history.service';
     MetricHistoryService,
     HostTelemetryService,
     HostProcessesService,
+    HostSensorsService,
     HostDeviceHistoryService,
   ],
   exports: [],
