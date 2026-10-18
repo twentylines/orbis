@@ -28,6 +28,7 @@ const inspectHomeStatusThemes = require('./home-status-theme-checks.cjs');
 const inspectCustomWorkspace = require('./custom-workspace-checks.cjs');
 const inspectTileComfort = require('./tile-comfort-checks.cjs');
 const inspectSystemMode = require('./system-mode-checks.cjs');
+const inspectHostDevices = require('./host-devices-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
 const searchComfortOnly = process.env.ORBIS_VISUAL_SEARCH_COMFORT_ONLY === '1';
@@ -53,6 +54,9 @@ const homeStatusThemesOnly = process.env.ORBIS_VISUAL_HOME_STATUS_THEMES_ONLY ==
 const customWorkspaceOnly = process.env.ORBIS_VISUAL_CUSTOM_WORKSPACE_ONLY === '1';
 const tilesOnly = process.env.ORBIS_VISUAL_TILES_ONLY === '1';
 const systemModeOnly = process.env.ORBIS_VISUAL_SYSTEM_MODE_ONLY === '1';
+const hostDeviceColorsOnly = process.env.ORBIS_VISUAL_HOST_DEVICES_COLORS_ONLY === '1';
+const hostDeviceChartsOnly = process.env.ORBIS_VISUAL_HOST_DEVICES_CHARTS_ONLY === '1';
+const hostDevicesOnly = process.env.ORBIS_VISUAL_HOST_DEVICES_ONLY === '1' || hostDeviceColorsOnly || hostDeviceChartsOnly;
 const textScale = Number(process.env.ORBIS_VISUAL_TEXT_SCALE || 2);
 if (![1, 2].includes(textScale)) throw new Error('ORBIS_VISUAL_TEXT_SCALE must be 1 or 2');
 
@@ -74,7 +78,8 @@ if (
     homeStatusThemesOnly ||
     customWorkspaceOnly ||
     tilesOnly ||
-    systemModeOnly) &&
+    systemModeOnly ||
+    hostDevicesOnly) &&
   zoom !== 1
 )
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
@@ -402,8 +407,8 @@ async function main() {
   let preferences = freshPreferences();
   const reports = [];
   const viewports =
-    connectionOnly || systemModeOnly
-      ? [{ name: systemModeOnly ? 'system-mode' : 'connection', width: 1440, height: 1120 }]
+    connectionOnly || systemModeOnly || hostDevicesOnly
+      ? [{ name: hostDevicesOnly ? 'host-devices' : systemModeOnly ? 'system-mode' : 'connection', width: 1440, height: 1120 }]
       : process.env.ORBIS_VISUAL_NARROW
         ? [{ name: 'narrow', width: Math.floor(narrowWidth / zoom), height: Math.floor(narrowHeight / zoom) }]
         : monitorThemesOnly || homeStatusThemesOnly
@@ -560,6 +565,7 @@ async function main() {
       if (url.pathname === '/api/links') return respond({ links: [] });
       if (url.pathname === '/api/system/load')
         return respond({ diskUsed: 43, diskSize: 256, percentUsed: 17, cpuLoad: 11.3, memoryTotal: 32, percentUsedMemory: 38 });
+      if (url.pathname === '/api/system/host-telemetry') return respond(inspectHostDevices.fixture());
       if (url.pathname === '/api/system/telemetry')
         return respond({
           sampledAt: new Date().toISOString(),
@@ -703,6 +709,18 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (hostDevicesOnly) {
+      const inspect = hostDeviceColorsOnly ? inspectHostDevices.contrast : hostDeviceChartsOnly ? inspectHostDevices.charts : inspectHostDevices;
+      const hostDevices = await inspect({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, hostDevices, errors });
+      await page.close();
+      continue;
+    }
     if (systemModeOnly) {
       const systemMode = await inspectSystemMode({
         page,
@@ -1066,8 +1084,10 @@ async function main() {
       (await page.locator('.metric-chart[data-metric="cpu"] .metric-chart-tooltip').isVisible());
     const historyTooltipContained = await page.locator('.metric-chart[data-metric="cpu"] .metric-chart-tooltip').evaluate((tooltip) => {
       const box = tooltip.getBoundingClientRect();
-      const plot = tooltip.closest('.metric-chart-plot').getBoundingClientRect();
-      return box.top >= plot.top + 8 && box.bottom <= plot.bottom - 8 && box.left >= plot.left + 8 && box.right <= plot.right - 8;
+      const chart = tooltip.closest('.metric-chart');
+      const outer = chart.getBoundingClientRect();
+      const plot = chart.querySelector('.metric-chart-plot').getBoundingClientRect();
+      return box.top >= plot.bottom + 8 && box.bottom <= outer.bottom + 1 && box.left >= outer.left && box.right <= outer.right;
     });
     const historyGaps = (await page.locator('.metric-chart[data-metric="cpu"] [data-history-segment]').count()) > 1;
     await capture(page, `${viewport.name}-monitor-history.png`, { scrollTop: false });
@@ -1391,10 +1411,17 @@ async function main() {
     homeStatusThemesOnly ||
     customWorkspaceOnly ||
     tilesOnly ||
-    systemModeOnly
+    systemModeOnly ||
+    hostDevicesOnly
   ) {
     if (
-      reports.some((report) => report.errors.length || (tilesOnly && !report.tileComfort?.passed) || (systemModeOnly && !report.systemMode?.passed))
+      reports.some(
+        (report) =>
+          report.errors.length ||
+          (tilesOnly && !report.tileComfort?.passed) ||
+          (systemModeOnly && !report.systemMode?.passed) ||
+          (hostDevicesOnly && !report.hostDevices?.passed),
+      )
     )
       process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);

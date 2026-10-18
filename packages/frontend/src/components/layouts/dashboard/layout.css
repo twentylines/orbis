@@ -2,6 +2,8 @@
 /* biome-ignore-all lint/complexity/noImportantStyles: Tabler utilities and reduced-motion controls need stronger overrides. */
 
 html:has(.desktop) {
+  /* Native focus must settle before the next keypress; section motion is handled separately. */
+  scroll-behavior: auto;
   scroll-padding-top: calc(var(--orbis-bar-bottom, 88px) + 16px);
   scroll-padding-bottom: calc(var(--orbis-dock-height, 78px) + 54px + env(safe-area-inset-bottom, 0px));
 }

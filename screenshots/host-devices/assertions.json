@@ -1,0 +1,2169 @@
+{
+  "passed": true,
+  "layouts": [
+    {
+      "width": 1440,
+      "mode": "light",
+      "textScale": 1,
+      "nativeScroll": {
+        "x": 0,
+        "y": 0,
+        "frame": 0,
+        "content": 1090
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 0
+      }
+    },
+    {
+      "width": 1440,
+      "mode": "light",
+      "textScale": 2,
+      "nativeScroll": {
+        "x": 0,
+        "y": 0,
+        "frame": 0,
+        "content": 2726
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 1
+      }
+    },
+    {
+      "width": 1440,
+      "mode": "dark",
+      "textScale": 1,
+      "nativeScroll": {
+        "x": 0,
+        "y": 0,
+        "frame": 0,
+        "content": 1090
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 2
+      }
+    },
+    {
+      "width": 1440,
+      "mode": "dark",
+      "textScale": 2,
+      "nativeScroll": {
+        "x": 0,
+        "y": 0,
+        "frame": 0,
+        "content": 2726
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 3
+      }
+    },
+    {
+      "width": 768,
+      "mode": "light",
+      "textScale": 1,
+      "nativeScroll": {
+        "x": 0,
+        "y": 2698,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 4
+      }
+    },
+    {
+      "width": 768,
+      "mode": "light",
+      "textScale": 2,
+      "nativeScroll": {
+        "x": 0,
+        "y": 4304,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 5
+      }
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "textScale": 1,
+      "nativeScroll": {
+        "x": 0,
+        "y": 2698,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 6
+      }
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "textScale": 2,
+      "nativeScroll": {
+        "x": 0,
+        "y": 4304,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 7
+      }
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "textScale": 1,
+      "nativeScroll": {
+        "x": 0,
+        "y": 3899,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 8
+      }
+    },
+    {
+      "width": 390,
+      "mode": "light",
+      "textScale": 2,
+      "nativeScroll": {
+        "x": 0,
+        "y": 6248,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 9
+      }
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "textScale": 1,
+      "nativeScroll": {
+        "x": 0,
+        "y": 3899,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 10
+      }
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "textScale": 2,
+      "nativeScroll": {
+        "x": 0,
+        "y": 6248,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 11
+      }
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "textScale": 1,
+      "nativeScroll": {
+        "x": 0,
+        "y": 4018,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 12
+      }
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "textScale": 2,
+      "nativeScroll": {
+        "x": 0,
+        "y": 6865,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 13
+      }
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "textScale": 1,
+      "nativeScroll": {
+        "x": 0,
+        "y": 4018,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 14
+      }
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "textScale": 2,
+      "nativeScroll": {
+        "x": 0,
+        "y": 6865,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true,
+      "metricsRef": {
+        "file": "layout-measurements.json",
+        "index": 15
+      }
+    }
+  ],
+  "states": [
+    {
+      "width": 1440,
+      "mode": "light",
+      "scale": 1,
+      "variant": "first-sample",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 0
+      }
+    },
+    {
+      "width": 1440,
+      "mode": "light",
+      "scale": 1,
+      "variant": "stale",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 1
+      }
+    },
+    {
+      "width": 1440,
+      "mode": "light",
+      "scale": 1,
+      "variant": "partial",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 2
+      }
+    },
+    {
+      "width": 1440,
+      "mode": "light",
+      "scale": 1,
+      "variant": "omitted",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 3
+      }
+    },
+    {
+      "width": 1440,
+      "mode": "light",
+      "scale": 1,
+      "variant": "empty",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 4
+      }
+    },
+    {
+      "width": 1440,
+      "mode": "light",
+      "scale": 1,
+      "variant": "unavailable",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "desktop",
+        "desktopQuery": true,
+        "documentScroll": {
+          "scrollHeight": 1120,
+          "clientHeight": 1120,
+          "scrollTop": 0,
+          "maxScroll": 0
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 0,
+          "content": 407
+        },
+        "top": 948.703125,
+        "bottom": 988.703125,
+        "documentTop": 948.703125,
+        "chromeBottom": 189.75,
+        "dockTop": 1022,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": true,
+        "loading": false
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 407
+        },
+        "beforeHeading": {
+          "top": 896.703125,
+          "bottom": 924.703125,
+          "chromeBottom": 189.75,
+          "dockTop": 1022,
+          "documentTop": 896.703125,
+          "scrollPaddingTop": 104,
+          "scrollPaddingBottom": 132,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 1120
+        },
+        "after": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 407
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "desktop",
+          "desktopQuery": true,
+          "documentScroll": {
+            "scrollHeight": 1120,
+            "clientHeight": 1120,
+            "scrollTop": 0,
+            "maxScroll": 0
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 0,
+            "content": 407
+          },
+          "top": 896.703125,
+          "bottom": 924.703125,
+          "documentTop": 896.703125,
+          "chromeBottom": 189.75,
+          "dockTop": 1022,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 5
+      }
+    },
+    {
+      "width": 1440,
+      "mode": "light",
+      "scale": 1,
+      "variant": "error",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "desktop",
+        "desktopQuery": true,
+        "documentScroll": {
+          "scrollHeight": 1120,
+          "clientHeight": 1120,
+          "scrollTop": 0,
+          "maxScroll": 0
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 0,
+          "content": 407
+        },
+        "top": 948.703125,
+        "bottom": 988.703125,
+        "documentTop": 948.703125,
+        "chromeBottom": 189.75,
+        "dockTop": 1022,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "rejectedRetry": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "desktop",
+        "desktopQuery": true,
+        "documentScroll": {
+          "scrollHeight": 1120,
+          "clientHeight": 1120,
+          "scrollTop": 0,
+          "maxScroll": 0
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 0,
+          "content": 407
+        },
+        "top": 948.703125,
+        "bottom": 988.703125,
+        "documentTop": 948.703125,
+        "chromeBottom": 189.75,
+        "dockTop": 1022,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": false,
+        "loading": true
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 407
+        },
+        "beforeHeading": {
+          "top": 896.703125,
+          "bottom": 924.703125,
+          "chromeBottom": 189.75,
+          "dockTop": 1022,
+          "documentTop": 896.703125,
+          "scrollPaddingTop": 104,
+          "scrollPaddingBottom": 132,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 1120
+        },
+        "after": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 407
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "desktop",
+          "desktopQuery": true,
+          "documentScroll": {
+            "scrollHeight": 1120,
+            "clientHeight": 1120,
+            "scrollTop": 0,
+            "maxScroll": 0
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 0,
+            "content": 407
+          },
+          "top": 896.703125,
+          "bottom": 924.703125,
+          "documentTop": 896.703125,
+          "chromeBottom": 189.75,
+          "dockTop": 1022,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 6
+      }
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "first-sample",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 7
+      }
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "stale",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 8
+      }
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "partial",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 9
+      }
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "omitted",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 10
+      }
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "empty",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 11
+      }
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "unavailable",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 5164,
+          "clientHeight": 1024,
+          "scrollTop": 2108,
+          "maxScroll": 4140
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 2108,
+          "content": 0
+        },
+        "top": 465.421875,
+        "bottom": 525.421875,
+        "documentTop": 2573.421875,
+        "chromeBottom": 88,
+        "dockTop": 919.578125,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": true,
+        "loading": false
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 2108,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeHeading": {
+          "top": 274.234375,
+          "bottom": 330.234375,
+          "chromeBottom": 88,
+          "dockTop": 919.578125,
+          "documentTop": 2382.234375,
+          "scrollPaddingTop": 104,
+          "scrollPaddingBottom": 138,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 1024
+        },
+        "after": {
+          "x": 0,
+          "y": 2108,
+          "frame": 0,
+          "content": 0
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 7700,
+            "clientHeight": 1024,
+            "scrollTop": 2108,
+            "maxScroll": 6676
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 2108,
+            "content": 0
+          },
+          "top": 274.234375,
+          "bottom": 330.234375,
+          "documentTop": 2382.234375,
+          "chromeBottom": 88,
+          "dockTop": 919.578125,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 12
+      }
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "error",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 5164,
+          "clientHeight": 1024,
+          "scrollTop": 2108,
+          "maxScroll": 4140
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 2108,
+          "content": 0
+        },
+        "top": 465.421875,
+        "bottom": 525.421875,
+        "documentTop": 2573.421875,
+        "chromeBottom": 88,
+        "dockTop": 919.578125,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "rejectedRetry": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 5088,
+          "clientHeight": 1024,
+          "scrollTop": 2108,
+          "maxScroll": 4064
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 2108,
+          "content": 0
+        },
+        "top": 381.828125,
+        "bottom": 421.828125,
+        "documentTop": 2489.828125,
+        "chromeBottom": 88,
+        "dockTop": 919.578125,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": false,
+        "loading": true
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 2108,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeHeading": {
+          "top": 274.234375,
+          "bottom": 330.234375,
+          "chromeBottom": 88,
+          "dockTop": 919.578125,
+          "documentTop": 2382.234375,
+          "scrollPaddingTop": 104,
+          "scrollPaddingBottom": 138,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 1024
+        },
+        "after": {
+          "x": 0,
+          "y": 2108,
+          "frame": 0,
+          "content": 0
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 7700,
+            "clientHeight": 1024,
+            "scrollTop": 2108,
+            "maxScroll": 6676
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 2108,
+            "content": 0
+          },
+          "top": 274.234375,
+          "bottom": 330.234375,
+          "documentTop": 2382.234375,
+          "chromeBottom": 88,
+          "dockTop": 919.578125,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 13
+      }
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "scale": 1,
+      "variant": "first-sample",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 14
+      }
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "scale": 1,
+      "variant": "stale",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 15
+      }
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "scale": 1,
+      "variant": "partial",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 16
+      }
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "scale": 1,
+      "variant": "omitted",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 17
+      }
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "scale": 1,
+      "variant": "empty",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 18
+      }
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "scale": 1,
+      "variant": "unavailable",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 4405,
+          "clientHeight": 844,
+          "scrollTop": 1851,
+          "maxScroll": 3561
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 1851,
+          "content": 0
+        },
+        "top": 396.640625,
+        "bottom": 436.640625,
+        "documentTop": 2247.640625,
+        "chromeBottom": 98,
+        "dockTop": 765,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": true,
+        "loading": false
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 1851,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeHeading": {
+          "top": 249.453125,
+          "bottom": 277.453125,
+          "chromeBottom": 98,
+          "dockTop": 765,
+          "documentTop": 2100.453125,
+          "scrollPaddingTop": 114,
+          "scrollPaddingBottom": 125,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 844
+        },
+        "after": {
+          "x": 0,
+          "y": 1851,
+          "frame": 0,
+          "content": 0
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 6891,
+            "clientHeight": 844,
+            "scrollTop": 1851,
+            "maxScroll": 6047
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 1851,
+            "content": 0
+          },
+          "top": 249.453125,
+          "bottom": 277.453125,
+          "documentTop": 2100.453125,
+          "chromeBottom": 98,
+          "dockTop": 765,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 19
+      }
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "scale": 1,
+      "variant": "error",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 4405,
+          "clientHeight": 844,
+          "scrollTop": 1851,
+          "maxScroll": 3561
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 1851,
+          "content": 0
+        },
+        "top": 396.640625,
+        "bottom": 436.640625,
+        "documentTop": 2247.640625,
+        "chromeBottom": 98,
+        "dockTop": 765,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "rejectedRetry": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 4405,
+          "clientHeight": 844,
+          "scrollTop": 1851,
+          "maxScroll": 3561
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 1851,
+          "content": 0
+        },
+        "top": 396.640625,
+        "bottom": 436.640625,
+        "documentTop": 2247.640625,
+        "chromeBottom": 98,
+        "dockTop": 765,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": false,
+        "loading": true
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 1851,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeHeading": {
+          "top": 249.453125,
+          "bottom": 277.453125,
+          "chromeBottom": 98,
+          "dockTop": 765,
+          "documentTop": 2100.453125,
+          "scrollPaddingTop": 114,
+          "scrollPaddingBottom": 125,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 844
+        },
+        "after": {
+          "x": 0,
+          "y": 1851,
+          "frame": 0,
+          "content": 0
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 6891,
+            "clientHeight": 844,
+            "scrollTop": 1851,
+            "maxScroll": 6047
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 1851,
+            "content": 0
+          },
+          "top": 249.453125,
+          "bottom": 277.453125,
+          "documentTop": 2100.453125,
+          "chromeBottom": 98,
+          "dockTop": 765,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 20
+      }
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "variant": "first-sample",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 21
+      }
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "variant": "stale",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 22
+      }
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "variant": "partial",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 23
+      }
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "variant": "omitted",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 24
+      }
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "variant": "empty",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 25
+      }
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "variant": "unavailable",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 7838,
+          "clientHeight": 800,
+          "scrollTop": 3744,
+          "maxScroll": 7038
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 3744,
+          "content": 0
+        },
+        "top": 342.84375,
+        "bottom": 402.84375,
+        "documentTop": 4086.84375,
+        "chromeBottom": 126,
+        "dockTop": 648.84375,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": true,
+        "loading": false
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 3744,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeHeading": {
+          "top": -224.328125,
+          "bottom": -112.328125,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "documentTop": 3519.671875,
+          "scrollPaddingTop": 142,
+          "scrollPaddingBottom": 197,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 800
+        },
+        "after": {
+          "x": 0,
+          "y": 3378,
+          "frame": 0,
+          "content": 0
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 12036,
+            "clientHeight": 800,
+            "scrollTop": 3378,
+            "maxScroll": 11236
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 3378,
+            "content": 0
+          },
+          "top": 141.671875,
+          "bottom": 253.671875,
+          "documentTop": 3519.671875,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "requiredFocusReveal": {
+          "correction": -366,
+          "minimum": -366.328125,
+          "top": 142,
+          "bottom": 603
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 26
+      }
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "variant": "error",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 7791,
+          "clientHeight": 800,
+          "scrollTop": 3697,
+          "maxScroll": 6991
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 3697,
+          "content": 0
+        },
+        "top": 342.25,
+        "bottom": 402.25,
+        "documentTop": 4039.25,
+        "chromeBottom": 126,
+        "dockTop": 648.84375,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "rejectedRetry": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 7771,
+          "clientHeight": 800,
+          "scrollTop": 3697,
+          "maxScroll": 6971
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 3697,
+          "content": 0
+        },
+        "top": 342.25,
+        "bottom": 382.25,
+        "documentTop": 4039.25,
+        "chromeBottom": 126,
+        "dockTop": 648.84375,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": false,
+        "loading": true
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 3697,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeHeading": {
+          "top": -177.328125,
+          "bottom": -65.328125,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "documentTop": 3519.671875,
+          "scrollPaddingTop": 142,
+          "scrollPaddingBottom": 197,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 800
+        },
+        "after": {
+          "x": 0,
+          "y": 3378,
+          "frame": 0,
+          "content": 0
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 12036,
+            "clientHeight": 800,
+            "scrollTop": 3378,
+            "maxScroll": 11236
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 3378,
+            "content": 0
+          },
+          "top": 141.671875,
+          "bottom": 253.671875,
+          "documentTop": 3519.671875,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "requiredFocusReveal": {
+          "correction": -319,
+          "minimum": -319.328125,
+          "top": 142,
+          "bottom": 603
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 27
+      }
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "first-sample",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 28
+      }
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "stale",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 29
+      }
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "partial",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 30
+      }
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "omitted",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 31
+      }
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "empty",
+      "passed": true,
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 32
+      }
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "unavailable",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 7838,
+          "clientHeight": 800,
+          "scrollTop": 3744,
+          "maxScroll": 7038
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 3744,
+          "content": 0
+        },
+        "top": 342.84375,
+        "bottom": 402.84375,
+        "documentTop": 4086.84375,
+        "chromeBottom": 126,
+        "dockTop": 648.84375,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": true,
+        "loading": false
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 3744,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeHeading": {
+          "top": -224.328125,
+          "bottom": -112.328125,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "documentTop": 3519.671875,
+          "scrollPaddingTop": 142,
+          "scrollPaddingBottom": 197,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 800
+        },
+        "after": {
+          "x": 0,
+          "y": 3378,
+          "frame": 0,
+          "content": 0
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 12036,
+            "clientHeight": 800,
+            "scrollTop": 3378,
+            "maxScroll": 11236
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 3378,
+            "content": 0
+          },
+          "top": 141.671875,
+          "bottom": 253.671875,
+          "documentTop": 3519.671875,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "requiredFocusReveal": {
+          "correction": -366,
+          "minimum": -366.328125,
+          "top": 142,
+          "bottom": 603
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 33
+      }
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "variant": "error",
+      "passed": true,
+      "focus": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 7791,
+          "clientHeight": 800,
+          "scrollTop": 3697,
+          "maxScroll": 6991
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 3697,
+          "content": 0
+        },
+        "top": 342.25,
+        "bottom": 402.25,
+        "documentTop": 4039.25,
+        "chromeBottom": 126,
+        "dockTop": 648.84375,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "rejectedRetry": {
+        "tag": "BUTTON",
+        "owner": "host-devices",
+        "frameMode": "page",
+        "desktopQuery": false,
+        "documentScroll": {
+          "scrollHeight": 7771,
+          "clientHeight": 800,
+          "scrollTop": 3697,
+          "maxScroll": 6971
+        },
+        "expectedRevealDelta": 0,
+        "text": "Retry",
+        "scroll": {
+          "y": 3697,
+          "content": 0
+        },
+        "top": 342.25,
+        "bottom": 382.25,
+        "documentTop": 4039.25,
+        "chromeBottom": 126,
+        "dockTop": 648.84375,
+        "outline": "rgb(183, 92, 62) solid 3px",
+        "shadow": "none"
+      },
+      "pending": {
+        "checking": false,
+        "loading": true
+      },
+      "retry": {
+        "before": {
+          "x": 0,
+          "y": 3697,
+          "frame": 0,
+          "content": 0
+        },
+        "beforeHeading": {
+          "top": -177.328125,
+          "bottom": -65.328125,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "documentTop": 3519.671875,
+          "scrollPaddingTop": 142,
+          "scrollPaddingBottom": 197,
+          "scrollMarginTop": 0,
+          "scrollMarginBottom": 0,
+          "viewportHeight": 800
+        },
+        "after": {
+          "x": 0,
+          "y": 3378,
+          "frame": 0,
+          "content": 0
+        },
+        "active": {
+          "tag": "H2",
+          "insideTool": true
+        },
+        "focus": {
+          "tag": "H2",
+          "owner": "host-devices",
+          "frameMode": "page",
+          "desktopQuery": false,
+          "documentScroll": {
+            "scrollHeight": 12036,
+            "clientHeight": 800,
+            "scrollTop": 3378,
+            "maxScroll": 11236
+          },
+          "expectedRevealDelta": 0,
+          "text": "Host devices",
+          "scroll": {
+            "y": 3378,
+            "content": 0
+          },
+          "top": 141.671875,
+          "bottom": 253.671875,
+          "documentTop": 3519.671875,
+          "chromeBottom": 126,
+          "dockTop": 648.84375,
+          "outline": "rgb(183, 92, 62) solid 3px",
+          "shadow": "none"
+        },
+        "requiredFocusReveal": {
+          "correction": -319,
+          "minimum": -319.328125,
+          "top": 142,
+          "bottom": 603
+        }
+      },
+      "metricsRef": {
+        "file": "state-measurements.json",
+        "index": 34
+      }
+    }
+  ],
+  "refresh": [
+    {
+      "width": 1440,
+      "mode": "light",
+      "scale": 1,
+      "requests": 1,
+      "before": {
+        "x": 0,
+        "y": 0,
+        "frame": 0,
+        "content": 1142
+      },
+      "after": {
+        "x": 0,
+        "y": 0,
+        "frame": 0,
+        "content": 1142
+      },
+      "passed": true
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "scale": 2,
+      "requests": 1,
+      "before": {
+        "x": 0,
+        "y": 3211,
+        "frame": 0,
+        "content": 0
+      },
+      "after": {
+        "x": 0,
+        "y": 3211,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "scale": 1,
+      "requests": 1,
+      "before": {
+        "x": 0,
+        "y": 2753,
+        "frame": 0,
+        "content": 0
+      },
+      "after": {
+        "x": 0,
+        "y": 2753,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "requests": 1,
+      "before": {
+        "x": 0,
+        "y": 4927,
+        "frame": 0,
+        "content": 0
+      },
+      "after": {
+        "x": 0,
+        "y": 4927,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "requests": 1,
+      "before": {
+        "x": 0,
+        "y": 4927,
+        "frame": 0,
+        "content": 0
+      },
+      "after": {
+        "x": 0,
+        "y": 4927,
+        "frame": 0,
+        "content": 0
+      },
+      "passed": true
+    }
+  ],
+  "collecting": [
+    {
+      "width": 1440,
+      "mode": "light",
+      "scale": 1,
+      "collectedAfter": 2012,
+      "passed": true
+    },
+    {
+      "width": 768,
+      "mode": "dark",
+      "scale": 2,
+      "collectedAfter": 2018,
+      "passed": true
+    },
+    {
+      "width": 390,
+      "mode": "dark",
+      "scale": 1,
+      "collectedAfter": 2008,
+      "passed": true
+    },
+    {
+      "width": 320,
+      "mode": "light",
+      "scale": 2,
+      "collectedAfter": 2008,
+      "passed": true
+    },
+    {
+      "width": 320,
+      "mode": "dark",
+      "scale": 2,
+      "collectedAfter": 2009,
+      "passed": true
+    }
+  ],
+  "focusAffinity": [
+    {
+      "movedToHeader": true,
+      "retainedOnCompletion": true,
+      "passed": true
+    }
+  ],
+  "requests": [
+    {
+      "scenario": "ready",
+      "at": 1792292906577
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292911511
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292917181
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292922151
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292927827
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292932996
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292938466
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292943590
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292949023
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292954140
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292959648
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292964811
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292970377
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292975624
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292981389
+    },
+    {
+      "scenario": "ready",
+      "at": 1792292986632
+    },
+    {
+      "scenario": "first-sample",
+      "at": 1792292992418
+    },
+    {
+      "scenario": "stale",
+      "at": 1792292994942
+    },
+    {
+      "scenario": "partial",
+      "at": 1792292997558
+    },
+    {
+      "scenario": "omitted",
+      "at": 1792293000162
+    },
+    {
+      "scenario": "empty",
+      "at": 1792293002816
+    },
+    {
+      "scenario": "unavailable",
+      "at": 1792293005429
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293008130
+    },
+    {
+      "scenario": "error",
+      "at": 1792293009354
+    },
+    {
+      "scenario": "error",
+      "at": 1792293012068
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293012897
+    },
+    {
+      "scenario": "collecting",
+      "at": 1792293014170
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293016182
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293016668
+    },
+    {
+      "scenario": "refreshed",
+      "at": 1792293026678
+    },
+    {
+      "scenario": "first-sample",
+      "at": 1792293027374
+    },
+    {
+      "scenario": "stale",
+      "at": 1792293030623
+    },
+    {
+      "scenario": "partial",
+      "at": 1792293033540
+    },
+    {
+      "scenario": "omitted",
+      "at": 1792293036498
+    },
+    {
+      "scenario": "empty",
+      "at": 1792293039412
+    },
+    {
+      "scenario": "unavailable",
+      "at": 1792293042323
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293045376
+    },
+    {
+      "scenario": "error",
+      "at": 1792293046621
+    },
+    {
+      "scenario": "error",
+      "at": 1792293049643
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293050476
+    },
+    {
+      "scenario": "collecting",
+      "at": 1792293051676
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293053694
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293054191
+    },
+    {
+      "scenario": "refreshed",
+      "at": 1792293064194
+    },
+    {
+      "scenario": "first-sample",
+      "at": 1792293064852
+    },
+    {
+      "scenario": "stale",
+      "at": 1792293067429
+    },
+    {
+      "scenario": "partial",
+      "at": 1792293069991
+    },
+    {
+      "scenario": "omitted",
+      "at": 1792293072539
+    },
+    {
+      "scenario": "empty",
+      "at": 1792293075110
+    },
+    {
+      "scenario": "unavailable",
+      "at": 1792293077825
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293080540
+    },
+    {
+      "scenario": "error",
+      "at": 1792293081787
+    },
+    {
+      "scenario": "error",
+      "at": 1792293084488
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293085328
+    },
+    {
+      "scenario": "collecting",
+      "at": 1792293086549
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293088557
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293089055
+    },
+    {
+      "scenario": "refreshed",
+      "at": 1792293099059
+    },
+    {
+      "scenario": "first-sample",
+      "at": 1792293099765
+    },
+    {
+      "scenario": "stale",
+      "at": 1792293102748
+    },
+    {
+      "scenario": "partial",
+      "at": 1792293105688
+    },
+    {
+      "scenario": "omitted",
+      "at": 1792293108625
+    },
+    {
+      "scenario": "empty",
+      "at": 1792293111567
+    },
+    {
+      "scenario": "unavailable",
+      "at": 1792293114575
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293117667
+    },
+    {
+      "scenario": "error",
+      "at": 1792293118847
+    },
+    {
+      "scenario": "error",
+      "at": 1792293121961
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293122804
+    },
+    {
+      "scenario": "collecting",
+      "at": 1792293124010
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293126018
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293126523
+    },
+    {
+      "scenario": "refreshed",
+      "at": 1792293136530
+    },
+    {
+      "scenario": "first-sample",
+      "at": 1792293137224
+    },
+    {
+      "scenario": "stale",
+      "at": 1792293140183
+    },
+    {
+      "scenario": "partial",
+      "at": 1792293143133
+    },
+    {
+      "scenario": "omitted",
+      "at": 1792293146109
+    },
+    {
+      "scenario": "empty",
+      "at": 1792293149022
+    },
+    {
+      "scenario": "unavailable",
+      "at": 1792293152000
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293155108
+    },
+    {
+      "scenario": "error",
+      "at": 1792293156372
+    },
+    {
+      "scenario": "error",
+      "at": 1792293159428
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293160278
+    },
+    {
+      "scenario": "collecting",
+      "at": 1792293161483
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293163492
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293163983
+    },
+    {
+      "scenario": "refreshed",
+      "at": 1792293173987
+    },
+    {
+      "scenario": "unavailable",
+      "at": 1792293174696
+    },
+    {
+      "scenario": "ready",
+      "at": 1792293175549
+    }
+  ],
+  "preferencePuts": 0,
+  "mutations": [],
+  "errors": [],
+  "cleanup": {
+    "routesRestored": true,
+    "textRestored": true,
+    "viewportRestored": true,
+    "listenersRestored": true
+  },
+  "current": "1440-light-text1-unavailable",
+  "pendingFocus": {
+    "tag": "BUTTON",
+    "owner": "host-devices",
+    "frameMode": "page",
+    "desktopQuery": false,
+    "documentScroll": {
+      "scrollHeight": 7791,
+      "clientHeight": 800,
+      "scrollTop": 3697,
+      "maxScroll": 6991
+    },
+    "expectedRevealDelta": 0,
+    "text": "Retry",
+    "scroll": {
+      "y": 3697,
+      "content": 0
+    },
+    "top": 342.25,
+    "bottom": 402.25,
+    "documentTop": 4039.25,
+    "chromeBottom": 126,
+    "dockTop": 648.84375,
+    "outline": "rgb(183, 92, 62) solid 3px",
+    "shadow": "none"
+  },
+  "cleanupFailures": [],
+  "runnerErrors": []
+}

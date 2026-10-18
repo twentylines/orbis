@@ -152,31 +152,35 @@ export function MetricChart({
             {loading ? 'Loading history…' : points.length ? 'Readings unavailable in this range' : 'No samples recorded in this range'}
           </span>
         ) : null}
-        {inspecting && selected && summary ? (
-          <output className="metric-chart-tooltip">
-            <time dateTime={selected.at}>
-              {new Date(selected.at).toLocaleString()}
-              {selected.until !== selected.at ? ` – ${new Date(selected.until).toLocaleTimeString()}` : ''}
-            </time>
+        <div className="metric-chart-times" aria-hidden="true">
+          <span>{history ? axisTime(from) : '—'}</span>
+          <span>{history ? axisTime(from + (to - from) / 2) : '—'}</span>
+          <span>{history ? axisTime(to) : '—'}</span>
+        </div>
+      </div>
+      {inspecting && selected && summary ? (
+        <output className="metric-chart-tooltip" aria-live="off">
+          <time dateTime={selected.at}>
+            {new Date(selected.at).toLocaleString()}
+            {selected.until !== selected.at ? ` – ${new Date(selected.until).toLocaleTimeString()}` : ''}
+          </time>
+          {summary.average === null ? (
+            <span>Unavailable</span>
+          ) : (
             <strong>
               {formatMetricValue(summary.average, field)}
               {summary.samples > 1 ? ' average' : ''}
             </strong>
-            {summary.samples > 1 ? (
-              <span>
-                Peak {formatMetricValue(summary.peak, field)} · {summary.samples} samples
-              </span>
-            ) : null}
-            {field === 'cpu' ? <span>{source}</span> : null}
-            <small>← → inspect samples</small>
-          </output>
-        ) : null}
-      </div>
-      <div className="metric-chart-times" aria-hidden="true">
-        <span>{history ? axisTime(from) : '—'}</span>
-        <span>{history ? axisTime(from + (to - from) / 2) : '—'}</span>
-        <span>{history ? axisTime(to) : '—'}</span>
-      </div>
+          )}
+          {summary.samples > 1 ? (
+            <span>
+              Peak {formatMetricValue(summary.peak, field)} · {summary.samples} samples
+            </span>
+          ) : null}
+          {field === 'cpu' ? <span>{source}</span> : null}
+          <small>← → inspect samples</small>
+        </output>
+      ) : null}
     </div>
   );
 }

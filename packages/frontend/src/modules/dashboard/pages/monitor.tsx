@@ -8,6 +8,7 @@ import { formatUptime } from '@/desktop/uptime';
 import './monitor.css';
 import { ContainerResources } from '@/components/container-resources/container-resources';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { HostDevices } from '../components/host-devices';
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return 'Unavailable';
@@ -56,7 +57,7 @@ export default function Monitor() {
 
   return (
     <div className="desktop-monitor">
-      <p className="desktop-monitor-scope">Filesystem and network readings cover the Orbis core container.</p>
+      <p className="desktop-monitor-scope">History charts show CPU, host memory and Orbis core network traffic.</p>
       <div className="desktop-monitor-live-status">
         <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} />
         <strong>{telemetry.isError ? 'Connection interrupted' : 'Live readings'}</strong>
@@ -231,8 +232,9 @@ export default function Monitor() {
                 <strong>{bytes(sample.memory.swapTotalBytes)}</strong>
               </div>
             </section>
+            <HostDevices />
             <section className="desktop-telemetry-disks" aria-labelledby="telemetry-disks-title">
-              <h2 id="telemetry-disks-title">Runtime filesystems</h2>
+              <h2 id="telemetry-disks-title">Orbis core storage</h2>
               {sample.filesystems.length ? (
                 <div className="desktop-telemetry-list">
                   {sample.filesystems.map((disk) => (
@@ -255,7 +257,7 @@ export default function Monitor() {
               )}
             </section>
             <section className="desktop-telemetry-network" aria-labelledby="telemetry-network-title">
-              <h2 id="telemetry-network-title">Runtime network</h2>
+              <h2 id="telemetry-network-title">Orbis core network</h2>
               <div className="desktop-network-charts">
                 <div>
                   <h3>↓ Download</h3>

@@ -2,6 +2,12 @@
 
 ## Unreleased development preview
 
+- Stop inherited smooth page scrolling from racing native keyboard focus behind the dock. Preserve explicit section and search motion.
+- Size history-chart axes to their labels, wrap timestamps and place inspection details below the plot. Keep missing values readable and strengthen theme-aware small-label contrast.
+
+- Add a Host devices section in Monitor with real Linux filesystem capacity, interface counters/rates/link state and whole-device disk activity through the restricted helper. Bound and share collection, reject unsafe responses and show stale/partial/missing capabilities explicitly. Keep core-container readings separate.
+- Wrap mount labels at directory boundaries, use accessible ellipsis for long identifier segments, reflow device facts with enlarged text and preserve keyboard focus after Retry. Keep initial collection responsive without adding continuous background browser polling.
+
 - Add Follow system colour mode without replacing the chosen preset. Track device changes across status instruments, desktop/auth/guest/recovery surfaces, notifications and editors; keep the raw account/export preference as system and avoid preference writes for device changes.
 - Guard language detection, theme cookies and preference storage when JavaScript storage access fails. Keep the page usable and report whether changes are synced, cached or temporary. Let mode cards reflow with enlarged text.
 

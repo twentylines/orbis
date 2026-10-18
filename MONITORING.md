@@ -10,7 +10,21 @@ App containers are associated through `runtipi.appurn`, or the existing Compose 
 
 The workspace combines CPU, memory, container network, and runtime storage in System status. Home and Monitor show uptime from the existing system telemetry instead of the sample timestamp, formatted as days, hours and minutes. With the host-proc mount configured, the collector reads the server's `/proc/uptime`; it does not count how long the Orbis container has been running. On the owned Linux test host, API and host uptime differed by 1.56 seconds before the beta 27 update.
 
-The Usage section and expanded Monitor rank containers by CPU or memory, highest first. This ranking covers Docker workloads only; it does not claim to identify other host processes. Host-wide mount details, host network interfaces, sensor telemetry, and process ranking remain future work.
+The Usage section and expanded Monitor rank containers by CPU or memory, highest first. This ranking covers Docker workloads only; it does not claim to identify other host processes. Sensor telemetry and host-process ranking remain future work.
+
+## Host devices
+
+The source after beta41 adds authenticated `GET /api/system/host-telemetry` and Monitor's Host devices section. The existing restricted Linux helper exposes only a fixed, zero-argument `GET /v1/telemetry` on its private Unix socket. A missing helper, older helper or unavailable capability remains explicit; Orbis core-container capacity/network readings retain their separate headings. This requires the updated helper and core; published beta41 does not include this feature.
+
+Mounted filesystem capacity comes from host `statvfs`, not the container's mount namespace. The list skips kernel/in-memory filesystems and temporary container overlay mounts, preserving the host root even on an overlay-based host. Mount source and option fields are never returned because they can contain credentials. Available capacity can differ from total minus used because filesystems reserve space. Bind mounts can share capacity; their values are not added into a fake total.
+
+Interface totals come from `/proc/net/dev`; link state, link speed and identity come from selected sysfs files. Loopback is excluded. Whole-device I/O comes from `/proc/diskstats`, excluding partitions and loop/ram/CD devices. Read/write rates use actual monotonic elapsed time and [Linux's fixed 512-byte counter sectors](https://docs.kernel.org/block/stat.html). Active time follows the kernel I/O-time counter and is approximate, especially with concurrent I/O; it is not a claim of drive saturation. Layered devices can share the same traffic, so no aggregate is fabricated. Counter resets, replaced device identities, the first sample and gaps over 60 seconds produce unavailable rates until two recent samples exist. [Kernel counter definitions](https://docs.kernel.org/admin-guide/iostats.html) describe these limits.
+
+One shared daemon worker samples on demand at most every ten seconds. Each counter file read is bounded, each group exposes at most 32 items, omitted counts and partial failures are explicit, and only previous counter sets plus the latest snapshot remain in memory. A blocked filesystem cannot block HTTP handlers or spawn more sampler workers; existing values become stale after 30 seconds. The backend coalesces viewers, validates and selects every returned field, caps the response at 256 KiB and ends a socket request after two seconds. Browser polling stops in background/minimized views; a first Collecting response retries after two seconds, then normal reads use ten seconds.
+
+Monitor uses readable directory-boundary wrapping, with full-text/title ellipsis for unusually long individual identifiers. Facts reflow as text grows. Automatic refresh preserves reading position. Successful Retry restores keyboard focus to the surviving Host devices heading, using only the minimum padded scroll adjustment when that target is behind the chrome. It does not move focus away from another control the user selected.
+
+The retained Linux source probe uses only the owned arm64 Colima guest, a temporary Unix server and two real samples; it never updates the installed helper/core. API authentication/transport/counter fixtures and the compiled-source UI matrix remain separate evidence. A published-image/helper-upgrade confirmation is the next acceptance gate; Hades is untouched.
 
 ## Recorded history
 
@@ -25,3 +39,5 @@ On graceful shutdown, the current partial minute is flushed through Nest's shutd
 The 5-minute view uses recent individual readings with saved minute summaries before the current process's recent buffer. Longer ranges use sample-weighted 1-minute, 5-minute and 30-minute averages, retaining peaks and counts for inspection. Averages describe actual samples, not an assumption of continuous coverage. No samples are created for downtime. The charts use real time coordinates, break lines across missing readings, collection gaps and CPU source changes, and label the selected time range. Pointer inspection and Left/Right/Home/End keyboard controls reveal timestamps, averages, peaks and source labels.
 
 History currently covers aggregate CPU, host memory, and core-network rates. It does not record per-container history, host disk throughput, or sensors. Current per-container readings remain available separately.
+
+Chart axes size to their labels instead of using a fixed pixel allowance. Time labels wrap when space is limited. Inspection details appear in the document flow below the plot so enlarged text does not cover subsequent core rows; keyboard Left/Right/Home/End and the slider's complete value description remain available.

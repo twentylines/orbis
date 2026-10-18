@@ -1,0 +1,16 @@
+{
+  "scope": "Frozen compiled R5 source candidate; not installed-image acceptance",
+  "baseCommit": "6be37ac8df0482c94a50fb6a2e1ad54f013792b5",
+  "productSources": {
+    "packages/frontend/src/components/layouts/dashboard/layout.css": "bc563726e03e0fb30a9e2249967938df74f32fb09b8708300e969c4439cb3667",
+    "packages/frontend/src/components/metric-chart/metric-chart.tsx": "b91f928b4aed06fb72b8e6570cdcd5cbcb8db594cf38b71280ca9e68bf407167",
+    "packages/frontend/src/components/metric-chart/metric-chart.css": "760fbc84f175fc0370beff19b6d73e0b2b3296440ebe31a8e1d0243a08db80e8",
+    "packages/frontend/src/modules/dashboard/components/host-devices.tsx": "ce903b1ff9b5a9d709877ef8e9b7a4b6e82dc385faa1d7792841bceb65f05e51",
+    "packages/frontend/src/modules/dashboard/components/host-devices.css": "2fa29e75318572586cdf9b1a01ae71ada1cfdd693261745a1f2f4553fd84c732",
+    "packages/frontend/src/modules/dashboard/pages/monitor.tsx": "794397b52e7f68fc5bae8397beb4481f1b6271f59e07a7461ca452871f86d126",
+    "packages/backend/src/modules/system/host-telemetry.service.ts": "c09a874364018f699937b621924dadd0840b9abf9dcb27489a2b0e5d04112fdf",
+    "packages/common/src/schemas/host-telemetry.ts": "32917a60c4727299f60bc557cba743ad263ee1203b5e6096187af46e30df838b",
+    "scripts/orbis-host-service.py": "17be861700b87f3e9f9f242dfb7adffc34adde7d2c258dabd0b42196c1715904",
+    "scripts/orbis-host-telemetry.py": "e6175a49d9b02c87a204bdb82a902c8d755830af8dbb4a220ae5709f351f09b1"
+  }
+}
