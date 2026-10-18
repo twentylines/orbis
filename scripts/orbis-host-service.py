@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Expose only reviewed Orbis core updates over a local Unix socket.
+"""Expose bounded host readings and reviewed core/package updates over a Unix socket.
 
 Run this service outside the Orbis container. Socket file permissions are the
 transport boundary; the web API must separately authenticate its user.
@@ -35,6 +35,7 @@ def load_script(name: str, module_name: str):
 
 UPDATE = load_script("orbis-host-update.py", "orbis_update_for_service")
 PACKAGES = load_script("orbis-host-packages.py", "orbis_packages_for_service")
+TELEMETRY = load_script("orbis-host-telemetry.py", "orbis_telemetry_for_service").HostTelemetry()
 HOST = UPDATE.HOST
 PLAN = HOST.PLAN
 CHECK = UPDATE.CHECK
@@ -500,6 +501,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self) -> None:
+        if self.path == "/v1/telemetry":
+            self.send_json(200, TELEMETRY.read())
+            return
         if self.path == "/v1/status":
             try:
                 self.send_json(200, self.server.service.status())

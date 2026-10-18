@@ -10,6 +10,7 @@ import { SystemService } from '../system.service';
 import { OrbisReleaseService } from '../orbis-release.service';
 import { ContainerTelemetryService } from '../container-telemetry.service';
 import { MetricHistoryService } from '../metric-history.service';
+import { HostTelemetryService } from '../host-telemetry.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
@@ -18,6 +19,7 @@ describe('SystemController certificate security', () => {
   const logger = mock<LoggerService>();
   const containers = mock<ContainerTelemetryService>();
   const history = mock<MetricHistoryService>();
+  const host = mock<HostTelemetryService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -26,6 +28,7 @@ describe('SystemController certificate security', () => {
         AuthGuard,
         { provide: ContainerTelemetryService, useValue: containers },
         { provide: MetricHistoryService, useValue: history },
+        { provide: HostTelemetryService, useValue: host },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         {
           provide: SystemService,
@@ -99,6 +102,16 @@ describe('SystemController certificate security', () => {
     containers.read.mockResolvedValue({ sampledAt: new Date().toISOString(), available: true, containers: [], omitted: 0 });
     expect((await request(app.getHttpServer()).get('/system/containers').set('Authorization', 'Bearer cli-token')).status).toBe(200);
     expect(containers.read).toHaveBeenCalledOnce();
+  });
+
+  it('requires authentication before reading host devices', async () => {
+    expect((await request(app.getHttpServer()).get('/system/host-telemetry')).status).toBe(401);
+    expect(host.read).not.toHaveBeenCalled();
+    host.read.mockResolvedValue({ available: false, reason: 'Collecting host readings.' });
+    const result = await request(app.getHttpServer()).get('/system/host-telemetry').set('Authorization', 'Bearer cli-token');
+    expect(result.status).toBe(200);
+    expect(result.body.reason).toBe('Collecting host readings.');
+    expect(host.read).toHaveBeenCalledOnce();
   });
 
   it('requires authentication for build metadata and reports the installed version', async () => {

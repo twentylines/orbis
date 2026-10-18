@@ -7,6 +7,7 @@ import { ApiResponse } from '@nestjs/swagger';
 import { OrbisReleaseService } from './orbis-release.service';
 import { ContainerTelemetryService } from './container-telemetry.service';
 import { MetricHistoryService } from './metric-history.service';
+import { HostTelemetryService } from './host-telemetry.service';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
 
 @Controller('system')
@@ -16,6 +17,7 @@ export class SystemController {
     private readonly orbisReleases: OrbisReleaseService,
     private readonly containers: ContainerTelemetryService,
     private readonly history: MetricHistoryService,
+    private readonly host: HostTelemetryService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -30,6 +32,12 @@ export class SystemController {
   @Get('/telemetry')
   async telemetry() {
     return this.systemService.getTelemetry();
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/host-telemetry')
+  hostTelemetry() {
+    return this.host.read();
   }
 
   @UseGuards(AuthGuard)
