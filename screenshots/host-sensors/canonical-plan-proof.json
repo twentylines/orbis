@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "scope": "Read-only existing helper upgrade CLI plan after guarded sensor upgrade",
+  "installedAndCandidateScriptsMatch": true,
+  "installedAndCandidateUnitMatch": true,
+  "canonicalEnrollmentEnvironmentUnitDropInAndSocketGuards": true,
+  "coreExactImageContainerStartUnchanged": true,
+  "plan": {
+    "root": "/Users/sai/.codex/tmp/orbis-stock-20261015",
+    "dockerContext": "default",
+    "releaseTag": "v0.1.0-beta.45",
+    "digest": "sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06",
+    "installedScriptsSha256": "561c0f99fa01d1f068877fddc8ba0b3faad9cf5b29e3216bb25edaad9cd84b16",
+    "candidateScriptsSha256": "561c0f99fa01d1f068877fddc8ba0b3faad9cf5b29e3216bb25edaad9cd84b16",
+    "installedUnitSha256": "aec0035be514b039c26ca30a1fb693aeb9be5d468e75e4d11344e863ce539794",
+    "candidateUnitSha256": "aec0035be514b039c26ca30a1fb693aeb9be5d468e75e4d11344e863ce539794"
+  }
+}

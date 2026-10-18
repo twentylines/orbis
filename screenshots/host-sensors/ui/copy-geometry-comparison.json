@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "noticeLines": 1,
+  "noticeHeight": 40,
+  "R4measuredRetryRectEqualsR5": true,
+  "R4derivedErrorLayoutInsertion": 103.796875,
+  "derivation": "R4 About top relative to sensor root before/after cached error; notice+stale output are inserted above groups. Direct R4 cached-error card boxes were not recorded; R3 dimensions plus this measured R4 insertion predict R5 card positions. CSS is unchanged from R4.",
+  "differences": []
+}

@@ -1,0 +1,5 @@
+{
+  "scripts/host-sensors-checks.cjs": "804418bce8bd2205e2ded935b4e7a2a3ac1bb9161037a9a7b9d16a5668935294",
+  "scripts/visual-qa.cjs": "07f17b408c64273e530a3d3aa4c17085389816510f7d5e992446480b021f8555",
+  "packages/frontend/dist/client/index.html": "3af31f1db6b4f417c901999dc71bce5e7bd07a746b0b9dd83fd931b5d95b6a8a"
+}
