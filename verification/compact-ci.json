@@ -1,0 +1,23 @@
+{
+  "sourceCommit": "4d45c3fefbbb552cc4a4d7e0c61781111e4cee16",
+  "passed": true,
+  "runs": [
+    {
+      "conclusion": "success",
+      "databaseId": 39116021488,
+      "headSha": "4d45c3fefbbb552cc4a4d7e0c61781111e4cee16",
+      "status": "completed",
+      "url": "https://github.com/twentylines/orbis/actions/runs/39116021488",
+      "workflowName": "Orbis CI"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 39116021482,
+      "headSha": "4d45c3fefbbb552cc4a4d7e0c61781111e4cee16",
+      "status": "completed",
+      "url": "https://github.com/twentylines/orbis/actions/runs/39116021482",
+      "workflowName": "Integration tests"
+    }
+  ],
+  "scope": "GitHub CI/integration for the committed compact source and handoff. No published-image/CLI recovery/Hades acceptance implied."
+}
