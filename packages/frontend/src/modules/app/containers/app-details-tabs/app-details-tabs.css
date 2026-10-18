@@ -79,7 +79,7 @@
   .app-detail-tabs .markdown h1,
   .app-detail-tabs .markdown h2,
   .app-detail-tabs .markdown h3 {
-    font-size: 20px;
+    font-size: var(--orbis-compact-page-title, 20px);
     line-height: 1.4;
   }
 }
@@ -99,7 +99,7 @@
 }
 .app-panel-empty h3 {
   color: var(--desktop-ink);
-  font-size: 19px;
+  font-size: var(--orbis-compact-section, 19px);
   margin-bottom: 12px;
 }
 .app-panel-caption {
@@ -117,7 +117,7 @@
 }
 .app-operations h3 {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--orbis-compact-section, 22px);
   letter-spacing: -0.03em;
 }
 .app-operations > header a {

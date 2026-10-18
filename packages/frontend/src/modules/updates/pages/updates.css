@@ -365,7 +365,7 @@
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
-  font-size: 21px;
+  font-size: var(--orbis-compact-section, 21px);
 }
 .desktop-update-release-title time {
   color: var(--desktop-muted);

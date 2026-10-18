@@ -53,6 +53,38 @@ body:has(.orbis-theme) {
   --workspace-heading-ink: #132e2b;
   --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
 }
+
+/* Compact pages share a type and spacing scale; text enlargement still reflows. */
+@media (max-width: 1099px), (max-height: 639px) {
+  .orbis-theme,
+  body:has(.orbis-theme) {
+    --orbis-compact-title: 2rem;
+    --orbis-compact-section: 1.125rem;
+    --orbis-compact-reading: 1.75rem;
+    --orbis-compact-page-title: 1.25rem;
+    --orbis-compact-panel-space: 1.25rem;
+    --orbis-compact-section-gap: 1.25rem;
+  }
+}
+@media (max-width: 760px) {
+  .orbis-theme,
+  body:has(.orbis-theme) {
+    --orbis-compact-title: 1.625rem;
+    --orbis-compact-section: 1.0625rem;
+    --orbis-compact-reading: 1.5rem;
+    --orbis-compact-page-title: 1.125rem;
+    --orbis-compact-panel-space: 1rem;
+    --orbis-compact-section-gap: 1rem;
+  }
+}
+@media (max-width: 380px) {
+  .orbis-theme,
+  body:has(.orbis-theme) {
+    --orbis-compact-title: 1.5rem;
+    --orbis-compact-section: 1rem;
+    --orbis-compact-reading: 1.375rem;
+  }
+}
 body:has(.orbis-theme) .form-select {
   min-height: 40px;
 }

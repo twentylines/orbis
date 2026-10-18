@@ -1,7 +1,7 @@
 .host-processes {
   --process-muted: var(--desktop-status-muted);
   margin-top: 24px;
-  padding: 28px;
+  padding: var(--orbis-compact-panel-space, 28px);
   border: 1px solid var(--desktop-line);
   border-radius: 20px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
@@ -17,7 +17,7 @@
 }
 .host-processes .host-processes-heading h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--orbis-compact-section, 22px);
   line-height: 1.5;
   letter-spacing: -0.035em;
 }
@@ -146,7 +146,7 @@
 }
 @container (max-width: 650px) {
   .host-processes {
-    padding: 18px;
+    padding: var(--orbis-compact-panel-space, 18px);
   }
 }
 @media (prefers-reduced-motion: reduce) {

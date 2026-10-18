@@ -1,5 +1,10 @@
 # Orbis changelog
 
+## In progress — compact screens and portable handoff
+
+- Add compact-screen type/spacing across tools, app details and auth. Verify32 native compositions, both phone widths/modes with doubled text and20 narrow surface samples. Retain source screenshots and target-size limitations.
+- Add a portable handoff, original brief and Claude entry point, with a full-checkpoint rule at1% account allowance remaining. Include the prepared guarded beta47 recovery UI verifier; actual recovery acceptance remains pending.
+
 ## Beta46 — 18 October 2026
 
 - Add current kernel temperature/fan readings and DRM GPU identity to Monitor, with AMDGPU activity/VRAM where supported. Missing, faulted, partial and empty hardware states stay explicit; the restricted helper uses bounded shared reads and no hardware-control commands.

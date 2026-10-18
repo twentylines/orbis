@@ -31,8 +31,8 @@ export const AuthLayout = ({ children }: PropsWithChildren) => {
         </Button>
         <LanguageSelector locale={locale as Locale} className="mb-0" />
       </div>
-      <div className="container container-tight py-4">
-        <div className="text-center mb-4 desktop-auth-identity">
+      <div className="container container-tight desktop-auth-container">
+        <div className="text-center desktop-auth-identity">
           <img
             alt="Orbis logo"
             src={getLogo(allowAutoThemes)}

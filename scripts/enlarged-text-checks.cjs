@@ -238,6 +238,7 @@ module.exports = async function inspectEnlargedText({ page, base, viewport, capt
     await settle();
     return probes;
   };
+  let primaryFailure;
   try {
     for (const mode of ['light', 'dark']) {
       if (page.url().startsWith(origin.origin)) await page.evaluate(() => localStorage.removeItem('server-desktop-preferences-v1'));
@@ -306,9 +307,18 @@ module.exports = async function inspectEnlargedText({ page, base, viewport, capt
       report.modes.push(result);
     }
     assert.equal(report.mutations.length, 0, 'text/layout checks must not issue app or host mutations');
-    return report;
+  } catch (error) {
+    primaryFailure = error;
+    await Promise.resolve(shot('text-failure')).catch((captureError) => console.error('Text failure capture failed:', captureError.message));
   } finally {
     page.off('request', onRequest);
-    await restoreText();
+    try {
+      await restoreText();
+    } catch (error) {
+      if (primaryFailure) console.error('Text cleanup failed after the recorded error:', error.message);
+      else primaryFailure = error;
+    }
   }
+  if (primaryFailure) throw primaryFailure;
+  return report;
 };

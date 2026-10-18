@@ -8,7 +8,7 @@
   background: linear-gradient(130deg, rgba(104, 149, 119, 0.18), rgba(196, 160, 114, 0.1));
 }
 .task-summary h2 {
-  font-size: 25px;
+  font-size: var(--orbis-compact-page-title, 25px);
   margin: 0 0 7px;
   letter-spacing: -0.04em;
 }
@@ -187,14 +187,14 @@
   .task-summary {
     flex-wrap: wrap;
     gap: 16px;
-    padding: 22px;
+    padding: var(--orbis-compact-panel-space);
   }
   .task-summary-orbit {
     width: 52px;
     height: 52px;
   }
   .task-summary h2 {
-    font-size: 22px;
+    font-size: var(--orbis-compact-section);
   }
   .task-retention {
     margin-left: 0;

@@ -19,7 +19,7 @@
   min-width: 0;
 }
 .appearance-section h2 {
-  font-size: 18px;
+  font-size: var(--orbis-compact-section, 18px);
   margin: 0 0 6px;
 }
 .appearance-section p {

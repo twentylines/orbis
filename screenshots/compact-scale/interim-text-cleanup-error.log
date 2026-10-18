@@ -1,0 +1,6 @@
+page.evaluate: Execution context was destroyed, most likely because of a navigation
+    at restoreText (/Users/sai/Documents/ChatGPT/homelab/scripts/enlarged-text-checks.cjs:35:10)
+    at inspectEnlargedText (/Users/sai/Documents/ChatGPT/homelab/scripts/enlarged-text-checks.cjs:312:11)
+    at async main (/Users/sai/Documents/ChatGPT/homelab/scripts/visual-qa.cjs:1025:28) {
+  name: 'Error'
+}

@@ -36,6 +36,8 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 
 .desktop-auth {
   --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
+  position: relative;
+  padding-block: 88px 40px;
   min-height: 100vh;
   background: #c9d0bc var(--desktop-wallpaper) center center / cover fixed;
   color: var(--desktop-ink);
@@ -53,8 +55,14 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   color: var(--desktop-ink);
   box-shadow: 0 28px 70px rgba(28, 39, 35, 0.17);
 }
+.desktop-auth-container {
+  padding-block: 24px;
+}
+.desktop-auth-identity {
+  margin-bottom: 24px;
+}
 .desktop-auth-identity h1 {
-  font-size: 24px;
+  font-size: var(--orbis-compact-page-title, 24px);
   letter-spacing: -0.035em;
   margin: 10px 0 0;
   color: var(--desktop-ink);
@@ -107,10 +115,29 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 @media (max-width: 640px) {
   .desktop-auth {
     background-attachment: scroll;
+    padding-block: 76px 24px;
   }
   .desktop-auth .container-tight {
     width: min(100%, 480px);
-    padding: 0 15px;
+    padding: 16px;
+  }
+  .desktop-auth-identity {
+    margin-bottom: 16px;
+  }
+  .desktop-auth-identity img {
+    width: 48px;
+  }
+  .desktop-auth .card-body {
+    padding: 20px;
+  }
+  .desktop-auth .h2 {
+    font-size: var(--orbis-compact-page-title);
+  }
+  .desktop-auth-credit {
+    padding: 12px 20px;
+  }
+  .desktop-auth pre {
+    padding: 12px;
   }
 }
 
@@ -119,10 +146,6 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   text-align: center;
 }
 
-.desktop-auth {
-  position: relative;
-  padding-block: 88px 40px;
-}
 .desktop-auth-toolbar {
   position: absolute;
   top: 24px;
@@ -194,7 +217,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 }
 .orbis-error-copy h1 {
   margin: 0 0 8px;
-  font-size: 22px;
+  font-size: var(--orbis-compact-page-title, 22px);
   line-height: 1.25;
   letter-spacing: -0.025em;
   overflow-wrap: anywhere;

@@ -34,6 +34,7 @@ const inspectHostSensors = require('./host-sensors-checks.cjs');
 const inspectHostHistory = require('./host-device-history-checks.cjs');
 const inspectCachedRetry = require('./cached-retry-focus-checks.cjs');
 const inspectMonitorRefresh = require('./monitor-refresh-checks.cjs');
+const compactScaleOnly = process.env.ORBIS_VISUAL_COMPACT_SCALE_ONLY === '1';
 const monitorRefreshOnly = process.env.ORBIS_VISUAL_MONITOR_REFRESH_ONLY === '1';
 const hostSensorsOnly = process.env.ORBIS_VISUAL_HOST_SENSORS_ONLY === '1';
 const cachedRetryOnly = process.env.ORBIS_VISUAL_CACHED_RETRY_ONLY === '1';
@@ -794,6 +795,18 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (compactScaleOnly) {
+      const inspectCompactScale = require('./compact-scale-checks.cjs');
+      const compactScale = await inspectCompactScale({
+        page,
+        base,
+        viewport,
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, compactScale, errors });
+      await page.close();
+      continue;
+    }
     if (hostSensorsOnly) {
       const hostSensors = await inspectHostSensors({
         page,
@@ -1551,6 +1564,7 @@ async function main() {
   }
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
   if (
+    compactScaleOnly ||
     homeOnly ||
     compoundHomeOnly ||
     searchComfortOnly ||
@@ -1585,6 +1599,7 @@ async function main() {
       reports.some(
         (report) =>
           report.errors.length ||
+          (compactScaleOnly && !report.compactScale?.passed) ||
           (tilesOnly && !report.tileComfort?.passed) ||
           (systemModeOnly && !report.systemMode?.passed) ||
           (hostDevicesOnly && !report.hostDevices?.passed) ||

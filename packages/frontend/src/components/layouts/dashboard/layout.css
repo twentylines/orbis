@@ -669,7 +669,7 @@ html:has(.desktop) {
   color: var(--desktop-muted);
 }
 .desktop-route-title .page-title {
-  font-size: clamp(25px, 3vw, 35px);
+  font-size: var(--orbis-compact-page-title, clamp(25px, 3vw, 35px));
   letter-spacing: -0.035em;
   margin: 4px 0 0 !important;
 }
@@ -804,7 +804,7 @@ html:has(.desktop) {
   font-size: 13px;
 }
 .desktop-view-heading h1 {
-  font-size: clamp(26px, 3vw, 36px);
+  font-size: min(var(--orbis-compact-title, 36px), clamp(26px, 3vw, 36px));
   letter-spacing: -0.035em;
   margin: 0;
 }
@@ -830,7 +830,7 @@ html:has(.desktop) {
 }
 .desktop-monitor-grid strong {
   display: block;
-  font-size: clamp(26px, 3vw, 38px);
+  font-size: min(var(--orbis-compact-reading, 38px), clamp(26px, 3vw, 38px));
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
 }
@@ -916,7 +916,7 @@ html:has(.desktop) {
     padding: 0;
   }
   .desktop-main {
-    padding: 30px 24px max(124px, calc(var(--orbis-dock-height, 71px) + 40px + env(safe-area-inset-bottom, 0px)));
+    padding: 22px 24px max(124px, calc(var(--orbis-dock-height, 71px) + 40px + env(safe-area-inset-bottom, 0px)));
   }
   .desktop-view-app {
     padding: 20px;
