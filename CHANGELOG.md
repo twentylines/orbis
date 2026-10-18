@@ -2,6 +2,9 @@
 
 ## Unreleased development preview
 
+- Add bounded individual host disk/interface history with private restart-safe storage, device/range links, measured averages/peaks/counts and explicit coverage/storage states. Keep hidden browser polling paused and device focus stable during refresh and delayed selections.
+- Give compact charts a full-width plot with the scale above it. Preserve the surviving Retry button after repeated failures in host devices, device history and host processes.
+
 - Stop inherited smooth page scrolling from racing native keyboard focus behind the dock. Preserve explicit section and search motion.
 - Size history-chart axes to their labels, wrap timestamps and place inspection details below the plot. Keep missing values readable and strengthen theme-aware small-label contrast.
 
