@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Published beta41: device mode persistence and arm64 OTA (18 October 2026)
+
+Release workflow `39088109358` passed for source `87c670afe2e4c883c7c52f28f441ff5978af9fc6`. The read-only release checker matches linux/amd64 and linux/arm64 with index digest `sha256:3e90daac8c3fd87ad71c8bee75c945964f6fcde34331cdf8f7f9293ff4de5b8c`. Reviewed beta40→41 job `3e03f5a7-9c22-463b-932c-e25d31a41f13` reaches that exact healthy arm64 image, retaining both app records, preferences and all 28 task outcomes. Wrong-password feedback and the valid retry pass; only the new session is closed.
+
+The stopped beta40 snapshot independently verifies 3,591 entries, 2,827 files and 149,817,891 bytes, tree hash `685b68f1e100945bf33b49e9f6a49eecbe93955e80f133ef2fa6f8f796a43a73`. The separate 33-entry/17-file application/configuration/data comparison remains `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`. The Mac explicitly used `colima-runtipi-test`; the snapshot tool's recorded `default` context belongs to that isolated Linux guest.
+
+An authenticated same-origin PUT saves the actual System/Ocean preference. API and stored file retain the raw `system` value with file mode `0600`. One planned restart of the same container and pinned image preserves those bytes and the original authenticated session. After the browser review, the original Dark/Frost preference file is restored exactly, including permissions and ownership. The protected app/configuration/data comparison still matches.
+
+The retained published-image browser runner passes eight groups and 24 OS-mode states using actual published bodies and reads, including 320px doubled Appearance and fresh phone boot with JavaScript storage/cookie access denied. It forwards no mutations or preference shadows. All 104 actual API reads succeed and 116 distinct published assets are fingerprinted; records match and all browser resources close. The bars retain translucent palette blur without bright frame rims. [Current captures and sanitized assertions](screenshots/live-beta41/README.md) record controlled browser hooks and the bounded inspection scope. The broader source auth/guest/editor and storage-failure matrix remains separate. The copied x86 authenticator fixture stays on beta40. Hades is untouched; complete production/migration acceptance remains open.
+
 ## Published beta39: authentication source update and arm64 OTA (18 October 2026)
 
 Release workflow `39081664916` passed for source `67ac2db81bd794822d11e80518e15f6a152fd09e`. Both architectures match the checker and digest `sha256:1ff90aa7edc45739e67e98e4eab6fe708691a38b2d44d6dfde08d24e6049cbc1`. Reviewed beta38→39 job `0db24623-26f6-4c27-9334-13e663c33d7a` reaches that exact healthy arm64 image, retaining both app records, preferences and all 28 task outcomes. Real wrong-password/retry passes, closes only its new session and retains the original session/preferences.

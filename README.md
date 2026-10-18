@@ -8,6 +8,7 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 - [Isolated build and migration rehearsal](DEPLOYMENT.md)
 - [Released workspace and theme captures](screenshots/live-beta37/README.md)
 - [Released Apps/Store, glass chrome, update and login checks](screenshots/live-beta40/README.md)
+- [Current released modes, blurred bars and storage recovery](screenshots/live-beta41/README.md)
 - [Follow system, enlarged text and browser storage checks](screenshots/system-mode/README.md)
 - [Multi-homelab phase](MULTI-HOMELAB.md)
 - [Update Center contract](UPDATES.md)
@@ -19,9 +20,9 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 - [Persistent lifecycle tasks](TASKS.md)
 - [Desktop window controls and behavior](DESKTOP-WINDOWS.md)
 
-![Orbis desktop in light mode with development fixture data](screenshots/desktop-fixtures/desktop-workspace.png)
+![Published Orbis beta41 Home in light mode with isolated synthetic app records](screenshots/live-beta41/1440x1120-text1-home-light-actual-viewport.png)
 
-[Dark workspace](screenshots/desktop-fixtures/desktop-workspace-dark.png) · [Phone workspace](screenshots/desktop-fixtures/mobile-workspace.png) · [Phone in dark mode](screenshots/desktop-fixtures/mobile-workspace-dark.png) · [Monitor](screenshots/desktop-fixtures/desktop-monitor.png) · [Appearance](screenshots/system-mode/1440-light-native.png)
+[Dark workspace](screenshots/live-beta41/1440x1120-text1-home-dark-actual-viewport.png) · [Phone workspace](screenshots/live-beta41/390x844-text1-home-light-actual-viewport.png) · [Phone in dark mode](screenshots/live-beta41/390x844-text1-home-dark-actual-viewport.png) · [Monitor](screenshots/live-beta41/1440x1120-text1-monitor-light-actual-viewport.png) · [Appearance](screenshots/live-beta41/1440x1120-text1-appearance-light-actual-viewport.png)
 
 [Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Search](screenshots/desktop-fixtures/desktop-search.png) · [Home app picker](screenshots/desktop-fixtures/desktop-dark-home-picker.png) · [All Home apps](screenshots/desktop-fixtures/desktop-dark-home-all-apps.png) · [Inspection record](VISUAL-QA.md)
 

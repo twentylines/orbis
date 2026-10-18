@@ -1,6 +1,6 @@
 # Follow system and storage recovery
 
-Compiled-source Chrome fixtures, 18 October 2026. These are browser-only API responses on static port 8080, separate from published beta40 and any real homelab. Hades is unchanged.
+Compiled-source Chrome fixtures, 18 October 2026. These use browser-only API responses on static port 8080, separate from released-image checks and any real homelab. Hades is unchanged.
 
 [Assertions](assertions.json) · [Light Appearance](1440-light-native.png) · [Dark Appearance with doubled text](1440-dark-text200.png) · [Tablet with doubled text](768-dark-text200.png) · [320px with doubled text](320-light-text200.png)
 
@@ -22,4 +22,4 @@ ORBIS_VISUAL_SYSTEM_MODE_ONLY=1 \
   node scripts/visual-qa.cjs > /tmp/orbis-system-mode.json
 ```
 
-Published-image confirmation, other browsers and physical devices remain open. Full theme packs are a later product feature.
+The subsequent [published beta41 review](../live-beta41/README.md) confirms actual preference persistence, restart, representative mode transitions and denied-storage boot. Other browsers and physical devices remain open. Full theme packs are a later product feature.
