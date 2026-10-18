@@ -89,7 +89,7 @@ describe('read-only host device socket', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('coalesces concurrent readers and retains one ten-second shared result', async () => {
+  it('coalesces concurrent readers and retains one shared result before the next history tick', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const service = new HostTelemetryService();
     const [first, second] = await Promise.all([service.read(), service.read()]);

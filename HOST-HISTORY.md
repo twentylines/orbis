@@ -4,7 +4,7 @@ Implementation in progress after beta43. The published beta43 image has current 
 
 ## Published acceptance follow-up
 
-Beta44 now passes reviewed arm64 OTA, independent snapshot/data verification and exact prior full app/store/preference preservation. Its real no-browser background gate is rejected: cache expiry overlaps the collector timer, producing mostly 20-second samples and an unavailable/delayed state. A source correction and regression are in progress. Background collection, planned restart continuity and published UI are not accepted. [Actual rejected measurements](screenshots/host-device-history/rejected-real-background.json).
+Beta44 now passes reviewed arm64 OTA, independent snapshot/data verification and exact prior full app/store/preference preservation. Its real no-browser background gate is rejected: cache expiry overlaps the collector timer, producing mostly 20-second samples and an unavailable/delayed state. The source correction now expires success nine seconds after request start while retaining coalescing and completion-based failure backoff. Five new cases reject the old policy; all 38 scoped tests and backend types pass. Corrected published background collection, planned restart continuity and UI remain acceptance gates. [Actual rejected measurements](screenshots/host-device-history/rejected-real-background.json).
 
 ## Source checkpoint
 

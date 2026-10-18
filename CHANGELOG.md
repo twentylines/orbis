@@ -2,6 +2,8 @@
 
 ## Unreleased development preview
 
+- Correct the host-device cache deadline found by beta44's real no-browser gate. Expire successful results from request start before the next history tick, retaining request coalescing and unavailable-result backoff; reject the old policy with real-service/timer regressions.
+
 - Add bounded individual host disk/interface history with private restart-safe storage, device/range links, measured averages/peaks/counts and explicit coverage/storage states. Keep hidden browser polling paused and device focus stable during refresh and delayed selections.
 - Give compact charts a full-width plot with the scale above it. Preserve the surviving Retry button after repeated failures in host devices, device history and host processes.
 

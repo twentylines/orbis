@@ -109,10 +109,11 @@ export class HostTelemetryService {
   read(): Promise<HostTelemetry> {
     if (this.cached && this.cached.expiresAt > Date.now()) return Promise.resolve(this.cached.result);
     if (!this.pending) {
+      const startedAt = Date.now();
       this.pending = this.fetch()
         .catch(() => unavailable())
         .then((result) => {
-          this.cached = { expiresAt: Date.now() + (result.available ? 10_000 : 2000), result };
+          this.cached = { expiresAt: result.available ? startedAt + 9000 : Date.now() + 2000, result };
           return result;
         })
         .finally(() => {
