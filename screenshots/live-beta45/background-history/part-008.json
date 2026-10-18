@@ -1,0 +1,82 @@
+{
+  "readOnly": true,
+  "capturedAt": 1792305314126,
+  "core": {
+    "image": "ghcr.io/twentylines/orbis@sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06",
+    "imageId": "sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06",
+    "id": "sha256:831dd0fb05ef6fa2319a6ccb01ef284da4bc34c54b535a0196af372cddbc5648",
+    "startedAt": "2026-10-18T06:31:10.805402825Z",
+    "running": true,
+    "health": "healthy"
+  },
+  "helper": {
+    "sampledAt": "2026-10-18T06:35:05.063947Z",
+    "devices": [
+      {
+        "kind": "network",
+        "name": "device-10f2dc2d5fbd",
+        "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5"
+      },
+      {
+        "kind": "network",
+        "name": "device-297a8b73df18",
+        "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4"
+      },
+      {
+        "kind": "network",
+        "name": "device-9c32a8c7e59e",
+        "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a"
+      },
+      {
+        "kind": "network",
+        "name": "device-a0ab1df03e27",
+        "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271"
+      },
+      {
+        "kind": "network",
+        "name": "device-c6656f4d4d19",
+        "sourceId": "6747c2e9a249e3d5828b7e7246c0c466a977c5ea0dc8364516cba762270d0872"
+      },
+      {
+        "kind": "network",
+        "name": "device-0dc2b2044e39",
+        "sourceId": "cbda51ca7200ab171407b3bbe6214d1c3ee28ed27d3b73de2bfa7ad39d76dc9f"
+      },
+      {
+        "kind": "network",
+        "name": "device-2898e723dcf0",
+        "sourceId": "6a2e63858059b77aa1d1e943051aaf57cb012428284c8436b2c62c4341d8ec85"
+      },
+      {
+        "kind": "network",
+        "name": "device-d4e9fee7c364",
+        "sourceId": "82c69e160d618b15512f06ad0c170a9f43b717aa5c14ff1c5dda539964e639b4"
+      },
+      {
+        "kind": "disk",
+        "name": "device-6c4aba296684",
+        "sourceId": "29e5c580a777449a7c4464af5e00c3fc672903ba0e18a574dc7b10eca7ab4d7d"
+      },
+      {
+        "kind": "disk",
+        "name": "device-8737cf35c838",
+        "sourceId": "aa694c06fded6d3dfb4fc33bf9a60d28c3022df6342bfe79c69dfe599ee20a49"
+      },
+      {
+        "kind": "disk",
+        "name": "device-e54a5df6ff5b",
+        "sourceId": "4cebf669734b08bcca40ffaffa1d249ed7bcb1b05f1eec3c98ee76bb9ec43e8a"
+      }
+    ],
+    "unavailable": [],
+    "omitted": {
+      "network": 0,
+      "disks": 0,
+      "filesystems": 0
+    }
+  },
+  "helperSha256": {
+    "orbis-host-service.py": "402c6a13ce33f4f85195398abf5a143f6e158997f25bc7469ba4b2ba775adb11",
+    "orbis-host-telemetry.py": "b2e8e54b82827a192fdbf44d8762cc4f1ec6ef1c0eda05bc811818b89f5ab606"
+  }
+}

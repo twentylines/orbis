@@ -1,10 +1,12 @@
 # Host disk and network history
 
-Implementation in progress after beta43. The published beta43 image has current host readings and aggregate CPU/memory/core-network history; it does not yet include this per-device history.
+Published beta45 includes per-device history. Its reviewed arm64 OTA, real autonomous collector and planned same-image restart now pass. Published browser acceptance remains under investigation after a refresh/reading-position rejection.
 
 ## Published acceptance follow-up
 
-Beta44 now passes reviewed arm64 OTA, independent snapshot/data verification and exact prior full app/store/preference preservation. Its real no-browser background gate is rejected: cache expiry overlaps the collector timer, producing mostly 20-second samples and an unavailable/delayed state. The source correction now expires success nine seconds after request start while retaining coalescing and completion-based failure backoff. Five new cases reject the old policy; all 38 scoped tests and backend types pass. Corrected published background collection, planned restart continuity and UI remain acceptance gates. [Actual rejected measurements](screenshots/host-device-history/rejected-real-background.json).
+Beta44's real no-browser gate was rejected for delayed/unavailable collection. Beta45 expires successful host snapshots nine seconds after request start while retaining shared requests and completion-based failure backoff. Its source passes 596 backend, 78 common and 126 Python tests.
+
+The actual beta45 quiet interval lasts 130.006 seconds without browser viewers or probe reads. Collection remains available and persistent, with nine distinct samples at observed 10–20-second intervals. Independent raw averages/peaks/counts and 257 saved summaries match. A planned same-container restart retains all 11 saved partial-device rows and verifies 443 saved summaries without double counting. That restart crosses a minute boundary; same-minute merge coverage remains the separate source regression. Authentication, query validation and 11 kernel-derived identities pass. [Runtime reports](screenshots/live-beta45/README.md) · [Rejected beta44 measurements](screenshots/host-device-history/rejected-real-background.json).
 
 ## Source checkpoint
 

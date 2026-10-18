@@ -1,0 +1,5216 @@
+{
+  "network:device-10f2dc2d5fbd": {
+    "5m": {
+      "range": "5m",
+      "from": "2026-10-18T06:28:03.113Z",
+      "to": "2026-10-18T06:33:03.113Z",
+      "resolutionSeconds": 10,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-10f2dc2d5fbd"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:28:16.499Z",
+          "until": "2026-10-18T06:28:56.504Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:29:16.536Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:30:16.573Z",
+          "intervalSeconds": 60,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 349.102561199334,
+            "peak": 349.102561199334,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 40160.27725735179,
+            "peak": 40160.27725735179,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:31:14.955Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 3118.368698553102,
+            "peak": 3118.368698553102,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 21734.906511406036,
+            "peak": 21734.906511406036,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:34.936Z",
+          "until": "2026-10-18T06:31:34.936Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 107831.31098001411,
+            "peak": 107831.31098001411,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 6296.414233294996,
+            "peak": 6296.414233294996,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:44.968Z",
+          "until": "2026-10-18T06:31:44.968Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:54.971Z",
+          "until": "2026-10-18T06:31:54.971Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 10.796312038102817,
+            "peak": 10.796312038102817,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 14.994877830698357,
+            "peak": 14.994877830698357,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:04.991Z",
+          "until": "2026-10-18T06:32:04.991Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:24.984Z",
+          "until": "2026-10-18T06:32:24.984Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 5.401637235436541,
+            "peak": 5.401637235436541,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 7.502273938106308,
+            "peak": 7.502273938106308,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:35.002Z",
+          "until": "2026-10-18T06:32:35.002Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 3794.893982503592,
+            "peak": 3794.893982503592,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 520.6798982727992,
+            "peak": 520.6798982727992,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:45.002Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 3140.9898480076613,
+            "peak": 3140.9898480076613,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 298.9990336053138,
+            "peak": 298.9990336053138,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "1h": {
+      "range": "1h",
+      "from": "2026-10-18T05:33:03.115Z",
+      "to": "2026-10-18T06:33:03.115Z",
+      "resolutionSeconds": 60,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-10f2dc2d5fbd"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:05:45.722Z",
+          "until": "2026-10-18T06:05:45.722Z",
+          "intervalSeconds": 60,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          },
+          "outbound": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:06:05.735Z",
+          "until": "2026-10-18T06:06:45.770Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 35943.7605189108,
+            "peak": 107827.28627030955,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 2048.8229582825934,
+            "peak": 6141.074831953128,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:07:05.804Z",
+          "until": "2026-10-18T06:07:55.838Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 221.08889510167666,
+            "peak": 725.3405586912891,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 70.43068489905589,
+            "peak": 151.6947783724215,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:08:15.847Z",
+          "until": "2026-10-18T06:08:55.886Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 2502.2074670557895,
+            "peak": 7462.042438904413,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 580.9383075457349,
+            "peak": 1706.2318398180237,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:09:15.893Z",
+          "until": "2026-10-18T06:09:55.925Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 2.6649762737117166,
+            "peak": 2.7991321434926766,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 3.5977877430566156,
+            "peak": 4.198698215239014,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:10:15.930Z",
+          "until": "2026-10-18T06:10:55.944Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 125.2681349524469,
+            "peak": 361.4069434763354,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 18.958744727018917,
+            "peak": 38.27955181179106,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:11:15.972Z",
+          "until": "2026-10-18T06:11:55.996Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 121.4532720977147,
+            "peak": 361.56379440988786,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 12.75411795956785,
+            "peak": 34.068321053819226,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:12:15.971Z",
+          "until": "2026-10-18T06:12:56.007Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:13:16.011Z",
+          "until": "2026-10-18T06:13:56.027Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:14:16.038Z",
+          "until": "2026-10-18T06:14:56.058Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:15:16.067Z",
+          "until": "2026-10-18T06:15:56.062Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 231.2118081273814,
+            "peak": 400.8295297257852,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 15531.926162544736,
+            "peak": 40452.341252793405,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:16:16.104Z",
+          "until": "2026-10-18T06:16:56.111Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 7.397282783645062,
+            "peak": 18.19495532671505,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 10.795963355445604,
+            "peak": 26.99251614402782,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:17:16.131Z",
+          "until": "2026-10-18T06:17:56.164Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 4.859756761698138,
+            "peak": 11.782055703545176,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 5.791916197181297,
+            "peak": 13.179926719220028,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:18:16.179Z",
+          "until": "2026-10-18T06:18:56.197Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:19:16.212Z",
+          "until": "2026-10-18T06:19:56.233Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:20:16.247Z",
+          "until": "2026-10-18T06:20:56.282Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:21:16.299Z",
+          "until": "2026-10-18T06:21:56.297Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:22:16.293Z",
+          "until": "2026-10-18T06:22:56.327Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:23:16.321Z",
+          "until": "2026-10-18T06:23:56.359Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:24:16.363Z",
+          "until": "2026-10-18T06:24:56.399Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:25:16.410Z",
+          "until": "2026-10-18T06:25:56.417Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:26:16.436Z",
+          "until": "2026-10-18T06:26:56.459Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:27:16.474Z",
+          "until": "2026-10-18T06:27:56.483Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:28:16.499Z",
+          "until": "2026-10-18T06:28:56.504Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:29:16.536Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:30:16.573Z",
+          "intervalSeconds": 60,
+          "samples": 1,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 349.102561199334,
+            "peak": 349.102561199334,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 40160.27725735179,
+            "peak": 40160.27725735179,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:31:54.971Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 27740.118997651327,
+            "peak": 107831.31098001411,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 7011.578905632933,
+            "peak": 21734.906511406036,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:04.991Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 1735.3213669366726,
+            "peak": 3794.893982503592,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 206.79530145405482,
+            "peak": 520.6798982727992,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "24h": {
+      "range": "24h",
+      "from": "2026-10-17T06:33:03.116Z",
+      "to": "2026-10-18T06:33:03.116Z",
+      "resolutionSeconds": 300,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-10f2dc2d5fbd"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:05:45.722Z",
+          "until": "2026-10-18T06:09:55.925Z",
+          "intervalSeconds": 300,
+          "samples": 14,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 8940.78880516366,
+            "peak": 107827.28627030955,
+            "samples": 13
+          },
+          "outbound": {
+            "average": 629.3692231007984,
+            "peak": 6141.074831953128,
+            "samples": 13
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:10:15.930Z",
+          "until": "2026-10-18T06:14:56.058Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 49.3442814100323,
+            "peak": 361.56379440988786,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 6.342572537317353,
+            "peak": 38.27955181179106,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:15:16.067Z",
+          "until": "2026-10-18T06:19:56.233Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 48.69376953454493,
+            "peak": 400.8295297257852,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 3109.7028084194726,
+            "peak": 40452.341252793405,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:20:16.247Z",
+          "until": "2026-10-18T06:24:56.399Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:25:16.410Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 300,
+          "samples": 9,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 13138.984891061256,
+            "peak": 107831.31098001411,
+            "samples": 9
+          },
+          "outbound": {
+            "average": 7670.419342855526,
+            "peak": 40160.27725735179,
+            "samples": 9
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "7d": {
+      "range": "7d",
+      "from": "2026-10-11T06:33:03.118Z",
+      "to": "2026-10-18T06:33:03.118Z",
+      "resolutionSeconds": 1800,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-10f2dc2d5fbd"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:05:45.722Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 1800,
+          "samples": 74,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 1612.3400716615913,
+            "peak": 107827.28627030955,
+            "samples": 73
+          },
+          "outbound": {
+            "average": 752.3627481460577,
+            "peak": 40452.341252793405,
+            "samples": 73
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 1800,
+          "samples": 9,
+          "sourceId": "8872438cddd68f22ac88e19fcd44dae82c9f139648c85dc3dff1e79b6315e7b5",
+          "inbound": {
+            "average": 13138.984891061256,
+            "peak": 107831.31098001411,
+            "samples": 9
+          },
+          "outbound": {
+            "average": 7670.419342855526,
+            "peak": 40160.27725735179,
+            "samples": 9
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    }
+  },
+  "network:device-297a8b73df18": {
+    "5m": {
+      "range": "5m",
+      "from": "2026-10-18T06:28:03.120Z",
+      "to": "2026-10-18T06:33:03.120Z",
+      "resolutionSeconds": 10,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-297a8b73df18"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:28:16.499Z",
+          "until": "2026-10-18T06:28:56.504Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:29:16.536Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:30:16.573Z",
+          "intervalSeconds": 60,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:31:14.955Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:34.936Z",
+          "until": "2026-10-18T06:31:34.936Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:44.968Z",
+          "until": "2026-10-18T06:31:44.968Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:54.971Z",
+          "until": "2026-10-18T06:31:54.971Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:04.991Z",
+          "until": "2026-10-18T06:32:04.991Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:24.984Z",
+          "until": "2026-10-18T06:32:24.984Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:35.002Z",
+          "until": "2026-10-18T06:32:35.002Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:45.002Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "1h": {
+      "range": "1h",
+      "from": "2026-10-18T05:33:03.122Z",
+      "to": "2026-10-18T06:33:03.122Z",
+      "resolutionSeconds": 60,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-297a8b73df18"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:05:45.722Z",
+          "until": "2026-10-18T06:05:45.722Z",
+          "intervalSeconds": 60,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          },
+          "outbound": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:06:05.735Z",
+          "until": "2026-10-18T06:06:45.770Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:07:05.804Z",
+          "until": "2026-10-18T06:07:55.838Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:08:15.847Z",
+          "until": "2026-10-18T06:08:55.886Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:09:15.893Z",
+          "until": "2026-10-18T06:09:55.925Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:10:15.930Z",
+          "until": "2026-10-18T06:10:55.944Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:11:15.972Z",
+          "until": "2026-10-18T06:11:55.996Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:12:15.971Z",
+          "until": "2026-10-18T06:12:56.007Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:13:16.011Z",
+          "until": "2026-10-18T06:13:56.027Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:14:16.038Z",
+          "until": "2026-10-18T06:14:56.058Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:15:16.067Z",
+          "until": "2026-10-18T06:15:56.062Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:16:16.104Z",
+          "until": "2026-10-18T06:16:56.111Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:17:16.131Z",
+          "until": "2026-10-18T06:17:56.164Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:18:16.179Z",
+          "until": "2026-10-18T06:18:56.197Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:19:16.212Z",
+          "until": "2026-10-18T06:19:56.233Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:20:16.247Z",
+          "until": "2026-10-18T06:20:56.282Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:21:16.299Z",
+          "until": "2026-10-18T06:21:56.297Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:22:16.293Z",
+          "until": "2026-10-18T06:22:56.327Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:23:16.321Z",
+          "until": "2026-10-18T06:23:56.359Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:24:16.363Z",
+          "until": "2026-10-18T06:24:56.399Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:25:16.410Z",
+          "until": "2026-10-18T06:25:56.417Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:26:16.436Z",
+          "until": "2026-10-18T06:26:56.459Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:27:16.474Z",
+          "until": "2026-10-18T06:27:56.483Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:28:16.499Z",
+          "until": "2026-10-18T06:28:56.504Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:29:16.536Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:30:16.573Z",
+          "intervalSeconds": 60,
+          "samples": 1,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:31:54.971Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:04.991Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "24h": {
+      "range": "24h",
+      "from": "2026-10-17T06:33:03.124Z",
+      "to": "2026-10-18T06:33:03.124Z",
+      "resolutionSeconds": 300,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-297a8b73df18"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:05:45.722Z",
+          "until": "2026-10-18T06:09:55.925Z",
+          "intervalSeconds": 300,
+          "samples": 14,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 13
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 13
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:10:15.930Z",
+          "until": "2026-10-18T06:14:56.058Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:15:16.067Z",
+          "until": "2026-10-18T06:19:56.233Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:20:16.247Z",
+          "until": "2026-10-18T06:24:56.399Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:25:16.410Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 300,
+          "samples": 9,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 9
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 9
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "7d": {
+      "range": "7d",
+      "from": "2026-10-11T06:33:03.125Z",
+      "to": "2026-10-18T06:33:03.125Z",
+      "resolutionSeconds": 1800,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-297a8b73df18"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:05:45.722Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 1800,
+          "samples": 74,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 73
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 73
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 1800,
+          "samples": 9,
+          "sourceId": "e1116c4a59d183579b832397baa0621f0d25412bdffb91f1c367d3ff8843f5a4",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 9
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 9
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    }
+  },
+  "network:device-9c32a8c7e59e": {
+    "5m": {
+      "range": "5m",
+      "from": "2026-10-18T06:28:03.127Z",
+      "to": "2026-10-18T06:33:03.127Z",
+      "resolutionSeconds": 10,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-9c32a8c7e59e"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:28:16.499Z",
+          "until": "2026-10-18T06:28:56.504Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:29:16.536Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:30:16.573Z",
+          "intervalSeconds": 60,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 41860.49811326867,
+            "peak": 41860.49811326867,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 413.2203824809739,
+            "peak": 413.2203824809739,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:31:14.955Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 1132671.2427323058,
+            "peak": 1132671.2427323058,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 13050.798879028433,
+            "peak": 13050.798879028433,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:34.936Z",
+          "until": "2026-10-18T06:31:34.936Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 7634.678758805206,
+            "peak": 7634.678758805206,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 113100.34282505889,
+            "peak": 113100.34282505889,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:44.968Z",
+          "until": "2026-10-18T06:31:44.968Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:54.971Z",
+          "until": "2026-10-18T06:31:54.971Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 10.796312038102817,
+            "peak": 10.796312038102817,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 10.796312038102817,
+            "peak": 10.796312038102817,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:04.991Z",
+          "until": "2026-10-18T06:32:04.991Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:24.984Z",
+          "until": "2026-10-18T06:32:24.984Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 7.502273938106308,
+            "peak": 7.502273938106308,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 7.502273938106308,
+            "peak": 7.502273938106308,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:35.002Z",
+          "until": "2026-10-18T06:32:35.002Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 1076.497703791002,
+            "peak": 1076.497703791002,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 4236.5135894742325,
+            "peak": 4236.5135894742325,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:45.002Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 451.19854168132974,
+            "peak": 451.19854168132974,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 3351.989166036829,
+            "peak": 3351.989166036829,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "1h": {
+      "range": "1h",
+      "from": "2026-10-18T05:33:03.129Z",
+      "to": "2026-10-18T06:33:03.129Z",
+      "resolutionSeconds": 60,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-9c32a8c7e59e"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:05:45.722Z",
+          "until": "2026-10-18T06:05:45.722Z",
+          "intervalSeconds": 60,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          },
+          "outbound": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:06:05.735Z",
+          "until": "2026-10-18T06:06:45.770Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 2393.2515737099684,
+            "peak": 7042.813154931745,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 38217.54480515576,
+            "peak": 113740.6529376936,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:07:05.804Z",
+          "until": "2026-10-18T06:07:55.838Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 505.13208896668505,
+            "peak": 1395.3699332993992,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 1852.0252520225754,
+            "peak": 4866.559367543128,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:08:15.847Z",
+          "until": "2026-10-18T06:08:55.886Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 1083.6842138054242,
+            "peak": 2970.5734057012073,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 3522.6758435667243,
+            "peak": 8892.64222381213,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:09:15.893Z",
+          "until": "2026-10-18T06:09:55.925Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 3.5977877430566156,
+            "peak": 4.198698215239014,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 3.5977877430566156,
+            "peak": 4.198698215239014,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:10:15.930Z",
+          "until": "2026-10-18T06:10:55.944Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 23.25644897742888,
+            "peak": 51.172664563020945,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 133.09777388906954,
+            "peak": 380.6966392979429,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:11:15.972Z",
+          "until": "2026-10-18T06:11:55.996Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 16.384764377789892,
+            "peak": 49.15429313336967,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 127.24834286084385,
+            "peak": 381.7450285825315,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:12:15.971Z",
+          "until": "2026-10-18T06:12:56.007Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:13:16.011Z",
+          "until": "2026-10-18T06:13:56.027Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:14:16.038Z",
+          "until": "2026-10-18T06:14:56.058Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:15:16.067Z",
+          "until": "2026-10-18T06:15:56.062Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 16108.498173899534,
+            "peak": 41923.017454866684,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 268.0283965521716,
+            "peak": 462.5033002596529,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:16:16.104Z",
+          "until": "2026-10-18T06:16:56.111Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 10.097442340381491,
+            "peak": 26.99251614402782,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 8.797802674187558,
+            "peak": 23.093597145446026,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:17:16.131Z",
+          "until": "2026-10-18T06:17:56.164Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 5.791548059631412,
+            "peak": 15.276733242732305,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 6.490483567468838,
+            "peak": 17.373539766244583,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:18:16.179Z",
+          "until": "2026-10-18T06:18:56.197Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:19:16.212Z",
+          "until": "2026-10-18T06:19:56.233Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:20:16.247Z",
+          "until": "2026-10-18T06:20:56.282Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:21:16.299Z",
+          "until": "2026-10-18T06:21:56.297Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:22:16.293Z",
+          "until": "2026-10-18T06:22:56.327Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:23:16.321Z",
+          "until": "2026-10-18T06:23:56.359Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 2.9009193687941153,
+            "peak": 8.702758106382346,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 2.9009193687941153,
+            "peak": 8.702758106382346,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:24:16.363Z",
+          "until": "2026-10-18T06:24:56.399Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:25:16.410Z",
+          "until": "2026-10-18T06:25:56.417Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:26:16.436Z",
+          "until": "2026-10-18T06:26:56.459Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:27:16.474Z",
+          "until": "2026-10-18T06:27:56.483Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:28:16.499Z",
+          "until": "2026-10-18T06:28:56.504Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:29:16.536Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 60,
+          "samples": 3,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:30:16.573Z",
+          "intervalSeconds": 60,
+          "samples": 1,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 41860.49811326867,
+            "peak": 41860.49811326867,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 413.2203824809739,
+            "peak": 413.2203824809739,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:31:54.971Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 285079.17945078725,
+            "peak": 1132671.2427323058,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 31540.48450403136,
+            "peak": 113100.34282505889,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:04.991Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 383.79962985260954,
+            "peak": 1076.497703791002,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 1899.0012573622919,
+            "peak": 4236.5135894742325,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "24h": {
+      "range": "24h",
+      "from": "2026-10-17T06:33:03.131Z",
+      "to": "2026-10-18T06:33:03.131Z",
+      "resolutionSeconds": 300,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-9c32a8c7e59e"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:05:45.722Z",
+          "until": "2026-10-18T06:09:55.925Z",
+          "intervalSeconds": 300,
+          "samples": 14,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 958.6253139724685,
+            "peak": 7042.813154931745,
+            "samples": 13
+          },
+          "outbound": {
+            "average": 10203.04279365284,
+            "peak": 113740.6529376936,
+            "samples": 13
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:10:15.930Z",
+          "until": "2026-10-18T06:14:56.058Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 7.928242671043755,
+            "peak": 51.172664563020945,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 52.06922334998268,
+            "peak": 381.7450285825315,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:15:16.067Z",
+          "until": "2026-10-18T06:19:56.233Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 3224.877432859909,
+            "peak": 41923.017454866684,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 56.663336558765614,
+            "peak": 462.5033002596529,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:20:16.247Z",
+          "until": "2026-10-18T06:24:56.399Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0.5801838737588231,
+            "peak": 8.702758106382346,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 0.5801838737588231,
+            "peak": 8.702758106382346,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:25:16.410Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 300,
+          "samples": 15,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 15
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 300,
+          "samples": 9,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 131523.6016039809,
+            "peak": 1132671.2427323058,
+            "samples": 9
+          },
+          "outbound": {
+            "average": 14907.90704756173,
+            "peak": 113100.34282505889,
+            "samples": 9
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "7d": {
+      "range": "7d",
+      "from": "2026-10-11T06:33:03.132Z",
+      "to": "2026-10-18T06:33:03.132Z",
+      "resolutionSeconds": 1800,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-9c32a8c7e59e"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:05:45.722Z",
+          "until": "2026-10-18T06:29:56.548Z",
+          "intervalSeconds": 1800,
+          "samples": 74,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 835.108451680997,
+            "peak": 41923.017454866684,
+            "samples": 73
+          },
+          "outbound": {
+            "average": 1839.4417462222548,
+            "peak": 113740.6529376936,
+            "samples": 73
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:30:16.573Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 1800,
+          "samples": 9,
+          "sourceId": "eabd95ef3327bb0e0bfc50f7e8a436bae82c92e19103e606c982a9a96bbee40a",
+          "inbound": {
+            "average": 131523.6016039809,
+            "peak": 1132671.2427323058,
+            "samples": 9
+          },
+          "outbound": {
+            "average": 14907.90704756173,
+            "peak": 113100.34282505889,
+            "samples": 9
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    }
+  },
+  "network:device-a0ab1df03e27": {
+    "5m": {
+      "range": "5m",
+      "from": "2026-10-18T06:28:03.134Z",
+      "to": "2026-10-18T06:33:03.134Z",
+      "resolutionSeconds": 10,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-a0ab1df03e27"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:31:14.955Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          },
+          "outbound": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:34.936Z",
+          "until": "2026-10-18T06:31:34.936Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 108817.05558040208,
+            "peak": 108817.05558040208,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 7164.9524644841695,
+            "peak": 7164.9524644841695,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:44.968Z",
+          "until": "2026-10-18T06:31:44.968Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 6.5793738793397685,
+            "peak": 6.5793738793397685,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 14.35499755492313,
+            "peak": 14.35499755492313,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:31:54.971Z",
+          "until": "2026-10-18T06:31:54.971Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 4.19856579259554,
+            "peak": 4.19856579259554,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 4.19856579259554,
+            "peak": 4.19856579259554,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:04.991Z",
+          "until": "2026-10-18T06:32:04.991Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 0,
+            "peak": 0,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:24.984Z",
+          "until": "2026-10-18T06:32:24.984Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 7.002122342232554,
+            "peak": 7.002122342232554,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 10.50318351334883,
+            "peak": 10.50318351334883,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:35.002Z",
+          "until": "2026-10-18T06:32:35.002Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 4556.747698688025,
+            "peak": 4556.747698688025,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 1442.0517274633546,
+            "peak": 1442.0517274633546,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:45.002Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 10,
+          "samples": 1,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 3351.989166036829,
+            "peak": 3351.989166036829,
+            "samples": 1
+          },
+          "outbound": {
+            "average": 475.9984615255163,
+            "peak": 475.9984615255163,
+            "samples": 1
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "1h": {
+      "range": "1h",
+      "from": "2026-10-18T05:33:03.135Z",
+      "to": "2026-10-18T06:33:03.135Z",
+      "resolutionSeconds": 60,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-a0ab1df03e27"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:31:54.971Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 36275.94450669135,
+            "peak": 108817.05558040208,
+            "samples": 3
+          },
+          "outbound": {
+            "average": 2394.5020092772293,
+            "peak": 7164.9524644841695,
+            "samples": 3
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        },
+        {
+          "at": "2026-10-18T06:32:04.991Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 60,
+          "samples": 4,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 1978.9347467667717,
+            "peak": 4556.747698688025,
+            "samples": 4
+          },
+          "outbound": {
+            "average": 482.13834312555497,
+            "peak": 1442.0517274633546,
+            "samples": 4
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "24h": {
+      "range": "24h",
+      "from": "2026-10-17T06:33:03.136Z",
+      "to": "2026-10-18T06:33:03.136Z",
+      "resolutionSeconds": 300,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-a0ab1df03e27"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 300,
+          "samples": 8,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 16677.653215305876,
+            "peak": 108817.05558040208,
+            "samples": 7
+          },
+          "outbound": {
+            "average": 1301.7227714762723,
+            "peak": 7164.9524644841695,
+            "samples": 7
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    },
+    "7d": {
+      "range": "7d",
+      "from": "2026-10-11T06:33:03.138Z",
+      "to": "2026-10-18T06:33:03.138Z",
+      "resolutionSeconds": 1800,
+      "sampledEverySeconds": 10,
+      "retentionDays": 7,
+      "seriesLimit": 64,
+      "storage": "persistent",
+      "collectorAvailable": true,
+      "reason": null,
+      "unidentifiedDevices": 0,
+      "omittedDevices": 0,
+      "evictedDevices": 0,
+      "lastSampleAt": "2026-10-18T06:32:45.002Z",
+      "persistedThrough": "2026-10-18T06:32:04.991Z",
+      "devices": [
+        {
+          "kind": "disk",
+          "name": "device-6c4aba296684",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-8737cf35c838",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "disk",
+          "name": "device-e54a5df6ff5b",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-10f2dc2d5fbd",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-297a8b73df18",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-9c32a8c7e59e",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-bb5e2fbd92d0",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-eff19ad92259",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-9165f55ba724",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-a0ab1df03e27",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-c6656f4d4d19",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-e430b283219c",
+          "lastSeenAt": "2026-10-18T06:30:16.573Z",
+          "present": false
+        },
+        {
+          "kind": "network",
+          "name": "device-0dc2b2044e39",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-2898e723dcf0",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        },
+        {
+          "kind": "network",
+          "name": "device-d4e9fee7c364",
+          "lastSeenAt": "2026-10-18T06:32:45.002Z",
+          "present": true
+        }
+      ],
+      "selected": {
+        "kind": "network",
+        "name": "device-a0ab1df03e27"
+      },
+      "points": [
+        {
+          "at": "2026-10-18T06:31:14.955Z",
+          "until": "2026-10-18T06:32:45.002Z",
+          "intervalSeconds": 1800,
+          "samples": 8,
+          "sourceId": "b94c9ef026f2c072e4de76fff7d1071fb2e98a5b6dc6f1d89241e8aee6d70271",
+          "inbound": {
+            "average": 16677.653215305876,
+            "peak": 108817.05558040208,
+            "samples": 7
+          },
+          "outbound": {
+            "average": 1301.7227714762723,
+            "peak": 7164.9524644841695,
+            "samples": 7
+          },
+          "busy": {
+            "average": null,
+            "peak": null,
+            "samples": 0
+          }
+        }
+      ]
+    }
+  }
+}

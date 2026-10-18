@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "scope": "Read-only prior verified beta43 to beta45 full-record comparison",
+  "groupsMatch": {
+    "preferences": true,
+    "installed": true,
+    "apps": true,
+    "stores": true
+  },
+  "installedApps": 2,
+  "noMutations": true
+}

@@ -42,5 +42,6 @@
     "2026-10-18T06:10:55.944Z"
   ],
   "observedIntervalsMilliseconds": [20034, 20041, 19956, 10037, 20009, 20023, 20016, 20007, 20006, 20026, 20005, 20010, 20004],
-  "diagnosis": "A ten-second completed-response cache overlaps the ten-second history timer. The helper refreshes asynchronously, compounding sample age. Keep the collector and helper bounds while correcting cache expiry."
+  "diagnosis": "A ten-second completed-response cache overlaps the ten-second history timer. The helper refreshes asynchronously, compounding sample age. Keep the collector and helper bounds while correcting cache expiry.",
+  "runtimeVerifierSha256": "7d9642933ee9f5f73330173ddfd73bc529665adbe434a29270740110f5df7798"
 }

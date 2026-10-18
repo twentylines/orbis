@@ -1,5 +1,17 @@
 # Orbis build and migration rehearsal
 
+## Published beta45: background history and planned restart (18 October 2026)
+
+Source `c58aa30268d2b7ec8b7d49cbb1cbde91344db2ef` passes main CI `39103508275` and integration `39103508273`, including 596 backend, 78 common and 126 Python tests. Release workflow `39103658522` publishes both Linux architectures; the independent checker matches OCI index `sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06`.
+
+Reviewed beta44→45 browser OTA job `0ed32149-7968-436a-b494-e777c804dcbd` reaches that exact healthy arm64 image, retaining both app records, preferences and 28 task outcomes. The independent stopped beta44 snapshot verifies 3,593 entries, 2,828 files and 150,029,992 bytes, tree hash `6620d86eda81e82ee969eb0560f1b304cbe36260499babf4de2fd6cb1e41a025`. Protected app/data/user-config/repository trees and the original 33-entry/17-file Mac baseline match. Complete prior full app/store/preference records match beta43.
+
+A 130.006-second quiet interval with all owned browser clients closed performs no probe API/helper/guest reads. The final collector is available with persistent storage. Nine distinct background samples have observed intervals of 10–20 seconds; this is not uniformly ten-second sampling. Independent arithmetic compares 11 raw device-minute rows and 257 saved API summaries against the journal. All 11 current generation digests match independent Linux kernel identities. Authentication returns 401/200; eight invalid/repeated-query cases return 400.
+
+One planned stop/start preserves the same container and exact image. An independent stopped-journal witness precedes restart. The recovered API retains 11 saved partial-device rows unchanged, records 50 distinct next-minute raw rows, and matches 362 minute, 81 five-minute and 26 half-hour saved rows without double counting. This actual restart crosses a minute boundary: it does **not** exercise a same-minute merge. Separate source regressions cover that arithmetic. All 443 saved summaries and 11 current kernel identities match.
+
+[Complete sanitized runtime reports and snapshot proofs](screenshots/live-beta45/README.md) retain numeric readings and assertions; names are pseudonyms and full account baselines remain private. Published rendering remains under inspection after one refresh/reading-position rejection; subsequent passing diagnostics alone do not override that result. The installed helper is unchanged by the core updates. Hades and the copied x86 authenticator fixture remain untouched.
+
 ## Published beta44: update passed, background history rejected (18 October 2026)
 
 Release workflow 39102140126 passes all verification, integration and publication gates for source `4b7f4b6ac24ff9e5bbb77e2daccad1414d4538da`. Independent GitHub/tag/registry checks match both Linux architectures and OCI index `sha256:fa7f3054a2c7e1bc9c4cf3e0b19d8cada322573fd7951aab621cbd2796bfdbe6`.

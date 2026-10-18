@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "scope": "Planned same-container same-image restart with stopped journal witness",
+  "image": "ghcr.io/twentylines/orbis@sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06",
+  "containerIdHash": "831dd0fb05ef6fa2319a6ccb01ef284da4bc34c54b535a0196af372cddbc5648",
+  "sameContainer": true,
+  "sameImage": true,
+  "changedStartedAt": true,
+  "healthy": true,
+  "stoppedWitnessPassed": true
+}

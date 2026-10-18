@@ -1,0 +1,38 @@
+{
+  "release": "v0.1.0-beta.45",
+  "commit": "c58aa30268d2b7ec8b7d49cbb1cbde91344db2ef",
+  "scope": "Owned isolated arm64 runtime only. Hades was not accessed. Device names are deterministic pseudonyms; container IDs are hashes. Numeric readings, timestamps, generation digests and assertions are retained. Full account/app/store records remain private.",
+  "reports": {
+    "background-history": {
+      "originalReportSha256": "4ab6d8d6f55f41c5b345d3e03eec33e73b4fcf080b15eabab0ac720d7d073b36",
+      "parsedReportSha256": "a321e463b421c56105a77db8fa7c8c048d509bd91d9e3da7e66c309f2751e8df",
+      "completeParsedReportRestored": true,
+      "parts": 9,
+      "originalBytes": 1343459,
+      "status": null,
+      "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json.",
+      "privateExecutionReportSha256": "f24d2136676a4c40504bb322d098275f6cedfb42d8752da248e14cacab1e72a3"
+    },
+    "stopped-history": {
+      "originalReportSha256": "738c96f45ca771cb6e5f3c52982354e1843896ada755f7995feaed01dd5f7ed6",
+      "parsedReportSha256": "f7893e2620283639d17419fae3dc2d5cc8663e0c965ceb770edbeb894a0b0e76",
+      "completeParsedReportRestored": true,
+      "parts": 2,
+      "originalBytes": 286908,
+      "status": null,
+      "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json.",
+      "privateExecutionReportSha256": "ad4be5b7c70b5f9ad110a4d53d48f4e4e8b633d8aab9e15a5566cbcc60f5629b"
+    },
+    "restart-history": {
+      "originalReportSha256": "af6f3b1cd06d4c7baeba8954111ff983bbddf5d9ab3a10a3abd6e378ee005b95",
+      "parsedReportSha256": "17781b4b32af3539b755a0c40381270d5d3cebddce900d69fa519adf84c6be76",
+      "completeParsedReportRestored": true,
+      "parts": 9,
+      "originalBytes": 1240696,
+      "status": null,
+      "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json.",
+      "privateExecutionReportSha256": "08f245321d7394125d04c3759b0a14797fb63ea77e9a01a5b30a0dd80392d760"
+    }
+  },
+  "runtimeVerifierSha256": "6c597a230ce241b9021591faae6a6db54ae59b8b7fd8540c5005de204c8b7bd0"
+}
