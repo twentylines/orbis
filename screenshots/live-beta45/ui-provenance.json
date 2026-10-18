@@ -1,0 +1,52 @@
+{
+  "release": "v0.1.0-beta.45",
+  "commit": "c58aa30268d2b7ec8b7d49cbb1cbde91344db2ef",
+  "image": "ghcr.io/twentylines/orbis@sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06",
+  "publishedUi": {
+    "originalReportSha256": "8c70cb42e02ece65efea0d020ff68d46895c4a60c90114f60dc7f286dfa25a70",
+    "parsedReportSha256": "5df8fefd6eec517b99ca79d23710c56e6ecbcbb2dee7976324c00e3aa7b0f1dd",
+    "completeParsedReportRestored": true,
+    "parts": 8,
+    "originalBytes": 1327327,
+    "status": null,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "unresolvedFirstUiPoll": {
+    "originalReportSha256": "c8fd065e27ea07a87a093d783961a490aba60919170a57a9c40ebaf38073bb9d",
+    "parsedReportSha256": "0c9d027bafb3bfbf995781e06bdeae29b111f602c9ee76ccc2155f9bc72e8a13",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 123742,
+    "status": null,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "originalFailureBoundary": "Earlier verifier did not save exact pre/post-poll geometry. R1 is retained as unresolved; passing reproductions do not establish its cause. Its execution script was not fingerprinted.",
+  "retainedAndR4ExecutionVerifierSha256": "c128efbf81e04e22d77dab5ae07629b88ddf453917fdac06f4a61a374558623e",
+  "captures": {
+    "1440x1120-text1-disk-inspection-actual-viewport.png": "fc52bae688c65e76e647e1b3e431402eea5fdc614bb97f73794c5ea47ab71ca1",
+    "1440x1120-text1-initial-actual-viewport.png": "f542dc378e71c183bf003b4190ce0cf2cbee9bbc4de27ef7abf60dea8d84c812",
+    "1440x1120-text1-network-before-poll-actual-viewport.png": "9ec416f07a5f0e7d46893768aabec9119aaa6d4bfecca8b3c477050fe2a72ac9",
+    "1440x1120-text1-network-inspection-actual-viewport.png": "bea07209dba0fff03c641d8502a4319a54bc083b79daa21a2a41288594190c71",
+    "1440x1120-text1-network-poll-1-actual-viewport.png": "a8a83056a063dac7be9ce75753e758cb07d6afa6d1f989e3b9f86e65f27b76c0",
+    "1440x1120-text1-network-poll-2-actual-viewport.png": "469861ad423679d561b45e0a33cca0308d180a4e2cf654a9d2635892ab35bccd",
+    "1440x1120-text1-network-refreshed-actual-viewport.png": "469861ad423679d561b45e0a33cca0308d180a4e2cf654a9d2635892ab35bccd",
+    "320x800-text1-disk-inspection-actual-viewport.png": "0bfa39bbaf676cdd950456651e6a75a4676c93a593fcab03f868aeaac0f7a656",
+    "320x800-text1-initial-actual-viewport.png": "4727a2c81808161b6cf7d80a8894146190ffb1b8757768c102ed49c6fdbcee3b",
+    "320x800-text1-network-inspection-actual-viewport.png": "0836b3d768a04f1684b8643c44f0dd0e9f9846acef79902ca455fd3456124bff",
+    "320x800-text2-disk-inspection-actual-viewport.png": "2264fb75e58a5fe8380b55337255e2e19602e1fe8511d70b067622a1697799d4",
+    "320x800-text2-initial-actual-viewport.png": "6a9197b860e3cd73b2f6f2386b8dde1bebdde04ae0b61c5738a38554e584e71a",
+    "320x800-text2-network-before-poll-actual-viewport.png": "4c5a08ed679f878547bcbda16948923221118028492165ffbd63e3037ec53947",
+    "320x800-text2-network-inspection-actual-viewport.png": "d9c4879d8eab7fc20f0461006846ad1600f80167323c4d028ae69d5ba818176c",
+    "320x800-text2-network-poll-1-actual-viewport.png": "46286a8013df1d97535ea54c0ada62033df5c580febc2f10d777db99117b72ea",
+    "320x800-text2-network-poll-2-actual-viewport.png": "f45362b241381f52147da66efb945cf070b5442ceee320f09405215d05feaf1d",
+    "320x800-text2-network-refreshed-actual-viewport.png": "f45362b241381f52147da66efb945cf070b5442ceee320f09405215d05feaf1d",
+    "390x844-text1-disk-inspection-actual-viewport.png": "0afccb4e137436633660be86dcc2664a9db682d97516880e21fc2b3af3369e4b",
+    "390x844-text1-initial-actual-viewport.png": "023bc2a5b4c6b14633e0201d6c97ea841970d14b5fda81bd974c991feddcf0cf",
+    "390x844-text1-network-inspection-actual-viewport.png": "65134ebe284cfe75d83ac5a2f44969b89bfa41321abfd21b57409b1a0c53403b",
+    "768x1024-text1-disk-inspection-actual-viewport.png": "43b681d8bdd105e50b4214f041763f730cff35ed5b16b49d6bfdcf502e22fdb3",
+    "768x1024-text1-initial-actual-viewport.png": "ff974d2c330314e5c4b29a5641876f081cc1afffe523a3729450600360cfb7cc",
+    "768x1024-text1-network-inspection-actual-viewport.png": "6adca56755be375eb5276837f1389c7c74c40f6ed88b57de96231f7168d717b9"
+  },
+  "unresolvedFirstCaptureSha256": "fc0b367c985fd6960d70c1af32ce3200ed8895c5cc9e98221f19ea9eebfdfbcf",
+  "scope": "Actual published resources/GET bodies and unchanged saved Dark/Frost preferences. One doubled-computed-text phone group, OS dark media preference and browser-only same-origin CSP header restriction are controlled. No response substitutions, preference shadows or real writes. Raw account/history records remain private. Hades was not accessed."
+}

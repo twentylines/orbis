@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "scope": "Exact full preference/installed/full-app/store API objects from previously verified beta43 through beta45 OTA, planned same-image restart and full actual UI audit. Comparison is offline; records remain private.",
+  "groupsMatch": {
+    "preferences": true,
+    "installed": true,
+    "apps": true,
+    "stores": true
+  },
+  "recordMutations": 0
+}

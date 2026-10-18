@@ -2,6 +2,8 @@
 
 This directory records the compiled-source device-history UI and separate real Linux helper evidence after beta43. At the source checkpoint the core remained beta43: its current-reading API works with the upgraded rehearsal helper, but it has no per-device history API/UI yet. Real background collection, restart persistence and the next published-image acceptance remain required. Hades is untouched.
 
+Current published beta45 has separate [actual runtime, restart and browser evidence](../live-beta45/README.md). The compiled-source records below keep their historical source boundary.
+
 ## Captures
 
 ![Compiled-source Monitor device history](desktop-light-history.png)

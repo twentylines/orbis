@@ -1,0 +1,221 @@
+{
+  "boundary": "R1 is unresolved. Its original verifier failed before saving after-scroll geometry. Two instrumented desktop reproductions and the subsequent full matrix pass without weakening exact native-scroll assertions. No cause or product correction is claimed.",
+  "runs": [
+    {
+      "run": "r2",
+      "passed": true,
+      "privateCompleteReportSha256": "0ec6338c628057224802fd19cb59ed3ace602413e4923bbd088f7d66e1395995",
+      "scope": "Selected reading-position measurements only; complete diagnostic report remains private. Two actual native1440 polls; no product/runtime writes. This passing diagnostic does not explain R1.",
+      "before": {
+        "scroll": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 5306
+        },
+        "history": {
+          "top": 410.296875,
+          "bottom": 1069.75,
+          "left": 55,
+          "right": 1385,
+          "height": 659.453125,
+          "width": 1330,
+          "documentTop": 410.296875,
+          "contentTop": 5526.546875
+        },
+        "plot": {
+          "top": 696.65625,
+          "bottom": 883.359375,
+          "left": 84,
+          "right": 706,
+          "height": 186.703125,
+          "width": 622,
+          "documentTop": 696.65625,
+          "contentTop": 5812.90625
+        }
+      },
+      "after": [
+        {
+          "scroll": {
+            "x": 0,
+            "y": 0,
+            "frame": 0,
+            "content": 5306
+          },
+          "history": {
+            "top": 410.296875,
+            "bottom": 1069.75,
+            "left": 55,
+            "right": 1385,
+            "height": 659.453125,
+            "width": 1330,
+            "documentTop": 410.296875,
+            "contentTop": 5526.546875
+          },
+          "plot": {
+            "top": 696.65625,
+            "bottom": 883.359375,
+            "left": 84,
+            "right": 706,
+            "height": 186.703125,
+            "width": 622,
+            "documentTop": 696.65625,
+            "contentTop": 5812.90625
+          },
+          "intervalFromPriorPoll": null
+        },
+        {
+          "scroll": {
+            "x": 0,
+            "y": 0,
+            "frame": 0,
+            "content": 5306
+          },
+          "history": {
+            "top": 410.296875,
+            "bottom": 1069.75,
+            "left": 55,
+            "right": 1385,
+            "height": 659.453125,
+            "width": 1330,
+            "documentTop": 410.296875,
+            "contentTop": 5526.546875
+          },
+          "plot": {
+            "top": 696.65625,
+            "bottom": 883.359375,
+            "left": 84,
+            "right": 706,
+            "height": 186.703125,
+            "width": 622,
+            "documentTop": 696.65625,
+            "contentTop": 5812.90625
+          },
+          "intervalFromPriorPoll": 10018
+        }
+      ],
+      "recordsUnchanged": true,
+      "errors": {
+        "readFailures": 0,
+        "assetFailures": 0,
+        "pageErrors": 0,
+        "blockedMutations": 0,
+        "cleanupFailures": 0
+      },
+      "cleanup": {
+        "groupContextsClosed": 1,
+        "readerClosed": true,
+        "anonymousClosed": true,
+        "browserClosed": true
+      }
+    },
+    {
+      "run": "r3",
+      "passed": true,
+      "privateCompleteReportSha256": "9aeac97d4d753ccefb0c4e29e408c093653c2dad4e0049d73825cfa455e00aa9",
+      "scope": "Selected reading-position measurements only; complete diagnostic report remains private. Two actual native1440 polls; no product/runtime writes. This passing diagnostic does not explain R1.",
+      "before": {
+        "scroll": {
+          "x": 0,
+          "y": 0,
+          "frame": 0,
+          "content": 5306
+        },
+        "history": {
+          "top": 410.296875,
+          "bottom": 1069.75,
+          "left": 55,
+          "right": 1385,
+          "height": 659.453125,
+          "width": 1330,
+          "documentTop": 410.296875,
+          "contentTop": 5526.546875
+        },
+        "plot": {
+          "top": 696.65625,
+          "bottom": 883.359375,
+          "left": 84,
+          "right": 706,
+          "height": 186.703125,
+          "width": 622,
+          "documentTop": 696.65625,
+          "contentTop": 5812.90625
+        }
+      },
+      "after": [
+        {
+          "scroll": {
+            "x": 0,
+            "y": 0,
+            "frame": 0,
+            "content": 5306
+          },
+          "history": {
+            "top": 410.296875,
+            "bottom": 1069.75,
+            "left": 55,
+            "right": 1385,
+            "height": 659.453125,
+            "width": 1330,
+            "documentTop": 410.296875,
+            "contentTop": 5526.546875
+          },
+          "plot": {
+            "top": 696.65625,
+            "bottom": 883.359375,
+            "left": 84,
+            "right": 706,
+            "height": 186.703125,
+            "width": 622,
+            "documentTop": 696.65625,
+            "contentTop": 5812.90625
+          },
+          "intervalFromPriorPoll": null
+        },
+        {
+          "scroll": {
+            "x": 0,
+            "y": 0,
+            "frame": 0,
+            "content": 5306
+          },
+          "history": {
+            "top": 410.296875,
+            "bottom": 1069.75,
+            "left": 55,
+            "right": 1385,
+            "height": 659.453125,
+            "width": 1330,
+            "documentTop": 410.296875,
+            "contentTop": 5526.546875
+          },
+          "plot": {
+            "top": 696.65625,
+            "bottom": 883.359375,
+            "left": 84,
+            "right": 706,
+            "height": 186.703125,
+            "width": 622,
+            "documentTop": 696.65625,
+            "contentTop": 5812.90625
+          },
+          "intervalFromPriorPoll": 10013
+        }
+      ],
+      "recordsUnchanged": true,
+      "errors": {
+        "readFailures": 0,
+        "assetFailures": 0,
+        "pageErrors": 0,
+        "blockedMutations": 0,
+        "cleanupFailures": 0
+      },
+      "cleanup": {
+        "groupContextsClosed": 1,
+        "readerClosed": true,
+        "anonymousClosed": true,
+        "browserClosed": true
+      }
+    }
+  ]
+}

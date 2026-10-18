@@ -1,6 +1,6 @@
 # Host disk and network history
 
-Published beta45 includes per-device history. Its reviewed arm64 OTA, real autonomous collector and planned same-image restart now pass. Published browser acceptance remains under investigation after a refresh/reading-position rejection.
+Published beta45 includes per-device history. Its reviewed arm64 OTA, real autonomous collector and planned same-image restart now pass. The current five-group published browser matrix passes actual values, native keyboard inspection, chrome, text and four scroll/focus-preserving polls. One earlier scroll flag remains unexplained and retained as an open stability item.
 
 ## Published acceptance follow-up
 
@@ -16,7 +16,7 @@ Three additional regressions now distinguish a failed network group, both failed
 
 The compiled Monitor presentation passes desktop/tablet/phone and doubled-rendered-text checks, device/range selection, delayed responses, empty/error states, keyboard/pointer inspection, hidden polling and refresh/reading-position checks. Direct review rejected a narrow 55px plot despite passing text bounds; the final phone plots use the full 166/236px interior. Cached-data Retry failures in all three host cards now retain the surviving Retry button; a successful retry moves focus to the card heading. [Captures, assertions and source boundaries](screenshots/host-device-history/README.md).
 
-A read-only Linux source probe verifies all 11 actual device identities against independent kernel-derived digests across two samples and a new collector. First/new-collector rates wait for a comparison. A subsequent private, dated helper backup and guarded rehearsal upgrade now verify the installed telemetry module, all 11 identities/rates and matching host/core Unix readings. Environment, unit and every other installed module match the backup. The core remains healthy on its exact published beta43 image; authenticated current-device readings and full preference/app/store records retain the previous verified baseline. Real backend background collection, restart persistence and published device-history API/UI remain separate release gates. Hades is untouched.
+A read-only Linux source probe verifies all 11 actual device identities against independent kernel-derived digests across two samples and a new collector. First/new-collector rates wait for a comparison. A subsequent private, dated helper backup and guarded rehearsal upgrade now verify the installed telemetry module, all 11 identities/rates and matching host/core Unix readings. Environment, unit and every other installed module match the backup. At that earlier helper checkpoint, the core remained on beta43 with its current-device API and full preference/app/store baseline preserved. Subsequent beta45 runtime and browser results are recorded above. Hades is untouched.
 
 ## Contract
 

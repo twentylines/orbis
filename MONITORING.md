@@ -52,7 +52,7 @@ Published beta43 history covers aggregate CPU, host memory, and core-network rat
 
 Chart axes size to their labels instead of using a fixed pixel allowance. Time labels wrap when space is limited. Inspection details appear in the document flow below the plot so enlarged text does not cover subsequent core rows; keyboard Left/Right/Home/End and the slider's complete value description remain available.
 
-## Per-device history (beta45 runtime; browser acceptance open)
+## Per-device history (beta45)
 
 Authenticated `GET /api/system/host-history?range=5m|1h|24h|7d&device=network:NAME|disk:NAME` selects one logical device; an omitted device selects the first retained device. Invalid ranges, duplicate parameters, unsupported names and paths return 400. Selection only looks up already collected data. It never selects a helper command or filesystem path.
 
@@ -66,4 +66,4 @@ Monitor now provides a single device selector with device-specific Download/Uplo
 
 [HOST-HISTORY.md](HOST-HISTORY.md) and the [retained source inspection](screenshots/host-device-history/README.md) record source tests, rejected defects and corrected native/doubled-text layouts. The installed helper supplies verified opaque identities after a dated private backup and guarded upgrade; environment, unit and other modules are unchanged.
 
-Beta44's actual background gate was rejected for delayed/unavailable collection. Beta45 corrects the cache deadline and passes its 130-second no-browser gate with available persistent storage and observed 10–20-second samples. Independent averages/peaks/counts, API/journal summaries and 11 kernel identities match. A planned same-container restart preserves 11 saved partial-device rows without double counting; it crosses a minute boundary, so actual same-minute merge coverage is not claimed. Published browser acceptance remains under investigation after one refresh-position rejection. [Runtime reports and precise boundaries](screenshots/live-beta45/README.md). Hades is unchanged.
+Beta44's actual background gate was rejected for delayed/unavailable collection. Beta45 corrects the cache deadline and passes its 130-second no-browser gate with available persistent storage and observed 10–20-second samples. Independent averages/peaks/counts, API/journal summaries and 11 kernel identities match. A planned same-container restart preserves 11 saved partial-device rows without double counting; it crosses a minute boundary, so actual same-minute merge coverage is not claimed. The current published browser matrix passes five native/enlarged groups, actual value/date/keyboard checks and four scroll/focus-preserving polls. One earlier scroll assertion failed before exact geometry was retained; it remains unexplained despite two passing diagnostics and the full current matrix. [Runtime reports and precise boundaries](screenshots/live-beta45/README.md). Hades is unchanged.

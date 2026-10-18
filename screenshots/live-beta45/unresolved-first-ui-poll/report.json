@@ -1,0 +1,3318 @@
+{
+  "passed": false,
+  "release": {
+    "tag": "v0.1.0-beta.45",
+    "commit": "c58aa30268d2b7ec8b7d49cbb1cbde91344db2ef",
+    "digest": "sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06"
+  },
+  "groups": [
+    {
+      "width": 1440,
+      "height": 1120,
+      "textScale": 1,
+      "poll": true,
+      "passed": false,
+      "actualHistoryReads": 3,
+      "captures": [
+        "1440x1120-text1-initial-actual-viewport.png",
+        "1440x1120-text1-network-inspection-actual-viewport.png",
+        "1440x1120-text1-failure-actual-viewport.png"
+      ],
+      "cleanup": {
+        "textRestored": true,
+        "viewportRestored": true,
+        "pageClosed": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "contextClosed": true
+      },
+      "initial": {
+        "range": "5m",
+        "points": 12,
+        "devices": 16,
+        "selectedKind": "network",
+        "selectedNameHash": "10f2dc2d5fbd1343eb3342c083c5db5a01e341ca4198678aff77894a7c35cd04",
+        "selectedNameLength": 15,
+        "collectorAvailable": true,
+        "storage": "persistent",
+        "lastSampleAt": "2026-10-18T06:39:21.827Z",
+        "persistedThrough": "2026-10-18T06:39:11.808Z",
+        "responseHash": "6dd6d271ab374c9d47c9f4341a40a043143ec41a92be2816382e0f7068a6fc8d",
+        "exactValuesAndLabels": true,
+        "exactTimes": true,
+        "exactUrl": true
+      },
+      "initialMetrics": {
+        "menu": null,
+        "textScale": 1,
+        "width": 1440,
+        "documentWidth": 1440,
+        "root": {
+          "left": 55,
+          "right": 1385,
+          "top": 5716.296875,
+          "bottom": 6273.953125,
+          "width": 1330,
+          "height": 557.65625
+        },
+        "monitor": {
+          "left": 55,
+          "right": 1385,
+          "top": 216.75,
+          "bottom": 6558.546875,
+          "width": 1330,
+          "height": 6341.796875
+        },
+        "inner": {
+          "left": 84,
+          "right": 1356
+        },
+        "padding": [28, 28],
+        "heading": {
+          "left": 84,
+          "right": 215.84375,
+          "top": 5745.296875,
+          "bottom": 5778.296875,
+          "width": 131.84375,
+          "height": 33
+        },
+        "peer": {
+          "left": 84,
+          "right": 228.9375,
+          "top": 6326.953125,
+          "bottom": 6359.953125,
+          "width": 144.9375,
+          "height": 33
+        },
+        "words": [],
+        "edgeInk": [],
+        "label": {
+          "text": {
+            "sha256": "5220b182948ec78cf1710602e4ce19538ab6b15d852f5ae97096a3a622e65174",
+            "length": 11
+          },
+          "box": {
+            "left": 84,
+            "right": 692,
+            "top": 5802.296875,
+            "bottom": 5824.6875,
+            "width": 608,
+            "height": 22.390625
+          },
+          "ink": [
+            {
+              "left": 84,
+              "right": 162.234375,
+              "top": 5804.296875,
+              "bottom": 5821.296875
+            }
+          ],
+          "font": 14,
+          "expectedFont": null
+        },
+        "trigger": {
+          "text": {
+            "sha256": "c236071acad5fea527194bb16766260b6f114f18a8d2d0ab5d5644f27f5a790c",
+            "length": 22
+          },
+          "box": {
+            "left": 84,
+            "right": 692,
+            "top": 5834.6875,
+            "bottom": 5902.671875,
+            "width": 608,
+            "height": 67.984375
+          },
+          "ink": [
+            {
+              "left": 101,
+              "right": 643,
+              "top": 5847.6875,
+              "bottom": 5889.671875
+            },
+            {
+              "left": 101,
+              "right": 149.21875,
+              "top": 5849.6875,
+              "bottom": 5864.6875
+            },
+            {
+              "left": 101,
+              "right": 213.265625,
+              "top": 5869.28125,
+              "bottom": 5886.28125
+            }
+          ],
+          "font": 14,
+          "expectedFont": null,
+          "title": {
+            "sha256": "1bcab550177a258b9c864fe780d30627b5ffd6a515df97665a92aa970ec6f49e",
+            "length": 24
+          },
+          "disabled": false
+        },
+        "buttons": [
+          {
+            "text": {
+              "sha256": "53bc57cdb69279bbfe2fc05f6964a89862ff636724f5c3c2016e8894c2be609c",
+              "length": 5
+            },
+            "box": {
+              "left": 726,
+              "right": 786.890625,
+              "top": 5858.671875,
+              "bottom": 5896.671875,
+              "width": 60.890625,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 740,
+                "right": 772.890625,
+                "top": 5870.09375,
+                "bottom": 5885.09375
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          },
+          {
+            "text": {
+              "sha256": "f8b8883f0c9d8d823a8df096ebde57ec04abe9f9cbc4eea1cbc3454c5025c484",
+              "length": 6
+            },
+            "box": {
+              "left": 792.890625,
+              "right": 857.515625,
+              "top": 5858.671875,
+              "bottom": 5896.671875,
+              "width": 64.625,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 806.890625,
+                "right": 843.515625,
+                "top": 5870.09375,
+                "bottom": 5885.09375
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          },
+          {
+            "text": {
+              "sha256": "f0514e8df84107f48f494271bdb02c616740729edfcfbc10fda4d5bad173a777",
+              "length": 8
+            },
+            "box": {
+              "left": 863.515625,
+              "right": 944.359375,
+              "top": 5858.671875,
+              "bottom": 5896.671875,
+              "width": 80.84375,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 877.515625,
+                "right": 930.359375,
+                "top": 5870.09375,
+                "bottom": 5885.09375
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          },
+          {
+            "text": {
+              "sha256": "7f920bb639c9307589b65e5f639391d65dcb86b0611ac47f58f7c769215326ee",
+              "length": 6
+            },
+            "box": {
+              "left": 950.359375,
+              "right": 1016.84375,
+              "top": 5858.671875,
+              "bottom": 5896.671875,
+              "width": 66.484375,
+              "height": 38
+            },
+            "ink": [
+              {
+                "left": 964.359375,
+                "right": 1002.84375,
+                "top": 5870.09375,
+                "bottom": 5885.09375
+              }
+            ],
+            "font": 12,
+            "expectedFont": null
+          }
+        ],
+        "choices": [
+          {
+            "box": {
+              "left": 101,
+              "right": 643,
+              "top": 5847.6875,
+              "bottom": 5889.671875,
+              "width": 542,
+              "height": 41.984375
+            },
+            "text": {
+              "sha256": "c236071acad5fea527194bb16766260b6f114f18a8d2d0ab5d5644f27f5a790c",
+              "length": 22
+            },
+            "title": {
+              "sha256": "1bcab550177a258b9c864fe780d30627b5ffd6a515df97665a92aa970ec6f49e",
+              "length": 24
+            },
+            "option": null,
+            "kind": {
+              "text": {
+                "sha256": "1744b96470b51bf30935e2748b237a708d226a0430063f92accf90961cd28d86",
+                "length": 7
+              },
+              "box": {
+                "left": 101,
+                "right": 643,
+                "top": 5847.6875,
+                "bottom": 5867.28125,
+                "width": 542,
+                "height": 19.59375
+              },
+              "ink": [
+                {
+                  "left": 101,
+                  "right": 149.21875,
+                  "top": 5849.6875,
+                  "bottom": 5864.6875
+                }
+              ],
+              "font": 12.25,
+              "expectedFont": null
+            },
+            "identifier": {
+              "text": {
+                "sha256": "10f2dc2d5fbd1343eb3342c083c5db5a01e341ca4198678aff77894a7c35cd04",
+                "length": 15
+              },
+              "box": {
+                "left": 101,
+                "right": 643,
+                "top": 5867.28125,
+                "bottom": 5889.671875,
+                "width": 542,
+                "height": 22.390625
+              },
+              "overflow": "hidden",
+              "ellipsis": "ellipsis",
+              "nowrap": "nowrap",
+              "truncated": false
+            }
+          }
+        ],
+        "charts": [
+          {
+            "box": {
+              "left": 84,
+              "right": 706,
+              "top": 5962.265625,
+              "bottom": 6209.359375,
+              "width": 622,
+              "height": 247.09375
+            },
+            "heading": {
+              "left": 84,
+              "right": 151,
+              "top": 5962.265625,
+              "bottom": 5984.65625,
+              "width": 67,
+              "height": 22.390625
+            },
+            "headerValue": {
+              "text": {
+                "sha256": "943e47463b52a020066d245f01c65c12d4e667f3a6963e12f130c8261731d3e0",
+                "length": 5
+              },
+              "box": {
+                "left": 673.1875,
+                "right": 706,
+                "top": 5962.265625,
+                "bottom": 5984.65625,
+                "width": 32.8125,
+                "height": 22.390625
+              },
+              "ink": [
+                {
+                  "left": 673.1875,
+                  "right": 706,
+                  "top": 5964.265625,
+                  "bottom": 5981.265625
+                }
+              ],
+              "font": 14,
+              "expectedFont": null
+            },
+            "metric": "host-inbound",
+            "plot": {
+              "left": 84,
+              "right": 706,
+              "top": 6002.65625,
+              "bottom": 6189.359375,
+              "width": 622,
+              "height": 186.703125
+            },
+            "svg": {
+              "left": 160.3125,
+              "right": 693,
+              "top": 6015.65625,
+              "bottom": 6155.65625,
+              "width": 532.6875,
+              "height": 140
+            },
+            "scale": {
+              "left": 97,
+              "right": 148.3125,
+              "top": 6015.65625,
+              "bottom": 6155.65625,
+              "width": 51.3125,
+              "height": 140
+            },
+            "labels": [
+              {
+                "text": {
+                  "sha256": "35220c0fba7dd0db6539719b9d4915ea6fc3dfcbf514afa9251ef97c00d8d95d",
+                  "length": 9
+                },
+                "box": {
+                  "left": 97,
+                  "right": 148.3125,
+                  "top": 6015.65625,
+                  "bottom": 6029.953125,
+                  "width": 51.3125,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 148.3125,
+                    "top": 6015.65625,
+                    "bottom": 6028.65625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null,
+                "prefix": "none"
+              },
+              {
+                "text": {
+                  "sha256": "c5af733c9ac59e252f0756a3e311d6dde7d157ed77449e3b0ed72625653be172",
+                  "length": 9
+                },
+                "box": {
+                  "left": 97,
+                  "right": 148.3125,
+                  "top": 6078.515625,
+                  "bottom": 6092.8125,
+                  "width": 51.3125,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 148.3125,
+                    "top": 6078.515625,
+                    "bottom": 6091.515625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null,
+                "prefix": "none"
+              },
+              {
+                "text": {
+                  "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+                  "length": 1
+                },
+                "box": {
+                  "left": 97,
+                  "right": 148.3125,
+                  "top": 6141.359375,
+                  "bottom": 6155.65625,
+                  "width": 51.3125,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 97,
+                    "right": 104,
+                    "top": 6141.359375,
+                    "bottom": 6154.359375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null,
+                "prefix": "none"
+              }
+            ],
+            "times": [
+              {
+                "text": {
+                  "sha256": "5c1e6000809405464775d52c25009179e672cf740fd3dc99cd18cf757ccae2f5",
+                  "length": 5
+                },
+                "box": {
+                  "left": 160.3125,
+                  "right": 191.625,
+                  "top": 6164.65625,
+                  "bottom": 6180.359375,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 160.3125,
+                    "right": 191.625,
+                    "top": 6165.65625,
+                    "bottom": 6178.65625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": {
+                  "sha256": "f89e2b83f10f504bc5f4e50e1b55ac21f9fb4ef6235f4d94dc3bd24f8664536a",
+                  "length": 5
+                },
+                "box": {
+                  "left": 411,
+                  "right": 442.3125,
+                  "top": 6164.65625,
+                  "bottom": 6180.359375,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 411,
+                    "right": 442.3125,
+                    "top": 6165.65625,
+                    "bottom": 6178.65625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": {
+                  "sha256": "5b71c686718933794d37ad83e27c56a3ef36f411981f02aeb14f116a74d900b6",
+                  "length": 5
+                },
+                "box": {
+                  "left": 661.6875,
+                  "right": 693,
+                  "top": 6164.65625,
+                  "bottom": 6180.359375,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 661.6875,
+                    "right": 693,
+                    "top": 6165.65625,
+                    "bottom": 6178.65625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "lines": [
+              "0.0,132.0 39.9,111.7 159.9,132.0 299.9,132.0",
+              "393.3,131.1 413.3,129.8 433.3,132.0 453.3,132.0 473.4,132.0 493.4,132.0 533.4,19.3 553.4,132.0"
+            ],
+            "segments": 2,
+            "tooltip": null,
+            "empty": null
+          },
+          {
+            "box": {
+              "left": 734,
+              "right": 1356,
+              "top": 5962.265625,
+              "bottom": 6209.359375,
+              "width": 622,
+              "height": 247.09375
+            },
+            "heading": {
+              "left": 734,
+              "right": 782.015625,
+              "top": 5962.265625,
+              "bottom": 5984.65625,
+              "width": 48.015625,
+              "height": 22.390625
+            },
+            "headerValue": {
+              "text": {
+                "sha256": "943e47463b52a020066d245f01c65c12d4e667f3a6963e12f130c8261731d3e0",
+                "length": 5
+              },
+              "box": {
+                "left": 1323.1875,
+                "right": 1356,
+                "top": 5962.265625,
+                "bottom": 5984.65625,
+                "width": 32.8125,
+                "height": 22.390625
+              },
+              "ink": [
+                {
+                  "left": 1323.1875,
+                  "right": 1356,
+                  "top": 5964.265625,
+                  "bottom": 5981.265625
+                }
+              ],
+              "font": 14,
+              "expectedFont": null
+            },
+            "metric": "host-outbound",
+            "plot": {
+              "left": 734,
+              "right": 1356,
+              "top": 6002.65625,
+              "bottom": 6189.359375,
+              "width": 622,
+              "height": 186.703125
+            },
+            "svg": {
+              "left": 810.3125,
+              "right": 1343,
+              "top": 6015.65625,
+              "bottom": 6155.65625,
+              "width": 532.6875,
+              "height": 140
+            },
+            "scale": {
+              "left": 747,
+              "right": 798.3125,
+              "top": 6015.65625,
+              "bottom": 6155.65625,
+              "width": 51.3125,
+              "height": 140
+            },
+            "labels": [
+              {
+                "text": {
+                  "sha256": "19ef9251f1527fddc58d9e62284902e71f5e9e5f81bec7cb90d1a5d13403ca8c",
+                  "length": 9
+                },
+                "box": {
+                  "left": 747,
+                  "right": 798.3125,
+                  "top": 6015.65625,
+                  "bottom": 6029.953125,
+                  "width": 51.3125,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 747,
+                    "right": 798.3125,
+                    "top": 6015.65625,
+                    "bottom": 6028.65625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null,
+                "prefix": "none"
+              },
+              {
+                "text": {
+                  "sha256": "362182187c4df3f57611cfa2cdbeb20cb0ea89ee5b71d3507f08ff5b175649d5",
+                  "length": 9
+                },
+                "box": {
+                  "left": 747,
+                  "right": 798.3125,
+                  "top": 6078.515625,
+                  "bottom": 6092.8125,
+                  "width": 51.3125,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 747,
+                    "right": 798.3125,
+                    "top": 6078.515625,
+                    "bottom": 6091.515625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null,
+                "prefix": "none"
+              },
+              {
+                "text": {
+                  "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+                  "length": 1
+                },
+                "box": {
+                  "left": 747,
+                  "right": 798.3125,
+                  "top": 6141.359375,
+                  "bottom": 6155.65625,
+                  "width": 51.3125,
+                  "height": 14.296875
+                },
+                "ink": [
+                  {
+                    "left": 747,
+                    "right": 754,
+                    "top": 6141.359375,
+                    "bottom": 6154.359375
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null,
+                "prefix": "none"
+              }
+            ],
+            "times": [
+              {
+                "text": {
+                  "sha256": "5c1e6000809405464775d52c25009179e672cf740fd3dc99cd18cf757ccae2f5",
+                  "length": 5
+                },
+                "box": {
+                  "left": 810.3125,
+                  "right": 841.625,
+                  "top": 6164.65625,
+                  "bottom": 6180.359375,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 810.3125,
+                    "right": 841.625,
+                    "top": 6165.65625,
+                    "bottom": 6178.65625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": {
+                  "sha256": "f89e2b83f10f504bc5f4e50e1b55ac21f9fb4ef6235f4d94dc3bd24f8664536a",
+                  "length": 5
+                },
+                "box": {
+                  "left": 1061,
+                  "right": 1092.3125,
+                  "top": 6164.65625,
+                  "bottom": 6180.359375,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 1061,
+                    "right": 1092.3125,
+                    "top": 6165.65625,
+                    "bottom": 6178.65625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              },
+              {
+                "text": {
+                  "sha256": "5b71c686718933794d37ad83e27c56a3ef36f411981f02aeb14f116a74d900b6",
+                  "length": 5
+                },
+                "box": {
+                  "left": 1311.6875,
+                  "right": 1343,
+                  "top": 6164.65625,
+                  "bottom": 6180.359375,
+                  "width": 31.3125,
+                  "height": 15.703125
+                },
+                "ink": [
+                  {
+                    "left": 1311.6875,
+                    "right": 1343,
+                    "top": 6165.65625,
+                    "bottom": 6178.65625
+                  }
+                ],
+                "font": 11,
+                "expectedFont": null
+              }
+            ],
+            "lines": [
+              "0.0,132.0 39.9,130.2 159.9,132.0 299.9,132.0",
+              "393.3,19.3 413.3,129.1 433.3,132.0 453.3,132.0 473.4,131.9 493.4,132.0 533.4,119.7 553.4,132.0"
+            ],
+            "segments": 2,
+            "tooltip": null,
+            "empty": null
+          }
+        ],
+        "notices": []
+      },
+      "chrome": {
+        "navigation": "desktop",
+        "bar": {
+          "background": "rgba(9, 23, 23, 0.92)",
+          "blur": "blur(28px) saturate(1.45)",
+          "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"],
+          "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px"
+        },
+        "dock": {
+          "background": "rgba(9, 23, 23, 0.92)",
+          "blur": "blur(28px) saturate(1.45)",
+          "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"],
+          "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px"
+        },
+        "header": {
+          "background": "rgba(9, 23, 23, 0.92)",
+          "blur": "blur(28px) saturate(1.45)",
+          "borders": ["rgb(242, 244, 239)", "rgb(242, 244, 239)", "rgba(190, 221, 205, 0.12)", "rgb(242, 244, 239)"],
+          "shadow": "rgba(18, 43, 37, 0.12) 0px 13px 24px 0px"
+        },
+        "frame": {
+          "background": "rgba(0, 0, 0, 0)",
+          "blur": "none",
+          "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"],
+          "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px"
+        }
+      },
+      "appearance": {
+        "mode": "dark",
+        "preset": "frost"
+      },
+      "selections": [
+        {
+          "kind": "network",
+          "nameHash": "10f2dc2d5fbd1343eb3342c083c5db5a01e341ca4198678aff77894a7c35cd04",
+          "nameLength": 15,
+          "ranges": [
+            {
+              "range": "5m",
+              "points": 12,
+              "devices": 16,
+              "selectedKind": "network",
+              "selectedNameHash": "10f2dc2d5fbd1343eb3342c083c5db5a01e341ca4198678aff77894a7c35cd04",
+              "selectedNameLength": 15,
+              "collectorAvailable": true,
+              "storage": "persistent",
+              "lastSampleAt": "2026-10-18T06:39:21.827Z",
+              "persistedThrough": "2026-10-18T06:39:11.808Z",
+              "responseHash": "6dd6d271ab374c9d47c9f4341a40a043143ec41a92be2816382e0f7068a6fc8d",
+              "exactValuesAndLabels": true,
+              "exactTimes": true,
+              "exactUrl": true
+            },
+            {
+              "range": "1h",
+              "points": 35,
+              "devices": 16,
+              "selectedKind": "network",
+              "selectedNameHash": "10f2dc2d5fbd1343eb3342c083c5db5a01e341ca4198678aff77894a7c35cd04",
+              "selectedNameLength": 15,
+              "collectorAvailable": true,
+              "storage": "persistent",
+              "lastSampleAt": "2026-10-18T06:39:21.827Z",
+              "persistedThrough": "2026-10-18T06:39:11.808Z",
+              "responseHash": "ac4170b863510f23c46144c82b19f72677060d0819cda237ebf631498f3d54bd",
+              "exactValuesAndLabels": true,
+              "exactTimes": true,
+              "exactUrl": true
+            }
+          ],
+          "keyboard": [
+            {
+              "field": "inbound",
+              "key": "Home",
+              "attempts": 1,
+              "proof": {
+                "index": 0,
+                "at": "2026-10-18T06:34:05.051Z",
+                "until": "2026-10-18T06:34:55.037Z",
+                "metric": {
+                  "average": 3.702744248316436,
+                  "peak": 5.410791762215232,
+                  "samples": 4
+                },
+                "exactAccessibleAndVisibleReading": true
+              }
+            },
+            {
+              "field": "inbound",
+              "key": "ArrowRight",
+              "attempts": 1,
+              "proof": {
+                "index": 1,
+                "at": "2026-10-18T06:35:05.063Z",
+                "until": "2026-10-18T06:35:45.082Z",
+                "metric": {
+                  "average": 3443.4805862236008,
+                  "peak": 13773.922344894403,
+                  "samples": 4
+                },
+                "exactAccessibleAndVisibleReading": true
+              }
+            },
+            {
+              "field": "inbound",
+              "key": "End",
+              "attempts": 1,
+              "proof": {
+                "index": 11,
+                "at": "2026-10-18T06:39:21.827Z",
+                "until": "2026-10-18T06:39:21.827Z",
+                "metric": {
+                  "average": 0,
+                  "peak": 0,
+                  "samples": 1
+                },
+                "exactAccessibleAndVisibleReading": true
+              },
+              "focus": {
+                "tag": "DIV",
+                "owner": "tool",
+                "frameMode": "desktop",
+                "desktopQuery": true,
+                "documentScroll": {
+                  "scrollHeight": 1120,
+                  "clientHeight": 1120,
+                  "scrollTop": 0,
+                  "maxScroll": 0
+                },
+                "expectedRevealDelta": 0,
+                "scroll": {
+                  "y": 0,
+                  "content": 5282
+                },
+                "top": 720.65625,
+                "bottom": 907.359375,
+                "documentTop": 720.65625,
+                "chromeBottom": 189.75,
+                "dockTop": 1022,
+                "outline": "rgb(183, 92, 62) solid 3px",
+                "shadow": "none",
+                "textHash": "8d70b2972e15ea6f17f31522a85ea8bf0b34cdab1df8e6de93ef99cb0afaec89",
+                "textLength": 34
+              },
+              "metrics": {
+                "menu": null,
+                "textScale": 1,
+                "width": 1440,
+                "documentWidth": 1440,
+                "root": {
+                  "left": 55,
+                  "right": 1385,
+                  "top": 434.296875,
+                  "bottom": 1093.75,
+                  "width": 1330,
+                  "height": 659.453125
+                },
+                "monitor": {
+                  "left": 55,
+                  "right": 1385,
+                  "top": -5065.25,
+                  "bottom": 1391.9375,
+                  "width": 1330,
+                  "height": 6457.1875
+                },
+                "inner": {
+                  "left": 84,
+                  "right": 1356
+                },
+                "padding": [28, 28],
+                "heading": {
+                  "left": 84,
+                  "right": 215.84375,
+                  "top": 463.296875,
+                  "bottom": 496.296875,
+                  "width": 131.84375,
+                  "height": 33
+                },
+                "peer": {
+                  "left": 84,
+                  "right": 228.9375,
+                  "top": 1146.75,
+                  "bottom": 1179.75,
+                  "width": 144.9375,
+                  "height": 33
+                },
+                "words": [],
+                "edgeInk": [],
+                "label": {
+                  "text": {
+                    "sha256": "5220b182948ec78cf1710602e4ce19538ab6b15d852f5ae97096a3a622e65174",
+                    "length": 11
+                  },
+                  "box": {
+                    "left": 84,
+                    "right": 692,
+                    "top": 520.296875,
+                    "bottom": 542.6875,
+                    "width": 608,
+                    "height": 22.390625
+                  },
+                  "ink": [
+                    {
+                      "left": 84,
+                      "right": 162.234375,
+                      "top": 522.296875,
+                      "bottom": 539.296875
+                    }
+                  ],
+                  "font": 14,
+                  "expectedFont": null
+                },
+                "trigger": {
+                  "text": {
+                    "sha256": "c236071acad5fea527194bb16766260b6f114f18a8d2d0ab5d5644f27f5a790c",
+                    "length": 22
+                  },
+                  "box": {
+                    "left": 84,
+                    "right": 692,
+                    "top": 552.6875,
+                    "bottom": 620.671875,
+                    "width": 608,
+                    "height": 67.984375
+                  },
+                  "ink": [
+                    {
+                      "left": 101,
+                      "right": 643,
+                      "top": 565.6875,
+                      "bottom": 607.671875
+                    },
+                    {
+                      "left": 101,
+                      "right": 149.21875,
+                      "top": 567.6875,
+                      "bottom": 582.6875
+                    },
+                    {
+                      "left": 101,
+                      "right": 213.265625,
+                      "top": 587.28125,
+                      "bottom": 604.28125
+                    }
+                  ],
+                  "font": 14,
+                  "expectedFont": null,
+                  "title": {
+                    "sha256": "1bcab550177a258b9c864fe780d30627b5ffd6a515df97665a92aa970ec6f49e",
+                    "length": 24
+                  },
+                  "disabled": false
+                },
+                "buttons": [
+                  {
+                    "text": {
+                      "sha256": "53bc57cdb69279bbfe2fc05f6964a89862ff636724f5c3c2016e8894c2be609c",
+                      "length": 5
+                    },
+                    "box": {
+                      "left": 726,
+                      "right": 786.890625,
+                      "top": 576.671875,
+                      "bottom": 614.671875,
+                      "width": 60.890625,
+                      "height": 38
+                    },
+                    "ink": [
+                      {
+                        "left": 740,
+                        "right": 772.890625,
+                        "top": 588.09375,
+                        "bottom": 603.09375
+                      }
+                    ],
+                    "font": 12,
+                    "expectedFont": null
+                  },
+                  {
+                    "text": {
+                      "sha256": "f8b8883f0c9d8d823a8df096ebde57ec04abe9f9cbc4eea1cbc3454c5025c484",
+                      "length": 6
+                    },
+                    "box": {
+                      "left": 792.890625,
+                      "right": 857.515625,
+                      "top": 576.671875,
+                      "bottom": 614.671875,
+                      "width": 64.625,
+                      "height": 38
+                    },
+                    "ink": [
+                      {
+                        "left": 806.890625,
+                        "right": 843.515625,
+                        "top": 588.09375,
+                        "bottom": 603.09375
+                      }
+                    ],
+                    "font": 12,
+                    "expectedFont": null
+                  },
+                  {
+                    "text": {
+                      "sha256": "f0514e8df84107f48f494271bdb02c616740729edfcfbc10fda4d5bad173a777",
+                      "length": 8
+                    },
+                    "box": {
+                      "left": 863.515625,
+                      "right": 944.359375,
+                      "top": 576.671875,
+                      "bottom": 614.671875,
+                      "width": 80.84375,
+                      "height": 38
+                    },
+                    "ink": [
+                      {
+                        "left": 877.515625,
+                        "right": 930.359375,
+                        "top": 588.09375,
+                        "bottom": 603.09375
+                      }
+                    ],
+                    "font": 12,
+                    "expectedFont": null
+                  },
+                  {
+                    "text": {
+                      "sha256": "7f920bb639c9307589b65e5f639391d65dcb86b0611ac47f58f7c769215326ee",
+                      "length": 6
+                    },
+                    "box": {
+                      "left": 950.359375,
+                      "right": 1016.84375,
+                      "top": 576.671875,
+                      "bottom": 614.671875,
+                      "width": 66.484375,
+                      "height": 38
+                    },
+                    "ink": [
+                      {
+                        "left": 964.359375,
+                        "right": 1002.84375,
+                        "top": 588.09375,
+                        "bottom": 603.09375
+                      }
+                    ],
+                    "font": 12,
+                    "expectedFont": null
+                  }
+                ],
+                "choices": [
+                  {
+                    "box": {
+                      "left": 101,
+                      "right": 643,
+                      "top": 565.6875,
+                      "bottom": 607.671875,
+                      "width": 542,
+                      "height": 41.984375
+                    },
+                    "text": {
+                      "sha256": "c236071acad5fea527194bb16766260b6f114f18a8d2d0ab5d5644f27f5a790c",
+                      "length": 22
+                    },
+                    "title": {
+                      "sha256": "1bcab550177a258b9c864fe780d30627b5ffd6a515df97665a92aa970ec6f49e",
+                      "length": 24
+                    },
+                    "option": null,
+                    "kind": {
+                      "text": {
+                        "sha256": "1744b96470b51bf30935e2748b237a708d226a0430063f92accf90961cd28d86",
+                        "length": 7
+                      },
+                      "box": {
+                        "left": 101,
+                        "right": 643,
+                        "top": 565.6875,
+                        "bottom": 585.28125,
+                        "width": 542,
+                        "height": 19.59375
+                      },
+                      "ink": [
+                        {
+                          "left": 101,
+                          "right": 149.21875,
+                          "top": 567.6875,
+                          "bottom": 582.6875
+                        }
+                      ],
+                      "font": 12.25,
+                      "expectedFont": null
+                    },
+                    "identifier": {
+                      "text": {
+                        "sha256": "10f2dc2d5fbd1343eb3342c083c5db5a01e341ca4198678aff77894a7c35cd04",
+                        "length": 15
+                      },
+                      "box": {
+                        "left": 101,
+                        "right": 643,
+                        "top": 585.28125,
+                        "bottom": 607.671875,
+                        "width": 542,
+                        "height": 22.390625
+                      },
+                      "overflow": "hidden",
+                      "ellipsis": "ellipsis",
+                      "nowrap": "nowrap",
+                      "truncated": false
+                    }
+                  }
+                ],
+                "charts": [
+                  {
+                    "box": {
+                      "left": 84,
+                      "right": 706,
+                      "top": 680.265625,
+                      "bottom": 1029.15625,
+                      "width": 622,
+                      "height": 348.890625
+                    },
+                    "heading": {
+                      "left": 84,
+                      "right": 151,
+                      "top": 680.265625,
+                      "bottom": 702.65625,
+                      "width": 67,
+                      "height": 22.390625
+                    },
+                    "headerValue": {
+                      "text": {
+                        "sha256": "943e47463b52a020066d245f01c65c12d4e667f3a6963e12f130c8261731d3e0",
+                        "length": 5
+                      },
+                      "box": {
+                        "left": 673.1875,
+                        "right": 706,
+                        "top": 680.265625,
+                        "bottom": 702.65625,
+                        "width": 32.8125,
+                        "height": 22.390625
+                      },
+                      "ink": [
+                        {
+                          "left": 673.1875,
+                          "right": 706,
+                          "top": 682.265625,
+                          "bottom": 699.265625
+                        }
+                      ],
+                      "font": 14,
+                      "expectedFont": null
+                    },
+                    "metric": "host-inbound",
+                    "plot": {
+                      "left": 84,
+                      "right": 706,
+                      "top": 720.65625,
+                      "bottom": 907.359375,
+                      "width": 622,
+                      "height": 186.703125
+                    },
+                    "svg": {
+                      "left": 160.3125,
+                      "right": 693,
+                      "top": 733.65625,
+                      "bottom": 873.65625,
+                      "width": 532.6875,
+                      "height": 140
+                    },
+                    "scale": {
+                      "left": 97,
+                      "right": 148.3125,
+                      "top": 733.65625,
+                      "bottom": 873.65625,
+                      "width": 51.3125,
+                      "height": 140
+                    },
+                    "labels": [
+                      {
+                        "text": {
+                          "sha256": "35220c0fba7dd0db6539719b9d4915ea6fc3dfcbf514afa9251ef97c00d8d95d",
+                          "length": 9
+                        },
+                        "box": {
+                          "left": 97,
+                          "right": 148.3125,
+                          "top": 733.65625,
+                          "bottom": 747.953125,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 97,
+                            "right": 148.3125,
+                            "top": 733.65625,
+                            "bottom": 746.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      },
+                      {
+                        "text": {
+                          "sha256": "c5af733c9ac59e252f0756a3e311d6dde7d157ed77449e3b0ed72625653be172",
+                          "length": 9
+                        },
+                        "box": {
+                          "left": 97,
+                          "right": 148.3125,
+                          "top": 796.515625,
+                          "bottom": 810.8125,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 97,
+                            "right": 148.3125,
+                            "top": 796.515625,
+                            "bottom": 809.515625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      },
+                      {
+                        "text": {
+                          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+                          "length": 1
+                        },
+                        "box": {
+                          "left": 97,
+                          "right": 148.3125,
+                          "top": 859.359375,
+                          "bottom": 873.65625,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 97,
+                            "right": 104,
+                            "top": 859.359375,
+                            "bottom": 872.359375
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      }
+                    ],
+                    "times": [
+                      {
+                        "text": {
+                          "sha256": "5c1e6000809405464775d52c25009179e672cf740fd3dc99cd18cf757ccae2f5",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 160.3125,
+                          "right": 191.625,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 160.3125,
+                            "right": 191.625,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      },
+                      {
+                        "text": {
+                          "sha256": "f89e2b83f10f504bc5f4e50e1b55ac21f9fb4ef6235f4d94dc3bd24f8664536a",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 411,
+                          "right": 442.3125,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 411,
+                            "right": 442.3125,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      },
+                      {
+                        "text": {
+                          "sha256": "5b71c686718933794d37ad83e27c56a3ef36f411981f02aeb14f116a74d900b6",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 661.6875,
+                          "right": 693,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 661.6875,
+                            "right": 693,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      }
+                    ],
+                    "lines": [
+                      "0.0,132.0 39.9,111.7 159.9,132.0 299.9,132.0",
+                      "393.3,131.1 413.3,129.8 433.3,132.0 453.3,132.0 473.4,132.0 493.4,132.0 533.4,19.3 553.4,132.0"
+                    ],
+                    "segments": 2,
+                    "tooltip": {
+                      "text": {
+                        "sha256": "b5f6de4a70bd3c0e5bb0914b4ece19b8119dc52bc1d5f2678f657a832dfb4c96",
+                        "length": 44
+                      },
+                      "box": {
+                        "left": 84,
+                        "right": 706,
+                        "top": 919.359375,
+                        "bottom": 1009.15625,
+                        "width": 622,
+                        "height": 89.796875
+                      },
+                      "ink": [
+                        {
+                          "left": 99,
+                          "right": 691,
+                          "top": 932.359375,
+                          "bottom": 946.359375
+                        },
+                        {
+                          "left": 99,
+                          "right": 207.34375,
+                          "top": 933.359375,
+                          "bottom": 945.359375
+                        },
+                        {
+                          "left": 99,
+                          "right": 691,
+                          "top": 952.359375,
+                          "bottom": 976.15625
+                        },
+                        {
+                          "left": 99,
+                          "right": 139.03125,
+                          "top": 953.359375,
+                          "bottom": 973.359375
+                        },
+                        {
+                          "left": 99,
+                          "right": 691,
+                          "top": 982.15625,
+                          "bottom": 996.15625
+                        },
+                        {
+                          "left": 99,
+                          "right": 201.5,
+                          "top": 983.15625,
+                          "bottom": 995.15625
+                        }
+                      ],
+                      "font": 12,
+                      "expectedFont": null,
+                      "position": "static",
+                      "children": [
+                        {
+                          "text": {
+                            "sha256": "6fec1f9dde31b8c4bf40bd1c7c3feb1aedcb4a827b6cd9c6199ce5bffaf32ee5",
+                            "length": 20
+                          },
+                          "box": {
+                            "left": 99,
+                            "right": 691,
+                            "top": 932.359375,
+                            "bottom": 946.359375,
+                            "width": 592,
+                            "height": 14
+                          },
+                          "ink": [
+                            {
+                              "left": 99,
+                              "right": 207.34375,
+                              "top": 933.359375,
+                              "bottom": 945.359375
+                            }
+                          ],
+                          "font": 10,
+                          "expectedFont": null
+                        },
+                        {
+                          "text": {
+                            "sha256": "943e47463b52a020066d245f01c65c12d4e667f3a6963e12f130c8261731d3e0",
+                            "length": 5
+                          },
+                          "box": {
+                            "left": 99,
+                            "right": 691,
+                            "top": 952.359375,
+                            "bottom": 976.15625,
+                            "width": 592,
+                            "height": 23.796875
+                          },
+                          "ink": [
+                            {
+                              "left": 99,
+                              "right": 139.03125,
+                              "top": 953.359375,
+                              "bottom": 973.359375
+                            }
+                          ],
+                          "font": 17,
+                          "expectedFont": null
+                        },
+                        {
+                          "text": {
+                            "sha256": "3f29f4a9a0d7b90162a3d055c1c4ccfeab0cf85d270931f12e836a5561110849",
+                            "length": 19
+                          },
+                          "box": {
+                            "left": 99,
+                            "right": 691,
+                            "top": 982.15625,
+                            "bottom": 996.15625,
+                            "width": 592,
+                            "height": 14
+                          },
+                          "ink": [
+                            {
+                              "left": 99,
+                              "right": 201.5,
+                              "top": 983.15625,
+                              "bottom": 995.15625
+                            }
+                          ],
+                          "font": 10,
+                          "expectedFont": null
+                        }
+                      ]
+                    },
+                    "empty": null
+                  },
+                  {
+                    "box": {
+                      "left": 734,
+                      "right": 1356,
+                      "top": 680.265625,
+                      "bottom": 1029.15625,
+                      "width": 622,
+                      "height": 348.890625
+                    },
+                    "heading": {
+                      "left": 734,
+                      "right": 782.015625,
+                      "top": 680.265625,
+                      "bottom": 702.65625,
+                      "width": 48.015625,
+                      "height": 22.390625
+                    },
+                    "headerValue": {
+                      "text": {
+                        "sha256": "943e47463b52a020066d245f01c65c12d4e667f3a6963e12f130c8261731d3e0",
+                        "length": 5
+                      },
+                      "box": {
+                        "left": 1323.1875,
+                        "right": 1356,
+                        "top": 680.265625,
+                        "bottom": 702.65625,
+                        "width": 32.8125,
+                        "height": 22.390625
+                      },
+                      "ink": [
+                        {
+                          "left": 1323.1875,
+                          "right": 1356,
+                          "top": 682.265625,
+                          "bottom": 699.265625
+                        }
+                      ],
+                      "font": 14,
+                      "expectedFont": null
+                    },
+                    "metric": "host-outbound",
+                    "plot": {
+                      "left": 734,
+                      "right": 1356,
+                      "top": 720.65625,
+                      "bottom": 907.359375,
+                      "width": 622,
+                      "height": 186.703125
+                    },
+                    "svg": {
+                      "left": 810.3125,
+                      "right": 1343,
+                      "top": 733.65625,
+                      "bottom": 873.65625,
+                      "width": 532.6875,
+                      "height": 140
+                    },
+                    "scale": {
+                      "left": 747,
+                      "right": 798.3125,
+                      "top": 733.65625,
+                      "bottom": 873.65625,
+                      "width": 51.3125,
+                      "height": 140
+                    },
+                    "labels": [
+                      {
+                        "text": {
+                          "sha256": "19ef9251f1527fddc58d9e62284902e71f5e9e5f81bec7cb90d1a5d13403ca8c",
+                          "length": 9
+                        },
+                        "box": {
+                          "left": 747,
+                          "right": 798.3125,
+                          "top": 733.65625,
+                          "bottom": 747.953125,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 747,
+                            "right": 798.3125,
+                            "top": 733.65625,
+                            "bottom": 746.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      },
+                      {
+                        "text": {
+                          "sha256": "362182187c4df3f57611cfa2cdbeb20cb0ea89ee5b71d3507f08ff5b175649d5",
+                          "length": 9
+                        },
+                        "box": {
+                          "left": 747,
+                          "right": 798.3125,
+                          "top": 796.515625,
+                          "bottom": 810.8125,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 747,
+                            "right": 798.3125,
+                            "top": 796.515625,
+                            "bottom": 809.515625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      },
+                      {
+                        "text": {
+                          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+                          "length": 1
+                        },
+                        "box": {
+                          "left": 747,
+                          "right": 798.3125,
+                          "top": 859.359375,
+                          "bottom": 873.65625,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 747,
+                            "right": 754,
+                            "top": 859.359375,
+                            "bottom": 872.359375
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      }
+                    ],
+                    "times": [
+                      {
+                        "text": {
+                          "sha256": "5c1e6000809405464775d52c25009179e672cf740fd3dc99cd18cf757ccae2f5",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 810.3125,
+                          "right": 841.625,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 810.3125,
+                            "right": 841.625,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      },
+                      {
+                        "text": {
+                          "sha256": "f89e2b83f10f504bc5f4e50e1b55ac21f9fb4ef6235f4d94dc3bd24f8664536a",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 1061,
+                          "right": 1092.3125,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 1061,
+                            "right": 1092.3125,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      },
+                      {
+                        "text": {
+                          "sha256": "5b71c686718933794d37ad83e27c56a3ef36f411981f02aeb14f116a74d900b6",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 1311.6875,
+                          "right": 1343,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 1311.6875,
+                            "right": 1343,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      }
+                    ],
+                    "lines": [
+                      "0.0,132.0 39.9,130.2 159.9,132.0 299.9,132.0",
+                      "393.3,19.3 413.3,129.1 433.3,132.0 453.3,132.0 473.4,131.9 493.4,132.0 533.4,119.7 553.4,132.0"
+                    ],
+                    "segments": 2,
+                    "tooltip": null,
+                    "empty": null
+                  }
+                ],
+                "notices": []
+              }
+            },
+            {
+              "field": "outbound",
+              "key": "Home",
+              "attempts": 1,
+              "proof": {
+                "index": 0,
+                "at": "2026-10-18T06:34:05.051Z",
+                "until": "2026-10-18T06:34:55.037Z",
+                "metric": {
+                  "average": 5.103786449445275,
+                  "peak": 7.514988558632267,
+                  "samples": 4
+                },
+                "exactAccessibleAndVisibleReading": true
+              }
+            },
+            {
+              "field": "outbound",
+              "key": "ArrowRight",
+              "attempts": 1,
+              "proof": {
+                "index": 1,
+                "at": "2026-10-18T06:35:05.063Z",
+                "until": "2026-10-18T06:35:45.082Z",
+                "metric": {
+                  "average": 361.1037213441014,
+                  "peak": 1444.4148853764057,
+                  "samples": 4
+                },
+                "exactAccessibleAndVisibleReading": true
+              }
+            },
+            {
+              "field": "outbound",
+              "key": "End",
+              "attempts": 1,
+              "proof": {
+                "index": 11,
+                "at": "2026-10-18T06:39:21.827Z",
+                "until": "2026-10-18T06:39:21.827Z",
+                "metric": {
+                  "average": 0,
+                  "peak": 0,
+                  "samples": 1
+                },
+                "exactAccessibleAndVisibleReading": true
+              },
+              "focus": {
+                "tag": "DIV",
+                "owner": "tool",
+                "frameMode": "desktop",
+                "desktopQuery": true,
+                "documentScroll": {
+                  "scrollHeight": 1120,
+                  "clientHeight": 1120,
+                  "scrollTop": 0,
+                  "maxScroll": 0
+                },
+                "expectedRevealDelta": 0,
+                "scroll": {
+                  "y": 0,
+                  "content": 5282
+                },
+                "top": 720.65625,
+                "bottom": 907.359375,
+                "documentTop": 720.65625,
+                "chromeBottom": 189.75,
+                "dockTop": 1022,
+                "outline": "rgb(183, 92, 62) solid 3px",
+                "shadow": "none",
+                "textHash": "f62cbfe350ff83990160fab2574fdf091c4406b98682083eab0e1a22cdcd6f57",
+                "textLength": 34
+              },
+              "metrics": {
+                "menu": null,
+                "textScale": 1,
+                "width": 1440,
+                "documentWidth": 1440,
+                "root": {
+                  "left": 55,
+                  "right": 1385,
+                  "top": 434.296875,
+                  "bottom": 1093.75,
+                  "width": 1330,
+                  "height": 659.453125
+                },
+                "monitor": {
+                  "left": 55,
+                  "right": 1385,
+                  "top": -5065.25,
+                  "bottom": 1391.9375,
+                  "width": 1330,
+                  "height": 6457.1875
+                },
+                "inner": {
+                  "left": 84,
+                  "right": 1356
+                },
+                "padding": [28, 28],
+                "heading": {
+                  "left": 84,
+                  "right": 215.84375,
+                  "top": 463.296875,
+                  "bottom": 496.296875,
+                  "width": 131.84375,
+                  "height": 33
+                },
+                "peer": {
+                  "left": 84,
+                  "right": 228.9375,
+                  "top": 1146.75,
+                  "bottom": 1179.75,
+                  "width": 144.9375,
+                  "height": 33
+                },
+                "words": [],
+                "edgeInk": [],
+                "label": {
+                  "text": {
+                    "sha256": "5220b182948ec78cf1710602e4ce19538ab6b15d852f5ae97096a3a622e65174",
+                    "length": 11
+                  },
+                  "box": {
+                    "left": 84,
+                    "right": 692,
+                    "top": 520.296875,
+                    "bottom": 542.6875,
+                    "width": 608,
+                    "height": 22.390625
+                  },
+                  "ink": [
+                    {
+                      "left": 84,
+                      "right": 162.234375,
+                      "top": 522.296875,
+                      "bottom": 539.296875
+                    }
+                  ],
+                  "font": 14,
+                  "expectedFont": null
+                },
+                "trigger": {
+                  "text": {
+                    "sha256": "c236071acad5fea527194bb16766260b6f114f18a8d2d0ab5d5644f27f5a790c",
+                    "length": 22
+                  },
+                  "box": {
+                    "left": 84,
+                    "right": 692,
+                    "top": 552.6875,
+                    "bottom": 620.671875,
+                    "width": 608,
+                    "height": 67.984375
+                  },
+                  "ink": [
+                    {
+                      "left": 101,
+                      "right": 643,
+                      "top": 565.6875,
+                      "bottom": 607.671875
+                    },
+                    {
+                      "left": 101,
+                      "right": 149.21875,
+                      "top": 567.6875,
+                      "bottom": 582.6875
+                    },
+                    {
+                      "left": 101,
+                      "right": 213.265625,
+                      "top": 587.28125,
+                      "bottom": 604.28125
+                    }
+                  ],
+                  "font": 14,
+                  "expectedFont": null,
+                  "title": {
+                    "sha256": "1bcab550177a258b9c864fe780d30627b5ffd6a515df97665a92aa970ec6f49e",
+                    "length": 24
+                  },
+                  "disabled": false
+                },
+                "buttons": [
+                  {
+                    "text": {
+                      "sha256": "53bc57cdb69279bbfe2fc05f6964a89862ff636724f5c3c2016e8894c2be609c",
+                      "length": 5
+                    },
+                    "box": {
+                      "left": 726,
+                      "right": 786.890625,
+                      "top": 576.671875,
+                      "bottom": 614.671875,
+                      "width": 60.890625,
+                      "height": 38
+                    },
+                    "ink": [
+                      {
+                        "left": 740,
+                        "right": 772.890625,
+                        "top": 588.09375,
+                        "bottom": 603.09375
+                      }
+                    ],
+                    "font": 12,
+                    "expectedFont": null
+                  },
+                  {
+                    "text": {
+                      "sha256": "f8b8883f0c9d8d823a8df096ebde57ec04abe9f9cbc4eea1cbc3454c5025c484",
+                      "length": 6
+                    },
+                    "box": {
+                      "left": 792.890625,
+                      "right": 857.515625,
+                      "top": 576.671875,
+                      "bottom": 614.671875,
+                      "width": 64.625,
+                      "height": 38
+                    },
+                    "ink": [
+                      {
+                        "left": 806.890625,
+                        "right": 843.515625,
+                        "top": 588.09375,
+                        "bottom": 603.09375
+                      }
+                    ],
+                    "font": 12,
+                    "expectedFont": null
+                  },
+                  {
+                    "text": {
+                      "sha256": "f0514e8df84107f48f494271bdb02c616740729edfcfbc10fda4d5bad173a777",
+                      "length": 8
+                    },
+                    "box": {
+                      "left": 863.515625,
+                      "right": 944.359375,
+                      "top": 576.671875,
+                      "bottom": 614.671875,
+                      "width": 80.84375,
+                      "height": 38
+                    },
+                    "ink": [
+                      {
+                        "left": 877.515625,
+                        "right": 930.359375,
+                        "top": 588.09375,
+                        "bottom": 603.09375
+                      }
+                    ],
+                    "font": 12,
+                    "expectedFont": null
+                  },
+                  {
+                    "text": {
+                      "sha256": "7f920bb639c9307589b65e5f639391d65dcb86b0611ac47f58f7c769215326ee",
+                      "length": 6
+                    },
+                    "box": {
+                      "left": 950.359375,
+                      "right": 1016.84375,
+                      "top": 576.671875,
+                      "bottom": 614.671875,
+                      "width": 66.484375,
+                      "height": 38
+                    },
+                    "ink": [
+                      {
+                        "left": 964.359375,
+                        "right": 1002.84375,
+                        "top": 588.09375,
+                        "bottom": 603.09375
+                      }
+                    ],
+                    "font": 12,
+                    "expectedFont": null
+                  }
+                ],
+                "choices": [
+                  {
+                    "box": {
+                      "left": 101,
+                      "right": 643,
+                      "top": 565.6875,
+                      "bottom": 607.671875,
+                      "width": 542,
+                      "height": 41.984375
+                    },
+                    "text": {
+                      "sha256": "c236071acad5fea527194bb16766260b6f114f18a8d2d0ab5d5644f27f5a790c",
+                      "length": 22
+                    },
+                    "title": {
+                      "sha256": "1bcab550177a258b9c864fe780d30627b5ffd6a515df97665a92aa970ec6f49e",
+                      "length": 24
+                    },
+                    "option": null,
+                    "kind": {
+                      "text": {
+                        "sha256": "1744b96470b51bf30935e2748b237a708d226a0430063f92accf90961cd28d86",
+                        "length": 7
+                      },
+                      "box": {
+                        "left": 101,
+                        "right": 643,
+                        "top": 565.6875,
+                        "bottom": 585.28125,
+                        "width": 542,
+                        "height": 19.59375
+                      },
+                      "ink": [
+                        {
+                          "left": 101,
+                          "right": 149.21875,
+                          "top": 567.6875,
+                          "bottom": 582.6875
+                        }
+                      ],
+                      "font": 12.25,
+                      "expectedFont": null
+                    },
+                    "identifier": {
+                      "text": {
+                        "sha256": "10f2dc2d5fbd1343eb3342c083c5db5a01e341ca4198678aff77894a7c35cd04",
+                        "length": 15
+                      },
+                      "box": {
+                        "left": 101,
+                        "right": 643,
+                        "top": 585.28125,
+                        "bottom": 607.671875,
+                        "width": 542,
+                        "height": 22.390625
+                      },
+                      "overflow": "hidden",
+                      "ellipsis": "ellipsis",
+                      "nowrap": "nowrap",
+                      "truncated": false
+                    }
+                  }
+                ],
+                "charts": [
+                  {
+                    "box": {
+                      "left": 84,
+                      "right": 706,
+                      "top": 680.265625,
+                      "bottom": 1029.15625,
+                      "width": 622,
+                      "height": 348.890625
+                    },
+                    "heading": {
+                      "left": 84,
+                      "right": 151,
+                      "top": 680.265625,
+                      "bottom": 702.65625,
+                      "width": 67,
+                      "height": 22.390625
+                    },
+                    "headerValue": {
+                      "text": {
+                        "sha256": "943e47463b52a020066d245f01c65c12d4e667f3a6963e12f130c8261731d3e0",
+                        "length": 5
+                      },
+                      "box": {
+                        "left": 673.1875,
+                        "right": 706,
+                        "top": 680.265625,
+                        "bottom": 702.65625,
+                        "width": 32.8125,
+                        "height": 22.390625
+                      },
+                      "ink": [
+                        {
+                          "left": 673.1875,
+                          "right": 706,
+                          "top": 682.265625,
+                          "bottom": 699.265625
+                        }
+                      ],
+                      "font": 14,
+                      "expectedFont": null
+                    },
+                    "metric": "host-inbound",
+                    "plot": {
+                      "left": 84,
+                      "right": 706,
+                      "top": 720.65625,
+                      "bottom": 907.359375,
+                      "width": 622,
+                      "height": 186.703125
+                    },
+                    "svg": {
+                      "left": 160.3125,
+                      "right": 693,
+                      "top": 733.65625,
+                      "bottom": 873.65625,
+                      "width": 532.6875,
+                      "height": 140
+                    },
+                    "scale": {
+                      "left": 97,
+                      "right": 148.3125,
+                      "top": 733.65625,
+                      "bottom": 873.65625,
+                      "width": 51.3125,
+                      "height": 140
+                    },
+                    "labels": [
+                      {
+                        "text": {
+                          "sha256": "35220c0fba7dd0db6539719b9d4915ea6fc3dfcbf514afa9251ef97c00d8d95d",
+                          "length": 9
+                        },
+                        "box": {
+                          "left": 97,
+                          "right": 148.3125,
+                          "top": 733.65625,
+                          "bottom": 747.953125,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 97,
+                            "right": 148.3125,
+                            "top": 733.65625,
+                            "bottom": 746.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      },
+                      {
+                        "text": {
+                          "sha256": "c5af733c9ac59e252f0756a3e311d6dde7d157ed77449e3b0ed72625653be172",
+                          "length": 9
+                        },
+                        "box": {
+                          "left": 97,
+                          "right": 148.3125,
+                          "top": 796.515625,
+                          "bottom": 810.8125,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 97,
+                            "right": 148.3125,
+                            "top": 796.515625,
+                            "bottom": 809.515625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      },
+                      {
+                        "text": {
+                          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+                          "length": 1
+                        },
+                        "box": {
+                          "left": 97,
+                          "right": 148.3125,
+                          "top": 859.359375,
+                          "bottom": 873.65625,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 97,
+                            "right": 104,
+                            "top": 859.359375,
+                            "bottom": 872.359375
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      }
+                    ],
+                    "times": [
+                      {
+                        "text": {
+                          "sha256": "5c1e6000809405464775d52c25009179e672cf740fd3dc99cd18cf757ccae2f5",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 160.3125,
+                          "right": 191.625,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 160.3125,
+                            "right": 191.625,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      },
+                      {
+                        "text": {
+                          "sha256": "f89e2b83f10f504bc5f4e50e1b55ac21f9fb4ef6235f4d94dc3bd24f8664536a",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 411,
+                          "right": 442.3125,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 411,
+                            "right": 442.3125,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      },
+                      {
+                        "text": {
+                          "sha256": "5b71c686718933794d37ad83e27c56a3ef36f411981f02aeb14f116a74d900b6",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 661.6875,
+                          "right": 693,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 661.6875,
+                            "right": 693,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      }
+                    ],
+                    "lines": [
+                      "0.0,132.0 39.9,111.7 159.9,132.0 299.9,132.0",
+                      "393.3,131.1 413.3,129.8 433.3,132.0 453.3,132.0 473.4,132.0 493.4,132.0 533.4,19.3 553.4,132.0"
+                    ],
+                    "segments": 2,
+                    "tooltip": null,
+                    "empty": null
+                  },
+                  {
+                    "box": {
+                      "left": 734,
+                      "right": 1356,
+                      "top": 680.265625,
+                      "bottom": 1029.15625,
+                      "width": 622,
+                      "height": 348.890625
+                    },
+                    "heading": {
+                      "left": 734,
+                      "right": 782.015625,
+                      "top": 680.265625,
+                      "bottom": 702.65625,
+                      "width": 48.015625,
+                      "height": 22.390625
+                    },
+                    "headerValue": {
+                      "text": {
+                        "sha256": "943e47463b52a020066d245f01c65c12d4e667f3a6963e12f130c8261731d3e0",
+                        "length": 5
+                      },
+                      "box": {
+                        "left": 1323.1875,
+                        "right": 1356,
+                        "top": 680.265625,
+                        "bottom": 702.65625,
+                        "width": 32.8125,
+                        "height": 22.390625
+                      },
+                      "ink": [
+                        {
+                          "left": 1323.1875,
+                          "right": 1356,
+                          "top": 682.265625,
+                          "bottom": 699.265625
+                        }
+                      ],
+                      "font": 14,
+                      "expectedFont": null
+                    },
+                    "metric": "host-outbound",
+                    "plot": {
+                      "left": 734,
+                      "right": 1356,
+                      "top": 720.65625,
+                      "bottom": 907.359375,
+                      "width": 622,
+                      "height": 186.703125
+                    },
+                    "svg": {
+                      "left": 810.3125,
+                      "right": 1343,
+                      "top": 733.65625,
+                      "bottom": 873.65625,
+                      "width": 532.6875,
+                      "height": 140
+                    },
+                    "scale": {
+                      "left": 747,
+                      "right": 798.3125,
+                      "top": 733.65625,
+                      "bottom": 873.65625,
+                      "width": 51.3125,
+                      "height": 140
+                    },
+                    "labels": [
+                      {
+                        "text": {
+                          "sha256": "19ef9251f1527fddc58d9e62284902e71f5e9e5f81bec7cb90d1a5d13403ca8c",
+                          "length": 9
+                        },
+                        "box": {
+                          "left": 747,
+                          "right": 798.3125,
+                          "top": 733.65625,
+                          "bottom": 747.953125,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 747,
+                            "right": 798.3125,
+                            "top": 733.65625,
+                            "bottom": 746.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      },
+                      {
+                        "text": {
+                          "sha256": "362182187c4df3f57611cfa2cdbeb20cb0ea89ee5b71d3507f08ff5b175649d5",
+                          "length": 9
+                        },
+                        "box": {
+                          "left": 747,
+                          "right": 798.3125,
+                          "top": 796.515625,
+                          "bottom": 810.8125,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 747,
+                            "right": 798.3125,
+                            "top": 796.515625,
+                            "bottom": 809.515625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      },
+                      {
+                        "text": {
+                          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+                          "length": 1
+                        },
+                        "box": {
+                          "left": 747,
+                          "right": 798.3125,
+                          "top": 859.359375,
+                          "bottom": 873.65625,
+                          "width": 51.3125,
+                          "height": 14.296875
+                        },
+                        "ink": [
+                          {
+                            "left": 747,
+                            "right": 754,
+                            "top": 859.359375,
+                            "bottom": 872.359375
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null,
+                        "prefix": "none"
+                      }
+                    ],
+                    "times": [
+                      {
+                        "text": {
+                          "sha256": "5c1e6000809405464775d52c25009179e672cf740fd3dc99cd18cf757ccae2f5",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 810.3125,
+                          "right": 841.625,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 810.3125,
+                            "right": 841.625,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      },
+                      {
+                        "text": {
+                          "sha256": "f89e2b83f10f504bc5f4e50e1b55ac21f9fb4ef6235f4d94dc3bd24f8664536a",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 1061,
+                          "right": 1092.3125,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 1061,
+                            "right": 1092.3125,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      },
+                      {
+                        "text": {
+                          "sha256": "5b71c686718933794d37ad83e27c56a3ef36f411981f02aeb14f116a74d900b6",
+                          "length": 5
+                        },
+                        "box": {
+                          "left": 1311.6875,
+                          "right": 1343,
+                          "top": 882.65625,
+                          "bottom": 898.359375,
+                          "width": 31.3125,
+                          "height": 15.703125
+                        },
+                        "ink": [
+                          {
+                            "left": 1311.6875,
+                            "right": 1343,
+                            "top": 883.65625,
+                            "bottom": 896.65625
+                          }
+                        ],
+                        "font": 11,
+                        "expectedFont": null
+                      }
+                    ],
+                    "lines": [
+                      "0.0,132.0 39.9,130.2 159.9,132.0 299.9,132.0",
+                      "393.3,19.3 413.3,129.1 433.3,132.0 453.3,132.0 473.4,131.9 493.4,132.0 533.4,119.7 553.4,132.0"
+                    ],
+                    "segments": 2,
+                    "tooltip": {
+                      "text": {
+                        "sha256": "b5f6de4a70bd3c0e5bb0914b4ece19b8119dc52bc1d5f2678f657a832dfb4c96",
+                        "length": 44
+                      },
+                      "box": {
+                        "left": 734,
+                        "right": 1356,
+                        "top": 919.359375,
+                        "bottom": 1009.15625,
+                        "width": 622,
+                        "height": 89.796875
+                      },
+                      "ink": [
+                        {
+                          "left": 749,
+                          "right": 1341,
+                          "top": 932.359375,
+                          "bottom": 946.359375
+                        },
+                        {
+                          "left": 749,
+                          "right": 857.34375,
+                          "top": 933.359375,
+                          "bottom": 945.359375
+                        },
+                        {
+                          "left": 749,
+                          "right": 1341,
+                          "top": 952.359375,
+                          "bottom": 976.15625
+                        },
+                        {
+                          "left": 749,
+                          "right": 789.03125,
+                          "top": 953.359375,
+                          "bottom": 973.359375
+                        },
+                        {
+                          "left": 749,
+                          "right": 1341,
+                          "top": 982.15625,
+                          "bottom": 996.15625
+                        },
+                        {
+                          "left": 749,
+                          "right": 851.5,
+                          "top": 983.15625,
+                          "bottom": 995.15625
+                        }
+                      ],
+                      "font": 12,
+                      "expectedFont": null,
+                      "position": "static",
+                      "children": [
+                        {
+                          "text": {
+                            "sha256": "6fec1f9dde31b8c4bf40bd1c7c3feb1aedcb4a827b6cd9c6199ce5bffaf32ee5",
+                            "length": 20
+                          },
+                          "box": {
+                            "left": 749,
+                            "right": 1341,
+                            "top": 932.359375,
+                            "bottom": 946.359375,
+                            "width": 592,
+                            "height": 14
+                          },
+                          "ink": [
+                            {
+                              "left": 749,
+                              "right": 857.34375,
+                              "top": 933.359375,
+                              "bottom": 945.359375
+                            }
+                          ],
+                          "font": 10,
+                          "expectedFont": null
+                        },
+                        {
+                          "text": {
+                            "sha256": "943e47463b52a020066d245f01c65c12d4e667f3a6963e12f130c8261731d3e0",
+                            "length": 5
+                          },
+                          "box": {
+                            "left": 749,
+                            "right": 1341,
+                            "top": 952.359375,
+                            "bottom": 976.15625,
+                            "width": 592,
+                            "height": 23.796875
+                          },
+                          "ink": [
+                            {
+                              "left": 749,
+                              "right": 789.03125,
+                              "top": 953.359375,
+                              "bottom": 973.359375
+                            }
+                          ],
+                          "font": 17,
+                          "expectedFont": null
+                        },
+                        {
+                          "text": {
+                            "sha256": "3f29f4a9a0d7b90162a3d055c1c4ccfeab0cf85d270931f12e836a5561110849",
+                            "length": 19
+                          },
+                          "box": {
+                            "left": 749,
+                            "right": 1341,
+                            "top": 982.15625,
+                            "bottom": 996.15625,
+                            "width": 592,
+                            "height": 14
+                          },
+                          "ink": [
+                            {
+                              "left": 749,
+                              "right": 851.5,
+                              "top": 983.15625,
+                              "bottom": 995.15625
+                            }
+                          ],
+                          "font": 10,
+                          "expectedFont": null
+                        }
+                      ]
+                    },
+                    "empty": null
+                  }
+                ],
+                "notices": []
+              }
+            }
+          ],
+          "captures": [],
+          "nativeTabFocus": {
+            "tag": "DIV",
+            "owner": "tool",
+            "frameMode": "desktop",
+            "desktopQuery": true,
+            "documentScroll": {
+              "scrollHeight": 1120,
+              "clientHeight": 1120,
+              "scrollTop": 0,
+              "maxScroll": 0
+            },
+            "expectedRevealDelta": 0,
+            "scroll": {
+              "y": 0,
+              "content": 5282
+            },
+            "top": 720.65625,
+            "bottom": 907.359375,
+            "documentTop": 720.65625,
+            "chromeBottom": 189.75,
+            "dockTop": 1022,
+            "outline": "rgb(183, 92, 62) solid 3px",
+            "shadow": "none",
+            "textHash": "8d70b2972e15ea6f17f31522a85ea8bf0b34cdab1df8e6de93ef99cb0afaec89",
+            "textLength": 34
+          },
+          "refresh": {
+            "before": {
+              "x": 0,
+              "y": 0,
+              "frame": 0,
+              "content": 5306
+            },
+            "checkpoints": [],
+            "passed": false
+          }
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "/monitor:eba0b1ac949902d4fc2bc4923979d13cfce3cd85ecb0b9278ef40f09dea290ef": {
+      "kind": "document",
+      "bytes": 4475,
+      "sha256": "eba0b1ac949902d4fc2bc4923979d13cfce3cd85ecb0b9278ef40f09dea290ef"
+    },
+    "/asset/[e77fe9b33e8a4975]:b60c76160e97624574dbb8cf10abe6aee9a6493b60096fdfc15dd1dd2bd99eb9": {
+      "kind": "script",
+      "bytes": 83555,
+      "sha256": "b60c76160e97624574dbb8cf10abe6aee9a6493b60096fdfc15dd1dd2bd99eb9"
+    },
+    "/assets/manifest-ea760121.js:1f38c5db49697d982dfd8a0ee6b87db5abb5cba10506ed83442d225643f9c092": {
+      "kind": "script",
+      "bytes": 39246,
+      "sha256": "1f38c5db49697d982dfd8a0ee6b87db5abb5cba10506ed83442d225643f9c092"
+    },
+    "/assets/entry.client-Bo3G56KK.js:8711b63be03d95e28b29b0d61130a1c0f5156e7a3fa5dce22f9cafcae2de5e4c": {
+      "kind": "script",
+      "bytes": 189873,
+      "sha256": "8711b63be03d95e28b29b0d61130a1c0f5156e7a3fa5dce22f9cafcae2de5e4c"
+    },
+    "/assets/jsx-runtime-DI7wNVj9.js:09640868a17e28939938ad1479c2bcb1cdde45f1c09ecc9ca1040a1b77666723": {
+      "kind": "script",
+      "bytes": 825,
+      "sha256": "09640868a17e28939938ad1479c2bcb1cdde45f1c09ecc9ca1040a1b77666723"
+    },
+    "/assets/index-BvDxk5HW.js:3857e2d8599cd50523f6786935eec638062be5767882eb15bde93bc95faed92a": {
+      "kind": "script",
+      "bytes": 10960,
+      "sha256": "3857e2d8599cd50523f6786935eec638062be5767882eb15bde93bc95faed92a"
+    },
+    "/assets/index-BiKvzQbN.js:9994f8106e3b21f44ffd79cbeece4ea5583a3b3669eb6d6d5c6a109eb9c9b29a": {
+      "kind": "script",
+      "bytes": 4053,
+      "sha256": "9994f8106e3b21f44ffd79cbeece4ea5583a3b3669eb6d6d5c6a109eb9c9b29a"
+    },
+    "/assets/user-context-BX1Nd4nW.js:e4d14a4c8589d0984f10684df46d9d41270d075afe48cbb9b493b2f674017fb0": {
+      "kind": "script",
+      "bytes": 1017,
+      "sha256": "e4d14a4c8589d0984f10684df46d9d41270d075afe48cbb9b493b2f674017fb0"
+    },
+    "/assets/error-page-74CBVmuJ.js:7f25241abc776eaf9766f975224411cbba9aff6cbd340742615a61f04549f2d2": {
+      "kind": "script",
+      "bytes": 2180,
+      "sha256": "7f25241abc776eaf9766f975224411cbba9aff6cbd340742615a61f04549f2d2"
+    },
+    "/assets/preferences-By0qVXgo.js:c3dd720d52679d0056d8c64827a6e8a9b145231637463c046a29bddaf1e4c0a1": {
+      "kind": "script",
+      "bytes": 5260,
+      "sha256": "c3dd720d52679d0056d8c64827a6e8a9b145231637463c046a29bddaf1e4c0a1"
+    },
+    "/assets/useMutation-GVgdbRTF.js:32c20d9b996d7e11136b70333180cf4b22455dd2910761a135cbc1b6ba884951": {
+      "kind": "script",
+      "bytes": 5660,
+      "sha256": "32c20d9b996d7e11136b70333180cf4b22455dd2910761a135cbc1b6ba884951"
+    },
+    "/assets/IconX-DocWhQdy.js:f23a9bed0712be611b5bc903ed3c9fc063f724073a274942b68423f31e45ecee": {
+      "kind": "script",
+      "bytes": 530,
+      "sha256": "f23a9bed0712be611b5bc903ed3c9fc063f724073a274942b68423f31e45ecee"
+    },
+    "/assets/IconInfoCircle-8lu2tuQo.js:c4a5f490af4ae7ebf140f22607c3618c1292fab76172a4a61bb4ddffe2ead012": {
+      "kind": "script",
+      "bytes": 612,
+      "sha256": "c4a5f490af4ae7ebf140f22607c3618c1292fab76172a4a61bb4ddffe2ead012"
+    },
+    "/assets/infiniteQueryBehavior-t2iIi2gp.js:3fc3a8072dccd4e8202a2fce5f7d147a4855db5bc393835ff282cf55233541d8": {
+      "kind": "script",
+      "bytes": 1893,
+      "sha256": "3fc3a8072dccd4e8202a2fce5f7d147a4855db5bc393835ff282cf55233541d8"
+    },
+    "/assets/createReactComponent-_qIFi7dj.js:57c9785133731914d869a3b4225cc4576e21724b67b6a81e4fc4c1a8c416c794": {
+      "kind": "script",
+      "bytes": 1125,
+      "sha256": "57c9785133731914d869a3b4225cc4576e21724b67b6a81e4fc4c1a8c416c794"
+    },
+    "/assets/index-ztP8_AaN.js:17e1de05c2914c3b137762fb2d403d3b6845d28e6ea2868922240b32a1cd8a24": {
+      "kind": "script",
+      "bytes": 3907,
+      "sha256": "17e1de05c2914c3b137762fb2d403d3b6845d28e6ea2868922240b32a1cd8a24"
+    },
+    "/assets/IconCheck-BoZKbHvs.js:7a273f06db9361a1bbcaa8ceca132764a5753749ae6fb89dc118e5896e093ce1": {
+      "kind": "script",
+      "bytes": 504,
+      "sha256": "7a273f06db9361a1bbcaa8ceca132764a5753749ae6fb89dc118e5896e093ce1"
+    },
+    "/assets/react-query.gen-Bm64XMw1.js:691e57bb8144d738de218fb5439a099f6110ab29591c168d873a7f4fe1401662": {
+      "kind": "script",
+      "bytes": 46725,
+      "sha256": "691e57bb8144d738de218fb5439a099f6110ab29591c168d873a7f4fe1401662"
+    },
+    "/assets/i18next-B0ZP0dUq.js:35525a3f2b4153b7e65cb9d52cab16821eef7c607b08c073084964fce20cb570": {
+      "kind": "script",
+      "bytes": 42691,
+      "sha256": "35525a3f2b4153b7e65cb9d52cab16821eef7c607b08c073084964fce20cb570"
+    },
+    "/assets/react-error-boundary-Cv56_q_S.js:74de56d47a89fee024ffae5a93a34f50927c826e79a2e534c8448ae21dbc15c2": {
+      "kind": "script",
+      "bytes": 1834,
+      "sha256": "74de56d47a89fee024ffae5a93a34f50927c826e79a2e534c8448ae21dbc15c2"
+    },
+    "/assets/chunk-UIGDSWPH-Hm2xAixd.js:472a335427e35830a3946cc9d6074d99ced69b319671642c4ccb8e9a43caa382": {
+      "kind": "script",
+      "bytes": 120319,
+      "sha256": "472a335427e35830a3946cc9d6074d99ced69b319671642c4ccb8e9a43caa382"
+    },
+    "/assets/proxy-jZ3ZKDKP.js:61126c3046029408e9184664bac4b026313b23e4e98255633c99ef271e97e637": {
+      "kind": "script",
+      "bytes": 112629,
+      "sha256": "61126c3046029408e9184664bac4b026313b23e4e98255633c99ef271e97e637"
+    },
+    "/assets/context-Cx_goLvz.js:6271f3fe83f0598fdd1da6b2d217f69c34bcd17c2ae932c31bed31cf7a0ee0d6": {
+      "kind": "script",
+      "bytes": 1337,
+      "sha256": "6271f3fe83f0598fdd1da6b2d217f69c34bcd17c2ae932c31bed31cf7a0ee0d6"
+    },
+    "/assets/root-CSwVkWNM.js:af0dade44378bc326263f8c430b03e1b8df386a3d2a956c42525160bb497fc06": {
+      "kind": "script",
+      "bytes": 160361,
+      "sha256": "af0dade44378bc326263f8c430b03e1b8df386a3d2a956c42525160bb497fc06"
+    },
+    "/assets/preload-helper-dJ61LZNH.js:b39e0b254ad7fb7f20a128fb3e25cdcef98382e2529e011de63a7bda4b69a2a3": {
+      "kind": "script",
+      "bytes": 1452,
+      "sha256": "b39e0b254ad7fb7f20a128fb3e25cdcef98382e2529e011de63a7bda4b69a2a3"
+    },
+    "/assets/Button-CSImUJFn.css:36451f7ba12fd6061a24c1dce0213b36f86d8bd4a28b7dc30fa1dc4e9b2e10a5": {
+      "kind": "stylesheet",
+      "bytes": 640,
+      "sha256": "36451f7ba12fd6061a24c1dce0213b36f86d8bd4a28b7dc30fa1dc4e9b2e10a5"
+    },
+    "/assets/root-CuZchtkR.css:01128cae1825d5d392e08b425d0c23eb0b7e28bfc31b091c6f2ae775e51e06b9": {
+      "kind": "stylesheet",
+      "bytes": 3235,
+      "sha256": "01128cae1825d5d392e08b425d0c23eb0b7e28bfc31b091c6f2ae775e51e06b9"
+    },
+    "/assets/Dialog-B0fISEUN.css:051f3f60041c000dda5da66c958c3608889db67b6583698eb2b02faff8ecbe1f": {
+      "kind": "stylesheet",
+      "bytes": 558,
+      "sha256": "051f3f60041c000dda5da66c958c3608889db67b6583698eb2b02faff8ecbe1f"
+    },
+    "/assets/confirmation-CyHkg-Kv.js:c211f2ff199d67dfc95ba31d3a2960529ce90e69f269c29aaf70ef4b32e4a78a": {
+      "kind": "script",
+      "bytes": 1306,
+      "sha256": "c211f2ff199d67dfc95ba31d3a2960529ce90e69f269c29aaf70ef4b32e4a78a"
+    },
+    "/assets/theme-DVLBnZri.js:a870b4df1e222063b4953e4272f63cc96f1b7cbc8e9d2d96dc5cec49a2d3dd30": {
+      "kind": "script",
+      "bytes": 671,
+      "sha256": "a870b4df1e222063b4953e4272f63cc96f1b7cbc8e9d2d96dc5cec49a2d3dd30"
+    },
+    "/assets/Button-B3rF8z9B.js:259de3aa6d4fb23016dc09f24290aad80d97d00ef23c73fe25ec92428280a96a": {
+      "kind": "script",
+      "bytes": 4040,
+      "sha256": "259de3aa6d4fb23016dc09f24290aad80d97d00ef23c73fe25ec92428280a96a"
+    },
+    "/assets/react-C_RGyVy3.js:51e853378d8a5b7e95419dc689c5e9144337840b0f1554784441e27f586994b7": {
+      "kind": "script",
+      "bytes": 1007,
+      "sha256": "51e853378d8a5b7e95419dc689c5e9144337840b0f1554784441e27f586994b7"
+    },
+    "/assets/desktop-windows-BqFh4csl.js:7ba1819b3ec6e8ddb8ed7af85fef48ca434fd803869390ecb2c5662015528333": {
+      "kind": "script",
+      "bytes": 13938,
+      "sha256": "7ba1819b3ec6e8ddb8ed7af85fef48ca434fd803869390ecb2c5662015528333"
+    },
+    "/assets/IconAlertCircle-CjryGSyh.js:0fbda31d98771a13bfab1bfaba3f1bea783b67fc7d1a56ffa87432b71cd5e657": {
+      "kind": "script",
+      "bytes": 610,
+      "sha256": "0fbda31d98771a13bfab1bfaba3f1bea783b67fc7d1a56ffa87432b71cd5e657"
+    },
+    "/assets/useSuspenseQuery-BJyX1xYn.js:f81b80086009c0332b1deeff08e71da68541ee5b794a12c985cff1486f032308": {
+      "kind": "script",
+      "bytes": 519,
+      "sha256": "f81b80086009c0332b1deeff08e71da68541ee5b794a12c985cff1486f032308"
+    },
+    "/assets/index-Cs61HkGm.js:b801c0c00801953e113b6ea0e0266e4fa438f1de45b2bdd46d3c37a5dd193e57": {
+      "kind": "script",
+      "bytes": 753,
+      "sha256": "b801c0c00801953e113b6ea0e0266e4fa438f1de45b2bdd46d3c37a5dd193e57"
+    },
+    "/assets/clsx-eT0YPcGk.js:10c87ee24b5a3c0b65017b25b32c6815e0f81ac24f0a56e27419c493c98ff9fa": {
+      "kind": "script",
+      "bytes": 720,
+      "sha256": "10c87ee24b5a3c0b65017b25b32c6815e0f81ac24f0a56e27419c493c98ff9fa"
+    },
+    "/assets/index-B_uSXX_H.js:09c0cf5b7e7de4f42cbdb9d847c0ae99ebdfdb79d561981af4595e499354ad4d": {
+      "kind": "script",
+      "bytes": 522,
+      "sha256": "09c0cf5b7e7de4f42cbdb9d847c0ae99ebdfdb79d561981af4595e499354ad4d"
+    },
+    "/assets/Dialog-CXPPUr8t.js:784e3ab0378d87958eab567301dceff9b808ba1b8a46a3d64e53925fbbd46cd7": {
+      "kind": "script",
+      "bytes": 2591,
+      "sha256": "784e3ab0378d87958eab567301dceff9b808ba1b8a46a3d64e53925fbbd46cd7"
+    },
+    "/assets/index-QK03aF6T.js:42d9fb85f6c12f52b1911d613c2c8d9881a166cb7a30f6ba64ef9944bed41086": {
+      "kind": "script",
+      "bytes": 5593,
+      "sha256": "42d9fb85f6c12f52b1911d613c2c8d9881a166cb7a30f6ba64ef9944bed41086"
+    },
+    "/assets/index-C4nmOHUk.js:c4c3580a1012d5fddaa4903e5ef2cf2e260cd3014551ccf35c1c06e31f88e1f2": {
+      "kind": "script",
+      "bytes": 4705,
+      "sha256": "c4c3580a1012d5fddaa4903e5ef2cf2e260cd3014551ccf35c1c06e31f88e1f2"
+    },
+    "/assets/index-DoZ9skra.js:e0446df3366e1d3db7f08826e106402185e72aa8a5dfbd8f828cfd6ad673ce70": {
+      "kind": "script",
+      "bytes": 20974,
+      "sha256": "e0446df3366e1d3db7f08826e106402185e72aa8a5dfbd8f828cfd6ad673ce70"
+    },
+    "/assets/index-bcEq8dko.js:92dfcae0c75655058c1432614920562037611d5fda6bf9a5ae19b51af7a8ef38": {
+      "kind": "script",
+      "bytes": 2452,
+      "sha256": "92dfcae0c75655058c1432614920562037611d5fda6bf9a5ae19b51af7a8ef38"
+    },
+    "/assets/keywords-Cxh7xw6o.js:5c5ab474d5b2e2b9cab97eb7c40baef5e081ca3850c3c1bb94e15bc843ef2be6": {
+      "kind": "script",
+      "bytes": 154201,
+      "sha256": "5c5ab474d5b2e2b9cab97eb7c40baef5e081ca3850c3c1bb94e15bc843ef2be6"
+    },
+    "/assets/app-DX92l9tG.css:14ca02b82225c8548c1b223cbca8968e39a8ea1314f795d3045823237fba904b": {
+      "kind": "stylesheet",
+      "bytes": 553540,
+      "sha256": "14ca02b82225c8548c1b223cbca8968e39a8ea1314f795d3045823237fba904b"
+    },
+    "/assets/authenticated-route-LQsJMLgj.css:70453c10c2a513772e4db4e2850516c35963d3df8ee0dddbb0104cfced66a158": {
+      "kind": "stylesheet",
+      "bytes": 33195,
+      "sha256": "70453c10c2a513772e4db4e2850516c35963d3df8ee0dddbb0104cfced66a158"
+    },
+    "/assets/authenticated-route-iSvUbHmg.js:b31a47479bad4badee97cb09bcb30767b794d0d6e9c030cdc3595e48003e95cc": {
+      "kind": "script",
+      "bytes": 45276,
+      "sha256": "b31a47479bad4badee97cb09bcb30767b794d0d6e9c030cdc3595e48003e95cc"
+    },
+    "/assets/dropdown-D4WGJ2Np.css:1e683d7b81d4f6cf46c96271762eb550d7b2d56104b9bb0a6803de6b8ea2fb86": {
+      "kind": "stylesheet",
+      "bytes": 1285,
+      "sha256": "1e683d7b81d4f6cf46c96271762eb550d7b2d56104b9bb0a6803de6b8ea2fb86"
+    },
+    "/assets/app-grid-mHl0NSbk.css:468b936359d57d227d166e10b36ab154c3587f1ab5632aa5a42b19013910ebcd": {
+      "kind": "stylesheet",
+      "bytes": 1354,
+      "sha256": "468b936359d57d227d166e10b36ab154c3587f1ab5632aa5a42b19013910ebcd"
+    },
+    "/assets/app-logo-Cr4ebCUt.css:cb1b5312444ed46c7c4df2564634e2eab44e99a93cb6736266d0cec612ea3d97": {
+      "kind": "stylesheet",
+      "bytes": 169,
+      "sha256": "cb1b5312444ed46c7c4df2564634e2eab44e99a93cb6736266d0cec612ea3d97"
+    },
+    "/assets/docker-health-BLt-q-VJ.css:fc798ff18662b2e329078f7728b6352151d83612068e88962a1074142d723ebf": {
+      "kind": "stylesheet",
+      "bytes": 667,
+      "sha256": "fc798ff18662b2e329078f7728b6352151d83612068e88962a1074142d723ebf"
+    },
+    "/assets/empty-page-BIZrtWRb.css:28bc7c46a3e6c9ca2bbabf57ece28aa68b2466d30a74df11a2f83557ab82cd12": {
+      "kind": "stylesheet",
+      "bytes": 240,
+      "sha256": "28bc7c46a3e6c9ca2bbabf57ece28aa68b2466d30a74df11a2f83557ab82cd12"
+    },
+    "/assets/wrap-words-COwpq6g4.css:9fa400f4474ff628100e97e745804fe86910217f1c337013ed26b71a2e599c39": {
+      "kind": "stylesheet",
+      "bytes": 135,
+      "sha256": "9fa400f4474ff628100e97e745804fe86910217f1c337013ed26b71a2e599c39"
+    },
+    "/assets/Switch-CyhH0Bd5.css:12022342a917bbf7081ad5b0af9d4626189b62ac6b6f5ec6b761819eb76c1b6b": {
+      "kind": "stylesheet",
+      "bytes": 685,
+      "sha256": "12022342a917bbf7081ad5b0af9d4626189b62ac6b6f5ec6b761819eb76c1b6b"
+    },
+    "/assets/monitor-DnFRzuPH.js:7a1b821d9e2f136b33d3c199ae67f02e09bb3140b27cc8b173e668100ce6e76e": {
+      "kind": "script",
+      "bytes": 34136,
+      "sha256": "7a1b821d9e2f136b33d3c199ae67f02e09bb3140b27cc8b173e668100ce6e76e"
+    },
+    "/assets/monitor-Dv_h0bI2.css:c03642cbfdfb973c4145fb2816a21e73b0ab3ecdd3b0c73e77b90d9916524db1": {
+      "kind": "stylesheet",
+      "bytes": 21502,
+      "sha256": "c03642cbfdfb973c4145fb2816a21e73b0ab3ecdd3b0c73e77b90d9916524db1"
+    },
+    "/assets/container-resources-BKH_bcJm.css:2b13d46515736c38d98f7e917a9b9c631284d32cc87dc4d8a9ada1255fbe2066": {
+      "kind": "stylesheet",
+      "bytes": 4150,
+      "sha256": "2b13d46515736c38d98f7e917a9b9c631284d32cc87dc4d8a9ada1255fbe2066"
+    },
+    "/assets/app-context-Xol9bF_A.js:d321fd2d2bac11641bcf404d5b48407c569209ba020599a27017139fe0c02ffe": {
+      "kind": "script",
+      "bytes": 1157,
+      "sha256": "d321fd2d2bac11641bcf404d5b48407c569209ba020599a27017139fe0c02ffe"
+    },
+    "/assets/useTranslation-D41PHViU.js:4a34723835a099c19a58652d1eba132a3f8acd5c58bc3da357c0d74bb436e667": {
+      "kind": "script",
+      "bytes": 4062,
+      "sha256": "4a34723835a099c19a58652d1eba132a3f8acd5c58bc3da357c0d74bb436e667"
+    },
+    "/assets/IconBrandGithub-Cy6_5zEU.js:910741b87e8837aa0ffd94ddd14f1e7bb7cc4d55dc8853b0a5c4ea4bf7261194": {
+      "kind": "script",
+      "bytes": 793,
+      "sha256": "910741b87e8837aa0ffd94ddd14f1e7bb7cc4d55dc8853b0a5c4ea4bf7261194"
+    },
+    "/assets/app-grid-Blrinvnb.js:3508dbfe05e439317e919eb6f16b9b0aac68b329737878d8dfaf1bccc7f71482": {
+      "kind": "script",
+      "bytes": 1674,
+      "sha256": "3508dbfe05e439317e919eb6f16b9b0aac68b329737878d8dfaf1bccc7f71482"
+    },
+    "/assets/route-wrapper-Qg8Lxua6.js:8e90f4e8877a57e0dd89ea77318c06adec713eccf7790a999dc24437ccfd5138": {
+      "kind": "script",
+      "bytes": 1160,
+      "sha256": "8e90f4e8877a57e0dd89ea77318c06adec713eccf7790a999dc24437ccfd5138"
+    },
+    "/assets/empty-page-Bpa_x_Bn.js:ad8e210cc2d975839c678de4aa7c009ba6977e0a9b26b4384feb4f1abe8caed9": {
+      "kind": "script",
+      "bytes": 1368,
+      "sha256": "ad8e210cc2d975839c678de4aa7c009ba6977e0a9b26b4384feb4f1abe8caed9"
+    },
+    "/assets/DropdownMenu-DJHPDYwB.js:041b7b0bc4edcaa51c2b8af4bcb045e8bde3186333c0a1fb14ebaed48ceb336b": {
+      "kind": "script",
+      "bytes": 18256,
+      "sha256": "041b7b0bc4edcaa51c2b8af4bcb045e8bde3186333c0a1fb14ebaed48ceb336b"
+    },
+    "/assets/IconLock-nfUEK_CW.js:d1ed8eccd08c49f6bdf6b11e949399ff7bcc7b4feb760547fc9e063b9ae230db": {
+      "kind": "script",
+      "bytes": 679,
+      "sha256": "d1ed8eccd08c49f6bdf6b11e949399ff7bcc7b4feb760547fc9e063b9ae230db"
+    },
+    "/assets/app-logo-CQXlgwMr.js:3555e1bbf407defdbb6949e669e753c7d0daa106589dc2d1a4dc6d4c3d63edf7": {
+      "kind": "script",
+      "bytes": 946,
+      "sha256": "3555e1bbf407defdbb6949e669e753c7d0daa106589dc2d1a4dc6d4c3d63edf7"
+    },
+    "/assets/IconDeviceDesktopAnalytics-nBtQfoO7.js:32dcae1d114866f244cf69286921d819fd1ba2be92ad44b126a950d3c95d6de0": {
+      "kind": "script",
+      "bytes": 1294,
+      "sha256": "32dcae1d114866f244cf69286921d819fd1ba2be92ad44b126a950d3c95d6de0"
+    },
+    "/assets/wrap-words-Dtsgeulf.js:428eb20970a6d88b5b98c05e3fce7932d4ed90a74e124bada8c214b2f56fb16f": {
+      "kind": "script",
+      "bytes": 632,
+      "sha256": "428eb20970a6d88b5b98c05e3fce7932d4ed90a74e124bada8c214b2f56fb16f"
+    },
+    "/assets/Switch-BNK4XZFl.js:7ab79f88526441cc46d63a784f7178ed19f7c8ef5a9734801c7185cc497e2939": {
+      "kind": "script",
+      "bytes": 2792,
+      "sha256": "7ab79f88526441cc46d63a784f7178ed19f7c8ef5a9734801c7185cc497e2939"
+    },
+    "/assets/tasks-BTjDuYPU.js:6d5ea4a598e173f70d359427d12a5e8d2dd57ee715c72b21ddee0b981739c442": {
+      "kind": "script",
+      "bytes": 1337,
+      "sha256": "6d5ea4a598e173f70d359427d12a5e8d2dd57ee715c72b21ddee0b981739c442"
+    },
+    "/assets/app-helpers-CSGU8P35.js:344811b7abff5bbe1f77b6caa02e6214f640979497956e83105dfbd0be93769e": {
+      "kind": "script",
+      "bytes": 963,
+      "sha256": "344811b7abff5bbe1f77b6caa02e6214f640979497956e83105dfbd0be93769e"
+    },
+    "/assets/useQuery-DGVsH3wG.js:0fd2398ba527ad474a9172a9ba4a2d7a8b22a935e009ad83ff064e1a616bc3d0": {
+      "kind": "script",
+      "bytes": 446,
+      "sha256": "0fd2398ba527ad474a9172a9ba4a2d7a8b22a935e009ad83ff064e1a616bc3d0"
+    },
+    "/assets/app-status-BbL7XaGP.js:3d0b89595494ba47b548b7ceca572d6e3bfc4dd7c0d66aa53c11bc5c5782dcdc": {
+      "kind": "script",
+      "bytes": 1659,
+      "sha256": "3d0b89595494ba47b548b7ceca572d6e3bfc4dd7c0d66aa53c11bc5c5782dcdc"
+    },
+    "/assets/IconBrandAppstore-B3nWGL0U.js:d619c63bfd12f8fc0a1fa7f72ed5900cc419c2f2386b80facf029081e4a3a6c6": {
+      "kind": "script",
+      "bytes": 732,
+      "sha256": "d619c63bfd12f8fc0a1fa7f72ed5900cc419c2f2386b80facf029081e4a3a6c6"
+    },
+    "/assets/IconSettings-BUiC1VP6.js:5fd1bfeed81189539e7a70022720be167c2705dc8fcb1fccad438ddc69039e4a": {
+      "kind": "script",
+      "bytes": 1079,
+      "sha256": "5fd1bfeed81189539e7a70022720be167c2705dc8fcb1fccad438ddc69039e4a"
+    },
+    "/assets/IconActivity-BcSWHkrF.js:1b2d1fe97296dbe11acd6a605704cb3f4b1eb9a22ad104c8b3aa8e1133d4b372": {
+      "kind": "script",
+      "bytes": 517,
+      "sha256": "1b2d1fe97296dbe11acd6a605704cb3f4b1eb9a22ad104c8b3aa8e1133d4b372"
+    },
+    "/assets/dropdown-BZxWQu52.js:ba3916d2b5a17cc96ecf00e9c4e97055dea0429a0429b822815c6e99698c242c": {
+      "kind": "script",
+      "bytes": 8029,
+      "sha256": "ba3916d2b5a17cc96ecf00e9c4e97055dea0429a0429b822815c6e99698c242c"
+    },
+    "/assets/use-sse-BN9m11y3.js:5504831ad8fcb19201f4c063d8479ec2f9b99757949de707bc657a7ebba76b58": {
+      "kind": "script",
+      "bytes": 1664,
+      "sha256": "5504831ad8fcb19201f4c063d8479ec2f9b99757949de707bc657a7ebba76b58"
+    },
+    "/assets/window-visibility-Cx7krjhu.js:867a08ec25b3e26fdea8fe203d11e46e4aab92f47c620bfa92b41d657be5d6b5": {
+      "kind": "script",
+      "bytes": 468,
+      "sha256": "867a08ec25b3e26fdea8fe203d11e46e4aab92f47c620bfa92b41d657be5d6b5"
+    },
+    "/assets/floating-ui.dom-lQXCKZOP.js:0132f17e2ba63a4f86012effeaa329e283bd7635a871e2505e99fc8b4762c488": {
+      "kind": "script",
+      "bytes": 21081,
+      "sha256": "0132f17e2ba63a4f86012effeaa329e283bd7635a871e2505e99fc8b4762c488"
+    },
+    "/assets/index-B2x3hPiU.js:92f5b4fc39f2e560f3aca73bb61c095070ecbe0231016f9a57df79dd94c0517a": {
+      "kind": "script",
+      "bytes": 532,
+      "sha256": "92f5b4fc39f2e560f3aca73bb61c095070ecbe0231016f9a57df79dd94c0517a"
+    },
+    "/assets/window-navigation-CToNfxca.js:7fd002817ae1455f926538dc1ae552c8b2553a9a3e36848327dd5ea2cfc3db6e": {
+      "kind": "script",
+      "bytes": 842,
+      "sha256": "7fd002817ae1455f926538dc1ae552c8b2553a9a3e36848327dd5ea2cfc3db6e"
+    },
+    "/assets/IconArrowUpRight-DFhLfHS2.js:967bde68c3b79217d53514d17849081744e82e8f0b85e4fc923db4ee29179d8b": {
+      "kind": "script",
+      "bytes": 556,
+      "sha256": "967bde68c3b79217d53514d17849081744e82e8f0b85e4fc923db4ee29179d8b"
+    },
+    "/assets/index-CaWey-Ti.js:7fb706b6b1821bdeabcf667fc241d7064ff734cabe3dd38b88d191dff4795d75": {
+      "kind": "script",
+      "bytes": 1082,
+      "sha256": "7fb706b6b1821bdeabcf667fc241d7064ff734cabe3dd38b88d191dff4795d75"
+    },
+    "/assets/docker-health-BCdJCCcH.js:c1a5a4888fd890d982f750c206d251b59a1a5cd0f1ac2e528cd4131840cac433": {
+      "kind": "script",
+      "bytes": 1404,
+      "sha256": "c1a5a4888fd890d982f750c206d251b59a1a5cd0f1ac2e528cd4131840cac433"
+    },
+    "/assets/index-CdbWVEzt.js:2fb0a55b1e372a178d79b77d74c1894c7606c77a1381e6fd40816935351bab28": {
+      "kind": "script",
+      "bytes": 4055,
+      "sha256": "2fb0a55b1e372a178d79b77d74c1894c7606c77a1381e6fd40816935351bab28"
+    },
+    "/assets/docker-health-BcKB2fmo.js:2ea17751a2a50b7f8cf54eaa60e7273fffe5da682230883c65b23faf6b4588c2": {
+      "kind": "script",
+      "bytes": 835,
+      "sha256": "2ea17751a2a50b7f8cf54eaa60e7273fffe5da682230883c65b23faf6b4588c2"
+    },
+    "/assets/container-resources-D--9tcpa.js:932814aec858a4578abc5dc6b1b133553d3226a7dc591dca3100cbd6ec0b90c4": {
+      "kind": "script",
+      "bytes": 5605,
+      "sha256": "932814aec858a4578abc5dc6b1b133553d3226a7dc591dca3100cbd6ec0b90c4"
+    },
+    "/assets/uptime-Fcf2UGO5.js:57dc41456e5cf63b8cf3f638033b7ca408588f75f35dcfb406bf2a5e94681840": {
+      "kind": "script",
+      "bytes": 814,
+      "sha256": "57dc41456e5cf63b8cf3f638033b7ca408588f75f35dcfb406bf2a5e94681840"
+    },
+    "/assets/react-tooltip.min-C0sb90c_.js:24db8eeafc79280f755e70be2333c8f5e6c0253b40a241c33963a0f7f1d9f786": {
+      "kind": "script",
+      "bytes": 21190,
+      "sha256": "24db8eeafc79280f755e70be2333c8f5e6c0253b40a241c33963a0f7f1d9f786"
+    },
+    "/assets/IconChevronDown-C8Bc4Rj3.js:de6d3e9c0450ab55e9133d5ddf6cd8908bc7c59f12fcc67c669994a7c7295fdf": {
+      "kind": "script",
+      "bytes": 514,
+      "sha256": "de6d3e9c0450ab55e9133d5ddf6cd8908bc7c59f12fcc67c669994a7c7295fdf"
+    },
+    "/assets/Select-DJsBLCb1.js:869e5c0132e33f49f19b8aa52d63fe6d0121e024a25abb37a966a2c7408cb185": {
+      "kind": "script",
+      "bytes": 20820,
+      "sha256": "869e5c0132e33f49f19b8aa52d63fe6d0121e024a25abb37a966a2c7408cb185"
+    },
+    "/assets/index-DsUpwLPW.js:9f99d9569adf6ccaf2e995842d1a1ae3d23383e481af858fada4d4dc43133edc": {
+      "kind": "script",
+      "bytes": 415,
+      "sha256": "9f99d9569adf6ccaf2e995842d1a1ae3d23383e481af858fada4d4dc43133edc"
+    },
+    "/asset/[79b6eadf65d5e284]:bdcfb9bf8562cae24ee33a12ca4ae956984f0913d04ba1bcab6c8e05ac050040": {
+      "kind": "image",
+      "bytes": 166332,
+      "sha256": "bdcfb9bf8562cae24ee33a12ca4ae956984f0913d04ba1bcab6c8e05ac050040"
+    },
+    "/asset/[82343b7b4be3628d]:7eda8415507055fe03563b632ea5f43131f784f4701a7a42d8c175f25aa7ea9a": {
+      "kind": "image",
+      "bytes": 510,
+      "sha256": "7eda8415507055fe03563b632ea5f43131f784f4701a7a42d8c175f25aa7ea9a"
+    }
+  },
+  "forwardedReads": {
+    "/api/[48915ac7e4e06f9f]": 1,
+    "/api/[66d9cfa0ab5a9b4b]": 1,
+    "/api/user-context": 4,
+    "/api/app-context": 1,
+    "/api/system/host-history": 3,
+    "/api/system/host-processes": 6,
+    "/api/system/history": 3,
+    "/api/[b30d6ea315929436]": 3,
+    "/api/[029e2bdb71830884]": 3,
+    "/api/desktop-preferences": 1,
+    "/api/[5d02fe6b10a1ec6b]": 1,
+    "/api/[c11264b5f10764bb]": 1,
+    "/api/sse/app": 1,
+    "/api/system/host-telemetry": 2,
+    "/api/system/containers": 3,
+    "/api/apps/installed": 1
+  },
+  "directReads": {
+    "/api/system/build": 2,
+    "/api/user-context": 1,
+    "/api/app-context": 1,
+    "/api/apps/installed": 2,
+    "/api/[ef0817c21056f5d5]": 2,
+    "/api/[7d6021afe54ddd90]": 2,
+    "/api/desktop-preferences": 2,
+    "/api/marketplace/all": 2,
+    "/api/system/host-history": 3
+  },
+  "coreChecks": [
+    {
+      "idHash": "c845932ce1aee8a7df00be8074c91a3299f391dedd20535c47d40911ee3c960e",
+      "image": "ghcr.io/twentylines/orbis@sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06",
+      "imageId": "sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06",
+      "healthy": true,
+      "ownedBinds": true,
+      "architecture": "arm64"
+    }
+  ],
+  "source": {
+    "live": [
+      "Actual published HTML, JavaScript, stylesheets, images and authenticated GET responses",
+      "Actual network/disk history responses, selected device/range, recorded values and timestamps; existing account preferences"
+    ],
+    "controlled": [
+      "One320px doubled-computed-text group",
+      "Browser-only same-origin CSP header adjustment and OS dark media preference; all response bodies unchanged"
+    ],
+    "responseSubstitutions": 0,
+    "preferenceShadows": 0,
+    "realWrites": 0,
+    "captures": "Private native viewport captures at actual focused/wheel reading positions; no scroll reset",
+    "privacy": "Raw logical device identifiers/history samples and account baseline remain in0600 private files; public metrics contain hashes"
+  },
+  "blockedMutations": [],
+  "blockedRedirects": [],
+  "externalRequestsBlocked": 0,
+  "readFailures": [],
+  "assetFailures": [],
+  "pageErrors": [],
+  "recordsUnchanged": true,
+  "cleanupFailures": [],
+  "cleanup": {
+    "groupContextsClosed": 1,
+    "readerClosed": true,
+    "anonymousClosed": true,
+    "browserClosed": true
+  },
+  "unauthenticatedStatus": 401,
+  "warmup": {
+    "attempts": 1,
+    "elapsed": 12,
+    "samples": [
+      {
+        "range": "5m",
+        "points": 12,
+        "devices": 16,
+        "selectedKind": "network",
+        "selectedNameHash": "10f2dc2d5fbd1343eb3342c083c5db5a01e341ca4198678aff77894a7c35cd04",
+        "selectedNameLength": 15,
+        "collectorAvailable": true,
+        "storage": "persistent",
+        "lastSampleAt": "2026-10-18T06:39:21.827Z",
+        "persistedThrough": "2026-10-18T06:39:11.808Z",
+        "responseHash": "226c16a75fb00da94d77f354cb07d3aceeab5f1d2a3eb71e01149ddd6a3e1671"
+      },
+      {
+        "range": "5m",
+        "points": 12,
+        "devices": 16,
+        "selectedKind": "disk",
+        "selectedNameHash": "6c4aba2966848b426e7ec2fa92bb28862bc0c0985a4e7acd9ae41fe68ea23b0f",
+        "selectedNameLength": 3,
+        "collectorAvailable": true,
+        "storage": "persistent",
+        "lastSampleAt": "2026-10-18T06:39:21.827Z",
+        "persistedThrough": "2026-10-18T06:39:11.808Z",
+        "responseHash": "2049e0ce2025e0ca699e2852c0e662491353babdd8c6badb3dff3b09d25f9a6d"
+      }
+    ]
+  },
+  "failure": {
+    "stage": "1440x1120-text1",
+    "code": "PUBLISHED_HOST_HISTORY_UI_AUDIT_FAILED",
+    "messageHash": "851cf095560f69d181d58e7a87c2ca86723c2c9c1d565bf6df1e72046a42e539"
+  },
+  "stage": "1440x1120-text1"
+}

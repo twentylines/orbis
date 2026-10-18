@@ -1,0 +1,10 @@
+{
+  "passed": false,
+  "stage": "1440x1120-text1",
+  "type": "AssertionError",
+  "failedAssertion": "Actual history polling preserves exact natural reading position",
+  "boundary": "The first execution throws before saving numeric after-scroll measurements. No cause is established. Later diagnostics and the full current matrix pass the same exact-offset criterion; the original flag remains unresolved.",
+  "redactedErrorFileSha256": "cdf6aaced70d41498bd5ed0200989f9520e88d19fd6f0bc0c54f223ce3c19ab0",
+  "originalReportSha256": "c8fd065e27ea07a87a093d783961a490aba60919170a57a9c40ebaf38073bb9d",
+  "earlierExecutionVerifierFingerprinted": false
+}
