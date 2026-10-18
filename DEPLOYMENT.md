@@ -1,5 +1,23 @@
 # Orbis build and migration rehearsal
 
+## Published beta39: authentication source update and arm64 OTA (18 October 2026)
+
+Release workflow `39081664916` passed for source `67ac2db81bd794822d11e80518e15f6a152fd09e`. Both architectures match the checker and digest `sha256:1ff90aa7edc45739e67e98e4eab6fe708691a38b2d44d6dfde08d24e6049cbc1`. Reviewed beta38→39 job `0db24623-26f6-4c27-9334-13e663c33d7a` reaches that exact healthy arm64 image, retaining both app records, preferences and all 28 task outcomes. Real wrong-password/retry passes, closes only its new session and retains the original session/preferences.
+
+The stopped beta38 snapshot independently verifies 3,591 entries, 2,827 files and 149,797,319 bytes, tree hash `ea2a55c424e32eecd134ae3227eae230c12eff20f9ed4f845178aee957dbff1d`. The separate application/configuration/data comparison remains `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`. [Sanitized assertions and blank Login](screenshots/live-beta39/README.md) record that scope.
+
+The first update check had no Prepare button: a briefly unfinished release manifest was cached as missing. No update was submitted in that attempt. After the original cache expired, the same published manifest became available and the reviewed update passed. New source shortens unfinished-release caching to 30 seconds while retaining the 15-minute ready-release cache and request coalescing; the regression rejects the old behaviour. Frontend source is unchanged, so the beta38 visual findings remain applicable. Copied TOTP/HTTPS adoption is a separate test; Hades remains untouched.
+
+## Published beta38: regenerated client and actual login retry (18 October 2026)
+
+Release workflow `39080836579` passed for source `b84c99a2ddb433186f90ac1e84dacbdc49686078`. The checker matched both architectures and digest `sha256:41df612019706f12e219e3cdccaf3cf77c8cedd89ab059a9f6f3b7151b1023ab`. Reviewed beta37→38 OTA job `358c3cfd-5c69-4266-9502-0ddaa8a830e7` reached that exact healthy image, retaining both app records, preferences and all 28 task outcomes.
+
+The stopped beta37 snapshot independently verified 3,591 entries, 2,827 files and 149,790,089 bytes, tree hash `cf7855c29df1c767e7854574aaff650ad0b482405ec73b0ddac49d34e2ae8002`. The separate 33-entry/17-file application/configuration/data comparison remains `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`.
+
+A real wrong-password attempt returns HTTP400 and translated themed feedback, remains signed out and preserves enabled fields. The correct retry authenticates. Only that new session is closed; original session and preferences match. The opt-in `ORBIS_AUDIT_REJECT_LOGIN_FIRST=1` adds this one rejected attempt to the guarded login runner. Entered credentials are never captured or published.
+
+The bounded released-client audit passes 16 native views over eight routes at desktop/phone sizes, with actual reads, loaded images and exact record preservation. There are no page errors or real writes. All 15 prior shared CSS bodies match beta37 byte for byte; nine further route styles were loaded. Manual review confirms no white chrome rims, but rejects character-count tile truncation and a 12px Store filter inset. [Captures and sanitized assertions](screenshots/live-beta38/README.md) retain those failures for the source follow-up. The full theme/window mutation matrices were not repeated for unchanged styles. Hades remains untouched.
+
 ## Published beta37: custom workspace rows and ORM update (18 October 2026)
 
 Release workflow `39079756805` passed for source `c02ea585a83cf846c836827d6652abae9821d20d`. Both architectures match the release checker and image digest `sha256:cae92aa631d95a1c0f6b0fcdd1598f4ac9fba9ef3723b0d8a52910498f7956bc`. Reviewed beta36→37 OTA job `474daa24-00e6-48ac-8d48-e3304a88b965` reached that exact healthy image. Both app records, preferences and all 28 task outcomes matched.

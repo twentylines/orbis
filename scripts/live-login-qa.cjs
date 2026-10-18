@@ -11,6 +11,7 @@ const tag = process.env.ORBIS_AUDIT_EXPECTED_TAG;
 const commit = process.env.ORBIS_AUDIT_EXPECTED_COMMIT;
 const digest = process.env.ORBIS_AUDIT_EXPECTED_DIGEST;
 const releaseFile = process.env.ORBIS_AUDIT_RELEASE_FILE;
+const rejectFirst = process.env.ORBIS_AUDIT_REJECT_LOGIN_FIRST === '1';
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const privateRead = (file, fixture = false) => {
   assert.ok(path.isAbsolute(file) && path.resolve(file) === file);
@@ -34,6 +35,8 @@ const privateRead = (file, fixture = false) => {
   assert.ok(release.tag === tag && release.commit === commit && release.image === `ghcr.io/twentylines/orbis@${digest}`);
   const credentials = JSON.parse(privateRead(`${root}/test-credentials.json`, true));
   assert.ok(typeof credentials.username === 'string' && typeof credentials.password === 'string');
+  const rejectedPassword = `orbis-invalid-${crypto.randomBytes(12).toString('hex')}`;
+  assert.notEqual(rejectedPassword, credentials.password);
   const cookies = privateRead(`${root}/test-cookies.txt`, true)
     .split('\n')
     .filter((line) => line && (!line.startsWith('#') || line.startsWith('#HttpOnly_')))
@@ -60,6 +63,10 @@ const privateRead = (file, fixture = false) => {
     commit,
     digest,
     loginPosts: 0,
+    validPasswordPosts: 0,
+    rejectedPasswordPosts: 0,
+    rejectionRequested: rejectFirst,
+    rejectionKeptSignedOut: null,
     unchangedPreferenceWrites: 0,
     blockedMutations: [],
     pageErrors: [],
@@ -94,9 +101,16 @@ const privateRead = (file, fixture = false) => {
       try {
         const body = JSON.parse(request.postData() || '{}');
         if (url.pathname === '/api/auth/login' && request.method() === 'POST') {
-          assert.ok(body.username === credentials.username && body.password === credentials.password);
+          assert.equal(body.username, credentials.username, 'Only the owned audit account is permitted');
           assert.deepEqual(Object.keys(body).sort(), ['password', 'username']);
-          assert.equal(report.loginPosts, 0, 'Only one actual login is permitted');
+          if (body.password === rejectedPassword) {
+            assert.ok(rejectFirst && report.loginPosts === 0, 'Only one explicitly requested rejected password attempt is permitted');
+            report.rejectedPasswordPosts++;
+          } else {
+            assert.ok(body.password === credentials.password, 'Only the expected audit password is permitted');
+            assert.equal(report.loginPosts, rejectFirst ? 1 : 0, 'Only one valid password attempt is permitted');
+            report.validPasswordPosts++;
+          }
           report.loginPosts++;
           return route.continue();
         }
@@ -117,6 +131,45 @@ const privateRead = (file, fixture = false) => {
     await page.locator('input[name="email"]').waitFor();
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: path.join(output, 'login-phone.png'), animations: 'disabled' });
+    if (rejectFirst) {
+      stage = 'actual-rejected-password';
+      await page.locator('input[name="email"]').fill(credentials.username);
+      await page.locator('input[name="password"]').fill(rejectedPassword);
+      const rejected = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === '/api/auth/login' && response.request().method() === 'POST',
+      );
+      await page.locator('form button[type="submit"]').click();
+      const response = await rejected;
+      assert.equal(response.status(), 400, 'The deliberately wrong password must be rejected');
+      assert.equal((await response.json()).message, 'AUTH_ERROR_INVALID_CREDENTIALS');
+      const notice = page.locator('.orbis-notification[data-notification-type="error"]');
+      await notice.getByText('Incorrect email address or password.', { exact: true }).waitFor();
+      await page.waitForFunction(() => {
+        const element = document.querySelector('.orbis-notification[data-notification-type="error"]');
+        if (!element) return false;
+        const style = getComputedStyle(element);
+        return style.opacity === '1' && (style.transform === 'none' || new DOMMatrix(style.transform).isIdentity);
+      });
+      const box = await notice.boundingBox();
+      assert.ok(box && box.x >= 8 && box.x + box.width <= 382 && box.y >= 0, 'Rejected-login feedback must fit the phone viewport');
+      assert.equal(page.url(), `${base}/login`, 'A rejected password must not navigate to Home');
+      assert.ok(await page.locator('input[name="email"]').isEnabled());
+      assert.ok(await page.locator('input[name="password"]').isEnabled());
+      assert.ok(await page.locator('form button[type="submit"]').isEnabled(), 'Password retry must remain enabled');
+      assert.ok(
+        (await page.locator('input[name="email"]').inputValue()) === credentials.username &&
+          (await page.locator('input[name="password"]').inputValue()) === rejectedPassword,
+        'A rejected password must preserve the entered fields',
+      );
+      const anonymous = await context.request.get(`${base}/api/user-context`, { maxRedirects: 0 });
+      assert.ok(anonymous.ok() && (await anonymous.json()).isLoggedIn === false, 'A rejected password must not authenticate');
+      assert.ok(
+        !(await context.cookies(base)).some((cookie) => cookie.name === 'runtipi-sid'),
+        'A rejected password must not create a session cookie',
+      );
+      report.rejectionKeptSignedOut = true;
+      report.rejectionNotice = { translated: true, phoneBounds: box, retryEnabled: true, fieldsPreserved: true };
+    }
     stage = 'actual-password-login';
     await page.locator('input[name="email"]').fill(credentials.username);
     await page.locator('input[name="password"]').fill(credentials.password);
@@ -129,7 +182,9 @@ const privateRead = (file, fixture = false) => {
     await page.waitForURL(`${base}/dashboard`);
     const authenticated = await context.request.get(`${base}/api/user-context`, { maxRedirects: 0 });
     assert.ok(authenticated.ok() && (await authenticated.json()).isLoggedIn === true, 'New session did not authenticate');
-    assert.equal(report.loginPosts, 1);
+    assert.equal(report.loginPosts, rejectFirst ? 2 : 1);
+    assert.equal(report.validPasswordPosts, 1);
+    assert.equal(report.rejectedPasswordPosts, rejectFirst ? 1 : 0);
     assert.deepEqual(report.blockedMutations, []);
     assert.deepEqual(report.pageErrors, []);
     report.passed = true;
