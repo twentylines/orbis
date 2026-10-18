@@ -110,9 +110,7 @@ def preflight(root: Path, context: str, source: Path, *, allow_existing: bool = 
     saved = HOST.saved_state(root)
     if not saved or saved.get("root") != str(root) or saved.get("dockerContext") != context or not isinstance(saved.get("tag"), str):
         raise ValueError("this installation is not enrolled on the selected Docker context")
-    manifest = SERVICE.manifest_for_tag(saved["tag"])
-    if HOST.installation_fingerprint(root, manifest, context) != saved:
-        raise ValueError("Orbis enrollment no longer matches the installation files")
+    manifest = SERVICE.installed_manifest(root, context)
     core = HOST.current_core(root, context)
     if core.get("state") != "running" or core.get("health") != "healthy" or core.get("image") != f"{PLAN.IMAGE}@{manifest['digest']}":
         raise ValueError("the enrolled Orbis core must be healthy at its published image")

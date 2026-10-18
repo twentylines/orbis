@@ -11,7 +11,7 @@ This is currently a **disposable-host test path**. It has unit and socket transp
 ## Boundaries
 
 - The host service uses the explicit installation root and Docker context supplied at startup. A browser request can contain only a release tag or a server-issued plan/job ID.
-- A plan verifies the GitHub tag, release manifest, GHCR index digest and supported platforms, existing enrollment, healthy running image, Compose delta, stopped managed apps, and snapshot capacity. Plans expire after 15 minutes.
+- A plan verifies the target GitHub tag, release manifest, GHCR index digest and supported platforms, existing enrollment, healthy running image, Compose delta, stopped managed apps, and snapshot capacity. The installed release is identified by its enrolled digest, local image source/version/revision labels and exact saved configuration. Plans expire after 15 minutes.
 - Apply rechecks those conditions, pulls before downtime, captures a stopped-state snapshot, starts the digest-pinned release, and uses the existing automatic rollback transaction. The host service keeps running while the Orbis container restarts. A job record is saved outside the installation.
 - Failed updates retain their failure stage and a fixed diagnostic code after rollback. Snapshot failures distinguish inconsistent source reads, failed copies, changing source files, mismatched copies and verification-record failures. The browser receives a safe explanation; raw exception messages, command output and installation file contents are not returned. An incomplete snapshot without a valid sidecar is never restored.
 - The backend update routes require an authenticated operator session. The inherited `AuthGuard` checks same-origin POST requests; a second guard rejects non-operators and CLI tokens. Host telemetry uses the existing authenticated session/CLI guard for system readings and exposes no mutation. Only the Orbis backend should receive the Unix socket mount; keep the socket directory and service state private.
@@ -46,7 +46,7 @@ The helper's socket is owned by the host process with mode `0600`. The container
 
 ## Linux service setup
 
-`scripts/orbis-host-service-setup.py` installs the helper on an **already enrolled** Linux systemd host whose running Orbis core has the read-only socket mount above. The socket directory must exist before that core container starts. The plan verifies the exact published image, saved enrollment, Docker context, merged Compose mount and environment, and host/container mount device and inode. A stale bind mount is rejected; recreate only the core under the reviewed Compose model before retrying. It does not edit Compose or adopt stock Runtipi.
+`scripts/orbis-host-service-setup.py` installs the helper on an **already enrolled** Linux systemd host whose running Orbis core has the read-only socket mount above. The socket directory must exist before that core container starts. The plan verifies the installed image digest and build identity, saved enrollment, Docker context, merged Compose mount and environment, and host/container mount device and inode. A stale bind mount is rejected; recreate only the core under the reviewed Compose model before retrying. It does not edit Compose or adopt stock Runtipi.
 
 ```sh
 python3 scripts/orbis-host-service-setup.py plan ROOT --docker-context CONTEXT
@@ -67,6 +67,8 @@ sudo python3 scripts/orbis-host-service-upgrade.py upgrade ROOT --docker-context
 ```
 
 The plan checks the enrolled image, Compose socket mount, live host/container mount identity, root-owned helper files, systemd unit and environment, and absence of a running or interrupted core update. It reports hashes of the installed and candidate scripts and unit. Identical hashes return without a service restart. Otherwise upgrade takes the host-operation lock, marks maintenance so the newer helper refuses new core operations, stops the old unit, replaces scripts and unit from a same-filesystem staging area, starts the unit, then checks the socket from both the host and core and checks the bind-mount identity. If startup or verification fails, it restores the previous scripts and unit. The environment and installation data tree are unchanged.
+
+An installed release remains identifiable after its remote release assets are archived. Current helpers verify its local digest, original build labels and enrolled configuration without downloading its old manifest. Every new update target still requires fresh GitHub and GHCR verification. If an older helper reports a missing manifest for the installed release, upgrade the helper from a reviewed current checkout using the commands above, then prepare the core update again. Keep the installed release's original build identity; do not substitute a newer tag or manifest for it.
 
 If the upgrade command is interrupted, use the same checkout and exact root/context to recover the recorded helper transaction:
 

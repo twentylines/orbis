@@ -97,6 +97,61 @@ def manifest_for_tag(tag: str) -> dict[str, str]:
     )
 
 
+def enrollment_matches(root: Path, context: str, saved: dict | None) -> bool:
+    if not saved or saved.get("root") != str(root) or saved.get("dockerContext") != context:
+        return False
+    files = saved.get("files")
+    if not isinstance(files, dict):
+        return False
+    names = ("docker-compose.yml", ".env", "user-config/tipi-compose.yml", "orbis-compose.yml")
+    return set(files) == set(names) and all(files[name] == HOST.file_digest(root / name) for name in names)
+
+
+def installed_manifest(root: Path, context: str) -> dict[str, str]:
+    saved = HOST.saved_state(root)
+    if (
+        not enrollment_matches(root, context, saved)
+        or not isinstance(saved.get("tag"), str)
+        or not isinstance(saved.get("digest"), str)
+        or not PLAN.DIGEST.fullmatch(saved["digest"])
+    ):
+        raise ValueError("this installation is not enrolled in Orbis")
+    image = f"{PLAN.IMAGE}@{saved['digest']}"
+    result = HOST.docker(
+        context,
+        ["image", "inspect", "--format", '{"labels":{{json .Config.Labels}},"digests":{{json .RepoDigests}}}', image],
+        root,
+    )
+    if result.returncode:
+        raise RuntimeError("could not inspect the enrolled Orbis image")
+    try:
+        metadata = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise ValueError("Docker returned invalid enrolled image metadata") from error
+    labels = metadata.get("labels") if isinstance(metadata, dict) else None
+    digests = metadata.get("digests") if isinstance(metadata, dict) else None
+    if (
+        not isinstance(labels, dict)
+        or not isinstance(digests, list)
+        or image not in digests
+        or labels.get("org.opencontainers.image.source") != "https://github.com/twentylines/orbis"
+        or labels.get("org.opencontainers.image.version") != saved["tag"]
+    ):
+        raise ValueError("the installed image identity differs from the enrolled release")
+    # Installed releases can outlive their remote assets. New targets still
+    # require fresh GitHub/GHCR verification in plan and apply.
+    current = PLAN.validate_manifest({
+        "schema": "orbis.release.v1",
+        "image": PLAN.IMAGE,
+        "tag": saved["tag"],
+        "commit": labels.get("org.opencontainers.image.revision"),
+        "digest": saved["digest"],
+        "runtipiCompatibility": PLAN.read_version(root),
+    })
+    HOST.require_current_state(root, HOST.installation_fingerprint(root, current, context))
+    return current
+
+
 class HostService:
     def __init__(self, root: Path, context: str, snapshots: Path, state_dir: Path):
         self.root = root.resolve(strict=True)
@@ -261,22 +316,10 @@ class HostService:
             return {"jobId": plan_id, "state": "queued"}
 
     def state_matches(self, saved: dict | None) -> bool:
-        if not saved or saved.get("root") != str(self.root) or saved.get("dockerContext") != self.context:
-            return False
-        files = saved.get("files")
-        if not isinstance(files, dict):
-            return False
-        names = ("docker-compose.yml", ".env", "user-config/tipi-compose.yml", "orbis-compose.yml")
-        return set(files) == set(names) and all(files[name] == HOST.file_digest(self.root / name) for name in names)
+        return enrollment_matches(self.root, self.context, saved)
 
     def current_manifest(self) -> dict[str, str]:
-        saved = HOST.saved_state(self.root)
-        if not self.state_matches(saved) or not isinstance(saved.get("tag"), str) or not isinstance(saved.get("digest"), str):
-            raise ValueError("this installation is not enrolled in Orbis")
-        current = manifest_for_tag(saved["tag"])
-        if current["digest"] != saved["digest"]:
-            raise ValueError("the enrolled digest no longer matches its published release")
-        return current
+        return installed_manifest(self.root, self.context)
 
     def status(self) -> dict:
         saved = HOST.saved_state(self.root)

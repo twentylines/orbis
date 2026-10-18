@@ -30,6 +30,103 @@ CURRENT = manifest("v0.1.0-beta.6", "b")
 TARGET = manifest("v0.1.0-beta.7", "c")
 
 
+class InstalledManifestTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        base = Path(self.temp.name).resolve()
+        self.root, self.snapshots, self.state = (base / name for name in ("install", "snapshots", "state"))
+        for directory in (self.root, self.snapshots, self.state):
+            directory.mkdir(mode=0o700)
+        for name, content in {
+            "docker-compose.yml": "fixture\n",
+            ".env": "TIPI_VERSION=4.10.1\n",
+            "VERSION": "4.10.1\n",
+            "orbis-compose.yml": SERVICE.HOST.STAGE.staged_content(CURRENT),
+        }.items():
+            (self.root / name).write_text(content)
+        self.compose = mock.patch.object(SERVICE.PLAN, "plan", return_value={})
+        self.compose.start()
+        self.addCleanup(self.compose.stop)
+        self.saved = SERVICE.HOST.installation_fingerprint(self.root, CURRENT, "test-daemon")
+        SERVICE.HOST.write_state(self.root, self.saved)
+        self.service = SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
+        self.metadata = {
+            "labels": {
+                "org.opencontainers.image.source": "https://github.com/twentylines/orbis",
+                "org.opencontainers.image.version": CURRENT["tag"],
+                "org.opencontainers.image.revision": CURRENT["commit"],
+            },
+            "digests": [f"{CURRENT['image']}@{CURRENT['digest']}"],
+        }
+
+    def inspect_result(self):
+        return mock.Mock(returncode=0, stdout=json.dumps(self.metadata))
+
+    def test_archived_installed_release_uses_its_local_digest_and_original_build_identity(self):
+        with mock.patch.object(SERVICE.HOST, "docker", return_value=self.inspect_result()) as docker, mock.patch.object(
+            SERVICE.CHECK, "check", side_effect=AssertionError("installed identity must not require remote assets")
+        ):
+            self.assertEqual(self.service.current_manifest(), CURRENT)
+        self.assertEqual(docker.call_args.args[0], "test-daemon")
+        self.assertEqual(docker.call_args.args[1][-1], f"{CURRENT['image']}@{CURRENT['digest']}")
+        self.assertEqual(docker.call_args.args[2], self.root)
+
+    def test_target_release_still_requires_independent_verification(self):
+        with mock.patch.object(SERVICE.HOST, "docker", return_value=self.inspect_result()), mock.patch.object(
+            SERVICE, "manifest_for_tag", side_effect=ValueError("target release is not verified")
+        ) as target:
+            with self.assertRaisesRegex(ValueError, "target release is not verified"):
+                self.service.plan(TARGET["tag"])
+        target.assert_called_once_with(TARGET["tag"])
+        self.assertEqual(list(self.state.iterdir()), [])
+
+    def test_foreign_missing_or_changed_image_identity_is_rejected(self):
+        mutations = [
+            lambda value: value["labels"].update({"org.opencontainers.image.source": "https://github.com/example/orbis"}),
+            lambda value: value["labels"].update({"org.opencontainers.image.version": TARGET["tag"]}),
+            lambda value: value["labels"].update({"org.opencontainers.image.revision": "not-a-commit"}),
+            lambda value: value["labels"].update({"org.opencontainers.image.revision": "d" * 40}),
+            lambda value: value.update(digests=[]),
+            lambda value: value.update(digests=[f"{TARGET['image']}@{TARGET['digest']}"]),
+            lambda value: value.update(labels=None),
+            lambda value: value.update(digests=None),
+        ]
+        for change in mutations:
+            with self.subTest(change=change):
+                metadata = json.loads(json.dumps(self.metadata))
+                change(metadata)
+                with mock.patch.object(SERVICE.HOST, "docker", return_value=mock.Mock(returncode=0, stdout=json.dumps(metadata))):
+                    with self.assertRaises(ValueError):
+                        self.service.current_manifest()
+
+    def test_changed_enrollment_or_configuration_is_rejected_before_image_inspection(self):
+        for name in ("docker-compose.yml", ".env", "orbis-compose.yml"):
+            with self.subTest(name=name):
+                file = self.root / name
+                original = file.read_text()
+                file.write_text(original + "changed\n")
+                try:
+                    with mock.patch.object(SERVICE.HOST, "docker") as docker:
+                        with self.assertRaisesRegex(ValueError, "not enrolled"):
+                            self.service.current_manifest()
+                        docker.assert_not_called()
+                finally:
+                    file.write_text(original)
+
+    def test_missing_image_and_malformed_metadata_fail_without_relaying_docker_output(self):
+        for result in (
+            mock.Mock(returncode=1, stdout="SECRET_MARKER", stderr="SECRET_MARKER"),
+            mock.Mock(returncode=0, stdout="SECRET_MARKER"),
+            mock.Mock(returncode=0, stdout="[]"),
+        ):
+            with self.subTest(result=result):
+                with mock.patch.object(SERVICE.HOST, "docker", return_value=result):
+                    with self.assertRaises((ValueError, RuntimeError)) as caught:
+                        self.service.current_manifest()
+                    self.assertNotIn("SECRET_MARKER", str(caught.exception))
+
+
 class HostServiceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
