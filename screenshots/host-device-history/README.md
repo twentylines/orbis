@@ -1,6 +1,6 @@
 # Host device history verification
 
-This directory records the compiled-source device-history UI and separate real Linux helper evidence after beta43. The core remains beta43: its current-reading API works with the upgraded rehearsal helper, but it has no per-device history API/UI yet. Real background collection, restart persistence and the next published-image acceptance remain required. Hades is untouched.
+This directory records the compiled-source device-history UI and separate real Linux helper evidence after beta43. At the source checkpoint the core remained beta43: its current-reading API works with the upgraded rehearsal helper, but it has no per-device history API/UI yet. Real background collection, restart persistence and the next published-image acceptance remain required. Hades is untouched.
 
 ## Captures
 
@@ -51,3 +51,8 @@ The exact beta43 core remains healthy at OCI index `sha256:85466caef871350b90342
 The backend foundation passes 591 backend, 78 common and 126 Python tests, plus backend types and bundle. Independent model/service/parser suites reject impossible aggregates, excessive capacity and malformed identities. Real private temporary files cover restart continuity, retention, corruption, symlinks, modes, storage backoff and a stalled writer. See [HOST-HISTORY.md](../../HOST-HISTORY.md) for the contract and outstanding gates.
 
 Backend/frontend types and bundles also pass. Three additional cases report failed network/disk groups honestly while preserving usable readings. The remaining gates are real backend background collection, persistence through a planned core restart, and a reviewed published update.
+
+
+## Subsequent published gate: rejected
+
+Beta44 passes reviewed arm64 OTA, independent stopped-snapshot verification and exact prior full app/store/preference preservation. Its actual 130-second no-browser background gate is rejected: cache expiry overlaps collector ticks, yielding mostly 20-second readings and an unavailable/delayed state. A source correction is in progress. [Actual failed measurements](rejected-real-background.json). Source fixture checks do not establish background collection, restart continuity or published UI acceptance.

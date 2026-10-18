@@ -1,5 +1,13 @@
 # Orbis build and migration rehearsal
 
+## Published beta44: update passed, background history rejected (18 October 2026)
+
+Release workflow 39102140126 passes all verification, integration and publication gates for source `4b7f4b6ac24ff9e5bbb77e2daccad1414d4538da`. Independent GitHub/tag/registry checks match both Linux architectures and OCI index `sha256:fa7f3054a2c7e1bc9c4cf3e0b19d8cada322573fd7951aab621cbd2796bfdbe6`.
+
+Reviewed beta43→44 arm64 browser OTA job `3bd5ab39-2d48-4d3a-8b47-955846c4d4b1` reaches the exact healthy image, retaining both app records, preferences and 28 task outcomes. The stopped beta43 snapshot independently verifies 3,591 entries, 2,827 files and 149,870,973 bytes, tree hash `764702ea68ad46b49501a149eedfc7f92b621556ad8aa373700d0fb8cc32a1ab`. Protected app/data/user-config/repository trees match, as does the original 33-entry/17-file Mac baseline. Complete prior full app/store/preference API records match the previous verified beta43 baseline.
+
+The subsequent 130-second no-browser history gate is rejected. It performs no probe API/helper/guest reads during the quiet interval, then finds collector unavailable. A separate actual API observation shows mostly 20-second sample intervals and delayed readings. The ten-second cache expires from request completion, overlapping the ten-second collector tick while the helper refreshes asynchronously. A source correction is in progress; background history, planned restart and published UI acceptance remain incomplete. [Sanitized rejected measurements](screenshots/host-device-history/rejected-real-background.json). Hades and the copied x86 authenticator fixture are unchanged.
+
 ## Device-history helper rehearsal (18 October 2026)
 
 The owned arm64 rehearsal helper now supplies opaque device identities for the next core iteration. Before the guarded upgrade, a private dated 14-entry archive verifies every member byte, root ownership and directory 0700/archive 0600: `/var/lib/orbis/snapshots/helper-before-device-history-20261018T053642Z.tar.gz`, SHA-256 `6bf69144907a111acc9d0c36f44a467769fbb442fc9e5dee49c1b9aabfadaeaa`.
@@ -86,7 +94,7 @@ Beta37 includes the ORM escaping update. The later generator/translation changes
 
 ## Published beta36: status themes and glass headers (18 October 2026)
 
-Release workflow `39077874705` passed for source `2ae0165246f022b6cca2c93b0ed7be6f5da286e4`. The release checker matched both architectures and image digest `sha256:093074760b2021cbf54604bccf3d8731d2c29d42d5b67c8d7d73735e62c49b39`. The real browser reviewed and applied beta35→36, job `bf231fa5-6d1f-47ad-93a5-a283d8061629`, reaching the exact healthy image. Both app records, account preferences and28 task outcomes matched.
+Release workflow `39077874705` passed for source `2ae0165246f022b6cca2c93b0ed7be6f5da286e4`. The release checker matched both architectures and image digest `sha256:093074760b2021cbf54604bccf3d8731d2c29d42d5b67c8d7d73735e62c49b39`. The real browser reviewed and applied beta35→36, job `bf231fa5-6d1f-47ad-93a5-a283d8061629`, reaching the exact healthy image. Both app records, account preferences and 28 task outcomes matched.
 
 The stopped beta35 snapshot independently verified 3,591 entries, 2,827 files and 149,778,677 bytes, tree hash `9a02092057ec311c1090e1665f644f3db118ebeaccee8e9f003e520d94457463`. The separate33-entry/17-file application/configuration/data comparison still matches `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`.
 
@@ -194,11 +202,11 @@ A separate released-image window audit passed unsaved-draft minimize/restore, on
 
 The first browser-requested beta24→25 transaction, job `b5a627ba-cffd-4b83-a2f9-ec415ac222fc`, rolled back before staging the new image. The incomplete snapshot has no verification sidecar and has not been used for restoration. Beta24 returned healthy at its enrolled digest. The old helper discarded the underlying failure, so its exact cause is unconfirmed; publication is not evidence of a beta25 runtime pass.
 
-A separate guarded stopped-tree capture then passed all three fingerprints: source before copy, source after copy and saved copy matched, including contents, permissions and numeric ownership (3,576 entries,2,812 files,97,052,823 bytes). Beta24 restarted healthy. Disk space and inode capacity were sufficient. A metadata-only copy also returned success despite unsupported extended-attribute warnings from the mounted filesystem; those warnings alone do not explain the failed transaction.
+A separate guarded stopped-tree capture then passed all three fingerprints: source before copy, source after copy and saved copy matched, including contents, permissions and numeric ownership (3,576 entries, 2,812 files,97,052,823 bytes). Beta24 restarted healthy. Disk space and inode capacity were sufficient. A metadata-only copy also returned success despite unsupported extended-attribute warnings from the mounted filesystem; those warnings alone do not explain the failed transaction.
 
 The current helper source now retains a fixed failure stage, code and exception category before rollback changes the journal stage. Snapshot read, copy, source-change, copy-mismatch and verification-record failures have distinct safe messages. Public diagnostics never include command stderr, file contents, paths from exceptions or arbitrary exception text. Strict fingerprint and sidecar requirements remain enforced. A replacement helper and subsequent published-image update must still be verified on the owned test host. Hades was not accessed.
 
-The replacement helper subsequently passed its guarded upgrade, host/container socket checks and active systemd state. The browser retried beta24→25 as job `22ff76a9-ef33-4ee6-afa3-e49f8a215dd3`; it completed at the exact published beta25 digest with a healthy core and matching enrollment. Preferences,2 installed app records and22 saved task outcomes matched their pre-update values. The previous beta24 snapshot independently verified 3,576 entries,2,812 files and97,055,150 bytes. This successful retry does not establish the cause of the original failure.
+The replacement helper subsequently passed its guarded upgrade, host/container socket checks and active systemd state. The browser retried beta24→25 as job `22ff76a9-ef33-4ee6-afa3-e49f8a215dd3`; it completed at the exact published beta25 digest with a healthy core and matching enrollment. Preferences,2 installed app records and22 saved task outcomes matched their pre-update values. The previous beta24 snapshot independently verified 3,576 entries, 2,812 files and97,055,150 bytes. This successful retry does not establish the cause of the original failure.
 
 The released beta25 bundle passed12 Settings/error-recovery/login compositions at 1440/390/320px in both modes, with a controlled catalogue error and real authentication/preferences APIs. The account preferences were restored and compared. Screenshot inspection then found an8px offset between the login theme and language controls, which the existing assertions had missed. The next source iteration removes the language wrapper's form margin only in the auth toolbar and adds actual control-height/centre assertions to both retained fixture and released-image checks.
 

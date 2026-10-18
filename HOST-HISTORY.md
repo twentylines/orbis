@@ -2,6 +2,10 @@
 
 Implementation in progress after beta43. The published beta43 image has current host readings and aggregate CPU/memory/core-network history; it does not yet include this per-device history.
 
+## Published acceptance follow-up
+
+Beta44 now passes reviewed arm64 OTA, independent snapshot/data verification and exact prior full app/store/preference preservation. Its real no-browser background gate is rejected: cache expiry overlaps the collector timer, producing mostly 20-second samples and an unavailable/delayed state. A source correction and regression are in progress. Background collection, planned restart continuity and published UI are not accepted. [Actual rejected measurements](screenshots/host-device-history/rejected-real-background.json).
+
 ## Source checkpoint
 
 The backend model/service, authenticated query validation and helper generation fields pass 591 backend, 78 common and 126 Python tests. Independent suites exercise 68 model cases, 22 service cases and 50 parser cases, plus 15 Python identity cases. They cover weighted means/peaks, impossible aggregates, retention, name churn/evictions, private real temporary files, two restarts with partial-minute continuity, corrupt/oversized/symlink preservation, timer coalescing, storage backoff and a stalled writer through 361 samples. Model capacity overflow and impossible count/mean acceptance were rejected and corrected. Backend types and bundle pass.

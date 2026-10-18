@@ -52,7 +52,7 @@ Published beta43 history covers aggregate CPU, host memory, and core-network rat
 
 Chart axes size to their labels instead of using a fixed pixel allowance. Time labels wrap when space is limited. Inspection details appear in the document flow below the plot so enlarged text does not cover subsequent core rows; keyboard Left/Right/Home/End and the slider's complete value description remain available.
 
-## Per-device history (source, not released)
+## Per-device history (beta44 acceptance incomplete)
 
 Authenticated `GET /api/system/host-history?range=5m|1h|24h|7d&device=network:NAME|disk:NAME` selects one logical device; an omitted device selects the first retained device. Invalid ranges, duplicate parameters, unsupported names and paths return 400. Selection only looks up already collected data. It never selects a helper command or filesystem path.
 
@@ -65,3 +65,6 @@ The separate `/data/state/orbis-host-history/devices-v1.jsonl` journal has a 32 
 Monitor now provides a single device selector with device-specific Download/Upload or Read/Write/Active time charts. Range and device stay in the URL, including links from the current readings. The first resolved device is pinned so catalogue growth cannot silently change the inspected device. Visible queries refresh every ten seconds for five minutes and every thirty seconds for longer ranges; hidden/minimized queries pause. Pending device/range changes retain the selector and focus without relabelling old metric readings as the new device. Pointer and native keyboard inspection reveal averages, peaks and actual sample counts. Small chart containers move the scale above a full-width plot; long identifiers retain their full accessible names.
 
 [HOST-HISTORY.md](HOST-HISTORY.md) and the [retained source inspection](screenshots/host-device-history/README.md) record source test evidence, rejected defects and corrected native/doubled-text layouts. The owned arm64 installed helper now supplies verified opaque identities after a dated private backup and guarded upgrade; environment, unit and other modules are unchanged. Published beta43 still uses its original current-reading API and has no per-device history API/UI. Real backend background collection, persistence and a reviewed published update remain required. Hades is unchanged.
+
+
+The subsequent published beta44 update retains existing records and passes independent snapshot verification, but its real no-browser history gate is rejected. A ten-second completed-response cache overlaps the history timer, producing mostly 20-second readings and a delayed state. The cache-deadline correction is in progress; the source browser matrix does not override this failed runtime gate. [Retained actual failure](screenshots/host-device-history/rejected-real-background.json).
