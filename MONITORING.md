@@ -24,7 +24,7 @@ One shared daemon worker samples on demand at most every ten seconds. Each count
 
 Monitor uses readable directory-boundary wrapping, with full-text/title ellipsis for unusually long individual identifiers. Facts reflow as text grows. Automatic refresh preserves reading position. Successful Retry restores keyboard focus to the surviving Host devices heading, using only the minimum padded scroll adjustment when that target is behind the chrome. It does not move focus away from another control the user selected.
 
-The retained Linux source probe uses only the owned arm64 Colima guest, a temporary Unix server and two real samples; it never updates the installed helper/core. API authentication/transport/counter fixtures and the compiled-source UI matrix remain separate evidence. A published-image/helper-upgrade confirmation is the next acceptance gate; Hades is untouched.
+The retained Linux source probe uses only the owned arm64 Colima guest, a temporary Unix server and two real samples; it never updates the installed helper/core. A separate installed-helper probe now verifies the reviewed helper upgrade, actual host/core Unix reads, two distinct samples, source hashes and private permissions while the core stays beta41. API authentication/transport/counter fixtures and the compiled-source UI matrix remain separate evidence. Published-core API/render confirmation and reviewed OTA are the next acceptance gates; Hades is untouched.
 
 ## Recorded history
 

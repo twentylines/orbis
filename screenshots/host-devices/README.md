@@ -6,6 +6,8 @@ These captures use the compiled local source at static8080 with controlled API r
 
 [Linux source assertions](linux-source-proof.json) come from the actual new Unix handler in the owned arm64 Linux guest. The probe returns 11 mounted filesystems, eight interfaces and three whole devices. Root capacity matches host `statvfs`; the first sample has no invented rates, and a second real sample produces network and disk rates. Temporary container mounts and arbitrary query paths are rejected. The temporary server closes. The proof records both source hashes and does not change the installed helper or core.
 
+[Installed-helper assertions](installed-helper-proof.json) separately verify the guarded helper upgrade after a private dated backup. The installed scripts match the reviewed hashes; the active service, socket and directory retain private permissions. Unit and environment bytes are unchanged. Actual host/core socket reads agree, and two live samples produce rates for the same 11/8/3 device groups. The core stays healthy on beta41; this does not claim the new core API or published Monitor has been checked.
+
 ## Layout, refresh and focus
 
 [Layout/state assertions](assertions.json) cover 16 ready compositions at 1440/768/390/320px, both modes and native/doubled text, plus 35 first-sample/stale/partial/omitted/empty/unavailable/error states. Measurements compare section gutters, card padding, whole words, identifier ellipsis, value columns and numeric units. Five Collecting polls resolve after about two seconds; five real ten-second refreshes preserve exact scroll. Rapid native forward/reverse focus, pending/rejected Retry and successful removed-opener focus all pass. Necessary heading reveals match the padded minimum within one pixel (maximum rounding difference 0.328px), without changing the heading's document position. A deliberately moved focus stays on the user's chosen control.
@@ -46,4 +48,4 @@ ORBIS_VISUAL_HOST_DEVICES_CHARTS_ONLY=1 node scripts/visual-qa.cjs
 
 Set `ORBIS_VISUAL_SCREENSHOT_DIR` to a separate output directory. The Linux probe requires its explicit owned-guest flag and a fresh `/tmp` output path; see [the probe](../../scripts/live-host-telemetry-qa.py).
 
-Published-image/helper upgrade, broader history/sensors/processes, other browser engines, physical devices and complete migration acceptance remain separate gates.
+Published-core API/render and reviewed OTA, broader history/sensors/processes, other browser engines, physical devices and complete migration acceptance remain separate gates.

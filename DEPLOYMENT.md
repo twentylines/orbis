@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Host telemetry helper rehearsal (18 October 2026)
+
+Source `9adb1d18f78e207f1b88d680059ed46e272e6820` passes main CI `39093022270` and integration `39093022170`. The owned arm64 helper preflight identifies exactly two changed files: the socket handler and new telemetry module. All other installed helper scripts and the systemd unit match. A private dated 12-file backup is verified before upgrade, SHA-256 `164e695f9dae341457add4042cbfb9f39b5c7c5537ab10a4c6a7ea301a90ad71`.
+
+The guarded helper upgrade completes with the service active, no maintenance record and private script/socket/directory permissions. Environment and unit bytes match the backup exactly. The core remains healthy on beta41 at its existing pinned digest; this operation does not update the core image.
+
+The installed helper's actual Unix endpoint returns 11 filesystems, eight interfaces and three whole devices with no omitted or unavailable groups. Its first HTTP response takes 2.11ms. Two distinct real samples produce interface and disk rates, root capacity matches host `statvfs`, temporary mounts are excluded and an arbitrary query path returns 404. The core container's socket read matches the host's sample, and installed handler/collector hashes match the reviewed source. [Sanitized installed-helper proof](screenshots/host-devices/installed-helper-proof.json) records these checks. The retained opt-in probe now covers both temporary source handlers and the installed helper.
+
+This confirms the helper upgrade and wire readings only. The beta42 published core API, reviewed OTA and actual Monitor rendering remain separate acceptance checks. The Mac uses `colima-runtipi-test`; `default` inside the probe is the isolated guest's Docker context. Hades is unchanged.
+
 ## Published beta41: device mode persistence and arm64 OTA (18 October 2026)
 
 Release workflow `39088109358` passed for source `87c670afe2e4c883c7c52f28f441ff5978af9fc6`. The read-only release checker matches linux/amd64 and linux/arm64 with index digest `sha256:3e90daac8c3fd87ad71c8bee75c945964f6fcde34331cdf8f7f9293ff4de5b8c`. Reviewed beta40→41 job `3e03f5a7-9c22-463b-932c-e25d31a41f13` reaches that exact healthy arm64 image, retaining both app records, preferences and all 28 task outcomes. Wrong-password feedback and the valid retry pass; only the new session is closed.
