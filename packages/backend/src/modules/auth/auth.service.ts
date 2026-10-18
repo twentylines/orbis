@@ -19,6 +19,8 @@ const MAX_TOTP_ATTEMPTS = 5;
 
 @Injectable()
 export class AuthService {
+  private operatorResetInProgress = false;
+
   constructor(
     private userRepository: UserRepository,
     private sessionManager: SessionManager,
@@ -346,30 +348,43 @@ export class AuthService {
    * @param {string} params.newPassword - The new password
    */
   public changeOperatorPassword = async (params: { newPassword: string }) => {
-    const isRequested = await this.checkPasswordChangeRequest();
-
-    if (!isRequested) {
-      throw new TranslatableError('AUTH_ERROR_NO_CHANGE_PASSWORD_REQUEST');
+    if (this.operatorResetInProgress) {
+      throw new TranslatableError('AUTH_ERROR_RESET_IN_PROGRESS', {}, HttpStatus.CONFLICT);
     }
 
-    const { newPassword } = params;
+    this.operatorResetInProgress = true;
+    try {
+      const isRequested = await this.checkPasswordChangeRequest();
 
-    const user = await this.userRepository.getFirstOperator();
+      if (!isRequested) {
+        throw new TranslatableError('AUTH_ERROR_NO_CHANGE_PASSWORD_REQUEST', {}, HttpStatus.BAD_REQUEST);
+      }
 
-    if (!user) {
-      throw new TranslatableError('AUTH_ERROR_OPERATOR_NOT_FOUND');
+      const { newPassword } = params;
+      if (newPassword.length < 8) {
+        throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD_LENGTH', {}, HttpStatus.BAD_REQUEST);
+      }
+
+      const user = await this.userRepository.getFirstOperator();
+
+      if (!user) {
+        throw new TranslatableError('AUTH_ERROR_OPERATOR_NOT_FOUND');
+      }
+
+      const hash = await this.passwordService.hash(newPassword);
+      await this.userRepository.updateUser(user.id, { password: hash, totpEnabled: false, totpSecret: null });
+      await this.sessionManager.destroyAllSessionsByUserId(user.id);
+
+      const { dataDir } = this.config.get('directories');
+      const cleared = await this.filesystem.removeFile(path.join(dataDir, 'state', 'password-change-request'));
+      if (!cleared) {
+        throw new TranslatableError('AUTH_ERROR_RESET_REQUEST_CLEANUP');
+      }
+
+      return { email: user.username };
+    } finally {
+      this.operatorResetInProgress = false;
     }
-
-    const hash = await this.passwordService.hash(newPassword);
-
-    await this.userRepository.updateUser(user.id, { password: hash, totpEnabled: false, totpSecret: null });
-
-    const { dataDir } = this.config.get('directories');
-    await this.filesystem.removeFile(path.join(dataDir, 'state', 'password-change-request'));
-
-    await this.sessionManager.destroyAllSessionsByUserId(user.id);
-
-    return { email: user.username };
   };
 
   /*
@@ -387,12 +402,13 @@ export class AuthService {
     try {
       const timestamp = await this.filesystem.readTextFile(resetPasswordFilePath);
 
-      if (!timestamp) {
+      if (!timestamp || !/^\d+$/.test(timestamp.trim())) {
         return false;
       }
 
       const requestCreation = Number(timestamp);
-      return requestCreation + REQUEST_TIMEOUT_SECS > Date.now() / 1000;
+      const now = Date.now() / 1000;
+      return Number.isSafeInteger(requestCreation) && requestCreation > 0 && requestCreation <= now && now - requestCreation < REQUEST_TIMEOUT_SECS;
     } catch {
       return false;
     }

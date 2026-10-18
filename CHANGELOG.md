@@ -9,6 +9,8 @@
 
 ## Unreleased development preview
 
+- Enforce the normal password minimum and a current fifteen-minute decimal timestamp for local operator recovery. Reject overlapping resets, preserve retry after early failures and report failed request cleanup after updating the password and revoking sessions. CLI-only authorization is retained; published CLI acceptance remains separate.
+
 - Correct the host-device cache deadline found by beta44's real no-browser gate. Expire successful results from request start before the next history tick, retaining request coalescing and unavailable-result backoff; reject the old policy with real-service/timer regressions.
 
 - Add bounded individual host disk/interface history with private restart-safe storage, device/range links, measured averages/peaks/counts and explicit coverage/storage states. Keep hidden browser polling paused and device focus stable during refresh and delayed selections.

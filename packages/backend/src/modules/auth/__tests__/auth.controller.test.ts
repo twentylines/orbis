@@ -128,6 +128,7 @@ describe('AuthController reset-password security', () => {
   });
 
   it('does not expose a public password reset status endpoint', async () => {
+    authService.checkPasswordChangeRequest.mockResolvedValue(true);
     const response = await request(app.getHttpServer()).get('/auth/reset-password');
 
     expect(response.status).toBe(404);
@@ -135,6 +136,7 @@ describe('AuthController reset-password security', () => {
   });
 
   it('rejects unauthenticated password reset completion attempts', async () => {
+    authService.checkPasswordChangeRequest.mockResolvedValue(true);
     const response = await request(app.getHttpServer()).post('/auth/reset-password').send({ newPassword: 'new-password-123' });
 
     expect(response.status).toBe(401);
@@ -158,6 +160,29 @@ describe('AuthController reset-password security', () => {
 
     expect(response.status).toBe(201);
     expect(authService.changeOperatorPassword).toHaveBeenCalledWith({ newPassword: 'new-password-123' });
+  });
+
+  it('does not let a dashboard session use local operator recovery', async () => {
+    authService.checkPasswordChangeRequest.mockResolvedValue(true);
+    const response = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .set('Cookie', `${SESSION_COOKIE_NAME}=session-id`)
+      .set('Host', 'orbis.example.test')
+      .set('Origin', 'http://orbis.example.test')
+      .send({ newPassword: 'new-password-123' });
+
+    expect(response.status).toBe(401);
+    expect(authService.changeOperatorPassword).not.toHaveBeenCalled();
+  });
+
+  it('does not let an app-host session use local operator recovery', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .set('Cookie', `${FORWARD_AUTH_COOKIE_NAME}=forward-session-id`)
+      .send({ newPassword: 'new-password-123' });
+
+    expect(response.status).toBe(401);
+    expect(authService.changeOperatorPassword).not.toHaveBeenCalled();
   });
 
   it('revokes forward-auth grants and app-host sessions on logout', async () => {

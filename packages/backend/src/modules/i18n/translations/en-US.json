@@ -342,6 +342,8 @@
   "AUTH_ERROR_INVALID_USERNAME": "Invalid username",
   "AUTH_ERROR_MISSING_EMAIL_OR_PASSWORD": "Missing email or password",
   "AUTH_ERROR_NO_CHANGE_PASSWORD_REQUEST": "No password reset request found.",
+  "AUTH_ERROR_RESET_IN_PROGRESS": "A password reset is already running. Wait for it to finish before retrying.",
+  "AUTH_ERROR_RESET_REQUEST_CLEANUP": "Your password changed, but the recovery request could not be cleared. Sign in with the new password. The server administrator must remove state/password-change-request before starting another recovery.",
   "AUTH_ERROR_OPERATOR_NOT_FOUND": "Operator user not found",
   "AUTH_ERROR_TOTP_ALREADY_ENABLED": "2FA is already enabled for this user",
   "AUTH_ERROR_TOTP_INVALID_CODE": "Incorrect authentication code.",
