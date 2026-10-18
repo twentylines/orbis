@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { isDeepStrictEqual } = require('node:util');
+const { isDeepStrictEqual, stripVTControlCharacters } = require('node:util');
 const { chromium } = require('@playwright/test');
 const { dom } = require('./host-devices-checks.cjs');
 const inspectSettingsAlignment = require('./settings-alignment-checks.cjs');
@@ -13,8 +13,9 @@ const inspectSettingsAlignment = require('./settings-alignment-checks.cjs');
 const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
 const dockerContext = 'colima-runtipi-test';
-const expectedTag = 'v0.1.0-beta.48';
-const reviewedCommit = '48089d6797be81947c96cfa13654bb597ef20b6b';
+const expectedTag = 'v0.1.0-beta.49';
+const reviewedCommit = '39855692be86339565204d0d9d468402531e9f08';
+const reviewedDigest = 'sha256:3285fb07e8538ab70664733eb4ce39a6665f0172525fe38294e8f88563b44f1b';
 const readMethods = new Set(['GET', 'HEAD']);
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const samePrivate = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message);
@@ -231,9 +232,9 @@ async function scaleText(page, factor) {
   await dom.settle(page);
 }
 
-const releasePath = '/tmp/orbis-beta48-release-check.json';
-const baselinePath = '/tmp/orbis-beta48-after-ota-records.private.json';
-const goPath = '/tmp/orbis-beta48-compact-ui-go.private.json';
+const releasePath = '/tmp/orbis-beta49-release-check.json';
+const baselinePath = '/tmp/orbis-beta49-after-ota-records.private.json';
+const goPath = '/tmp/orbis-beta49-compact-ui-go.private.json';
 const baseUrl = 'http://127.0.0.1:18080';
 const recordKeys = ['preferences', 'installed', 'apps', 'stores', 'links', 'userContext', 'appContext'];
 const groups = [
@@ -283,16 +284,57 @@ function sanitized(value, key = '') {
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, sanitized(item, name)]));
   return value;
 }
+function safeDiagnosticText(value) {
+  try {
+    return String(value);
+  } catch {
+    return '[unprintable diagnostic value]';
+  }
+}
+function originalError(error) {
+  const result = {};
+  for (const key of ['name', 'message', 'stack']) {
+    try {
+      const value = error?.[key];
+      if (value !== undefined) result[key] = safeDiagnosticText(value);
+    } catch {
+      result[key] = '[unreadable error property]';
+    }
+  }
+  if (!Object.keys(result).length) result.value = safeDiagnosticText(error);
+  return result;
+}
+function diagnosticUrl(value) {
+  const raw = safeDiagnosticText(value);
+  try {
+    const target = new URL(stripVTControlCharacters(raw));
+    if (!['http:', 'https:'].includes(target.protocol)) return `[non-http-url:${hash(raw).slice(0, 16)}]`;
+    return `${target.origin}${target.pathname}${target.search ? '?[redacted]' : ''}`;
+  } catch {
+    return `[invalid-url:${hash(raw).slice(0, 16)}]`;
+  }
+}
+function diagnosticError(error, secrets = []) {
+  const original = originalError(error);
+  let value = stripVTControlCharacters(original.stack || original.message || original.value || '[unreadable error]');
+  for (const secret of secrets) if (secret) value = value.replaceAll(secret, '[private]');
+  return value
+    .replace(/https?:\/\/[^\s"'<>]+/g, (url) => diagnosticUrl(url))
+    .split('\n')
+    .filter((line) => !/\b(?:cookie|authorization|headers)\b/i.test(line))
+    .join('\n');
+}
 
 function options(env, argv) {
   assert.deepEqual(argv, ['--allow-owned-published-compact-ui'], 'Explicit owned published compact UI argument is required');
   assert.equal(env.ORBIS_ALLOW_LIVE_COMPACT_UI_AUDIT, '1', 'Explicit published compact UI opt-in is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta48 is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta49 is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_COMMIT || '', /^[a-f0-9]{40}$/, 'Exact reviewed full commit is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta48 commit is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta49 commit is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_DIGEST || '', /^sha256:[a-f0-9]{64}$/, 'Exact reviewed published digest is required');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_DIGEST, reviewedDigest, 'Only the independently verified beta49 image index is permitted');
   assert.equal(env.ORBIS_AUDIT_COOKIE_FILE, ownedCookieFile, 'Only the primary owned observer cookie jar is permitted');
-  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta48 release manifest is permitted');
+  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta49 release manifest is permitted');
   assert.equal(env.ORBIS_AUDIT_BASELINE_FILE, baselinePath, 'Only the independently captured post-OTA baseline is permitted');
   assert.equal(env.ORBIS_AUDIT_GO_FILE, goPath, 'Independent post-OTA GO proof is required');
   const origin = new URL(env.ORBIS_AUDIT_URL || baseUrl);
@@ -786,11 +828,18 @@ async function nativeFocus(page, sample) {
             ? '.action-bar input'
             : sample.name === 'apps'
               ? '.desktop-installed-grid a,.desktop-installed-grid button,.empty a,.empty button'
-              : sample.name === 'home'
-                ? '.workspace-heading button,.workspace-heading a'
-                : 'button:not([disabled]),a[href]';
+              : sample.name === 'updates'
+                ? '.desktop-updates .desktop-update-link'
+                : sample.name === 'home'
+                  ? '.workspace-heading button,.workspace-heading a'
+                  : 'button:not([disabled]),a[href]';
   const target = page.locator(sample.root).first().locator(choices).filter({ visible: true }).first();
   if (!(await target.count())) return { checked: false, reason: 'No matching route control in actual data' };
+  assert.equal(
+    await target.evaluate((element) => Boolean(element.closest('.desktop-window-bar,.desktop-window-controls,.desktop-window-resize'))),
+    false,
+    'Native route-content preparation must not select fixed window chrome',
+  );
   await wheelVisible(page, target);
   await target.focus();
   await page.keyboard.press('Tab');
@@ -831,6 +880,10 @@ async function search(page, shot) {
     assert.ok(Math.abs(after.scroll[key] - before.scroll[key]) <= 1, 'Search close must preserve actual prior reading position');
   return { passed: true, opened: sanitized(opened), before: before.scroll, after: after.scroll, nativeEscape: true, returnedToTrigger: true };
 }
+function checkFocusIdentity(value) {
+  assert.equal(value.connected, true, 'Refresh must preserve the original connected control node');
+  assert.equal(value.sameActive, true, 'Refresh must keep that exact original DOM control focused');
+}
 async function refresh(page, shot, save, result) {
   const target = page.locator('.host-processes-sort button').first();
   await target.waitFor();
@@ -841,32 +894,56 @@ async function refresh(page, shot, save, result) {
   await settled(page);
   const before = await measure(page, '.desktop-route-window');
   checkFocus(before);
-  result.refresh = { passed: false, before: sanitized(before), actualEndpoint: '/api/system/host-processes' };
-  await shot('before-natural-refresh');
-  save();
-  const received = await page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === '/api/system/host-processes' && response.request().method() === 'GET' && response.status() === 200,
-    { timeout: 13000 },
-  );
-  await received.finished();
-  await settled(page);
-  const after = await measure(page, '.desktop-route-window');
-  Object.assign(result.refresh, {
-    after: sanitized(after),
-    rawScrollChanged: !isDeepStrictEqual(before.scroll, after.scroll),
-    anchorDelta: { top: after.active.box.top - before.active.box.top, bottom: after.active.box.bottom - before.active.box.bottom },
-    actual200: true,
-  });
-  save();
-  await shot('after-natural-refresh');
-  checkFocus(after);
-  assert.equal(after.active.classes, before.active.classes, 'Refresh must retain the focused control');
-  assert.ok(
-    Math.abs(after.active.box.top - before.active.box.top) <= 1 && Math.abs(after.active.box.bottom - before.active.box.bottom) <= 1,
-    'Refresh must retain the visible reading/focus anchor within one CSS pixel',
-  );
-  result.refresh.passed = true;
+  const control = await target.elementHandle();
+  assert.ok(control, 'The exact CPU sort control must exist before refresh');
+  result.refresh = { passed: false, before: sanitized(before), actualEndpoint: '/api/system/host-processes', controlHandleDisposed: false };
+  let primaryError;
+  try {
+    result.refresh.beforeIdentity = await control.evaluate((element) => ({
+      connected: element.isConnected,
+      sameActive: element === document.activeElement,
+    }));
+    checkFocusIdentity(result.refresh.beforeIdentity);
+    await shot('before-natural-refresh');
+    save();
+    const received = await page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/system/host-processes' && response.request().method() === 'GET' && response.status() === 200,
+      { timeout: 13000 },
+    );
+    await received.finished();
+    await settled(page);
+    const after = await measure(page, '.desktop-route-window');
+    Object.assign(result.refresh, {
+      after: sanitized(after),
+      rawScrollChanged: !isDeepStrictEqual(before.scroll, after.scroll),
+      anchorDelta: { top: after.active.box.top - before.active.box.top, bottom: after.active.box.bottom - before.active.box.bottom },
+      actual200: true,
+      afterIdentity: await control.evaluate((element) => ({ connected: element.isConnected, sameActive: element === document.activeElement })),
+    });
+    save();
+    await shot('after-natural-refresh');
+    checkFocus(after);
+    checkFocusIdentity(result.refresh.afterIdentity);
+    assert.equal(after.active.classes, before.active.classes, 'Refresh must retain the focused control');
+    assert.ok(
+      Math.abs(after.active.box.top - before.active.box.top) <= 1 && Math.abs(after.active.box.bottom - before.active.box.bottom) <= 1,
+      'Refresh must retain the visible reading/focus anchor within one CSS pixel',
+    );
+    result.refresh.passed = true;
+  } catch (error) {
+    primaryError = error;
+  } finally {
+    try {
+      await control.dispose();
+      result.refresh.controlHandleDisposed = true;
+    } catch (error) {
+      result.refresh.controlHandleCleanupErrorHash = hash(error.message);
+      result.refresh.passed = false;
+      primaryError ??= error;
+    }
+  }
+  if (primaryError) throw primaryError;
 }
 
 async function main() {
@@ -890,9 +967,10 @@ async function main() {
     matchedIndependentPostOtaBaseline: false,
     observerRetained: false,
     cleanupFailures: [],
+    diagnosticFailures: [],
     cleanup: { groupContextsClosed: 0, anonymousContextsClosed: 0, readerClosed: false, browserClosed: false },
     scope: {
-      live: 'Actual immutable beta48 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
+      live: 'Actual immutable beta49 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
       controlled:
         'Browser OS colour media matches the saved fixed mode (light for system); one320 doubled-computed-text group; document CSP connect-src adjustment only. No response body substitutions.',
       writes: 'Only GET/HEAD are forwarded. No login/logout, preference, reset, TOTP, refresh, installation or lifecycle mutations.',
@@ -904,6 +982,7 @@ async function main() {
   };
   const privateData = {};
   const network = [];
+  const originalForwardErrors = [];
   const errors = [];
   let config;
   let release;
@@ -915,19 +994,6 @@ async function main() {
   let outputReady = false;
   let secrets = [];
   let stage = 'preflight';
-  const diagnosticUrl = (value) => {
-    const target = new URL(value);
-    return `${target.origin}${target.pathname}${target.search ? '?[redacted]' : ''}`;
-  };
-  const diagnosticError = (error) => {
-    let value = String(error.stack || error.message || error);
-    for (const secret of secrets) value = value.replaceAll(secret, '[private]');
-    return value
-      .replace(/https?:\/\/[^\s"'<>]+/g, (url) => diagnosticUrl(url))
-      .split('\n')
-      .filter((line) => !/\b(?:cookie|authorization|headers)\b/i.test(line))
-      .join('\n');
-  };
   const fail = (error) => {
     let trace = String(error.stack || error.message || error);
     for (const secret of secrets) trace = trace.replaceAll(secret, '[private]');
@@ -942,6 +1008,7 @@ async function main() {
     if (!outputReady) return;
     privateWrite(path.join(config.output, 'private-baseline.json'), privateData);
     privateWrite(path.join(config.output, 'private-network.json'), network);
+    privateWrite(path.join(config.output, 'private-original-forward-errors.json'), originalForwardErrors);
     privateWrite(path.join(config.output, 'private-errors.json'), errors);
     privateWrite(path.join(config.output, 'report.json'), { ...report, stage });
   };
@@ -1110,7 +1177,7 @@ async function main() {
           id: requestId(request),
           url: diagnosticUrl(request.url()),
           kind: request.resourceType(),
-          error: diagnosticError(request.failure()?.errorText || 'Request failed'),
+          error: diagnosticError(request.failure()?.errorText || 'Request failed', secrets),
           closing,
         });
         if (
@@ -1208,6 +1275,24 @@ async function main() {
               : "connect-src 'self'";
           return route.fulfill({ response, headers });
         } catch (error) {
+          originalForwardErrors.push({
+            at: Date.now(),
+            group: groupName,
+            stage,
+            navigation,
+            id: requestId(request),
+            requestUrl: diagnosticUrl(request.url()),
+            original: originalError(error),
+          });
+          try {
+            privateWrite(path.join(config.output, 'private-original-forward-errors.json'), originalForwardErrors);
+          } catch (writeError) {
+            report.diagnosticFailures.push({
+              stage,
+              operation: 'preserveOriginalForwardError',
+              messageHash: hash(safeDiagnosticText(writeError?.message)),
+            });
+          }
           network.push({
             event: 'forward-exception',
             at: Date.now(),
@@ -1216,7 +1301,7 @@ async function main() {
             navigation,
             id: requestId(request),
             url: diagnosticUrl(request.url()),
-            error: diagnosticError(error),
+            error: diagnosticError(error, secrets),
             elapsedMs: Date.now() - began,
             closing,
           });
@@ -1288,7 +1373,7 @@ async function main() {
           group: groupName,
           stage,
           navigation,
-          error: diagnosticError(error),
+          error: diagnosticError(error, secrets),
           pending: [...pending.values()],
         });
         save();
@@ -1405,7 +1490,15 @@ async function main() {
         fail(error);
         report.cleanupFailures.push('browserClosed');
       }
-    for (const name of ['blockedMutations', 'blockedRedirects', 'readFailures', 'assetFailures', 'pageErrors', 'cleanupFailures'])
+    for (const name of [
+      'blockedMutations',
+      'blockedRedirects',
+      'readFailures',
+      'assetFailures',
+      'pageErrors',
+      'cleanupFailures',
+      'diagnosticFailures',
+    ])
       if (report[name].length) report.passed = false;
     if (errors.length || report.externalRequestsBlocked || !report.recordsUnchanged || !report.observerRetained) report.passed = false;
     if (!report.cleanup.readerClosed || !report.cleanup.browserClosed) report.passed = false;
@@ -1427,7 +1520,7 @@ async function main() {
 }
 
 function selfCheck() {
-  const digest = `sha256:${'a'.repeat(64)}`;
+  const digest = reviewedDigest;
   const env = {
     ORBIS_ALLOW_LIVE_COMPACT_UI_AUDIT: '1',
     ORBIS_AUDIT_EXPECTED_TAG: expectedTag,
@@ -1564,6 +1657,47 @@ function selfCheck() {
   assert.equal(alpha('rgba(17, 38, 36, 0.82)'), 0.82);
   assert.equal(groups.length * routes.length, 30);
   assert.equal(groups.filter((group) => group.anonymous).length * anonymousRoutes.length, 4);
+  checkFocusIdentity({ connected: true, sameActive: true });
+  assert.throws(() => checkFocusIdentity({ connected: false, sameActive: true }));
+  assert.throws(() => checkFocusIdentity({ connected: true, sameActive: false }));
+  const ansiOrigin = `${baseUrl}\u001b[22m`;
+  assert.throws(() => new URL(ansiOrigin), { code: 'ERR_INVALID_URL' });
+  assert.equal(diagnosticUrl(ansiOrigin), `${baseUrl}/`);
+  const malformed = [
+    'http://',
+    'https://[',
+    'http://127.0.0.1:invalid',
+    '',
+    null,
+    undefined,
+    {
+      toString() {
+        throw new Error('denied string conversion');
+      },
+    },
+  ];
+  for (const value of malformed) assert.doesNotThrow(() => diagnosticUrl(value));
+  const raw = new Error(`route.fetch failed at ${ansiOrigin}/assets/file.js?token=private-probe`);
+  const original = originalError(raw);
+  assert.equal(original.message, raw.message);
+  assert.equal(original.stack, raw.stack);
+  const formatted = diagnosticError(raw, ['private-probe']);
+  assert.ok(!formatted.includes('\u001b') && !formatted.includes('token=') && !formatted.includes('private-probe'));
+  for (const value of [
+    null,
+    undefined,
+    {
+      get stack() {
+        throw new Error('denied stack');
+      },
+    },
+    {
+      toString() {
+        throw new Error('denied conversion');
+      },
+    },
+  ])
+    assert.doesNotThrow(() => diagnosticError(value));
   return {
     passed: true,
     browserStarted: false,
@@ -1573,6 +1707,10 @@ function selfCheck() {
     rejectedUnsafeCases: negatives,
     authenticatedCompositions: 30,
     anonymousCompositions: 4,
+    focusIdentityNegatives: 2,
+    loggerMalformedUrlCases: malformed.length + 1,
+    loggerErrorShapeCases: 4,
+    originalLoggerAnsiNegativeReproduced: true,
   };
 }
 if (require.main === module) {

@@ -252,7 +252,7 @@ export default function Updates() {
               <Link className="desktop-update-app" to={`/apps/${storeId}/${appId}`} key={info.urn}>
                 <AppLogo urn={info.urn} size={42} alt="" />
                 <span>
-                  <strong>{info.name}</strong>
+                  <strong title={info.name}>{info.name}</strong>
                   <small>
                     Version {app.version} → {metadata.latestVersion}
                   </small>

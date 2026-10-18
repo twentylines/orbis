@@ -1,9 +1,16 @@
 # Orbis changelog
 
-## In progress — process reading position and compact gutters
+## In progress — Updates and compact system-model spacing
+
+- Keep Updates cards at their natural height and separate stacked system readings from the transformed server model. Reflow headings/app rows and CPU/memory columns with enlarged text; preserve accessible long app names. Verify28 native and8 independent doubled-text source compositions after retaining real overflow failures.
+- Preserve original browser forwarding exceptions before diagnostic formatting; handle ANSI/malformed URL text safely. Keep incomplete browser runs and their original failure/cleanup flags.
+
+## Beta49 — 18 October 2026
+
+### Process reading position and compact gutters
 
 - Keep the previous CPU sample, explicitly delayed with its original timestamp, while new comparisons are pending. Keep Memory current and replace the old ranking when fresh CPU readings arrive. Initial warmup does not invent previous data.
-- Reproduce the preceding end-of-scroll clamp; verify three source viewport/text cases and a composed40-state functional matrix. Match compact Docker/process panel gutters through the shared padding token. Actual published acceptance still requires a new release.
+- Reproduce the preceding end-of-scroll clamp; verify three source viewport/text cases and a composed40-state functional matrix. Match compact Docker/process panel gutters through the shared padding token. The published desktop Monitor refresh preserves exact DOM focus and0px position. Full native/enlarged route acceptance remains unfinished because of verifier failures and manually identified spacing defects; see [actual evidence](screenshots/live-beta49/README.md).
 
 ## Beta48 — 18 October 2026
 

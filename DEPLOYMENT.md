@@ -1,5 +1,11 @@
 # Orbis build and migration rehearsal
 
+## Published beta49: update accepted, UI acceptance incomplete (18 October 2026)
+
+Immutable source`39855692be86339565204d0d9d468402531e9f08`, index`sha256:3285fb07e8538ab70664733eb4ce39a6665f0172525fe38294e8f88563b44f1b`, both Linux architectures; main CI39121947726/integration39121947744 and release39122221216 pass. Reviewed primary48→49 job`4e1bfce5-5087-40ec-89f4-9b74a75d1020` completes at the exact healthy image. Seven full saved-record groups/two apps/28 task outcomes remain exact. Independent stopped48 snapshot3,597entries/2,832files/167,953,090bytes/treeSHA`2990bdc377bb8c4022f9c87b7f283983691709c0016aecd421e426e4efc6c24b`, with protected trees matching.
+
+The actual desktop Monitor refresh now passes0px position/exact DOM focus. R1 then rejects wrong verifier target selection; R2 accepts25 authenticated arrivals before a diagnostic URL parser crash, leaving9 planned views unexecuted. Explicit final cleanup/data comparison is not proved for R2; root's separate GET-only after-stop verification proves full records/tasks/observer/core/default preservation and absence of Playwright Chrome. The underlying forwarding exception remains unknown. Manual card/model spacing findings have newer source corrections. [Exact released evidence and limitations](screenshots/live-beta49/README.md), [source spacing](screenshots/spacing-followup/README.md). Hades and separate40/47 fixtures are unchanged.
+
 ## Published beta48: update accepted, UI audit rejected (18 October 2026)
 
 Immutable source `48089d6797be81947c96cfa13654bb597ef20b6b`, index `sha256:2c06d598df5d288895aed475628dd09b04213a4eda4283e0587c51ca87fb3cef`, both Linux architectures. Source CI39118077089/integration39118076942 and release39118221112 pass; prepared verifier checkpoint e3e6c778 CI39118748351/integration39118748370 pass. Actual reviewed primary46→48 job `0c126476-da99-4541-ae2d-6406ca1f6d2b` completes at the exact healthy image, retaining full app/store/preferences/links/user context, two app records and all28 task outcomes. Independent stopped snapshot reads3,597 entries/2,832 files/167,862,745 bytes and matching protected trees.

@@ -130,12 +130,15 @@
 }
 .desktop-host-overview-readings {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5em), 1fr));
   gap: 16px;
   max-width: 520px;
   margin-top: 24px;
   border-top: 1px solid var(--desktop-line);
   padding-top: 17px;
+}
+.desktop-host-overview-readings > div {
+  min-width: 0;
 }
 .desktop-host-overview-readings span,
 .desktop-host-overview-readings strong {
@@ -484,6 +487,7 @@
 @container (max-width: 900px) {
   .desktop-host-overview {
     grid-template-columns: minmax(0, 1fr);
+    row-gap: 32px;
     padding: var(--orbis-compact-panel-space, 28px);
   }
   .desktop-host-visual {
@@ -533,9 +537,6 @@
   .desktop-monitor .desktop-view-heading > a {
     display: inline-block;
     margin-top: 12px;
-  }
-  .desktop-host-overview-readings {
-    grid-template-columns: 1fr 1fr;
   }
 }
 @container (max-width: 360px) {

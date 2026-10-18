@@ -71,6 +71,9 @@ async function measure(page, rootSelector) {
         continue;
       }
       const boundary = parent.getBoundingClientRect();
+      const allocation = parent.closest('.desktop-host-overview-copy,.desktop-updates-card');
+      const allocationBox = allocation?.getBoundingClientRect();
+      const allocationStyle = allocation ? getComputedStyle(allocation) : null;
       for (const match of node.textContent.matchAll(/[A-Za-z]{3,}|\d[\d,.]*%?/g)) {
         const range = document.createRange();
         range.setStart(node, match.index);
@@ -80,6 +83,22 @@ async function measure(page, rootSelector) {
         for (const r of painted)
           if (r.left < boundary.left - 1 || r.right > boundary.right + 1)
             clipped.push({ word: match[0], context: parent.textContent, rect: r, bounds: { left: boundary.left, right: boundary.right } });
+        if (allocationBox)
+          for (const r of painted)
+            if (
+              r.left < allocationBox.left + Number.parseFloat(allocationStyle.paddingLeft) - 1 ||
+              r.right > allocationBox.right - Number.parseFloat(allocationStyle.paddingRight) + 1
+            )
+              clipped.push({
+                word: match[0],
+                context: parent.textContent,
+                rect: r,
+                allocatedAncestor: allocation.className,
+                bounds: {
+                  left: allocationBox.left + Number.parseFloat(allocationStyle.paddingLeft),
+                  right: allocationBox.right - Number.parseFloat(allocationStyle.paddingRight),
+                },
+              });
       }
     }
     const controls = [...root.querySelectorAll(controlsSelector)]
@@ -120,6 +139,14 @@ async function measure(page, rootSelector) {
     const headingLabel = heading?.querySelector('h1');
     const content = frame?.querySelector('.desktop-window-content');
     const setting = root.querySelector('.desktop-settings');
+    const applicationCard = root.querySelector('[aria-labelledby="application-updates-title"]');
+    const applicationAction = applicationCard?.querySelector('.desktop-update-link');
+    const applicationStyle = applicationCard ? getComputedStyle(applicationCard) : null;
+    const overview = root.querySelector('.desktop-host-overview');
+    const overviewCopy = overview?.querySelector('.desktop-host-overview-copy');
+    const machineFaces = overview
+      ? [...overview.querySelectorAll('.desktop-host-machine-front,.desktop-host-machine-side,.desktop-host-machine-top')].map(box)
+      : [];
     return {
       viewport: { width: innerWidth, height: innerHeight },
       documentWidth: document.documentElement.scrollWidth,
@@ -146,6 +173,24 @@ async function measure(page, rootSelector) {
       navigation: frame?.dataset.windowNavigation,
       content: content ? box(content) : null,
       settings: setting ? box(setting) : null,
+      applicationCardFit:
+        applicationCard && applicationAction
+          ? {
+              card: box(applicationCard),
+              action: box(applicationAction),
+              paddingBottom: Number.parseFloat(applicationStyle.paddingBottom),
+              borderBottom: Number.parseFloat(applicationStyle.borderBottomWidth),
+              actionMarginBottom: Number.parseFloat(getComputedStyle(applicationAction).marginBottom),
+            }
+          : null,
+      stackedMachineClearance:
+        overviewCopy && machineFaces.length && getComputedStyle(overview).gridTemplateColumns.trim().split(/\s+/).length === 1
+          ? {
+              copy: box(overviewCopy),
+              faces: machineFaces,
+              gap: Math.min(...machineFaces.map((face) => face.top)) - box(overviewCopy).bottom,
+            }
+          : null,
       panels: [
         ...root.querySelectorAll(
           '.workspace-activity,.workspace-operations,.workspace-attention,.desktop-host-overview,.desktop-telemetry-grid > section,.host-sensors,.host-processes,.host-device-history,.desktop-updates-card,.desktop-auth .card-body',
@@ -177,6 +222,15 @@ function checkGeometry(value, name) {
   assert.ok(value.documentWidth <= value.viewport.width, `${name}: document must not overflow horizontally`);
   assert.deepEqual(value.words, [], `${name}: ordinary words and values must not split into fragments`);
   assert.deepEqual(value.clipped, [], `${name}: text must not paint outside its actual allocated box`);
+  if (value.applicationCardFit) {
+    const { card, action, paddingBottom, borderBottom, actionMarginBottom } = value.applicationCardFit;
+    assert.ok(
+      card.bottom - action.bottom <= paddingBottom + borderBottom + actionMarginBottom + 2,
+      `${name}: Applications card must end at its content and intended padding rather than stretch to a taller sibling`,
+    );
+  }
+  if (value.stackedMachineClearance)
+    assert.ok(value.stackedMachineClearance.gap >= 16, `${name}: transformed server faces need at least16px clearance below system readings`);
   assert.ok(
     value.ellipses.every((item) => item.accessible),
     `${name}: deliberate identifier ellipsis must retain the complete accessible text`,
