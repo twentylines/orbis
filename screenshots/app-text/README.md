@@ -11,4 +11,4 @@ Current source fixtures, captured in Chrome on 16 October 2026. These use a long
 - [320px enlarged backup step](narrow-dark-update-text-2-backup.png)
 - [320px enlarged configuration review](narrow-light-update-text-2-configuration.png)
 
-These are full-page captures. The dock is fixed at its viewport position; page content scrolls behind it, with reserved space at the end. The usual metadata fixtures and functional app-detail captures in `../desktop-fixtures` have also been refreshed. `VISUAL-QA.md` records the assertions and evidence limits.
+These are full-page captures. The dock is fixed at its viewport position; page content scrolls behind it, with reserved space at the end. The usual metadata fixtures and functional app-detail captures in `../desktop-fixtures` have also been refreshed. [release notes](https://github.com/twentylines/orbis/releases) records the assertions and evidence limits.

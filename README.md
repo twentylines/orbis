@@ -4,33 +4,13 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 
 [Orbis on GitHub](https://github.com/twentylines/orbis) · [Beta previews](https://github.com/twentylines/orbis/releases) · [Development changelog](CHANGELOG.md)
 
-- [Current implementation and limits](IMPLEMENTATION.md)
-- [Portable handoff and next steps](HANDOFF.md)
-- [Original product brief](PRODUCT-BRIEF.md)
-- [Compact screen sizing and current source captures](screenshots/compact-scale/README.md)
-- [Isolated build and migration rehearsal](DEPLOYMENT.md)
-- [Released workspace and theme captures](screenshots/live-beta37/README.md)
-- [Released Apps/Store, glass chrome, update and login checks](screenshots/live-beta40/README.md)
-- [Beta49 update, preserved data and incomplete browser acceptance](screenshots/live-beta49/README.md)
-- [Current Updates and system-model spacing corrections](screenshots/spacing-followup/README.md)
-- [Beta48 update evidence and open UI rejection](screenshots/live-beta48/README.md)
-- [Published local account recovery](screenshots/live-beta47/README.md)
-- [Released modes, blurred bars and storage recovery](screenshots/live-beta41/README.md)
-- [Host devices and actual beta42 checks](screenshots/live-beta42/README.md)
-- [Host processes and actual beta43 checks](screenshots/live-beta43/README.md)
-- [Current hardware sensors, rim-free glass and actual beta46 checks](screenshots/live-beta46/README.md)
-- [Device history and actual beta45 collection/restart checks](screenshots/live-beta45/README.md)
-- [Device-history source checks, installed helper and current runtime gate](screenshots/host-device-history/README.md)
-- [Follow system, enlarged text and browser storage checks](screenshots/system-mode/README.md)
-- [Multi-homelab phase](MULTI-HOMELAB.md)
-- [Update Center contract](UPDATES.md)
-- [Authentication verification and remaining cases](AUTHENTICATION-QA.md)
-- [Restricted Linux host service setup](HOST-SERVICE.md)
-- [Feature preservation checklist](FEATURE-INVENTORY.md)
-- [App-store recovery and network limits](APP-STORES.md)
-- [Docker health and resource readings](MONITORING.md)
-- [Persistent lifecycle tasks](TASKS.md)
-- [Desktop window controls and behavior](DESKTOP-WINDOWS.md)
+- [Releases and changelogs](https://github.com/twentylines/orbis/releases)
+- [Installation and migration](DEPLOYMENT.md)
+- [Update Center](UPDATES.md)
+- [Linux host service](HOST-SERVICE.md)
+- [App stores](APP-STORES.md)
+- [Monitoring](MONITORING.md)
+- [Desktop windows](DESKTOP-WINDOWS.md)
 
 ![Published Orbis beta46 Monitor with real isolated host readings and translucent glass chrome](screenshots/live-beta46/1440x1120-text1-initial-monitor-chrome-actual-viewport.png)
 
@@ -40,7 +20,7 @@ The following workspace and Appearance captures record beta41:
 
 [Dark workspace](screenshots/live-beta41/1440x1120-text1-home-dark-actual-viewport.png) · [Phone workspace](screenshots/live-beta41/390x844-text1-home-light-actual-viewport.png) · [Phone in dark mode](screenshots/live-beta41/390x844-text1-home-dark-actual-viewport.png) · [Monitor](screenshots/live-beta41/1440x1120-text1-monitor-light-actual-viewport.png) · [Appearance](screenshots/live-beta41/1440x1120-text1-appearance-light-actual-viewport.png)
 
-[Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Search](screenshots/desktop-fixtures/desktop-search.png) · [Home app picker](screenshots/desktop-fixtures/desktop-dark-home-picker.png) · [All Home apps](screenshots/desktop-fixtures/desktop-dark-home-all-apps.png) · [Inspection record](VISUAL-QA.md)
+[Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Search](screenshots/desktop-fixtures/desktop-search.png) · [Home app picker](screenshots/desktop-fixtures/desktop-dark-home-picker.png) · [All Home apps](screenshots/desktop-fixtures/desktop-dark-home-all-apps.png)
 
 [Updated Apps/Store spacing and enlarged text](screenshots/tile-comfort/README.md) · [Copied authenticator account over HTTPS](screenshots/authentication/README.md)
 
@@ -245,5 +225,3 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 
 Did you contribute and want to see your name listed in the README? Write a comment [here](https://github.com/runtipi/runtipi/issues/380)
 This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
-
-The full product scope, verified boundaries and remaining acceptance work are tracked in [ACCEPTANCE.md](ACCEPTANCE.md). The current full-goal estimate is recorded in [PROGRESS.md](PROGRESS.md).

@@ -34,4 +34,4 @@ This model does not embed third-party applications or claim that their pages can
 
 ## Verification
 
-Preference HTTP tests cover authentication, round trips, old accounts, unknown tool IDs, invalid modes, fractional/out-of-range coordinates and rejected extra window data. Geometry tests cover display changes, useful minimum sizes, equal snapping and smaller-display fallback. Browser checks cover visible layout, draft preservation, exact-route/history behavior, pointer/keyboard controls, resizing and log/poll cleanup. Current iteration results are recorded in `VISUAL-QA.md` before publication.
+Preference HTTP tests cover authentication, round trips, old accounts, unknown tool IDs, invalid modes, fractional/out-of-range coordinates and rejected extra window data. Geometry tests cover display changes, useful minimum sizes, equal snapping and smaller-display fallback. Browser checks cover visible layout, draft preservation, exact-route/history behavior, pointer/keyboard controls, resizing and log/poll cleanup. Current iteration results are recorded in [release notes](https://github.com/twentylines/orbis/releases) before publication.

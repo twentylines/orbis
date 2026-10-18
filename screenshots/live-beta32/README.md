@@ -9,7 +9,7 @@ These 390×844 dark-mode captures use the exact published beta32 image and real 
 | [Network timeout](selective-enable-timeout-390.png) | HTTP502 after 30,047.70 ms; database row stays disabled, previous cache/data remain intact, same dialog retains entered values and a translated themed inline error |
 | [Retry succeeds](selective-enable-retry-success-390.png) | Root resumes Git; Save in the same mounted dialog returns HTTP200 and restores the original state |
 
-There were no browser errors or success notices for the failed request. The retained error and pending surfaces were also inspected directly for padding, alignment and readable whole labels. Broader source UI matrices remain separate evidence in [VISUAL-QA.md](../../VISUAL-QA.md).
+There were no browser errors or success notices for the failed request. The retained error and pending surfaces were also inspected directly for padding, alignment and readable whole labels. Broader source UI matrices remain separate evidence in [Release notes](https://github.com/twentylines/orbis/releases).
 
 The post-operation Settings captures also expose a separate layout defect: its window header can pass behind the sticky system bar during page scrolling. That remains open in this released image; the passed modal recovery checks do not establish a correct scrolled tool layout.
 

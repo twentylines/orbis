@@ -4,4 +4,4 @@ The exact published arm64 image passes a reviewed beta38→39 update, stopped-sn
 
 [Sanitized assertions](assertions.json) · [Blank phone Login](login-phone.png)
 
-Frontend source is unchanged from beta38, so the bounded native gallery and its known tile/filter findings remain explicit in [that review](../live-beta38/README.md). This run does not repeat theme/window mutations or establish copied TOTP/HTTPS/forward-auth adoption. The separate x86 enrollment/adoption work and new HTTP error classification are recorded in `AUTHENTICATION-QA.md`. Hades is unchanged.
+Frontend source is unchanged from beta38, so the bounded native gallery and its known tile/filter findings remain explicit in [that review](../live-beta38/README.md). This run does not repeat theme/window mutations or establish copied TOTP/HTTPS/forward-auth adoption. The separate x86 enrollment/adoption work and new HTTP error classification are recorded in [release notes](https://github.com/twentylines/orbis/releases). Hades is unchanged.

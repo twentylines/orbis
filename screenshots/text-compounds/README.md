@@ -15,4 +15,4 @@ Chrome captures from this iteration's production frontend builds, using isolated
 - [Enlarged tablet connection status](tablet-light-reconnecting-text200.png)
 - [Missing-address fallback](tablet-light-address-unavailable-text200.png)
 
-`VISUAL-QA.md` records the checked scenarios and their limits. `DEPLOYMENT.md` separates published-image and actual-backend evidence.
+[release notes](https://github.com/twentylines/orbis/releases) records the checked scenarios and their limits. `DEPLOYMENT.md` separates published-image and actual-backend evidence.

@@ -6,4 +6,4 @@ The current page/window flow matrix covers 1440, 768, 390 and 320px, light/dark,
 
 Long repository addresses have deliberate ellipsis with the complete link text and hover title. Ordinary words remain whole. At 320px with doubled text, long dialog content scrolls inside the panel while the footer stays fixed. The two refreshed `error-scrolled` captures show the end of that content after native wheel scrolling, with at least 44px room below the last line and a stationary reachable footer.
 
-The shared switch keeps its track aligned with the label: 0px centre difference and 10px separation in the final app-store matrix. Separate switch interaction checks and released-image/backend results are recorded in `VISUAL-QA.md` and `DEPLOYMENT.md`.
+The shared switch keeps its track aligned with the label: 0px centre difference and 10px separation in the final app-store matrix. Separate switch interaction checks and released-image/backend results are recorded in [release notes](https://github.com/twentylines/orbis/releases) and `DEPLOYMENT.md`.

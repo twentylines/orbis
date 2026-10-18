@@ -184,7 +184,7 @@ The guarded runner is `scripts/live-store-network-qa.cjs`. [Released 390px captu
 
 ## Published beta 31 store recovery and OTA verification (16 October 2026)
 
-Source commit `da09a630b6c4ce2740e632700fd6d123c9f31dc4` passed main CI `38832184484` and integration `38832184208`. [Beta 31](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.31) points to that commit; release workflow `38832348128` passed verification and publication. The read-only checker matched the tag, commit and exact OCI index `sha256:cfcf30d9b733fcd177b49c2b7471f2024baba62d665a0f4f7364bb2fdc0e16ca`, including linux/amd64 and linux/arm64. Source layout and switch checks are recorded in `VISUAL-QA.md`.
+Source commit `da09a630b6c4ce2740e632700fd6d123c9f31dc4` passed main CI `38832184484` and integration `38832184208`. [Beta 31](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.31) points to that commit; release workflow `38832348128` passed verification and publication. The read-only checker matched the tag, commit and exact OCI index `sha256:cfcf30d9b733fcd177b49c2b7471f2024baba62d665a0f4f7364bb2fdc0e16ca`, including linux/amd64 and linux/arm64. Source layout and switch checks are recorded in [release notes](https://github.com/twentylines/orbis/releases).
 
 The real browser reviewed and submitted the isolated arm64 beta30→31 update. Host job `eecc5cbf-ff6f-48d8-b9dd-2cb68f41633d` completed; the core became healthy at the exact published image. Both app records, account preferences and all 28 previous terminal task outcomes matched. An independent stopped beta30 snapshot verification covered 3,579 entries, 2,815 files and 97,176,778 bytes, with tree hash `56241c105ac9a31eb1acd52be3340d053bb95d1164fe0749c2ad0fa5ad30e386`. A separate before/after check of `apps`, `app-data` and `user-config` matched all 33 entries and 17 files, including contents, modes, numeric ownership and symlink targets; its hash is `737d596d5ecb7ad5bd668cbcc17b1dae401c046dbab336522c480481f64c9656`.
 
@@ -196,7 +196,7 @@ The guarded runner is `scripts/live-store-recovery-qa.cjs`; its private session,
 
 ## Published beta 30 text and OTA verification (16 October 2026)
 
-Source commit `58840f531a298afaa2eb8e2aa8d41e45411d54b6` passed main CI `38823880436` and integration `38823880336`. [Beta 30](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.30) points to that exact commit; release workflow `38824082927` passed its verification and publication. The read-only release checker matched the tag, commit and exact OCI index `sha256:43a49e9f3284aaedb915ecb807c26bda580228ab1709a90e4cd35cbc71de8bc6`, including linux/amd64 and linux/arm64. Source text/keyboard inspection and refreshed screenshots are recorded in `VISUAL-QA.md`.
+Source commit `58840f531a298afaa2eb8e2aa8d41e45411d54b6` passed main CI `38823880436` and integration `38823880336`. [Beta 30](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.30) points to that exact commit; release workflow `38824082927` passed its verification and publication. The read-only release checker matched the tag, commit and exact OCI index `sha256:43a49e9f3284aaedb915ecb807c26bda580228ab1709a90e4cd35cbc71de8bc6`, including linux/amd64 and linux/arm64. Source text/keyboard inspection and refreshed screenshots are recorded in [release notes](https://github.com/twentylines/orbis/releases).
 
 The browser reviewed that digest and submitted the owned arm64 beta29→30 update. Host job `61580da4-efb8-42da-8413-376e9115804b` completed; the core is healthy at the exact published digest. Both app records, account preferences and all 28 prior terminal task outcomes matched. The first audit attempt stopped at authentication before any update because its test session had expired; the private owned-account session was renewed and the complete rerun passed with no browser errors. Hades has not been accessed.
 
@@ -236,11 +236,11 @@ The published image passed 30 browser compositions at 1440/390/320px in both mod
 
 A separate released-image window audit passed unsaved-draft minimize/restore, one debounced drag write, maximize/restore, 16px snap gap, saved bounds after clearing local cache/reload, independent tool placement, phone fallback and configured-IP visibility. Preferences were restored and compared again; there were no page errors.
 
-[Current released captures](screenshots/live-beta28) include Home, enlarged phone text, login, controlled recovery/diagnostics, controlled two-factor inputs and real window states. Source fixture/long-name inspection is in `VISUAL-QA.md`. The default Docker context stayed `default`. These are isolated synthetic-data results; copied real homelab migration, external storage/HTTPS and full production acceptance remain open. Hades was not accessed.
+[Current released captures](screenshots/live-beta28) include Home, enlarged phone text, login, controlled recovery/diagnostics, controlled two-factor inputs and real window states. Source fixture/long-name inspection is in [release notes](https://github.com/twentylines/orbis/releases). The default Docker context stayed `default`. These are isolated synthetic-data results; copied real homelab migration, external storage/HTTPS and full production acceptance remain open. Hades was not accessed.
 
 ## Beta 25 publication and update investigation (16 October 2026)
 
-[Beta 25](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.25) passed protected PR 23 and release workflow `38775867799`. The checker verified commit `95618c6002b15c9c04fe89c9f7c6d141dfbf5841`, the manifest and exact OCI index `sha256:daf14cd97068665a0c645679fd3bb51b63afc4e8e9c0bd6c708f07ad1ff9d0ce`, with linux/amd64 and linux/arm64 entries. Its compact error/authentication screens, wider desktop and enlarged-text fixes passed the fixture and independent browser matrices recorded in `VISUAL-QA.md`.
+[Beta 25](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.25) passed protected PR 23 and release workflow `38775867799`. The checker verified commit `95618c6002b15c9c04fe89c9f7c6d141dfbf5841`, the manifest and exact OCI index `sha256:daf14cd97068665a0c645679fd3bb51b63afc4e8e9c0bd6c708f07ad1ff9d0ce`, with linux/amd64 and linux/arm64 entries. Its compact error/authentication screens, wider desktop and enlarged-text fixes passed the fixture and independent browser matrices recorded in [release notes](https://github.com/twentylines/orbis/releases).
 
 The first browser-requested beta24→25 transaction, job `b5a627ba-cffd-4b83-a2f9-ec415ac222fc`, rolled back before staging the new image. The incomplete snapshot has no verification sidecar and has not been used for restoration. Beta24 returned healthy at its enrolled digest. The old helper discarded the underlying failure, so its exact cause is unconfirmed; publication is not evidence of a beta25 runtime pass.
 
@@ -301,7 +301,7 @@ ORBIS_AUDIT_COOKIE_FILE=/path/to/private-cookie-jar.txt ORBIS_AUDIT_RELEASE_FILE
 
 An idle pre-update core spot sample was 140.2 MiB/0.00% CPU; a post-audit sample was 162.9 MiB/0.12%. This is not a controlled memory or sustained-performance comparison. These results cover synthetic data on arm64. AMD64 runtime, copied real homelab data, external mounts, independent backup rehearsal and production cutover remain outstanding. Hades was untouched.
 
-Historical rehearsals follow; version-specific limits describe those runs. The full current acceptance record is in `ACCEPTANCE.md`.
+Historical rehearsals follow; version-specific limits describe those runs. The full current acceptance record is in [release notes](https://github.com/twentylines/orbis/releases).
 
 ## Published beta 21 runtime verification (15 October 2026)
 
@@ -313,7 +313,7 @@ On the published image, real `whoami:migrated` start/stop requests completed as 
 
 The 390 px browser saved pins/show-all and hidden lower cards, reloaded the account-backed preferences, restored the cards, searched both installed/catalogue apps and navigated to Updates and Appearance. Escape returned focus. The original preferences were restored through the authenticated API and compared after restoration. No page errors occurred. A separate browser decoded all 248 catalogue/installed icons with zero failures.
 
-Live captures: [desktop](screenshots/live-beta21/workspace-desktop.png), [phone workspace during the interaction check](screenshots/live-beta21/workspace-mobile.png), [search](screenshots/live-beta21/search-mobile.png), [app resources while running](screenshots/live-beta21/app-resources.png). Fixture inspection and its wider layout matrix are in `VISUAL-QA.md`.
+Live captures: [desktop](screenshots/live-beta21/workspace-desktop.png), [phone workspace during the interaction check](screenshots/live-beta21/workspace-mobile.png), [search](screenshots/live-beta21/search-mobile.png), [app resources while running](screenshots/live-beta21/app-resources.png). Fixture inspection and its wider layout matrix are in [release notes](https://github.com/twentylines/orbis/releases).
 
 These are isolated synthetic-data/arm64 results. AMD64 image publication does not establish an AMD64 boot; copied real-data migration, external mounts/volumes, independent backup rehearsal and Hades cutover remain outstanding. Hades was untouched.
 
@@ -486,4 +486,4 @@ Four actual native Apps/Store views at 1440×1120 and 390×844 pass painted row/
 
 The separate copied x86 account passes retained-password/TOTP login over scoped verified HTTPS with correct HTTP 400/429 classification and an actual phone browser retry. Its independently verified stopped-copy adoption retains the original encrypted secret and account hash; it does not establish x86 reviewed OTA or real homelab migration.
 
-Two actual protected app hosts also pass the existing proxy middleware's grant exchange, host-only cookies, reload, cross-host/replay rejection, real grant expiry and logout revocation. Both temporary services are removed, the copied core remains healthy and the Mac's default Docker context remains unchanged. See [AUTHENTICATION-QA.md](AUTHENTICATION-QA.md) for the exact setup, assertions and remaining external proxy/certificate/reset/migration requirements. Hades is unchanged.
+Two actual protected app hosts also pass the existing proxy middleware's grant exchange, host-only cookies, reload, cross-host/replay rejection, real grant expiry and logout revocation. Both temporary services are removed, the copied core remains healthy and the Mac's default Docker context remains unchanged. See [Release notes](https://github.com/twentylines/orbis/releases) for the exact setup, assertions and remaining external proxy/certificate/reset/migration requirements. Hades is unchanged.

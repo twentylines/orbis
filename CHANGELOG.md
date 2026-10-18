@@ -15,7 +15,6 @@
 ## Beta48 — 18 October 2026
 
 - Add compact-screen type/spacing across tools, app details and auth. Verify32 native compositions, both phone widths/modes with doubled text and20 narrow surface samples. Retain source screenshots and target-size limitations.
-- Add a portable handoff, original brief and Claude entry point, with a full-checkpoint rule at1% account allowance remaining. Include the guarded beta47 recovery UI verifier and independently checked adoption/actual CLI recovery evidence.
 
 ### Recovery cache faults
 
@@ -87,7 +86,7 @@
 
 - Added saved floating/maximized/snapped tool windows, pointer/keyboard move/resize, mobile fallback and minimize/restore that preserves the current form and URL. Hidden tools pause their polling and log streams; global events and tasks stay live.
 - Corrected content-width layouts, long Store headings/server labels, create/edit/update titles, input label associations, system-log IDs/limits and ignored-update attention counts. Independent window geometry, flow, motion and screenshot checks pass.
-- Added strict window-state persistence, visibility-only editor loader guards and declared-field preference import/export. The current single-tool model and remaining acceptance scope are documented in `DESKTOP-WINDOWS.md` and `ACCEPTANCE.md`.
+- Added strict window-state persistence, visibility-only editor loader guards and declared-field preference import/export. The current single-tool model and remaining acceptance scope are documented in `DESKTOP-WINDOWS.md` and [release notes](https://github.com/twentylines/orbis/releases).
 
 - Added a saved show-all Home app mode, a direct pin picker and automatic compaction of Recent operations/Needs attention. App scrolling stays contained while either lower widget is enabled.
 - Added directional section slides and a full-workspace search expansion with installed apps, catalogue apps and Settings/Updates destinations. Keyboard, interrupted motion, error/retry states and reduced-motion support passed independent browser inspection.
@@ -99,7 +98,7 @@
 
 - Corrected header hover alignment, toggle width changes and tablet overlaps; removed bright white rims and double dialog frames. Dialogs and menus now share Orbis tokens. Simplified Appearance and app controls after independent visual audits.
 
-- Added bounded server-side metric history with seven-day retention, inspectable charts, measured downsampling and responsive Monitor ranges. Full outstanding acceptance requirements are tracked in `ACCEPTANCE.md`.
+- Added bounded server-side metric history with seven-day retention, inspectable charts, measured downsampling and responsive Monitor ranges. Full outstanding acceptance requirements are tracked in [release notes](https://github.com/twentylines/orbis/releases).
 
 - Fixed the exposed strip above the desktop, widened chrome/window insets, removed duplicate route titles, and combined storage with System status. Recent operations now sits beneath the launcher.
 - Added Docker health beside installed apps, shared per-container telemetry, CPU/memory consumer rankings, and persistent lifecycle task history. The isolated icon audit decoded 248 app icons successfully.

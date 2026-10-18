@@ -97,3 +97,21 @@ docs/jira/
 .internal/media/*
 .internal/traefik/*
 !.internal/cache/.gitkeep
+
+# Local agent instructions, prompts and working notes
+AGENTS.md
+CLAUDE.md
+HANDOFF.md
+PRODUCT-BRIEF.md
+PROGRESS.md
+ACCEPTANCE.md
+IMPLEMENTATION.md
+DESIGN.md
+FEATURE-INVENTORY.md
+MULTI-HOMELAB.md
+AUTHENTICATION-QA.md
+VISUAL-QA.md
+/.github/copilot-instructions.md
+/.github/memory-bank/
+/.github/prompts/
+/.orbis-private/

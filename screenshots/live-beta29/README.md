@@ -11,4 +11,4 @@ HTML, scripts, styles and system/container reads come from that published server
 - [320px enlarged backup step](320-dark-update-text-2-backup.png)
 - [Desktop enlarged configuration review](1440-dark-update-text-2-configuration.png)
 
-Full-page screenshots preserve the fixed dock at its viewport position. `DEPLOYMENT.md` records the verified image, retained records and snapshot; `VISUAL-QA.md` records source checks and limits. Hades was not accessed.
+Full-page screenshots preserve the fixed dock at its viewport position. `DEPLOYMENT.md` records the verified image, retained records and snapshot; [release notes](https://github.com/twentylines/orbis/releases) records source checks and limits. Hades was not accessed.

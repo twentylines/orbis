@@ -14,4 +14,4 @@ HTML, scripts and styles come from the published image. Each width first checks 
 - [Compose controls](320-dark-text2-compose-environment-controls.png)
 - [Native Compose actions](320-light-text1-compose-footer-controls.png)
 
-The bounded published-image run passed 17 surface samples at 1440/768/320px, including native light and enlarged dark phone/tablet cases. Actual app records and preferences matched before/after; the separate file comparison also matched. `DEPLOYMENT.md` records OTA, digest and snapshot evidence. Broader local fixture inspection remains in `VISUAL-QA.md`.
+The bounded published-image run passed 17 surface samples at 1440/768/320px, including native light and enlarged dark phone/tablet cases. Actual app records and preferences matched before/after; the separate file comparison also matched. `DEPLOYMENT.md` records OTA, digest and snapshot evidence. Broader local fixture inspection remains in [release notes](https://github.com/twentylines/orbis/releases).
