@@ -1,0 +1,42 @@
+{
+  "schema": "orbis.snapshot.v1",
+  "release": "v0.1.0-beta.45",
+  "dockerContext": "default",
+  "createdAt": "2026-10-18T08:29:46.551144+00:00",
+  "treeSha256": "4ec23bbc8284bb5ee65bbe701306840eadc0d3c98511743302c2782d72c920c8",
+  "entries": 3593,
+  "files": 2828,
+  "bytes": 150349395,
+  "sourceRootMode": 448,
+  "privateSnapshot": true,
+  "protectedTrees": {
+    "apps": {
+      "treeSha256": "936d3d92bce3c6b2cb71c6b95f668694dd2332c8d235b1f7523a96940b5fd712",
+      "entries": 17,
+      "files": 11,
+      "bytes": 30499,
+      "matched": true
+    },
+    "app-data": {
+      "treeSha256": "b6296320cf7ac8facafa7700f6a00fbdcd5117e07d8dfb8ca36d916e2e25eb0e",
+      "entries": 8,
+      "files": 3,
+      "bytes": 3281,
+      "matched": true
+    },
+    "user-config": {
+      "treeSha256": "32411613fb37b8e57f770775e8e9ecacbc2508d9dec71831d79a986e3675ba17",
+      "entries": 5,
+      "files": 3,
+      "bytes": 327,
+      "matched": true
+    },
+    "repos": {
+      "treeSha256": "6d859df339a955bce8a3d77fa8176d57ff529603d773782d418e4903463f3c94",
+      "entries": 2192,
+      "files": 1508,
+      "bytes": 95841759,
+      "matched": true
+    }
+  }
+}

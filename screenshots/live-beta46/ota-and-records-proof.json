@@ -1,0 +1,54 @@
+{
+  "passed": true,
+  "tag": "v0.1.0-beta.46",
+  "commit": "762d7e0b5042e3993bb25fc65c3cff763be9579f",
+  "image": "ghcr.io/twentylines/orbis@sha256:2cb89cd81a7e5b58a849df85c43803408e8ae234b2cf426dbbc47d63ca14a287",
+  "beforeRecordsMatched": true,
+  "notesReviewed": true,
+  "plan": {
+    "planId": "465defdf-1521-4bfd-8fbb-9f61800d3512",
+    "currentTag": "v0.1.0-beta.45",
+    "targetTag": "v0.1.0-beta.46",
+    "targetDigest": "sha256:2cb89cd81a7e5b58a849df85c43803408e8ae234b2cf426dbbc47d63ca14a287",
+    "snapshotBytes": 150337182,
+    "appsMustBeStopped": true
+  },
+  "apply": {
+    "jobId": "465defdf-1521-4bfd-8fbb-9f61800d3512",
+    "state": "running"
+  },
+  "blocked": [],
+  "pageErrors": [],
+  "cleanup": {
+    "page": true,
+    "context": true,
+    "browser": true
+  },
+  "taskComparison": "Exact task records and retention metadata; generated top-level read timestamps validated and excluded",
+  "recordsAndTasksPreserved": true,
+  "build": {
+    "version": "v0.1.0-beta.46",
+    "commit": "762d7e0b5042e3993bb25fc65c3cff763be9579f",
+    "imageDigest": "sha256:2cb89cd81a7e5b58a849df85c43803408e8ae234b2cf426dbbc47d63ca14a287",
+    "runtipiCompatibility": "v4.10.1"
+  },
+  "job": {
+    "id": "465defdf-1521-4bfd-8fbb-9f61800d3512",
+    "state": "complete",
+    "targetTag": "v0.1.0-beta.46",
+    "startedAt": 1792312155.178662,
+    "finishedAt": 1792312205.1618686,
+    "message": "Orbis reached the reviewed image and healthy state."
+  },
+  "installedAppRecords": 2,
+  "taskOutcomes": 28,
+  "generatedTaskReadTimestamps": {
+    "before": "2026-10-18T08:29:00.545Z",
+    "after": "2026-10-18T08:30:07.004Z"
+  },
+  "savedTaskRecordsAndRetentionMetadataMatch": true,
+  "privateFullRecordBaselineSha256": "6ab60d3fb6ec3032970049c8530c6d0e585eca252445c255d0a7ec5ccabb5228",
+  "privateFullExecutionReportSha256": "8d81bbde153af0a63c5edf7742044089b47655cc2fee316c7ff2f6a76ab9b22d",
+  "executedDriverSha256": "1563f96d10d493ac36d816208a66fc7d1daa07c68562c6835ba0a537953f75c2",
+  "scope": "Actual UI-reviewed beta45 to beta46 core update on owned isolated arm64; full app/store/preferences and saved task objects/retention metadata match. Generated top-level tasks read timestamps are validated and excluded. Full account/task bodies remain private; Hades unchanged."
+}

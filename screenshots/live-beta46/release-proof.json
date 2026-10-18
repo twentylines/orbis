@@ -1,0 +1,6 @@
+{
+  "tag": "v0.1.0-beta.46",
+  "commit": "762d7e0b5042e3993bb25fc65c3cff763be9579f",
+  "image": "ghcr.io/twentylines/orbis@sha256:2cb89cd81a7e5b58a849df85c43803408e8ae234b2cf426dbbc47d63ca14a287",
+  "platforms": ["linux/amd64", "linux/arm64"]
+}

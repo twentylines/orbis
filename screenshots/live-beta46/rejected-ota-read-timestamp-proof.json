@@ -1,0 +1,15 @@
+{
+  "passed": false,
+  "stage": "Read-only pre-browser baseline guard",
+  "reason": "Verifier incorrectly compared the generated top-level tasks sampledAt timestamp as persisted data. Source tasks.service.ts getTaskHistory returns new Date().toISOString() for each read. R2 validates both timestamps and compares every other response field exactly.",
+  "updatePlanCreated": false,
+  "updateApplied": false,
+  "browserPageCreated": false,
+  "cleanup": {
+    "context": true,
+    "browser": true
+  },
+  "privateRejectedReportSha256": "ad4bef7aa20ab0b398e23f85b5d5d8f797716bb88f01aeeed13dbffb98ab331c",
+  "executedRejectedDriverSha256": "dcde2bbc8461f6a6cad919b8b1b9604790fd6fc7f6df4d8581b13353aa8617c4",
+  "classification": "Verifier comparison error; no product failure inferred; original false report retained privately."
+}

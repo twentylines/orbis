@@ -1,0 +1,64 @@
+{
+  "release": {
+    "tag": "v0.1.0-beta.46",
+    "commit": "762d7e0b5042e3993bb25fc65c3cff763be9579f",
+    "digest": "sha256:2cb89cd81a7e5b58a849df85c43803408e8ae234b2cf426dbbc47d63ca14a287"
+  },
+  "publishedUi": {
+    "originalReportSha256": "ef7c2d602784963032bce4d762bf11c36a2f757f640c7b3063d717a9f14547a2",
+    "parsedReportSha256": "2cae495a1bfc6bfdba3ca65355b379874d0d1e5de09984658d8ea7a8860d24b9",
+    "completeParsedReportRestored": true,
+    "parts": 0,
+    "originalBytes": 87456,
+    "passed": true,
+    "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
+  },
+  "execution": {
+    "runnerSha256": "28b2568f12d6d9de64b245c3a1e19c410e7dce9e71acc09289b7169d939e14a3",
+    "pureSensorInspectorSha256": "f12c30bd3ec4a01ccdb08a636604d4dcbfe252915180e9e619a029b4f3c99c1c",
+    "pureBrowserUtilitiesSha256": "475a99d247c2ec05dde4fee36698c2bfee5efa6bf774b9851542dbbd87255aaf"
+  },
+  "captures": {
+    "1440x1120-text1-about-focused-actual-viewport.png": "69e99a0eb1f8e1d66ab8494a2cce363d6799a49232dabed9140874f3e44a1986",
+    "1440x1120-text1-about-reading-actual-viewport.png": "ceb2fd8738ddb060c393cfc48c83c9574f2d81f48e69ae956ef73fb861850bd2",
+    "1440x1120-text1-after-thirty-second-poll-actual-viewport.png": "fcacb25041d1d01cc3229c7d5dc2ec94dcea43a650766ed544c558c219a4a58b",
+    "1440x1120-text1-before-thirty-second-poll-actual-viewport.png": "69e99a0eb1f8e1d66ab8494a2cce363d6799a49232dabed9140874f3e44a1986",
+    "1440x1120-text1-initial-monitor-chrome-actual-viewport.png": "f73171d1243a72917b846d2010b29c7b3c2040e28bd3b612b06169408ffd4d56",
+    "1440x1120-text1-true-empty-reading-actual-viewport.png": "6691fc53cb8f5c18320df78c6186ace92a068807f3c2c39375b5528e02172847",
+    "320x800-text1-about-focused-actual-viewport.png": "e5e67dae4f5f904a2aa0c5eb12cd2ca3913c30d6c221e26dd93dab50c5bc627a",
+    "320x800-text1-about-reading-actual-viewport.png": "2b7da6daf8def474bee68b2cb9f1575be6fbea9264c7133fc30e693bf9aa1ed9",
+    "320x800-text1-true-empty-reading-actual-viewport.png": "491e8d2b036386e518ffaedd225c2f2d25e2d5d0cd40ec7d0f4416e5912ec7eb",
+    "320x800-text2-about-focused-actual-viewport.png": "8292bf1af453587205bf5120727e9081165f1e5ead184fd4b3e2cecf4449ea43",
+    "320x800-text2-about-reading-actual-viewport.png": "70009cb1561dcef31a1782845a084137fa2de70d9b22b13432f8ba2248e54efa",
+    "320x800-text2-true-empty-reading-actual-viewport.png": "2c21817c400a36b9928856236d21831098936af3a08eb00453e46a85889a2aa2",
+    "390x844-text1-about-focused-actual-viewport.png": "3ad83577db36ed950ab7df1be408553941f6c48422a0fefcbf64d290512d9d59",
+    "390x844-text1-about-reading-actual-viewport.png": "035ec3a299e952ddfac5f18c528a6238c0b71cb666dbe459d0903eb707f5cc98",
+    "390x844-text1-true-empty-reading-actual-viewport.png": "816ccc9ac63a4adfc7642a14c95276a5116e25bb2c21bc878dfd612af01a0593",
+    "768x1024-text1-about-focused-actual-viewport.png": "1d95124a522dd4b1d5c9f184f0395df6f6446ca5fdcc108d33a998b6d39f8b79",
+    "768x1024-text1-about-reading-actual-viewport.png": "a97bb32f657bffd108683b4e96fefcd5d9fb72f2c7201bf204fdc1bce03d8f20",
+    "768x1024-text1-true-empty-reading-actual-viewport.png": "299fe3ace866afdf06becf34f4abdb7fcdb5c759a74c6cfe20127d7534e698cc"
+  },
+  "inputProofs": {
+    "releaseSha256": "0ad3f1b78aa1d7d368021461fbe008cc585c73497347ceb748a7a78dceba5851",
+    "priorRecordsSha256": "6ab60d3fb6ec3032970049c8530c6d0e585eca252445c255d0a7ec5ccabb5228",
+    "installedProofSha256": "611400b62d60427727e306f07cf18409733420d98a87e35c842c63452e07a00e",
+    "independentKernelCounts": {
+      "temperatures": 0,
+      "fans": 0,
+      "gpus": 0
+    },
+    "helperSourceSha256": {
+      "orbis-host-service.py": "838986928ac7a9f98482adfd2d4fc2429cab018bda7616eb173b9ca2f25a6ac5",
+      "orbis-host-sensors.py": "5b2455a30a22f401f732f9cfa2eaba431e53d8eb2b3391a812fb1f8d4dad9bed"
+    }
+  },
+  "scope": {
+    "live": "Actual published HTML/assets, unchanged authenticated GET bodies and existing Dark/Frost preferences; actual VM empty sensor lists matched to independent kernel proof.",
+    "controlled": "OS dark media setting, one320 doubled-computed-text group, browser-only document CSP connect-src adjustment. No response-body or preference substitutions.",
+    "numericHardwareReadingsVerified": false,
+    "sourceFixtureMatricesRepeated": false,
+    "realWrites": 0,
+    "screenshots": "Actual native viewport at natural wheel/native focus position; no scroll reset."
+  },
+  "controlledBoundary": "Actual saved Dark/Frost only, OS dark media preference, one doubled-computed-text phone group and browser-only same-origin CSP header restriction. No response substitutions or preferences written; no physical numeric sensor rows available. Private full account baselines remain private. Hades unchanged."
+}

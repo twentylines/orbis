@@ -1,5 +1,12 @@
 # Orbis changelog
 
+## Beta46 — 18 October 2026
+
+- Add current kernel temperature/fan readings and DRM GPU identity to Monitor, with AMDGPU activity/VRAM where supported. Missing, faulted, partial and empty hardware states stay explicit; the restricted helper uses bounded shared reads and no hardware-control commands.
+- Refresh sensors every 30 seconds while visible. Preserve focused Docker disclosures through live ranking changes and move focus to Usage if their row disappears.
+- Keep wrapped ordinary fallback copy, comfortable disclosure padding, full accessible identifiers and theme-aware warnings. Top bars/titlebars retain the dock's translucent blur without white rims.
+- Verify the published arm64 update, private stopped snapshot, exact saved records and five actual native/enlarged browser groups. The VM exposes no physical sensor/GPU devices; numerical hardware acceptance remains open. See [current release evidence](screenshots/live-beta46/README.md).
+
 ## Unreleased development preview
 
 - Correct the host-device cache deadline found by beta44's real no-browser gate. Expire successful results from request start before the next history tick, retaining request coalescing and unavailable-result backoff; reject the old policy with real-service/timer regressions.

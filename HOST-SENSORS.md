@@ -1,6 +1,6 @@
 # Host temperatures, fans and GPUs
 
-Implementation in progress after beta45. The rehearsal helper now includes the sensor endpoint after a private backup and guarded upgrade; the installed beta45 core does not include the API or Monitor presentation yet. Source checks, installed Linux helper readings and published UI acceptance are separate gates. Hades is untouched.
+Published beta46 includes the sensor API and Monitor presentation. The rehearsal helper was upgraded separately after a private backup. Reviewed arm64 OTA, stopped-snapshot/data preservation and five actual published browser groups pass. This VM exposes no physical sensor/GPU devices, so numerical hardware acceptance remains open. Source fixtures, installed Linux reads and published UI checks retain separate evidence below. Hades is untouched.
 
 ## Read contract
 
@@ -28,4 +28,6 @@ The installed rehearsal helper now passes a separate read-only probe after a pri
 
 The compiled Monitor presentation now passes ten native/enlarged layouts, all twelve preset/mode combinations and nine loading/error/coverage states. Actual warmup, a 30-second refresh, keyboard Retry recovery/no-focus-theft and minimized/hidden polling suppression pass. A truncated ordinary fallback and marginal small-label contrast are rejected and corrected; complete source reports retain their distinct verifier corrections. [Source UI scope and reports](screenshots/host-sensors/ui/README.md) keep this separate from released behavior.
 
-Real readings on an exposed Linux host, exact data preservation, published browser inspection and OTA remain required before release acceptance. The installed beta45 core remains unchanged.
+Published beta46 now passes reviewed OTA to the independently verified image, an independent stopped snapshot and exact app/store/preference plus 28 saved task-outcome preservation. Five actual native/enlarged browser groups pass true-empty hardware, anonymous/authenticated 401/200, native About controls, comfortable wrapping/padding and rim-free shared glass. A real 30,008ms refresh preserves the focused control and reading position exactly; all 179 authenticated API reads and 96 assets succeed, no writes occur, and browser resources close. The post-update installed-helper probe matches the pinned beta46 image and independently empty kernel lists. [Actual captures, complete report and limits](screenshots/live-beta46/README.md).
+
+Physical numerical readings on an exposed Linux host remain required. The actual runtime matrix covers saved Dark/Frost and genuine empty hardware; source fixtures separately cover numerical/failed/partial states and twelve preset/mode combinations. Hades and the copied x86 authenticator fixture remain unchanged.

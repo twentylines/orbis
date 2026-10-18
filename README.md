@@ -11,7 +11,8 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 - [Released modes, blurred bars and storage recovery](screenshots/live-beta41/README.md)
 - [Host devices and actual beta42 checks](screenshots/live-beta42/README.md)
 - [Host processes and actual beta43 checks](screenshots/live-beta43/README.md)
-- [Current device history, rim-free glass and actual beta45 checks](screenshots/live-beta45/README.md)
+- [Current hardware sensors, rim-free glass and actual beta46 checks](screenshots/live-beta46/README.md)
+- [Device history and actual beta45 collection/restart checks](screenshots/live-beta45/README.md)
 - [Device-history source checks, installed helper and current runtime gate](screenshots/host-device-history/README.md)
 - [Follow system, enlarged text and browser storage checks](screenshots/system-mode/README.md)
 - [Multi-homelab phase](MULTI-HOMELAB.md)
@@ -24,7 +25,7 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 - [Persistent lifecycle tasks](TASKS.md)
 - [Desktop window controls and behavior](DESKTOP-WINDOWS.md)
 
-![Published Orbis beta45 Monitor with real isolated host readings and translucent glass chrome](screenshots/live-beta45/1440x1120-text1-initial-actual-viewport.png)
+![Published Orbis beta46 Monitor with real isolated host readings and translucent glass chrome](screenshots/live-beta46/1440x1120-text1-initial-monitor-chrome-actual-viewport.png)
 
 [Actual CPU rankings](screenshots/live-beta43/1440x1120-text1-cpu-refreshed-actual-viewport.png) · [Tablet memory](screenshots/live-beta43/768x1024-text1-memory-actual-viewport.png) · [Doubled phone text](screenshots/live-beta43/320x800-text2-cpu-refreshed-actual-viewport.png) · [Beta43 inspection record](screenshots/live-beta43/README.md)
 

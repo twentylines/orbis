@@ -1,5 +1,17 @@
 # Orbis build and migration rehearsal
 
+## Published beta46: sensors, preserved data and glass (18 October 2026)
+
+Source `762d7e0b5042e3993bb25fc65c3cff763be9579f` passes main CI `39110799266` and integration `39110799237`. Release workflow `39110815929` publishes both architectures; the independent checker matches OCI index `sha256:2cb89cd81a7e5b58a849df85c43803408e8ae234b2cf426dbbc47d63ca14a287`. Actual UI changelog/review and one plan/apply complete beta45→46 job `465defdf-1521-4bfd-8fbb-9f61800d3512` on that exact healthy arm64 image.
+
+Complete app/store/preferences, both app records and 28 saved task outcomes/retention metadata match. The first verifier incorrectly compares the task endpoint's generated read timestamp and stops before opening a page or planning/applying an update. Source confirms that field is generated per read; the retained correction validates both timestamps and excludes only that field while comparing all other data exactly. The original false result remains separate.
+
+The independent private stopped snapshot verifies 3,593 entries, 2,828 files and 150,349,395 bytes, tree SHA-256 `4ec23bbc8284bb5ee65bbe701306840eadc0d3c98511743302c2782d72c920c8`; protected app/data/user-config/repository trees match. The separately upgraded 13-module sensor helper retains private permissions, matches source, gives matching host/core-mounted reads and preserves existing telemetry/process endpoints. Actual kernel enumeration confirms zero temperature/fan/GPU devices; physical numerical readings are not claimed.
+
+Five actual published UI groups pass native 1440/768/390/320px and doubled computed text at 320px. True-empty hardware and 401/200 authentication are explicit. Native About controls, complete focus markers, readable whole-word wrapping, direct gutters and rim-free shared 28px glass pass. One actual 30,008ms refresh preserves focused viewport geometry and natural scroll exactly. All 179 authenticated API reads and 96 assets succeed; no response/preferences are substituted, no writes occur, full records match again, and all browser resources close. [Actual captures and complete sanitized report](screenshots/live-beta46/README.md) retain exact scope and provenance. Saved Dark/Frost is the actual runtime appearance; source fixtures separately cover twelve preset/mode combinations.
+
+Mac Docker commands explicitly use `colima-runtipi-test`; snapshot `default` belongs to its isolated Linux guest. The copied x86 authenticator fixture remains beta40 and Hades is untouched. The earlier unexplained beta45 history-scroll flag remains open; this sensor refresh pass does not establish its cause. Full product and real-data migration acceptance remain open.
+
 ## Published beta45: background history and planned restart (18 October 2026)
 
 Source `c58aa30268d2b7ec8b7d49cbb1cbde91344db2ef` passes main CI `39103508275` and integration `39103508273`, including 596 backend, 78 common and 126 Python tests. Release workflow `39103658522` publishes both Linux architectures; the independent checker matches OCI index `sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06`.
