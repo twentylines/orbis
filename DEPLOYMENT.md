@@ -1,5 +1,13 @@
 # Orbis build and migration rehearsal
 
+## Host process helper rehearsal (18 October 2026)
+
+Source `a78eea0c86d918110a5ed60f5d28ed41385fa8f9` passes main CI `39095521118` and integration `39095521135`. The owned arm64 preflight confirms only the handler and new `orbis-host-processes.py` change, with the systemd unit unchanged. A dated private 13-file archive verifies member bytes, root ownership and `0600`, SHA-256 `a6b8dc319f265f03bf6c6b7a56d46f88df320f62ccbeed8df9573e543d2adde5`.
+
+The guarded helper upgrade completes active with no maintenance record. Installed hashes match the reviewed source and script/socket/directory permissions remain private. Independent comparison confirms unchanged environment/unit bytes and all other installed scripts. The core stays healthy on the exact beta42 digest; the original 33-entry/17-file protected application/configuration/data baseline still matches `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`.
+
+Actual installed Unix readings cover 123 processes and ordered top-20 CPU/memory lists. First CPU comparisons remain unavailable; memory is immediate. A bounded workload in the probe itself measures 19.758% CPU against independent process-time/wall-time 19.734%, and RSS matches independent `statm` within the declared 2 MiB tolerance. The first HTTP response takes 2.24ms. Arbitrary query paths return 404; host/core socket reads match. [Source and installed-helper proofs](screenshots/host-processes/README.md) distinguish these readings from the compiled-source Monitor candidate still under inspection. Published-core API/render and reviewed OTA remain separate gates. Hades is unchanged.
+
 ## Published beta42: host devices and arm64 OTA (18 October 2026)
 
 Release workflow `39093163805` passed for source `9adb1d18f78e207f1b88d680059ed46e272e6820`. The read-only release checker matches linux/amd64 and linux/arm64 with index digest `sha256:3a0435e87402e3dd74c8d3ea2fff06cc2cf3e74d0a85dfbd4dfdfa35e02eac0f`. Reviewed beta41→42 job `df94681f-2231-44e5-bc2f-fdf6e696f3af` reaches that exact healthy arm64 image, retaining both app records, preferences and all 28 task outcomes. The helper was upgraded separately before this core update, as recorded below.
