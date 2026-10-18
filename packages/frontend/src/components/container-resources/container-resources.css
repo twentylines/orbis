@@ -84,12 +84,17 @@
 }
 .container-resource-name strong {
   font-size: 14px;
-  overflow-wrap: anywhere;
 }
 .container-resource-name small {
   color: var(--desktop-muted);
   font-size: 11px;
-  overflow-wrap: anywhere;
+}
+.container-resource-name > strong,
+.container-resource-name > small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .container-resource-values {
   display: flex;

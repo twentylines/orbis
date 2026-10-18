@@ -91,8 +91,8 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
             return (
               <li key={item.id} data-container={item.name}>
                 <div className="container-resource-name">
-                  <strong>{label}</strong>
-                  {label !== item.name ? <small>{item.name}</small> : null}
+                  <strong title={label}>{label}</strong>
+                  {label !== item.name ? <small title={item.name}>{item.name}</small> : null}
                   {compact ? null : (
                     <span className="docker-health" data-health={health.state}>
                       <i aria-hidden="true" />

@@ -13,9 +13,9 @@ const inspectSettingsAlignment = require('./settings-alignment-checks.cjs');
 const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
 const dockerContext = 'colima-runtipi-test';
-const expectedTag = 'v0.1.0-beta.49';
-const reviewedCommit = '39855692be86339565204d0d9d468402531e9f08';
-const reviewedDigest = 'sha256:3285fb07e8538ab70664733eb4ce39a6665f0172525fe38294e8f88563b44f1b';
+const expectedTag = 'v0.1.0-beta.50';
+const reviewedCommit = '9366532feef08471c88a893fe53f4e440fd33012';
+const reviewedDigest = 'sha256:30ad1b4472a77f167ec35e2923e4626e916484d57c1ee12b025aebef97d713ff';
 const readMethods = new Set(['GET', 'HEAD']);
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const samePrivate = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message);
@@ -232,9 +232,9 @@ async function scaleText(page, factor) {
   await dom.settle(page);
 }
 
-const releasePath = '/tmp/orbis-beta49-release-check.json';
-const baselinePath = '/tmp/orbis-beta49-after-ota-records.private.json';
-const goPath = '/tmp/orbis-beta49-compact-ui-go.private.json';
+const releasePath = '/tmp/orbis-beta50-release-check.json';
+const baselinePath = '/tmp/orbis-beta50-after-ota-records.private.json';
+const goPath = '/tmp/orbis-beta50-compact-ui-go.private.json';
 const baseUrl = 'http://127.0.0.1:18080';
 const recordKeys = ['preferences', 'installed', 'apps', 'stores', 'links', 'userContext', 'appContext'];
 const groups = [
@@ -325,16 +325,17 @@ function diagnosticError(error, secrets = []) {
     .join('\n');
 }
 
-function options(env, argv) {
+function validateOptions(env, argv, digest) {
+  assert.match(digest || '', /^sha256:[a-f0-9]{64}$/, 'Reviewed beta50 digest is not pinned; live audit is disabled');
   assert.deepEqual(argv, ['--allow-owned-published-compact-ui'], 'Explicit owned published compact UI argument is required');
   assert.equal(env.ORBIS_ALLOW_LIVE_COMPACT_UI_AUDIT, '1', 'Explicit published compact UI opt-in is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta49 is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta50 is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_COMMIT || '', /^[a-f0-9]{40}$/, 'Exact reviewed full commit is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta49 commit is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta50 commit is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_DIGEST || '', /^sha256:[a-f0-9]{64}$/, 'Exact reviewed published digest is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_DIGEST, reviewedDigest, 'Only the independently verified beta49 image index is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_DIGEST, digest, 'Only the independently verified beta50 image index is permitted');
   assert.equal(env.ORBIS_AUDIT_COOKIE_FILE, ownedCookieFile, 'Only the primary owned observer cookie jar is permitted');
-  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta49 release manifest is permitted');
+  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta50 release manifest is permitted');
   assert.equal(env.ORBIS_AUDIT_BASELINE_FILE, baselinePath, 'Only the independently captured post-OTA baseline is permitted');
   assert.equal(env.ORBIS_AUDIT_GO_FILE, goPath, 'Independent post-OTA GO proof is required');
   const origin = new URL(env.ORBIS_AUDIT_URL || baseUrl);
@@ -346,6 +347,9 @@ function options(env, argv) {
     'Explicit normalized fresh /tmp output is required',
   );
   return { origin, output, expectedCommit: env.ORBIS_AUDIT_EXPECTED_COMMIT, expectedDigest: env.ORBIS_AUDIT_EXPECTED_DIGEST };
+}
+function options(env, argv) {
+  return validateOptions(env, argv, reviewedDigest);
 }
 function proofInputs(release, proof, priorText, config) {
   assert.equal(release.tag, expectedTag, 'Exact release tag differs');
@@ -502,6 +506,9 @@ async function measure(page, rootSelector) {
           continue;
         }
         const boundary = parent.getBoundingClientRect();
+        const allocation = parent.closest('.desktop-host-overview-copy,.desktop-updates-card');
+        const allocationBox = allocation?.getBoundingClientRect();
+        const allocationStyle = allocation ? getComputedStyle(allocation) : null;
         for (const match of node.textContent.matchAll(/[A-Za-z]{3,}/g)) {
           const range = document.createRange();
           range.setStart(node, match.index);
@@ -524,6 +531,15 @@ async function measure(page, rootSelector) {
           for (const r of ink)
             if (r.left < boundary.left - 1 || r.right > boundary.right + 1)
               clipped.push({ word: match[0], context: parent.textContent, rect: r, bounds: box(parent) });
+          if (allocationBox)
+            for (const r of ink) {
+              const bounds = {
+                left: allocationBox.left + Number.parseFloat(allocationStyle.borderLeftWidth) + Number.parseFloat(allocationStyle.paddingLeft),
+                right: allocationBox.right - Number.parseFloat(allocationStyle.borderRightWidth) - Number.parseFloat(allocationStyle.paddingRight),
+              };
+              if (r.left < bounds.left - 1 || r.right > bounds.right + 1)
+                clipped.push({ word: match[0], context: parent.textContent, rect: r, allocatedAncestor: allocation.className, bounds });
+            }
         }
       }
       const frame = root.matches('.desktop-route-window') ? root : root.querySelector('.desktop-route-window');
@@ -576,6 +592,47 @@ async function measure(page, rootSelector) {
       ]
         .filter(visible)
         .map((element) => ({ id: element.id, tag: element.tagName, text: element.textContent.trim(), ...style(element) }));
+      const criticalInk = [
+        ...root.querySelectorAll(
+          '.desktop-updates-card-head h2,.desktop-updates-card-head p,.desktop-update-app strong,.desktop-host-overview-readings span,.desktop-host-overview-readings strong',
+        ),
+      ]
+        .filter(visible)
+        .map((element) => {
+          const allocation = element.closest('.desktop-host-overview-copy,.desktop-updates-card');
+          const allocationBox = allocation.getBoundingClientRect();
+          const allocationStyle = getComputedStyle(allocation);
+          const elementStyle = getComputedStyle(element);
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          return {
+            selector: element.id ? `#${element.id}` : element.tagName.toLowerCase(),
+            text: element.textContent.trim(),
+            local: box(element),
+            bounds: {
+              left: allocationBox.left + Number.parseFloat(allocationStyle.borderLeftWidth) + Number.parseFloat(allocationStyle.paddingLeft),
+              right: allocationBox.right - Number.parseFloat(allocationStyle.borderRightWidth) - Number.parseFloat(allocationStyle.paddingRight),
+            },
+            ink: rects(range),
+            clientWidth: element.clientWidth,
+            scrollWidth: element.scrollWidth,
+            appName: element.matches('.desktop-update-app strong'),
+            ellipsis: {
+              whiteSpace: elementStyle.whiteSpace,
+              textOverflow: elementStyle.textOverflow,
+              overflow: elementStyle.overflowX,
+              title: element.title,
+            },
+          };
+        });
+      const applicationCard = root.querySelector('[aria-labelledby="application-updates-title"]');
+      const applicationAction = applicationCard?.querySelector('.desktop-update-link');
+      const applicationStyle = applicationCard ? getComputedStyle(applicationCard) : null;
+      const overview = root.querySelector('.desktop-host-overview');
+      const overviewCopy = overview?.querySelector('.desktop-host-overview-copy');
+      const machineFaces = overview
+        ? [...overview.querySelectorAll('.desktop-host-machine-front,.desktop-host-machine-side,.desktop-host-machine-top')].map(box)
+        : [];
       const action = [...root.querySelectorAll('.action-bar')].find(visible);
       const grid = root.querySelector('.desktop-installed-grid,.desktop-catalogue-grid');
       const cards = grid ? [...grid.children].filter(visible).map((item) => box(item.querySelector('.app-tile,.card') || item)) : [];
@@ -599,6 +656,31 @@ async function measure(page, rootSelector) {
         controls,
         panels,
         fonts,
+        criticalInk,
+        applicationCardFit:
+          applicationCard && applicationAction
+            ? {
+                card: box(applicationCard),
+                action: box(applicationAction),
+                paddingBottom: Number.parseFloat(applicationStyle.paddingBottom),
+                borderBottom: Number.parseFloat(applicationStyle.borderBottomWidth),
+                actionMarginBottom: Number.parseFloat(getComputedStyle(applicationAction).marginBottom),
+                extra:
+                  box(applicationCard).bottom -
+                  box(applicationAction).bottom -
+                  Number.parseFloat(applicationStyle.paddingBottom) -
+                  Number.parseFloat(applicationStyle.borderBottomWidth) -
+                  Number.parseFloat(getComputedStyle(applicationAction).marginBottom),
+              }
+            : null,
+        stackedMachineClearance:
+          overviewCopy && machineFaces.length && getComputedStyle(overview).gridTemplateColumns.trim().split(/\s+/).length === 1
+            ? {
+                copy: box(overviewCopy),
+                faces: machineFaces,
+                gap: Math.min(...machineFaces.map((face) => face.top)) - box(overviewCopy).bottom,
+              }
+            : null,
         root: style(root),
         frame: style(frame),
         heading: style(heading),
@@ -656,6 +738,39 @@ function alpha(value) {
   assert.ok(values?.length >= 3, 'Browser colour must be a resolved RGB colour');
   return values.length === 4 ? values[3] : 1;
 }
+function horizontalFits(ink, bounds) {
+  return ink.left >= bounds.left - 1 && ink.right <= bounds.right + 1;
+}
+function checkCriticalInk(items) {
+  for (const item of items) {
+    if (item.appName && item.scrollWidth > item.clientWidth + 1) {
+      assert.notEqual(item.text, 'Backups', 'The previously cropped ordinary app name must remain complete');
+      assert.equal(item.ellipsis.whiteSpace, 'nowrap');
+      assert.equal(item.ellipsis.textOverflow, 'ellipsis');
+      assert.equal(item.ellipsis.overflow, 'hidden');
+      assert.equal(item.ellipsis.title, item.text, 'Ellipsized app names must retain their complete title');
+      continue;
+    }
+    for (const ink of item.ink) {
+      assert.ok(horizontalFits(ink, item.local), 'Complete heading/reading ink must fit its own text allocation');
+      assert.ok(horizontalFits(ink, item.bounds), 'Complete heading/reading ink must fit its padded card/copy ancestor');
+    }
+  }
+}
+function checkRouteSpacing(value, sample) {
+  checkCriticalInk(value.criticalInk);
+  if (sample.name === 'updates') {
+    const fit = value.applicationCardFit;
+    assert.ok(fit, 'Actual Applications card and its final action must be measured');
+    const extra = fit.card.bottom - fit.action.bottom - fit.paddingBottom - fit.borderBottom - fit.actionMarginBottom;
+    fit.extra = extra;
+    assert.ok(extra >= -1 && extra <= 2, 'Applications card must end at its final action plus normal padding');
+  }
+  if (sample.name === 'monitor' && value.viewport.width <= 900)
+    assert.ok(value.stackedMachineClearance, 'Compact Monitor must expose the stacked copy and transformed model faces');
+  if (value.stackedMachineClearance)
+    assert.ok(value.stackedMachineClearance.gap >= 16, 'All transformed model faces must clear the full readings copy by16px');
+}
 function check(value, sample, group, appearance) {
   assert.ok(value.documentWidth <= group.width, 'Published page must not overflow horizontally');
   assert.deepEqual(value.words, [], 'Ordinary words must not fracture into orphan fragments');
@@ -668,6 +783,7 @@ function check(value, sample, group, appearance) {
     value.images.every((image) => image.complete && image.loaded),
     'Actual visible images must load',
   );
+  checkRouteSpacing(value, sample);
   assert.equal(value.theme.mode, appearance.mode, 'Rendered mode must match the actual saved selection');
   assert.equal(value.theme.preset, appearance.preset, 'Rendered preset must match actual saved preferences');
   if (value.frame) {
@@ -848,6 +964,33 @@ async function nativeFocus(page, sample) {
   checkFocus(after);
   return { checked: true, keyboard: 'Native Tab after one explicit route-control focus', after: sanitized(after.active), scroll: after.scroll };
 }
+async function inspectModel(page, sample, group, appearance, shot, save, item) {
+  const visual = page.locator('.desktop-host-visual');
+  await wheelVisible(page, visual);
+  await page.mouse.move(1, 1);
+  await page.waitForTimeout(450);
+  await settled(page);
+  const rest = await measure(page, sample.root);
+  item.model = { passed: false, rest: sanitized(rest) };
+  save();
+  await shot(`${sample.name}-model-rest`);
+  check(rest, sample, group, appearance);
+  const point = await visual.evaluate((element) => {
+    const r = element.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  assert.ok(point.x > 0 && point.x < group.width && point.y > 0 && point.y < group.height, 'Model hover point must be in the viewport');
+  await page.mouse.move(point.x, point.y);
+  await page.waitForTimeout(450);
+  await settled(page);
+  const hover = await measure(page, sample.root);
+  item.model.hover = sanitized(hover);
+  save();
+  await shot(`${sample.name}-model-hover`);
+  check(hover, sample, group, appearance);
+  await page.mouse.move(1, 1);
+  item.model.passed = true;
+}
 async function search(page, shot) {
   const trigger = page.locator('.desktop-search-trigger');
   await trigger.waitFor();
@@ -970,9 +1113,9 @@ async function main() {
     diagnosticFailures: [],
     cleanup: { groupContextsClosed: 0, anonymousContextsClosed: 0, readerClosed: false, browserClosed: false },
     scope: {
-      live: 'Actual immutable beta49 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
+      live: 'Actual immutable beta50 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
       controlled:
-        'Browser OS colour media matches the saved fixed mode (light for system); one320 doubled-computed-text group; document CSP connect-src adjustment only. No response body substitutions.',
+        'Browser OS colour media matches the saved fixed mode (light for system); one320 doubled-computed-text group; documents alone use route.fetch/fulfill for CSP connect-src adjustment. Assets and API GET/HEAD use native browser transport. No response body substitutions.',
       writes: 'Only GET/HEAD are forwarded. No login/logout, preference, reset, TOTP, refresh, installation or lifecycle mutations.',
       protocol: 'Owned isolated plain HTTP loopback18080; no HTTPS or production acceptance claim.',
       screenshots: 'Actual viewport at natural route arrival, wheel and native focus positions; no scroll resets.',
@@ -995,13 +1138,13 @@ async function main() {
   let secrets = [];
   let stage = 'preflight';
   const fail = (error) => {
-    let trace = String(error.stack || error.message || error);
-    for (const secret of secrets) trace = trace.replaceAll(secret, '[private]');
+    const original = originalError(error);
+    let trace = diagnosticError(error, secrets);
     trace = trace
       .split('\n')
       .filter((line) => !/\b(?:cookie|authorization|headers)\b/i.test(line) && !/^\s*-?\s*[a-z][a-z0-9-]*:\s*/i.test(line))
       .join('\n');
-    errors.push({ stage, type: error.name || 'Error', redactedTrace: trace });
+    errors.push({ stage, type: original.name || 'Error', redactedTrace: trace });
     report.failure = { stage, code: 'PUBLISHED_COMPACT_UI_AUDIT_FAILED', messageHash: hash(trace) };
   };
   const save = () => {
@@ -1240,7 +1383,7 @@ async function main() {
         }
         if (target.pathname.startsWith('/api/'))
           report.forwardedReads[safePath(target.pathname)] = (report.forwardedReads[safePath(target.pathname)] || 0) + 1;
-        if (target.pathname === '/api/sse/app' && !target.search) return route.continue();
+        if (request.resourceType() !== 'document') return route.continue();
         const began = Date.now();
         network.push({
           event: 'forward-start',
@@ -1275,14 +1418,15 @@ async function main() {
               : "connect-src 'self'";
           return route.fulfill({ response, headers });
         } catch (error) {
+          const original = originalError(error);
           originalForwardErrors.push({
             at: Date.now(),
             group: groupName,
             stage,
             navigation,
             id: requestId(request),
-            requestUrl: diagnosticUrl(request.url()),
-            original: originalError(error),
+            requestUrl: request.url(),
+            original,
           });
           try {
             privateWrite(path.join(config.output, 'private-original-forward-errors.json'), originalForwardErrors);
@@ -1290,7 +1434,7 @@ async function main() {
             report.diagnosticFailures.push({
               stage,
               operation: 'preserveOriginalForwardError',
-              messageHash: hash(safeDiagnosticText(writeError?.message)),
+              messageHash: hash(safeDiagnosticText(originalError(writeError).message)),
             });
           }
           network.push({
@@ -1305,7 +1449,12 @@ async function main() {
             elapsedMs: Date.now() - began,
             closing,
           });
-          if (!closing) report.readFailures.push({ group: groupName, path: safePath(target.pathname), messageHash: hash(error.message) });
+          if (!closing)
+            report.readFailures.push({
+              group: groupName,
+              path: safePath(target.pathname),
+              messageHash: hash(safeDiagnosticText(original.message || original.value)),
+            });
           return route.abort('failed').catch(() => undefined);
         }
       };
@@ -1350,6 +1499,7 @@ async function main() {
               './runtipi-cli reset-password',
               'Actual reset command must remain complete',
             );
+          if (sample.name === 'monitor') await inspectModel(page, sample, group, actualAppearance, shot, save, item);
           item.focus = await nativeFocus(page, sample);
           if (item.focus.checked) await shot(`${sample.name}-native-focus`);
           if (sample.name === 'home') result.search = await search(page, (name) => shot(`${sample.name}-${name}`));
@@ -1520,7 +1670,8 @@ async function main() {
 }
 
 function selfCheck() {
-  const digest = reviewedDigest;
+  const digest = reviewedDigest || `sha256:${'a'.repeat(64)}`;
+  const pureOptions = (env, argv) => validateOptions(env, argv, digest);
   const env = {
     ORBIS_ALLOW_LIVE_COMPACT_UI_AUDIT: '1',
     ORBIS_AUDIT_EXPECTED_TAG: expectedTag,
@@ -1532,7 +1683,8 @@ function selfCheck() {
     ORBIS_AUDIT_GO_FILE: goPath,
     ORBIS_AUDIT_OUTPUT_DIR: '/tmp/orbis-compact-self-check-output',
   };
-  const config = options(env, ['--allow-owned-published-compact-ui']);
+  const config = pureOptions(env, ['--allow-owned-published-compact-ui']);
+  if (!reviewedDigest) assert.throws(() => options(env, ['--allow-owned-published-compact-ui']), /not pinned/);
   const baseline = JSON.stringify({
     preferences: { mode: 'dark', preset: 'frost' },
     installed: {},
@@ -1586,10 +1738,10 @@ function selfCheck() {
     ['ORBIS_AUDIT_URL', 'http://localhost:18080'],
     ['ORBIS_AUDIT_OUTPUT_DIR', '/tmp/../private'],
   ]) {
-    assert.throws(() => options({ ...env, [key]: value }, ['--allow-owned-published-compact-ui']));
+    assert.throws(() => pureOptions({ ...env, [key]: value }, ['--allow-owned-published-compact-ui']));
     negatives++;
   }
-  assert.throws(() => options(env, []));
+  assert.throws(() => pureOptions(env, []));
   negatives++;
   for (const change of [
     (value) => {
@@ -1698,6 +1850,42 @@ function selfCheck() {
     },
   ])
     assert.doesNotThrow(() => diagnosticError(value));
+  const priorEnlargedBoxes = [
+    {
+      text: 'Applications',
+      local: { left: 96, right: 310.765625 },
+      bounds: { left: 60, right: 260 },
+      ink: [{ left: 96, right: 310.765625 }],
+    },
+    {
+      text: 'Backups',
+      local: { left: 124, right: 220 },
+      bounds: { left: 60, right: 260 },
+      ink: [{ left: 124, right: 234.40625 }],
+    },
+    {
+      text: '37.5%',
+      local: { left: 175.3125, right: 278.625 },
+      bounds: { left: 62, right: 258 },
+      ink: [{ left: 175.3125, right: 278.625 }],
+    },
+  ];
+  for (const value of priorEnlargedBoxes) assert.throws(() => checkCriticalInk([value]));
+  checkCriticalInk([
+    { text: 'Applications', local: { left: 60, right: 260 }, bounds: { left: 60, right: 260 }, ink: [{ left: 60, right: 241.96875 }] },
+  ]);
+  const spacing = {
+    viewport: { width: 768 },
+    criticalInk: [],
+    applicationCardFit: { card: { bottom: 500 }, action: { bottom: 485 }, paddingBottom: 14, borderBottom: 1, actionMarginBottom: 0 },
+    stackedMachineClearance: { gap: 19.75439453125 },
+  };
+  checkRouteSpacing(spacing, { name: 'updates' });
+  checkRouteSpacing(spacing, { name: 'monitor' });
+  assert.throws(() =>
+    checkRouteSpacing({ ...spacing, applicationCardFit: { ...spacing.applicationCardFit, card: { bottom: 688.5 } } }, { name: 'updates' }),
+  );
+  assert.throws(() => checkRouteSpacing({ ...spacing, stackedMachineClearance: { gap: -12.245635 } }, { name: 'monitor' }));
   return {
     passed: true,
     browserStarted: false,
@@ -1711,6 +1899,10 @@ function selfCheck() {
     loggerMalformedUrlCases: malformed.length + 1,
     loggerErrorShapeCases: 4,
     originalLoggerAnsiNegativeReproduced: true,
+    priorEnlargedBoxNegatives: priorEnlargedBoxes.length,
+    routeSpacingNegatives: 2,
+    releaseDigestPinned: Boolean(reviewedDigest),
+    unpinnedLiveGuardChecked: !reviewedDigest,
   };
 }
 if (require.main === module) {
