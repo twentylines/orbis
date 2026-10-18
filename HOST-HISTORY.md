@@ -8,6 +8,8 @@ The backend model/service, authenticated query validation and helper generation 
 
 The compiled Monitor presentation is under review. These source tests do not establish installed-helper support, real Linux background collection or published-image acceptance.
 
+A subsequent read-only Linux source probe verifies all 11 actual device identities against independent kernel-derived digests across two samples and a new collector. First/new-collector rates wait for a comparison. Its temporary server closes, installed helper/environment/unit hashes match and the core remains healthy on its exact beta43 image. [Sanitized source proof](screenshots/host-device-history/README.md). Background collection, installed-helper adoption and release acceptance remain separate gates.
+
 ## Contract
 
 - Reuse the restricted helper's selected interface/disk rates. Add an opaque generation digest based on the Linux boot and kernel device identity; never expose MAC addresses, boot identifiers or hardware serial numbers. An older helper keeps current readings but explicitly lacks history identity support.
