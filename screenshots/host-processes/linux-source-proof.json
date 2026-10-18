@@ -1,0 +1,31 @@
+{
+  "passed": true,
+  "scope": "Temporary source Unix handler in owned arm64 guest; installed helper/core unchanged",
+  "macDockerContext": "colima-runtipi-test",
+  "guestDockerContext": "default",
+  "coreTag": "v0.1.0-beta.42",
+  "firstResponseMilliseconds": 0.6,
+  "twoDistinctSamples": true,
+  "firstCpuUnavailable": true,
+  "memoryAvailableImmediately": true,
+  "scanned": 123,
+  "readable": 123,
+  "unreadable": 0,
+  "compared": 123,
+  "limited": false,
+  "cpuRows": 20,
+  "memoryRows": 20,
+  "rankingsOrdered": true,
+  "selectedFieldsOnly": true,
+  "boundedOwnWorkloadCpuPercent": 19.856,
+  "independentProcessTimePercent": 19.896,
+  "residentMemoryMatchesIndependentStatm": true,
+  "queryPathRejected": true,
+  "collectorIdle": true,
+  "sourceSha256": {
+    "orbis-host-service.py": "402c6a13ce33f4f85195398abf5a143f6e158997f25bc7469ba4b2ba775adb11",
+    "orbis-host-processes.py": "fda55ceddeff20664c4bf041c87aa646f41f2f4e87480884ff24899917046040"
+  },
+  "serverClosed": true,
+  "installedHelperUnchanged": true
+}

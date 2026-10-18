@@ -11,6 +11,7 @@ import { OrbisReleaseService } from '../orbis-release.service';
 import { ContainerTelemetryService } from '../container-telemetry.service';
 import { MetricHistoryService } from '../metric-history.service';
 import { HostTelemetryService } from '../host-telemetry.service';
+import { HostProcessesService } from '../host-processes.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
@@ -20,6 +21,7 @@ describe('SystemController certificate security', () => {
   const containers = mock<ContainerTelemetryService>();
   const history = mock<MetricHistoryService>();
   const host = mock<HostTelemetryService>();
+  const processes = mock<HostProcessesService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -29,6 +31,7 @@ describe('SystemController certificate security', () => {
         { provide: ContainerTelemetryService, useValue: containers },
         { provide: MetricHistoryService, useValue: history },
         { provide: HostTelemetryService, useValue: host },
+        { provide: HostProcessesService, useValue: processes },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         {
           provide: SystemService,
@@ -112,6 +115,16 @@ describe('SystemController certificate security', () => {
     expect(result.status).toBe(200);
     expect(result.body.reason).toBe('Collecting host readings.');
     expect(host.read).toHaveBeenCalledOnce();
+  });
+
+  it('requires authentication before reading host processes', async () => {
+    expect((await request(app.getHttpServer()).get('/system/host-processes')).status).toBe(401);
+    expect(processes.read).not.toHaveBeenCalled();
+    processes.read.mockResolvedValue({ available: false, reason: 'Collecting process readings.' });
+    const result = await request(app.getHttpServer()).get('/system/host-processes').set('Authorization', 'Bearer cli-token');
+    expect(result.status).toBe(200);
+    expect(result.body.reason).toBe('Collecting process readings.');
+    expect(processes.read).toHaveBeenCalledOnce();
   });
 
   it('requires authentication for build metadata and reports the installed version', async () => {

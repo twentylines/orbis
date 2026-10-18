@@ -8,6 +8,7 @@ import { OrbisReleaseService } from './orbis-release.service';
 import { ContainerTelemetryService } from './container-telemetry.service';
 import { MetricHistoryService } from './metric-history.service';
 import { HostTelemetryService } from './host-telemetry.service';
+import { HostProcessesService } from './host-processes.service';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
 
 @Controller('system')
@@ -18,6 +19,7 @@ export class SystemController {
     private readonly containers: ContainerTelemetryService,
     private readonly history: MetricHistoryService,
     private readonly host: HostTelemetryService,
+    private readonly processes: HostProcessesService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -44,6 +46,12 @@ export class SystemController {
   @Get('/containers')
   containerTelemetry() {
     return this.containers.read();
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/host-processes')
+  hostProcesses() {
+    return this.processes.read();
   }
 
   @UseGuards(AuthGuard)

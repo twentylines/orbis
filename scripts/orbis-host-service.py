@@ -36,6 +36,7 @@ def load_script(name: str, module_name: str):
 UPDATE = load_script("orbis-host-update.py", "orbis_update_for_service")
 PACKAGES = load_script("orbis-host-packages.py", "orbis_packages_for_service")
 TELEMETRY = load_script("orbis-host-telemetry.py", "orbis_telemetry_for_service").HostTelemetry()
+PROCESSES = load_script("orbis-host-processes.py", "orbis_processes_for_service").HostProcesses()
 HOST = UPDATE.HOST
 PLAN = HOST.PLAN
 CHECK = UPDATE.CHECK
@@ -501,6 +502,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self) -> None:
+        if self.path == "/v1/processes":
+            self.send_json(200, PROCESSES.read())
+            return
         if self.path == "/v1/telemetry":
             self.send_json(200, TELEMETRY.read())
             return

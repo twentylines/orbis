@@ -25,6 +25,7 @@ import {
 } from './task-history.js';
 import type { ContainerReading, ContainerTelemetry } from './container-telemetry.js';
 import type { HostFilesystem, HostNetwork, HostDisk, HostTelemetry } from './host-telemetry.js';
+import type { HostProcess, HostProcesses } from './host-processes.js';
 import { metricHistoryRanges, type MetricHistoryRange, type MetricSummary, type MetricHistoryPoint, type MetricHistory } from './metric-history.js';
 import {
   desktopWindowIds,
@@ -91,6 +92,8 @@ export {
   type HostNetwork,
   type HostDisk,
   type HostTelemetry,
+  type HostProcess,
+  type HostProcesses,
   metricHistoryRanges,
   type MetricHistoryRange,
   type MetricSummary,

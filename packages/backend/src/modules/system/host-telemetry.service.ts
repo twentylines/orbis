@@ -1,7 +1,6 @@
-import http from 'node:http';
-import path from 'node:path';
 import { Injectable } from '@nestjs/common';
 import type { HostTelemetry, HostNetwork } from '@runtipi/common/schemas';
+import { readHostSocket } from './host-socket';
 
 const unavailable = (reason = 'Host readings are unavailable. Check the Orbis host service.'): HostTelemetry => ({ available: false, reason });
 
@@ -117,34 +116,14 @@ export class HostTelemetryService {
   }
 
   private async fetch(): Promise<HostTelemetry> {
-    const socketPath = this.socketPath;
-    if (!socketPath || !path.isAbsolute(socketPath) || socketPath.includes('\0'))
-      return unavailable('Connect the Orbis host service to see host devices.');
-    return new Promise<HostTelemetry>((resolve, reject) => {
-      const request = http.request({ socketPath, path: '/v1/telemetry', method: 'GET', signal: AbortSignal.timeout(2000) }, (response) => {
-        response.on('error', reject);
-        if (response.statusCode !== 200) {
-          response.resume();
-          resolve(unavailable(response.statusCode === 404 ? 'Update the Orbis host service to see host devices.' : undefined));
-          return;
-        }
-        let size = 0;
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > 256 * 1024) response.destroy(new Error('Host sample exceeds limit'));
-          else chunks.push(chunk);
-        });
-        response.on('end', () => {
-          try {
-            resolve(parseHostTelemetry(JSON.parse(Buffer.concat(chunks).toString('utf8'))));
-          } catch {
-            reject(new Error('Invalid host sample'));
-          }
-        });
-      });
-      request.on('error', reject);
-      request.end();
-    });
+    return readHostSocket(this.socketPath, '/v1/telemetry', parseHostTelemetry, (reason) =>
+      unavailable(
+        reason === 'missing'
+          ? 'Connect the Orbis host service to see host devices.'
+          : reason === 'older'
+            ? 'Update the Orbis host service to see host devices.'
+            : undefined,
+      ),
+    );
   }
 }

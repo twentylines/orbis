@@ -295,6 +295,11 @@ class HostServiceTests(unittest.TestCase):
             return int(header.split(b" ")[1]), json.loads(payload)
 
         self.assertEqual(request("GET", "/v1/unknown")[0], 404)
+        with mock.patch.object(SERVICE.PROCESSES, "read", return_value={"available": False, "reason": "Collecting process readings."}) as processes:
+            self.assertEqual(request("GET", "/v1/processes")[1]["reason"], "Collecting process readings.")
+            self.assertEqual(request("GET", "/v1/processes?pid=1")[0], 404)
+            self.assertEqual(request("POST", "/v1/processes", {"signal": 9})[0], 404)
+            processes.assert_called_once_with()
         with mock.patch.object(SERVICE.TELEMETRY, "read", return_value={"available": False, "reason": "Collecting host readings."}) as telemetry:
             self.assertEqual(request("GET", "/v1/telemetry")[1]["reason"], "Collecting host readings.")
             self.assertEqual(request("GET", "/v1/telemetry?path=/etc/shadow")[0], 404)
