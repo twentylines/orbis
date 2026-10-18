@@ -1,6 +1,6 @@
 # Host device source checks
 
-These captures use the compiled local source at static8080 with controlled API responses. They do not show a newly installed release or a production host. The installed arm64 test core remains beta41, the separate copied x86 authenticator fixture remains beta40, and Hades is unchanged.
+These captures use the compiled local source at static8080 with controlled API responses. They do not show a newly installed release or a production host. The source and installed-helper proofs record the pre-OTA beta41 boundary. A subsequent reviewed update reaches the healthy beta42 arm64 core; the separate copied x86 authenticator fixture remains beta40, and Hades is unchanged.
 
 ## Host counter proof
 
@@ -48,4 +48,4 @@ ORBIS_VISUAL_HOST_DEVICES_CHARTS_ONLY=1 node scripts/visual-qa.cjs
 
 Set `ORBIS_VISUAL_SCREENSHOT_DIR` to a separate output directory. The Linux probe requires its explicit owned-guest flag and a fresh `/tmp` output path; see [the probe](../../scripts/live-host-telemetry-qa.py).
 
-Published-core API/render and reviewed OTA, broader history/sensors/processes, other browser engines, physical devices and complete migration acceptance remain separate gates.
+The subsequent reviewed beta42 OTA and independent snapshot/data checks pass. Its actual API/render review is separate from these controlled source checks. Broader history/sensors/processes, other browser engines, physical devices and complete migration acceptance remain open.

@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Published beta42: host devices and arm64 OTA (18 October 2026)
+
+Release workflow `39093163805` passed for source `9adb1d18f78e207f1b88d680059ed46e272e6820`. The read-only release checker matches linux/amd64 and linux/arm64 with index digest `sha256:3a0435e87402e3dd74c8d3ea2fff06cc2cf3e74d0a85dfbd4dfdfa35e02eac0f`. Reviewed beta41→42 job `df94681f-2231-44e5-bc2f-fdf6e696f3af` reaches that exact healthy arm64 image, retaining both app records, preferences and all 28 task outcomes. The helper was upgraded separately before this core update, as recorded below.
+
+The stopped beta41 snapshot independently verifies 3,591 entries, 2,827 files and 149,837,205 bytes, tree hash `e28d076dadb723a93b5ba84d4dcb9a9f996e5fc88a48c33558bfa81c6d403d81`. Its protected directory is root-owned `0700`. Snapshot fingerprints for `apps`, `app-data`, `user-config` and `repos` match the current trees. The separate original 33-entry/17-file application/configuration/data comparison remains `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`.
+
+Ownership-sensitive comparisons run in the namespace where their baseline was captured: the Mac-side protected-file baseline passes on the Mac. The guest's shared-filesystem UID/GID mapping is different; that is not a reason to alter data permissions. The Mac explicitly uses `colima-runtipi-test`; the snapshot tool's recorded `default` context belongs to that isolated Linux guest. The Mac's default context remains unchanged.
+
+The read-only published-image audit now passes five Monitor layouts: 1440/768/390/320px native and 320px doubled text. Actual authenticated telemetry returns 200; a separate unauthenticated request returns 401. All five views render the actual 11 filesystem, eight interface and three disk identifiers. Five distinct refreshes arrive after 10,014–10,040ms and preserve exact reading position. All 110 forwarded browser API reads and 90 fingerprinted published assets succeed. Native focus clears chrome, whole words and deliberate identifier ellipsis pass, and the bars retain shared translucent blur without white rims. No response bodies or preferences are substituted, no writes occur, actual preference/app/store records match, and all five contexts, reader, anonymous context and browser close. [Actual captures and sanitized assertions](screenshots/live-beta42/README.md) retain the controlled doubled-text and same-origin CSP boundary. Authentication code is unchanged, so this iteration reuses the original authenticated session rather than repeating password attempts. The copied x86 authenticator fixture remains on beta40. Hades is untouched; complete production/migration acceptance remains open.
+
 ## Host telemetry helper rehearsal (18 October 2026)
 
 Source `9adb1d18f78e207f1b88d680059ed46e272e6820` passes main CI `39093022270` and integration `39093022170`. The owned arm64 helper preflight identifies exactly two changed files: the socket handler and new telemetry module. All other installed helper scripts and the systemd unit match. A private dated 12-file backup is verified before upgrade, SHA-256 `164e695f9dae341457add4042cbfb9f39b5c7c5537ab10a4c6a7ea301a90ad71`.
@@ -8,7 +18,7 @@ The guarded helper upgrade completes with the service active, no maintenance rec
 
 The installed helper's actual Unix endpoint returns 11 filesystems, eight interfaces and three whole devices with no omitted or unavailable groups. Its first HTTP response takes 2.11ms. Two distinct real samples produce interface and disk rates, root capacity matches host `statvfs`, temporary mounts are excluded and an arbitrary query path returns 404. The core container's socket read matches the host's sample, and installed handler/collector hashes match the reviewed source. [Sanitized installed-helper proof](screenshots/host-devices/installed-helper-proof.json) records these checks. The retained opt-in probe now covers both temporary source handlers and the installed helper.
 
-This confirms the helper upgrade and wire readings only. The beta42 published core API, reviewed OTA and actual Monitor rendering remain separate acceptance checks. The Mac uses `colima-runtipi-test`; `default` inside the probe is the isolated guest's Docker context. Hades is unchanged.
+This confirms the helper upgrade and wire readings at the historical pre-OTA beta41 boundary. The reviewed beta42 core OTA subsequently passes as recorded above; published-core API and actual Monitor rendering are separate checks. The Mac uses `colima-runtipi-test`; `default` inside the probe is the isolated guest's Docker context. Hades is unchanged.
 
 ## Published beta41: device mode persistence and arm64 OTA (18 October 2026)
 

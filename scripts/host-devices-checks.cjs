@@ -825,6 +825,7 @@ module.exports = async function inspectHostDevices({
   return report;
 };
 module.exports.fixture = fixture;
+module.exports.dom = { inspect, check, scaleText, restoreText, wheelTo, reading, settle, focusMetrics };
 
 module.exports.contrast = async function inspectHostDeviceContrast({ page, base, preferences, capture }) {
   const origin = new URL(base);

@@ -8,7 +8,8 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 - [Isolated build and migration rehearsal](DEPLOYMENT.md)
 - [Released workspace and theme captures](screenshots/live-beta37/README.md)
 - [Released Apps/Store, glass chrome, update and login checks](screenshots/live-beta40/README.md)
-- [Current released modes, blurred bars and storage recovery](screenshots/live-beta41/README.md)
+- [Released modes, blurred bars and storage recovery](screenshots/live-beta41/README.md)
+- [Current host devices, rim-free glass and actual beta42 checks](screenshots/live-beta42/README.md)
 - [Follow system, enlarged text and browser storage checks](screenshots/system-mode/README.md)
 - [Multi-homelab phase](MULTI-HOMELAB.md)
 - [Update Center contract](UPDATES.md)
@@ -20,7 +21,11 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 - [Persistent lifecycle tasks](TASKS.md)
 - [Desktop window controls and behavior](DESKTOP-WINDOWS.md)
 
-![Published Orbis beta41 Home in light mode with isolated synthetic app records](screenshots/live-beta41/1440x1120-text1-home-light-actual-viewport.png)
+![Published Orbis beta42 Monitor with real isolated host readings and translucent glass chrome](screenshots/live-beta42/1440x1120-text1-initial-actual-viewport.png)
+
+[Actual host readings](screenshots/live-beta42/1440x1120-text1-heading-actual-viewport.png) · [Phone disk activity](screenshots/live-beta42/390x844-text1-disks-actual-viewport.png) · [Doubled phone text](screenshots/live-beta42/320x800-text2-network-actual-viewport.png) · [Beta42 inspection record](screenshots/live-beta42/README.md)
+
+The following workspace and Appearance captures record beta41:
 
 [Dark workspace](screenshots/live-beta41/1440x1120-text1-home-dark-actual-viewport.png) · [Phone workspace](screenshots/live-beta41/390x844-text1-home-light-actual-viewport.png) · [Phone in dark mode](screenshots/live-beta41/390x844-text1-home-dark-actual-viewport.png) · [Monitor](screenshots/live-beta41/1440x1120-text1-monitor-light-actual-viewport.png) · [Appearance](screenshots/live-beta41/1440x1120-text1-appearance-light-actual-viewport.png)
 
