@@ -41,4 +41,4 @@ With the compiled static preview at `http://localhost:8080`, run `node scripts/v
 - `ORBIS_VISUAL_HOST_PROCESSES_ABOUT_ONLY=1`: About text clearance in all 16 layouts.
 - `ORBIS_VISUAL_HOST_PROCESSES_COLORS_ONLY=1`: all six presets in both modes.
 
-Published-core API/render confirmation remains required before claiming a released feature. Full product, history/sensor and migration acceptance remain open.
+The separate [published beta43 API/render, reviewed OTA and preservation checks](../live-beta43/README.md) now pass. Full product, history/sensor and migration acceptance remain open.

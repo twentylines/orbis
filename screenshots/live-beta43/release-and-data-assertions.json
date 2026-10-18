@@ -1,0 +1,82 @@
+{
+  "release": {
+    "tag": "v0.1.0-beta.43",
+    "commit": "aa7cb6afa15abe5e56075fc4ca2d6a8f5ccc3722",
+    "image": "ghcr.io/twentylines/orbis@sha256:85466caef871350b9034287d024fe71dfea27ae670c12197b61df1bfdcdeee86",
+    "platforms": ["linux/amd64", "linux/arm64"],
+    "releaseUrl": "https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.43",
+    "readOnly": true
+  },
+  "releaseWorkflow": {
+    "id": 39096810638,
+    "conclusion": "success"
+  },
+  "sourceChecks": {
+    "mainCI": 39096716857,
+    "mainIntegration": 39096716863,
+    "conclusion": "success"
+  },
+  "reviewedBrowserOTA": {
+    "from": "v0.1.0-beta.42",
+    "version": "v0.1.0-beta.43",
+    "commit": "aa7cb6afa15abe5e56075fc4ca2d6a8f5ccc3722",
+    "digest": "sha256:85466caef871350b9034287d024fe71dfea27ae670c12197b61df1bfdcdeee86",
+    "jobId": "20f864e4-f786-4f2e-9c6d-4e01a152aeef",
+    "preferencesRetained": true,
+    "appRecordsRetained": 2,
+    "taskOutcomesRetained": 28,
+    "healthy": true,
+    "pageErrors": []
+  },
+  "independentStoppedSnapshot": {
+    "schema": "orbis.snapshot.v1",
+    "release": "v0.1.0-beta.42",
+    "dockerContext": "default",
+    "createdAt": "2026-10-18T04:32:17.164689+00:00",
+    "treeSha256": "9e9e6fc0c875a8569384c504e9a5b5b933c2cbf2e40794b6e22ed3202dadd0a9",
+    "entries": 3591,
+    "files": 2827,
+    "bytes": 149850550,
+    "sourceRootMode": 448,
+    "privateSnapshot": true,
+    "protectedTrees": {
+      "apps": {
+        "treeSha256": "936d3d92bce3c6b2cb71c6b95f668694dd2332c8d235b1f7523a96940b5fd712",
+        "entries": 17,
+        "files": 11,
+        "bytes": 30499,
+        "matched": true
+      },
+      "app-data": {
+        "treeSha256": "b6296320cf7ac8facafa7700f6a00fbdcd5117e07d8dfb8ca36d916e2e25eb0e",
+        "entries": 8,
+        "files": 3,
+        "bytes": 3281,
+        "matched": true
+      },
+      "user-config": {
+        "treeSha256": "32411613fb37b8e57f770775e8e9ecacbc2508d9dec71831d79a986e3675ba17",
+        "entries": 5,
+        "files": 3,
+        "bytes": 327,
+        "matched": true
+      },
+      "repos": {
+        "treeSha256": "6d859df339a955bce8a3d77fa8176d57ff529603d773782d418e4903463f3c94",
+        "entries": 2192,
+        "files": 1508,
+        "bytes": 95841759,
+        "matched": true
+      }
+    }
+  },
+  "originalMacProtectedBaseline": {
+    "matched": true,
+    "entries": 33,
+    "files": 17,
+    "sha256": "7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2"
+  },
+  "defaultMacDockerContext": "default",
+  "copiedX86AuthenticatorFixture": "Remains on beta40; not changed by this arm64 iteration",
+  "Hades": "Not accessed or modified"
+}

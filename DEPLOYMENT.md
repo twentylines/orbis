@@ -1,5 +1,15 @@
 # Orbis build and migration rehearsal
 
+## Published beta43: host processes and arm64 OTA (18 October 2026)
+
+Direct-main source `aa7cb6afa15abe5e56075fc4ca2d6a8f5ccc3722` passes CI `39096716857` and integration `39096716863`. Release workflow `39096810638` passes and publishes the immutable beta43 tag, manifest and both Linux architectures, independently matching OCI index `sha256:85466caef871350b9034287d024fe71dfea27ae670c12197b61df1bfdcdeee86`.
+
+The actual browser reviews and installs beta42→43 on the owned arm64 stack, job `20f864e4-f786-4f2e-9c6d-4e01a152aeef`. It reaches the exact healthy image and retains preferences, both app records and all 28 task outcomes. The stopped beta42 snapshot independently verifies 3,591 entries, 2,827 files and 149,850,550 bytes, tree hash `9e9e6fc0c875a8569384c504e9a5b5b933c2cbf2e40794b6e22ed3202dadd0a9`. Its private root and protected app/data/user-configuration/repository trees match. The original 33-entry/17-file Mac baseline remains `7f4c0a000362ee45d1cca9c2e9b9c8a5f65dc0c9478444c04b1090dd542456d2`; ownership comparisons run in their original namespace. The Mac default Docker context remains unchanged.
+
+The read-only published-image inspection passes five Monitor groups: native 1440/768/390/320px and doubled computed text at 320px. Actual samples contain 122–126 readable host processes, with 20 CPU and 20 memory rows matching real API names/order/values and full accessible titles. A separate unauthenticated request returns 401 and authenticated reads return 200. Six actual polls arrive after 10,018–10,091ms, preserving exact reading position and focused sort controls; all five groups obtain a distinct helper sample. All 128 forwarded browser API reads and 90 fingerprinted published assets succeed. Native keyboard, text spacing/ellipsis and shared blurred chrome pass direct inspection without white frame rims.
+
+No response bodies or preferences are substituted and no mutations occur. Complete preference/app/store records match and all five contexts, authenticated reader, anonymous context and browser close. [Twenty actual captures and lossless sanitized assertions](screenshots/live-beta43/README.md) retain the controlled text/CSP boundary. The installed-helper upgrade has separate backup, permission/hash and actual CPU/RSS evidence below; a core update does not replace it. Authentication code is unchanged and the original private session is reused. The copied x86 authenticator fixture stays on beta40. Hades is unchanged; full product and real-data migration acceptance remain open.
+
 ## Host process helper rehearsal (18 October 2026)
 
 Source `a78eea0c86d918110a5ed60f5d28ed41385fa8f9` passes main CI `39095521118` and integration `39095521135`. The owned arm64 preflight confirms only the handler and new `orbis-host-processes.py` change, with the systemd unit unchanged. A dated private 13-file archive verifies member bytes, root ownership and `0600`, SHA-256 `a6b8dc319f265f03bf6c6b7a56d46f88df320f62ccbeed8df9573e543d2adde5`.

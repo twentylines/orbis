@@ -1,0 +1,5931 @@
+{
+  "width": 390,
+  "height": 844,
+  "textScale": 1,
+  "passed": true,
+  "actualProcessReads": 2,
+  "captures": [
+    "390x844-text1-initial-actual-viewport.png",
+    "390x844-text1-memory-actual-viewport.png",
+    "390x844-text1-cpu-reading-actual-viewport.png",
+    "390x844-text1-cpu-refreshed-actual-viewport.png"
+  ],
+  "cleanup": {
+    "textRestored": true,
+    "viewportRestored": true,
+    "pageClosed": true,
+    "routesRestored": true,
+    "contextClosed": true
+  },
+  "cpu": {
+    "rows": 20,
+    "rankHash": "9864ba2fca524e31d5d7302e56faf27e7b950697699a0490e04392cf8fa633b1",
+    "sampleHash": "45a42e84ac2ddeb903ffd167a23cd28baa5ca0fc1668c528afb4e7201be3c645",
+    "exactApiOrderAndValues": true,
+    "fullAccessibleNames": true,
+    "responseAt": 1792298048943,
+    "sampledAt": "2026-10-18T04:33:54.058250Z"
+  },
+  "initialMetrics": {
+    "width": 390,
+    "documentWidth": 390,
+    "root": {
+      "left": 45,
+      "right": 345,
+      "top": 12274.703125,
+      "bottom": 16077.640625,
+      "width": 300,
+      "height": 3802.9375
+    },
+    "monitor": {
+      "left": 45,
+      "right": 345,
+      "top": 232,
+      "bottom": 16077.640625,
+      "width": 300,
+      "height": 15845.640625
+    },
+    "inner": {
+      "left": 64,
+      "right": 326
+    },
+    "padding": [18, 18],
+    "heading": {
+      "left": 64,
+      "right": 208.9375,
+      "top": 12293.703125,
+      "bottom": 12326.703125,
+      "width": 144.9375,
+      "height": 33
+    },
+    "peerHeading": {
+      "left": 64,
+      "right": 154.15625,
+      "top": 10864.703125,
+      "bottom": 10892.703125,
+      "width": 90.15625,
+      "height": 28
+    },
+    "words": [],
+    "overflowInk": [],
+    "buttons": [
+      {
+        "text": "CPU",
+        "box": {
+          "left": 64,
+          "right": 115.921875,
+          "top": 12376.296875,
+          "bottom": 12412.296875,
+          "width": 51.921875,
+          "height": 36
+        },
+        "ink": [
+          {
+            "left": 77,
+            "right": 102.921875,
+            "top": 12386.71875,
+            "bottom": 12401.71875
+          }
+        ],
+        "padding": ["12px", "12px"]
+      },
+      {
+        "text": "Memory",
+        "box": {
+          "left": 125.921875,
+          "right": 200.609375,
+          "top": 12376.296875,
+          "bottom": 12412.296875,
+          "width": 74.6875,
+          "height": 36
+        },
+        "ink": [
+          {
+            "left": 138.921875,
+            "right": 187.609375,
+            "top": 12386.71875,
+            "bottom": 12401.71875
+          }
+        ],
+        "padding": ["12px", "12px"]
+      }
+    ],
+    "rows": [
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 12489.484375,
+          "bottom": 12662.453125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "545ea538461003efdc8c81c244531b003f6f26cfccf6c0073b3239fdedf49446",
+          "length": 4,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 12509.484375,
+            "bottom": 12531.875,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 12573.46875,
+              "bottom": 12621.453125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 12575.46875,
+                "bottom": 12590.46875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 12601.0625,
+                "bottom": 12618.0625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "743fc20629f94700bd1f8ffc33f187a1c089f74752b5096bfb3028661a24b2f9",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 12573.46875,
+              "bottom": 12621.453125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 12575.46875,
+                "bottom": 12590.46875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 273.671875,
+                "top": 12601.0625,
+                "bottom": 12618.0625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "80c0b0afe17dde742bfb05f6612c3433fe301d26c53603b36cb114e05ac25c4c",
+            "valueLength": 8
+          }
+        ],
+        "pidHash": "68ff7b1c3d0b6b5f94855b8c626363bbcca9bb207eb5b02273a8a167899a545a"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 12662.453125,
+          "bottom": 12835.421875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "1bd0438fadfd70c4ff2660fc4d66365a082805dbda9efcd272ee63bd8c14dac7",
+          "length": 7,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 12682.453125,
+            "bottom": 12704.84375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 12746.4375,
+              "bottom": 12794.421875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 12748.4375,
+                "bottom": 12763.4375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 12774.03125,
+                "bottom": 12791.03125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "a86eb5282f1ff48ae202931f7fcab37823561ea4ddca25a292914339332d4f4a",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 12746.4375,
+              "bottom": 12794.421875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 12748.4375,
+                "bottom": 12763.4375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 273.671875,
+                "top": 12774.03125,
+                "bottom": 12791.03125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "758bcf3a30cb1c75c4581028ea6f30cf4956b1f94e132662cd366b0eaadf03de",
+            "valueLength": 8
+          }
+        ],
+        "pidHash": "6bd44ccbcb332868f388c5e513b138cad353444144eb078ac58bf6f530c31439"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 12835.421875,
+          "bottom": 13008.390625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "2397d068a8d1552a4c3f9147ba9c94e086bfd66fb2acb5bbaf47197105127d5f",
+          "length": 10,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 12855.421875,
+            "bottom": 12877.8125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 12919.40625,
+              "bottom": 12967.390625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 12921.40625,
+                "bottom": 12936.40625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 12947,
+                "bottom": 12964
+              }
+            ],
+            "overflow": false,
+            "valueHash": "fbe7bbb80106c6b7557719a59e27852829aa747ad4ca2fab184562a29663223c",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 12919.40625,
+              "bottom": 12967.390625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 12921.40625,
+                "bottom": 12936.40625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 12947,
+                "bottom": 12964
+              }
+            ],
+            "overflow": false,
+            "valueHash": "be4ea81c04fcd38172f9246a136644c492aa4fe5a293fc4f25e143a41a0f898f",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "b7e307660e1611cb42bcb28e4bb4a6465ccb5ec2e028ca4be8b84e8787929a38"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 13008.390625,
+          "bottom": 13181.359375,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "56210a470e293c6c1c37c26b813310feb5fe394f9ccac665f476ce6b03f3675e",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 13028.390625,
+            "bottom": 13050.78125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 13092.375,
+              "bottom": 13140.359375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 13094.375,
+                "bottom": 13109.375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 13119.96875,
+                "bottom": 13136.96875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 13092.375,
+              "bottom": 13140.359375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 13094.375,
+                "bottom": 13109.375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 13119.96875,
+                "bottom": 13136.96875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "6a0425fc08c5751067edc99de162cc6bef4ba9d06f45897cec6c656c8d859cbd",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "193f0469e83314ff4825152025e419a7e05a677a8f8fa9ba587f9528e7daa486"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 13181.359375,
+          "bottom": 13354.328125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "c1cc69e61c0f1c7ade8df0f2994e582e7c1f2c57d1ec192a0baf9f96b7739d9d",
+          "length": 7,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 13201.359375,
+            "bottom": 13223.75,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 13265.34375,
+              "bottom": 13313.328125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 13267.34375,
+                "bottom": 13282.34375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 13292.9375,
+                "bottom": 13309.9375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 13265.34375,
+              "bottom": 13313.328125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 13267.34375,
+                "bottom": 13282.34375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 13292.9375,
+                "bottom": 13309.9375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "e16755298f2385d3b6cf2a3890ad5e8387727513e447625f1bff543e3d05c803",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "bc00ab20164dfd0ac8718178dc41a02e498bf1f25fe5839076ed47d6b2ce6977"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 13354.328125,
+          "bottom": 13527.296875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "7e245d5d8e00238b086c1af6965554190b8e1e8085eefee7fca84a93871f9d44",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 13374.328125,
+            "bottom": 13396.71875,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 13438.3125,
+              "bottom": 13486.296875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 13440.3125,
+                "bottom": 13455.3125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 13465.90625,
+                "bottom": 13482.90625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 13438.3125,
+              "bottom": 13486.296875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 13440.3125,
+                "bottom": 13455.3125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 13465.90625,
+                "bottom": 13482.90625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "1eca6009ebc2be28f6a9722abbdb6d20ac2b543ebf9fa27a2c2bb89a4019a3e2",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "fc72c98a6c2916c1bbf9f39fce094f5785bb6f1d656971520b660b2e8a760fe3"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 13527.296875,
+          "bottom": 13700.265625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 13547.296875,
+            "bottom": 13569.6875,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 13611.28125,
+              "bottom": 13659.265625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 13613.28125,
+                "bottom": 13628.28125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 13638.875,
+                "bottom": 13655.875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "a975b3c69be4b8b75ef56fd7ad27fd94fbf073e7faaa6ea72ac525b5bdb1bdf5",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 13611.28125,
+              "bottom": 13659.265625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 13613.28125,
+                "bottom": 13628.28125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 13638.875,
+                "bottom": 13655.875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "b7c27efcaf69dbbcc430140b1d8644c2842d7fe1e51336c26c01d4402c7b3416",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "6847e8b4488d433641f1060e0b07e5d79207e6e1386fab980c64cb3b5ef2d662"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 13700.265625,
+          "bottom": 13873.234375,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 13720.265625,
+            "bottom": 13742.65625,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 13784.25,
+              "bottom": 13832.234375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 13786.25,
+                "bottom": 13801.25
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 13811.84375,
+                "bottom": 13828.84375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "fda6e40ea531f60ed3db79c5934caccf2e6e14298a9d3450570c8f2949210792",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 13784.25,
+              "bottom": 13832.234375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 13786.25,
+                "bottom": 13801.25
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 13811.84375,
+                "bottom": 13828.84375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "87785832202f9e9daed8e63ad6b30120a63abfdb1a75c78d209ac5cd61666a74",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "cdff81887d7e7a3173036b4b17db1084e0ea4d5940173b355a701b6c69a8d9ee"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 13873.234375,
+          "bottom": 14046.203125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 13893.234375,
+            "bottom": 13915.625,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 13957.21875,
+              "bottom": 14005.203125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 13959.21875,
+                "bottom": 13974.21875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 13984.8125,
+                "bottom": 14001.8125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "fda6e40ea531f60ed3db79c5934caccf2e6e14298a9d3450570c8f2949210792",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 13957.21875,
+              "bottom": 14005.203125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 13959.21875,
+                "bottom": 13974.21875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 13984.8125,
+                "bottom": 14001.8125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "1829b6aec4b532af19ba8948fd1ffb53026210bb07463925a07dbb97be2be41d",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "98c1bbc5132729147d9bdf313dfb4f6759925d816aeb693b21cfe6d91ad06d09"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 14046.203125,
+          "bottom": 14219.171875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 14066.203125,
+            "bottom": 14088.59375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 14130.1875,
+              "bottom": 14178.171875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 14132.1875,
+                "bottom": 14147.1875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 14157.78125,
+                "bottom": 14174.78125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 14130.1875,
+              "bottom": 14178.171875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 14132.1875,
+                "bottom": 14147.1875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 14157.78125,
+                "bottom": 14174.78125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "1829b6aec4b532af19ba8948fd1ffb53026210bb07463925a07dbb97be2be41d",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "084cdf0e074beb5950d726288c350900af22bab8d8da663667dcf11ff2230357"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 14219.171875,
+          "bottom": 14392.140625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "659a4df60a2f35d141117ccf3ee22aaa78e878d7c50c1ce70089cd1e6a3f9b53",
+          "length": 24,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 14239.171875,
+            "bottom": 14261.5625,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 14303.15625,
+              "bottom": 14351.140625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 14305.15625,
+                "bottom": 14320.15625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 14330.75,
+                "bottom": 14347.75
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 14303.15625,
+              "bottom": 14351.140625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 14305.15625,
+                "bottom": 14320.15625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 229.15625,
+                "top": 14330.75,
+                "bottom": 14347.75
+              }
+            ],
+            "overflow": false,
+            "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+            "valueLength": 3
+          }
+        ],
+        "pidHash": "fe4d8560950d339833fc264e9e1e2ceb5dc304c50b1c7617d76cb4fa135ca218"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 14392.140625,
+          "bottom": 14565.109375,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 14412.140625,
+            "bottom": 14434.53125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 14476.125,
+              "bottom": 14524.109375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 14478.125,
+                "bottom": 14493.125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 14503.71875,
+                "bottom": 14520.71875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 14476.125,
+              "bottom": 14524.109375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 14478.125,
+                "bottom": 14493.125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 14503.71875,
+                "bottom": 14520.71875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13470ea362474d90e6da65e0a8b77babd30488d44e049ee2285d496a7d73f5ee",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "83b712553cda6ca5a4e6e68dc268a68f6ff533bc16f307beedf9b947ed2b3f69"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 14565.109375,
+          "bottom": 14738.078125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "a942b37ccfaf5a813b1432caa209a43b9d144e47ad0de1549c289c253e556cd5",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 14585.109375,
+            "bottom": 14607.5,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 14649.09375,
+              "bottom": 14697.078125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 14651.09375,
+                "bottom": 14666.09375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 14676.6875,
+                "bottom": 14693.6875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 14649.09375,
+              "bottom": 14697.078125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 14651.09375,
+                "bottom": 14666.09375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 14676.6875,
+                "bottom": 14693.6875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "e30af743b170df913b93532dc223198f21996d0ab17df4452067af6db43e819f",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "af044d4278e7dc8ae981daec9acaf35b72843ca79dd701a90b0b0598bc3a3a00"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 14738.078125,
+          "bottom": 14911.046875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "8b51ac5ca03b0a599e3951a7825c5e6028b62a6c82c9565b3d6a3660d2c7fd00",
+          "length": 4,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 14758.078125,
+            "bottom": 14780.46875,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 14822.0625,
+              "bottom": 14870.046875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 14824.0625,
+                "bottom": 14839.0625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 14849.65625,
+                "bottom": 14866.65625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 14822.0625,
+              "bottom": 14870.046875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 14824.0625,
+                "bottom": 14839.0625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 255.359375,
+                "top": 14849.65625,
+                "bottom": 14866.65625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "2d6fc10209c40485442b2cc58f5a40d7a730962acc627b07711fb074dfe58e89",
+            "valueLength": 6
+          }
+        ],
+        "pidHash": "61ab550f4c85a975cd46f8606ede483d8ee720a76f627773de1bc1dd8ce5fb35"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 14911.046875,
+          "bottom": 15084.015625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "a942b37ccfaf5a813b1432caa209a43b9d144e47ad0de1549c289c253e556cd5",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 14931.046875,
+            "bottom": 14953.4375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 14995.03125,
+              "bottom": 15043.015625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 14997.03125,
+                "bottom": 15012.03125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 15022.625,
+                "bottom": 15039.625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 14995.03125,
+              "bottom": 15043.015625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 14997.03125,
+                "bottom": 15012.03125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 255.359375,
+                "top": 15022.625,
+                "bottom": 15039.625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "b6ac9e6e4c14ba65baa91c16db53b8b5675bc16dabccdbf2c55980e534a8ac68",
+            "valueLength": 6
+          }
+        ],
+        "pidHash": "117da887a9173fefd7ca1303fbe60f02a7260df64f4ca329ae62c6da0dabd4d0"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 15084.015625,
+          "bottom": 15256.984375,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "a942b37ccfaf5a813b1432caa209a43b9d144e47ad0de1549c289c253e556cd5",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 15104.015625,
+            "bottom": 15126.40625,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 15168,
+              "bottom": 15215.984375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 15170,
+                "bottom": 15185
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 15195.59375,
+                "bottom": 15212.59375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 15168,
+              "bottom": 15215.984375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 15170,
+                "bottom": 15185
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 229.15625,
+                "top": 15195.59375,
+                "bottom": 15212.59375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+            "valueLength": 3
+          }
+        ],
+        "pidHash": "326f31317bbca778fde2e70e2d256a15c747b22a11f29b53846d8943888d1cd7"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 15256.984375,
+          "bottom": 15429.953125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "a942b37ccfaf5a813b1432caa209a43b9d144e47ad0de1549c289c253e556cd5",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 15276.984375,
+            "bottom": 15299.375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 15340.96875,
+              "bottom": 15388.953125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 15342.96875,
+                "bottom": 15357.96875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 15368.5625,
+                "bottom": 15385.5625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 15340.96875,
+              "bottom": 15388.953125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 15342.96875,
+                "bottom": 15357.96875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 15368.5625,
+                "bottom": 15385.5625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "3fd26149f445d321c0f55a7af48152a0c82851e0c58817d6687c8328215c4bc5",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "b111b17cb0bc024ecae103931d7ee46cb17896b52d9b863cf4b4cdff170ac634"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 15429.953125,
+          "bottom": 15602.921875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+          "length": 7,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 15449.953125,
+            "bottom": 15472.34375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 15513.9375,
+              "bottom": 15561.921875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 15515.9375,
+                "bottom": 15530.9375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 15541.53125,
+                "bottom": 15558.53125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 15513.9375,
+              "bottom": 15561.921875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 15515.9375,
+                "bottom": 15530.9375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 15541.53125,
+                "bottom": 15558.53125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "6572d431bb5c9bb187633e8f821cb4f349e42c0168482ebacb550854c60adada",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 15602.921875,
+          "bottom": 15775.890625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "92cb138e1113b206bed13e7993bf9c632f34c7890667178800de4a157d88fd66",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 15622.921875,
+            "bottom": 15645.3125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 15686.90625,
+              "bottom": 15734.890625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 15688.90625,
+                "bottom": 15703.90625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 15714.5,
+                "bottom": 15731.5
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 15686.90625,
+              "bottom": 15734.890625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 15688.90625,
+                "bottom": 15703.90625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 229.15625,
+                "top": 15714.5,
+                "bottom": 15731.5
+              }
+            ],
+            "overflow": false,
+            "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+            "valueLength": 3
+          }
+        ],
+        "pidHash": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 15775.890625,
+          "bottom": 15947.859375,
+          "width": 262,
+          "height": 171.96875
+        },
+        "name": {
+          "sha256": "1a69d77c6ef35993cefaf8d0f2e86040f6b061eb7dc312fdbf21a3912c8f3b0c",
+          "length": 22,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 15795.890625,
+            "bottom": 15818.28125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 15859.875,
+              "bottom": 15907.859375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 15861.875,
+                "bottom": 15876.875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 15887.46875,
+                "bottom": 15904.46875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 15859.875,
+              "bottom": 15907.859375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 15861.875,
+                "bottom": 15876.875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 229.15625,
+                "top": 15887.46875,
+                "bottom": 15904.46875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+            "valueLength": 3
+          }
+        ],
+        "pidHash": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+      }
+    ],
+    "notice": null,
+    "chrome": {
+      "bar": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "dock": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "frame": {
+        "background": "rgba(20, 36, 35, 0.95)",
+        "blur": "blur(24px) saturate(1.2)",
+        "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "header": {
+        "background": "rgba(0, 0, 0, 0)",
+        "blur": "none",
+        "shadow": "none",
+        "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+      },
+      "navigation": "page"
+    }
+  },
+  "counts": {
+    "scanned": 125,
+    "readable": 124,
+    "unreadable": 1,
+    "compared": 123,
+    "cpuRows": 20,
+    "memoryRows": 20,
+    "limited": false
+  },
+  "nativeTabFocus": {
+    "tag": "BUTTON",
+    "owner": "tool",
+    "frameMode": "page",
+    "desktopQuery": false,
+    "documentScroll": {
+      "scrollHeight": 16223,
+      "clientHeight": 844,
+      "scrollTop": 11978,
+      "maxScroll": 15379
+    },
+    "expectedRevealDelta": 0,
+    "scroll": {
+      "y": 11978,
+      "content": 0
+    },
+    "top": 398.296875,
+    "bottom": 434.296875,
+    "documentTop": 12376.296875,
+    "chromeBottom": 98,
+    "dockTop": 765,
+    "outline": "rgb(183, 92, 62) solid 3px",
+    "shadow": "none",
+    "textHash": "c3963aedaac6c83c04cf8fb997b479c61e66b3caeecfadd2f2d4bd5b0aef1778",
+    "textLength": 6
+  },
+  "memory": {
+    "rows": 20,
+    "rankHash": "87ca00b5c83ca7b747bea9b21abbf690e2b938cc888e0e5e9f21d10f3b6ec8ec",
+    "sampleHash": "45a42e84ac2ddeb903ffd167a23cd28baa5ca0fc1668c528afb4e7201be3c645",
+    "exactApiOrderAndValues": true,
+    "fullAccessibleNames": true,
+    "responseAt": 1792298048943,
+    "sampledAt": "2026-10-18T04:33:54.058250Z"
+  },
+  "memoryMetrics": {
+    "width": 390,
+    "documentWidth": 390,
+    "root": {
+      "left": 45,
+      "right": 345,
+      "top": 296.703125,
+      "bottom": 4080.046875,
+      "width": 300,
+      "height": 3783.34375
+    },
+    "monitor": {
+      "left": 45,
+      "right": 345,
+      "top": -11746,
+      "bottom": 4080.046875,
+      "width": 300,
+      "height": 15826.046875
+    },
+    "inner": {
+      "left": 64,
+      "right": 326
+    },
+    "padding": [18, 18],
+    "heading": {
+      "left": 64,
+      "right": 208.9375,
+      "top": 315.703125,
+      "bottom": 348.703125,
+      "width": 144.9375,
+      "height": 33
+    },
+    "peerHeading": {
+      "left": 64,
+      "right": 154.15625,
+      "top": -1113.296875,
+      "bottom": -1085.296875,
+      "width": 90.15625,
+      "height": 28
+    },
+    "words": [],
+    "overflowInk": [],
+    "buttons": [
+      {
+        "text": "CPU",
+        "box": {
+          "left": 64,
+          "right": 115.921875,
+          "top": 398.296875,
+          "bottom": 434.296875,
+          "width": 51.921875,
+          "height": 36
+        },
+        "ink": [
+          {
+            "left": 77,
+            "right": 102.921875,
+            "top": 408.71875,
+            "bottom": 423.71875
+          }
+        ],
+        "padding": ["12px", "12px"]
+      },
+      {
+        "text": "Memory",
+        "box": {
+          "left": 125.921875,
+          "right": 200.609375,
+          "top": 398.296875,
+          "bottom": 434.296875,
+          "width": 74.6875,
+          "height": 36
+        },
+        "ink": [
+          {
+            "left": 138.921875,
+            "right": 187.609375,
+            "top": 408.71875,
+            "bottom": 423.71875
+          }
+        ],
+        "padding": ["12px", "12px"]
+      }
+    ],
+    "rows": [
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 511.484375,
+          "bottom": 684.453125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "1bd0438fadfd70c4ff2660fc4d66365a082805dbda9efcd272ee63bd8c14dac7",
+          "length": 7,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 531.484375,
+            "bottom": 553.875,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 595.46875,
+              "bottom": 643.453125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 597.46875,
+                "bottom": 612.46875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 623.0625,
+                "bottom": 640.0625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "a86eb5282f1ff48ae202931f7fcab37823561ea4ddca25a292914339332d4f4a",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 595.46875,
+              "bottom": 643.453125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 597.46875,
+                "bottom": 612.46875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 273.671875,
+                "top": 623.0625,
+                "bottom": 640.0625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "758bcf3a30cb1c75c4581028ea6f30cf4956b1f94e132662cd366b0eaadf03de",
+            "valueLength": 8
+          }
+        ],
+        "pidHash": "6bd44ccbcb332868f388c5e513b138cad353444144eb078ac58bf6f530c31439"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 684.453125,
+          "bottom": 857.421875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "545ea538461003efdc8c81c244531b003f6f26cfccf6c0073b3239fdedf49446",
+          "length": 4,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 704.453125,
+            "bottom": 726.84375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 768.4375,
+              "bottom": 816.421875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 770.4375,
+                "bottom": 785.4375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 796.03125,
+                "bottom": 813.03125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "743fc20629f94700bd1f8ffc33f187a1c089f74752b5096bfb3028661a24b2f9",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 768.4375,
+              "bottom": 816.421875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 770.4375,
+                "bottom": 785.4375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 273.671875,
+                "top": 796.03125,
+                "bottom": 813.03125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "80c0b0afe17dde742bfb05f6612c3433fe301d26c53603b36cb114e05ac25c4c",
+            "valueLength": 8
+          }
+        ],
+        "pidHash": "68ff7b1c3d0b6b5f94855b8c626363bbcca9bb207eb5b02273a8a167899a545a"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 857.421875,
+          "bottom": 1030.390625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "56210a470e293c6c1c37c26b813310feb5fe394f9ccac665f476ce6b03f3675e",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 877.421875,
+            "bottom": 899.8125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 941.40625,
+              "bottom": 989.390625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 943.40625,
+                "bottom": 958.40625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 969,
+                "bottom": 986
+              }
+            ],
+            "overflow": false,
+            "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 941.40625,
+              "bottom": 989.390625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 943.40625,
+                "bottom": 958.40625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 969,
+                "bottom": 986
+              }
+            ],
+            "overflow": false,
+            "valueHash": "6a0425fc08c5751067edc99de162cc6bef4ba9d06f45897cec6c656c8d859cbd",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "193f0469e83314ff4825152025e419a7e05a677a8f8fa9ba587f9528e7daa486"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 1030.390625,
+          "bottom": 1203.359375,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "858bd5f51000cf273d4de32ef14ac9c5887cce3076ab8f8f1b2e30fd499afab6",
+          "length": 7,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1050.390625,
+            "bottom": 1072.78125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 1114.375,
+              "bottom": 1162.359375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 1116.375,
+                "bottom": 1131.375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 1141.96875,
+                "bottom": 1158.96875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 1114.375,
+              "bottom": 1162.359375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 1116.375,
+                "bottom": 1131.375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 1141.96875,
+                "bottom": 1158.96875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "2b664ca91d5c7b5ba211fe30adc1e09104d9676fb3cd7b54d212aeba95df8664",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "5eb9303dc0c874c69193dd3300762fbc0f3621a376275627ca65296a29f5b755"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 1203.359375,
+          "bottom": 1376.328125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "2397d068a8d1552a4c3f9147ba9c94e086bfd66fb2acb5bbaf47197105127d5f",
+          "length": 10,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1223.359375,
+            "bottom": 1245.75,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 1287.34375,
+              "bottom": 1335.328125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 1289.34375,
+                "bottom": 1304.34375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 1314.9375,
+                "bottom": 1331.9375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "fbe7bbb80106c6b7557719a59e27852829aa747ad4ca2fab184562a29663223c",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 1287.34375,
+              "bottom": 1335.328125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 1289.34375,
+                "bottom": 1304.34375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 1314.9375,
+                "bottom": 1331.9375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "be4ea81c04fcd38172f9246a136644c492aa4fe5a293fc4f25e143a41a0f898f",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "b7e307660e1611cb42bcb28e4bb4a6465ccb5ec2e028ca4be8b84e8787929a38"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 1376.328125,
+          "bottom": 1549.296875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "7e245d5d8e00238b086c1af6965554190b8e1e8085eefee7fca84a93871f9d44",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1396.328125,
+            "bottom": 1418.71875,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 1460.3125,
+              "bottom": 1508.296875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 1462.3125,
+                "bottom": 1477.3125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 1487.90625,
+                "bottom": 1504.90625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 1460.3125,
+              "bottom": 1508.296875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 1462.3125,
+                "bottom": 1477.3125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 1487.90625,
+                "bottom": 1504.90625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "1eca6009ebc2be28f6a9722abbdb6d20ac2b543ebf9fa27a2c2bb89a4019a3e2",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "fc72c98a6c2916c1bbf9f39fce094f5785bb6f1d656971520b660b2e8a760fe3"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 1549.296875,
+          "bottom": 1722.265625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "c1cc69e61c0f1c7ade8df0f2994e582e7c1f2c57d1ec192a0baf9f96b7739d9d",
+          "length": 7,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1569.296875,
+            "bottom": 1591.6875,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 1633.28125,
+              "bottom": 1681.265625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 1635.28125,
+                "bottom": 1650.28125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 1660.875,
+                "bottom": 1677.875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 1633.28125,
+              "bottom": 1681.265625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 1635.28125,
+                "bottom": 1650.28125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 1660.875,
+                "bottom": 1677.875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "e16755298f2385d3b6cf2a3890ad5e8387727513e447625f1bff543e3d05c803",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "bc00ab20164dfd0ac8718178dc41a02e498bf1f25fe5839076ed47d6b2ce6977"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 1722.265625,
+          "bottom": 1895.234375,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "a942b37ccfaf5a813b1432caa209a43b9d144e47ad0de1549c289c253e556cd5",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1742.265625,
+            "bottom": 1764.65625,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 1806.25,
+              "bottom": 1854.234375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 1808.25,
+                "bottom": 1823.25
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 1833.84375,
+                "bottom": 1850.84375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 1806.25,
+              "bottom": 1854.234375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 1808.25,
+                "bottom": 1823.25
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 1833.84375,
+                "bottom": 1850.84375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "e30af743b170df913b93532dc223198f21996d0ab17df4452067af6db43e819f",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "af044d4278e7dc8ae981daec9acaf35b72843ca79dd701a90b0b0598bc3a3a00"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 1895.234375,
+          "bottom": 2068.203125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "545ea538461003efdc8c81c244531b003f6f26cfccf6c0073b3239fdedf49446",
+          "length": 4,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 1915.234375,
+            "bottom": 1937.625,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 1979.21875,
+              "bottom": 2027.203125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 1981.21875,
+                "bottom": 1996.21875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 2006.8125,
+                "bottom": 2023.8125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 1979.21875,
+              "bottom": 2027.203125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 1981.21875,
+                "bottom": 1996.21875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 2006.8125,
+                "bottom": 2023.8125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "cc7a455e4d8feaa2027bf89fac98063cffe421f13433342c409e13e5b6c0d370",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "c8a6860019d8ca72e539105fbac8d651e6a2a4c774d95b1ccf229cbb71642cb7"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 2068.203125,
+          "bottom": 2241.171875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "4a5236ec192002f17c390089e9d43e5f51af69dbff498043a08df9920c651ad9",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 2088.203125,
+            "bottom": 2110.59375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 2152.1875,
+              "bottom": 2200.171875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 2154.1875,
+                "bottom": 2169.1875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 2179.78125,
+                "bottom": 2196.78125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 2152.1875,
+              "bottom": 2200.171875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 2154.1875,
+                "bottom": 2169.1875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 2179.78125,
+                "bottom": 2196.78125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "fe8809c1ed2618298ef315240d9f08d80409bc7b4ace07a361a0e0b7f3c1c82a",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "85daaf6f7055cd5736287faed9603d712920092c4f8fd0097ec3b650bf27530e"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 2241.171875,
+          "bottom": 2414.140625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "a942b37ccfaf5a813b1432caa209a43b9d144e47ad0de1549c289c253e556cd5",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 2261.171875,
+            "bottom": 2283.5625,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 2325.15625,
+              "bottom": 2373.140625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 2327.15625,
+                "bottom": 2342.15625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 2352.75,
+                "bottom": 2369.75
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 2325.15625,
+              "bottom": 2373.140625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 2327.15625,
+                "bottom": 2342.15625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 2352.75,
+                "bottom": 2369.75
+              }
+            ],
+            "overflow": false,
+            "valueHash": "3fd26149f445d321c0f55a7af48152a0c82851e0c58817d6687c8328215c4bc5",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "b111b17cb0bc024ecae103931d7ee46cb17896b52d9b863cf4b4cdff170ac634"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 2414.140625,
+          "bottom": 2587.109375,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "501e03083c73bb097e77509a3cb92cedc7f44d6d53e1e54eb4c40f23f03307e9",
+          "length": 4,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 2434.140625,
+            "bottom": 2456.53125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 2498.125,
+              "bottom": 2546.109375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 2500.125,
+                "bottom": 2515.125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 119.6875,
+                "top": 2525.71875,
+                "bottom": 2542.71875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "331551b0de4157c9abc7b72b61b96a2a928fd6db3cdf029c1fc44b08ad633aa6",
+            "valueLength": 7
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 2498.125,
+              "bottom": 2546.109375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 2500.125,
+                "bottom": 2515.125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 2525.71875,
+                "bottom": 2542.71875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "bf4cee8a50fdb694d580cfd3a51c6ac252044a9eb6d377f20cf25f9de3809e77",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "ae0ca343520a9bcdeec6b3859762e8e512994c24fc8b74d3face9107432f94fe"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 2587.109375,
+          "bottom": 2760.078125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+          "length": 7,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 2607.109375,
+            "bottom": 2629.5,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 2671.09375,
+              "bottom": 2719.078125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 2673.09375,
+                "bottom": 2688.09375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 2698.6875,
+                "bottom": 2715.6875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 2671.09375,
+              "bottom": 2719.078125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 2673.09375,
+                "bottom": 2688.09375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 2698.6875,
+                "bottom": 2715.6875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "6572d431bb5c9bb187633e8f821cb4f349e42c0168482ebacb550854c60adada",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 2760.078125,
+          "bottom": 2933.046875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 2780.078125,
+            "bottom": 2802.46875,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 2844.0625,
+              "bottom": 2892.046875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 2846.0625,
+                "bottom": 2861.0625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 2871.65625,
+                "bottom": 2888.65625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "a975b3c69be4b8b75ef56fd7ad27fd94fbf073e7faaa6ea72ac525b5bdb1bdf5",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 2844.0625,
+              "bottom": 2892.046875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 2846.0625,
+                "bottom": 2861.0625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 2871.65625,
+                "bottom": 2888.65625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "b7c27efcaf69dbbcc430140b1d8644c2842d7fe1e51336c26c01d4402c7b3416",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "6847e8b4488d433641f1060e0b07e5d79207e6e1386fab980c64cb3b5ef2d662"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 2933.046875,
+          "bottom": 3106.015625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 2953.046875,
+            "bottom": 2975.4375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 3017.03125,
+              "bottom": 3065.015625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 3019.03125,
+                "bottom": 3034.03125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 3044.625,
+                "bottom": 3061.625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 3017.03125,
+              "bottom": 3065.015625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 3019.03125,
+                "bottom": 3034.03125
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 3044.625,
+                "bottom": 3061.625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13470ea362474d90e6da65e0a8b77babd30488d44e049ee2285d496a7d73f5ee",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "83b712553cda6ca5a4e6e68dc268a68f6ff533bc16f307beedf9b947ed2b3f69"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 3106.015625,
+          "bottom": 3278.984375,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 3126.015625,
+            "bottom": 3148.40625,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 3190,
+              "bottom": 3237.984375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 3192,
+                "bottom": 3207
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 3217.59375,
+                "bottom": 3234.59375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "fda6e40ea531f60ed3db79c5934caccf2e6e14298a9d3450570c8f2949210792",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 3190,
+              "bottom": 3237.984375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 3192,
+                "bottom": 3207
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 3217.59375,
+                "bottom": 3234.59375
+              }
+            ],
+            "overflow": false,
+            "valueHash": "87785832202f9e9daed8e63ad6b30120a63abfdb1a75c78d209ac5cd61666a74",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "cdff81887d7e7a3173036b4b17db1084e0ea4d5940173b355a701b6c69a8d9ee"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 3278.984375,
+          "bottom": 3451.953125,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 3298.984375,
+            "bottom": 3321.375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 3362.96875,
+              "bottom": 3410.953125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 3364.96875,
+                "bottom": 3379.96875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 3390.5625,
+                "bottom": 3407.5625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 3362.96875,
+              "bottom": 3410.953125,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 3364.96875,
+                "bottom": 3379.96875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 3390.5625,
+                "bottom": 3407.5625
+              }
+            ],
+            "overflow": false,
+            "valueHash": "1829b6aec4b532af19ba8948fd1ffb53026210bb07463925a07dbb97be2be41d",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "084cdf0e074beb5950d726288c350900af22bab8d8da663667dcf11ff2230357"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 3451.953125,
+          "bottom": 3624.921875,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+          "length": 15,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 3471.953125,
+            "bottom": 3494.34375,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 3535.9375,
+              "bottom": 3583.921875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 3537.9375,
+                "bottom": 3552.9375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 3563.53125,
+                "bottom": 3580.53125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "fda6e40ea531f60ed3db79c5934caccf2e6e14298a9d3450570c8f2949210792",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 3535.9375,
+              "bottom": 3583.921875,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 3537.9375,
+                "bottom": 3552.9375
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 3563.53125,
+                "bottom": 3580.53125
+              }
+            ],
+            "overflow": false,
+            "valueHash": "1829b6aec4b532af19ba8948fd1ffb53026210bb07463925a07dbb97be2be41d",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "98c1bbc5132729147d9bdf313dfb4f6759925d816aeb693b21cfe6d91ad06d09"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 3624.921875,
+          "bottom": 3797.890625,
+          "width": 262,
+          "height": 172.96875
+        },
+        "name": {
+          "sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+          "length": 7,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 3644.921875,
+            "bottom": 3667.3125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 3708.90625,
+              "bottom": 3756.890625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 3710.90625,
+                "bottom": 3725.90625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 3736.5,
+                "bottom": 3753.5
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 3708.90625,
+              "bottom": 3756.890625,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 3710.90625,
+                "bottom": 3725.90625
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 264.515625,
+                "top": 3736.5,
+                "bottom": 3753.5
+              }
+            ],
+            "overflow": false,
+            "valueHash": "d42173f0f26eb35e2049d5e01489e1c0b498e02ce4d26651b3b01cba637da84c",
+            "valueLength": 7
+          }
+        ],
+        "pidHash": "ad3b83575249b68aab9602de378314fc221ab07a9b2ab0bb4a245ec649219f45"
+      },
+      {
+        "box": {
+          "left": 64,
+          "right": 326,
+          "top": 3797.890625,
+          "bottom": 3969.859375,
+          "width": 262,
+          "height": 171.96875
+        },
+        "name": {
+          "sha256": "a942b37ccfaf5a813b1432caa209a43b9d144e47ad0de1549c289c253e556cd5",
+          "length": 8,
+          "titleMatches": true,
+          "bdi": true,
+          "box": {
+            "left": 64,
+            "right": 326,
+            "top": 3817.890625,
+            "bottom": 3840.28125,
+            "width": 262,
+            "height": 22.390625
+          },
+          "ellipsis": false,
+          "overflow": "hidden",
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis"
+        },
+        "facts": [
+          {
+            "label": "CPU",
+            "box": {
+              "left": 64,
+              "right": 183,
+              "top": 3881.875,
+              "bottom": 3929.859375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 64,
+                "right": 89.53125,
+                "top": 3883.875,
+                "bottom": 3898.875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 64,
+                "right": 101,
+                "top": 3909.46875,
+                "bottom": 3926.46875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+            "valueLength": 4
+          },
+          {
+            "label": "Memory",
+            "box": {
+              "left": 207,
+              "right": 326,
+              "top": 3881.875,
+              "bottom": 3929.859375,
+              "width": 119,
+              "height": 47.984375
+            },
+            "labelInk": [
+              {
+                "left": 207,
+                "right": 253.875,
+                "top": 3883.875,
+                "bottom": 3898.875
+              }
+            ],
+            "valueInk": [
+              {
+                "left": 207,
+                "right": 255.359375,
+                "top": 3909.46875,
+                "bottom": 3926.46875
+              }
+            ],
+            "overflow": false,
+            "valueHash": "9a42151bdf8ec35d5bdf13c01e8946c8f463ae3267f5e98af31a8bfa6ff2d332",
+            "valueLength": 6
+          }
+        ],
+        "pidHash": "437f2e1f2bd34e3939bae4e1ef5c385be11413362ea11ea6f6d1b2fabae7cf62"
+      }
+    ],
+    "notice": null,
+    "chrome": {
+      "bar": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "dock": {
+        "background": "rgba(9, 23, 23, 0.92)",
+        "blur": "blur(28px) saturate(1.45)",
+        "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "frame": {
+        "background": "rgba(20, 36, 35, 0.95)",
+        "blur": "blur(24px) saturate(1.2)",
+        "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+        "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+      },
+      "header": {
+        "background": "rgba(0, 0, 0, 0)",
+        "blur": "none",
+        "shadow": "none",
+        "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+      },
+      "navigation": "page"
+    }
+  },
+  "cpuRestored": {
+    "rows": 20,
+    "rankHash": "9864ba2fca524e31d5d7302e56faf27e7b950697699a0490e04392cf8fa633b1",
+    "sampleHash": "45a42e84ac2ddeb903ffd167a23cd28baa5ca0fc1668c528afb4e7201be3c645",
+    "exactApiOrderAndValues": true,
+    "fullAccessibleNames": true,
+    "responseAt": 1792298048943,
+    "sampledAt": "2026-10-18T04:33:54.058250Z"
+  },
+  "refresh": {
+    "before": {
+      "x": 0,
+      "y": 12714,
+      "frame": 0,
+      "content": 0
+    },
+    "checkpoints": [
+      {
+        "actualResponse200": true,
+        "intervalFromPriorReceipt": 10018,
+        "before": {
+          "x": 0,
+          "y": 12714,
+          "frame": 0,
+          "content": 0
+        },
+        "after": {
+          "x": 0,
+          "y": 12714,
+          "frame": 0,
+          "content": 0
+        },
+        "proof": {
+          "rows": 20,
+          "rankHash": "30e2cd1a14c688bfacdb573746adbbc0c878fc93c8c5c67eacf8f3c66a6f0250",
+          "sampleHash": "3f5521b867fc96f4364caa9327debf3988c3a2f680b8d4a136777e1c0a29e2fb",
+          "exactApiOrderAndValues": true,
+          "fullAccessibleNames": true,
+          "responseAt": 1792298058961,
+          "sampledAt": "2026-10-18T04:34:06.816451Z"
+        },
+        "metrics": {
+          "width": 390,
+          "documentWidth": 390,
+          "root": {
+            "left": 45,
+            "right": 345,
+            "top": -439.296875,
+            "bottom": 3306.453125,
+            "width": 300,
+            "height": 3745.75
+          },
+          "monitor": {
+            "left": 45,
+            "right": 345,
+            "top": -12482,
+            "bottom": 3306.453125,
+            "width": 300,
+            "height": 15788.453125
+          },
+          "inner": {
+            "left": 64,
+            "right": 326
+          },
+          "padding": [18, 18],
+          "heading": {
+            "left": 64,
+            "right": 208.9375,
+            "top": -420.296875,
+            "bottom": -387.296875,
+            "width": 144.9375,
+            "height": 33
+          },
+          "peerHeading": {
+            "left": 64,
+            "right": 154.15625,
+            "top": -1849.296875,
+            "bottom": -1821.296875,
+            "width": 90.15625,
+            "height": 28
+          },
+          "words": [],
+          "overflowInk": [],
+          "buttons": [
+            {
+              "text": "CPU",
+              "box": {
+                "left": 64,
+                "right": 115.921875,
+                "top": -337.703125,
+                "bottom": -301.703125,
+                "width": 51.921875,
+                "height": 36
+              },
+              "ink": [
+                {
+                  "left": 77,
+                  "right": 102.921875,
+                  "top": -327.28125,
+                  "bottom": -312.28125
+                }
+              ],
+              "padding": ["12px", "12px"]
+            },
+            {
+              "text": "Memory",
+              "box": {
+                "left": 125.921875,
+                "right": 200.609375,
+                "top": -337.703125,
+                "bottom": -301.703125,
+                "width": 74.6875,
+                "height": 36
+              },
+              "ink": [
+                {
+                  "left": 138.921875,
+                  "right": 187.609375,
+                  "top": -327.28125,
+                  "bottom": -312.28125
+                }
+              ],
+              "padding": ["12px", "12px"]
+            }
+          ],
+          "rows": [
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": -281.703125,
+                "bottom": -108.734375,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "545ea538461003efdc8c81c244531b003f6f26cfccf6c0073b3239fdedf49446",
+                "length": 4,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": -261.703125,
+                  "bottom": -239.3125,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": -197.71875,
+                    "bottom": -149.734375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": -195.71875,
+                      "bottom": -180.71875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": -170.125,
+                      "bottom": -153.125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "55a4cebd10c4cdb18e32f07a658ca93790237981b32e962c1f6be892481c210a",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": -197.71875,
+                    "bottom": -149.734375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": -195.71875,
+                      "bottom": -180.71875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 273.671875,
+                      "top": -170.125,
+                      "bottom": -153.125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "a1c3dbde637ad6c2b772830cc31c9da2137cfc593fb5bcb00fb6a6e5ec462a6b",
+                  "valueLength": 8
+                }
+              ],
+              "pidHash": "68ff7b1c3d0b6b5f94855b8c626363bbcca9bb207eb5b02273a8a167899a545a"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": -108.734375,
+                "bottom": 64.234375,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "1bd0438fadfd70c4ff2660fc4d66365a082805dbda9efcd272ee63bd8c14dac7",
+                "length": 7,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": -88.734375,
+                  "bottom": -66.34375,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": -24.75,
+                    "bottom": 23.234375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": -22.75,
+                      "bottom": -7.75
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 2.84375,
+                      "bottom": 19.84375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "2f6ba1725f2052117977cda7b66d5d0a48924375d843a7ee19b62d1eb9e1b7d9",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": -24.75,
+                    "bottom": 23.234375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": -22.75,
+                      "bottom": -7.75
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 273.671875,
+                      "top": 2.84375,
+                      "bottom": 19.84375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "758bcf3a30cb1c75c4581028ea6f30cf4956b1f94e132662cd366b0eaadf03de",
+                  "valueLength": 8
+                }
+              ],
+              "pidHash": "6bd44ccbcb332868f388c5e513b138cad353444144eb078ac58bf6f530c31439"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 64.234375,
+                "bottom": 237.203125,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "2397d068a8d1552a4c3f9147ba9c94e086bfd66fb2acb5bbaf47197105127d5f",
+                "length": 10,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 84.234375,
+                  "bottom": 106.625,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 148.21875,
+                    "bottom": 196.203125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 150.21875,
+                      "bottom": 165.21875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 175.8125,
+                      "bottom": 192.8125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "93b447ba1ed409d245300f61c2c4c763dd2fff3e0fe8b5178b39f48ef0a57393",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 148.21875,
+                    "bottom": 196.203125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 150.21875,
+                      "bottom": 165.21875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 264.515625,
+                      "top": 175.8125,
+                      "bottom": 192.8125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "5256678ab5495c96da2b2e59a2d0f629f8cdce963d181ac6048e2f295481cee4",
+                  "valueLength": 7
+                }
+              ],
+              "pidHash": "b7e307660e1611cb42bcb28e4bb4a6465ccb5ec2e028ca4be8b84e8787929a38"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 237.203125,
+                "bottom": 410.171875,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "8b51ac5ca03b0a599e3951a7825c5e6028b62a6c82c9565b3d6a3660d2c7fd00",
+                "length": 4,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 257.203125,
+                  "bottom": 279.59375,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 321.1875,
+                    "bottom": 369.171875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 323.1875,
+                      "bottom": 338.1875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 348.78125,
+                      "bottom": 365.78125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "86fe72ee2a449f7928f4bb8615cb13e9d364f2b8e7d8037195c22749b3189842",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 321.1875,
+                    "bottom": 369.171875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 323.1875,
+                      "bottom": 338.1875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 255.359375,
+                      "top": 348.78125,
+                      "bottom": 365.78125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "2d6fc10209c40485442b2cc58f5a40d7a730962acc627b07711fb074dfe58e89",
+                  "valueLength": 6
+                }
+              ],
+              "pidHash": "61ab550f4c85a975cd46f8606ede483d8ee720a76f627773de1bc1dd8ce5fb35"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 410.171875,
+                "bottom": 583.140625,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "7e245d5d8e00238b086c1af6965554190b8e1e8085eefee7fca84a93871f9d44",
+                "length": 15,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 430.171875,
+                  "bottom": 452.5625,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 494.15625,
+                    "bottom": 542.140625,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 496.15625,
+                      "bottom": 511.15625
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 521.75,
+                      "bottom": 538.75
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 494.15625,
+                    "bottom": 542.140625,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 496.15625,
+                      "bottom": 511.15625
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 264.515625,
+                      "top": 521.75,
+                      "bottom": 538.75
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "1eca6009ebc2be28f6a9722abbdb6d20ac2b543ebf9fa27a2c2bb89a4019a3e2",
+                  "valueLength": 7
+                }
+              ],
+              "pidHash": "fc72c98a6c2916c1bbf9f39fce094f5785bb6f1d656971520b660b2e8a760fe3"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 583.140625,
+                "bottom": 756.109375,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "2f6c3750f9968e79b714577697aa6547d3468d683185eed4a1257f84e1ba2c58",
+                "length": 12,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 603.140625,
+                  "bottom": 625.53125,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 667.125,
+                    "bottom": 715.109375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 669.125,
+                      "bottom": 684.125
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 694.71875,
+                      "bottom": 711.71875
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 667.125,
+                    "bottom": 715.109375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 669.125,
+                      "bottom": 684.125
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 255.359375,
+                      "top": 694.71875,
+                      "bottom": 711.71875
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "79d1d4b834b4f793c7fbe1d8ba8b29a8e5ab3a3eacfad5e7f52318682309502e",
+                  "valueLength": 6
+                }
+              ],
+              "pidHash": "faef973fd5a25fc5e4e76f7db3aeeba15bf1145426b22f16cd8133ba69856249"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 756.109375,
+                "bottom": 929.078125,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "c1cc69e61c0f1c7ade8df0f2994e582e7c1f2c57d1ec192a0baf9f96b7739d9d",
+                "length": 7,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 776.109375,
+                  "bottom": 798.5,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 840.09375,
+                    "bottom": 888.078125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 842.09375,
+                      "bottom": 857.09375
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 867.6875,
+                      "bottom": 884.6875
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 840.09375,
+                    "bottom": 888.078125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 842.09375,
+                      "bottom": 857.09375
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 264.515625,
+                      "top": 867.6875,
+                      "bottom": 884.6875
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "e16755298f2385d3b6cf2a3890ad5e8387727513e447625f1bff543e3d05c803",
+                  "valueLength": 7
+                }
+              ],
+              "pidHash": "bc00ab20164dfd0ac8718178dc41a02e498bf1f25fe5839076ed47d6b2ce6977"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 929.078125,
+                "bottom": 1102.046875,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "56210a470e293c6c1c37c26b813310feb5fe394f9ccac665f476ce6b03f3675e",
+                "length": 8,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 949.078125,
+                  "bottom": 971.46875,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 1013.0625,
+                    "bottom": 1061.046875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 1015.0625,
+                      "bottom": 1030.0625
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 1040.65625,
+                      "bottom": 1057.65625
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "b6cde9e48ec7234291ca5b038af7990afb986b70cc35b8bcbc65ca3103c480aa",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 1013.0625,
+                    "bottom": 1061.046875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 1015.0625,
+                      "bottom": 1030.0625
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 264.515625,
+                      "top": 1040.65625,
+                      "bottom": 1057.65625
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "6a0425fc08c5751067edc99de162cc6bef4ba9d06f45897cec6c656c8d859cbd",
+                  "valueLength": 7
+                }
+              ],
+              "pidHash": "193f0469e83314ff4825152025e419a7e05a677a8f8fa9ba587f9528e7daa486"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 1102.046875,
+                "bottom": 1275.015625,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+                "length": 15,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 1122.046875,
+                  "bottom": 1144.4375,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 1186.03125,
+                    "bottom": 1234.015625,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 1188.03125,
+                      "bottom": 1203.03125
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 1213.625,
+                      "bottom": 1230.625
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "a975b3c69be4b8b75ef56fd7ad27fd94fbf073e7faaa6ea72ac525b5bdb1bdf5",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 1186.03125,
+                    "bottom": 1234.015625,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 1188.03125,
+                      "bottom": 1203.03125
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 264.515625,
+                      "top": 1213.625,
+                      "bottom": 1230.625
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "fabca374a02bdf0fb5c50aec8aeb093092a247b791ac043c6e9c8b3fd4f6224e",
+                  "valueLength": 7
+                }
+              ],
+              "pidHash": "83b712553cda6ca5a4e6e68dc268a68f6ff533bc16f307beedf9b947ed2b3f69"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 1275.015625,
+                "bottom": 1447.984375,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "50ddc997f376d5b8b43ca5b19b658d930726b12f56c6228864fe7e4a2487dd82",
+                "length": 15,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 1295.015625,
+                  "bottom": 1317.40625,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 1359,
+                    "bottom": 1406.984375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 1361,
+                      "bottom": 1376
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 1386.59375,
+                      "bottom": 1403.59375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "fda6e40ea531f60ed3db79c5934caccf2e6e14298a9d3450570c8f2949210792",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 1359,
+                    "bottom": 1406.984375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 1361,
+                      "bottom": 1376
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 264.515625,
+                      "top": 1386.59375,
+                      "bottom": 1403.59375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "e32e67a200327d0d175f56d14984ca3b34e05001b2fa221b556bb0421e33d417",
+                  "valueLength": 7
+                }
+              ],
+              "pidHash": "6847e8b4488d433641f1060e0b07e5d79207e6e1386fab980c64cb3b5ef2d662"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 1447.984375,
+                "bottom": 1620.953125,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "858bd5f51000cf273d4de32ef14ac9c5887cce3076ab8f8f1b2e30fd499afab6",
+                "length": 7,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 1467.984375,
+                  "bottom": 1490.375,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 1531.96875,
+                    "bottom": 1579.953125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 1533.96875,
+                      "bottom": 1548.96875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 1559.5625,
+                      "bottom": 1576.5625
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 1531.96875,
+                    "bottom": 1579.953125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 1533.96875,
+                      "bottom": 1548.96875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 264.515625,
+                      "top": 1559.5625,
+                      "bottom": 1576.5625
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "2b664ca91d5c7b5ba211fe30adc1e09104d9676fb3cd7b54d212aeba95df8664",
+                  "valueLength": 7
+                }
+              ],
+              "pidHash": "5eb9303dc0c874c69193dd3300762fbc0f3621a376275627ca65296a29f5b755"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 1620.953125,
+                "bottom": 1793.921875,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "b632351365b3ed2a314b862b0cd09abf2d5234e9726719f9dba9043bcc59ee49",
+                "length": 18,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 1640.953125,
+                  "bottom": 1663.34375,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 1704.9375,
+                    "bottom": 1752.921875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 1706.9375,
+                      "bottom": 1721.9375
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 1732.53125,
+                      "bottom": 1749.53125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 1704.9375,
+                    "bottom": 1752.921875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 1706.9375,
+                      "bottom": 1721.9375
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 229.15625,
+                      "top": 1732.53125,
+                      "bottom": 1749.53125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+                  "valueLength": 3
+                }
+              ],
+              "pidHash": "fe4d8560950d339833fc264e9e1e2ceb5dc304c50b1c7617d76cb4fa135ca218"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 1793.921875,
+                "bottom": 1966.890625,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "e28fc7a96814bc3d336f6b7af535ac1f5bb5c3b7c9cb6a4b09051f0e579a3cf8",
+                "length": 11,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 1813.921875,
+                  "bottom": 1836.3125,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 1877.90625,
+                    "bottom": 1925.890625,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 1879.90625,
+                      "bottom": 1894.90625
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 1905.5,
+                      "bottom": 1922.5
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "c8b27c2ee23c90034e6bf439e768bc950ddd06c3ef38848f3792ad27842457d6",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 1877.90625,
+                    "bottom": 1925.890625,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 1879.90625,
+                      "bottom": 1894.90625
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 229.15625,
+                      "top": 1905.5,
+                      "bottom": 1922.5
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+                  "valueLength": 3
+                }
+              ],
+              "pidHash": "4523540f1504cd17100c4835e85b7eefd49911580f8efff0599a8f283be6b9e3"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 1966.890625,
+                "bottom": 2139.859375,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                "length": 7,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 1986.890625,
+                  "bottom": 2009.28125,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 2050.875,
+                    "bottom": 2098.859375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 2052.875,
+                      "bottom": 2067.875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 2078.46875,
+                      "bottom": 2095.46875
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 2050.875,
+                    "bottom": 2098.859375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 2052.875,
+                      "bottom": 2067.875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 264.515625,
+                      "top": 2078.46875,
+                      "bottom": 2095.46875
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "6572d431bb5c9bb187633e8f821cb4f349e42c0168482ebacb550854c60adada",
+                  "valueLength": 7
+                }
+              ],
+              "pidHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 2139.859375,
+                "bottom": 2312.828125,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "92cb138e1113b206bed13e7993bf9c632f34c7890667178800de4a157d88fd66",
+                "length": 8,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 2159.859375,
+                  "bottom": 2182.25,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 2223.84375,
+                    "bottom": 2271.828125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 2225.84375,
+                      "bottom": 2240.84375
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 2251.4375,
+                      "bottom": 2268.4375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 2223.84375,
+                    "bottom": 2271.828125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 2225.84375,
+                      "bottom": 2240.84375
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 229.15625,
+                      "top": 2251.4375,
+                      "bottom": 2268.4375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+                  "valueLength": 3
+                }
+              ],
+              "pidHash": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 2312.828125,
+                "bottom": 2485.796875,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "1a69d77c6ef35993cefaf8d0f2e86040f6b061eb7dc312fdbf21a3912c8f3b0c",
+                "length": 22,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 2332.828125,
+                  "bottom": 2355.21875,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 2396.8125,
+                    "bottom": 2444.796875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 2398.8125,
+                      "bottom": 2413.8125
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 2424.40625,
+                      "bottom": 2441.40625
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 2396.8125,
+                    "bottom": 2444.796875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 2398.8125,
+                      "bottom": 2413.8125
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 229.15625,
+                      "top": 2424.40625,
+                      "bottom": 2441.40625
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+                  "valueLength": 3
+                }
+              ],
+              "pidHash": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 2485.796875,
+                "bottom": 2658.765625,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "8e6b55009d8ddf52156c27d17d60b119fbc86b405de95211930f1ef0251eaade",
+                "length": 15,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 2505.796875,
+                  "bottom": 2528.1875,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 2569.78125,
+                    "bottom": 2617.765625,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 2571.78125,
+                      "bottom": 2586.78125
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 2597.375,
+                      "bottom": 2614.375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 2569.78125,
+                    "bottom": 2617.765625,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 2571.78125,
+                      "bottom": 2586.78125
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 229.15625,
+                      "top": 2597.375,
+                      "bottom": 2614.375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+                  "valueLength": 3
+                }
+              ],
+              "pidHash": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 2658.765625,
+                "bottom": 2831.734375,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "17b14a719aa20c16e6cf0e2e3fec3a37fd790d5d499430c4d889c3836db45825",
+                "length": 15,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 2678.765625,
+                  "bottom": 2701.15625,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 2742.75,
+                    "bottom": 2790.734375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 2744.75,
+                      "bottom": 2759.75
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 2770.34375,
+                      "bottom": 2787.34375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 2742.75,
+                    "bottom": 2790.734375,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 2744.75,
+                      "bottom": 2759.75
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 229.15625,
+                      "top": 2770.34375,
+                      "bottom": 2787.34375
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+                  "valueLength": 3
+                }
+              ],
+              "pidHash": "ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 2831.734375,
+                "bottom": 3004.703125,
+                "width": 262,
+                "height": 172.96875
+              },
+              "name": {
+                "sha256": "29b22e8152d4261733b5f196216c2754d5fa99b7f9b6c98a3e5bf1562df71bd3",
+                "length": 15,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 2851.734375,
+                  "bottom": 2874.125,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 2915.71875,
+                    "bottom": 2963.703125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 2917.71875,
+                      "bottom": 2932.71875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 2943.3125,
+                      "bottom": 2960.3125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 2915.71875,
+                    "bottom": 2963.703125,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 2917.71875,
+                      "bottom": 2932.71875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 229.15625,
+                      "top": 2943.3125,
+                      "bottom": 2960.3125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+                  "valueLength": 3
+                }
+              ],
+              "pidHash": "e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"
+            },
+            {
+              "box": {
+                "left": 64,
+                "right": 326,
+                "top": 3004.703125,
+                "bottom": 3176.671875,
+                "width": 262,
+                "height": 171.96875
+              },
+              "name": {
+                "sha256": "e2b9c434676e4d8ac46ce003b4d4114616a4a7bd276d19e809fd4f5f0434c9ca",
+                "length": 15,
+                "titleMatches": true,
+                "bdi": true,
+                "box": {
+                  "left": 64,
+                  "right": 326,
+                  "top": 3024.703125,
+                  "bottom": 3047.09375,
+                  "width": 262,
+                  "height": 22.390625
+                },
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              "facts": [
+                {
+                  "label": "CPU",
+                  "box": {
+                    "left": 64,
+                    "right": 183,
+                    "top": 3088.6875,
+                    "bottom": 3136.671875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 64,
+                      "right": 89.53125,
+                      "top": 3090.6875,
+                      "bottom": 3105.6875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 64,
+                      "right": 101,
+                      "top": 3116.28125,
+                      "bottom": 3133.28125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "13e2510bc57d3bd9e2a3cfc0b1c33ce18483d1b322d87221dd5c76fb2477e6fc",
+                  "valueLength": 4
+                },
+                {
+                  "label": "Memory",
+                  "box": {
+                    "left": 207,
+                    "right": 326,
+                    "top": 3088.6875,
+                    "bottom": 3136.671875,
+                    "width": 119,
+                    "height": 47.984375
+                  },
+                  "labelInk": [
+                    {
+                      "left": 207,
+                      "right": 253.875,
+                      "top": 3090.6875,
+                      "bottom": 3105.6875
+                    }
+                  ],
+                  "valueInk": [
+                    {
+                      "left": 207,
+                      "right": 229.15625,
+                      "top": 3116.28125,
+                      "bottom": 3133.28125
+                    }
+                  ],
+                  "overflow": false,
+                  "valueHash": "4558e6463a13409ac7c724fc386e89bd965f8ceabf2601bc3846228f1ec06568",
+                  "valueLength": 3
+                }
+              ],
+              "pidHash": "7902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451"
+            }
+          ],
+          "notice": null,
+          "chrome": {
+            "bar": {
+              "background": "rgba(9, 23, 23, 0.92)",
+              "blur": "blur(28px) saturate(1.45)",
+              "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+              "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+            },
+            "dock": {
+              "background": "rgba(9, 23, 23, 0.92)",
+              "blur": "blur(28px) saturate(1.45)",
+              "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+              "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+            },
+            "frame": {
+              "background": "rgba(20, 36, 35, 0.95)",
+              "blur": "blur(24px) saturate(1.2)",
+              "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+              "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+            },
+            "header": {
+              "background": "rgba(0, 0, 0, 0)",
+              "blur": "none",
+              "shadow": "none",
+              "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+            },
+            "navigation": "page"
+          }
+        }
+      }
+    ],
+    "passed": true,
+    "distinctSample": true
+  },
+  "images": [
+    {
+      "visible": true,
+      "complete": true,
+      "loaded": true
+    }
+  ]
+}
