@@ -1,4 +1,4 @@
-"""Exercise only the new source sensor handler in the owned isolated Linux guest."""
+"""Read source or installed sensor handlers in the owned isolated Linux guest."""
 
 import argparse
 import hashlib
@@ -71,6 +71,79 @@ assert result.get('passed') and result['serverClosed']
 print(json.dumps(result))
 '''
 
+INSTALLED_PROBE = r'''
+import datetime,hashlib,http.client,json,os,re,socket,stat,subprocess,tarfile,time
+from pathlib import Path
+source=Path('/Users/sai/Documents/ChatGPT/homelab/scripts');installed=Path('/opt/orbis/host-service')
+archive=Path('/var/lib/orbis/snapshots/helper-before-sensors-20261018T075207Z.tar.gz')
+archive_hash='19c6accfa4307ca49c862ec5950bd997bb1ec07c0bfd365a659426047c3b2f8b'
+assert archive.is_file() and not archive.is_symlink() and stat.S_IMODE(archive.stat().st_mode)==0o600
+assert hashlib.sha256(archive.read_bytes()).hexdigest()==archive_hash
+changed=[]
+with tarfile.open(archive,'r:gz') as previous:
+    members=previous.getmembers();assert len(members)==14
+    for member in members:
+        assert member.isreg() and not member.name.startswith('/') and '..' not in Path(member.name).parts
+        file=Path('/')/member.name
+        assert file.is_file() and not file.is_symlink() and file.stat().st_uid==0
+        if hashlib.sha256(previous.extractfile(member).read()).digest()!=hashlib.sha256(file.read_bytes()).digest():changed.append(str(file))
+assert changed==['/opt/orbis/host-service/orbis-host-service.py']
+assert len(list(installed.glob('*.py')))==13 and stat.S_IMODE(installed.stat().st_mode)==0o700
+for file in installed.glob('*.py'):
+    assert not file.is_symlink() and file.stat().st_uid==0 and stat.S_IMODE(file.stat().st_mode)==0o600
+    assert file.read_bytes()==(source/file.name).read_bytes()
+assert not Path('/var/lib/orbis/state/helper-maintenance.json').exists()
+address=Path('/run/orbis/host.sock');assert address.stat().st_uid==0 and stat.S_IMODE(address.stat().st_mode)==0o600
+active=subprocess.run(['systemctl','is-active','orbis-host.service'],capture_output=True,text=True,timeout=3)
+assert active.returncode==0 and active.stdout.strip()=='active'
+def read(method='GET',target='/v1/sensors'):
+    client=http.client.HTTPConnection('localhost',timeout=2);transport=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    transport.settimeout(2);transport.connect(str(address));client.sock=transport
+    try:
+        client.request(method,target);response=client.getresponse();body=response.read(262145);assert len(body)<=262144
+        return response.status,json.loads(body)
+    finally:client.close()
+began=time.monotonic();status,sample=read();latency=time.monotonic()-began
+assert status==200 and latency<.5
+deadline=time.monotonic()+5
+while time.monotonic()<deadline:
+    if sample.get('available'):
+        age=datetime.datetime.now(datetime.timezone.utc).timestamp()-datetime.datetime.fromisoformat(sample['sampledAt'].replace('Z','+00:00')).timestamp()
+        if not sample['stale'] and -2<=age<27:break
+    time.sleep(.05);status,sample=read();assert status==200
+assert sample.get('available') and not sample['stale'] and -2<=age<27
+expected={'temperatures':set(),'fans':set(),'gpus':set()}
+for chip in Path('/sys/class/hwmon').glob('hwmon[0-9]*'):
+    for attribute in chip.iterdir():
+        for group,kind,pattern in [('temperatures','temperature',r'temp[1-9][0-9]*_input'),('fans','fan',r'fan[1-9][0-9]*_input')]:
+            if re.fullmatch(pattern,attribute.name):expected[group].add(kind+':'+hashlib.sha256(str(attribute.resolve()).encode()).hexdigest()[:16])
+for card in Path('/sys/class/drm').glob('card[0-9]*'):
+    if re.fullmatch(r'card[0-9]+',card.name) and (card/'device').exists():
+        expected['gpus'].add('gpu:'+hashlib.sha256(str((card/'device').resolve()).encode()).hexdigest()[:16])
+assert not sample['unavailable'] and not sample['limited'] and not sample['unreadable']
+for group in expected:
+    assert {row['id'] for row in sample[group]}==expected[group] and sample['omitted'][group]==0
+for _ in range(20):
+    status,shared=read();assert status==200 and shared['sampledAt']==sample['sampledAt']
+inside=subprocess.run(['docker','--context','default','exec','runtipi','curl','-fsS','--max-time','2','--unix-socket',str(address),'http://localhost/v1/sensors'],capture_output=True,text=True,timeout=4)
+assert inside.returncode==0 and json.loads(inside.stdout)==sample
+assert read(target='/v1/sensors?path=/etc/shadow')[0]==404 and read(method='POST')[0]==404
+for target in ['/v1/telemetry','/v1/processes']:
+    deadline=time.monotonic()+2
+    while time.monotonic()<deadline:
+        status,existing=read(target=target);assert status==200
+        if existing.get('available'):break
+        time.sleep(.05)
+    assert existing.get('available')
+print(json.dumps({'passed':True,'installedHelperVerified':True,'scope':'Installed helper on owned arm64 VM; beta45 core unchanged and does not expose the sensor API yet. Empty lists do not prove physical numeric readings.',
+ 'backup':str(archive),'backupSha256':archive_hash,'backupEntries':14,'installedModules':13,
+ 'onlyExistingModuleChanged':'orbis-host-service.py','addedModule':'orbis-host-sensors.py','environmentUnitAndOtherModulesMatchBackup':True,
+ 'privateScriptDirectoryAndSocketModes':True,'maintenanceAbsent':True,'serviceActive':True,
+ 'firstResponseMilliseconds':round(latency*1000,2),'twentySharedReadsDoNotResample':True,'coreSocketReadMatchesHost':True,'existingTelemetryAndProcessesAvailable':True,'queryAndPostRejected':True,
+ 'exposedKernelIdentitiesMatched':{key:len(value) for key,value in expected.items()},'actualNumericHardwareRows':sum(row.get('status')=='available' for group in ['temperatures','fans'] for row in sample[group]),
+ 'sourceSha256':{name:hashlib.sha256((installed/name).read_bytes()).hexdigest() for name in ['orbis-host-service.py','orbis-host-sensors.py']}}))
+'''
+
 
 def command(arguments):
     completed = subprocess.run(arguments, capture_output=True, text=True, timeout=15)
@@ -102,7 +175,9 @@ def core():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--allow-owned-source-probe", action="store_true", required=True)
+    scope = parser.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--allow-owned-source-probe", action="store_true")
+    scope.add_argument("--allow-owned-installed-probe", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     output = args.output
@@ -113,14 +188,19 @@ def main():
     os.umask(0o077)
     before = core()
     completed = subprocess.run(
-        ["colima", "--profile", "runtipi-test", "ssh", "--", "sudo", "-n", "timeout", "--kill-after=2s", "10s", "python3", "-"],
-        input=PROBE, text=True, capture_output=True, timeout=20,
+        ["colima", "--profile", "runtipi-test", "ssh", "--", "sudo", "-n", "env", "PYTHONDONTWRITEBYTECODE=1", "timeout", "--kill-after=2s", "15s", "python3", "-"],
+        input=PROBE if args.allow_owned_source_probe else INSTALLED_PROBE, text=True, capture_output=True, timeout=25,
     )
     if completed.returncode:
-        raise RuntimeError("owned Linux source sensor probe failed; remote output omitted")
+        diagnostic = output.with_suffix(".private.stderr")
+        descriptor = os.open(diagnostic, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(completed.stderr)
+        raise RuntimeError("owned Linux sensor probe failed; remote output retained privately")
     result = json.loads(completed.stdout)
-    if not result.get("passed") or not result.get("serverClosed") or core() != before:
-        raise RuntimeError("source probe or unchanged-core witness failed")
+    complete = result.get("serverClosed") if args.allow_owned_source_probe else result.get("installedHelperVerified")
+    if not result.get("passed") or not complete or core() != before:
+        raise RuntimeError("sensor probe or unchanged-core witness failed")
     result.update(macDockerContext=CONTEXT, unchangedCore=before, installedRuntimeMutations=0)
     descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     try:

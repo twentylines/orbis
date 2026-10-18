@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "archive": "/var/lib/orbis/snapshots/helper-before-sensors-20261018T075207Z.tar.gz",
+  "archiveSha256": "19c6accfa4307ca49c862ec5950bd997bb1ec07c0bfd365a659426047c3b2f8b",
+  "entries": 14,
+  "privateDirectoryMode": "0700",
+  "archiveMode": "0600",
+  "allArchivedBytesMatch": true,
+  "installedHelperEnvironmentUnitUnchanged": true,
+  "scope": "Private backup only on owned arm64 rehearsal guest; no helper/core upgrade",
+  "coreImage": "ghcr.io/twentylines/orbis@sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06",
+  "coreExactImageContainerStartUnchanged": true
+}

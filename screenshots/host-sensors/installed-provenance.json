@@ -1,0 +1,12 @@
+{
+  "scope": "Installed helper on owned isolated arm64 VM; beta45 core unchanged. No exposed physical numeric sensor/GPU capability.",
+  "driverSha256": "4bcf093587962a73265539465230e0667ff87bbc40525498db0c6dc9f4c016c8",
+  "privateUpgradeDriverSha256": "45fdb7549a8f2a0e8dc7a6528c81602c9e12e500f694cba22f816558794e69e0",
+  "proofFilesSha256": {
+    "helper-backup-proof.json": "121243d87fe0b9ab08c75c75b5beb9e4982b0b6c11ebdbd0539a8dad42b8d320",
+    "helper-upgrade-proof.json": "aee16e387ca4431b1a328818541af127ad2173bf514da1463ff228694405172c",
+    "installed-proof.json": "c02f6bd4727cd5db1b509471c2e3c35fcb1375a0778eb47837e228c06527c2de"
+  },
+  "initialReadVerifier": "First installed probe rejected without retaining its remote trace. A bounded diagnostic then passed unchanged. The verifier now permits documented initial collection for existing telemetry/process routes and retains future remote failure traces privately. The exact initial failing assertion is not established; formal installed r2 passes.",
+  "historicalSourceProbe": "The earlier Linux source report and its driver fingerprint belong to commit68080b8d. The current driver adds a separate installed read-only mode."
+}
