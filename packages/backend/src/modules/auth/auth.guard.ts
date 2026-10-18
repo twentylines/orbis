@@ -4,7 +4,7 @@ import type { Request } from 'express';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const INVALID_REQUEST_ORIGIN_MESSAGE =
-  'Invalid request origin. If Runtipi is behind a reverse proxy or tunnel, add the proxy IP/CIDR to trustedProxyIps in settings.json and restart Runtipi.';
+  'Invalid request origin. If Orbis is behind a reverse proxy or tunnel, add the proxy IP/CIDR to trustedProxyIps in settings.json and restart Orbis.';
 const CLOUDFLARE_INVALID_REQUEST_ORIGIN_MESSAGE = `${INVALID_REQUEST_ORIGIN_MESSAGE} Cloudflare headers were detected, so this may be a Cloudflare Tunnel trusted proxy configuration issue.`;
 
 const firstHeaderValue = (value: string | undefined) => value?.split(',')[0]?.trim();
@@ -46,7 +46,7 @@ export class AuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest() as Request;
 
-    this.logger.debug('HTTP request', request.method, request.url);
+    this.logger.debug('HTTP request', request.method, request.url.split('?')[0]);
 
     if (!request.user) {
       throw new UnauthorizedException();

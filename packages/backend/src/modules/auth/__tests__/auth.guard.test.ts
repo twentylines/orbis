@@ -29,7 +29,7 @@ describe('AuthGuard', () => {
         createContext({
           method: 'POST',
           protocol: 'http',
-          url: '/auth/reset-password',
+          url: '/auth/reset-password?token=fixture-query-secret',
           body: { newPassword: 'super-secret', totpCode: '123456' },
           headers: {
             host: 'example.com',
@@ -42,6 +42,7 @@ describe('AuthGuard', () => {
     ).resolves.toBe(true);
 
     expect(logger.debug).toHaveBeenCalledWith('HTTP request', 'POST', '/auth/reset-password');
+    expect(logger.debug).toHaveBeenCalledTimes(1);
   });
 
   it('rejects unauthenticated requests', async () => {

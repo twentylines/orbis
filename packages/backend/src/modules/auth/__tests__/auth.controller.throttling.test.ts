@@ -53,7 +53,7 @@ it('throttles repeated login attempts before they reach the controller', async (
   try {
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ArkValidationPipe());
-    await app.init();
+    await app.listen(0, '127.0.0.1');
 
     for (let index = 0; index < 20; index += 1) {
       const response = await request(app.getHttpServer()).post('/auth/login').send({ username: 'operator@example.com', password: 'password' });
@@ -110,7 +110,7 @@ it('does not throttle repeated traefik auth checks', async () => {
   try {
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ArkValidationPipe());
-    await app.init();
+    await app.listen(0, '127.0.0.1');
 
     for (let index = 0; index < 101; index += 1) {
       const response = await request(app.getHttpServer())

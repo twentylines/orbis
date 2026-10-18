@@ -123,7 +123,6 @@ export class AuthController {
     const proto = req.headers['x-forwarded-proto'] as string | undefined;
     const secure = proto === 'https';
 
-    this.logger.debug('Request headers', req.headers);
     this.logger.debug('Setting session cookie', { host, proto, secure });
 
     if (this.config.get('userSettings').experimental.insecureCookie) {
@@ -220,7 +219,7 @@ export class AuthController {
 
     const redirectUrl = body.redirectUrl ? (this.createForwardAuthRedirectUrl(sessionId, req, body.redirectUrl) ?? undefined) : undefined;
 
-    return LoginDto.parse({ success: true, redirectUrl }, { reportOnly: true });
+    return LoginDto.parse(redirectUrl ? { success: true, redirectUrl } : { success: true }, { reportOnly: true });
   }
 
   @Post('/verify-totp')
@@ -233,7 +232,7 @@ export class AuthController {
 
     const redirectUrl = body.redirectUrl ? (this.createForwardAuthRedirectUrl(sessionId, req, body.redirectUrl) ?? undefined) : undefined;
 
-    return LoginDto.parse({ success: true, redirectUrl }, { reportOnly: true });
+    return LoginDto.parse(redirectUrl ? { success: true, redirectUrl } : { success: true }, { reportOnly: true });
   }
 
   @Post('/register')
@@ -385,7 +384,7 @@ export class AuthController {
     const proto = req.headers['x-forwarded-proto'] as string;
     const host = req.headers['x-forwarded-host'] as string;
 
-    this.logger.debug('Auth request', { uri, proto, host });
+    this.logger.debug('Auth request', { proto, host });
 
     const subdomains = host.split('.');
     const app = subdomains[0] ?? '';
@@ -397,7 +396,7 @@ export class AuthController {
     loginUrl.searchParams.set('redirect_url', redirectUrl.toString());
     loginUrl.searchParams.set('app', app);
 
-    this.logger.debug('Redirecting to login', { loginUrl: loginUrl.toString(), redirectUrl: redirectUrl.toString(), app });
+    this.logger.debug('Redirecting to login', { proto, host, app });
 
     return res.status(302).redirect(loginUrl.toString());
   }

@@ -4,9 +4,10 @@ import { PasswordService } from '@/core/password/password.service';
 import { UserRepository } from '@/modules/user/user.repository';
 import { Test } from '@nestjs/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type MockProxy, mock } from 'vitest-mock-extended';
+import { type MockProxy, mock, mockReset } from 'vitest-mock-extended';
 import { AuthService } from '../auth.service';
 import { TotpAuthenticator } from '../utils/totp-authenticator';
+import { SessionManager } from '../session.manager';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -14,6 +15,7 @@ describe('AuthService', () => {
   let userRepository: MockProxy<UserRepository>;
   let passwordService: MockProxy<PasswordService>;
   let encryptionService: MockProxy<EncryptionService>;
+  let sessionManager: MockProxy<SessionManager>;
 
   const totpUser = {
     id: 1,
@@ -41,6 +43,12 @@ describe('AuthService', () => {
     userRepository = moduleRef.get(UserRepository);
     passwordService = moduleRef.get(PasswordService);
     encryptionService = moduleRef.get(EncryptionService);
+    sessionManager = moduleRef.get(SessionManager);
+    mockReset(cacheService);
+    mockReset(userRepository);
+    mockReset(passwordService);
+    mockReset(encryptionService);
+    mockReset(sessionManager);
   });
 
   afterEach(() => {
@@ -49,6 +57,40 @@ describe('AuthService', () => {
 
   it('should be defined', () => {
     expect(authService).toBeDefined();
+  });
+
+  it('labels new authenticator enrollments Orbis and keeps an existing encryption salt', async () => {
+    userRepository.getUserById.mockResolvedValue({ ...totpUser, totpEnabled: false });
+    passwordService.verify.mockResolvedValue(true);
+    encryptionService.encrypt.mockReturnValue('new-encrypted-secret');
+    vi.spyOn(TotpAuthenticator, 'generateSecret').mockReturnValue('JBSWY3DPEHPK3PXP');
+
+    const result = await authService.getTotpUri({ userId: 1, password: 'fixture-password' });
+    const uri = new URL(result.uri);
+
+    expect(uri.protocol).toBe('otpauth:');
+    expect(uri.searchParams.get('issuer')).toBe('Orbis');
+    expect(decodeURIComponent(uri.pathname)).toBe('/Orbis:operator@example.com');
+    expect(encryptionService.encrypt).toHaveBeenCalledWith(result.key, totpUser.salt);
+    expect(userRepository.updateUser).toHaveBeenCalledWith(1, { totpSecret: 'new-encrypted-secret', salt: totpUser.salt });
+    expect(sessionManager.generateSalt).not.toHaveBeenCalled();
+  });
+
+  it('authenticates a retained encrypted TOTP secret without reenrollment', async () => {
+    cacheService.get.mockImplementation((key) => (key === 'legacy-totp-session' ? '1' : undefined));
+    userRepository.getUserById.mockResolvedValue(totpUser);
+    encryptionService.decrypt.mockReturnValue('retained-secret');
+    sessionManager.createSession.mockResolvedValue('550e8400-e29b-41d4-a716-446655440000');
+    vi.spyOn(TotpAuthenticator, 'check').mockReturnValue(true);
+
+    await expect(authService.verifyTotp({ totpSessionId: 'legacy-totp-session', totpCode: '123456' })).resolves.toEqual({
+      sessionId: '550e8400-e29b-41d4-a716-446655440000',
+    });
+
+    expect(encryptionService.decrypt).toHaveBeenCalledWith(totpUser.totpSecret, totpUser.salt);
+    expect(TotpAuthenticator.check).toHaveBeenCalledWith('123456', 'retained-secret');
+    expect(userRepository.updateUser).not.toHaveBeenCalled();
+    expect(cacheService.del).toHaveBeenCalledWith('legacy-totp-session');
   });
 
   it('stores TOTP login sessions for five minutes', async () => {

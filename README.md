@@ -9,6 +9,7 @@ Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runti
 - [Released workspace and theme captures](screenshots/live-beta37/README.md)
 - [Multi-homelab phase](MULTI-HOMELAB.md)
 - [Update Center contract](UPDATES.md)
+- [Authentication verification and remaining cases](AUTHENTICATION-QA.md)
 - [Restricted Linux host service setup](HOST-SERVICE.md)
 - [Feature preservation checklist](FEATURE-INVENTORY.md)
 - [App-store recovery and network limits](APP-STORES.md)

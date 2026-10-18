@@ -72,7 +72,7 @@ describe('AuthController reset-password security', () => {
       }
       next();
     }) as NestMiddleware['use']);
-    await app.init();
+    await app.listen(0, '127.0.0.1');
   });
 
   afterAll(async () => {
@@ -80,6 +80,8 @@ describe('AuthController reset-password security', () => {
   });
 
   beforeEach(() => {
+    logger.debug.mockReset();
+    authService.login.mockReset();
     authService.changeOperatorPassword.mockReset();
     authService.cancelPasswordChangeRequest.mockReset();
     authService.checkPasswordChangeRequest.mockReset();
@@ -89,6 +91,40 @@ describe('AuthController reset-password security', () => {
     cache.del.mockReset();
     cache.getByPrefix.mockReset();
     config.get.mockReset();
+  });
+
+  it('sets a session cookie without logging raw authentication headers', async () => {
+    authService.login.mockResolvedValue({ sessionId: '550e8400-e29b-41d4-a716-446655440000' });
+    config.get.mockReturnValue(mock<ReturnType<ConfigurationService['getConfig']>['userSettings']>({ experimental: { insecureCookie: false } }));
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/login')
+      .set('Cookie', 'prior-session=fixture-cookie-secret')
+      .set('Authorization', 'Bearer fixture-header-secret')
+      .send({ username: 'operator@example.com', password: 'fixture-password' });
+
+    expect(response.status).toBe(201);
+    expect(response.headers['set-cookie']).toEqual(
+      expect.arrayContaining([expect.stringContaining(`${SESSION_COOKIE_NAME}=550e8400-e29b-41d4-a716-446655440000`)]),
+    );
+    const log = JSON.stringify(logger.debug.mock.calls);
+    expect(log).not.toContain('fixture-cookie-secret');
+    expect(log).not.toContain('fixture-header-secret');
+    expect(log).not.toContain('fixture-password');
+  });
+
+  it('redirects an app request without logging its query credentials', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/auth/traefik')
+      .set('X-Forwarded-Uri', '/library?token=fixture-link-secret')
+      .set('X-Forwarded-Proto', 'https')
+      .set('X-Forwarded-Host', 'app.example.com');
+
+    expect(response.status).toBe(302);
+    expect(new URL(response.headers.location ?? '').searchParams.get('redirect_url')).toBe(
+      'https://app.example.com/library?token=fixture-link-secret',
+    );
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain('fixture-link-secret');
   });
 
   it('does not expose a public password reset status endpoint', async () => {
