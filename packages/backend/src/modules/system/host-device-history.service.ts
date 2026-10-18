@@ -265,10 +265,12 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
       }
       this.unidentifiedDevices = sample.unidentified;
       this.omittedDevices = data.available ? Math.min(Number.MAX_SAFE_INTEGER, data.omitted.network + data.omitted.disks) : 0;
-      this.collectorAvailable = Boolean(sample.rows.length || sample.unidentified === 0);
-      this.reason = sample.unidentified
-        ? 'Some devices need an updated host service or a readable kernel identity before history can be recorded.'
-        : null;
+      const missing = data.available ? [...new Set(data.unavailable.filter((group) => group === 'network' || group === 'disks'))] : [];
+      this.collectorAvailable = Boolean(sample.rows.length || (sample.unidentified === 0 && missing.length === 0));
+      const issues: string[] = [];
+      if (missing.length) issues.push(`Host ${missing.map((group) => (group === 'disks' ? 'disk' : group)).join(' and ')} readings are unavailable.`);
+      if (sample.unidentified) issues.push('Some devices need an updated host service or a readable kernel identity before history can be recorded.');
+      this.reason = issues.length ? issues.join(' ') : null;
       this.present = new Set(sample.rows.map(hostHistoryKey));
       if (this.lastSampleAt !== null && sample.at - this.lastSampleAt < 2000) return;
       this.prune();

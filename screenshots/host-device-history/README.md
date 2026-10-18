@@ -10,6 +10,6 @@ The temporary server closes. Every installed helper module, the environment and 
 
 ## Source automated checks
 
-The backend foundation passes 588 backend, 78 common and 126 Python tests, plus backend types and bundle. Independent model/service/parser suites reject impossible aggregates, excessive capacity and malformed identities. Real private temporary files cover restart continuity, retention, corruption, symlinks, modes, storage backoff and a stalled writer. See [HOST-HISTORY.md](../../HOST-HISTORY.md) for the contract and outstanding gates.
+The backend foundation passes 591 backend, 78 common and 126 Python tests, plus backend types and bundle. Independent model/service/parser suites reject impossible aggregates, excessive capacity and malformed identities. Real private temporary files cover restart continuity, retention, corruption, symlinks, modes, storage backoff and a stalled writer. See [HOST-HISTORY.md](../../HOST-HISTORY.md) for the contract and outstanding gates.
 
 The compiled Monitor browser review is in progress. Screenshots and reports will be retained after the view passes its layout and interaction checks.

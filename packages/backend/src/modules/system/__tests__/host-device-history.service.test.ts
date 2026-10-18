@@ -44,7 +44,7 @@ const disk = (overrides: Partial<HostDisk> = {}): HostDisk => ({
   inFlight: 1,
   ...overrides,
 });
-const reading = (at = Date.now(), interfaces = [network()], disks = [disk()]): HostTelemetry => ({
+const reading = (at = Date.now(), interfaces = [network()], disks = [disk()]): Extract<HostTelemetry, { available: true }> => ({
   available: true,
   sampledAt: new Date(at).toISOString(),
   stale: false,
@@ -253,6 +253,35 @@ describe('autonomous private host device history service', () => {
     });
     expect(history.reason).toMatch(/updated host service|readable kernel identity/);
     expect(history.devices.every((device) => !device.present)).toBe(true);
+  });
+
+  it('reports a failed interface group while retaining measured disk history', async () => {
+    await collect(2);
+    vi.setSystemTime(origin + 12000);
+    host.read.mockResolvedValue({ ...reading(Date.now(), [], [disk()]), unavailable: ['network'] });
+    await service.collect();
+    const history = await service.read('5m', selected);
+    expect(history.collectorAvailable).toBe(true);
+    expect(history.reason).toContain('Host network readings are unavailable.');
+    expect(history.devices.find((item) => item.kind === 'network')?.present).toBe(false);
+    expect(history.points).toHaveLength(1);
+    expect((await service.read('5m', { kind: 'disk', name: 'sda' })).points).toHaveLength(2);
+  });
+
+  it('does not report healthy collection when both history groups fail', async () => {
+    host.read.mockResolvedValue({ ...reading(Date.now(), [], []), unavailable: ['network', 'disks'] });
+    await service.collect();
+    expect(await service.read('5m')).toMatchObject({
+      collectorAvailable: false,
+      reason: 'Host network and disk readings are unavailable.',
+      points: [],
+    });
+  });
+
+  it('keeps filesystem-only failures separate from disk and interface history', async () => {
+    host.read.mockResolvedValue({ ...reading(), unavailable: ['filesystems'] });
+    await service.collect();
+    expect(await service.read('5m')).toMatchObject({ collectorAvailable: true, reason: null });
   });
 
   it('limits logical name churn to64, reports eviction and persists the bounded catalogue', async () => {

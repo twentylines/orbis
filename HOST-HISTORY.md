@@ -4,7 +4,9 @@ Implementation in progress after beta43. The published beta43 image has current 
 
 ## Source checkpoint
 
-The backend model/service, authenticated query validation and helper generation fields pass 588 backend, 78 common and 126 Python tests. Independent suites exercise 68 model cases, 22 service cases and 50 parser cases, plus 15 Python identity cases. They cover weighted means/peaks, impossible aggregates, retention, name churn/evictions, private real temporary files, two restarts with partial-minute continuity, corrupt/oversized/symlink preservation, timer coalescing, storage backoff and a stalled writer through 361 samples. Model capacity overflow and impossible count/mean acceptance were rejected and corrected. Backend types and bundle pass.
+The backend model/service, authenticated query validation and helper generation fields pass 591 backend, 78 common and 126 Python tests. Independent suites exercise 68 model cases, 22 service cases and 50 parser cases, plus 15 Python identity cases. They cover weighted means/peaks, impossible aggregates, retention, name churn/evictions, private real temporary files, two restarts with partial-minute continuity, corrupt/oversized/symlink preservation, timer coalescing, storage backoff and a stalled writer through 361 samples. Model capacity overflow and impossible count/mean acceptance were rejected and corrected. Backend types and bundle pass.
+
+Three additional regressions now distinguish a failed network group, both failed history groups and a filesystem-only failure. The prior implementation hid partial failures and reported healthy collection when both relevant groups failed. The correction retains valid disk/interface history and reports the unavailable groups; filesystem-only failures do not affect device history. Backend types and bundle pass.
 
 The compiled Monitor presentation is under review. These source tests do not establish installed-helper support, real Linux background collection or published-image acceptance.
 
