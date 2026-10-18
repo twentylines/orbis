@@ -592,12 +592,26 @@ html:has(.desktop) {
   background: rgba(125, 145, 121, 0.12);
 }
 .desktop-installed-grid {
-  row-gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
   container-type: inline-size;
 }
-.desktop-installed-grid .app-link,
-.desktop-installed-grid .button-tile {
+.desktop .desktop-installed-grid > .app-link.p-2,
+.desktop .desktop-installed-grid > .button-tile.p-2 {
   margin: 0 !important;
+  padding: 0 !important;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+.desktop-installed-grid > .button-tile {
+  display: flex;
+  align-items: stretch;
+}
+.desktop-installed-grid > .button-tile > .card {
+  flex: 1;
   min-width: 0;
 }
 .desktop-installed-grid .card-link {
@@ -608,6 +622,11 @@ html:has(.desktop) {
   flex: 1 1 8em;
   min-width: min(100%, 8em);
   overflow-wrap: anywhere;
+}
+@container (max-width: 1000px) {
+  .desktop-installed-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @container (max-width: 540px) {
   .desktop-view-app .action-bar-content {
@@ -626,6 +645,9 @@ html:has(.desktop) {
 @container (max-width: 760px) {
   .desktop-catalogue-grid,
   .desktop-catalogue-skeleton {
+    grid-template-columns: 1fr;
+  }
+  .desktop-installed-grid {
     grid-template-columns: 1fr;
   }
   .desktop-installed-grid .app-link,

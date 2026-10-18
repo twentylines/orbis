@@ -26,6 +26,7 @@ const inspectSurfaceComfort = require('./surface-comfort-checks.cjs');
 const inspectMonitorThemes = require('./monitor-theme-checks.cjs');
 const inspectHomeStatusThemes = require('./home-status-theme-checks.cjs');
 const inspectCustomWorkspace = require('./custom-workspace-checks.cjs');
+const inspectTileComfort = require('./tile-comfort-checks.cjs');
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
 const searchComfortOnly = process.env.ORBIS_VISUAL_SEARCH_COMFORT_ONLY === '1';
@@ -49,6 +50,7 @@ const comfortOnly = process.env.ORBIS_VISUAL_COMFORT_ONLY === '1';
 const monitorThemesOnly = process.env.ORBIS_VISUAL_MONITOR_THEMES_ONLY === '1';
 const homeStatusThemesOnly = process.env.ORBIS_VISUAL_HOME_STATUS_THEMES_ONLY === '1';
 const customWorkspaceOnly = process.env.ORBIS_VISUAL_CUSTOM_WORKSPACE_ONLY === '1';
+const tilesOnly = process.env.ORBIS_VISUAL_TILES_ONLY === '1';
 const textScale = Number(process.env.ORBIS_VISUAL_TEXT_SCALE || 2);
 if (![1, 2].includes(textScale)) throw new Error('ORBIS_VISUAL_TEXT_SCALE must be 1 or 2');
 
@@ -68,7 +70,8 @@ if (
     pagesOnly ||
     monitorThemesOnly ||
     homeStatusThemesOnly ||
-    customWorkspaceOnly) &&
+    customWorkspaceOnly ||
+    tilesOnly) &&
   zoom !== 1
 )
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
@@ -696,6 +699,18 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (tilesOnly) {
+      const tileComfort = await inspectTileComfort({
+        page,
+        base,
+        fixtures: { apps, catalogue, preferences: freshPreferences() },
+        textScales: process.env.ORBIS_VISUAL_TEXT_SCALE ? [textScale] : [1, 2],
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, tileComfort, errors });
+      await page.close();
+      continue;
+    }
     if (customWorkspaceOnly) {
       const customWorkspace = await inspectCustomWorkspace({
         page,
@@ -1359,9 +1374,10 @@ async function main() {
     comfortOnly ||
     monitorThemesOnly ||
     homeStatusThemesOnly ||
-    customWorkspaceOnly
+    customWorkspaceOnly ||
+    tilesOnly
   ) {
-    if (reports.some((report) => report.errors.length)) process.exitCode = 1;
+    if (reports.some((report) => report.errors.length || (tilesOnly && !report.tileComfort?.passed))) process.exitCode = 1;
     await Promise.race([browser.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
     return;
   }

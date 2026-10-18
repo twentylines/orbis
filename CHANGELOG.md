@@ -2,6 +2,10 @@
 
 ## Unreleased development preview
 
+- Align installed app, custom-link and action-card rows at every column count. Share Store filter/card gutters, keep complete app copy and wrap long links without orphan letters. Scale the notice reserve with text so Docker health labels stay aligned.
+- Recheck unfinished GitHub release manifests after 30 seconds while retaining the normal cache for ready releases.
+- Return HTTP400 for incorrect, expired or reused authenticator challenges and incorrect enrollment codes; preserve HTTP429 after repeated invalid attempts.
+
 - Label new authenticator enrollments Orbis, retain existing encrypted TOTP verification, and use Orbis in origin errors. Remove raw authentication headers and redirect/query credentials from debug logging. Omit absent login redirects before response validation.
 - Update the API generator and regenerate its runtime templates to prevent parameter prototype substitution. Update translation URL validation and check normal request transport, preserved SDK routes and rejected unsafe language/namespace values.
 - Fill custom workspace rows while preserving wide/normal proportions. Remove forced launcher blank height; retain the default layout and contained all-app scrolling. Check native and doubled text across four widths and seven arrangements.

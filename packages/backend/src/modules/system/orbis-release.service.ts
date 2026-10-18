@@ -3,6 +3,7 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 const REPO = 'twentylines/orbis';
 const TAG = /^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$/;
 const CACHE_MS = 15 * 60 * 1000;
+const PENDING_RELEASE_CACHE_MS = 30 * 1000;
 
 export type OrbisRelease = {
   tag: string;
@@ -59,7 +60,8 @@ export class OrbisReleaseService {
     if (!this.pending) {
       this.pending = this.load()
         .then((value) => {
-          this.cached = { value, expiresAt: Date.now() + CACHE_MS };
+          const cacheMs = value?.imageManifestUrl ? CACHE_MS : PENDING_RELEASE_CACHE_MS;
+          this.cached = { value, expiresAt: Date.now() + cacheMs };
           return value;
         })
         .catch(() => {

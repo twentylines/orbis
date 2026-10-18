@@ -90,7 +90,7 @@ export class AuthService {
     const attemptKey = `totp-attempts:${totpSessionId}`;
 
     if (!userId) {
-      throw new TranslatableError('AUTH_ERROR_TOTP_SESSION_NOT_FOUND');
+      throw new TranslatableError('AUTH_ERROR_TOTP_SESSION_NOT_FOUND', {}, HttpStatus.BAD_REQUEST);
     }
 
     const user = await this.userRepository.getUserById(Number(userId));
@@ -100,7 +100,7 @@ export class AuthService {
     }
 
     if (!user.totpEnabled || !user.totpSecret || !user.salt) {
-      throw new TranslatableError('AUTH_ERROR_TOTP_NOT_ENABLED');
+      throw new TranslatableError('AUTH_ERROR_TOTP_NOT_ENABLED', {}, HttpStatus.BAD_REQUEST);
     }
 
     const totpSecret = this.encryption.decrypt(user.totpSecret, user.salt);
@@ -116,7 +116,7 @@ export class AuthService {
       }
 
       this.cache.set(attemptKey, attempts.toString(), TOTP_SESSION_EXPIRATION);
-      throw new TranslatableError('AUTH_ERROR_TOTP_INVALID_CODE');
+      throw new TranslatableError('AUTH_ERROR_TOTP_INVALID_CODE', {}, HttpStatus.BAD_REQUEST);
     }
 
     const sessionId = await this.sessionManager.createSession(user.id);
@@ -308,7 +308,7 @@ export class AuthService {
     const isValid = TotpAuthenticator.check(totpCode, totpSecret);
 
     if (!isValid) {
-      throw new TranslatableError('AUTH_ERROR_TOTP_INVALID_CODE');
+      throw new TranslatableError('AUTH_ERROR_TOTP_INVALID_CODE', {}, HttpStatus.BAD_REQUEST);
     }
 
     await this.userRepository.updateUser(userId, { totpEnabled: true });

@@ -115,7 +115,10 @@ describe('AuthService', () => {
     encryptionService.decrypt.mockReturnValue('decrypted-secret');
     vi.spyOn(TotpAuthenticator, 'check').mockReturnValue(false);
 
-    await expect(authService.verifyTotp({ totpSessionId: 'session-id', totpCode: '000000' })).rejects.toThrow('AUTH_ERROR_TOTP_INVALID_CODE');
+    await expect(authService.verifyTotp({ totpSessionId: 'session-id', totpCode: '000000' })).rejects.toMatchObject({
+      status: 400,
+      message: 'AUTH_ERROR_TOTP_INVALID_CODE',
+    });
 
     expect(cacheService.set).toHaveBeenCalledWith('totp-attempts:session-id', '1', 300);
     expect(cacheService.del).not.toHaveBeenCalled();
@@ -137,10 +140,33 @@ describe('AuthService', () => {
     encryptionService.decrypt.mockReturnValue('decrypted-secret');
     vi.spyOn(TotpAuthenticator, 'check').mockReturnValue(false);
 
-    await expect(authService.verifyTotp({ totpSessionId: 'session-id', totpCode: '000000' })).rejects.toThrow('AUTH_ERROR_TOTP_TOO_MANY_ATTEMPTS');
+    await expect(authService.verifyTotp({ totpSessionId: 'session-id', totpCode: '000000' })).rejects.toMatchObject({
+      status: 429,
+      message: 'AUTH_ERROR_TOTP_TOO_MANY_ATTEMPTS',
+    });
 
     expect(cacheService.del).toHaveBeenCalledWith('totp-attempts:session-id');
     expect(cacheService.del).toHaveBeenCalledWith('session-id');
+  });
+
+  it('reports an expired or already used TOTP challenge as a client error', async () => {
+    cacheService.get.mockReturnValue(undefined);
+    await expect(authService.verifyTotp({ totpSessionId: 'expired-challenge', totpCode: '123456' })).rejects.toMatchObject({
+      status: 400,
+      message: 'AUTH_ERROR_TOTP_SESSION_NOT_FOUND',
+    });
+    expect(sessionManager.createSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects a wrong enrollment code without treating it as a server failure', async () => {
+    userRepository.getUserById.mockResolvedValue({ ...totpUser, totpEnabled: false });
+    encryptionService.decrypt.mockReturnValue('decrypted-secret');
+    vi.spyOn(TotpAuthenticator, 'check').mockReturnValue(false);
+    await expect(authService.setupTotp({ userId: 1, totpCode: '000000' })).rejects.toMatchObject({
+      status: 400,
+      message: 'AUTH_ERROR_TOTP_INVALID_CODE',
+    });
+    expect(userRepository.updateUser).not.toHaveBeenCalled();
   });
 
   describe('getCookieDomain', () => {

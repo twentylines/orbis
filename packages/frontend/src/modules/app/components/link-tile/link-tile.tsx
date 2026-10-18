@@ -7,13 +7,14 @@ import type React from 'react';
 import { useTranslation } from 'react-i18next';
 import { AddLinkDialog } from '../dialogs/add-link/add-link-dialog';
 import { DeleteLinkDialog } from '../dialogs/delete-link/delete-link-dialog';
+import './link-tile.css';
 
 type LinkTileProps = {
   link: CustomLink;
 };
 
 export const LinkTile: React.FC<LinkTileProps> = ({ link }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const addLinkDisclosure = useDisclosure();
   const deleteLinkDisclosure = useDisclosure();
@@ -29,12 +30,12 @@ export const LinkTile: React.FC<LinkTileProps> = ({ link }) => {
   return (
     <>
       <ContextMenu>
-        <ContextMenuTrigger>
-          <div data-testid={`link-tile-${link.title}`}>
+        <ContextMenuTrigger asChild>
+          <div className="app-link-tile" data-testid={`link-tile-${link.title}`}>
             <div className="card card-sm card-link">
-              <div className="card-body d-flex align-items-center gap-3">
+              <div className="card-body d-flex align-items-center gap-3 app-link-tile-body">
                 <AppLogo url={link.iconUrl || ''} size={60} />
-                <div>
+                <div className="app-link-tile-copy" lang={i18n.resolvedLanguage ?? i18n.language}>
                   <span className="fw-bolder">{link.title}</span>
                   {link.description?.length !== 0 && <div className="text-muted text-break">{link.description}</div>}
                 </div>

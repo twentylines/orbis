@@ -1,5 +1,4 @@
 import { AppLogo } from '@/components/app-logo/app-logo';
-import { limitText } from '@/lib/helpers/text-helpers';
 import type { AppInfo, AppStatus as AppStatusType } from '@/types/app.types';
 import { IconAlertCircle, IconDownload, IconRotateClockwise } from '@tabler/icons-react';
 import type React from 'react';
@@ -37,7 +36,7 @@ export const AppTile: React.FC<{
             <span className="fw-bolder">{info.name}</span>
             {!docker || !['running', 'stopped'].includes(status) ? <AppStatus lite status={status} /> : null}
           </div>
-          <div className="text-muted">{limitText(info.short_desc, 50)}</div>
+          <div className="text-muted">{info.short_desc}</div>
           {docker ? <DockerHealth appUrn={info.urn} telemetry={docker.data} stale={docker.stale} /> : null}
           <span className="app-tile-notice" aria-hidden={notice ? undefined : true}>
             {notice ? (
