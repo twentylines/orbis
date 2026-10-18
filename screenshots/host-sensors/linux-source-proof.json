@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "scope": "New source Unix handler in the owned arm64 Linux guest. Installed helper/core are unchanged. This does not prove physical hardware readings when lists are empty.",
+  "firstResponseMilliseconds": 1.02,
+  "exposedKernelIdentitiesMatched": {
+    "temperatures": 0,
+    "fans": 0,
+    "gpus": 0
+  },
+  "actualNumericHardwareRows": 0,
+  "twentySharedReadsDoNotResample": true,
+  "queryAndPostRejected": true,
+  "sourceSocketMode": "0600",
+  "sourceSha256": {
+    "orbis-host-service.py": "838986928ac7a9f98482adfd2d4fc2429cab018bda7616eb173b9ca2f25a6ac5",
+    "orbis-host-sensors.py": "5b2455a30a22f401f732f9cfa2eaba431e53d8eb2b3391a812fb1f8d4dad9bed"
+  },
+  "serverClosed": true,
+  "macDockerContext": "colima-runtipi-test",
+  "unchangedCore": {
+    "idHash": "831dd0fb05ef6fa2319a6ccb01ef284da4bc34c54b535a0196af372cddbc5648",
+    "image": "ghcr.io/twentylines/orbis@sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06",
+    "startedAt": "2026-10-18T06:37:58.378642094Z"
+  },
+  "installedRuntimeMutations": 0
+}

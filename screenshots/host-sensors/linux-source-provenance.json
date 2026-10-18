@@ -1,0 +1,6 @@
+{
+  "scope": "Read-only temporary source Unix server in the owned arm64 Colima guest. Installed beta45 helper/core unchanged; no physical numeric hardware capability was exposed.",
+  "privateReportSha256": "97cfe9184d894d4bfefcda884069014d72099850c26a3b0ed92c96a07c39e130",
+  "executionAndRetainedDriverSha256": "bded83957b0bfdef7d4db0957138b8c42363bc55a608f54077a942be15c1df57",
+  "preflightCorrection": "The first attempt rejected an incorrect monolithic /data bind assumption before guest execution. The final guard requires every established scoped owned bind, loopback18080 and exact healthy image."
+}
