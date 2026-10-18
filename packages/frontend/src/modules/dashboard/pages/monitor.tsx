@@ -11,6 +11,7 @@ import { useWindowVisible } from '@/desktop/window-visibility';
 import { HostDevices } from '../components/host-devices';
 import { HostProcessesView } from '../components/host-processes';
 import { HostDeviceHistoryView } from '../components/host-device-history';
+import { HostSensorsView } from '../components/host-sensors';
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return 'Unavailable';
@@ -299,6 +300,7 @@ export default function Monitor() {
       ) : null}
       <HostDeviceHistoryView />
       <HostProcessesView />
+      <HostSensorsView />
     </div>
   );
 }

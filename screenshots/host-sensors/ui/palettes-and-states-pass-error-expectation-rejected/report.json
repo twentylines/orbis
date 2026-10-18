@@ -1,0 +1,4054 @@
+[
+  {
+    "viewport": "host-sensors",
+    "hostSensors": {
+      "passed": false,
+      "layouts": [],
+      "palette": {
+        "$orbis_array_parts": ["part-001.json", "part-002.json", "part-003.json", "part-004.json", "part-005.json", "part-006.json"]
+      },
+      "states": [
+        {
+          "variant": "missing",
+          "metrics": {
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "documentWidth": 390,
+            "root": {
+              "top": 665.375,
+              "bottom": 951.15625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 285.78125
+            },
+            "monitor": {
+              "top": -9181,
+              "bottom": 951.15625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 10132.15625
+            },
+            "inner": {
+              "left": 64,
+              "right": 326
+            },
+            "padding": [18, 18],
+            "heading": {
+              "top": 684.375,
+              "bottom": 717.375,
+              "left": 64,
+              "right": 232.9375,
+              "width": 168.9375,
+              "height": 33
+            },
+            "headingInk": [
+              {
+                "top": 687.375,
+                "bottom": 713.375,
+                "left": 64,
+                "right": 232.9375
+              }
+            ],
+            "words": [],
+            "overflow": [],
+            "identifiers": [],
+            "groups": [],
+            "chrome": {
+              "navigation": "page",
+              "frame": {
+                "background": "rgba(20, 36, 35, 0.95)",
+                "blur": "blur(24px) saturate(1.2)",
+                "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "header": {
+                "background": "rgba(0, 0, 0, 0)",
+                "blur": "none",
+                "shadow": "none",
+                "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+              },
+              "bar": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "dock": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              }
+            }
+          },
+          "passed": true
+        },
+        {
+          "variant": "collecting",
+          "metrics": {
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "documentWidth": 390,
+            "root": {
+              "top": 665.375,
+              "bottom": 927.359375,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 261.984375
+            },
+            "monitor": {
+              "top": -9181,
+              "bottom": 927.359375,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 10108.359375
+            },
+            "inner": {
+              "left": 64,
+              "right": 326
+            },
+            "padding": [18, 18],
+            "heading": {
+              "top": 684.375,
+              "bottom": 717.375,
+              "left": 64,
+              "right": 232.9375,
+              "width": 168.9375,
+              "height": 33
+            },
+            "headingInk": [
+              {
+                "top": 687.375,
+                "bottom": 713.375,
+                "left": 64,
+                "right": 232.9375
+              }
+            ],
+            "words": [],
+            "overflow": [],
+            "identifiers": [],
+            "groups": [],
+            "chrome": {
+              "navigation": "page",
+              "frame": {
+                "background": "rgba(20, 36, 35, 0.95)",
+                "blur": "blur(24px) saturate(1.2)",
+                "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "header": {
+                "background": "rgba(0, 0, 0, 0)",
+                "blur": "none",
+                "shadow": "none",
+                "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+              },
+              "bar": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "dock": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              }
+            }
+          },
+          "passed": true
+        },
+        {
+          "variant": "empty",
+          "metrics": {
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "documentWidth": 390,
+            "root": {
+              "top": 665.375,
+              "bottom": 895.15625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 229.78125
+            },
+            "monitor": {
+              "top": -9181,
+              "bottom": 895.15625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 10076.15625
+            },
+            "inner": {
+              "left": 64,
+              "right": 326
+            },
+            "padding": [18, 18],
+            "heading": {
+              "top": 684.375,
+              "bottom": 717.375,
+              "left": 64,
+              "right": 232.9375,
+              "width": 168.9375,
+              "height": 33
+            },
+            "headingInk": [
+              {
+                "top": 687.375,
+                "bottom": 713.375,
+                "left": 64,
+                "right": 232.9375
+              }
+            ],
+            "words": [],
+            "overflow": [],
+            "identifiers": [],
+            "groups": [],
+            "chrome": {
+              "navigation": "page",
+              "frame": {
+                "background": "rgba(20, 36, 35, 0.95)",
+                "blur": "blur(24px) saturate(1.2)",
+                "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "header": {
+                "background": "rgba(0, 0, 0, 0)",
+                "blur": "none",
+                "shadow": "none",
+                "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+              },
+              "bar": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "dock": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              }
+            }
+          },
+          "passed": true
+        },
+        {
+          "variant": "failed-empty",
+          "metrics": {
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "documentWidth": 390,
+            "root": {
+              "top": 665.375,
+              "bottom": 1255.71875,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 590.34375
+            },
+            "monitor": {
+              "top": -9181,
+              "bottom": 1255.71875,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 10436.71875
+            },
+            "inner": {
+              "left": 64,
+              "right": 326
+            },
+            "padding": [18, 18],
+            "heading": {
+              "top": 684.375,
+              "bottom": 717.375,
+              "left": 64,
+              "right": 232.9375,
+              "width": 168.9375,
+              "height": 33
+            },
+            "headingInk": [
+              {
+                "top": 687.375,
+                "bottom": 713.375,
+                "left": 64,
+                "right": 232.9375
+              }
+            ],
+            "words": [],
+            "overflow": [],
+            "identifiers": [],
+            "groups": [
+              {
+                "box": {
+                  "top": 808.5625,
+                  "bottom": 916.75,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 108.1875
+                },
+                "heading": {
+                  "top": 808.5625,
+                  "bottom": 829.5625,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": []
+              },
+              {
+                "box": {
+                  "top": 940.75,
+                  "bottom": 1048.9375,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 108.1875
+                },
+                "heading": {
+                  "top": 940.75,
+                  "bottom": 961.75,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": []
+              },
+              {
+                "box": {
+                  "top": 1072.9375,
+                  "bottom": 1181.125,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 108.1875
+                },
+                "heading": {
+                  "top": 1072.9375,
+                  "bottom": 1093.9375,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": []
+              }
+            ],
+            "chrome": {
+              "navigation": "page",
+              "frame": {
+                "background": "rgba(20, 36, 35, 0.95)",
+                "blur": "blur(24px) saturate(1.2)",
+                "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "header": {
+                "background": "rgba(0, 0, 0, 0)",
+                "blur": "none",
+                "shadow": "none",
+                "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+              },
+              "bar": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "dock": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              }
+            }
+          },
+          "passed": true
+        },
+        {
+          "variant": "limited-empty",
+          "metrics": {
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "documentWidth": 390,
+            "root": {
+              "top": 665.375,
+              "bottom": 1275.3125,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 609.9375
+            },
+            "monitor": {
+              "top": -9181,
+              "bottom": 1275.3125,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 10456.3125
+            },
+            "inner": {
+              "left": 64,
+              "right": 326
+            },
+            "padding": [18, 18],
+            "heading": {
+              "top": 684.375,
+              "bottom": 717.375,
+              "left": 64,
+              "right": 232.9375,
+              "width": 168.9375,
+              "height": 33
+            },
+            "headingInk": [
+              {
+                "top": 687.375,
+                "bottom": 713.375,
+                "left": 64,
+                "right": 232.9375
+              }
+            ],
+            "words": [],
+            "overflow": [],
+            "identifiers": [],
+            "groups": [
+              {
+                "box": {
+                  "top": 828.15625,
+                  "bottom": 936.34375,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 108.1875
+                },
+                "heading": {
+                  "top": 828.15625,
+                  "bottom": 849.15625,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": []
+              },
+              {
+                "box": {
+                  "top": 960.34375,
+                  "bottom": 1068.53125,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 108.1875
+                },
+                "heading": {
+                  "top": 960.34375,
+                  "bottom": 981.34375,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": []
+              },
+              {
+                "box": {
+                  "top": 1092.53125,
+                  "bottom": 1200.71875,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 108.1875
+                },
+                "heading": {
+                  "top": 1092.53125,
+                  "bottom": 1113.53125,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": []
+              }
+            ],
+            "chrome": {
+              "navigation": "page",
+              "frame": {
+                "background": "rgba(20, 36, 35, 0.95)",
+                "blur": "blur(24px) saturate(1.2)",
+                "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "header": {
+                "background": "rgba(0, 0, 0, 0)",
+                "blur": "none",
+                "shadow": "none",
+                "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+              },
+              "bar": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "dock": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              }
+            }
+          },
+          "passed": true
+        },
+        {
+          "variant": "partial",
+          "metrics": {
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "documentWidth": 390,
+            "root": {
+              "top": 665.375,
+              "bottom": 3810.40625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 3145.03125
+            },
+            "monitor": {
+              "top": -9181,
+              "bottom": 3810.40625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 12991.40625
+            },
+            "inner": {
+              "left": 64,
+              "right": 326
+            },
+            "padding": [18, 18],
+            "heading": {
+              "top": 684.375,
+              "bottom": 717.375,
+              "left": 64,
+              "right": 232.9375,
+              "width": 168.9375,
+              "height": 33
+            },
+            "headingInk": [
+              {
+                "top": 687.375,
+                "bottom": 713.375,
+                "left": 64,
+                "right": 232.9375
+              }
+            ],
+            "words": [],
+            "overflow": [],
+            "identifiers": [
+              {
+                "text": "Processor package temperature",
+                "title": "Processor package temperature",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "motherboard-monitoring-controller-secondary-archive-0123456789",
+                "title": "motherboard-monitoring-controller-secondary-archive-0123456789",
+                "fallback": false,
+                "ellipsis": true,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Storage controller",
+                "title": "Storage controller",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nvme",
+                "title": "nvme",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "External probe",
+                "title": "External probe",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Disabled probe",
+                "title": "Disabled probe",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Unavailable probe",
+                "title": "Unavailable probe",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Cold ambient probe",
+                "title": "Cold ambient probe",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "environment",
+                "title": "environment",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Stopped chassis fan",
+                "title": "Stopped chassis fan",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Maximum reported fan",
+                "title": "Maximum reported fan",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Faulted fan",
+                "title": "Faulted fan",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Disabled fan",
+                "title": "Disabled fan",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Primary graphics adapter with a complete accessible descriptive name",
+                "title": "Primary graphics adapter with a complete accessible descriptive name",
+                "fallback": false,
+                "ellipsis": true,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "AMD · amdgpu",
+                "title": "AMD · amdgpu",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Busy graphics adapter",
+                "title": "Busy graphics adapter",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "AMD · amdgpu",
+                "title": "AMD · amdgpu",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Identity only graphics adapter",
+                "title": "Identity only graphics adapter",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Intel · i915",
+                "title": "Intel · i915",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Driver not reported",
+                "title": "Driver not reported",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Driver not reported",
+                "title": "Driver not reported",
+                "fallback": true,
+                "ellipsis": false,
+                "overflow": "visible",
+                "whiteSpace": "normal",
+                "textOverflow": "clip"
+              }
+            ],
+            "groups": [
+              {
+                "box": {
+                  "top": 847.75,
+                  "bottom": 1805.78125,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 958.03125
+                },
+                "heading": {
+                  "top": 847.75,
+                  "bottom": 868.75,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": [
+                  {
+                    "box": {
+                      "top": 884.75,
+                      "bottom": 1009.125,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 903.75,
+                      "bottom": 926.140625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 930.140625,
+                      "bottom": 949.734375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1021.125,
+                      "bottom": 1177.09375,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 155.96875
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1040.125,
+                      "bottom": 1062.515625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1066.515625,
+                      "bottom": 1086.109375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1189.09375,
+                      "bottom": 1313.46875,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1208.09375,
+                      "bottom": 1230.484375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1234.484375,
+                      "bottom": 1254.078125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1325.46875,
+                      "bottom": 1449.84375,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1344.46875,
+                      "bottom": 1366.859375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1370.859375,
+                      "bottom": 1390.453125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1461.84375,
+                      "bottom": 1586.21875,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1480.84375,
+                      "bottom": 1503.234375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1507.234375,
+                      "bottom": 1526.828125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1598.21875,
+                      "bottom": 1754.1875,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 155.96875
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1617.21875,
+                      "bottom": 1639.609375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1643.609375,
+                      "bottom": 1663.203125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  }
+                ]
+              },
+              {
+                "box": {
+                  "top": 1829.78125,
+                  "bottom": 2471.46875,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 641.6875
+                },
+                "heading": {
+                  "top": 1829.78125,
+                  "bottom": 1850.78125,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": [
+                  {
+                    "box": {
+                      "top": 1866.78125,
+                      "bottom": 1991.15625,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1885.78125,
+                      "bottom": 1908.171875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1912.171875,
+                      "bottom": 1931.765625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 2003.15625,
+                      "bottom": 2127.53125,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2022.15625,
+                      "bottom": 2044.546875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2048.546875,
+                      "bottom": 2068.140625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 2139.53125,
+                      "bottom": 2263.90625,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2158.53125,
+                      "bottom": 2180.921875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2184.921875,
+                      "bottom": 2204.515625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 2275.90625,
+                      "bottom": 2400.28125,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2294.90625,
+                      "bottom": 2317.296875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2321.296875,
+                      "bottom": 2340.890625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  }
+                ]
+              },
+              {
+                "box": {
+                  "top": 2495.46875,
+                  "bottom": 3735.8125,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 1240.34375
+                },
+                "heading": {
+                  "top": 2495.46875,
+                  "bottom": 2516.46875,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": [
+                  {
+                    "box": {
+                      "top": 2532.46875,
+                      "bottom": 2811.40625,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 278.9375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2551.46875,
+                      "bottom": 2573.859375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2577.859375,
+                      "bottom": 2597.453125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": [
+                      {
+                        "box": {
+                          "top": 2615.453125,
+                          "bottom": 2662.4375,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 2617.453125,
+                            "bottom": 2632.453125,
+                            "left": 83,
+                            "right": 125.984375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 2642.046875,
+                            "bottom": 2659.046875,
+                            "left": 83,
+                            "right": 117.15625
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 2680.4375,
+                          "bottom": 2727.421875,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 2682.4375,
+                            "bottom": 2697.4375,
+                            "left": 83,
+                            "right": 149.59375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 2707.03125,
+                            "bottom": 2724.03125,
+                            "left": 83,
+                            "right": 104.515625
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 2745.421875,
+                          "bottom": 2792.40625,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 2747.421875,
+                            "bottom": 2762.421875,
+                            "left": 83,
+                            "right": 170.265625
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 2772.015625,
+                            "bottom": 2789.015625,
+                            "left": 83,
+                            "right": 151.90625
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 2823.40625,
+                      "bottom": 3102.34375,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 278.9375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2842.40625,
+                      "bottom": 2864.796875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2868.796875,
+                      "bottom": 2888.390625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": [
+                      {
+                        "box": {
+                          "top": 2906.390625,
+                          "bottom": 2953.375,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 2908.390625,
+                            "bottom": 2923.390625,
+                            "left": 83,
+                            "right": 125.984375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 2932.984375,
+                            "bottom": 2949.984375,
+                            "left": 83,
+                            "right": 134.484375
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 2971.375,
+                          "bottom": 3018.359375,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 2973.375,
+                            "bottom": 2988.375,
+                            "left": 83,
+                            "right": 149.59375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 2997.96875,
+                            "bottom": 3014.96875,
+                            "left": 83,
+                            "right": 151.90625
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3036.359375,
+                          "bottom": 3083.34375,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3038.359375,
+                            "bottom": 3053.359375,
+                            "left": 83,
+                            "right": 170.265625
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3062.953125,
+                            "bottom": 3079.953125,
+                            "left": 83,
+                            "right": 151.90625
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 3114.34375,
+                      "bottom": 3393.28125,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 278.9375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 3133.34375,
+                      "bottom": 3155.734375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 3159.734375,
+                      "bottom": 3179.328125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": [
+                      {
+                        "box": {
+                          "top": 3197.328125,
+                          "bottom": 3244.3125,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3199.328125,
+                            "bottom": 3214.328125,
+                            "left": 83,
+                            "right": 125.984375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3223.921875,
+                            "bottom": 3240.921875,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3262.3125,
+                          "bottom": 3309.296875,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3264.3125,
+                            "bottom": 3279.3125,
+                            "left": 83,
+                            "right": 149.59375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3288.90625,
+                            "bottom": 3305.90625,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3327.296875,
+                          "bottom": 3374.28125,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3329.296875,
+                            "bottom": 3344.296875,
+                            "left": 83,
+                            "right": 170.265625
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3353.890625,
+                            "bottom": 3370.890625,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 3405.28125,
+                      "bottom": 3684.21875,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 278.9375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 3424.28125,
+                      "bottom": 3446.671875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 3450.671875,
+                      "bottom": 3470.265625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": [
+                      {
+                        "box": {
+                          "top": 3488.265625,
+                          "bottom": 3535.25,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3490.265625,
+                            "bottom": 3505.265625,
+                            "left": 83,
+                            "right": 125.984375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3514.859375,
+                            "bottom": 3531.859375,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3553.25,
+                          "bottom": 3600.234375,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3555.25,
+                            "bottom": 3570.25,
+                            "left": 83,
+                            "right": 149.59375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3579.84375,
+                            "bottom": 3596.84375,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3618.234375,
+                          "bottom": 3665.21875,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3620.234375,
+                            "bottom": 3635.234375,
+                            "left": 83,
+                            "right": 170.265625
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3644.828125,
+                            "bottom": 3661.828125,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "chrome": {
+              "navigation": "page",
+              "frame": {
+                "background": "rgba(20, 36, 35, 0.95)",
+                "blur": "blur(24px) saturate(1.2)",
+                "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "header": {
+                "background": "rgba(0, 0, 0, 0)",
+                "blur": "none",
+                "shadow": "none",
+                "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+              },
+              "bar": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "dock": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              }
+            }
+          },
+          "passed": true
+        },
+        {
+          "variant": "stale",
+          "metrics": {
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "documentWidth": 390,
+            "root": {
+              "top": 665.375,
+              "bottom": 3878,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 3212.625
+            },
+            "monitor": {
+              "top": -9181,
+              "bottom": 3878,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 13059
+            },
+            "inner": {
+              "left": 64,
+              "right": 326
+            },
+            "padding": [18, 18],
+            "heading": {
+              "top": 684.375,
+              "bottom": 717.375,
+              "left": 64,
+              "right": 232.9375,
+              "width": 168.9375,
+              "height": 33
+            },
+            "headingInk": [
+              {
+                "top": 687.375,
+                "bottom": 713.375,
+                "left": 64,
+                "right": 232.9375
+              }
+            ],
+            "words": [],
+            "overflow": [],
+            "identifiers": [
+              {
+                "text": "Processor package temperature",
+                "title": "Processor package temperature",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "motherboard-monitoring-controller-secondary-archive-0123456789",
+                "title": "motherboard-monitoring-controller-secondary-archive-0123456789",
+                "fallback": false,
+                "ellipsis": true,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Storage controller",
+                "title": "Storage controller",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nvme",
+                "title": "nvme",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "External probe",
+                "title": "External probe",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Disabled probe",
+                "title": "Disabled probe",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Unavailable probe",
+                "title": "Unavailable probe",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Cold ambient probe",
+                "title": "Cold ambient probe",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "environment",
+                "title": "environment",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Stopped chassis fan",
+                "title": "Stopped chassis fan",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Maximum reported fan",
+                "title": "Maximum reported fan",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Faulted fan",
+                "title": "Faulted fan",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Disabled fan",
+                "title": "Disabled fan",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "nct6775",
+                "title": "nct6775",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Primary graphics adapter with a complete accessible descriptive name",
+                "title": "Primary graphics adapter with a complete accessible descriptive name",
+                "fallback": false,
+                "ellipsis": true,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "AMD · amdgpu",
+                "title": "AMD · amdgpu",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Busy graphics adapter",
+                "title": "Busy graphics adapter",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "AMD · amdgpu",
+                "title": "AMD · amdgpu",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Identity only graphics adapter",
+                "title": "Identity only graphics adapter",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Intel · i915",
+                "title": "Intel · i915",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Driver not reported",
+                "title": "Driver not reported",
+                "fallback": false,
+                "ellipsis": false,
+                "overflow": "hidden",
+                "whiteSpace": "nowrap",
+                "textOverflow": "ellipsis"
+              },
+              {
+                "text": "Driver not reported",
+                "title": "Driver not reported",
+                "fallback": true,
+                "ellipsis": false,
+                "overflow": "visible",
+                "whiteSpace": "normal",
+                "textOverflow": "clip"
+              }
+            ],
+            "groups": [
+              {
+                "box": {
+                  "top": 915.34375,
+                  "bottom": 1873.375,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 958.03125
+                },
+                "heading": {
+                  "top": 915.34375,
+                  "bottom": 936.34375,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": [
+                  {
+                    "box": {
+                      "top": 952.34375,
+                      "bottom": 1076.71875,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 971.34375,
+                      "bottom": 993.734375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 997.734375,
+                      "bottom": 1017.328125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1088.71875,
+                      "bottom": 1244.6875,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 155.96875
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1107.71875,
+                      "bottom": 1130.109375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1134.109375,
+                      "bottom": 1153.703125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1256.6875,
+                      "bottom": 1381.0625,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1275.6875,
+                      "bottom": 1298.078125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1302.078125,
+                      "bottom": 1321.671875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1393.0625,
+                      "bottom": 1517.4375,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1412.0625,
+                      "bottom": 1434.453125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1438.453125,
+                      "bottom": 1458.046875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1529.4375,
+                      "bottom": 1653.8125,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1548.4375,
+                      "bottom": 1570.828125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1574.828125,
+                      "bottom": 1594.421875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 1665.8125,
+                      "bottom": 1821.78125,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 155.96875
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1684.8125,
+                      "bottom": 1707.203125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1711.203125,
+                      "bottom": 1730.796875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  }
+                ]
+              },
+              {
+                "box": {
+                  "top": 1897.375,
+                  "bottom": 2539.0625,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 641.6875
+                },
+                "heading": {
+                  "top": 1897.375,
+                  "bottom": 1918.375,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": [
+                  {
+                    "box": {
+                      "top": 1934.375,
+                      "bottom": 2058.75,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 1953.375,
+                      "bottom": 1975.765625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 1979.765625,
+                      "bottom": 1999.359375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 2070.75,
+                      "bottom": 2195.125,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2089.75,
+                      "bottom": 2112.140625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2116.140625,
+                      "bottom": 2135.734375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 2207.125,
+                      "bottom": 2331.5,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2226.125,
+                      "bottom": 2248.515625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2252.515625,
+                      "bottom": 2272.109375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  },
+                  {
+                    "box": {
+                      "top": 2343.5,
+                      "bottom": 2467.875,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 124.375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2362.5,
+                      "bottom": 2384.890625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2388.890625,
+                      "bottom": 2408.484375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": []
+                  }
+                ]
+              },
+              {
+                "box": {
+                  "top": 2563.0625,
+                  "bottom": 3803.40625,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 1240.34375
+                },
+                "heading": {
+                  "top": 2563.0625,
+                  "bottom": 2584.0625,
+                  "left": 64,
+                  "right": 326,
+                  "width": 262,
+                  "height": 21
+                },
+                "cards": [
+                  {
+                    "box": {
+                      "top": 2600.0625,
+                      "bottom": 2879,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 278.9375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2619.0625,
+                      "bottom": 2641.453125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2645.453125,
+                      "bottom": 2665.046875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": [
+                      {
+                        "box": {
+                          "top": 2683.046875,
+                          "bottom": 2730.03125,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 2685.046875,
+                            "bottom": 2700.046875,
+                            "left": 83,
+                            "right": 125.984375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 2709.640625,
+                            "bottom": 2726.640625,
+                            "left": 83,
+                            "right": 117.15625
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 2748.03125,
+                          "bottom": 2795.015625,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 2750.03125,
+                            "bottom": 2765.03125,
+                            "left": 83,
+                            "right": 149.59375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 2774.625,
+                            "bottom": 2791.625,
+                            "left": 83,
+                            "right": 104.515625
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 2813.015625,
+                          "bottom": 2860,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 2815.015625,
+                            "bottom": 2830.015625,
+                            "left": 83,
+                            "right": 170.265625
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 2839.609375,
+                            "bottom": 2856.609375,
+                            "left": 83,
+                            "right": 151.90625
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 2891,
+                      "bottom": 3169.9375,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 278.9375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 2910,
+                      "bottom": 2932.390625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 2936.390625,
+                      "bottom": 2955.984375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": [
+                      {
+                        "box": {
+                          "top": 2973.984375,
+                          "bottom": 3020.96875,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 2975.984375,
+                            "bottom": 2990.984375,
+                            "left": 83,
+                            "right": 125.984375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3000.578125,
+                            "bottom": 3017.578125,
+                            "left": 83,
+                            "right": 134.484375
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3038.96875,
+                          "bottom": 3085.953125,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3040.96875,
+                            "bottom": 3055.96875,
+                            "left": 83,
+                            "right": 149.59375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3065.5625,
+                            "bottom": 3082.5625,
+                            "left": 83,
+                            "right": 151.90625
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3103.953125,
+                          "bottom": 3150.9375,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3105.953125,
+                            "bottom": 3120.953125,
+                            "left": 83,
+                            "right": 170.265625
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3130.546875,
+                            "bottom": 3147.546875,
+                            "left": 83,
+                            "right": 151.90625
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 3181.9375,
+                      "bottom": 3460.875,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 278.9375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 3200.9375,
+                      "bottom": 3223.328125,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 3227.328125,
+                      "bottom": 3246.921875,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": [
+                      {
+                        "box": {
+                          "top": 3264.921875,
+                          "bottom": 3311.90625,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3266.921875,
+                            "bottom": 3281.921875,
+                            "left": 83,
+                            "right": 125.984375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3291.515625,
+                            "bottom": 3308.515625,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3329.90625,
+                          "bottom": 3376.890625,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3331.90625,
+                            "bottom": 3346.90625,
+                            "left": 83,
+                            "right": 149.59375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3356.5,
+                            "bottom": 3373.5,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3394.890625,
+                          "bottom": 3441.875,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3396.890625,
+                            "bottom": 3411.890625,
+                            "left": 83,
+                            "right": 170.265625
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3421.484375,
+                            "bottom": 3438.484375,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 3472.875,
+                      "bottom": 3751.8125,
+                      "left": 64,
+                      "right": 326,
+                      "width": 262,
+                      "height": 278.9375
+                    },
+                    "padding": [18, 18],
+                    "title": {
+                      "top": 3491.875,
+                      "bottom": 3514.265625,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 22.390625
+                    },
+                    "chip": {
+                      "top": 3518.265625,
+                      "bottom": 3537.859375,
+                      "left": 83,
+                      "right": 307,
+                      "width": 224,
+                      "height": 19.59375
+                    },
+                    "facts": [
+                      {
+                        "box": {
+                          "top": 3555.859375,
+                          "bottom": 3602.84375,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3557.859375,
+                            "bottom": 3572.859375,
+                            "left": 83,
+                            "right": 125.984375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3582.453125,
+                            "bottom": 3599.453125,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3620.84375,
+                          "bottom": 3667.828125,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3622.84375,
+                            "bottom": 3637.84375,
+                            "left": 83,
+                            "right": 149.59375
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3647.4375,
+                            "bottom": 3664.4375,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      },
+                      {
+                        "box": {
+                          "top": 3685.828125,
+                          "bottom": 3732.8125,
+                          "left": 83,
+                          "right": 307,
+                          "width": 224,
+                          "height": 46.984375
+                        },
+                        "label": [
+                          {
+                            "top": 3687.828125,
+                            "bottom": 3702.828125,
+                            "left": 83,
+                            "right": 170.265625
+                          }
+                        ],
+                        "value": [
+                          {
+                            "top": 3712.421875,
+                            "bottom": 3729.421875,
+                            "left": 83,
+                            "right": 157.203125
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "chrome": {
+              "navigation": "page",
+              "frame": {
+                "background": "rgba(20, 36, 35, 0.95)",
+                "blur": "blur(24px) saturate(1.2)",
+                "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "header": {
+                "background": "rgba(0, 0, 0, 0)",
+                "blur": "none",
+                "shadow": "none",
+                "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+              },
+              "bar": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "dock": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              }
+            }
+          },
+          "passed": true
+        },
+        {
+          "variant": "error",
+          "metrics": {
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "documentWidth": 390,
+            "root": {
+              "top": 665.375,
+              "bottom": 951.15625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 285.78125
+            },
+            "monitor": {
+              "top": -9181,
+              "bottom": 951.15625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 10132.15625
+            },
+            "inner": {
+              "left": 64,
+              "right": 326
+            },
+            "padding": [18, 18],
+            "heading": {
+              "top": 684.375,
+              "bottom": 717.375,
+              "left": 64,
+              "right": 232.9375,
+              "width": 168.9375,
+              "height": 33
+            },
+            "headingInk": [
+              {
+                "top": 687.375,
+                "bottom": 713.375,
+                "left": 64,
+                "right": 232.9375
+              }
+            ],
+            "words": [],
+            "overflow": [],
+            "identifiers": [],
+            "groups": [],
+            "chrome": {
+              "navigation": "page",
+              "frame": {
+                "background": "rgba(20, 36, 35, 0.95)",
+                "blur": "blur(24px) saturate(1.2)",
+                "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "header": {
+                "background": "rgba(0, 0, 0, 0)",
+                "blur": "none",
+                "shadow": "none",
+                "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+              },
+              "bar": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "dock": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              }
+            }
+          },
+          "passed": false
+        }
+      ],
+      "retries": [],
+      "refresh": [],
+      "polling": [],
+      "requests": [
+        {
+          "scenario": "stale",
+          "at": 1792310155066
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310157483
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310159866
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310162234
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310164582
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310166897
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310169217
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310171531
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310173890
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310176242
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310178555
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310180865
+        },
+        {
+          "scenario": "ready",
+          "at": 1792310183193
+        },
+        {
+          "scenario": "missing",
+          "at": 1792310189012
+        },
+        {
+          "scenario": "collecting",
+          "at": 1792310192587
+        },
+        {
+          "scenario": "collecting",
+          "at": 1792310194614
+        },
+        {
+          "scenario": "empty",
+          "at": 1792310195773
+        },
+        {
+          "scenario": "failed-empty",
+          "at": 1792310198964
+        },
+        {
+          "scenario": "limited-empty",
+          "at": 1792310202157
+        },
+        {
+          "scenario": "partial",
+          "at": 1792310205318
+        },
+        {
+          "scenario": "stale",
+          "at": 1792310208570
+        },
+        {
+          "scenario": "error",
+          "at": 1792310211773
+        },
+        {
+          "scenario": "error",
+          "at": 1792310241780
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "preferencePuts": 0,
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": [],
+      "provenance": {
+        "controlledFixtures": true,
+        "scope": "finish",
+        "ordinaryWords": "No arbitrary fractures; long identifiers require full DOM/title and actual CSS ellipsis",
+        "contrast": "Conservative black/white wallpaper compositions through actual ancestor layers",
+        "poll": "Actual existing30second query timer, no injected clock or invalidation"
+      },
+      "current": "390-dark-text1-ocean-error",
+      "colorOnlyLayoutProof": {
+        "viewport": {
+          "width": 320,
+          "height": 800
+        },
+        "documentWidth": 320,
+        "root": {
+          "top": 391.1875,
+          "bottom": 5280.796875,
+          "left": 45,
+          "right": 275,
+          "width": 230,
+          "height": 4889.609375
+        },
+        "monitor": {
+          "top": -17714.203125,
+          "bottom": 5280.796875,
+          "left": 45,
+          "right": 275,
+          "width": 230,
+          "height": 22995
+        },
+        "inner": {
+          "left": 64,
+          "right": 256
+        },
+        "padding": [18, 18],
+        "heading": {
+          "top": 410.1875,
+          "bottom": 542.1875,
+          "left": 64,
+          "right": 256,
+          "width": 192,
+          "height": 132
+        },
+        "headingInk": [
+          {
+            "top": 417.1875,
+            "bottom": 469.1875,
+            "left": 64,
+            "right": 243.609375
+          },
+          {
+            "top": 483.1875,
+            "bottom": 535.1875,
+            "left": 64,
+            "right": 209.703125
+          }
+        ],
+        "words": [],
+        "overflow": [],
+        "identifiers": [
+          {
+            "text": "Processor package temperature",
+            "title": "Processor package temperature",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "motherboard-monitoring-controller-secondary-archive-0123456789",
+            "title": "motherboard-monitoring-controller-secondary-archive-0123456789",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Storage controller",
+            "title": "Storage controller",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "nvme",
+            "title": "nvme",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "External probe",
+            "title": "External probe",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "nct6775",
+            "title": "nct6775",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Disabled probe",
+            "title": "Disabled probe",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "nct6775",
+            "title": "nct6775",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Unavailable probe",
+            "title": "Unavailable probe",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "nct6775",
+            "title": "nct6775",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Cold ambient probe",
+            "title": "Cold ambient probe",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "environment",
+            "title": "environment",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Stopped chassis fan",
+            "title": "Stopped chassis fan",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "nct6775",
+            "title": "nct6775",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Maximum reported fan",
+            "title": "Maximum reported fan",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "nct6775",
+            "title": "nct6775",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Faulted fan",
+            "title": "Faulted fan",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "nct6775",
+            "title": "nct6775",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Disabled fan",
+            "title": "Disabled fan",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "nct6775",
+            "title": "nct6775",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Primary graphics adapter with a complete accessible descriptive name",
+            "title": "Primary graphics adapter with a complete accessible descriptive name",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "AMD · amdgpu",
+            "title": "AMD · amdgpu",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Busy graphics adapter",
+            "title": "Busy graphics adapter",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "AMD · amdgpu",
+            "title": "AMD · amdgpu",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Identity only graphics adapter",
+            "title": "Identity only graphics adapter",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Intel · i915",
+            "title": "Intel · i915",
+            "fallback": false,
+            "ellipsis": false,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Driver not reported",
+            "title": "Driver not reported",
+            "fallback": false,
+            "ellipsis": true,
+            "overflow": "hidden",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis"
+          },
+          {
+            "text": "Driver not reported",
+            "title": "Driver not reported",
+            "fallback": true,
+            "ellipsis": false,
+            "overflow": "visible",
+            "whiteSpace": "normal",
+            "textOverflow": "clip"
+          }
+        ],
+        "groups": [
+          {
+            "box": {
+              "top": 656.59375,
+              "bottom": 2127.390625,
+              "left": 64,
+              "right": 256,
+              "width": 192,
+              "height": 1470.796875
+            },
+            "heading": {
+              "top": 656.59375,
+              "bottom": 698.59375,
+              "left": 64,
+              "right": 256,
+              "width": 192,
+              "height": 42
+            },
+            "cards": [
+              {
+                "box": {
+                  "top": 714.59375,
+                  "bottom": 903.390625,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 188.796875
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 733.59375,
+                  "bottom": 778.390625,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 782.390625,
+                  "bottom": 821.59375,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              },
+              {
+                "box": {
+                  "top": 915.390625,
+                  "bottom": 1233.796875,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 318.40625
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 934.390625,
+                  "bottom": 979.1875,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 983.1875,
+                  "bottom": 1022.390625,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              },
+              {
+                "box": {
+                  "top": 1245.796875,
+                  "bottom": 1434.59375,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 188.796875
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 1264.796875,
+                  "bottom": 1309.59375,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 1313.59375,
+                  "bottom": 1352.796875,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              },
+              {
+                "box": {
+                  "top": 1446.59375,
+                  "bottom": 1635.390625,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 188.796875
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 1465.59375,
+                  "bottom": 1510.390625,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 1514.390625,
+                  "bottom": 1553.59375,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              },
+              {
+                "box": {
+                  "top": 1647.390625,
+                  "bottom": 1836.1875,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 188.796875
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 1666.390625,
+                  "bottom": 1711.1875,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 1715.1875,
+                  "bottom": 1754.390625,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              },
+              {
+                "box": {
+                  "top": 1848.1875,
+                  "bottom": 2127.390625,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 279.203125
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 1867.1875,
+                  "bottom": 1911.984375,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 1915.984375,
+                  "bottom": 1955.1875,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              }
+            ]
+          },
+          {
+            "box": {
+              "top": 2151.390625,
+              "bottom": 3045.375,
+              "left": 64,
+              "right": 256,
+              "width": 192,
+              "height": 893.984375
+            },
+            "heading": {
+              "top": 2151.390625,
+              "bottom": 2193.390625,
+              "left": 64,
+              "right": 256,
+              "width": 192,
+              "height": 42
+            },
+            "cards": [
+              {
+                "box": {
+                  "top": 2209.390625,
+                  "bottom": 2398.1875,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 188.796875
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 2228.390625,
+                  "bottom": 2273.1875,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 2277.1875,
+                  "bottom": 2316.390625,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              },
+              {
+                "box": {
+                  "top": 2410.1875,
+                  "bottom": 2643.78125,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 233.59375
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 2429.1875,
+                  "bottom": 2473.984375,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 2477.984375,
+                  "bottom": 2517.1875,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              },
+              {
+                "box": {
+                  "top": 2655.78125,
+                  "bottom": 2844.578125,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 188.796875
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 2674.78125,
+                  "bottom": 2719.578125,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 2723.578125,
+                  "bottom": 2762.78125,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              },
+              {
+                "box": {
+                  "top": 2856.578125,
+                  "bottom": 3045.375,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 188.796875
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 2875.578125,
+                  "bottom": 2920.375,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 2924.375,
+                  "bottom": 2963.578125,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": []
+              }
+            ]
+          },
+          {
+            "box": {
+              "top": 3069.375,
+              "bottom": 5147.390625,
+              "left": 64,
+              "right": 256,
+              "width": 192,
+              "height": 2078.015625
+            },
+            "heading": {
+              "top": 3069.375,
+              "bottom": 3111.375,
+              "left": 64,
+              "right": 256,
+              "width": 192,
+              "height": 42
+            },
+            "cards": [
+              {
+                "box": {
+                  "top": 3127.375,
+                  "bottom": 3613.578125,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 486.203125
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 3146.375,
+                  "bottom": 3191.171875,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 3195.171875,
+                  "bottom": 3234.375,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": [
+                  {
+                    "box": {
+                      "top": 3252.375,
+                      "bottom": 3341.375,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 89
+                    },
+                    "label": [
+                      {
+                        "top": 3257.375,
+                        "bottom": 3286.375,
+                        "left": 83,
+                        "right": 161.625
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 3301.578125,
+                        "bottom": 3334.578125,
+                        "left": 83,
+                        "right": 147.03125
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 3359.375,
+                      "bottom": 3448.375,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 89
+                    },
+                    "label": [
+                      {
+                        "top": 3364.375,
+                        "bottom": 3393.375,
+                        "left": 83,
+                        "right": 207.375
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 3408.578125,
+                        "bottom": 3441.578125,
+                        "left": 83,
+                        "right": 123.75
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 3466.375,
+                      "bottom": 3594.578125,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 128.203125
+                    },
+                    "label": [
+                      {
+                        "top": 3471.375,
+                        "bottom": 3500.375,
+                        "left": 83,
+                        "right": 150.1875
+                      },
+                      {
+                        "top": 3510.578125,
+                        "bottom": 3539.578125,
+                        "left": 83,
+                        "right": 172.484375
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 3554.78125,
+                        "bottom": 3587.78125,
+                        "left": 83,
+                        "right": 216.03125
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "box": {
+                  "top": 3625.578125,
+                  "bottom": 4111.78125,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 486.203125
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 3644.578125,
+                  "bottom": 3689.375,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 3693.375,
+                  "bottom": 3732.578125,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": [
+                  {
+                    "box": {
+                      "top": 3750.578125,
+                      "bottom": 3839.578125,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 89
+                    },
+                    "label": [
+                      {
+                        "top": 3755.578125,
+                        "bottom": 3784.578125,
+                        "left": 83,
+                        "right": 161.625
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 3799.78125,
+                        "bottom": 3832.78125,
+                        "left": 83,
+                        "right": 181.65625
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 3857.578125,
+                      "bottom": 3946.578125,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 89
+                    },
+                    "label": [
+                      {
+                        "top": 3862.578125,
+                        "bottom": 3891.578125,
+                        "left": 83,
+                        "right": 207.375
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 3906.78125,
+                        "bottom": 3939.78125,
+                        "left": 83,
+                        "right": 216.03125
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 3964.578125,
+                      "bottom": 4092.78125,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 128.203125
+                    },
+                    "label": [
+                      {
+                        "top": 3969.578125,
+                        "bottom": 3998.578125,
+                        "left": 83,
+                        "right": 150.1875
+                      },
+                      {
+                        "top": 4008.78125,
+                        "bottom": 4037.78125,
+                        "left": 83,
+                        "right": 172.484375
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 4052.984375,
+                        "bottom": 4085.984375,
+                        "left": 83,
+                        "right": 216.03125
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "box": {
+                  "top": 4123.78125,
+                  "bottom": 4609.984375,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 486.203125
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 4142.78125,
+                  "bottom": 4187.578125,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 4191.578125,
+                  "bottom": 4230.78125,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 39.203125
+                },
+                "facts": [
+                  {
+                    "box": {
+                      "top": 4248.78125,
+                      "bottom": 4337.78125,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 89
+                    },
+                    "label": [
+                      {
+                        "top": 4253.78125,
+                        "bottom": 4282.78125,
+                        "left": 83,
+                        "right": 161.625
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 4297.984375,
+                        "bottom": 4330.984375,
+                        "left": 83,
+                        "right": 223.921875
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 4355.78125,
+                      "bottom": 4444.78125,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 89
+                    },
+                    "label": [
+                      {
+                        "top": 4360.78125,
+                        "bottom": 4389.78125,
+                        "left": 83,
+                        "right": 207.375
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 4404.984375,
+                        "bottom": 4437.984375,
+                        "left": 83,
+                        "right": 223.921875
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 4462.78125,
+                      "bottom": 4590.984375,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 128.203125
+                    },
+                    "label": [
+                      {
+                        "top": 4467.78125,
+                        "bottom": 4496.78125,
+                        "left": 83,
+                        "right": 150.1875
+                      },
+                      {
+                        "top": 4506.984375,
+                        "bottom": 4535.984375,
+                        "left": 83,
+                        "right": 172.484375
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 4551.1875,
+                        "bottom": 4584.1875,
+                        "left": 83,
+                        "right": 223.921875
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "box": {
+                  "top": 4621.984375,
+                  "bottom": 5147.390625,
+                  "left": 64,
+                  "right": 256,
+                  "width": 192,
+                  "height": 525.40625
+                },
+                "padding": [18, 18],
+                "title": {
+                  "top": 4640.984375,
+                  "bottom": 4685.78125,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 44.796875
+                },
+                "chip": {
+                  "top": 4689.78125,
+                  "bottom": 4768.1875,
+                  "left": 83,
+                  "right": 237,
+                  "width": 154,
+                  "height": 78.40625
+                },
+                "facts": [
+                  {
+                    "box": {
+                      "top": 4786.1875,
+                      "bottom": 4875.1875,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 89
+                    },
+                    "label": [
+                      {
+                        "top": 4791.1875,
+                        "bottom": 4820.1875,
+                        "left": 83,
+                        "right": 161.625
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 4835.390625,
+                        "bottom": 4868.390625,
+                        "left": 83,
+                        "right": 223.921875
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 4893.1875,
+                      "bottom": 4982.1875,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 89
+                    },
+                    "label": [
+                      {
+                        "top": 4898.1875,
+                        "bottom": 4927.1875,
+                        "left": 83,
+                        "right": 207.375
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 4942.390625,
+                        "bottom": 4975.390625,
+                        "left": 83,
+                        "right": 223.921875
+                      }
+                    ]
+                  },
+                  {
+                    "box": {
+                      "top": 5000.1875,
+                      "bottom": 5128.390625,
+                      "left": 83,
+                      "right": 237,
+                      "width": 154,
+                      "height": 128.203125
+                    },
+                    "label": [
+                      {
+                        "top": 5005.1875,
+                        "bottom": 5034.1875,
+                        "left": 83,
+                        "right": 150.1875
+                      },
+                      {
+                        "top": 5044.390625,
+                        "bottom": 5073.390625,
+                        "left": 83,
+                        "right": 172.484375
+                      }
+                    ],
+                    "value": [
+                      {
+                        "top": 5088.59375,
+                        "bottom": 5121.59375,
+                        "left": 83,
+                        "right": 223.921875
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "chrome": {
+          "navigation": "page",
+          "frame": {
+            "background": "rgba(20, 36, 35, 0.95)",
+            "blur": "blur(24px) saturate(1.2)",
+            "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+            "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+          },
+          "header": {
+            "background": "rgba(0, 0, 0, 0)",
+            "blur": "none",
+            "shadow": "none",
+            "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+          },
+          "bar": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "blur": "blur(28px) saturate(1.45)",
+            "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+            "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+          },
+          "dock": {
+            "background": "rgba(9, 23, 23, 0.92)",
+            "blur": "blur(28px) saturate(1.45)",
+            "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+            "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+          }
+        }
+      },
+      "failure": {
+        "phase": "390-dark-text1-ocean-error",
+        "name": "TimeoutError",
+        "message": "locator.textContent: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-sensor-id=\"temperature:0000000000000001\"]').locator('h4')\u001b[22m\n"
+      }
+    },
+    "errors": []
+  }
+]

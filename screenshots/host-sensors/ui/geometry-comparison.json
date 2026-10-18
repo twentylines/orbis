@@ -1,0 +1,911 @@
+{
+  "passed": true,
+  "comparison": "R3b320dark2Ocean vs R4color-only320dark2Frost; root-relative geometry",
+  "numericDifferences": [],
+  "before": {
+    "rootWidth": 230,
+    "rootHeight": 4889.609375,
+    "padding": [18, 18],
+    "heading": {
+      "width": 192,
+      "height": 132,
+      "left": 19,
+      "right": 211,
+      "top": 19.0,
+      "bottom": 151.0
+    },
+    "groups": [
+      {
+        "box": {
+          "width": 192,
+          "height": 1470.796875,
+          "left": 19,
+          "right": 211,
+          "top": 265.40625,
+          "bottom": 1736.203125
+        },
+        "heading": {
+          "width": 192,
+          "height": 42,
+          "left": 19,
+          "right": 211,
+          "top": 265.40625,
+          "bottom": 307.40625
+        },
+        "cards": [
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 323.40625,
+              "bottom": 512.203125
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 342.40625,
+              "bottom": 387.203125
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 391.203125,
+              "bottom": 430.40625
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 318.40625,
+              "left": 19,
+              "right": 211,
+              "top": 524.203125,
+              "bottom": 842.609375
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 543.203125,
+              "bottom": 588.0
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 592.0,
+              "bottom": 631.203125
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 854.609375,
+              "bottom": 1043.40625
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 873.609375,
+              "bottom": 918.40625
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 922.40625,
+              "bottom": 961.609375
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 1055.40625,
+              "bottom": 1244.203125
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 1074.40625,
+              "bottom": 1119.203125
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 1123.203125,
+              "bottom": 1162.40625
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 1256.203125,
+              "bottom": 1445.0
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 1275.203125,
+              "bottom": 1320.0
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 1324.0,
+              "bottom": 1363.203125
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 279.203125,
+              "left": 19,
+              "right": 211,
+              "top": 1457.0,
+              "bottom": 1736.203125
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 1476.0,
+              "bottom": 1520.796875
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 1524.796875,
+              "bottom": 1564.0
+            }
+          }
+        ]
+      },
+      {
+        "box": {
+          "width": 192,
+          "height": 893.984375,
+          "left": 19,
+          "right": 211,
+          "top": 1760.203125,
+          "bottom": 2654.1875
+        },
+        "heading": {
+          "width": 192,
+          "height": 42,
+          "left": 19,
+          "right": 211,
+          "top": 1760.203125,
+          "bottom": 1802.203125
+        },
+        "cards": [
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 1818.203125,
+              "bottom": 2007.0
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 1837.203125,
+              "bottom": 1882.0
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 1886.0,
+              "bottom": 1925.203125
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 233.59375,
+              "left": 19,
+              "right": 211,
+              "top": 2019.0,
+              "bottom": 2252.59375
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 2038.0,
+              "bottom": 2082.796875
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 2086.796875,
+              "bottom": 2126.0
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 2264.59375,
+              "bottom": 2453.390625
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 2283.59375,
+              "bottom": 2328.390625
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 2332.390625,
+              "bottom": 2371.59375
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 2465.390625,
+              "bottom": 2654.1875
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 2484.390625,
+              "bottom": 2529.1875
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 2533.1875,
+              "bottom": 2572.390625
+            }
+          }
+        ]
+      },
+      {
+        "box": {
+          "width": 192,
+          "height": 2078.015625,
+          "left": 19,
+          "right": 211,
+          "top": 2678.1875,
+          "bottom": 4756.203125
+        },
+        "heading": {
+          "width": 192,
+          "height": 42,
+          "left": 19,
+          "right": 211,
+          "top": 2678.1875,
+          "bottom": 2720.1875
+        },
+        "cards": [
+          {
+            "box": {
+              "width": 192,
+              "height": 486.203125,
+              "left": 19,
+              "right": 211,
+              "top": 2736.1875,
+              "bottom": 3222.390625
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 2755.1875,
+              "bottom": 2799.984375
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 2803.984375,
+              "bottom": 2843.1875
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 486.203125,
+              "left": 19,
+              "right": 211,
+              "top": 3234.390625,
+              "bottom": 3720.59375
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 3253.390625,
+              "bottom": 3298.1875
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 3302.1875,
+              "bottom": 3341.390625
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 486.203125,
+              "left": 19,
+              "right": 211,
+              "top": 3732.59375,
+              "bottom": 4218.796875
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 3751.59375,
+              "bottom": 3796.390625
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 3800.390625,
+              "bottom": 3839.59375
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 525.40625,
+              "left": 19,
+              "right": 211,
+              "top": 4230.796875,
+              "bottom": 4756.203125
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 4249.796875,
+              "bottom": 4294.59375
+            },
+            "chip": {
+              "width": 154,
+              "height": 78.40625,
+              "left": 38,
+              "right": 192,
+              "top": 4298.59375,
+              "bottom": 4377.0
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "after": {
+    "rootWidth": 230,
+    "rootHeight": 4889.609375,
+    "padding": [18, 18],
+    "heading": {
+      "width": 192,
+      "height": 132,
+      "left": 19,
+      "right": 211,
+      "top": 19.0,
+      "bottom": 151.0
+    },
+    "groups": [
+      {
+        "box": {
+          "width": 192,
+          "height": 1470.796875,
+          "left": 19,
+          "right": 211,
+          "top": 265.40625,
+          "bottom": 1736.203125
+        },
+        "heading": {
+          "width": 192,
+          "height": 42,
+          "left": 19,
+          "right": 211,
+          "top": 265.40625,
+          "bottom": 307.40625
+        },
+        "cards": [
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 323.40625,
+              "bottom": 512.203125
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 342.40625,
+              "bottom": 387.203125
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 391.203125,
+              "bottom": 430.40625
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 318.40625,
+              "left": 19,
+              "right": 211,
+              "top": 524.203125,
+              "bottom": 842.609375
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 543.203125,
+              "bottom": 588.0
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 592.0,
+              "bottom": 631.203125
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 854.609375,
+              "bottom": 1043.40625
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 873.609375,
+              "bottom": 918.40625
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 922.40625,
+              "bottom": 961.609375
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 1055.40625,
+              "bottom": 1244.203125
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 1074.40625,
+              "bottom": 1119.203125
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 1123.203125,
+              "bottom": 1162.40625
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 1256.203125,
+              "bottom": 1445.0
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 1275.203125,
+              "bottom": 1320.0
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 1324.0,
+              "bottom": 1363.203125
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 279.203125,
+              "left": 19,
+              "right": 211,
+              "top": 1457.0,
+              "bottom": 1736.203125
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 1476.0,
+              "bottom": 1520.796875
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 1524.796875,
+              "bottom": 1564.0
+            }
+          }
+        ]
+      },
+      {
+        "box": {
+          "width": 192,
+          "height": 893.984375,
+          "left": 19,
+          "right": 211,
+          "top": 1760.203125,
+          "bottom": 2654.1875
+        },
+        "heading": {
+          "width": 192,
+          "height": 42,
+          "left": 19,
+          "right": 211,
+          "top": 1760.203125,
+          "bottom": 1802.203125
+        },
+        "cards": [
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 1818.203125,
+              "bottom": 2007.0
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 1837.203125,
+              "bottom": 1882.0
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 1886.0,
+              "bottom": 1925.203125
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 233.59375,
+              "left": 19,
+              "right": 211,
+              "top": 2019.0,
+              "bottom": 2252.59375
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 2038.0,
+              "bottom": 2082.796875
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 2086.796875,
+              "bottom": 2126.0
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 2264.59375,
+              "bottom": 2453.390625
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 2283.59375,
+              "bottom": 2328.390625
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 2332.390625,
+              "bottom": 2371.59375
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 188.796875,
+              "left": 19,
+              "right": 211,
+              "top": 2465.390625,
+              "bottom": 2654.1875
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 2484.390625,
+              "bottom": 2529.1875
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 2533.1875,
+              "bottom": 2572.390625
+            }
+          }
+        ]
+      },
+      {
+        "box": {
+          "width": 192,
+          "height": 2078.015625,
+          "left": 19,
+          "right": 211,
+          "top": 2678.1875,
+          "bottom": 4756.203125
+        },
+        "heading": {
+          "width": 192,
+          "height": 42,
+          "left": 19,
+          "right": 211,
+          "top": 2678.1875,
+          "bottom": 2720.1875
+        },
+        "cards": [
+          {
+            "box": {
+              "width": 192,
+              "height": 486.203125,
+              "left": 19,
+              "right": 211,
+              "top": 2736.1875,
+              "bottom": 3222.390625
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 2755.1875,
+              "bottom": 2799.984375
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 2803.984375,
+              "bottom": 2843.1875
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 486.203125,
+              "left": 19,
+              "right": 211,
+              "top": 3234.390625,
+              "bottom": 3720.59375
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 3253.390625,
+              "bottom": 3298.1875
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 3302.1875,
+              "bottom": 3341.390625
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 486.203125,
+              "left": 19,
+              "right": 211,
+              "top": 3732.59375,
+              "bottom": 4218.796875
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 3751.59375,
+              "bottom": 3796.390625
+            },
+            "chip": {
+              "width": 154,
+              "height": 39.203125,
+              "left": 38,
+              "right": 192,
+              "top": 3800.390625,
+              "bottom": 3839.59375
+            }
+          },
+          {
+            "box": {
+              "width": 192,
+              "height": 525.40625,
+              "left": 19,
+              "right": 211,
+              "top": 4230.796875,
+              "bottom": 4756.203125
+            },
+            "padding": [18, 18],
+            "title": {
+              "width": 154,
+              "height": 44.796875,
+              "left": 38,
+              "right": 192,
+              "top": 4249.796875,
+              "bottom": 4294.59375
+            },
+            "chip": {
+              "width": 154,
+              "height": 78.40625,
+              "left": 38,
+              "right": 192,
+              "top": 4298.59375,
+              "bottom": 4377.0
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,188 @@
+.host-sensors {
+  --host-sensor-warning: color-mix(in srgb, var(--desktop-warning) 90%, var(--desktop-ink));
+  margin-top: 24px;
+  padding: 28px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
+  container-type: inline-size;
+  scroll-margin-block: 16px;
+}
+.host-sensors-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 24px;
+}
+.host-sensors .host-sensors-heading h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.5;
+  letter-spacing: -0.035em;
+}
+.host-sensors-heading h2:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 5px;
+  border-radius: 4px;
+}
+.host-sensors-state,
+.host-sensors .host-sensor-coverage,
+.host-sensors .host-sensor-chip,
+.host-sensors .host-sensor-threshold,
+.host-sensors .host-sensor-empty,
+.host-gpu-facts dt,
+.host-sensors-about {
+  color: var(--desktop-status-muted);
+  font-size: 0.875em;
+  line-height: 1.6;
+}
+.host-sensors-state[data-stale="true"],
+.host-sensors-stale,
+.host-sensor-reading[data-warning="true"] {
+  color: var(--host-sensor-warning);
+}
+.host-sensors-stale {
+  display: block;
+  margin-bottom: 20px;
+  line-height: 1.7;
+}
+.host-sensors-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-block: 20px;
+}
+.host-sensors-notice p {
+  flex: 1 1 20em;
+  margin: 0;
+  line-height: 1.7;
+}
+.host-sensors-empty {
+  margin: 0;
+  line-height: 1.7;
+}
+.host-sensor-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17em), 1fr));
+  gap: 24px;
+}
+.host-sensor-groups > section,
+.host-sensor-card,
+.host-gpu-facts > div {
+  min-width: 0;
+}
+.host-sensor-groups h3 {
+  margin: 0 0 16px;
+  font-size: 1em;
+  line-height: 1.5;
+}
+.host-sensor-list {
+  display: grid;
+  gap: 12px;
+}
+.host-sensor-card {
+  padding: 18px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 7%, transparent);
+}
+.host-sensor-card h4,
+.host-sensors .host-sensor-chip {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin: 0;
+  line-height: 1.6;
+}
+.host-sensor-card h4 {
+  font-size: 1em;
+}
+.host-sensors .host-sensor-chip {
+  margin-top: 4px;
+}
+.host-sensors .host-sensor-chip[data-fallback="true"] {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+.host-sensor-reading {
+  display: block;
+  margin-top: 18px;
+  font-size: 1.5em;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+.host-sensor-reading:not([data-status="available"]) {
+  font-size: 1em;
+}
+.host-sensors .host-sensor-threshold {
+  margin: 12px 0 0;
+}
+.host-gpu-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8em), 1fr));
+  gap: 18px 24px;
+  margin: 18px 0 0;
+}
+.host-gpu-facts dt {
+  font-weight: 400;
+  margin-bottom: 5px;
+}
+.host-gpu-facts dd {
+  margin: 0;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+.host-sensors .host-sensor-coverage {
+  margin: 16px 0;
+}
+.host-sensors-about {
+  margin-top: 20px;
+}
+.host-sensors-about summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--desktop-ink);
+  list-style: none;
+  border-radius: 8px;
+}
+.host-sensors-about summary::-webkit-details-marker {
+  display: none;
+}
+.host-sensors-about summary svg {
+  flex: 0 0 16px;
+}
+.host-sensors-about summary span {
+  min-width: 0;
+}
+.host-sensors-about[open] summary svg {
+  transform: rotate(90deg);
+}
+.host-sensors-about summary:hover {
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent);
+}
+.host-sensors .host-sensors-about p {
+  color: var(--desktop-status-muted);
+  line-height: 1.7;
+  margin: 12px 0 0;
+}
+@container (max-width: 650px) {
+  .host-sensors {
+    padding: 18px;
+  }
+}
+@container (max-width: 20em) {
+  .host-sensor-reading {
+    font-size: 1em;
+  }
+}

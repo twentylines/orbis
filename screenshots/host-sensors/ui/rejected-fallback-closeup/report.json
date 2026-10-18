@@ -1,0 +1,86 @@
+[
+  {
+    "viewport": "host-sensors",
+    "hostSensors": {
+      "passed": false,
+      "layouts": [],
+      "palette": [],
+      "states": [],
+      "retries": [],
+      "refresh": [],
+      "polling": [],
+      "requests": [
+        {
+          "scenario": "ready",
+          "at": 1792309684418
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "preferencePuts": 0,
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": [],
+      "provenance": {
+        "controlledFixtures": true,
+        "scope": "fallback-negative",
+        "ordinaryWords": "No arbitrary fractures; long identifiers require full DOM/title and actual CSS ellipsis",
+        "contrast": "Conservative black/white wallpaper compositions through actual ancestor layers",
+        "poll": "Actual existing30second query timer, no injected clock or invalidation"
+      },
+      "current": "320-dark-text2-ocean-ready",
+      "fallback": {
+        "text": "Driver not reported",
+        "title": "",
+        "box": {
+          "top": 213.78125,
+          "bottom": 252.984375,
+          "left": 83,
+          "right": 237,
+          "width": 154,
+          "height": 39.203125
+        },
+        "card": {
+          "top": 145.984375,
+          "bottom": 632.1875,
+          "left": 64,
+          "right": 256,
+          "width": 192,
+          "height": 486.203125
+        },
+        "cardPadding": "18px",
+        "font": "24.5px",
+        "lineHeight": "39.2px",
+        "scrollWidth": 198,
+        "clientWidth": 154,
+        "overflow": "hidden",
+        "whiteSpace": "nowrap",
+        "textOverflow": "ellipsis",
+        "ink": [
+          {
+            "left": 83,
+            "right": 280.921875,
+            "top": 218.78125,
+            "bottom": 247.78125
+          },
+          {
+            "left": 83,
+            "right": 211.109375,
+            "top": 218.78125,
+            "bottom": 247.78125
+          }
+        ]
+      },
+      "failure": {
+        "phase": "320-dark-text2-ocean-ready",
+        "name": "AssertionError",
+        "message": "Only explicit accessible ellipsis may truncate identifiers"
+      }
+    },
+    "errors": []
+  }
+]

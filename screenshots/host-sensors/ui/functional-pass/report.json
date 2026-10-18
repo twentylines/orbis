@@ -1,0 +1,291 @@
+[
+  {
+    "viewport": "host-sensors",
+    "hostSensors": {
+      "passed": true,
+      "layouts": [],
+      "palette": [],
+      "states": [
+        {
+          "variant": "error",
+          "metrics": {
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "documentWidth": 390,
+            "root": {
+              "top": 665.375,
+              "bottom": 951.15625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 285.78125
+            },
+            "monitor": {
+              "top": -9181,
+              "bottom": 951.15625,
+              "left": 45,
+              "right": 345,
+              "width": 300,
+              "height": 10132.15625
+            },
+            "inner": {
+              "left": 64,
+              "right": 326
+            },
+            "padding": [18, 18],
+            "heading": {
+              "top": 684.375,
+              "bottom": 717.375,
+              "left": 64,
+              "right": 232.9375,
+              "width": 168.9375,
+              "height": 33
+            },
+            "headingInk": [
+              {
+                "top": 687.375,
+                "bottom": 713.375,
+                "left": 64,
+                "right": 232.9375
+              }
+            ],
+            "words": [],
+            "overflow": [],
+            "identifiers": [],
+            "groups": [],
+            "chrome": {
+              "navigation": "page",
+              "frame": {
+                "background": "rgba(20, 36, 35, 0.95)",
+                "blur": "blur(24px) saturate(1.2)",
+                "shadow": "rgba(4, 15, 15, 0.24) 0px 30px 70px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "header": {
+                "background": "rgba(0, 0, 0, 0)",
+                "blur": "none",
+                "shadow": "none",
+                "borders": ["rgb(237, 242, 239)", "rgb(237, 242, 239)", "rgba(224, 239, 228, 0.18)", "rgb(237, 242, 239)"]
+              },
+              "bar": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.22) 0px 16px 42px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              },
+              "dock": {
+                "background": "rgba(9, 23, 23, 0.92)",
+                "blur": "blur(28px) saturate(1.45)",
+                "shadow": "rgba(6, 27, 26, 0.34) 0px 18px 45px 0px",
+                "borders": ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]
+              }
+            }
+          },
+          "passed": true
+        },
+        {
+          "variant": "loading",
+          "text": "Loading hardware readings…",
+          "passed": true
+        }
+      ],
+      "retries": [
+        {
+          "phase": "cached-rejected",
+          "focus": {
+            "active": true,
+            "top": 575.265625,
+            "bottom": 615.265625,
+            "focusTop": 569.265625,
+            "focusBottom": 621.265625,
+            "extent": 6,
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "raw": {
+              "x": 0,
+              "y": 0,
+              "content": 4976,
+              "frame": 0
+            },
+            "rootTop": 489.265625
+          }
+        },
+        {
+          "phase": "cached-recovered",
+          "focus": {
+            "active": true,
+            "top": 518.265625,
+            "bottom": 551.265625,
+            "focusTop": 510.265625,
+            "focusBottom": 559.265625,
+            "extent": 8,
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "raw": {
+              "x": 0,
+              "y": 0,
+              "content": 4976,
+              "frame": 0
+            },
+            "rootTop": 489.265625
+          }
+        },
+        {
+          "phase": "moved-away",
+          "focus": {
+            "active": true,
+            "top": 683.65625,
+            "bottom": 719.25,
+            "focusTop": 677.65625,
+            "focusBottom": 725.25,
+            "extent": 6,
+            "clip": {
+              "top": 98,
+              "bottom": 765
+            },
+            "raw": {
+              "x": 0,
+              "y": 12236,
+              "content": 0,
+              "frame": 0
+            },
+            "rootTop": -2157.625
+          }
+        }
+      ],
+      "refresh": [
+        {
+          "before": {
+            "active": true,
+            "top": 906.3125,
+            "bottom": 941.90625,
+            "focusTop": 900.3125,
+            "focusBottom": 947.90625,
+            "extent": 6,
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "raw": {
+              "x": 0,
+              "y": 0,
+              "content": 5605,
+              "frame": 0
+            },
+            "rootTop": -139.734375
+          },
+          "after": {
+            "active": true,
+            "top": 906.109375,
+            "bottom": 941.703125,
+            "focusTop": 900.109375,
+            "focusBottom": 947.703125,
+            "extent": 6,
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "raw": {
+              "x": 0,
+              "y": 0,
+              "content": 5709,
+              "frame": 0
+            },
+            "rootTop": -243.734375
+          },
+          "interval": 30008
+        }
+      ],
+      "polling": [
+        {
+          "kind": "minimized",
+          "duration": 31000,
+          "reads": 0
+        },
+        {
+          "kind": "hidden-route",
+          "duration": 31000,
+          "reads": 0
+        }
+      ],
+      "requests": [
+        {
+          "scenario": "error",
+          "at": 1792310354174
+        },
+        {
+          "scenario": "loading",
+          "at": 1792310357334
+        },
+        {
+          "scenario": "collecting",
+          "at": 1792310360480
+        },
+        {
+          "scenario": "ready",
+          "at": 1792310362494
+        },
+        {
+          "scenario": "ready",
+          "at": 1792310363134
+        },
+        {
+          "scenario": "error",
+          "at": 1792310393142
+        },
+        {
+          "scenario": "error",
+          "at": 1792310394585
+        },
+        {
+          "scenario": "ready",
+          "at": 1792310395533
+        },
+        {
+          "scenario": "missing",
+          "at": 1792310397096
+        },
+        {
+          "scenario": "ready",
+          "at": 1792310397947
+        },
+        {
+          "scenario": "ready",
+          "at": 1792310398646
+        },
+        {
+          "scenario": "ready",
+          "at": 1792310430889
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "preferencePuts": 0,
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": [],
+      "provenance": {
+        "controlledFixtures": true,
+        "scope": "functional",
+        "ordinaryWords": "No arbitrary fractures; long identifiers require full DOM/title and actual CSS ellipsis",
+        "contrast": "Conservative black/white wallpaper compositions through actual ancestor layers",
+        "poll": "Actual existing30second query timer, no injected clock or invalidation"
+      },
+      "current": "1440-dark-text1-ocean-ready",
+      "warm": {
+        "interval": 2014
+      }
+    },
+    "errors": []
+  }
+]

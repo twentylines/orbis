@@ -30,10 +30,12 @@ const inspectTileComfort = require('./tile-comfort-checks.cjs');
 const inspectSystemMode = require('./system-mode-checks.cjs');
 const inspectHostDevices = require('./host-devices-checks.cjs');
 const inspectHostProcesses = require('./host-processes-checks.cjs');
+const inspectHostSensors = require('./host-sensors-checks.cjs');
 const inspectHostHistory = require('./host-device-history-checks.cjs');
 const inspectCachedRetry = require('./cached-retry-focus-checks.cjs');
 const inspectMonitorRefresh = require('./monitor-refresh-checks.cjs');
 const monitorRefreshOnly = process.env.ORBIS_VISUAL_MONITOR_REFRESH_ONLY === '1';
+const hostSensorsOnly = process.env.ORBIS_VISUAL_HOST_SENSORS_ONLY === '1';
 const cachedRetryOnly = process.env.ORBIS_VISUAL_CACHED_RETRY_ONLY === '1';
 const homeOnly = process.env.ORBIS_VISUAL_HOME_ONLY === '1';
 const compoundHomeOnly = process.env.ORBIS_VISUAL_COMPOUND_HOME_ONLY === '1';
@@ -130,7 +132,8 @@ if (
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
-    monitorRefreshOnly) &&
+    monitorRefreshOnly ||
+    hostSensorsOnly) &&
   zoom !== 1
 )
   throw new Error('Text-only checks require ORBIS_VISUAL_ZOOM=1');
@@ -458,22 +461,31 @@ async function main() {
   let preferences = freshPreferences();
   const reports = [];
   const viewports =
-    connectionOnly || systemModeOnly || hostDevicesOnly || hostProcessesOnly || hostHistoryOnly || cachedRetryOnly || monitorRefreshOnly
+    connectionOnly ||
+    systemModeOnly ||
+    hostDevicesOnly ||
+    hostProcessesOnly ||
+    hostHistoryOnly ||
+    cachedRetryOnly ||
+    monitorRefreshOnly ||
+    hostSensorsOnly
       ? [
           {
-            name: monitorRefreshOnly
-              ? 'monitor-refresh'
-              : cachedRetryOnly
-                ? 'cached-retry'
-                : hostHistoryOnly
-                  ? 'host-history'
-                  : hostProcessesOnly
-                    ? 'host-processes'
-                    : hostDevicesOnly
-                      ? 'host-devices'
-                      : systemModeOnly
-                        ? 'system-mode'
-                        : 'connection',
+            name: hostSensorsOnly
+              ? 'host-sensors'
+              : monitorRefreshOnly
+                ? 'monitor-refresh'
+                : cachedRetryOnly
+                  ? 'cached-retry'
+                  : hostHistoryOnly
+                    ? 'host-history'
+                    : hostProcessesOnly
+                      ? 'host-processes'
+                      : hostDevicesOnly
+                        ? 'host-devices'
+                        : systemModeOnly
+                          ? 'system-mode'
+                          : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -636,6 +648,7 @@ async function main() {
         return respond({ diskUsed: 43, diskSize: 256, percentUsed: 17, cpuLoad: 11.3, memoryTotal: 32, percentUsedMemory: 38 });
       if (url.pathname === '/api/system/host-telemetry') return respond(inspectHostDevices.fixture());
       if (url.pathname === '/api/system/host-processes') return respond(inspectHostProcesses.fixture());
+      if (url.pathname === '/api/system/host-sensors') return respond(inspectHostSensors.fixture('empty'));
       if (url.pathname === '/api/system/host-history')
         return respond(inspectHostHistory.fixture(url.searchParams.get('range') || '1h', url.searchParams.get('device')));
       if (url.pathname === '/api/system/telemetry')
@@ -781,6 +794,17 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (hostSensorsOnly) {
+      const hostSensors = await inspectHostSensors({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, hostSensors, errors });
+      await page.close();
+      continue;
+    }
     if (monitorRefreshOnly) {
       const monitorRefresh = await inspectMonitorRefresh({
         page,
@@ -1554,7 +1578,8 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
-    monitorRefreshOnly
+    monitorRefreshOnly ||
+    hostSensorsOnly
   ) {
     if (
       reports.some(
@@ -1566,7 +1591,8 @@ async function main() {
           (hostProcessesOnly && !report.hostProcesses?.passed) ||
           (hostHistoryOnly && !report.hostHistory?.passed) ||
           (cachedRetryOnly && !report.cachedRetry?.passed) ||
-          (monitorRefreshOnly && !report.monitorRefresh?.passed),
+          (monitorRefreshOnly && !report.monitorRefresh?.passed) ||
+          (hostSensorsOnly && !report.hostSensors?.passed),
       )
     )
       process.exitCode = 1;

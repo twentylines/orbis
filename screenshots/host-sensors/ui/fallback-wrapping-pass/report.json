@@ -1,0 +1,81 @@
+[
+  {
+    "viewport": "host-sensors",
+    "hostSensors": {
+      "passed": true,
+      "layouts": [],
+      "palette": [],
+      "states": [],
+      "retries": [],
+      "refresh": [],
+      "polling": [],
+      "requests": [
+        {
+          "scenario": "ready",
+          "at": 1792309895706
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "preferencePuts": 0,
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenersRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": [],
+      "provenance": {
+        "controlledFixtures": true,
+        "scope": "fallback-proof",
+        "ordinaryWords": "No arbitrary fractures; long identifiers require full DOM/title and actual CSS ellipsis",
+        "contrast": "Conservative black/white wallpaper compositions through actual ancestor layers",
+        "poll": "Actual existing30second query timer, no injected clock or invalidation"
+      },
+      "current": "320-dark-text2-ocean-ready",
+      "fallback": {
+        "text": "Driver not reported",
+        "title": "Driver not reported",
+        "box": {
+          "top": 553.78125,
+          "bottom": 632.1875,
+          "left": 83,
+          "right": 237,
+          "width": 154,
+          "height": 78.40625
+        },
+        "card": {
+          "top": 485.984375,
+          "bottom": 1011.390625,
+          "left": 64,
+          "right": 256,
+          "width": 192,
+          "height": 525.40625
+        },
+        "cardPadding": "18px",
+        "font": "24.5px",
+        "lineHeight": "39.2px",
+        "scrollWidth": 154,
+        "clientWidth": 154,
+        "overflow": "visible",
+        "whiteSpace": "normal",
+        "textOverflow": "clip",
+        "ink": [
+          {
+            "left": 83,
+            "right": 185.421875,
+            "top": 558.78125,
+            "bottom": 587.78125
+          },
+          {
+            "left": 83,
+            "right": 173.078125,
+            "top": 597.984375,
+            "bottom": 626.984375
+          }
+        ]
+      }
+    },
+    "errors": []
+  }
+]
