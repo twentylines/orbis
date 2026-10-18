@@ -9,6 +9,7 @@ export type HostFilesystem = {
 
 export type HostNetwork = {
   interface: string;
+  historyId?: string;
   state: 'up' | 'down' | 'unknown';
   speedMbps: number | null;
   receivedBytes: number | null;
@@ -19,6 +20,7 @@ export type HostNetwork = {
 
 export type HostDisk = {
   device: string;
+  historyId?: string;
   readBytes: number | null;
   writtenBytes: number | null;
   readBytesPerSecond: number | null;

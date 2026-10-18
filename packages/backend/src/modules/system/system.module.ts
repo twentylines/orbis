@@ -8,11 +8,20 @@ import { AppsModule } from '../apps/apps.module';
 import { MetricHistoryService } from './metric-history.service';
 import { HostTelemetryService } from './host-telemetry.service';
 import { HostProcessesService } from './host-processes.service';
+import { HostDeviceHistoryService } from './host-device-history.service';
 
 @Module({
   imports: [DockerModule, AppsModule],
   controllers: [SystemController],
-  providers: [SystemService, OrbisReleaseService, ContainerTelemetryService, MetricHistoryService, HostTelemetryService, HostProcessesService],
+  providers: [
+    SystemService,
+    OrbisReleaseService,
+    ContainerTelemetryService,
+    MetricHistoryService,
+    HostTelemetryService,
+    HostProcessesService,
+    HostDeviceHistoryService,
+  ],
   exports: [],
 })
 export class SystemModule {}

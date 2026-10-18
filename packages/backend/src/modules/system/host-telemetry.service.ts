@@ -26,6 +26,11 @@ function numeric(value: unknown): number {
 }
 
 const nullable = (value: unknown) => (value === null ? null : numeric(value));
+const historyIdentity = (row: Record<string, unknown>): { historyId?: string } => {
+  if (row.historyId === undefined) return {};
+  if (typeof row.historyId !== 'string' || !/^[a-f0-9]{64}$/.test(row.historyId)) throw new Error('Invalid host history identity');
+  return { historyId: row.historyId };
+};
 const integer = (value: unknown) => {
   const n = numeric(value);
   if (!Number.isInteger(n)) throw new Error('Invalid host count');
@@ -66,6 +71,7 @@ export function parseHostTelemetry(value: unknown, now = Date.now()): HostTeleme
       if (!['up', 'down', 'unknown'].includes(row.state as string)) throw new Error('Invalid interface state');
       return {
         interface: text(row.interface),
+        ...historyIdentity(row),
         state: row.state as HostNetwork['state'],
         speedMbps: nullable(row.speedMbps),
         receivedBytes: nullable(row.receivedBytes),
@@ -80,6 +86,7 @@ export function parseHostTelemetry(value: unknown, now = Date.now()): HostTeleme
       if (busyPercent !== null && busyPercent > 100) throw new Error('Invalid disk activity');
       return {
         device: text(row.device),
+        ...historyIdentity(row),
         readBytes: nullable(row.readBytes),
         writtenBytes: nullable(row.writtenBytes),
         readBytesPerSecond: nullable(row.readBytesPerSecond),

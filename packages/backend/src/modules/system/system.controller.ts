@@ -9,6 +9,8 @@ import { ContainerTelemetryService } from './container-telemetry.service';
 import { MetricHistoryService } from './metric-history.service';
 import { HostTelemetryService } from './host-telemetry.service';
 import { HostProcessesService } from './host-processes.service';
+import { HostDeviceHistoryService } from './host-device-history.service';
+import { parseHostHistorySelection } from './host-device-history.model';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
 
 @Controller('system')
@@ -20,6 +22,7 @@ export class SystemController {
     private readonly history: MetricHistoryService,
     private readonly host: HostTelemetryService,
     private readonly processes: HostProcessesService,
+    private readonly hostHistory: HostDeviceHistoryService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -52,6 +55,19 @@ export class SystemController {
   @Get('/host-processes')
   hostProcesses() {
     return this.processes.read();
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/host-history')
+  hostDeviceHistory(@Query('range') range: unknown = '1h', @Query('device') device: unknown = undefined) {
+    if (typeof range !== 'string' || !Object.hasOwn(metricHistoryRanges, range)) throw new BadRequestException('Unsupported history range');
+    let selection: ReturnType<typeof parseHostHistorySelection>;
+    try {
+      selection = parseHostHistorySelection(device);
+    } catch {
+      throw new BadRequestException('Unsupported history device');
+    }
+    return this.hostHistory.read(range as MetricHistoryRange, selection);
   }
 
   @UseGuards(AuthGuard)

@@ -12,6 +12,7 @@ import { ContainerTelemetryService } from '../container-telemetry.service';
 import { MetricHistoryService } from '../metric-history.service';
 import { HostTelemetryService } from '../host-telemetry.service';
 import { HostProcessesService } from '../host-processes.service';
+import { HostDeviceHistoryService } from '../host-device-history.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
@@ -22,6 +23,7 @@ describe('SystemController certificate security', () => {
   const history = mock<MetricHistoryService>();
   const host = mock<HostTelemetryService>();
   const processes = mock<HostProcessesService>();
+  const hostHistory = mock<HostDeviceHistoryService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -32,6 +34,7 @@ describe('SystemController certificate security', () => {
         { provide: MetricHistoryService, useValue: history },
         { provide: HostTelemetryService, useValue: host },
         { provide: HostProcessesService, useValue: processes },
+        { provide: HostDeviceHistoryService, useValue: hostHistory },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         {
           provide: SystemService,
@@ -135,6 +138,28 @@ describe('SystemController certificate security', () => {
     expect(allowed.status).toBe(200);
     expect(allowed.body.version).toBe(process.env.ORBIS_VERSION || 'development');
     expect(allowed.body.runtipiCompatibility).toBe(process.env.TIPI_VERSION || null);
+  });
+
+  it('authenticates host history before validating bounded logical lookups', async () => {
+    expect((await request(app.getHttpServer()).get('/system/host-history?device=disk:../../etc/passwd')).status).toBe(401);
+    expect(hostHistory.read).not.toHaveBeenCalled();
+    for (const query of [
+      'range=forever',
+      'range=5m&range=7d',
+      'device=disk:../../etc/passwd',
+      'device=disk:sda&device=disk:sdb',
+      'device=network:',
+    ]) {
+      expect((await request(app.getHttpServer()).get(`/system/host-history?${query}`).set('Authorization', 'Bearer cli-token')).status).toBe(400);
+    }
+    expect(hostHistory.read).not.toHaveBeenCalled();
+    expect(
+      (await request(app.getHttpServer()).get('/system/host-history?range=24h&device=network:eth0:1').set('Authorization', 'Bearer cli-token'))
+        .status,
+    ).toBe(200);
+    expect(hostHistory.read).toHaveBeenLastCalledWith('24h', { kind: 'network', name: 'eth0:1' });
+    expect((await request(app.getHttpServer()).get('/system/host-history').set('Authorization', 'Bearer cli-token')).status).toBe(200);
+    expect(hostHistory.read).toHaveBeenLastCalledWith('1h', null);
   });
 
   it('requires authentication and an allowlisted metric history range', async () => {

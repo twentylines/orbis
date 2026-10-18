@@ -1,5 +1,6 @@
 """Bounded Linux counters. No commands, device probes or user-supplied paths."""
 
+import hashlib
 import os
 import re
 import threading
@@ -51,6 +52,17 @@ class HostTelemetry:
         self.failed = False
         self.previous_network = {}
         self.previous_disks = {}
+        boot = self.small(self.proc / "sys/kernel/random/boot_id")
+        self.boot_identity = boot if boot and re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", boot) else None
+
+    def history_identity(self, kind: str, identity: tuple):
+        if self.boot_identity is None or any(value is None for value in identity):
+            return {}
+        counter = str(identity[-1])
+        if not re.fullmatch(r"[1-9][0-9]{0,19}", counter) or int(counter) >= (2**31 if kind == "network" else 2**64):
+            return {}
+        material = "\0".join((self.boot_identity, kind, *(str(value) for value in identity)))
+        return {"historyId": hashlib.sha256(material.encode()).hexdigest()}
 
     def small(self, path: Path):
         try:
@@ -82,6 +94,7 @@ class HostTelemetry:
             speed = self.small(base / "speed")
             result.append({
                 "interface": label,
+                **self.history_identity("network", identity),
                 "state": state if state in {"up", "down"} else "unknown",
                 "speedMbps": number(int(speed)) if speed and speed.isdecimal() else None,
                 "receivedBytes": number(received), "transmittedBytes": number(sent),
@@ -113,6 +126,7 @@ class HostTelemetry:
             busy_rate = delta(busy, old[3] if old else None, elapsed)
             result.append({
                 "device": label, "readBytes": number(read), "writtenBytes": number(written),
+                **self.history_identity("disk", identity),
                 "readBytesPerSecond": delta(read, old[1] if old else None, elapsed),
                 "writeBytesPerSecond": delta(written, old[2] if old else None, elapsed),
                 "busyPercent": min(100, busy_rate / 10) if busy_rate is not None else None,

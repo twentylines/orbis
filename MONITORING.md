@@ -48,6 +48,18 @@ On graceful shutdown, the current partial minute is flushed through Nest's shutd
 
 The 5-minute view uses recent individual readings with saved minute summaries before the current process's recent buffer. Longer ranges use sample-weighted 1-minute, 5-minute and 30-minute averages, retaining peaks and counts for inspection. Averages describe actual samples, not an assumption of continuous coverage. No samples are created for downtime. The charts use real time coordinates, break lines across missing readings, collection gaps and CPU source changes, and label the selected time range. Pointer inspection and Left/Right/Home/End keyboard controls reveal timestamps, averages, peaks and source labels.
 
-History currently covers aggregate CPU, host memory, and core-network rates. It does not record per-container history, host disk throughput, or sensors. Current per-container readings remain available separately.
+Published beta43 history covers aggregate CPU, host memory, and core-network rates. It does not record per-container history, host disk throughput, or sensors. Current per-container readings remain available separately.
 
 Chart axes size to their labels instead of using a fixed pixel allowance. Time labels wrap when space is limited. Inspection details appear in the document flow below the plot so enlarged text does not cover subsequent core rows; keyboard Left/Right/Home/End and the slider's complete value description remain available.
+
+## Per-device history (source, not released)
+
+Authenticated `GET /api/system/host-history?range=5m|1h|24h|7d&device=network:NAME|disk:NAME` selects one logical device; an omitted device selects the first retained device. Invalid ranges, duplicate parameters, unsupported names and paths return 400. Selection only looks up already collected data. It never selects a helper command or filesystem path.
+
+A single server timer samples the existing coalesced host collector every ten seconds without requiring a browser. It retains at most 64 logical device names, ten-second readings for five minutes in memory, minute summaries for one hour, five-minute summaries for 24 hours and 30-minute summaries for seven days. Each rate has its own sample-weighted average, peak and count; missing samples are never filled with zero. The API returns at most 720 points and reports omitted, unidentified and evicted devices. Disk active time retains the kernel-counter limitations above; layered devices are not summed.
+
+The helper adds only an opaque generation digest derived from canonical Linux boot and kernel-device identities. Raw boot IDs, MAC addresses and hardware serial numbers are not returned. A changed identity breaks the series; mixed generations within an aggregate make that aggregate unavailable. An older helper continues to supply current readings while its devices explicitly lack recordable identities.
+
+The separate `/data/state/orbis-host-history/devices-v1.jsonl` journal has a 32 MiB/4,096-record bound and private 700/600 directory/file modes. Completed-minute checkpoints append all retained tier updates; periodic atomic compaction discards expired/evicted data. A single bounded pending map coalesces writes even when storage stalls. Graceful shutdown also saves partial buckets. Unsaved readings can be lost on a forced stop; `persistedThrough` identifies the last successful save. Restart uses saved summaries until new recent samples exist, without counting the restored partial minute twice. Unsafe modes, symlinks, corruption and oversized files preserve the original bytes and expose unavailable storage while bounded collection continues in memory.
+
+[HOST-HISTORY.md](HOST-HISTORY.md) records source test evidence and the remaining browser, installed-helper, real Linux and release gates. Published beta43 and Hades have not been changed by this implementation.
