@@ -29,8 +29,15 @@ export function HostProcessesView() {
   });
   const data = query.data;
   const ready = data?.available ? data : null;
-  const stale = query.isError || Boolean(ready?.stale);
-  const rows = ready ? (sort === 'cpuPercent' ? ready.byCpu : ready.byMemory) : [];
+  const [lastCpuSample, setLastCpuSample] = useState<typeof ready>(null);
+  useEffect(() => {
+    if (ready && ready.compared > 0 && ready.byCpu.length > 0) setLastCpuSample(ready);
+  }, [ready]);
+  const waitingForCpu = sort === 'cpuPercent' && Boolean(ready && ready.readable > 0 && ready.compared === 0);
+  const showingPreviousCpu = waitingForCpu && Boolean(lastCpuSample);
+  const displayed = showingPreviousCpu ? lastCpuSample : ready;
+  const stale = query.isError || Boolean(ready?.stale) || showingPreviousCpu;
+  const rows = displayed ? (sort === 'cpuPercent' ? displayed.byCpu : displayed.byMemory) : [];
   const maximum = Math.max(1, ...rows.map((row) => row[sort] ?? 0));
   const heading = useRef<HTMLHeadingElement>(null);
   const retry = useRef<HTMLButtonElement>(null);
@@ -82,23 +89,25 @@ export function HostProcessesView() {
           </button>
         </div>
       ) : null}
-      {ready ? (
+      {displayed ? (
         <>
           {stale ? (
             <output className="host-processes-stale">
-              Last process sample: <time dateTime={ready.sampledAt}>{new Date(ready.sampledAt).toLocaleString()}</time>. Values may be stale.
+              {showingPreviousCpu ? 'CPU comparisons are pending. Previous sample: ' : 'Last process sample: '}
+              <time dateTime={displayed.sampledAt}>{new Date(displayed.sampledAt).toLocaleString()}</time>.
+              {showingPreviousCpu ? ' Select Memory for current memory readings.' : ' Values may be stale.'}
             </output>
           ) : null}
-          {ready.readable === 0 ? (
+          {displayed.readable === 0 ? (
             <p>No readable host processes.</p>
           ) : rows.length === 0 ? (
             <output>Collecting CPU comparisons… Select Memory to see current readings.</output>
           ) : null}
-          {ready.limited || ready.unreadable > 0 ? (
+          {displayed.limited || displayed.unreadable > 0 ? (
             <p className="host-processes-coverage">
-              {ready.limited ? `Scan limited to ${ready.scanned.toLocaleString()} processes; this ranking may omit other processes. ` : ''}
-              {ready.unreadable
-                ? `${ready.unreadable.toLocaleString()} ${ready.unreadable === 1 ? 'process could' : 'processes could'} not be read; they may have exited or be restricted.`
+              {displayed.limited ? `Scan limited to ${displayed.scanned.toLocaleString()} processes; this ranking may omit other processes. ` : ''}
+              {displayed.unreadable
+                ? `${displayed.unreadable.toLocaleString()} ${displayed.unreadable === 1 ? 'process could' : 'processes could'} not be read; they may have exited or be restricted.`
                 : ''}
             </p>
           ) : null}
@@ -128,8 +137,8 @@ export function HostProcessesView() {
             ))}
           </ol>
           <p className="host-processes-coverage">
-            {rows.length.toLocaleString()} shown · {ready.readable.toLocaleString()} readable processes
-            {sort === 'cpuPercent' ? ` · ${ready.compared.toLocaleString()} CPU comparisons` : ''}
+            {rows.length.toLocaleString()} shown · {displayed.readable.toLocaleString()} readable processes
+            {sort === 'cpuPercent' ? ` · ${displayed.compared.toLocaleString()} CPU comparisons` : ''}
           </p>
         </>
       ) : null}

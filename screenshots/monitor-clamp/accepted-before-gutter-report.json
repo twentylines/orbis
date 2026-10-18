@@ -1,0 +1,3995 @@
+[
+  {
+    "viewport": "monitor-clamp",
+    "monitorClamp": {
+      "passed": true,
+      "cases": [
+        {
+          "width": 1440,
+          "height": 1120,
+          "scale": 1,
+          "passed": true,
+          "before": {
+            "at": 1792319995341,
+            "viewport": {
+              "width": 1440,
+              "height": 1120,
+              "dpr": 1
+            },
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "content": 3746,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 3746,
+              "scrollHeight": 6403,
+              "clientHeight": 811,
+              "maxScroll": 5592,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 205.359375,
+              "bottom": 241.359375,
+              "left": 84,
+              "right": 135.921875,
+              "width": 51.921875,
+              "height": 36,
+              "contentTop": 3761.609375
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "frame": {
+              "top": 108,
+              "bottom": 1002,
+              "left": 24,
+              "right": 1416,
+              "width": 1392,
+              "height": 894,
+              "contentTop": 3664.25
+            },
+            "content": {
+              "top": 189.75,
+              "bottom": 1001,
+              "left": 25,
+              "right": 1415,
+              "width": 1390,
+              "height": 811.25,
+              "contentTop": 3746
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 199.359375,
+              "bottom": 247.359375,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": 125.359375,
+              "bottom": 2598.234375,
+              "left": 55,
+              "right": 1385,
+              "width": 1330,
+              "height": 2472.875,
+              "contentTop": 3681.609375
+            },
+            "sensors": {
+              "top": 2622.234375,
+              "bottom": 2816.625,
+              "left": 55,
+              "right": 1385,
+              "width": 1330,
+              "height": 194.390625,
+              "contentTop": 6178.484375
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -3529.25,
+                "bottom": -3509.25,
+                "left": 55,
+                "right": 672.28125,
+                "width": 617.28125,
+                "height": 20,
+                "contentTop": 27
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -3493.25,
+                "bottom": -3476.109375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 17.140625,
+                "contentTop": 63
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -3454.109375,
+                "bottom": -3436.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 17.140625,
+                "contentTop": 102.140625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -3424.96875,
+                "bottom": -3094.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 330,
+                "contentTop": 131.28125
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -3070.96875,
+                "bottom": -3010.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 60,
+                "contentTop": 485.28125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -2990.96875,
+                "bottom": -787.859375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 2203.109375,
+                "contentTop": 565.28125
+              },
+              {
+                "classes": "container-resources ",
+                "top": -763.859375,
+                "bottom": -480.296875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 283.5625,
+                "contentTop": 2792.390625
+              },
+              {
+                "classes": "host-device-history",
+                "top": -456.296875,
+                "bottom": 101.359375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 557.65625,
+                "contentTop": 3099.953125
+              },
+              {
+                "classes": "host-processes",
+                "top": 125.359375,
+                "bottom": 2598.234375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 2472.875,
+                "contentTop": 3681.609375
+              },
+              {
+                "classes": "host-sensors",
+                "top": 2622.234375,
+                "bottom": 2816.625,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 194.390625,
+                "contentTop": 6178.484375
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "after": {
+            "at": 1792320003875,
+            "viewport": {
+              "width": 1440,
+              "height": 1120,
+              "dpr": 1
+            },
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "content": 3746,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 3746,
+              "scrollHeight": 6403,
+              "clientHeight": 811,
+              "maxScroll": 5592,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 205.359375,
+              "bottom": 241.359375,
+              "left": 84,
+              "right": 135.921875,
+              "width": 51.921875,
+              "height": 36,
+              "contentTop": 3761.609375
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "frame": {
+              "top": 108,
+              "bottom": 1002,
+              "left": 24,
+              "right": 1416,
+              "width": 1392,
+              "height": 894,
+              "contentTop": 3664.25
+            },
+            "content": {
+              "top": 189.75,
+              "bottom": 1001,
+              "left": 25,
+              "right": 1415,
+              "width": 1390,
+              "height": 811.25,
+              "contentTop": 3746
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 199.359375,
+              "bottom": 247.359375,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": 125.359375,
+              "bottom": 2598.234375,
+              "left": 55,
+              "right": 1385,
+              "width": 1330,
+              "height": 2472.875,
+              "contentTop": 3681.609375
+            },
+            "sensors": {
+              "top": 2622.234375,
+              "bottom": 2816.625,
+              "left": 55,
+              "right": 1385,
+              "width": 1330,
+              "height": 194.390625,
+              "contentTop": 6178.484375
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -3529.25,
+                "bottom": -3509.25,
+                "left": 55,
+                "right": 672.28125,
+                "width": 617.28125,
+                "height": 20,
+                "contentTop": 27
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -3493.25,
+                "bottom": -3476.109375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 17.140625,
+                "contentTop": 63
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -3454.109375,
+                "bottom": -3436.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 17.140625,
+                "contentTop": 102.140625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -3424.96875,
+                "bottom": -3094.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 330,
+                "contentTop": 131.28125
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -3070.96875,
+                "bottom": -3010.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 60,
+                "contentTop": 485.28125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -2990.96875,
+                "bottom": -787.859375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 2203.109375,
+                "contentTop": 565.28125
+              },
+              {
+                "classes": "container-resources ",
+                "top": -763.859375,
+                "bottom": -480.296875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 283.5625,
+                "contentTop": 2792.390625
+              },
+              {
+                "classes": "host-device-history",
+                "top": -456.296875,
+                "bottom": 101.359375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 557.65625,
+                "contentTop": 3099.953125
+              },
+              {
+                "classes": "host-processes",
+                "top": 125.359375,
+                "bottom": 2598.234375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 2472.875,
+                "contentTop": 3681.609375
+              },
+              {
+                "classes": "host-sensors",
+                "top": 2622.234375,
+                "bottom": 2816.625,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 194.390625,
+                "contentTop": 6178.484375
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "originalCpu": {
+            "state": "Readings delayed",
+            "timestamp": "2026-10-18T10:39:07.917Z",
+            "notice": "Last process sample: 18/10/2026, 18:39:07. Values may be stale.",
+            "coverage": ["20 shown \u00b7 20 readable processes \u00b7 20 CPU comparisons"],
+            "rows": [
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "15000.2%",
+                "memory": "1.5 TB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "12500.5%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "12500.5%",
+                "memory": "16.0 GB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "207.6%",
+                "memory": "64.0 GB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "12.3%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "11.0%",
+                "memory": "11.0 GB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "10.0%",
+                "memory": "10.0 GB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "9.0%",
+                "memory": "9.0 GB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "8.0%",
+                "memory": "8.0 GB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "7.0%",
+                "memory": "7.0 GB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "6.0%",
+                "memory": "6.0 GB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "5.1%",
+                "memory": "48.0 GB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "5.0%",
+                "memory": "5.0 GB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "4.0%",
+                "memory": "4.0 GB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "3.0%",
+                "memory": "3.0 GB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "2.0%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "1.0%",
+                "memory": "1.0 GB"
+              },
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "0.0%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              },
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              }
+            ]
+          },
+          "armedAt": 1792319996053,
+          "receivedAt": 1792320003439,
+          "delta": {
+            "viewportTop": 0,
+            "viewportBottom": 0,
+            "contentTop": 0,
+            "scrollTop": 0,
+            "max": 0
+          },
+          "clampEvidence": {
+            "beforeScrollExceedsAfterMax": false,
+            "afterAtMax": false,
+            "unchangedControlContentCoordinate": true,
+            "predictedClampScroll": 3746,
+            "actualScroll": 3746
+          },
+          "pendingCpu": {
+            "state": "Readings delayed",
+            "timestamp": "2026-10-18T10:39:07.917Z",
+            "notice": "CPU comparisons are pending. Previous sample: 18/10/2026, 18:39:07. Select Memory for current memory readings.",
+            "coverage": ["20 shown \u00b7 20 readable processes \u00b7 20 CPU comparisons"],
+            "rows": [
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "15000.2%",
+                "memory": "1.5 TB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "12500.5%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "12500.5%",
+                "memory": "16.0 GB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "207.6%",
+                "memory": "64.0 GB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "12.3%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "11.0%",
+                "memory": "11.0 GB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "10.0%",
+                "memory": "10.0 GB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "9.0%",
+                "memory": "9.0 GB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "8.0%",
+                "memory": "8.0 GB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "7.0%",
+                "memory": "7.0 GB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "6.0%",
+                "memory": "6.0 GB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "5.1%",
+                "memory": "48.0 GB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "5.0%",
+                "memory": "5.0 GB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "4.0%",
+                "memory": "4.0 GB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "3.0%",
+                "memory": "3.0 GB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "2.0%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "1.0%",
+                "memory": "1.0 GB"
+              },
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "0.0%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              },
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              }
+            ]
+          },
+          "currentMemory": {
+            "state": "Updates every 10 seconds",
+            "timestamp": null,
+            "notice": null,
+            "coverage": ["1 process could not be read; they may have exited or be restricted.", "20 shown \u00b7 40 readable processes"],
+            "rows": [
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "Pending",
+                "memory": "500.0 MB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "Pending",
+                "memory": "499.0 MB"
+              },
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "Pending",
+                "memory": "498.0 MB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "Pending",
+                "memory": "497.0 MB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "Pending",
+                "memory": "496.0 MB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "Pending",
+                "memory": "495.0 MB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "Pending",
+                "memory": "494.0 MB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "Pending",
+                "memory": "493.0 MB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "Pending",
+                "memory": "492.0 MB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "Pending",
+                "memory": "491.0 MB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "Pending",
+                "memory": "490.0 MB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "Pending",
+                "memory": "489.0 MB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "Pending",
+                "memory": "488.0 MB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "Pending",
+                "memory": "487.0 MB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "Pending",
+                "memory": "486.0 MB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "Pending",
+                "memory": "485.0 MB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "Pending",
+                "memory": "484.0 MB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "Pending",
+                "memory": "483.0 MB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "Pending",
+                "memory": "482.0 MB"
+              },
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "Pending",
+                "memory": "481.0 MB"
+              }
+            ]
+          },
+          "recoveryBefore": {
+            "at": 1792320006151,
+            "viewport": {
+              "width": 1440,
+              "height": 1120,
+              "dpr": 1
+            },
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "content": 3746,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 3746,
+              "scrollHeight": 6403,
+              "clientHeight": 811,
+              "maxScroll": 5592,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 205.359375,
+              "bottom": 241.359375,
+              "left": 84,
+              "right": 135.921875,
+              "width": 51.921875,
+              "height": 36,
+              "contentTop": 3761.609375
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "frame": {
+              "top": 108,
+              "bottom": 1002,
+              "left": 24,
+              "right": 1416,
+              "width": 1392,
+              "height": 894,
+              "contentTop": 3664.25
+            },
+            "content": {
+              "top": 189.75,
+              "bottom": 1001,
+              "left": 25,
+              "right": 1415,
+              "width": 1390,
+              "height": 811.25,
+              "contentTop": 3746
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 199.359375,
+              "bottom": 247.359375,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": 125.359375,
+              "bottom": 2598.234375,
+              "left": 55,
+              "right": 1385,
+              "width": 1330,
+              "height": 2472.875,
+              "contentTop": 3681.609375
+            },
+            "sensors": {
+              "top": 2622.234375,
+              "bottom": 2816.625,
+              "left": 55,
+              "right": 1385,
+              "width": 1330,
+              "height": 194.390625,
+              "contentTop": 6178.484375
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -3529.25,
+                "bottom": -3509.25,
+                "left": 55,
+                "right": 672.28125,
+                "width": 617.28125,
+                "height": 20,
+                "contentTop": 27
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -3493.25,
+                "bottom": -3476.109375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 17.140625,
+                "contentTop": 63
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -3454.109375,
+                "bottom": -3436.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 17.140625,
+                "contentTop": 102.140625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -3424.96875,
+                "bottom": -3094.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 330,
+                "contentTop": 131.28125
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -3070.96875,
+                "bottom": -3010.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 60,
+                "contentTop": 485.28125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -2990.96875,
+                "bottom": -787.859375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 2203.109375,
+                "contentTop": 565.28125
+              },
+              {
+                "classes": "container-resources ",
+                "top": -763.859375,
+                "bottom": -480.296875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 283.5625,
+                "contentTop": 2792.390625
+              },
+              {
+                "classes": "host-device-history",
+                "top": -456.296875,
+                "bottom": 101.359375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 557.65625,
+                "contentTop": 3099.953125
+              },
+              {
+                "classes": "host-processes",
+                "top": 125.359375,
+                "bottom": 2598.234375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 2472.875,
+                "contentTop": 3681.609375
+              },
+              {
+                "classes": "host-sensors",
+                "top": 2622.234375,
+                "bottom": 2816.625,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 194.390625,
+                "contentTop": 6178.484375
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "recoveredCpu": {
+            "state": "Updates every 10 seconds",
+            "timestamp": null,
+            "notice": null,
+            "coverage": ["20 shown \u00b7 20 readable processes \u00b7 20 CPU comparisons"],
+            "rows": [
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "519.0%",
+                "memory": "1019.0 MB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "518.0%",
+                "memory": "1018.0 MB"
+              },
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "517.0%",
+                "memory": "1017.0 MB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "516.0%",
+                "memory": "1016.0 MB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "515.0%",
+                "memory": "1015.0 MB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "514.0%",
+                "memory": "1014.0 MB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "513.0%",
+                "memory": "1013.0 MB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "512.0%",
+                "memory": "1012.0 MB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "511.0%",
+                "memory": "1011.0 MB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "510.0%",
+                "memory": "1010.0 MB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "509.0%",
+                "memory": "1009.0 MB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "508.0%",
+                "memory": "1008.0 MB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "507.0%",
+                "memory": "1007.0 MB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "506.0%",
+                "memory": "1006.0 MB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "505.0%",
+                "memory": "1005.0 MB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "504.0%",
+                "memory": "1004.0 MB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "503.0%",
+                "memory": "1003.0 MB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "502.0%",
+                "memory": "1002.0 MB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "501.0%",
+                "memory": "1001.0 MB"
+              },
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "500.0%",
+                "memory": "1000.0 MB"
+              }
+            ]
+          },
+          "recoveryAfter": {
+            "at": 1792320008121,
+            "viewport": {
+              "width": 1440,
+              "height": 1120,
+              "dpr": 1
+            },
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "content": 3746,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 3746,
+              "scrollHeight": 6365,
+              "clientHeight": 811,
+              "maxScroll": 5554,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 205.359375,
+              "bottom": 241.359375,
+              "left": 84,
+              "right": 135.921875,
+              "width": 51.921875,
+              "height": 36,
+              "contentTop": 3761.609375
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 1001
+            },
+            "frame": {
+              "top": 108,
+              "bottom": 1002,
+              "left": 24,
+              "right": 1416,
+              "width": 1392,
+              "height": 894,
+              "contentTop": 3664.25
+            },
+            "content": {
+              "top": 189.75,
+              "bottom": 1001,
+              "left": 25,
+              "right": 1415,
+              "width": 1390,
+              "height": 811.25,
+              "contentTop": 3746
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 199.359375,
+              "bottom": 247.359375,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": 125.359375,
+              "bottom": 2560.234375,
+              "left": 55,
+              "right": 1385,
+              "width": 1330,
+              "height": 2434.875,
+              "contentTop": 3681.609375
+            },
+            "sensors": {
+              "top": 2584.234375,
+              "bottom": 2778.625,
+              "left": 55,
+              "right": 1385,
+              "width": 1330,
+              "height": 194.390625,
+              "contentTop": 6140.484375
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -3529.25,
+                "bottom": -3509.25,
+                "left": 55,
+                "right": 672.28125,
+                "width": 617.28125,
+                "height": 20,
+                "contentTop": 27
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -3493.25,
+                "bottom": -3476.109375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 17.140625,
+                "contentTop": 63
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -3454.109375,
+                "bottom": -3436.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 17.140625,
+                "contentTop": 102.140625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -3424.96875,
+                "bottom": -3094.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 330,
+                "contentTop": 131.28125
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -3070.96875,
+                "bottom": -3010.96875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 60,
+                "contentTop": 485.28125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -2990.96875,
+                "bottom": -787.859375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 2203.109375,
+                "contentTop": 565.28125
+              },
+              {
+                "classes": "container-resources ",
+                "top": -763.859375,
+                "bottom": -480.296875,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 283.5625,
+                "contentTop": 2792.390625
+              },
+              {
+                "classes": "host-device-history",
+                "top": -456.296875,
+                "bottom": 101.359375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 557.65625,
+                "contentTop": 3099.953125
+              },
+              {
+                "classes": "host-processes",
+                "top": 125.359375,
+                "bottom": 2560.234375,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 2434.875,
+                "contentTop": 3681.609375
+              },
+              {
+                "classes": "host-sensors",
+                "top": 2584.234375,
+                "bottom": 2778.625,
+                "left": 55,
+                "right": 1385,
+                "width": 1330,
+                "height": 194.390625,
+                "contentTop": 6140.484375
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "initialWarmup": {
+            "state": "Updates every 10 seconds",
+            "timestamp": null,
+            "notice": null,
+            "coverage": ["0 shown \u00b7 20 readable processes \u00b7 0 CPU comparisons"],
+            "rows": []
+          }
+        },
+        {
+          "width": 1100,
+          "height": 640,
+          "scale": 1,
+          "passed": true,
+          "before": {
+            "at": 1792320014257,
+            "viewport": {
+              "width": 1100,
+              "height": 640,
+              "dpr": 1
+            },
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "content": 4328,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 4328,
+              "scrollHeight": 6985,
+              "clientHeight": 331,
+              "maxScroll": 6654,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 205.9375,
+              "bottom": 241.9375,
+              "left": 84,
+              "right": 135.921875,
+              "width": 51.921875,
+              "height": 36,
+              "contentTop": 4344.1875
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 521
+            },
+            "frame": {
+              "top": 108,
+              "bottom": 522,
+              "left": 24,
+              "right": 1076,
+              "width": 1052,
+              "height": 414,
+              "contentTop": 4246.25
+            },
+            "content": {
+              "top": 189.75,
+              "bottom": 521,
+              "left": 25,
+              "right": 1075,
+              "width": 1050,
+              "height": 331.25,
+              "contentTop": 4328
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 199.9375,
+              "bottom": 247.9375,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": 125.9375,
+              "bottom": 2598.8125,
+              "left": 55,
+              "right": 1045,
+              "width": 990,
+              "height": 2472.875,
+              "contentTop": 4264.1875
+            },
+            "sensors": {
+              "top": 2622.8125,
+              "bottom": 2817.203125,
+              "left": 55,
+              "right": 1045,
+              "width": 990,
+              "height": 194.390625,
+              "contentTop": 6761.0625
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -4111.25,
+                "bottom": -4091.25,
+                "left": 55,
+                "right": 672.28125,
+                "width": 617.28125,
+                "height": 20,
+                "contentTop": 27
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -4075.25,
+                "bottom": -4058.109375,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 17.140625,
+                "contentTop": 63
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -4036.109375,
+                "bottom": -4018.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 17.140625,
+                "contentTop": 102.140625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -4006.96875,
+                "bottom": -3676.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 330,
+                "contentTop": 131.28125
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -3652.96875,
+                "bottom": -3592.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 60,
+                "contentTop": 485.28125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -3572.96875,
+                "bottom": -787.28125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 2785.6875,
+                "contentTop": 565.28125
+              },
+              {
+                "classes": "container-resources ",
+                "top": -763.28125,
+                "bottom": -479.71875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 283.5625,
+                "contentTop": 3374.96875
+              },
+              {
+                "classes": "host-device-history",
+                "top": -455.71875,
+                "bottom": 101.9375,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 557.65625,
+                "contentTop": 3682.53125
+              },
+              {
+                "classes": "host-processes",
+                "top": 125.9375,
+                "bottom": 2598.8125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 2472.875,
+                "contentTop": 4264.1875
+              },
+              {
+                "classes": "host-sensors",
+                "top": 2622.8125,
+                "bottom": 2817.203125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 194.390625,
+                "contentTop": 6761.0625
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "after": {
+            "at": 1792320022671,
+            "viewport": {
+              "width": 1100,
+              "height": 640,
+              "dpr": 1
+            },
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "content": 4328,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 4328,
+              "scrollHeight": 6985,
+              "clientHeight": 331,
+              "maxScroll": 6654,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 205.9375,
+              "bottom": 241.9375,
+              "left": 84,
+              "right": 135.921875,
+              "width": 51.921875,
+              "height": 36,
+              "contentTop": 4344.1875
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 521
+            },
+            "frame": {
+              "top": 108,
+              "bottom": 522,
+              "left": 24,
+              "right": 1076,
+              "width": 1052,
+              "height": 414,
+              "contentTop": 4246.25
+            },
+            "content": {
+              "top": 189.75,
+              "bottom": 521,
+              "left": 25,
+              "right": 1075,
+              "width": 1050,
+              "height": 331.25,
+              "contentTop": 4328
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 199.9375,
+              "bottom": 247.9375,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": 125.9375,
+              "bottom": 2598.8125,
+              "left": 55,
+              "right": 1045,
+              "width": 990,
+              "height": 2472.875,
+              "contentTop": 4264.1875
+            },
+            "sensors": {
+              "top": 2622.8125,
+              "bottom": 2817.203125,
+              "left": 55,
+              "right": 1045,
+              "width": 990,
+              "height": 194.390625,
+              "contentTop": 6761.0625
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -4111.25,
+                "bottom": -4091.25,
+                "left": 55,
+                "right": 672.28125,
+                "width": 617.28125,
+                "height": 20,
+                "contentTop": 27
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -4075.25,
+                "bottom": -4058.109375,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 17.140625,
+                "contentTop": 63
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -4036.109375,
+                "bottom": -4018.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 17.140625,
+                "contentTop": 102.140625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -4006.96875,
+                "bottom": -3676.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 330,
+                "contentTop": 131.28125
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -3652.96875,
+                "bottom": -3592.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 60,
+                "contentTop": 485.28125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -3572.96875,
+                "bottom": -787.28125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 2785.6875,
+                "contentTop": 565.28125
+              },
+              {
+                "classes": "container-resources ",
+                "top": -763.28125,
+                "bottom": -479.71875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 283.5625,
+                "contentTop": 3374.96875
+              },
+              {
+                "classes": "host-device-history",
+                "top": -455.71875,
+                "bottom": 101.9375,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 557.65625,
+                "contentTop": 3682.53125
+              },
+              {
+                "classes": "host-processes",
+                "top": 125.9375,
+                "bottom": 2598.8125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 2472.875,
+                "contentTop": 4264.1875
+              },
+              {
+                "classes": "host-sensors",
+                "top": 2622.8125,
+                "bottom": 2817.203125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 194.390625,
+                "contentTop": 6761.0625
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "originalCpu": {
+            "state": "Readings delayed",
+            "timestamp": "2026-10-18T10:39:26.629Z",
+            "notice": "Last process sample: 18/10/2026, 18:39:26. Values may be stale.",
+            "coverage": ["20 shown \u00b7 20 readable processes \u00b7 20 CPU comparisons"],
+            "rows": [
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "15000.2%",
+                "memory": "1.5 TB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "12500.5%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "12500.5%",
+                "memory": "16.0 GB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "207.6%",
+                "memory": "64.0 GB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "12.3%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "11.0%",
+                "memory": "11.0 GB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "10.0%",
+                "memory": "10.0 GB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "9.0%",
+                "memory": "9.0 GB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "8.0%",
+                "memory": "8.0 GB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "7.0%",
+                "memory": "7.0 GB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "6.0%",
+                "memory": "6.0 GB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "5.1%",
+                "memory": "48.0 GB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "5.0%",
+                "memory": "5.0 GB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "4.0%",
+                "memory": "4.0 GB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "3.0%",
+                "memory": "3.0 GB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "2.0%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "1.0%",
+                "memory": "1.0 GB"
+              },
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "0.0%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              },
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              }
+            ]
+          },
+          "armedAt": 1792320014960,
+          "receivedAt": 1792320022247,
+          "delta": {
+            "viewportTop": 0,
+            "viewportBottom": 0,
+            "contentTop": 0,
+            "scrollTop": 0,
+            "max": 0
+          },
+          "clampEvidence": {
+            "beforeScrollExceedsAfterMax": false,
+            "afterAtMax": false,
+            "unchangedControlContentCoordinate": true,
+            "predictedClampScroll": 4328,
+            "actualScroll": 4328
+          },
+          "pendingCpu": {
+            "state": "Readings delayed",
+            "timestamp": "2026-10-18T10:39:26.629Z",
+            "notice": "CPU comparisons are pending. Previous sample: 18/10/2026, 18:39:26. Select Memory for current memory readings.",
+            "coverage": ["20 shown \u00b7 20 readable processes \u00b7 20 CPU comparisons"],
+            "rows": [
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "15000.2%",
+                "memory": "1.5 TB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "12500.5%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "12500.5%",
+                "memory": "16.0 GB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "207.6%",
+                "memory": "64.0 GB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "12.3%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "11.0%",
+                "memory": "11.0 GB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "10.0%",
+                "memory": "10.0 GB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "9.0%",
+                "memory": "9.0 GB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "8.0%",
+                "memory": "8.0 GB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "7.0%",
+                "memory": "7.0 GB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "6.0%",
+                "memory": "6.0 GB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "5.1%",
+                "memory": "48.0 GB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "5.0%",
+                "memory": "5.0 GB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "4.0%",
+                "memory": "4.0 GB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "3.0%",
+                "memory": "3.0 GB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "2.0%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "1.0%",
+                "memory": "1.0 GB"
+              },
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "0.0%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              },
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              }
+            ]
+          },
+          "currentMemory": {
+            "state": "Updates every 10 seconds",
+            "timestamp": null,
+            "notice": null,
+            "coverage": ["1 process could not be read; they may have exited or be restricted.", "20 shown \u00b7 40 readable processes"],
+            "rows": [
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "Pending",
+                "memory": "500.0 MB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "Pending",
+                "memory": "499.0 MB"
+              },
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "Pending",
+                "memory": "498.0 MB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "Pending",
+                "memory": "497.0 MB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "Pending",
+                "memory": "496.0 MB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "Pending",
+                "memory": "495.0 MB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "Pending",
+                "memory": "494.0 MB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "Pending",
+                "memory": "493.0 MB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "Pending",
+                "memory": "492.0 MB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "Pending",
+                "memory": "491.0 MB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "Pending",
+                "memory": "490.0 MB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "Pending",
+                "memory": "489.0 MB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "Pending",
+                "memory": "488.0 MB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "Pending",
+                "memory": "487.0 MB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "Pending",
+                "memory": "486.0 MB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "Pending",
+                "memory": "485.0 MB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "Pending",
+                "memory": "484.0 MB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "Pending",
+                "memory": "483.0 MB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "Pending",
+                "memory": "482.0 MB"
+              },
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "Pending",
+                "memory": "481.0 MB"
+              }
+            ]
+          },
+          "recoveryBefore": {
+            "at": 1792320024867,
+            "viewport": {
+              "width": 1100,
+              "height": 640,
+              "dpr": 1
+            },
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "content": 4328,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 4328,
+              "scrollHeight": 6985,
+              "clientHeight": 331,
+              "maxScroll": 6654,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 205.9375,
+              "bottom": 241.9375,
+              "left": 84,
+              "right": 135.921875,
+              "width": 51.921875,
+              "height": 36,
+              "contentTop": 4344.1875
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 521
+            },
+            "frame": {
+              "top": 108,
+              "bottom": 522,
+              "left": 24,
+              "right": 1076,
+              "width": 1052,
+              "height": 414,
+              "contentTop": 4246.25
+            },
+            "content": {
+              "top": 189.75,
+              "bottom": 521,
+              "left": 25,
+              "right": 1075,
+              "width": 1050,
+              "height": 331.25,
+              "contentTop": 4328
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 199.9375,
+              "bottom": 247.9375,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": 125.9375,
+              "bottom": 2598.8125,
+              "left": 55,
+              "right": 1045,
+              "width": 990,
+              "height": 2472.875,
+              "contentTop": 4264.1875
+            },
+            "sensors": {
+              "top": 2622.8125,
+              "bottom": 2817.203125,
+              "left": 55,
+              "right": 1045,
+              "width": 990,
+              "height": 194.390625,
+              "contentTop": 6761.0625
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -4111.25,
+                "bottom": -4091.25,
+                "left": 55,
+                "right": 672.28125,
+                "width": 617.28125,
+                "height": 20,
+                "contentTop": 27
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -4075.25,
+                "bottom": -4058.109375,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 17.140625,
+                "contentTop": 63
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -4036.109375,
+                "bottom": -4018.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 17.140625,
+                "contentTop": 102.140625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -4006.96875,
+                "bottom": -3676.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 330,
+                "contentTop": 131.28125
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -3652.96875,
+                "bottom": -3592.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 60,
+                "contentTop": 485.28125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -3572.96875,
+                "bottom": -787.28125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 2785.6875,
+                "contentTop": 565.28125
+              },
+              {
+                "classes": "container-resources ",
+                "top": -763.28125,
+                "bottom": -479.71875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 283.5625,
+                "contentTop": 3374.96875
+              },
+              {
+                "classes": "host-device-history",
+                "top": -455.71875,
+                "bottom": 101.9375,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 557.65625,
+                "contentTop": 3682.53125
+              },
+              {
+                "classes": "host-processes",
+                "top": 125.9375,
+                "bottom": 2598.8125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 2472.875,
+                "contentTop": 4264.1875
+              },
+              {
+                "classes": "host-sensors",
+                "top": 2622.8125,
+                "bottom": 2817.203125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 194.390625,
+                "contentTop": 6761.0625
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "recoveredCpu": {
+            "state": "Updates every 10 seconds",
+            "timestamp": null,
+            "notice": null,
+            "coverage": ["20 shown \u00b7 20 readable processes \u00b7 20 CPU comparisons"],
+            "rows": [
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "519.0%",
+                "memory": "1019.0 MB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "518.0%",
+                "memory": "1018.0 MB"
+              },
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "517.0%",
+                "memory": "1017.0 MB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "516.0%",
+                "memory": "1016.0 MB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "515.0%",
+                "memory": "1015.0 MB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "514.0%",
+                "memory": "1014.0 MB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "513.0%",
+                "memory": "1013.0 MB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "512.0%",
+                "memory": "1012.0 MB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "511.0%",
+                "memory": "1011.0 MB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "510.0%",
+                "memory": "1010.0 MB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "509.0%",
+                "memory": "1009.0 MB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "508.0%",
+                "memory": "1008.0 MB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "507.0%",
+                "memory": "1007.0 MB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "506.0%",
+                "memory": "1006.0 MB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "505.0%",
+                "memory": "1005.0 MB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "504.0%",
+                "memory": "1004.0 MB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "503.0%",
+                "memory": "1003.0 MB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "502.0%",
+                "memory": "1002.0 MB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "501.0%",
+                "memory": "1001.0 MB"
+              },
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "500.0%",
+                "memory": "1000.0 MB"
+              }
+            ]
+          },
+          "recoveryAfter": {
+            "at": 1792320026874,
+            "viewport": {
+              "width": 1100,
+              "height": 640,
+              "dpr": 1
+            },
+            "navigation": "desktop",
+            "rawScroll": {
+              "x": 0,
+              "y": 0,
+              "content": 4328,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 4328,
+              "scrollHeight": 6947,
+              "clientHeight": 331,
+              "maxScroll": 6616,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 205.9375,
+              "bottom": 241.9375,
+              "left": 84,
+              "right": 135.921875,
+              "width": 51.921875,
+              "height": 36,
+              "contentTop": 4344.1875
+            },
+            "clip": {
+              "top": 189.75,
+              "bottom": 521
+            },
+            "frame": {
+              "top": 108,
+              "bottom": 522,
+              "left": 24,
+              "right": 1076,
+              "width": 1052,
+              "height": 414,
+              "contentTop": 4246.25
+            },
+            "content": {
+              "top": 189.75,
+              "bottom": 521,
+              "left": 25,
+              "right": 1075,
+              "width": 1050,
+              "height": 331.25,
+              "contentTop": 4328
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 199.9375,
+              "bottom": 247.9375,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": 125.9375,
+              "bottom": 2560.8125,
+              "left": 55,
+              "right": 1045,
+              "width": 990,
+              "height": 2434.875,
+              "contentTop": 4264.1875
+            },
+            "sensors": {
+              "top": 2584.8125,
+              "bottom": 2779.203125,
+              "left": 55,
+              "right": 1045,
+              "width": 990,
+              "height": 194.390625,
+              "contentTop": 6723.0625
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -4111.25,
+                "bottom": -4091.25,
+                "left": 55,
+                "right": 672.28125,
+                "width": 617.28125,
+                "height": 20,
+                "contentTop": 27
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -4075.25,
+                "bottom": -4058.109375,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 17.140625,
+                "contentTop": 63
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -4036.109375,
+                "bottom": -4018.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 17.140625,
+                "contentTop": 102.140625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -4006.96875,
+                "bottom": -3676.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 330,
+                "contentTop": 131.28125
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -3652.96875,
+                "bottom": -3592.96875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 60,
+                "contentTop": 485.28125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -3572.96875,
+                "bottom": -787.28125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 2785.6875,
+                "contentTop": 565.28125
+              },
+              {
+                "classes": "container-resources ",
+                "top": -763.28125,
+                "bottom": -479.71875,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 283.5625,
+                "contentTop": 3374.96875
+              },
+              {
+                "classes": "host-device-history",
+                "top": -455.71875,
+                "bottom": 101.9375,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 557.65625,
+                "contentTop": 3682.53125
+              },
+              {
+                "classes": "host-processes",
+                "top": 125.9375,
+                "bottom": 2560.8125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 2434.875,
+                "contentTop": 4264.1875
+              },
+              {
+                "classes": "host-sensors",
+                "top": 2584.8125,
+                "bottom": 2779.203125,
+                "left": 55,
+                "right": 1045,
+                "width": 990,
+                "height": 194.390625,
+                "contentTop": 6723.0625
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "initialWarmup": {
+            "state": "Updates every 10 seconds",
+            "timestamp": null,
+            "notice": null,
+            "coverage": ["0 shown \u00b7 20 readable processes \u00b7 0 CPU comparisons"],
+            "rows": []
+          }
+        },
+        {
+          "width": 320,
+          "height": 800,
+          "scale": 2,
+          "passed": true,
+          "before": {
+            "at": 1792320034755,
+            "viewport": {
+              "width": 320,
+              "height": 800,
+              "dpr": 1
+            },
+            "navigation": "page",
+            "rawScroll": {
+              "x": 0,
+              "y": 13273,
+              "content": 0,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 13273,
+              "scrollHeight": 22236,
+              "clientHeight": 800,
+              "maxScroll": 21436,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 141.78125,
+              "bottom": 192.0625,
+              "left": 62,
+              "right": 137.390625,
+              "width": 75.390625,
+              "height": 50.28125,
+              "contentTop": 13414.78125
+            },
+            "clip": {
+              "top": 126,
+              "bottom": 648.84375
+            },
+            "frame": {
+              "top": -13125,
+              "bottom": 8780.34375,
+              "left": 24,
+              "right": 296,
+              "width": 272,
+              "height": 21905.34375,
+              "contentTop": 148
+            },
+            "content": {
+              "top": -13044.203125,
+              "bottom": 8779.34375,
+              "left": 25,
+              "right": 295,
+              "width": 270,
+              "height": 21823.546875,
+              "contentTop": 228.796875
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 135.78125,
+              "bottom": 198.0625,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": -40.421875,
+              "bottom": 8138.5625,
+              "left": 45,
+              "right": 275,
+              "width": 230,
+              "height": 8178.984375,
+              "contentTop": 13232.578125
+            },
+            "sensors": {
+              "top": 8162.5625,
+              "bottom": 8759.34375,
+              "left": 45,
+              "right": 275,
+              "width": 230,
+              "height": 596.78125,
+              "contentTop": 21435.5625
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -13026.203125,
+                "bottom": -12866.203125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 160,
+                "contentTop": 246.796875
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -12850.203125,
+                "bottom": -12738.359375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 111.84375,
+                "contentTop": 422.796875
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -12716.359375,
+                "bottom": -12682.078125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 34.28125,
+                "contentTop": 556.640625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -12670.078125,
+                "bottom": -12125.21875,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 544.859375,
+                "contentTop": 602.921875
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -12101.21875,
+                "bottom": -11743.28125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 357.9375,
+                "contentTop": 1171.78125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -11723.28125,
+                "bottom": -2864.859375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 8858.421875,
+                "contentTop": 1549.71875
+              },
+              {
+                "classes": "container-resources ",
+                "top": -2840.859375,
+                "bottom": -1822.78125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 1018.078125,
+                "contentTop": 10432.140625
+              },
+              {
+                "classes": "host-device-history",
+                "top": -1798.78125,
+                "bottom": -64.421875,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 1734.359375,
+                "contentTop": 11474.21875
+              },
+              {
+                "classes": "host-processes",
+                "top": -40.421875,
+                "bottom": 8138.5625,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 8178.984375,
+                "contentTop": 13232.578125
+              },
+              {
+                "classes": "host-sensors",
+                "top": 8162.5625,
+                "bottom": 8759.34375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 596.78125,
+                "contentTop": 21435.5625
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "after": {
+            "at": 1792320041711,
+            "viewport": {
+              "width": 320,
+              "height": 800,
+              "dpr": 1
+            },
+            "navigation": "page",
+            "rawScroll": {
+              "x": 0,
+              "y": 13273,
+              "content": 0,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 13273,
+              "scrollHeight": 22436,
+              "clientHeight": 800,
+              "maxScroll": 21636,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 141.78125,
+              "bottom": 192.0625,
+              "left": 62,
+              "right": 137.390625,
+              "width": 75.390625,
+              "height": 50.28125,
+              "contentTop": 13414.78125
+            },
+            "clip": {
+              "top": 126,
+              "bottom": 648.84375
+            },
+            "frame": {
+              "top": -13125,
+              "bottom": 8980.34375,
+              "left": 24,
+              "right": 296,
+              "width": 272,
+              "height": 22105.34375,
+              "contentTop": 148
+            },
+            "content": {
+              "top": -13044.203125,
+              "bottom": 8979.34375,
+              "left": 25,
+              "right": 295,
+              "width": 270,
+              "height": 22023.546875,
+              "contentTop": 228.796875
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 135.78125,
+              "bottom": 198.0625,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": -40.421875,
+              "bottom": 8338.5625,
+              "left": 45,
+              "right": 275,
+              "width": 230,
+              "height": 8378.984375,
+              "contentTop": 13232.578125
+            },
+            "sensors": {
+              "top": 8362.5625,
+              "bottom": 8959.34375,
+              "left": 45,
+              "right": 275,
+              "width": 230,
+              "height": 596.78125,
+              "contentTop": 21635.5625
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -13026.203125,
+                "bottom": -12866.203125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 160,
+                "contentTop": 246.796875
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -12850.203125,
+                "bottom": -12738.359375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 111.84375,
+                "contentTop": 422.796875
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -12716.359375,
+                "bottom": -12682.078125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 34.28125,
+                "contentTop": 556.640625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -12670.078125,
+                "bottom": -12125.21875,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 544.859375,
+                "contentTop": 602.921875
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -12101.21875,
+                "bottom": -11743.28125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 357.9375,
+                "contentTop": 1171.78125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -11723.28125,
+                "bottom": -2864.859375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 8858.421875,
+                "contentTop": 1549.71875
+              },
+              {
+                "classes": "container-resources ",
+                "top": -2840.859375,
+                "bottom": -1822.78125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 1018.078125,
+                "contentTop": 10432.140625
+              },
+              {
+                "classes": "host-device-history",
+                "top": -1798.78125,
+                "bottom": -64.421875,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 1734.359375,
+                "contentTop": 11474.21875
+              },
+              {
+                "classes": "host-processes",
+                "top": -40.421875,
+                "bottom": 8338.5625,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 8378.984375,
+                "contentTop": 13232.578125
+              },
+              {
+                "classes": "host-sensors",
+                "top": 8362.5625,
+                "bottom": 8959.34375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 596.78125,
+                "contentTop": 21635.5625
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "originalCpu": {
+            "state": "Readings delayed",
+            "timestamp": "2026-10-18T10:39:45.612Z",
+            "notice": "Last process sample: 18/10/2026, 18:39:45. Values may be stale.",
+            "coverage": ["20 shown \u00b7 20 readable processes \u00b7 20 CPU comparisons"],
+            "rows": [
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "15000.2%",
+                "memory": "1.5 TB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "12500.5%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "12500.5%",
+                "memory": "16.0 GB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "207.6%",
+                "memory": "64.0 GB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "12.3%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "11.0%",
+                "memory": "11.0 GB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "10.0%",
+                "memory": "10.0 GB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "9.0%",
+                "memory": "9.0 GB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "8.0%",
+                "memory": "8.0 GB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "7.0%",
+                "memory": "7.0 GB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "6.0%",
+                "memory": "6.0 GB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "5.1%",
+                "memory": "48.0 GB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "5.0%",
+                "memory": "5.0 GB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "4.0%",
+                "memory": "4.0 GB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "3.0%",
+                "memory": "3.0 GB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "2.0%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "1.0%",
+                "memory": "1.0 GB"
+              },
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "0.0%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              },
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              }
+            ]
+          },
+          "armedAt": 1792320035400,
+          "receivedAt": 1792320041266,
+          "delta": {
+            "viewportTop": 0,
+            "viewportBottom": 0,
+            "contentTop": 0,
+            "scrollTop": 0,
+            "max": 200
+          },
+          "clampEvidence": {
+            "beforeScrollExceedsAfterMax": false,
+            "afterAtMax": false,
+            "unchangedControlContentCoordinate": true,
+            "predictedClampScroll": 13273,
+            "actualScroll": 13273
+          },
+          "pendingCpu": {
+            "state": "Readings delayed",
+            "timestamp": "2026-10-18T10:39:45.612Z",
+            "notice": "CPU comparisons are pending. Previous sample: 18/10/2026, 18:39:45. Select Memory for current memory readings.",
+            "coverage": ["20 shown \u00b7 20 readable processes \u00b7 20 CPU comparisons"],
+            "rows": [
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "15000.2%",
+                "memory": "1.5 TB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "12500.5%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "12500.5%",
+                "memory": "16.0 GB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "207.6%",
+                "memory": "64.0 GB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "12.3%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "11.0%",
+                "memory": "11.0 GB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "10.0%",
+                "memory": "10.0 GB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "9.0%",
+                "memory": "9.0 GB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "8.0%",
+                "memory": "8.0 GB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "7.0%",
+                "memory": "7.0 GB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "6.0%",
+                "memory": "6.0 GB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "5.1%",
+                "memory": "48.0 GB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "5.0%",
+                "memory": "5.0 GB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "4.0%",
+                "memory": "4.0 GB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "3.0%",
+                "memory": "3.0 GB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "2.0%",
+                "memory": "2.0 GB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "1.0%",
+                "memory": "1.0 GB"
+              },
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "0.0%",
+                "memory": "8192.0 TB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              },
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "0.0%",
+                "memory": "0 B"
+              }
+            ]
+          },
+          "currentMemory": {
+            "state": "Updates every 10 seconds",
+            "timestamp": null,
+            "notice": null,
+            "coverage": ["1 process could not be read; they may have exited or be restricted.", "20 shown \u00b7 40 readable processes"],
+            "rows": [
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "Pending",
+                "memory": "500.0 MB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "Pending",
+                "memory": "499.0 MB"
+              },
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "Pending",
+                "memory": "498.0 MB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "Pending",
+                "memory": "497.0 MB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "Pending",
+                "memory": "496.0 MB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "Pending",
+                "memory": "495.0 MB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "Pending",
+                "memory": "494.0 MB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "Pending",
+                "memory": "493.0 MB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "Pending",
+                "memory": "492.0 MB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "Pending",
+                "memory": "491.0 MB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "Pending",
+                "memory": "490.0 MB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "Pending",
+                "memory": "489.0 MB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "Pending",
+                "memory": "488.0 MB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "Pending",
+                "memory": "487.0 MB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "Pending",
+                "memory": "486.0 MB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "Pending",
+                "memory": "485.0 MB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "Pending",
+                "memory": "484.0 MB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "Pending",
+                "memory": "483.0 MB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "Pending",
+                "memory": "482.0 MB"
+              },
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "Pending",
+                "memory": "481.0 MB"
+              }
+            ]
+          },
+          "recoveryBefore": {
+            "at": 1792320043870,
+            "viewport": {
+              "width": 320,
+              "height": 800,
+              "dpr": 1
+            },
+            "navigation": "page",
+            "rawScroll": {
+              "x": 0,
+              "y": 13273,
+              "content": 0,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 13273,
+              "scrollHeight": 22436,
+              "clientHeight": 800,
+              "maxScroll": 21636,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 141.78125,
+              "bottom": 192.0625,
+              "left": 62,
+              "right": 137.390625,
+              "width": 75.390625,
+              "height": 50.28125,
+              "contentTop": 13414.78125
+            },
+            "clip": {
+              "top": 126,
+              "bottom": 648.84375
+            },
+            "frame": {
+              "top": -13125,
+              "bottom": 8980.34375,
+              "left": 24,
+              "right": 296,
+              "width": 272,
+              "height": 22105.34375,
+              "contentTop": 148
+            },
+            "content": {
+              "top": -13044.203125,
+              "bottom": 8979.34375,
+              "left": 25,
+              "right": 295,
+              "width": 270,
+              "height": 22023.546875,
+              "contentTop": 228.796875
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 135.78125,
+              "bottom": 198.0625,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": -40.421875,
+              "bottom": 8338.5625,
+              "left": 45,
+              "right": 275,
+              "width": 230,
+              "height": 8378.984375,
+              "contentTop": 13232.578125
+            },
+            "sensors": {
+              "top": 8362.5625,
+              "bottom": 8959.34375,
+              "left": 45,
+              "right": 275,
+              "width": 230,
+              "height": 596.78125,
+              "contentTop": 21635.5625
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -13026.203125,
+                "bottom": -12866.203125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 160,
+                "contentTop": 246.796875
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -12850.203125,
+                "bottom": -12738.359375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 111.84375,
+                "contentTop": 422.796875
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -12716.359375,
+                "bottom": -12682.078125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 34.28125,
+                "contentTop": 556.640625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -12670.078125,
+                "bottom": -12125.21875,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 544.859375,
+                "contentTop": 602.921875
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -12101.21875,
+                "bottom": -11743.28125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 357.9375,
+                "contentTop": 1171.78125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -11723.28125,
+                "bottom": -2864.859375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 8858.421875,
+                "contentTop": 1549.71875
+              },
+              {
+                "classes": "container-resources ",
+                "top": -2840.859375,
+                "bottom": -1822.78125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 1018.078125,
+                "contentTop": 10432.140625
+              },
+              {
+                "classes": "host-device-history",
+                "top": -1798.78125,
+                "bottom": -64.421875,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 1734.359375,
+                "contentTop": 11474.21875
+              },
+              {
+                "classes": "host-processes",
+                "top": -40.421875,
+                "bottom": 8338.5625,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 8378.984375,
+                "contentTop": 13232.578125
+              },
+              {
+                "classes": "host-sensors",
+                "top": 8362.5625,
+                "bottom": 8959.34375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 596.78125,
+                "contentTop": 21635.5625
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "recoveredCpu": {
+            "state": "Updates every 10 seconds",
+            "timestamp": null,
+            "notice": null,
+            "coverage": ["20 shown \u00b7 20 readable processes \u00b7 20 CPU comparisons"],
+            "rows": [
+              {
+                "pid": 100,
+                "name": "storage-worker-0",
+                "cpu": "519.0%",
+                "memory": "1019.0 MB"
+              },
+              {
+                "pid": 8,
+                "name": "idle-worker",
+                "cpu": "518.0%",
+                "memory": "1018.0 MB"
+              },
+              {
+                "pid": 7,
+                "name": "systemd",
+                "cpu": "517.0%",
+                "memory": "1017.0 MB"
+              },
+              {
+                "pid": 101,
+                "name": "storage-worker-1",
+                "cpu": "516.0%",
+                "memory": "1016.0 MB"
+              },
+              {
+                "pid": 102,
+                "name": "storage-worker-2",
+                "cpu": "515.0%",
+                "memory": "1015.0 MB"
+              },
+              {
+                "pid": 103,
+                "name": "storage-worker-3",
+                "cpu": "514.0%",
+                "memory": "1014.0 MB"
+              },
+              {
+                "pid": 104,
+                "name": "storage-worker-4",
+                "cpu": "513.0%",
+                "memory": "1013.0 MB"
+              },
+              {
+                "pid": 105,
+                "name": "storage-worker-5",
+                "cpu": "512.0%",
+                "memory": "1012.0 MB"
+              },
+              {
+                "pid": 31,
+                "name": "application-server",
+                "cpu": "511.0%",
+                "memory": "1011.0 MB"
+              },
+              {
+                "pid": 106,
+                "name": "storage-worker-6",
+                "cpu": "510.0%",
+                "memory": "1010.0 MB"
+              },
+              {
+                "pid": 107,
+                "name": "storage-worker-7",
+                "cpu": "509.0%",
+                "memory": "1009.0 MB"
+              },
+              {
+                "pid": 108,
+                "name": "storage-worker-8",
+                "cpu": "508.0%",
+                "memory": "1008.0 MB"
+              },
+              {
+                "pid": 109,
+                "name": "storage-worker-9",
+                "cpu": "507.0%",
+                "memory": "1007.0 MB"
+              },
+              {
+                "pid": 110,
+                "name": "storage-worker-10",
+                "cpu": "506.0%",
+                "memory": "1006.0 MB"
+              },
+              {
+                "pid": 111,
+                "name": "storage-worker-11",
+                "cpu": "505.0%",
+                "memory": "1005.0 MB"
+              },
+              {
+                "pid": 30,
+                "name": "jellyfin-\u0394\u03b9\u03b1\u03c7\u03b5\u03af\u03c1\u03b9\u03c3\u03b7",
+                "cpu": "504.0%",
+                "memory": "1004.0 MB"
+              },
+              {
+                "pid": 2147483647,
+                "name": "postgres-database",
+                "cpu": "503.0%",
+                "memory": "1003.0 MB"
+              },
+              {
+                "pid": 11,
+                "name": "backup-verification",
+                "cpu": "502.0%",
+                "memory": "1002.0 MB"
+              },
+              {
+                "pid": 10,
+                "name": "media-transcoding-worker-production-secondary-archive-0123456789",
+                "cpu": "501.0%",
+                "memory": "1001.0 MB"
+              },
+              {
+                "pid": 22,
+                "name": "archive-indexer",
+                "cpu": "500.0%",
+                "memory": "1000.0 MB"
+              }
+            ]
+          },
+          "recoveryAfter": {
+            "at": 1792320045865,
+            "viewport": {
+              "width": 320,
+              "height": 800,
+              "dpr": 1
+            },
+            "navigation": "page",
+            "rawScroll": {
+              "x": 0,
+              "y": 13312,
+              "content": 0,
+              "frame": 0
+            },
+            "scroller": {
+              "scrollTop": 13312,
+              "scrollHeight": 22018,
+              "clientHeight": 800,
+              "maxScroll": 21218,
+              "atEnd": false,
+              "overflowAnchor": "auto"
+            },
+            "target": {
+              "top": 141.984375,
+              "bottom": 192.265625,
+              "left": 62,
+              "right": 137.390625,
+              "width": 75.390625,
+              "height": 50.28125,
+              "contentTop": 13453.984375
+            },
+            "clip": {
+              "top": 126,
+              "bottom": 648.84375
+            },
+            "frame": {
+              "top": -13164,
+              "bottom": 8522.546875,
+              "left": 24,
+              "right": 296,
+              "width": 272,
+              "height": 21686.546875,
+              "contentTop": 148
+            },
+            "content": {
+              "top": -13083.203125,
+              "bottom": 8521.546875,
+              "left": 25,
+              "right": 295,
+              "width": 270,
+              "height": 21604.75,
+              "contentTop": 228.796875
+            },
+            "focus": {
+              "same": true,
+              "visible": true,
+              "extent": 6,
+              "top": 135.984375,
+              "bottom": 198.265625,
+              "label": "CPU"
+            },
+            "rows": 20,
+            "processes": {
+              "top": -79.421875,
+              "bottom": 7880.765625,
+              "left": 45,
+              "right": 275,
+              "width": 230,
+              "height": 7960.1875,
+              "contentTop": 13232.578125
+            },
+            "sensors": {
+              "top": 7904.765625,
+              "bottom": 8501.546875,
+              "left": 45,
+              "right": 275,
+              "width": 230,
+              "height": 596.78125,
+              "contentTop": 21216.765625
+            },
+            "sections": [
+              {
+                "classes": "desktop-monitor-scope",
+                "top": -13065.203125,
+                "bottom": -12905.203125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 160,
+                "contentTop": 246.796875
+              },
+              {
+                "classes": "desktop-monitor-live-status",
+                "top": -12889.203125,
+                "bottom": -12777.359375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 111.84375,
+                "contentTop": 422.796875
+              },
+              {
+                "classes": "desktop-monitor-time",
+                "top": -12755.359375,
+                "bottom": -12721.078125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 34.28125,
+                "contentTop": 556.640625
+              },
+              {
+                "classes": "desktop-host-overview",
+                "top": -12709.078125,
+                "bottom": -12164.21875,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 544.859375,
+                "contentTop": 602.921875
+              },
+              {
+                "classes": "monitor-history-toolbar",
+                "top": -12140.21875,
+                "bottom": -11782.28125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 357.9375,
+                "contentTop": 1171.78125
+              },
+              {
+                "classes": "desktop-telemetry-grid",
+                "top": -11762.28125,
+                "bottom": -2903.859375,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 8858.421875,
+                "contentTop": 1549.71875
+              },
+              {
+                "classes": "container-resources ",
+                "top": -2879.859375,
+                "bottom": -1861.78125,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 1018.078125,
+                "contentTop": 10432.140625
+              },
+              {
+                "classes": "host-device-history",
+                "top": -1837.78125,
+                "bottom": -103.421875,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 1734.359375,
+                "contentTop": 11474.21875
+              },
+              {
+                "classes": "host-processes",
+                "top": -79.421875,
+                "bottom": 7880.765625,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 7960.1875,
+                "contentTop": 13232.578125
+              },
+              {
+                "classes": "host-sensors",
+                "top": 7904.765625,
+                "bottom": 8501.546875,
+                "left": 45,
+                "right": 275,
+                "width": 230,
+                "height": 596.78125,
+                "contentTop": 21216.765625
+              }
+            ],
+            "position": {
+              "beforeRows": true,
+              "documentScrollBehavior": "auto"
+            }
+          },
+          "initialWarmup": {
+            "state": "Updates every 10 seconds",
+            "timestamp": null,
+            "notice": null,
+            "coverage": ["0 shown \u00b7 20 readable processes \u00b7 0 CPU comparisons"],
+            "rows": []
+          }
+        }
+      ],
+      "errors": [],
+      "mutations": [],
+      "external": [],
+      "requests": [
+        {
+          "at": 1792319993429,
+          "version": 0,
+          "rows": 20,
+          "compared": 20
+        },
+        {
+          "at": 1792320003437,
+          "version": 1,
+          "rows": 0,
+          "compared": 0
+        },
+        {
+          "at": 1792320007758,
+          "version": 2,
+          "rows": 20,
+          "compared": 20
+        },
+        {
+          "at": 1792320009469,
+          "version": 3,
+          "rows": 0,
+          "compared": 0
+        },
+        {
+          "at": 1792320011477,
+          "version": 3,
+          "rows": 0,
+          "compared": 0
+        },
+        {
+          "at": 1792320012240,
+          "version": 0,
+          "rows": 20,
+          "compared": 20
+        },
+        {
+          "at": 1792320022245,
+          "version": 1,
+          "rows": 0,
+          "compared": 0
+        },
+        {
+          "at": 1792320026491,
+          "version": 2,
+          "rows": 20,
+          "compared": 20
+        },
+        {
+          "at": 1792320028069,
+          "version": 3,
+          "rows": 0,
+          "compared": 0
+        },
+        {
+          "at": 1792320030088,
+          "version": 3,
+          "rows": 0,
+          "compared": 0
+        },
+        {
+          "at": 1792320031249,
+          "version": 0,
+          "rows": 20,
+          "compared": 20
+        },
+        {
+          "at": 1792320041259,
+          "version": 1,
+          "rows": 0,
+          "compared": 0
+        },
+        {
+          "at": 1792320045489,
+          "version": 2,
+          "rows": 20,
+          "compared": 20
+        },
+        {
+          "at": 1792320047064,
+          "version": 3,
+          "rows": 0,
+          "compared": 0
+        },
+        {
+          "at": 1792320049069,
+          "version": 3,
+          "rows": 0,
+          "compared": 0
+        }
+      ],
+      "preferenceShadowWrites": 0,
+      "cleanup": {
+        "textRestored": true,
+        "routesRestored": true,
+        "listenerRestored": true,
+        "viewportRestored": true
+      },
+      "cleanupFailures": [],
+      "provenance": {
+        "controlledFixtures": true,
+        "source": "Compiled static8080 only; no actual homelab reads, cookies or API writes.",
+        "update": "Unmodified existing10s HostProcesses query timer; typed20 CPU rows change to firstCPU/compared0 on next timer response.",
+        "oracle": "Complete focus visibility and same viewport anchor <=1px; raw offsets and actual max recorded separately. No post-update focus/scroll.",
+        "helperSha256": "571484bb2496bc54fcec1bb835277d3ef6c287757bbf6e5e0709992ce0dbf70e",
+        "runnerSha256": "7b928c0162a054086693688ac0e952e00b2cc8d86bc4a0a696903215fb509652",
+        "compiledIndexSha256": "f0b9f8b667534ce8017e8a9313fd82a4874ede0b0bfcd88015de9bd19f067d5c",
+        "productSources": {
+          "packages/frontend/src/modules/dashboard/components/host-processes.tsx": "d777562acf8c6e8739881bc33f8c03779ca182b243698dfff471dbbd439b029a",
+          "packages/frontend/src/modules/dashboard/components/host-processes.css": "9a81a14e353f3c185317ff0a30c270e0d151e83e06cdd9e186c04e15ddcd950e"
+        }
+      },
+      "current": "320x800-text2"
+    },
+    "errors": []
+  }
+]

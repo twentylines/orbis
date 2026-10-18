@@ -1,5 +1,11 @@
 # Orbis build and migration rehearsal
 
+## Published beta48: update accepted, UI audit rejected (18 October 2026)
+
+Immutable source `48089d6797be81947c96cfa13654bb597ef20b6b`, index `sha256:2c06d598df5d288895aed475628dd09b04213a4eda4283e0587c51ca87fb3cef`, both Linux architectures. Source CI39118077089/integration39118076942 and release39118221112 pass; prepared verifier checkpoint e3e6c778 CI39118748351/integration39118748370 pass. Actual reviewed primary46→48 job `0c126476-da99-4541-ae2d-6406ca1f6d2b` completes at the exact healthy image, retaining full app/store/preferences/links/user context, two app records and all28 task outcomes. Independent stopped snapshot reads3,597 entries/2,832 files/167,862,745 bytes and matching protected trees.
+
+The first read-only UI matrix accepts desktop Home/Search, then rejects a blank Monitor document after a failed actual JS asset request. Remaining29 authenticated/four anonymous views do not execute. Cause remains unclassified; later direct HTTP200 reads do not establish it. Full records/observer remain exact and all browser resources close. [Current evidence and retained rejection](screenshots/live-beta48/README.md). Separate40/47 fixtures and Mac default are unchanged; Hades remains untouched.
+
 ## Published beta47 local recovery (18 October 2026)
 
 The separate owned arm64 recovery fixture now runs `ghcr.io/twentylines/orbis@sha256:2c0fb73b40a17af4377b0f147e55f2d2fbeb6f966a99cb4ea29b6ed23a1bd8db`, source `48ffa3454aff42028c1a7cc80fb1d4ce9901e320`. Canonical stock adoption captures an independently reread stopped snapshot of3,535 entries/2,803 files/99,123,979 bytes and preserves exact original account/TOTP and protected trees. HTTP is exposed by Traefik only on loopback18082; the backend itself is unpublished. No TLS acceptance is claimed.

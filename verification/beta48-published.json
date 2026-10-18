@@ -1,0 +1,366 @@
+{
+  "scope": "Actual published immutable beta48 arm64 reviewed OTA/data acceptance. The first compact browser matrix is rejected and its cause remains unclassified; source sizing checks and the published normal recovery on beta47 are separate. Hades untouched.",
+  "release": {
+    "tag": "v0.1.0-beta.48",
+    "commit": "48089d6797be81947c96cfa13654bb597ef20b6b",
+    "image": "ghcr.io/twentylines/orbis@sha256:2c06d598df5d288895aed475628dd09b04213a4eda4283e0587c51ca87fb3cef",
+    "runtipiCompatibility": "4.10.1",
+    "platforms": ["linux/amd64", "linux/arm64"],
+    "publishedAt": "2026-10-18T10:19:10Z",
+    "releaseUrl": "https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.48"
+  },
+  "workflows": {
+    "sourceMainCi": {
+      "id": 39118077089,
+      "conclusion": "success"
+    },
+    "sourceIntegration": {
+      "id": 39118076942,
+      "conclusion": "success"
+    },
+    "preparedVerifierMainCi": {
+      "id": 39118748351,
+      "conclusion": "success"
+    },
+    "preparedVerifierIntegration": {
+      "id": 39118748370,
+      "conclusion": "success"
+    },
+    "release": {
+      "id": 39118221112,
+      "conclusion": "success"
+    }
+  },
+  "reviewedOta": {
+    "passed": true,
+    "from": "v0.1.0-beta.46",
+    "jobId": "0c126476-da99-4541-ae2d-6406ca1f6d2b",
+    "target": "v0.1.0-beta.48",
+    "notesReviewed": true,
+    "plansPosted": 1,
+    "appliesPosted": 1,
+    "stableFullRecordsAndTasksRetained": true,
+    "installedAppRecords": 2,
+    "savedTaskOutcomes": 28,
+    "build": {
+      "version": "v0.1.0-beta.48",
+      "commit": "48089d6797be81947c96cfa13654bb597ef20b6b",
+      "imageDigest": "sha256:2c06d598df5d288895aed475628dd09b04213a4eda4283e0587c51ca87fb3cef",
+      "runtipiCompatibility": "v4.10.1"
+    },
+    "cleanup": {
+      "page": true,
+      "context": true,
+      "browser": true
+    }
+  },
+  "stoppedSnapshot": {
+    "schema": "orbis.snapshot.v1",
+    "release": "v0.1.0-beta.46",
+    "dockerContext": "default",
+    "createdAt": "2026-10-18T10:22:10.946705+00:00",
+    "treeSha256": "053e419d203fb7fcd44e6e679f11bf6a2e7b7aa09c693079aa09bb9610ee5ffa",
+    "entries": 3597,
+    "files": 2832,
+    "bytes": 167862745,
+    "sourceRootMode": 448,
+    "privateSnapshot": true,
+    "independentFullSnapshotRead": true,
+    "protectedTrees": {
+      "apps": {
+        "treeSha256": "936d3d92bce3c6b2cb71c6b95f668694dd2332c8d235b1f7523a96940b5fd712",
+        "entries": 17,
+        "files": 11,
+        "bytes": 30499,
+        "matched": true
+      },
+      "app-data": {
+        "treeSha256": "b6296320cf7ac8facafa7700f6a00fbdcd5117e07d8dfb8ca36d916e2e25eb0e",
+        "entries": 8,
+        "files": 3,
+        "bytes": 3281,
+        "matched": true
+      },
+      "user-config": {
+        "treeSha256": "32411613fb37b8e57f770775e8e9ecacbc2508d9dec71831d79a986e3675ba17",
+        "entries": 5,
+        "files": 3,
+        "bytes": 327,
+        "matched": true
+      },
+      "repos": {
+        "treeSha256": "58da2d9f7fac8cf14f9d6ee5bf4492f6f60b6db2d9919b564c0d9f174ba48eb5",
+        "entries": 2196,
+        "files": 1512,
+        "bytes": 113278772,
+        "matched": true
+      }
+    }
+  },
+  "otherRuntimeOracles": {
+    "beta40AndBeta47IdsStartsHealthy": true,
+    "persistedMacDefaultUnchanged": true
+  },
+  "firstUiAttempt": {
+    "passed": false,
+    "stage": "1440x1120-text1-monitor",
+    "plannedAuthenticatedViews": 30,
+    "acceptedAuthenticatedViews": 1,
+    "plannedAnonymousViews": 4,
+    "acceptedAnonymousViews": 0,
+    "homeAndSearchPassed": true,
+    "classification": "Unclassified blank Monitor document after an actual failed preferences JS asset request. Do not call a geometry failure or transient/verifier issue without evidence.",
+    "pageErrors": 0,
+    "readFailures": [
+      {
+        "group": "1440x1120-text1",
+        "path": "/assets/preferences-Dd8kUgUr.js",
+        "messageHash": "8f8fa3d14b33bfa57009cc91648eefaf429a881bff5d87d3e8918a86ddfc89d8"
+      }
+    ],
+    "assetFailures": [
+      {
+        "group": "1440x1120-text1",
+        "path": "/assets/preferences-Dd8kUgUr.js",
+        "kind": "script",
+        "messageHash": "a6296a4c78ef9230eaffd594af049ad8e6ba178a2da94cc61e7821d688b4ee69"
+      }
+    ],
+    "fullRecordsUnchanged": true,
+    "observerRetained": true,
+    "cleanup": {
+      "groupContextsClosed": 1,
+      "anonymousContextsClosed": 0,
+      "readerClosed": true,
+      "browserClosed": true
+    },
+    "privateReportSha256": "c28e82cf62e85d3433bf13199d02b8c211913d3cae6bbdf31ec3640ec0d91791"
+  },
+  "laterDirectReadDiagnostic": {
+    "failedAsset": {
+      "status": 200,
+      "bytes": 5260,
+      "sha256": "f1b2935b647c7ad7d3d3bc629f9fd0ba7b46a3365827afa8a4743d99aef16e32",
+      "milliseconds": 28.76
+    },
+    "monitorHtml": {
+      "status": 200,
+      "bytes": 4475,
+      "milliseconds": 3.97
+    },
+    "health": {
+      "status": 200,
+      "milliseconds": 2.85
+    },
+    "doesNotEstablishEarlierCause": true
+  },
+  "captures": [
+    {
+      "path": "screenshots/live-beta48/changelog.png",
+      "sha256": "6922e157fe85d8e3858a3f23793289e28e8ad910bd225ee8d9040100d4a78d53"
+    },
+    {
+      "path": "screenshots/live-beta48/review.png",
+      "sha256": "4ce3bea693ba78f6cff101794fb6db128e1030c1c23582dabd552461270ada0c"
+    },
+    {
+      "path": "screenshots/live-beta48/1440x1120-text1-FIRST-FAILURE-actual-viewport.png",
+      "sha256": "c9d90eef0030f8a5f43006fed8eb19ee913835a9b827f7df2ac56fe7fa809a32"
+    },
+    {
+      "path": "screenshots/live-beta48/1440x1120-text1-home-arrival-actual-viewport.png",
+      "sha256": "0d9d41fdb28e069a80fd255f14ab0daab51a61de927752420ef9e30063726166"
+    },
+    {
+      "path": "screenshots/live-beta48/1440x1120-text1-monitor-before-natural-refresh-actual-viewport.png",
+      "sha256": "8110c559c0adebfb66c1de791ac5be3e71b48587d1d3de4c393bd60bb829a44a"
+    },
+    {
+      "path": "screenshots/live-beta48/1440x1120-text1-monitor-after-natural-refresh-actual-viewport.png",
+      "sha256": "16a507b5f1bfbad207da33dc51fd60d45ca36ff7516a74a6b66fb945cefcc359"
+    }
+  ],
+  "privateProofSha256": {
+    "orbis-beta48-release-check.json": "39a4aeb50b6fdb0ec90a58f80c7468ab9b9ec73e92733e0bfaadbb09dcbad858",
+    "orbis-beta48-before-records.json": "b71f84e929745e56adf7c0a59a86b75206cfbcfe4aa05d79a65e07b375c7a19d",
+    "orbis-beta48-ota-r1/report.json": "ca4183d1da01f82e5574b37c57c5bb9adf0a1e4af0c563c90fb5f2d484362484",
+    "orbis-beta48-stopped-snapshot-proof.json": "85ec4095edd3712a294cbfd8cb4606b47cab81d0d2adb75b47d5663d6704b2f1",
+    "orbis-beta48-after-ota-records.private.json": "d82b9200e4c1f08b4fae915c675edc04e2a0b4704926eb735e60b65595bc0b3e",
+    "orbis-beta48-compact-ui-go.private.json": "e5235d236af1d4c87f33428d18906ab3c095eb283c7945040c471bf8f7a99445"
+  },
+  "boundedDiagnostics": {
+    "native": {
+      "passed": true,
+      "cases": [
+        {
+          "kind": "direct-monitor",
+          "passed": true,
+          "cleanup": {
+            "listenersRemoved": true,
+            "routesRemoved": true,
+            "pageClosed": true,
+            "contextClosed": true
+          }
+        },
+        {
+          "kind": "home-search-native-dock-monitor",
+          "passed": true,
+          "cleanup": {
+            "listenersRemoved": true,
+            "routesRemoved": true,
+            "pageClosed": true,
+            "contextClosed": true
+          }
+        }
+      ],
+      "counts": {
+        "cases": 2,
+        "passedCases": 2,
+        "networkEvents": 813,
+        "consoleErrors": 0,
+        "actualRequests": 271,
+        "failedRequests": 0
+      },
+      "recordsUnchanged": true,
+      "observerRetained": true,
+      "cleanup": {
+        "contextsClosed": 2,
+        "readerClosed": true,
+        "browserClosed": true
+      },
+      "privateReportSha256": "3a71db9118d17d1c8954a3b551153132e528f867ac0f129b7fbbc462b4f53e58",
+      "originalFailureCauseEstablished": false
+    },
+    "fetch": {
+      "passed": true,
+      "cases": [
+        {
+          "kind": "home-search-forced-goto-fetch-monitor",
+          "passed": true,
+          "cleanup": {
+            "listenersRemoved": true,
+            "routesRemoved": true,
+            "pageClosed": true,
+            "contextClosed": true
+          }
+        }
+      ],
+      "counts": {
+        "cases": 1,
+        "passedCases": 1,
+        "networkEvents": 1266,
+        "consoleErrors": 0,
+        "actualRequests": 254,
+        "failedRequests": 1
+      },
+      "recordsUnchanged": true,
+      "observerRetained": true,
+      "cleanup": {
+        "contextsClosed": 1,
+        "readerClosed": true,
+        "browserClosed": true
+      },
+      "privateReportSha256": "ebee912aadf039dedd738bbea704f669d3a615dcf161d5f45169a78acbd2b03b",
+      "originalFailureCauseEstablished": false,
+      "expectedCancellation": "The one failed request is the prior /api/sse/app event stream cancelled by full document navigation (net::ERR_ABORTED); no asset failed and no route.fetch exception occurred. This does not establish the earlier blank-page cause."
+    }
+  },
+  "secondUiAttempt": {
+    "passed": false,
+    "stage": "1440x1120-text1-monitor",
+    "acceptedAuthenticatedCompositions": 1,
+    "plannedAuthenticatedCompositions": 30,
+    "acceptedAnonymousViews": 0,
+    "plannedAnonymousViews": 4,
+    "runnerSha256": "d57863850530025084297a66bfc55f0881f539b44e4251e7d400a8daeb7a17e1",
+    "privateReportSha256": "b431d78e7a7b7758dce66a0c1cf80811e8ea5340b2c1eb607d26b6a93901ba22",
+    "refresh": {
+      "before": {
+        "scroll": {
+          "x": 0,
+          "y": 0,
+          "content": 6218,
+          "frame": 0
+        },
+        "active": {
+          "inRoot": true,
+          "tag": "BUTTON",
+          "box": {
+            "top": 206.234375,
+            "bottom": 242.234375,
+            "left": 84,
+            "right": 135.921875,
+            "width": 51.921875,
+            "height": 36,
+            "cy": 224.234375
+          },
+          "extent": 6,
+          "focused": true,
+          "classes": ""
+        },
+        "contentBox": {
+          "top": 189.75,
+          "bottom": 1001,
+          "left": 25,
+          "right": 1415,
+          "width": 1390,
+          "height": 811.25,
+          "cy": 595.375
+        }
+      },
+      "after": {
+        "scroll": {
+          "x": 0,
+          "y": 0,
+          "content": 5910,
+          "frame": 0
+        },
+        "active": {
+          "inRoot": true,
+          "tag": "BUTTON",
+          "box": {
+            "top": 514.234375,
+            "bottom": 550.234375,
+            "left": 84,
+            "right": 135.921875,
+            "width": 51.921875,
+            "height": 36,
+            "cy": 532.234375
+          },
+          "extent": 6,
+          "focused": true,
+          "classes": ""
+        },
+        "contentBox": {
+          "top": 189.75,
+          "bottom": 1001,
+          "left": 25,
+          "right": 1415,
+          "width": 1390,
+          "height": 811.25,
+          "cy": 595.375
+        }
+      },
+      "rawScrollChanged": true,
+      "anchorDelta": {
+        "top": 308,
+        "bottom": 308
+      },
+      "actual200": true,
+      "liveScrollHeightNotCaptured": true
+    },
+    "fullRecordsUnchanged": true,
+    "observerRetained": true,
+    "cleanup": {
+      "groupContextsClosed": 1,
+      "anonymousContextsClosed": 0,
+      "readerClosed": true,
+      "browserClosed": true
+    },
+    "readFailures": [],
+    "assetFailures": [],
+    "pageErrors": [],
+    "firstBlankFailureRemainsSeparate": true,
+    "sourceReproduction": "Controlled source fixture independently proves max-scroll clamping under stale20\u2192fresh0-comparison state; it does not reconstruct missing live scrollHeight or establish R1/beta45 cause."
+  }
+}

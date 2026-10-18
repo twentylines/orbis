@@ -903,6 +903,7 @@ async function main() {
     },
   };
   const privateData = {};
+  const network = [];
   const errors = [];
   let config;
   let release;
@@ -914,6 +915,19 @@ async function main() {
   let outputReady = false;
   let secrets = [];
   let stage = 'preflight';
+  const diagnosticUrl = (value) => {
+    const target = new URL(value);
+    return `${target.origin}${target.pathname}${target.search ? '?[redacted]' : ''}`;
+  };
+  const diagnosticError = (error) => {
+    let value = String(error.stack || error.message || error);
+    for (const secret of secrets) value = value.replaceAll(secret, '[private]');
+    return value
+      .replace(/https?:\/\/[^\s"'<>]+/g, (url) => diagnosticUrl(url))
+      .split('\n')
+      .filter((line) => !/\b(?:cookie|authorization|headers)\b/i.test(line))
+      .join('\n');
+  };
   const fail = (error) => {
     let trace = String(error.stack || error.message || error);
     for (const secret of secrets) trace = trace.replaceAll(secret, '[private]');
@@ -927,6 +941,7 @@ async function main() {
   const save = () => {
     if (!outputReady) return;
     privateWrite(path.join(config.output, 'private-baseline.json'), privateData);
+    privateWrite(path.join(config.output, 'private-network.json'), network);
     privateWrite(path.join(config.output, 'private-errors.json'), errors);
     privateWrite(path.join(config.output, 'report.json'), { ...report, stage });
   };
@@ -1047,8 +1062,57 @@ async function main() {
       if (!anonymous) await context.addCookies(cookies);
       const jobs = [];
       let closing = false;
+      let navigation = 0;
+      let nextRequest = 0;
+      const requestIds = new WeakMap();
+      const pending = new Map();
+      const requestId = (request) => {
+        if (!requestIds.has(request)) requestIds.set(request, ++nextRequest);
+        return requestIds.get(request);
+      };
+      const requested = (request) => {
+        if (request.isNavigationRequest()) navigation++;
+        const entry = {
+          event: 'request',
+          at: Date.now(),
+          group: groupName,
+          stage,
+          navigation,
+          id: requestId(request),
+          method: request.method(),
+          url: diagnosticUrl(request.url()),
+          kind: request.resourceType(),
+        };
+        pending.set(entry.id, entry);
+        network.push(entry);
+      };
+      const finished = (request) => {
+        pending.delete(requestId(request));
+        network.push({
+          event: 'finished',
+          at: Date.now(),
+          group: groupName,
+          stage,
+          navigation,
+          id: requestId(request),
+          url: diagnosticUrl(request.url()),
+        });
+      };
       const failed = (request) => {
         const target = new URL(request.url());
+        pending.delete(requestId(request));
+        network.push({
+          event: 'requestfailed',
+          at: Date.now(),
+          group: groupName,
+          stage,
+          navigation,
+          id: requestId(request),
+          url: diagnosticUrl(request.url()),
+          kind: request.resourceType(),
+          error: diagnosticError(request.failure()?.errorText || 'Request failed'),
+          closing,
+        });
         if (
           !closing &&
           target.origin === config.origin.origin &&
@@ -1064,6 +1128,16 @@ async function main() {
       const responded = (response) => {
         const request = response.request();
         const target = new URL(response.url());
+        network.push({
+          event: 'response',
+          at: Date.now(),
+          group: groupName,
+          stage,
+          navigation,
+          id: requestId(request),
+          url: diagnosticUrl(response.url()),
+          status: response.status(),
+        });
         if (target.origin !== config.origin.origin) return;
         if (!response.ok() && response.status() !== 304)
           report.readFailures.push({ group: groupName, path: safePath(target.pathname), status: response.status() });
@@ -1100,8 +1174,29 @@ async function main() {
         if (target.pathname.startsWith('/api/'))
           report.forwardedReads[safePath(target.pathname)] = (report.forwardedReads[safePath(target.pathname)] || 0) + 1;
         if (target.pathname === '/api/sse/app' && !target.search) return route.continue();
+        const began = Date.now();
+        network.push({
+          event: 'forward-start',
+          at: began,
+          group: groupName,
+          stage,
+          navigation,
+          id: requestId(request),
+          url: diagnosticUrl(request.url()),
+        });
         try {
           const response = await route.fetch({ maxRedirects: 0, timeout: 15000 });
+          network.push({
+            event: 'forward-response',
+            at: Date.now(),
+            group: groupName,
+            stage,
+            navigation,
+            id: requestId(request),
+            url: diagnosticUrl(request.url()),
+            status: response.status(),
+            elapsedMs: Date.now() - began,
+          });
           if (response.status() >= 300 && response.status() < 400 && response.status() !== 304) {
             report.blockedRedirects.push({ group: groupName, path: safePath(target.pathname), status: response.status() });
             return route.abort('blockedbyclient');
@@ -1113,11 +1208,25 @@ async function main() {
               : "connect-src 'self'";
           return route.fulfill({ response, headers });
         } catch (error) {
+          network.push({
+            event: 'forward-exception',
+            at: Date.now(),
+            group: groupName,
+            stage,
+            navigation,
+            id: requestId(request),
+            url: diagnosticUrl(request.url()),
+            error: diagnosticError(error),
+            elapsedMs: Date.now() - began,
+            closing,
+          });
           if (!closing) report.readFailures.push({ group: groupName, path: safePath(target.pathname), messageHash: hash(error.message) });
           return route.abort('failed').catch(() => undefined);
         }
       };
       context.on('requestfailed', failed);
+      context.on('request', requested);
+      context.on('requestfinished', finished);
       context.on('response', responded);
       await context.route('**/*', handler);
       page = await context.newPage();
@@ -1173,6 +1282,16 @@ async function main() {
         assert.equal(result.samples.length, samples.length);
         result.passed = result.samples.every((sample) => sample.passed);
       } catch (error) {
+        network.push({
+          event: 'primary-rejection',
+          at: Date.now(),
+          group: groupName,
+          stage,
+          navigation,
+          error: diagnosticError(error),
+          pending: [...pending.values()],
+        });
+        save();
         await shot('FIRST-FAILURE').catch(() => {
           result.failureCaptureUnavailable = true;
         });
@@ -1185,6 +1304,7 @@ async function main() {
         }
         throw error;
       } finally {
+        network.push({ event: 'pending-inventory', at: Date.now(), group: groupName, stage, navigation, pending: [...pending.values()] });
         const attempt = async (name, action) => {
           try {
             await action();
@@ -1200,9 +1320,13 @@ async function main() {
         await Promise.all(jobs);
         await attempt('listenersRestored', async () => {
           context.off('requestfailed', failed);
+          context.off('request', requested);
+          context.off('requestfinished', finished);
           context.off('response', responded);
           page.off('pageerror', onError);
           assert.equal(context.listeners('requestfailed').includes(failed), false);
+          assert.equal(context.listeners('request').includes(requested), false);
+          assert.equal(context.listeners('requestfinished').includes(finished), false);
           assert.equal(context.listeners('response').includes(responded), false);
           assert.equal(page.listeners('pageerror').includes(onError), false);
         });

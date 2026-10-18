@@ -172,6 +172,7 @@ async function inspect(page) {
       monitor: box(root.closest('.desktop-monitor')),
       inner,
       padding: [Number.parseFloat(style.paddingLeft), Number.parseFloat(style.paddingRight)],
+      compactPanelPadding: Number.parseFloat(style.getPropertyValue('--orbis-compact-panel-space')),
       heading: box(root.querySelector('h2')),
       peerHeading: peer ? box(peer) : null,
       words,
@@ -229,9 +230,10 @@ function check(metrics) {
   near(metrics.root.right, metrics.monitor.right, 'Processes share the Monitor right edge');
   near(metrics.heading.left, metrics.inner.left, 'Title and rows share the padded content edge');
   if (metrics.peerHeading) near(metrics.heading.left, metrics.peerHeading.left, 'Process and Docker title gutters align');
+  const minimumPadding = Number.isFinite(metrics.compactPanelPadding) ? Math.max(16, metrics.compactPanelPadding) : 18;
   assert.ok(
-    metrics.padding.every((padding) => padding >= 18),
-    'Card text retains at least18px interior padding',
+    metrics.padding.every((padding) => padding >= minimumPadding),
+    'Card text retains its configured compact or legacy interior padding',
   );
   near(metrics.buttons[0].box.height, metrics.buttons[1].box.height, 'Rank controls have equal heights');
   if (Math.abs(metrics.buttons[0].box.top - metrics.buttons[1].box.top) < metrics.buttons[0].box.height)

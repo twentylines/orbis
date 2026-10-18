@@ -34,6 +34,8 @@ const inspectHostSensors = require('./host-sensors-checks.cjs');
 const inspectHostHistory = require('./host-device-history-checks.cjs');
 const inspectCachedRetry = require('./cached-retry-focus-checks.cjs');
 const inspectMonitorRefresh = require('./monitor-refresh-checks.cjs');
+const inspectMonitorClamp = require('./monitor-clamp-checks.cjs');
+const monitorClampOnly = process.env.ORBIS_VISUAL_MONITOR_CLAMP_ONLY === '1';
 const compactScaleOnly = process.env.ORBIS_VISUAL_COMPACT_SCALE_ONLY === '1';
 const monitorRefreshOnly = process.env.ORBIS_VISUAL_MONITOR_REFRESH_ONLY === '1';
 const hostSensorsOnly = process.env.ORBIS_VISUAL_HOST_SENSORS_ONLY === '1';
@@ -101,7 +103,8 @@ const hostDeviceColorsOnly = process.env.ORBIS_VISUAL_HOST_DEVICES_COLORS_ONLY =
 const hostDeviceChartsOnly = process.env.ORBIS_VISUAL_HOST_DEVICES_CHARTS_ONLY === '1';
 const hostDevicesOnly = process.env.ORBIS_VISUAL_HOST_DEVICES_ONLY === '1' || hostDeviceColorsOnly || hostDeviceChartsOnly;
 const hostProcessColorsOnly = process.env.ORBIS_VISUAL_HOST_PROCESSES_COLORS_ONLY === '1';
-const hostProcessFunctionalOnly = process.env.ORBIS_VISUAL_HOST_PROCESSES_FUNCTIONAL_ONLY === '1';
+const hostProcessFunctionalPhonesOnly = process.env.ORBIS_VISUAL_HOST_PROCESSES_PHONE_FUNCTIONAL_ONLY === '1';
+const hostProcessFunctionalOnly = process.env.ORBIS_VISUAL_HOST_PROCESSES_FUNCTIONAL_ONLY === '1' || hostProcessFunctionalPhonesOnly;
 const hostProcessAboutOnly = process.env.ORBIS_VISUAL_HOST_PROCESSES_ABOUT_ONLY === '1';
 const hostProcessesOnly =
   process.env.ORBIS_VISUAL_HOST_PROCESSES_ONLY === '1' || hostProcessColorsOnly || hostProcessFunctionalOnly || hostProcessAboutOnly;
@@ -133,6 +136,7 @@ if (
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    monitorClampOnly ||
     monitorRefreshOnly ||
     hostSensorsOnly) &&
   zoom !== 1
@@ -468,25 +472,28 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    monitorClampOnly ||
     monitorRefreshOnly ||
     hostSensorsOnly
       ? [
           {
             name: hostSensorsOnly
               ? 'host-sensors'
-              : monitorRefreshOnly
-                ? 'monitor-refresh'
-                : cachedRetryOnly
-                  ? 'cached-retry'
-                  : hostHistoryOnly
-                    ? 'host-history'
-                    : hostProcessesOnly
-                      ? 'host-processes'
-                      : hostDevicesOnly
-                        ? 'host-devices'
-                        : systemModeOnly
-                          ? 'system-mode'
-                          : 'connection',
+              : monitorClampOnly
+                ? 'monitor-clamp'
+                : monitorRefreshOnly
+                  ? 'monitor-refresh'
+                  : cachedRetryOnly
+                    ? 'cached-retry'
+                    : hostHistoryOnly
+                      ? 'host-history'
+                      : hostProcessesOnly
+                        ? 'host-processes'
+                        : hostDevicesOnly
+                          ? 'host-devices'
+                          : systemModeOnly
+                            ? 'system-mode'
+                            : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -818,6 +825,17 @@ async function main() {
       await page.close();
       continue;
     }
+    if (monitorClampOnly) {
+      const monitorClamp = await inspectMonitorClamp({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, monitorClamp, errors });
+      await page.close();
+      continue;
+    }
     if (monitorRefreshOnly) {
       const monitorRefresh = await inspectMonitorRefresh({
         page,
@@ -878,6 +896,15 @@ async function main() {
         base,
         preferences: freshPreferences(),
         ...(hostProcessFunctionalOnly ? { widths: [] } : hostProcessAboutOnly ? { onlyAbout: true, interactions: false } : {}),
+        ...(hostProcessFunctionalPhonesOnly
+          ? {
+              stateGroups: [
+                { width: 390, mode: 'dark', scale: 1 },
+                { width: 320, mode: 'light', scale: 2 },
+                { width: 320, mode: 'dark', scale: 2 },
+              ],
+            }
+          : {}),
         capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
       });
       reports.push({ viewport: viewport.name, hostProcesses, errors });
@@ -1592,6 +1619,7 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    monitorClampOnly ||
     monitorRefreshOnly ||
     hostSensorsOnly
   ) {
@@ -1606,6 +1634,7 @@ async function main() {
           (hostProcessesOnly && !report.hostProcesses?.passed) ||
           (hostHistoryOnly && !report.hostHistory?.passed) ||
           (cachedRetryOnly && !report.cachedRetry?.passed) ||
+          (monitorClampOnly && !report.monitorClamp?.passed) ||
           (monitorRefreshOnly && !report.monitorRefresh?.passed) ||
           (hostSensorsOnly && !report.hostSensors?.passed),
       )

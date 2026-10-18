@@ -1,14 +1,21 @@
 # Orbis changelog
 
-## In progress — compact screens and portable handoff
+## In progress — process reading position and compact gutters
+
+- Keep the previous CPU sample, explicitly delayed with its original timestamp, while new comparisons are pending. Keep Memory current and replace the old ranking when fresh CPU readings arrive. Initial warmup does not invent previous data.
+- Reproduce the preceding end-of-scroll clamp; verify three source viewport/text cases and a composed40-state functional matrix. Match compact Docker/process panel gutters through the shared padding token. Actual published acceptance still requires a new release.
+
+## Beta48 — 18 October 2026
 
 - Add compact-screen type/spacing across tools, app details and auth. Verify32 native compositions, both phone widths/modes with doubled text and20 narrow surface samples. Retain source screenshots and target-size limitations.
 - Add a portable handoff, original brief and Claude entry point, with a full-checkpoint rule at1% account allowance remaining. Include the guarded beta47 recovery UI verifier and independently checked adoption/actual CLI recovery evidence.
 
-## In progress — recovery cache faults
+### Recovery cache faults
 
 - Reject failed/unreadable SQLite session enumeration instead of treating it as zero sessions. Report partial recovery after a saved password change and retain its request for retry.
 - Delete the session value before its index so a failed deletion remains discoverable. Real SQLite connection/DELETE faults prove the preceding failures and successful retry; the new source is not part of beta47.
+
+- Publish both architectures and verify reviewed primary46→48 OTA, stopped snapshot and exact records/28 tasks. Retain the first compact UI rejection: blank Monitor after a failed JS asset request, cause unclassified. Do not infer full UI acceptance from source checks.
 
 ## Beta47 — 18 October 2026
 
