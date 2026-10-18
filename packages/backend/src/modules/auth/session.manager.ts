@@ -51,8 +51,9 @@ export class SessionManager {
 
     await Promise.all(
       sessions.map(async (session) => {
-        this.cache.del(session.key);
+        // Keep the index until revocation succeeds so a failed deletion remains retryable.
         if (session.val) this.cache.del(session.val);
+        this.cache.del(session.key);
       }),
     );
   };

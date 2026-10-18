@@ -3,7 +3,17 @@
 ## In progress — compact screens and portable handoff
 
 - Add compact-screen type/spacing across tools, app details and auth. Verify32 native compositions, both phone widths/modes with doubled text and20 narrow surface samples. Retain source screenshots and target-size limitations.
-- Add a portable handoff, original brief and Claude entry point, with a full-checkpoint rule at1% account allowance remaining. Include the prepared guarded beta47 recovery UI verifier; actual recovery acceptance remains pending.
+- Add a portable handoff, original brief and Claude entry point, with a full-checkpoint rule at1% account allowance remaining. Include the guarded beta47 recovery UI verifier and independently checked adoption/actual CLI recovery evidence.
+
+## In progress — recovery cache faults
+
+- Reject failed/unreadable SQLite session enumeration instead of treating it as zero sessions. Report partial recovery after a saved password change and retain its request for retry.
+- Delete the session value before its index so a failed deletion remains discoverable. Real SQLite connection/DELETE faults prove the preceding failures and successful retry; the new source is not part of beta47.
+
+## Beta47 — 18 October 2026
+
+- Enforce local recovery password length, current request timestamps, single-process overlap rejection and explicit failed request cleanup.
+- Verify actual stock adoption, original password/TOTP retention, hidden-prompt CLI recovery, old-session/password/challenge rejection and unrelated data preservation in a separate arm64 fixture. Four actual browser groups pass112 reads/assets. [Evidence and limits](screenshots/live-beta47/README.md).
 
 ## Beta46 — 18 October 2026
 

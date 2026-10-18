@@ -79,47 +79,138 @@ function readDocker(args) {
   return result.stdout;
 }
 
+const recoveryProject = 'runtipi';
+const recoveryNetwork = 'runtipi_tipi_main_network';
+const expectedComposeFiles = [`${installRoot}/docker-compose.yml`, `${installRoot}/user-config/tipi-compose.yml`, `${installRoot}/orbis-compose.yml`];
+const coreOwnedMounts = {
+  '/data/.env': '.env',
+  '/data/apps': 'apps',
+  '/data/repos': 'repos',
+  '/data/user-config': 'user-config',
+  '/data/state': 'state',
+  '/app-data': 'app-data',
+};
+function requireOwnedMounts(container, expected) {
+  assert.ok(Array.isArray(container.mounts), 'Owned container mount inspection must be available');
+  for (const [destination, relative] of Object.entries(expected)) {
+    const mounts = container.mounts.filter((mount) => mount.Destination === destination);
+    assert.ok(
+      mounts.length === 1 && mounts[0].Type === 'bind' && mounts[0].Source === path.join(installRoot, relative),
+      'Container binds do not match the separate owned recovery root',
+    );
+    assert.equal(
+      container.mounts.filter((mount) => mount.Destination.startsWith(`${destination}/`)).length,
+      0,
+      'Unexpected nested override of an owned bind',
+    );
+  }
+}
+function requireRecoveryLabels(container, service) {
+  assert.equal(container.project, recoveryProject, 'Recovery container must belong to the exact Compose project');
+  assert.equal(container.service, service, 'Recovery container service label differs');
+  assert.equal(container.workingDir, installRoot, 'Recovery Compose working directory differs from the owned root');
+  assert.equal(typeof container.configFiles, 'string', 'Recovery Compose configuration labels must be present');
+  samePrivate(container.configFiles.split(','), expectedComposeFiles, 'Recovery Compose configuration paths/order differ');
+  assert.equal(container.running, true, 'Recovery service must be running');
+  assert.equal(container.paused, false, 'Recovery service must be unpaused');
+}
+function unpublished(ports) {
+  assert.ok(ports && typeof ports === 'object' && !Array.isArray(ports), 'Port inspection must be an object');
+  return Object.values(ports).every((bindings) => bindings === null || (Array.isArray(bindings) && bindings.length === 0));
+}
+function requireProxyPorts(ports) {
+  assert.ok(ports && typeof ports === 'object' && !Array.isArray(ports), 'Ingress port inspection must be an object');
+  samePrivate(Object.keys(ports).sort(), ['443/tcp', '80/tcp'], 'Only the two reviewed ingress ports may be published');
+  const result = {};
+  for (const [port, expected] of [
+    ['80/tcp', '18082'],
+    ['443/tcp', '18446'],
+  ]) {
+    const bindings = ports[port];
+    assert.ok(Array.isArray(bindings) && bindings.length >= 1 && bindings.length <= 2, 'Each ingress port must have a reviewed loopback binding');
+    const ips = new Set();
+    for (const binding of bindings) {
+      assert.ok(
+        binding && ['127.0.0.1', '::1'].includes(binding.HostIp) && binding.HostPort === expected,
+        'Ingress must publish only the exact reviewed loopback HTTP/TLS binding',
+      );
+      assert.equal(ips.has(binding.HostIp), false, 'Duplicate ingress binding');
+      ips.add(binding.HostIp);
+    }
+    result[port] = bindings
+      .map((binding) => ({ HostIp: binding.HostIp, HostPort: binding.HostPort }))
+      .sort((a, b) => a.HostIp.localeCompare(b.HostIp));
+  }
+  return result;
+}
+function validateRecoveryTopology(core, proxy) {
+  requireRecoveryLabels(core, 'runtipi');
+  requireRecoveryLabels(proxy, 'runtipi-reverse-proxy');
+  assert.equal(core.health, 'healthy', 'Pinned recovery backend must be healthy');
+  assert.ok(unpublished(core.ports) && unpublished(core.hostBindings), 'Recovery backend must not publish any host ports');
+  requireOwnedMounts(core, coreOwnedMounts);
+  requireOwnedMounts(proxy, { '/etc/traefik': 'traefik', '/shared': 'traefik/shared' });
+  const socket = proxy.mounts.filter((mount) => mount.Destination === '/var/run/docker.sock');
+  assert.ok(
+    socket.length === 1 && socket[0].Type === 'bind' && socket[0].Source === '/var/run/docker.sock' && socket[0].RW === false,
+    'Ingress Docker socket must remain the reviewed read-only bind',
+  );
+  assert.equal(proxy.mounts.length, 3, 'Unexpected ingress mount override');
+  const published = requireProxyPorts(proxy.ports);
+  samePrivate(requireProxyPorts(proxy.hostBindings), published, 'Configured and actual ingress bindings differ');
+  for (const container of [core, proxy]) {
+    assert.equal(container.networkMode, recoveryNetwork, 'Recovery services must use the reviewed isolated Compose network');
+    assert.ok(
+      Array.isArray(container.networks) && container.networks.length === 1,
+      'Each recovery service must have exactly its reviewed network attachment',
+    );
+    assert.equal(container.networks[0].name, recoveryNetwork, 'Recovery network name differs');
+    assert.match(container.networks[0].networkId || '', /^[a-f0-9]{64}$/, 'Actual Docker network identity must be present');
+  }
+  assert.equal(core.networks[0].networkId, proxy.networks[0].networkId, 'Pinned backend and ingress must share the actual network identity');
+  return { networkIdHash: hash(core.networks[0].networkId), published, backendUnpublished: true, ownedRootAndProject: true };
+}
 function verifyCore(image) {
-  const ids = readDocker(['ps', '-q', '--filter', 'label=com.docker.compose.service=runtipi']).trim().split('\n').filter(Boolean);
-  assert.equal(ids.length, 1, 'Exactly one running core is required in the owned Docker context');
+  const oneService = (service) => {
+    const ids = readDocker(['ps', '-q', '--filter', `label=com.docker.compose.service=${service}`])
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    assert.equal(ids.length, 1, 'Exactly one running reviewed service is required in the separate owned Docker context');
+    return ids[0];
+  };
+  const coreId = oneService('runtipi');
+  const proxyId = oneService('runtipi-reverse-proxy');
   const format =
-    '{"image":{{json .Config.Image}},"imageId":{{json .Image}},"running":{{json .State.Running}},"paused":{{json .State.Paused}},"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}},"mounts":{{json .Mounts}},"ports":{{json .NetworkSettings.Ports}}}';
-  const core = parsePrivate(readDocker(['inspect', '--format', format, ids[0]]), 'Owned core inspection');
+    '{"id":{{json .Id}},"image":{{json .Config.Image}},"imageId":{{json .Image}},"running":{{json .State.Running}},"paused":{{json .State.Paused}},"startedAt":{{json .State.StartedAt}},"health":{{with (index .State "Health")}}{{json (index . "Status")}}{{else}}null{{end}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"workingDir":{{json (index .Config.Labels "com.docker.compose.project.working_dir")}},"configFiles":{{json (index .Config.Labels "com.docker.compose.project.config_files")}},"mounts":{{json .Mounts}},"ports":{{json .NetworkSettings.Ports}},"hostBindings":{{json .HostConfig.PortBindings}},"networkMode":{{json .HostConfig.NetworkMode}},"networks":[{{range $key, $value := .NetworkSettings.Networks}}{"name":{{json $key}},"networkId":{{json $value.NetworkID}}},{{end}}null]}';
+  const core = parsePrivate(readDocker(['inspect', '--format', format, coreId]), 'Owned recovery core inspection');
+  const proxy = parsePrivate(readDocker(['inspect', '--format', format, proxyId]), 'Owned recovery ingress inspection');
+  core.networks = core.networks.filter(Boolean);
+  proxy.networks = proxy.networks.filter(Boolean);
+  assert.match(core.id, /^[a-f0-9]{64}$/, 'Owned backend container identity is invalid');
+  assert.match(proxy.id, /^[a-f0-9]{64}$/, 'Owned ingress container identity is invalid');
+  assert.ok(Number.isFinite(Date.parse(core.startedAt)) && Number.isFinite(Date.parse(proxy.startedAt)), 'Recovery start witnesses are invalid');
   assert.equal(core.image, image, 'Owned core image differs from the expected published image');
   assert.match(core.imageId, /^sha256:[a-f0-9]{64}$/, 'Owned core image identity is invalid');
+  assert.match(proxy.imageId, /^sha256:[a-f0-9]{64}$/, 'Owned ingress image identity is invalid');
   const imageDigests = parsePrivate(
     readDocker(['inspect', '--type', 'image', '--format', '{{json .RepoDigests}}', core.imageId]),
     'Owned image digests',
   );
   assert.ok(Array.isArray(imageDigests) && imageDigests.includes(image), 'Running image does not contain the pinned published digest');
-  assert.ok(core.running && !core.paused && core.health === 'healthy', 'Owned core must be running, unpaused and healthy');
-  const loopbackBinds = Object.values(core.ports || {})
-    .flat()
-    .filter((binding) => binding?.HostPort === '18082');
-  assert.ok(
-    loopbackBinds.length > 0 && loopbackBinds.every((binding) => ['127.0.0.1', '::1'].includes(binding.HostIp)),
-    'Owned HTTP binding must remain loopback18082',
-  );
-  for (const [destination, relative] of Object.entries({
-    '/data/.env': '.env',
-    '/data/apps': 'apps',
-    '/data/repos': 'repos',
-    '/data/user-config': 'user-config',
-    '/data/state': 'state',
-    '/app-data': 'app-data',
-  })) {
-    const mounts = core.mounts.filter((mount) => mount.Destination === destination);
-    assert.ok(
-      mounts.length === 1 && mounts[0].Type === 'bind' && mounts[0].Source === path.join(installRoot, relative),
-      'Core bind ownership does not match the owned rehearsal root',
-    );
-  }
-  assert.equal(
-    core.mounts.filter((mount) => /^\/(?:data\/(?:apps|repos|user-config|state)|app-data)\//.test(mount.Destination)).length,
-    0,
-    'Unexpected owned-tree mount override',
-  );
-  return { idHash: hash(ids[0]), image: core.image, imageId: core.imageId, healthy: true, ownedBinds: true };
+  const topology = validateRecoveryTopology(core, proxy);
+  return {
+    idHash: hash(core.id),
+    image: core.image,
+    imageId: core.imageId,
+    startedAt: core.startedAt,
+    healthy: true,
+    ownedBinds: true,
+    proxyIdHash: hash(proxy.id),
+    proxyImageId: proxy.imageId,
+    proxyStartedAt: proxy.startedAt,
+    ingress: { ...topology, httpScope: 'Plain loopback18082 only;18446 binding checked without claiming HTTPS acceptance' },
+  };
 }
 
 function parseCookies(value, hostname) {
@@ -1146,6 +1237,11 @@ async function main() {
     report.coreChecks.push(afterCore);
     assert.equal(afterCore.idHash, report.coreChecks[0].idHash);
     assert.equal(afterCore.imageId, report.coreChecks[0].imageId);
+    assert.equal(afterCore.startedAt, report.coreChecks[0].startedAt, 'Pinned backend restarted during the audit');
+    assert.equal(afterCore.proxyIdHash, report.coreChecks[0].proxyIdHash, 'Recovery ingress identity changed during the audit');
+    assert.equal(afterCore.proxyImageId, report.coreChecks[0].proxyImageId, 'Recovery ingress image changed during the audit');
+    assert.equal(afterCore.proxyStartedAt, report.coreChecks[0].proxyStartedAt, 'Recovery ingress restarted during the audit');
+    samePrivate(afterCore.ingress, report.coreChecks[0].ingress, 'Recovery ingress ports/network changed during the audit');
     assert.equal(report.groups.length, 4);
     assert.ok(report.groups.every((item) => item.passed && item.ownSessionLogoutPosts === 1));
     report.passed = true;
@@ -1294,6 +1390,143 @@ function selfCheck() {
   assert.throws(() =>
     validateLoginAttempt({ username: account.username, password: account.newPassword }, account, null, { oldPasswordPosts: 1, newPasswordPosts: 0 }),
   );
+  const common = {
+    project: recoveryProject,
+    workingDir: installRoot,
+    configFiles: expectedComposeFiles.join(','),
+    running: true,
+    paused: false,
+    networkMode: recoveryNetwork,
+    networks: [{ name: recoveryNetwork, networkId: '1'.repeat(64) }],
+  };
+  const core = {
+    ...structuredClone(common),
+    service: 'runtipi',
+    health: 'healthy',
+    ports: { '3000/tcp': null },
+    hostBindings: {},
+    mounts: Object.entries(coreOwnedMounts).map(([Destination, relative]) => ({
+      Destination,
+      Source: path.join(installRoot, relative),
+      Type: 'bind',
+    })),
+  };
+  const proxyPorts = {
+    '80/tcp': [{ HostIp: '127.0.0.1', HostPort: '18082' }],
+    '443/tcp': [{ HostIp: '127.0.0.1', HostPort: '18446' }],
+  };
+  const proxy = {
+    ...structuredClone(common),
+    service: 'runtipi-reverse-proxy',
+    ports: structuredClone(proxyPorts),
+    hostBindings: structuredClone(proxyPorts),
+    mounts: [
+      { Destination: '/etc/traefik', Source: `${installRoot}/traefik`, Type: 'bind' },
+      { Destination: '/shared', Source: `${installRoot}/traefik/shared`, Type: 'bind' },
+      { Destination: '/var/run/docker.sock', Source: '/var/run/docker.sock', Type: 'bind', RW: false },
+    ],
+  };
+  assert.equal(validateRecoveryTopology(core, proxy).backendUnpublished, true);
+  const dualStack = structuredClone(proxy);
+  for (const map of [dualStack.ports, dualStack.hostBindings])
+    for (const bindings of Object.values(map)) bindings.push({ HostIp: '::1', HostPort: bindings[0].HostPort });
+  validateRecoveryTopology(core, dualStack);
+  const rejectTopology = (mutate) => {
+    const candidateCore = structuredClone(core);
+    const candidateProxy = structuredClone(proxy);
+    mutate(candidateCore, candidateProxy);
+    assert.throws(() => validateRecoveryTopology(candidateCore, candidateProxy));
+  };
+  for (const mutate of [
+    (core) => {
+      core.ports['3000/tcp'] = [{ HostIp: '127.0.0.1', HostPort: '18082' }];
+    },
+    (core) => {
+      core.hostBindings['3000/tcp'] = [{ HostIp: '127.0.0.1', HostPort: '18082' }];
+    },
+    (_, proxy) => {
+      proxy.ports['80/tcp'][0].HostIp = '0.0.0.0';
+    },
+    (_, proxy) => {
+      proxy.hostBindings['443/tcp'][0].HostIp = '::';
+    },
+    (_, proxy) => {
+      proxy.ports['80/tcp'][0].HostPort = '18080';
+    },
+    (_, proxy) => {
+      proxy.ports['443/tcp'][0].HostPort = '18445';
+    },
+    (_, proxy) => {
+      proxy.ports['8080/tcp'] = [{ HostIp: '127.0.0.1', HostPort: '18083' }];
+    },
+    (_, proxy) => {
+      proxy.ports['80/tcp'] = [];
+    },
+    (_, proxy) => {
+      proxy.hostBindings['80/tcp'] = [{ HostIp: '::1', HostPort: '18082' }];
+    },
+    (_, proxy) => {
+      proxy.ports['80/tcp'].push({ ...proxy.ports['80/tcp'][0] });
+    },
+    (core) => {
+      core.project = 'unowned';
+    },
+    (_, proxy) => {
+      proxy.project = 'unowned';
+    },
+    (_, proxy) => {
+      proxy.service = 'another-service';
+    },
+    (core) => {
+      core.workingDir = '/Users/sai/.codex/tmp/orbis-stock-20261015';
+    },
+    (_, proxy) => {
+      proxy.configFiles = '/tmp/unreviewed-compose.yml';
+    },
+    (core) => {
+      core.configFiles = expectedComposeFiles.slice(0, 2).join(',');
+    },
+    (_, proxy) => {
+      proxy.configFiles = [...expectedComposeFiles, `${installRoot}/unreviewed-compose.yml`].join(',');
+    },
+    (_, proxy) => {
+      proxy.configFiles = [...expectedComposeFiles].reverse().join(',');
+    },
+    (core) => {
+      core.health = 'unhealthy';
+    },
+    (_, proxy) => {
+      proxy.running = false;
+    },
+    (_, proxy) => {
+      proxy.paused = true;
+    },
+    (_, proxy) => {
+      proxy.networks[0].networkId = '2'.repeat(64);
+    },
+    (core) => {
+      core.networkMode = 'host';
+    },
+    (_, proxy) => {
+      proxy.networks.push({ name: 'other-network', networkId: '2'.repeat(64) });
+    },
+    (core) => {
+      core.mounts[0].Source = '/tmp/unowned-env';
+    },
+    (core) => {
+      core.mounts.push({ Destination: '/data/state/override', Source: '/tmp/unowned-state', Type: 'bind' });
+    },
+    (_, proxy) => {
+      proxy.mounts[0].Source = '/tmp/unowned-traefik';
+    },
+    (_, proxy) => {
+      proxy.mounts[2].RW = true;
+    },
+    (_, proxy) => {
+      proxy.mounts.push({ Destination: '/etc/traefik/override', Source: '/tmp/unowned-config', Type: 'bind' });
+    },
+  ])
+    rejectTopology(mutate);
   process.stdout.write('PUBLISHED_ACCOUNT_RECOVERY_UI_GUARDS_PASSED (no files, credentials, cookies, browser or runtime accessed)\n');
 }
 if (require.main === module) {

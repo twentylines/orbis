@@ -343,6 +343,7 @@
   "AUTH_ERROR_MISSING_EMAIL_OR_PASSWORD": "Missing email or password",
   "AUTH_ERROR_NO_CHANGE_PASSWORD_REQUEST": "No password reset request found.",
   "AUTH_ERROR_RESET_IN_PROGRESS": "A password reset is already running. Wait for it to finish before retrying.",
+  "AUTH_ERROR_RESET_SESSION_CLEANUP": "Your password changed, but existing sessions could not be cleared. The server administrator must resolve the session cache problem and run local password recovery again.",
   "AUTH_ERROR_RESET_REQUEST_CLEANUP": "Your password changed, but the recovery request could not be cleared. Sign in with the new password. The server administrator must remove state/password-change-request before starting another recovery.",
   "AUTH_ERROR_OPERATOR_NOT_FOUND": "Operator user not found",
   "AUTH_ERROR_TOTP_ALREADY_ENABLED": "2FA is already enabled for this user",

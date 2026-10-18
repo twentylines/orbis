@@ -49,10 +49,15 @@ export class CacheService {
       const query = this.db.prepare('SELECT * FROM keyv WHERE key LIKE ?');
       const rows = query.all(`${prefix}%`) as { key: string; value: string }[];
 
-      return rows.map((row) => ({ key: row.key, val: JSON.parse(row.value).value }));
-    } catch (error) {
-      console.error(error);
-      return [];
+      return rows.map((row) => {
+        const record: unknown = JSON.parse(row.value);
+        if (!record || typeof record !== 'object' || !('value' in record) || typeof record.value !== 'string') {
+          throw new Error('Invalid cached session record');
+        }
+        return { key: row.key, val: record.value };
+      });
+    } catch {
+      throw new Error('Could not read cached session records');
     }
   }
 

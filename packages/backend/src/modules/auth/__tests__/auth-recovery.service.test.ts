@@ -1,5 +1,6 @@
 import { mkdtemp, mkdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { CacheService } from '@/core/cache/cache.service';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { EncryptionService } from '@/core/encryption/encryption.service';
@@ -33,6 +34,7 @@ describe('Local operator recovery', () => {
   let sessions: ReturnType<typeof mock<SessionManager>>;
   let filesystem: ReturnType<typeof mock<FilesystemService>>;
   let passwords: PasswordService;
+  let config: ReturnType<typeof mock<ConfigurationService>>;
 
   beforeEach(async () => {
     directory = await mkdtemp('/tmp/orbis-recovery-test-');
@@ -49,7 +51,7 @@ describe('Local operator recovery', () => {
         () => false,
       ),
     );
-    const config = mock<ConfigurationService>();
+    config = mock<ConfigurationService>();
     config.get.mockReturnValue(mock<ReturnType<ConfigurationService['getConfig']>['directories']>({ dataDir: directory }));
     passwords = new PasswordService();
     vi.spyOn(passwords, 'hash');
@@ -157,6 +159,81 @@ describe('Local operator recovery', () => {
     await expect(auth.changeOperatorPassword({ newPassword: 'new-password-123' })).rejects.toThrow('synthetic database failure');
     expect(await readFile(requestFile, 'utf8')).toBe(String(now));
     expect(sessions.destroyAllSessionsByUserId).not.toHaveBeenCalled();
+  });
+
+  it('reports a partial reset and retains its request when real SQLite session enumeration fails, then allows recovery retry', async () => {
+    await request();
+    const cachePath = path.join(directory, 'sessions.sqlite');
+    let database = new DatabaseSync(cachePath);
+    database.exec('CREATE TABLE keyv (key TEXT PRIMARY KEY, value TEXT)');
+    let closed = false;
+    const cache = Object.create(CacheService.prototype) as CacheService;
+    Object.defineProperty(cache, 'db', { value: database, configurable: true });
+    const actualSessions = new SessionManager(cache);
+    const recovery = new AuthService(users, actualSessions, config, mock<EncryptionService>(), cache, filesystem, passwords);
+    try {
+      const oldSession = await actualSessions.createSession(operator.id);
+      const unrelatedSession = await actualSessions.createSession(operator.id + 1);
+      database.close();
+      closed = true;
+
+      await expect(recovery.changeOperatorPassword({ newPassword: 'new-password-123' })).rejects.toMatchObject({
+        status: 500,
+        message: 'AUTH_ERROR_RESET_SESSION_CLEANUP',
+      });
+      expect(users.updateUser).toHaveBeenCalledOnce();
+      const saved = users.updateUser.mock.calls.at(0)?.[1];
+      expect(await passwords.verify('new-password-123', saved?.password ?? '')).toBe(true);
+      expect(await readFile(requestFile, 'utf8')).toBe(String(now));
+      expect(filesystem.removeFile).not.toHaveBeenCalled();
+
+      database = new DatabaseSync(cachePath);
+      closed = false;
+      Object.defineProperty(cache, 'db', { value: database, configurable: true });
+      expect(cache.get(`session:${oldSession}`)).toBe(String(operator.id));
+      await expect(recovery.changeOperatorPassword({ newPassword: 'retry-password-456' })).resolves.toEqual({ email: operator.username });
+      expect(cache.get(`session:${oldSession}`)).toBeUndefined();
+      expect(cache.get(`session:${unrelatedSession}`)).toBe(String(operator.id + 1));
+      await expect(readFile(requestFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      if (!closed) database.close();
+    }
+  });
+
+  it('retains a failed session deletion in the index so recovery retry can revoke it', async () => {
+    await request();
+    const database = new DatabaseSync(path.join(directory, 'sessions.sqlite'));
+    database.exec('CREATE TABLE keyv (key TEXT PRIMARY KEY, value TEXT); CREATE TABLE blocked_deletions (key TEXT PRIMARY KEY)');
+    const cache = Object.create(CacheService.prototype) as CacheService;
+    Object.defineProperty(cache, 'db', { value: database });
+    const actualSessions = new SessionManager(cache);
+    const recovery = new AuthService(users, actualSessions, config, mock<EncryptionService>(), cache, filesystem, passwords);
+    try {
+      const oldSession = await actualSessions.createSession(operator.id);
+      const unrelatedSession = await actualSessions.createSession(operator.id + 1);
+      database.prepare('INSERT INTO blocked_deletions (key) VALUES (?)').run(`session:${oldSession}`);
+      database.exec(`CREATE TRIGGER fail_session_delete BEFORE DELETE ON keyv
+        WHEN EXISTS (SELECT 1 FROM blocked_deletions WHERE key = OLD.key)
+        BEGIN SELECT RAISE(FAIL, 'Injected session deletion failure'); END`);
+
+      await expect(recovery.changeOperatorPassword({ newPassword: 'new-password-123' })).rejects.toMatchObject({
+        status: 500,
+        message: 'AUTH_ERROR_RESET_SESSION_CLEANUP',
+      });
+      expect(cache.get(`session:${oldSession}`)).toBe(String(operator.id));
+      expect(cache.get(`session:${operator.id}:${oldSession}`)).toBe(`session:${oldSession}`);
+      expect(await readFile(requestFile, 'utf8')).toBe(String(now));
+      expect(filesystem.removeFile).not.toHaveBeenCalled();
+
+      database.exec('DROP TRIGGER fail_session_delete');
+      await expect(recovery.changeOperatorPassword({ newPassword: 'retry-password-456' })).resolves.toEqual({ email: operator.username });
+      expect(cache.get(`session:${oldSession}`)).toBeUndefined();
+      expect(cache.get(`session:${operator.id}:${oldSession}`)).toBeUndefined();
+      expect(cache.get(`session:${unrelatedSession}`)).toBe(String(operator.id + 1));
+      await expect(readFile(requestFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      database.close();
+    }
   });
 
   it('revokes sessions and reports incomplete cleanup after the password was changed', async () => {

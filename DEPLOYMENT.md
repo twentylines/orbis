@@ -1,5 +1,11 @@
 # Orbis build and migration rehearsal
 
+## Published beta47 local recovery (18 October 2026)
+
+The separate owned arm64 recovery fixture now runs `ghcr.io/twentylines/orbis@sha256:2c0fb73b40a17af4377b0f147e55f2d2fbeb6f966a99cb4ea29b6ed23a1bd8db`, source `48ffa3454aff42028c1a7cc80fb1d4ce9901e320`. Canonical stock adoption captures an independently reread stopped snapshot of3,535 entries/2,803 files/99,123,979 bytes and preserves exact original account/TOTP and protected trees. HTTP is exposed by Traefik only on loopback18082; the backend itself is unpublished. No TLS acceptance is claimed.
+
+Actual retained CLI-v4.10.1 recovery passes hidden prompts, short-password rejection, active-request browser/anonymous401, valid reset, three old-session rejections and new-password authentication without TOTP. Full unrelated fields/data remain exact. Four browser groups pass112 API reads/112 assets, preserved records/observer and complete cleanup. [Evidence and scope](screenshots/live-beta47/README.md). Primary beta46 and copied x86 beta40 are unchanged; Hades has never been accessed. Compact UI and the separately reproduced cache-fault source fix require a later release.
+
 ## Published beta46: sensors, preserved data and glass (18 October 2026)
 
 Source `762d7e0b5042e3993bb25fc65c3cff763be9579f` passes main CI `39110799266` and integration `39110799237`. Release workflow `39110815929` publishes both architectures; the independent checker matches OCI index `sha256:2cb89cd81a7e5b58a849df85c43803408e8ae234b2cf426dbbc47d63ca14a287`. Actual UI changelog/review and one plan/apply complete beta45→46 job `465defdf-1521-4bfd-8fbb-9f61800d3512` on that exact healthy arm64 image.

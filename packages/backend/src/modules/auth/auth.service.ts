@@ -373,7 +373,11 @@ export class AuthService {
 
       const hash = await this.passwordService.hash(newPassword);
       await this.userRepository.updateUser(user.id, { password: hash, totpEnabled: false, totpSecret: null });
-      await this.sessionManager.destroyAllSessionsByUserId(user.id);
+      try {
+        await this.sessionManager.destroyAllSessionsByUserId(user.id);
+      } catch {
+        throw new TranslatableError('AUTH_ERROR_RESET_SESSION_CLEANUP');
+      }
 
       const { dataDir } = this.config.get('directories');
       const cleared = await this.filesystem.removeFile(path.join(dataDir, 'state', 'password-change-request'));
