@@ -14,9 +14,9 @@ const compactCopy = require('./compact-copy-checks.cjs');
 const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
 const dockerContext = 'colima-runtipi-test';
-const expectedTag = 'v0.1.0-beta.53';
-const reviewedCommit = 'fed1689dffef812da01994b00709f200f494fd3c';
-const reviewedDigest = 'sha256:35e0ed0568788fe0013ac494c50eb34bf4979bd8a6c550e22cecf64a1ae807cd';
+const expectedTag = 'v0.1.0-beta.54';
+const reviewedCommit = '1db9b64e3c133153bc1e868e3c296cfe4d41e57a';
+const reviewedDigest = 'sha256:57f0856e7cb07bec36a41aa84f14b80fe1fc85738ee0470146e00dde3e535ccb';
 const readMethods = new Set(['GET', 'HEAD']);
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const samePrivate = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message);
@@ -233,9 +233,9 @@ async function scaleText(page, factor) {
   await dom.settle(page);
 }
 
-const releasePath = '/tmp/orbis-beta53-release-check.json';
-const baselinePath = '/tmp/orbis-beta53-after-ota-records.private.json';
-const goPath = '/tmp/orbis-beta53-compact-ui-go.private.json';
+const releasePath = '/tmp/orbis-beta54-release-check.json';
+const baselinePath = '/tmp/orbis-beta54-after-ota-records.private.json';
+const goPath = '/tmp/orbis-beta54-compact-ui-go.private.json';
 const baseUrl = 'http://127.0.0.1:18080';
 const recordKeys = ['preferences', 'installed', 'apps', 'stores', 'links', 'userContext', 'appContext'];
 const groups = [
@@ -327,16 +327,16 @@ function diagnosticError(error, secrets = []) {
 }
 
 function validateOptions(env, argv, digest) {
-  assert.match(digest || '', /^sha256:[a-f0-9]{64}$/, 'Reviewed beta53 digest is not pinned; live audit is disabled');
+  assert.match(digest || '', /^sha256:[a-f0-9]{64}$/, 'Reviewed beta54 digest is not pinned; live audit is disabled');
   assert.deepEqual(argv, ['--allow-owned-published-compact-ui'], 'Explicit owned published compact UI argument is required');
   assert.equal(env.ORBIS_ALLOW_LIVE_COMPACT_UI_AUDIT, '1', 'Explicit published compact UI opt-in is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta53 is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta54 is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_COMMIT || '', /^[a-f0-9]{40}$/, 'Exact reviewed full commit is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta53 commit is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta54 commit is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_DIGEST || '', /^sha256:[a-f0-9]{64}$/, 'Exact reviewed published digest is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_DIGEST, digest, 'Only the independently verified beta53 image index is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_DIGEST, digest, 'Only the independently verified beta54 image index is permitted');
   assert.equal(env.ORBIS_AUDIT_COOKIE_FILE, ownedCookieFile, 'Only the primary owned observer cookie jar is permitted');
-  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta53 release manifest is permitted');
+  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta54 release manifest is permitted');
   assert.equal(env.ORBIS_AUDIT_BASELINE_FILE, baselinePath, 'Only the independently captured post-OTA baseline is permitted');
   assert.equal(env.ORBIS_AUDIT_GO_FILE, goPath, 'Independent post-OTA GO proof is required');
   const origin = new URL(env.ORBIS_AUDIT_URL || baseUrl);
@@ -1181,7 +1181,7 @@ async function main() {
     diagnosticFailures: [],
     cleanup: { groupContextsClosed: 0, anonymousContextsClosed: 0, readerClosed: false, browserClosed: false },
     scope: {
-      live: 'Actual immutable beta53 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
+      live: 'Actual immutable beta54 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
       controlled:
         'Browser OS colour media matches the saved fixed mode (light for system); one320 doubled-computed-text group; documents alone use route.fetch/fulfill for CSP connect-src adjustment. Assets and API GET/HEAD use native browser transport. No response body substitutions.',
       writes: 'Only GET/HEAD are forwarded. No login/logout, preference, reset, TOTP, refresh, installation or lifecycle mutations.',
