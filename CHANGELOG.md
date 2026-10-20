@@ -2,6 +2,7 @@
 
 ## Unreleased — Backups
 
+- Include MIME detection and GNU tar in the runtime image. Verify binary contents, ownership, permissions and file/directory timestamps through an archive round trip during image builds.
 - Stage restores before replacing live directories; retain originals through commit and recover interrupted swaps before app operations or startup.
 - Preserve file ownership, modes and timestamps in backup copies. Keep committed recovery state until the database version and stopped state are reconciled.
 - Track partial extraction for cleanup and avoid copying app data twice when staging is on the same filesystem. Reject incomplete extraction and copy failures.

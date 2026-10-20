@@ -2,8 +2,70 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createRequire } = require('node:module');
+const { execFileSync } = require('node:child_process');
+const os = require('node:os');
+
+const verifyArchiveRuntime = () => {
+  const archiveRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'orbis-archive-runtime-'));
+  try {
+    const source = path.join(archiveRoot, 'source');
+    const restored = path.join(archiveRoot, 'restored');
+    fs.mkdirSync(source);
+    fs.mkdirSync(restored);
+    const nested = path.join(source, '.nested');
+    fs.mkdirSync(nested);
+    const file = path.join(nested, 'payload.bin');
+    const payload = Buffer.from([0, 255, 128, 10, 13, 0]);
+    fs.writeFileSync(file, payload);
+    if (process.platform === 'linux' && process.getuid() === 0) {
+      fs.chownSync(file, 1001, 1002);
+      fs.chownSync(nested, 1001, 1002);
+    }
+    fs.chmodSync(file, 0o640);
+    fs.utimesSync(file, 1700000000, 1700000000);
+    fs.chmodSync(nested, 0o750);
+    fs.utimesSync(nested, 1700000010, 1700000010);
+    const original = fs.statSync(file);
+    const originalDirectory = fs.statSync(nested);
+    const archive = path.join(archiveRoot, 'backup.tar.gz');
+    execFileSync('tar', ['-czpf', archive, '-C', source, '.']);
+    const archiveMime = execFileSync('file', ['--brief', '--mime-type', archive], { encoding: 'utf8' }).trim();
+    assert.ok(['application/gzip', 'application/x-gzip'].includes(archiveMime), `Unexpected backup MIME type: ${archiveMime}`);
+    const paths = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' }).trim().split('\n');
+    const entries = execFileSync('tar', ['-tzvf', archive], { encoding: 'utf8' }).trim().split('\n');
+    assert.equal(entries.length, paths.length);
+    assert.ok(paths.some((entry) => entry.endsWith('payload.bin')));
+    execFileSync('tar', ['-xzpf', archive, '-C', restored]);
+    const extractedDirectory = path.join(restored, '.nested');
+    const extracted = path.join(extractedDirectory, 'payload.bin');
+    const actual = fs.statSync(extracted);
+    assert.deepEqual(fs.readFileSync(extracted), payload);
+    assert.deepEqual([actual.uid, actual.gid, actual.mode & 0o7777, actual.mtimeMs], [original.uid, original.gid, 0o640, original.mtimeMs]);
+    const directory = fs.statSync(extractedDirectory);
+    assert.deepEqual(
+      [directory.uid, directory.gid, directory.mode & 0o7777, directory.mtimeMs],
+      [originalDirectory.uid, originalDirectory.gid, 0o750, originalDirectory.mtimeMs],
+    );
+    return {
+      archiveMime,
+      archiveRoundTripVerified: true,
+      archiveOwnershipVerified: true,
+      archiveDirectoryMetadataVerified: true,
+      archiveUid: actual.uid,
+      archiveGid: actual.gid,
+    };
+  } finally {
+    fs.rmSync(archiveRoot, { recursive: true, force: true });
+  }
+};
 
 (async () => {
+  if (process.argv[2] === '--archive-only') {
+    process.stdout.write(
+      `${JSON.stringify({ ...verifyArchiveRuntime(), node: process.version, architecture: process.arch, uid: process.getuid?.() })}\n`,
+    );
+    return;
+  }
   const root = path.resolve(process.argv[2] || process.cwd());
   const modules = path.join(root, 'node_modules');
   const manifest = JSON.parse(fs.readFileSync(path.join(modules, '.orbis-runtime-dependencies.json'), 'utf8'));
@@ -27,8 +89,9 @@ const { createRequire } = require('node:module');
   const instance = runtime('class-transformer').plainToInstance(Example, { name: 'Orbis' });
   assert.ok(instance instanceof Example);
   assert.equal(instance.name, 'Orbis');
+  const archives = verifyArchiveRuntime();
   process.stdout.write(
-    `${JSON.stringify({ lockfileSha256: manifest.lockfileSha256, packages: manifest.packages.length, nativeHashVerified: true, transformerVerified: true, node: process.version, architecture: process.arch })}\n`,
+    `${JSON.stringify({ lockfileSha256: manifest.lockfileSha256, packages: manifest.packages.length, nativeHashVerified: true, transformerVerified: true, ...archives, node: process.version, architecture: process.arch })}\n`,
   );
 })().catch((error) => {
   process.stderr.write(`Runtime dependency verification failed: ${error.message}\n`);
