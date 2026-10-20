@@ -10,6 +10,7 @@ const { chromium } = require('@playwright/test');
 const { dom } = require('./host-devices-checks.cjs');
 const inspectSettingsAlignment = require('./settings-alignment-checks.cjs');
 const compactCopy = require('./compact-copy-checks.cjs');
+const inputPlaceholders = require('./input-placeholder-checks.cjs');
 
 const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
@@ -1614,6 +1615,8 @@ async function main() {
           item.metrics = sanitized(metrics);
           item.legacyUnder40 = sanitized(metrics.controls.filter((control) => !control.excludedChrome && control.legacy && control.box.height < 40));
           await shot(`${sample.name}-arrival`);
+          item.placeholders = await inputPlaceholders.measure(page, sample.root);
+          inputPlaceholders.check(item.placeholders);
           // Auth intentionally has no account preferences; verify its actual defaults independently.
           const actualAppearance = anonymous ? { mode: metrics.theme.mode, preset: metrics.theme.preset } : appearance;
           check(metrics, sample, group, actualAppearance);
@@ -2074,6 +2077,10 @@ function selfCheck() {
   assert.equal(wheelInset(522.84375, 497.6875), 12);
   assert.equal(wheelInset(522.84375, 44), 16);
   assert.equal(wheelInset(200, 300), 8);
+  inputPlaceholders.check([{ textWidth: 80, available: 88 }]);
+  inputPlaceholders.check([]);
+  assert.throws(() => inputPlaceholders.check([{ textWidth: 80, available: 87 }]), /placeholder/);
+  assert.throws(() => inputPlaceholders.check([{ textWidth: Number.NaN, available: 88 }]), /finite/);
   return {
     passed: true,
     browserStarted: false,
@@ -2090,6 +2097,7 @@ function selfCheck() {
     priorEnlargedBoxNegatives: priorEnlargedBoxes.length,
     routeSpacingNegatives: 2,
     titleAlignmentNegatives: 7,
+    fieldPlaceholderNegatives: 2,
     releaseDigestPinned: Boolean(reviewedDigest),
     unpinnedLiveGuardChecked: !reviewedDigest,
   };

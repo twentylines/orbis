@@ -38,6 +38,8 @@ const inspectMonitorClamp = require('./monitor-clamp-checks.cjs');
 const inspectContainerNames = require('./container-name-checks.cjs');
 const inspectCompactCopy = require('./compact-copy-checks.cjs');
 const inspectSearchReading = require('./search-reading-checks.cjs');
+const inspectAuthFields = require('./auth-field-checks.cjs');
+const authFieldsOnly = process.env.ORBIS_VISUAL_AUTH_FIELDS_ONLY === '1';
 const searchReadingOnly = process.env.ORBIS_VISUAL_SEARCH_READING_ONLY === '1';
 const compactCopyOnly = process.env.ORBIS_VISUAL_COMPACT_COPY_ONLY === '1';
 const containerNamesOnly = process.env.ORBIS_VISUAL_CONTAINER_NAMES_ONLY === '1';
@@ -142,6 +144,7 @@ if (
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    authFieldsOnly ||
     searchReadingOnly ||
     compactCopyOnly ||
     containerNamesOnly ||
@@ -481,6 +484,7 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    authFieldsOnly ||
     searchReadingOnly ||
     compactCopyOnly ||
     containerNamesOnly ||
@@ -489,29 +493,31 @@ async function main() {
     hostSensorsOnly
       ? [
           {
-            name: searchReadingOnly
-              ? 'search-reading'
-              : compactCopyOnly
-                ? 'compact-copy'
-                : containerNamesOnly
-                  ? 'container-names'
-                  : hostSensorsOnly
-                    ? 'host-sensors'
-                    : monitorClampOnly
-                      ? 'monitor-clamp'
-                      : monitorRefreshOnly
-                        ? 'monitor-refresh'
-                        : cachedRetryOnly
-                          ? 'cached-retry'
-                          : hostHistoryOnly
-                            ? 'host-history'
-                            : hostProcessesOnly
-                              ? 'host-processes'
-                              : hostDevicesOnly
-                                ? 'host-devices'
-                                : systemModeOnly
-                                  ? 'system-mode'
-                                  : 'connection',
+            name: authFieldsOnly
+              ? 'auth-fields'
+              : searchReadingOnly
+                ? 'search-reading'
+                : compactCopyOnly
+                  ? 'compact-copy'
+                  : containerNamesOnly
+                    ? 'container-names'
+                    : hostSensorsOnly
+                      ? 'host-sensors'
+                      : monitorClampOnly
+                        ? 'monitor-clamp'
+                        : monitorRefreshOnly
+                          ? 'monitor-refresh'
+                          : cachedRetryOnly
+                            ? 'cached-retry'
+                            : hostHistoryOnly
+                              ? 'host-history'
+                              : hostProcessesOnly
+                                ? 'host-processes'
+                                : hostDevicesOnly
+                                  ? 'host-devices'
+                                  : systemModeOnly
+                                    ? 'system-mode'
+                                    : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -983,6 +989,17 @@ async function main() {
         capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
       });
       reports.push({ viewport: viewport.name, systemMode, errors });
+      await page.close();
+      continue;
+    }
+    if (authFieldsOnly) {
+      const authFields = await inspectAuthFields({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, authFields, errors });
       await page.close();
       continue;
     }
@@ -1671,6 +1688,7 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    authFieldsOnly ||
     searchReadingOnly ||
     compactCopyOnly ||
     containerNamesOnly ||
@@ -1689,6 +1707,7 @@ async function main() {
           (hostProcessesOnly && !report.hostProcesses?.passed) ||
           (hostHistoryOnly && !report.hostHistory?.passed) ||
           (cachedRetryOnly && !report.cachedRetry?.passed) ||
+          (authFieldsOnly && !report.authFields?.passed) ||
           (searchReadingOnly && !report.searchReading?.passed) ||
           (compactCopyOnly && !report.compactCopy?.passed) ||
           (containerNamesOnly && !report.containerNames?.passed) ||

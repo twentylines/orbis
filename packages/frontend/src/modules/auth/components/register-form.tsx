@@ -52,7 +52,7 @@ export const RegisterForm: React.FC<IProps> = ({ onSubmit, loading }) => {
           disabled={loading}
           type="email"
           className="mb-3"
-          placeholder={t('AUTH_FORM_EMAIL_PLACEHOLDER')}
+          autoComplete="username"
         />
         <Input
           {...register('password')}
@@ -61,7 +61,7 @@ export const RegisterForm: React.FC<IProps> = ({ onSubmit, loading }) => {
           disabled={loading}
           type="password"
           className="mb-3"
-          placeholder={t('AUTH_FORM_PASSWORD_PLACEHOLDER')}
+          autoComplete="new-password"
         />
         <Input
           {...register('passwordConfirm')}
@@ -70,7 +70,7 @@ export const RegisterForm: React.FC<IProps> = ({ onSubmit, loading }) => {
           disabled={loading}
           type="password"
           className="mb-3"
-          placeholder={t('AUTH_FORM_PASSWORD_CONFIRMATION_PLACEHOLDER')}
+          autoComplete="new-password"
         />
         <div className="form-footer">
           <Button loading={loading} type="submit" intent="primary" className="w-100">

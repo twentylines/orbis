@@ -48,7 +48,7 @@ export const LoginForm: React.FC<IProps> = ({ loading, onSubmit, loginType }) =>
           disabled={loading}
           type="email"
           className="mb-3"
-          placeholder={t('AUTH_FORM_EMAIL_PLACEHOLDER')}
+          autoComplete="username"
         />
         <Input
           {...register('password')}
@@ -58,7 +58,7 @@ export const LoginForm: React.FC<IProps> = ({ loading, onSubmit, loginType }) =>
           disabled={loading}
           type="password"
           className="mb-3 password-input"
-          placeholder={t('AUTH_FORM_PASSWORD_PLACEHOLDER')}
+          autoComplete="current-password"
         />
         <div className="form-footer">
           <Button disabled={isDisabled} loading={loading} type="submit" intent="primary" className="w-100">
