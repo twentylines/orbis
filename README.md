@@ -8,11 +8,13 @@ Orbis is currently in beta. Migration and recovery of a real homelab have not be
 
 ## Screenshots
 
-![Orbis Monitor on a disposable test server, beta46](screenshots/live-beta46/1440x1120-text1-initial-monitor-chrome-actual-viewport.png)
+![Orbis Monitor](screenshots/live-beta56/monitor.png)
 
-[Workspace](screenshots/live-beta41/1440x1120-text1-home-dark-actual-viewport.png) · [Phone workspace](screenshots/live-beta41/390x844-text1-home-dark-actual-viewport.png) · [Appearance](screenshots/live-beta41/1440x1120-text1-appearance-light-actual-viewport.png)
+[Workspace](screenshots/live-beta56/workspace.png) · [Applications](screenshots/live-beta56/applications.png) · [App Store](screenshots/live-beta56/app-store.png) · [Appearance](screenshots/live-beta56/appearance.png)
 
-These workspace and Appearance screenshots show beta41; the Monitor screenshot shows beta46.
+[Phone workspace](screenshots/live-beta56/phone-workspace.png) · [Phone App Store](screenshots/live-beta56/phone-app-store.png) · [Login](screenshots/live-beta56/phone-login.png)
+
+Beta56 on a disposable test server.
 
 ## Documentation
 
