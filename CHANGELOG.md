@@ -1,6 +1,6 @@
 # Orbis changelog
 
-## Unreleased — Backups
+## Beta58 — 21 October 2026
 
 - Include MIME detection and GNU tar in the runtime image. Verify binary contents, ownership, permissions and file/directory timestamps through an archive round trip during image builds.
 - Stage restores before replacing live directories; retain originals through commit and recover interrupted swaps before app operations or startup.

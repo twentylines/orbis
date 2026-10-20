@@ -1,6 +1,6 @@
 # App backups
 
-The restore changes below are in development builds. Check the release changelog for availability.
+The staged restore and interruption recovery described below require Orbis beta58 or later.
 
 Open **Apps → an app → Backups** to create, upload, download, restore or delete a backup. A backup contains the managed app data, installed app files and user configuration overrides. External bind mounts, Docker named volumes and media outside the app directory require separate backups.
 
