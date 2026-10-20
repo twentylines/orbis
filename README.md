@@ -1,58 +1,35 @@
 # Orbis
 
-Orbis is a server desktop built as a fork of Runtipi v4.10.1. It keeps the Runtipi app ecosystem and data layout while redesigning the workspace, application surfaces, monitoring, and appearance controls. A clean install, a disposable Whoami app lifecycle, migration from a synthetic stock CLI installation, and a browser-clicked core update have passed isolated Docker and browser tests. Migration of a real homelab and automated production updates remain unverified. **Do not replace a live Runtipi installation with this tree yet.**
+Orbis is a Runtipi fork for managing self-hosted apps, Docker resources and server updates from a browser. It uses Runtipi v4.10.1's app ecosystem and data layout.
 
-[Orbis on GitHub](https://github.com/twentylines/orbis) · [Beta previews](https://github.com/twentylines/orbis/releases) · [Development changelog](CHANGELOG.md)
+Orbis is currently in beta. Migration and recovery of a real homelab have not been validated.
 
-- [Releases and changelogs](https://github.com/twentylines/orbis/releases)
+[Releases and changelogs](https://github.com/twentylines/orbis/releases) · [Installation and migration](DEPLOYMENT.md) · [Licence](LICENSE)
+
+## Screenshots
+
+![Orbis Monitor on a disposable test server, beta46](screenshots/live-beta46/1440x1120-text1-initial-monitor-chrome-actual-viewport.png)
+
+[Workspace](screenshots/live-beta41/1440x1120-text1-home-dark-actual-viewport.png) · [Phone workspace](screenshots/live-beta41/390x844-text1-home-dark-actual-viewport.png) · [Appearance](screenshots/live-beta41/1440x1120-text1-appearance-light-actual-viewport.png)
+
+These workspace and Appearance screenshots show beta41; the Monitor screenshot shows beta46.
+
+## Documentation
+
 - [Installation and migration](DEPLOYMENT.md)
-- [Update Center](UPDATES.md)
+- [Orbis and system updates](UPDATES.md)
 - [Linux host service](HOST-SERVICE.md)
 - [App stores](APP-STORES.md)
 - [Monitoring](MONITORING.md)
 - [Desktop windows](DESKTOP-WINDOWS.md)
+- [Development changelog](CHANGELOG.md)
 
-![Published Orbis beta46 Monitor with real isolated host readings and translucent glass chrome](screenshots/live-beta46/1440x1120-text1-initial-monitor-chrome-actual-viewport.png)
+## Attribution
 
-[Actual CPU rankings](screenshots/live-beta43/1440x1120-text1-cpu-refreshed-actual-viewport.png) · [Tablet memory](screenshots/live-beta43/768x1024-text1-memory-actual-viewport.png) · [Doubled phone text](screenshots/live-beta43/320x800-text2-cpu-refreshed-actual-viewport.png) · [Beta43 inspection record](screenshots/live-beta43/README.md)
+Orbis is based on [Runtipi](https://github.com/runtipi/runtipi) and is distributed under the [GNU GPL v3](LICENSE). The original project information and contributor credits are preserved below. Its installation links are for stock Runtipi.
 
-The following workspace and Appearance captures record beta41:
-
-[Dark workspace](screenshots/live-beta41/1440x1120-text1-home-dark-actual-viewport.png) · [Phone workspace](screenshots/live-beta41/390x844-text1-home-light-actual-viewport.png) · [Phone in dark mode](screenshots/live-beta41/390x844-text1-home-dark-actual-viewport.png) · [Monitor](screenshots/live-beta41/1440x1120-text1-monitor-light-actual-viewport.png) · [Appearance](screenshots/live-beta41/1440x1120-text1-appearance-light-actual-viewport.png)
-
-[Tablet workspace](screenshots/desktop-fixtures/tablet-workspace.png) · [App workspace](screenshots/desktop-fixtures/desktop-app-detail.png) · [App resources](screenshots/desktop-fixtures/desktop-app-resources.png) · [Narrow app controls](screenshots/desktop-fixtures/narrow-app-detail.png) · [Search](screenshots/desktop-fixtures/desktop-search.png) · [Home app picker](screenshots/desktop-fixtures/desktop-dark-home-picker.png) · [All Home apps](screenshots/desktop-fixtures/desktop-dark-home-all-apps.png)
-
-[Updated Apps/Store spacing and enlarged text](screenshots/tile-comfort/README.md) · [Copied authenticator account over HTTPS](screenshots/authentication/README.md)
-
-[System status themes and rim-free chrome](screenshots/status-themes/README.md)
-
-[Responsive pages and corrected Settings alignment](screenshots/page-navigation/README.md)
-
-[Published beta36 status themes, window/layout measurements and fresh login](screenshots/live-beta36/README.md)
-
-[Published beta34 Settings/Store alignment, short-screen focus and fresh login](screenshots/live-beta34/README.md)
-
-[Floating tool](screenshots/windows/desktop-light-floating-settings.png) · [Dark floating tool](screenshots/windows/desktop-dark-floating-settings.png) · [Snapped tool](screenshots/windows/desktop-light-snap-left-settings.png) · [Maximized at4K](screenshots/windows/4k-dark-maximized-settings.png) · [Minimized tool](screenshots/windows/desktop-light-window-minimized.png)
-
-[Released beta 28 desktop](screenshots/live-beta28/workspace-desktop.png) · [Released phone workspace](screenshots/live-beta28/workspace-mobile.png) · [Released enlarged phone text](screenshots/live-beta28/workspace-text200-narrow.png) · [Released floating tool](screenshots/live-beta28/floating-settings.png) · [Released login](screenshots/live-beta28/login-mobile.png)
-
-[Beta 29 long-text checks](screenshots/live-beta29) · [320px update](screenshots/live-beta29/320-light-update-text-1-information.png) · [Enlarged app details](screenshots/live-beta29/320-dark-update-text-2-app-detail.png)
-
-[Published beta 30 text checks](screenshots/live-beta30) · [Enlarged tablet header](screenshots/live-beta30/768-dark-text2-home-reconnecting-controlled-events.png) · [Released phone search](screenshots/live-beta30/320-dark-text2-search-synchronization-controlled-metadata.png)
-
-[Published beta 31 recovery checks](screenshots/live-beta31) · [Removal error and retry](screenshots/live-beta31/readonly-repo-delete-error.png) · [Offline store error](screenshots/live-beta31/selective-enable-offline-error.png) · [Add-store retry](screenshots/live-beta31/invalid-first-clone.png)
-
-[Published beta 32 network recovery](screenshots/live-beta32) · [Pending request](screenshots/live-beta32/selective-enable-pending-390.png) · [Actual timeout](screenshots/live-beta32/selective-enable-timeout-390.png) · [Successful retry](screenshots/live-beta32/selective-enable-retry-success-390.png)
-
-[Whole words and nested forms](screenshots/text-compounds) · [Long phone server name](screenshots/text-compounds/mobile-light-heading-text200.png) · [Long search result](screenshots/text-compounds/narrow-light-search-text200.png) · [Keyboard-focused table action](screenshots/text-compounds/mobile-light-table-action-text200.png)
-
-[Enlarged text](screenshots/text-stress/narrow-light-text-home.png) · [Login](screenshots/themes/mobile-light-login.png) · [Expanded error details](screenshots/themes/desktop-dark-error-details.png) · [4K Settings](screenshots/themes/4k-dark-appearance.png) · [Themed notifications](screenshots/themes/narrow-frost-dark-notifications.png) · [Guest access](screenshots/themes/narrow-light-guest.png) · [Compose confirmation](screenshots/themes/narrow-light-discard-confirmation.png) · [Error recovery](screenshots/themes/narrow-light-error.png)
-
-[Two-factor fields](screenshots/themes/narrow-dark-two-factor.png) · [Enlarged code digits](screenshots/themes/narrow-light-two-factor-enlarged-digits.png)
-
-Source design screenshots use labelled development fixtures. Beta 32 captures use the published image and a real clone, paused-Git timeout and retry; appearance responses are local to the browser. Beta 31 captures use the published image and real store API failures, including a controlled offline Git fixture and read-only cache bind; appearance responses are local to the browser. Beta 30 captures use published HTML/assets and real connection/system/container reads, with controlled long metadata, appearance, later connection events, log lines and install state. Beta 29 captures use its published image with controlled long app metadata, diffs and browser appearance responses; system and container reads come from the real isolated server. Beta 28 captures show earlier real-API Home/window/login checks; recovery and two-factor captures use controlled responses. [Beta 22 window/search captures](screenshots/live-beta22) remain historical evidence. [Earlier beta 21](screenshots/live-beta21/workspace-desktop.png), [clean-install captures](screenshots/live-smoke/workspace.png) and [older beta 11 live captures](screenshots/live-beta11/monitor-mobile.png) remain available as historical deployment evidence.
-
-The original Runtipi project, licence, and contributor information follow for attribution. Its installation links install stock Runtipi, not Orbis.
+<details>
+<summary>Original Runtipi project information and contributors</summary>
 
 ## Runtipi — A personal homeserver for everyone
 
@@ -225,3 +202,5 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 
 Did you contribute and want to see your name listed in the README? Write a comment [here](https://github.com/runtipi/runtipi/issues/380)
 This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
+
+</details>
