@@ -200,7 +200,11 @@ export function CommandSearch() {
             aria-describedby={undefined}
             onOpenAutoFocus={(event) => {
               event.preventDefault();
-              input.current?.focus();
+              input.current?.focus({ preventScroll: true });
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              trigger.current?.focus({ preventScroll: true });
             }}
             onEscapeKeyDown={(event) => {
               event.preventDefault();

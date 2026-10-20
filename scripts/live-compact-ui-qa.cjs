@@ -14,9 +14,9 @@ const compactCopy = require('./compact-copy-checks.cjs');
 const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
 const dockerContext = 'colima-runtipi-test';
-const expectedTag = 'v0.1.0-beta.51';
-const reviewedCommit = '07dec2e9e8769edf8a1471f48c2bd72ef27437a4';
-const reviewedDigest = 'sha256:f85fd3e8d9ab565429e8340ba2a688941cc3ac0db563c7b8e4e99a4047abf7d7';
+const expectedTag = 'v0.1.0-beta.52';
+const reviewedCommit = '1f6707831f688bbba01d35fcc71c19344f40cddb';
+const reviewedDigest = 'sha256:9315dbb3ce0ab8c766de9107ce3cc980fbe950dc4a9a3357d86b2ab64171ca22';
 const readMethods = new Set(['GET', 'HEAD']);
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const samePrivate = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message);
@@ -233,9 +233,9 @@ async function scaleText(page, factor) {
   await dom.settle(page);
 }
 
-const releasePath = '/tmp/orbis-beta51-release-check-20261020.json';
-const baselinePath = '/tmp/orbis-beta51-after-ota-records.private.json';
-const goPath = '/tmp/orbis-beta51-compact-ui-go.private.json';
+const releasePath = '/tmp/orbis-beta52-release-check.json';
+const baselinePath = '/tmp/orbis-beta52-after-ota-records.private.json';
+const goPath = '/tmp/orbis-beta52-compact-ui-go.private.json';
 const baseUrl = 'http://127.0.0.1:18080';
 const recordKeys = ['preferences', 'installed', 'apps', 'stores', 'links', 'userContext', 'appContext'];
 const groups = [
@@ -327,16 +327,16 @@ function diagnosticError(error, secrets = []) {
 }
 
 function validateOptions(env, argv, digest) {
-  assert.match(digest || '', /^sha256:[a-f0-9]{64}$/, 'Reviewed beta51 digest is not pinned; live audit is disabled');
+  assert.match(digest || '', /^sha256:[a-f0-9]{64}$/, 'Reviewed beta52 digest is not pinned; live audit is disabled');
   assert.deepEqual(argv, ['--allow-owned-published-compact-ui'], 'Explicit owned published compact UI argument is required');
   assert.equal(env.ORBIS_ALLOW_LIVE_COMPACT_UI_AUDIT, '1', 'Explicit published compact UI opt-in is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta51 is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta52 is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_COMMIT || '', /^[a-f0-9]{40}$/, 'Exact reviewed full commit is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta51 commit is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta52 commit is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_DIGEST || '', /^sha256:[a-f0-9]{64}$/, 'Exact reviewed published digest is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_DIGEST, digest, 'Only the independently verified beta51 image index is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_DIGEST, digest, 'Only the independently verified beta52 image index is permitted');
   assert.equal(env.ORBIS_AUDIT_COOKIE_FILE, ownedCookieFile, 'Only the primary owned observer cookie jar is permitted');
-  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta51 release manifest is permitted');
+  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta52 release manifest is permitted');
   assert.equal(env.ORBIS_AUDIT_BASELINE_FILE, baselinePath, 'Only the independently captured post-OTA baseline is permitted');
   assert.equal(env.ORBIS_AUDIT_GO_FILE, goPath, 'Independent post-OTA GO proof is required');
   const origin = new URL(env.ORBIS_AUDIT_URL || baseUrl);
@@ -1012,11 +1012,20 @@ async function inspectModel(page, sample, group, appearance, shot, save, item) {
   await page.mouse.move(1, 1);
   item.model.passed = true;
 }
-async function search(page, shot) {
+async function search(page, shot, progress = () => undefined) {
   const trigger = page.locator('.desktop-search-trigger');
   await trigger.waitFor();
   const before = await measure(page, '.desktop-main');
-  await trigger.click();
+  const reading = { passed: false, before: before.scroll };
+  progress(reading);
+  const origin = await trigger.evaluate((button) => {
+    const r = button.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y = r.top + r.height / 2;
+    return { x, y, unobscured: document.elementFromPoint(x, y)?.closest('.desktop-search-trigger') === button };
+  });
+  assert.equal(origin.unobscured, true, 'The Search trigger must be visible at the current reading position');
+  await page.mouse.click(origin.x, origin.y);
   await page.locator('.desktop-search-surface').waitFor();
   await settled(page);
   assert.equal(
@@ -1025,6 +1034,8 @@ async function search(page, shot) {
     'Search must focus the actual input',
   );
   const opened = await measure(page, '.desktop-search-surface');
+  reading.open = opened.scroll;
+  progress(reading);
   const placeholder = await compactCopy.placeholder(page);
   compactCopy.checkPlaceholder(placeholder);
   assert.deepEqual(opened.words, [], 'Search ordinary words must remain whole');
@@ -1041,6 +1052,8 @@ async function search(page, shot) {
   await page.locator('.desktop-search-surface').waitFor({ state: 'detached' });
   await settled(page);
   const after = await measure(page, '.desktop-main');
+  reading.after = after.scroll;
+  progress(reading);
   assert.equal(await trigger.evaluate((element) => element === document.activeElement), true, 'Search Escape must restore its real trigger');
   for (const key of Object.keys(before.scroll))
     assert.ok(Math.abs(after.scroll[key] - before.scroll[key]) <= 1, 'Search close must preserve actual prior reading position');
@@ -1144,7 +1157,7 @@ async function main() {
     diagnosticFailures: [],
     cleanup: { groupContextsClosed: 0, anonymousContextsClosed: 0, readerClosed: false, browserClosed: false },
     scope: {
-      live: 'Actual immutable beta51 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
+      live: 'Actual immutable beta52 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
       controlled:
         'Browser OS colour media matches the saved fixed mode (light for system); one320 doubled-computed-text group; documents alone use route.fetch/fulfill for CSP connect-src adjustment. Assets and API GET/HEAD use native browser transport. No response body substitutions.',
       writes: 'Only GET/HEAD are forwarded. No login/logout, preference, reset, TOTP, refresh, installation or lifecycle mutations.',
@@ -1533,6 +1546,25 @@ async function main() {
         fs.chmodSync(file, 0o600);
         result.captures.push(path.basename(file));
       };
+      const finishImages = async () => {
+        await page.waitForFunction(
+          () =>
+            [...document.images].every((image) => {
+              const r = image.getBoundingClientRect();
+              return !r.width || !r.height || r.bottom <= 0 || r.top >= innerHeight || (image.complete && image.naturalWidth > 0);
+            }),
+          null,
+          { timeout: 15000 },
+        );
+        const deadline = Date.now() + 15000;
+        while ([...pending.values()].some((request) => request.kind === 'image') && Date.now() < deadline) await page.waitForTimeout(100);
+        assert.equal(
+          [...pending.values()].some((request) => request.kind === 'image'),
+          false,
+          'Retain route until every requested image finishes',
+        );
+        await Promise.all(jobs);
+      };
       try {
         for (const sample of samples) {
           stage = `${groupName}-${sample.name}`;
@@ -1551,6 +1583,7 @@ async function main() {
           await settled(page);
           await scaleText(page, group.textScale);
           await settled(page);
+          await finishImages();
           const item = { name: sample.name, path: sample.path, passed: false };
           result.samples.push(item);
           const metrics = await measure(page, sample.root);
@@ -1578,7 +1611,14 @@ async function main() {
           if (item.focus.checked) await shot(`${sample.name}-native-focus`);
           if (sample.name === 'home') {
             item.usage = await homeUsage(page, (name) => shot(`${sample.name}-${name}`));
-            result.search = await search(page, (name) => shot(`${sample.name}-${name}`));
+            result.search = await search(
+              page,
+              (name) => shot(`${sample.name}-${name}`),
+              (value) => {
+                result.search = value;
+                save();
+              },
+            );
           }
           if (sample.name === 'monitor') {
             const lower = page.locator('#host-sensors-title');
@@ -1587,23 +1627,7 @@ async function main() {
             await shot(`${sample.name}-lower-reading`);
             if (group.refresh) await refresh(page, (name) => shot(`${sample.name}-${name}`), save, result);
           }
-          await page.waitForFunction(
-            () =>
-              [...document.images].every((image) => {
-                const r = image.getBoundingClientRect();
-                return !r.width || !r.height || r.bottom <= 0 || r.top >= innerHeight || (image.complete && image.naturalWidth > 0);
-              }),
-            null,
-            { timeout: 15000 },
-          );
-          const imageDeadline = Date.now() + 15000;
-          while ([...pending.values()].some((request) => request.kind === 'image') && Date.now() < imageDeadline) await page.waitForTimeout(100);
-          assert.equal(
-            [...pending.values()].some((request) => request.kind === 'image'),
-            false,
-            'Retain route until every requested image finishes',
-          );
-          await Promise.all(jobs);
+          await finishImages();
           item.imagesFinishedBeforeNavigation = true;
           item.passed = true;
           save();
@@ -2008,4 +2032,4 @@ if (require.main === module) {
       process.exitCode = 1;
     });
 }
-module.exports = { main, selfCheck };
+module.exports = { main, selfCheck, browser: { scaleText, restoreText, wheelVisible, settled } };

@@ -37,6 +37,8 @@ const inspectMonitorRefresh = require('./monitor-refresh-checks.cjs');
 const inspectMonitorClamp = require('./monitor-clamp-checks.cjs');
 const inspectContainerNames = require('./container-name-checks.cjs');
 const inspectCompactCopy = require('./compact-copy-checks.cjs');
+const inspectSearchReading = require('./search-reading-checks.cjs');
+const searchReadingOnly = process.env.ORBIS_VISUAL_SEARCH_READING_ONLY === '1';
 const compactCopyOnly = process.env.ORBIS_VISUAL_COMPACT_COPY_ONLY === '1';
 const containerNamesOnly = process.env.ORBIS_VISUAL_CONTAINER_NAMES_ONLY === '1';
 const monitorClampOnly = process.env.ORBIS_VISUAL_MONITOR_CLAMP_ONLY === '1';
@@ -140,6 +142,7 @@ if (
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    searchReadingOnly ||
     compactCopyOnly ||
     containerNamesOnly ||
     monitorClampOnly ||
@@ -478,6 +481,7 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    searchReadingOnly ||
     compactCopyOnly ||
     containerNamesOnly ||
     monitorClampOnly ||
@@ -485,27 +489,29 @@ async function main() {
     hostSensorsOnly
       ? [
           {
-            name: compactCopyOnly
-              ? 'compact-copy'
-              : containerNamesOnly
-                ? 'container-names'
-                : hostSensorsOnly
-                  ? 'host-sensors'
-                  : monitorClampOnly
-                    ? 'monitor-clamp'
-                    : monitorRefreshOnly
-                      ? 'monitor-refresh'
-                      : cachedRetryOnly
-                        ? 'cached-retry'
-                        : hostHistoryOnly
-                          ? 'host-history'
-                          : hostProcessesOnly
-                            ? 'host-processes'
-                            : hostDevicesOnly
-                              ? 'host-devices'
-                              : systemModeOnly
-                                ? 'system-mode'
-                                : 'connection',
+            name: searchReadingOnly
+              ? 'search-reading'
+              : compactCopyOnly
+                ? 'compact-copy'
+                : containerNamesOnly
+                  ? 'container-names'
+                  : hostSensorsOnly
+                    ? 'host-sensors'
+                    : monitorClampOnly
+                      ? 'monitor-clamp'
+                      : monitorRefreshOnly
+                        ? 'monitor-refresh'
+                        : cachedRetryOnly
+                          ? 'cached-retry'
+                          : hostHistoryOnly
+                            ? 'host-history'
+                            : hostProcessesOnly
+                              ? 'host-processes'
+                              : hostDevicesOnly
+                                ? 'host-devices'
+                                : systemModeOnly
+                                  ? 'system-mode'
+                                  : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -834,6 +840,17 @@ async function main() {
         capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
       });
       reports.push({ viewport: viewport.name, hostSensors, errors });
+      await page.close();
+      continue;
+    }
+    if (searchReadingOnly) {
+      const searchReading = await inspectSearchReading({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, searchReading, errors });
       await page.close();
       continue;
     }
@@ -1654,6 +1671,7 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    searchReadingOnly ||
     compactCopyOnly ||
     containerNamesOnly ||
     monitorClampOnly ||
@@ -1671,6 +1689,7 @@ async function main() {
           (hostProcessesOnly && !report.hostProcesses?.passed) ||
           (hostHistoryOnly && !report.hostHistory?.passed) ||
           (cachedRetryOnly && !report.cachedRetry?.passed) ||
+          (searchReadingOnly && !report.searchReading?.passed) ||
           (compactCopyOnly && !report.compactCopy?.passed) ||
           (containerNamesOnly && !report.containerNames?.passed) ||
           (monitorClampOnly && !report.monitorClamp?.passed) ||
