@@ -772,6 +772,24 @@ function checkRouteSpacing(value, sample) {
   if (value.stackedMachineClearance)
     assert.ok(value.stackedMachineClearance.gap >= 16, 'All transformed model faces must clear the full readings copy by16px');
 }
+function checkTitleAlignment(value, desktop) {
+  const { icon, label } = value.titleAlignment || {};
+  if (!icon || !label) return;
+  const heading = value.heading;
+  for (const item of [icon, label]) {
+    assert.ok(item.left >= heading.box.left + heading.padding[3] - 1, 'Title content must retain its left padding');
+    assert.ok(item.right <= heading.box.right - heading.padding[1] + 1, 'Title content must retain its right padding');
+    assert.ok(item.bottom <= heading.box.bottom - heading.padding[2] + 1, 'Title divider must sit below the icon and complete label');
+  }
+  if (label.top >= icon.bottom) {
+    assert.equal(desktop, false, 'Only compact page headings may stack');
+    assert.ok(Math.abs(icon.left - label.left) <= 1, 'Stacked title icon and label must share a gutter');
+    assert.ok(label.top - icon.bottom >= 12, 'Stacked title rows must retain12px breathing room');
+  } else {
+    assert.ok(Math.abs(icon.cy - label.cy) <= 1, 'Inline title icon and label must share a centre');
+    assert.ok(label.left - icon.right >= 11, 'Inline title icon and label must retain12px breathing room');
+  }
+}
 function check(value, sample, group, appearance) {
   assert.ok(value.documentWidth <= group.width, 'Published page must not overflow horizontally');
   assert.deepEqual(value.words, [], 'Ordinary words must not fracture into orphan fragments');
@@ -805,8 +823,7 @@ function check(value, sample, group, appearance) {
       assert.ok(value.heading.blur.includes('blur(28px)'), 'Desktop titlebar must use shared28px glass');
       assert.ok(alpha(value.heading.background) > 0 && alpha(value.heading.background) < 1, 'Desktop titlebar must remain translucent');
     }
-    if (value.titleAlignment?.icon && value.titleAlignment?.label)
-      assert.ok(Math.abs(value.titleAlignment.icon.cy - value.titleAlignment.label.cy) <= 1, 'Page/title icon and label must share a centre');
+    checkTitleAlignment(value, desktop);
   }
   for (const item of [value.bar, value.dock].filter(Boolean)) {
     assert.ok(item.blur.includes('blur(28px)'), 'System bar/dock must preserve shared28px blur');
@@ -2005,6 +2022,48 @@ function selfCheck() {
     checkRouteSpacing({ ...spacing, applicationCardFit: { ...spacing.applicationCardFit, card: { bottom: 688.5 } } }, { name: 'updates' }),
   );
   assert.throws(() => checkRouteSpacing({ ...spacing, stackedMachineClearance: { gap: -12.245635 } }, { name: 'monitor' }));
+  const stackedTitle = {
+    heading: { box: { left: 25, right: 295, bottom: 272.796875 }, padding: [16, 20, 16, 20] },
+    titleAlignment: {
+      icon: { left: 45, right: 77, top: 165, bottom: 197, cy: 181 },
+      label: { left: 45, right: 275, top: 209, bottom: 255.796875, cy: 232.3984375 },
+    },
+  };
+  checkTitleAlignment(stackedTitle, false);
+  assert.throws(() => checkTitleAlignment(stackedTitle, true));
+  for (const change of [
+    (value) => {
+      value.titleAlignment.label.left += 8;
+    },
+    (value) => {
+      value.titleAlignment.label.top = 198;
+    },
+    (value) => {
+      value.titleAlignment.label.right = 290;
+    },
+    (value) => {
+      value.heading.box.bottom = 250;
+    },
+  ]) {
+    const altered = structuredClone(stackedTitle);
+    change(altered);
+    assert.throws(() => checkTitleAlignment(altered, false));
+  }
+  const inlineTitle = structuredClone(stackedTitle);
+  inlineTitle.titleAlignment.label = { left: 89, right: 275, top: 165, bottom: 197, cy: 181 };
+  checkTitleAlignment(inlineTitle, true);
+  for (const change of [
+    (value) => {
+      value.titleAlignment.label.cy += 8;
+    },
+    (value) => {
+      value.titleAlignment.label.left = 78;
+    },
+  ]) {
+    const altered = structuredClone(inlineTitle);
+    change(altered);
+    assert.throws(() => checkTitleAlignment(altered, true));
+  }
   return {
     passed: true,
     browserStarted: false,
@@ -2020,6 +2079,7 @@ function selfCheck() {
     originalLoggerAnsiNegativeReproduced: true,
     priorEnlargedBoxNegatives: priorEnlargedBoxes.length,
     routeSpacingNegatives: 2,
+    titleAlignmentNegatives: 7,
     releaseDigestPinned: Boolean(reviewedDigest),
     unpinnedLiveGuardChecked: !reviewedDigest,
   };
@@ -2032,4 +2092,4 @@ if (require.main === module) {
       process.exitCode = 1;
     });
 }
-module.exports = { main, selfCheck, browser: { scaleText, restoreText, wheelVisible, settled } };
+module.exports = { main, selfCheck, checkTitleAlignment, browser: { scaleText, restoreText, wheelVisible, settled } };
