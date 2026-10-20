@@ -349,6 +349,34 @@ body:has(.orbis-theme) .btn-danger {
   --tblr-btn-hover-bg: color-mix(in srgb, var(--desktop-danger-fill) 90%, var(--desktop-danger-ink));
   --tblr-btn-hover-border-color: var(--desktop-danger-fill);
   --tblr-btn-hover-color: var(--desktop-danger-ink);
+  --tblr-btn-active-bg: color-mix(in srgb, var(--desktop-danger-fill) 82%, var(--desktop-danger-ink));
+  --tblr-btn-active-border-color: var(--desktop-danger-fill);
+  --tblr-btn-active-color: var(--desktop-danger-ink);
+  --tblr-btn-disabled-bg: var(--desktop-danger-fill);
+  --tblr-btn-disabled-border-color: var(--desktop-danger-fill);
+  --tblr-btn-disabled-color: var(--desktop-danger-ink);
+}
+body:has(.orbis-theme) :is(.btn-outline-danger, .btn-ghost-danger) {
+  --tblr-btn-bg: transparent;
+  --tblr-btn-color: var(--desktop-negative);
+  --tblr-btn-disabled-bg: transparent;
+  --tblr-btn-disabled-color: var(--desktop-negative);
+  --tblr-btn-box-shadow: none;
+}
+body:has(.orbis-theme) .btn-outline-danger {
+  --tblr-btn-border-color: var(--desktop-negative);
+  --tblr-btn-disabled-border-color: var(--desktop-negative);
+}
+body:has(.orbis-theme) .btn-ghost-danger {
+  --tblr-btn-border-color: transparent;
+  --tblr-btn-hover-bg: color-mix(in srgb, var(--desktop-negative) 12%, transparent);
+  --tblr-btn-hover-border-color: transparent;
+  --tblr-btn-hover-color: var(--desktop-negative);
+  --tblr-btn-active-bg: color-mix(in srgb, var(--desktop-negative) 18%, transparent);
+  --tblr-btn-active-border-color: transparent;
+  --tblr-btn-active-color: var(--desktop-negative);
+  --tblr-btn-active-shadow: none;
+  --tblr-btn-disabled-border-color: transparent;
 }
 body:has(.orbis-theme) .alert {
   --orbis-alert-color: var(--desktop-muted);
