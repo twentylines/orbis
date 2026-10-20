@@ -24,6 +24,7 @@ Development backup views with sample data: [Desktop](screenshots/backups/desktop
 - [Orbis and system updates](UPDATES.md)
 - [Linux host service](HOST-SERVICE.md)
 - [App stores](APP-STORES.md)
+- [App backups](BACKUPS.md)
 - [Monitoring](MONITORING.md)
 - [Desktop windows](DESKTOP-WINDOWS.md)
 - [Development changelog](CHANGELOG.md)

@@ -6,6 +6,7 @@ import type { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import type { LoggerService } from '@/core/logger/logger.service';
 import type { AppFilesManager } from '@/modules/apps/app-files-manager';
+import type { AppsRepository } from '@/modules/apps/apps.repository';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackupManager } from '../backup.manager';
 
@@ -19,6 +20,8 @@ describe('BackupManager real files and archives', () => {
   let filesystem: FilesystemService;
   let archive: ArchiveService;
   let manager: BackupManager;
+  let apps: AppFilesManager;
+  let repository: AppsRepository;
 
   const write = async (file: string, content: string | Buffer) => {
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
@@ -35,8 +38,12 @@ describe('BackupManager real files and archives', () => {
     filesystem = new FilesystemService(logger);
     archive = new ArchiveService(logger);
     const config = { get: () => ({ dataDir: path.join(root, 'data') }) } as unknown as ConfigurationService;
-    const apps = { getAppPaths: () => ({ appDataDir, appInstalledDir }) } as unknown as AppFilesManager;
-    manager = new BackupManager(archive, logger, config, filesystem, apps);
+    apps = {
+      getAppPaths: () => ({ appDataDir, appInstalledDir }),
+      getInstalledAppInfo: vi.fn(async () => ({ tipi_version: Number(await fs.promises.readFile(path.join(appInstalledDir, 'version'), 'utf8')) })),
+    } as unknown as AppFilesManager;
+    repository = { getAppByUrn: vi.fn().mockResolvedValue(null), updateAppById: vi.fn() } as unknown as AppsRepository;
+    manager = new BackupManager(archive, logger, config, filesystem, apps, repository);
     vi.spyOn(filesystem, 'createTempDirectory').mockImplementation((prefix) => fs.promises.mkdtemp(path.join(root, path.basename(prefix))));
     await write(path.join(appDataDir, 'data', 'record'), 'original data\n');
     await write(path.join(appInstalledDir, 'docker-compose.yml'), 'services: {}\n');
@@ -71,6 +78,98 @@ describe('BackupManager real files and archives', () => {
     expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('original data\n');
     expect(await fs.promises.readFile(path.join(appInstalledDir, 'docker-compose.yml'), 'utf8')).toBe('services: {}\n');
     expect(await fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).toBe('SETTING=original\n');
+  });
+
+  const savedBackupWithNewerLiveFiles = async () => {
+    await manager.backupApp(appUrn);
+    const [saved] = await manager.listBackupsByAppId(appUrn);
+    if (!saved) throw new Error('Expected a saved backup');
+    await write(path.join(appDataDir, 'data', 'record'), 'newer live data\n');
+    await write(path.join(appInstalledDir, 'docker-compose.yml'), 'newer live app\n');
+    await write(path.join(userConfigDir, 'app.env'), 'SETTING=newer\n');
+    return saved;
+  };
+
+  const expectNewerLiveFiles = async () => {
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('newer live data\n');
+    expect(await fs.promises.readFile(path.join(appInstalledDir, 'docker-compose.yml'), 'utf8')).toBe('newer live app\n');
+    expect(await fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).toBe('SETTING=newer\n');
+  };
+
+  it.each(['app-data', 'app', 'user-config'])('preserves all live directories when the restored %s copy fails', async (group) => {
+    const saved = await savedBackupWithNewerLiveFiles();
+    const rename = fs.promises.rename.bind(fs.promises);
+    vi.spyOn(fs.promises, 'rename').mockImplementation(async (source, destination) => {
+      if (String(source).endsWith(`/extracted/${group}`) && String(destination).endsWith('/incoming'))
+        throw Object.assign(new Error('Cross-device restore staging'), { code: 'EXDEV' });
+      await rename(source, destination);
+    });
+    const copy = filesystem.copyDirectory.bind(filesystem);
+    vi.spyOn(filesystem, 'copyDirectory').mockImplementation((source, destination, options) =>
+      source.endsWith(`/${group}`) ? Promise.resolve(false) : copy(source, destination, options),
+    );
+    await expect(manager.restoreApp(appUrn, saved.id)).rejects.toThrow();
+    await expectNewerLiveFiles();
+    expect((await manager.listBackupsByAppId(appUrn)).map((backup) => backup.id)).toEqual([saved.id]);
+  });
+
+  it('moves extracted files into same-filesystem staging without copying the app data a second time', async () => {
+    const saved = await savedBackupWithNewerLiveFiles();
+    const copy = vi.spyOn(filesystem, 'copyDirectory');
+    await manager.restoreApp(appUrn, saved.id);
+    expect(copy).not.toHaveBeenCalled();
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('original data\n');
+    expect(await manager.getPendingRestores()).toEqual([]);
+  });
+
+  it('copies and commits the full restored directories when staging crosses a filesystem boundary', async () => {
+    const saved = await savedBackupWithNewerLiveFiles();
+    const rename = fs.promises.rename.bind(fs.promises);
+    vi.spyOn(fs.promises, 'rename').mockImplementation(async (source, destination) => {
+      if (String(source).includes('/extracted/') && String(destination).endsWith('/incoming'))
+        throw Object.assign(new Error('Cross-device restore staging'), { code: 'EXDEV' });
+      await rename(source, destination);
+    });
+    const copy = vi.spyOn(filesystem, 'copyDirectory');
+    await manager.restoreApp(appUrn, saved.id);
+    expect(copy).toHaveBeenCalledTimes(3);
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('original data\n');
+    expect(await fs.promises.readFile(path.join(appInstalledDir, 'docker-compose.yml'), 'utf8')).toBe('services: {}\n');
+    expect(await fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).toBe('SETTING=original\n');
+    expect(await manager.getPendingRestores()).toEqual([]);
+  });
+
+  it('rejects extraction errors even when the extracted directories look complete', async () => {
+    const saved = await savedBackupWithNewerLiveFiles();
+    const extract = archive.extractTarGz.bind(archive);
+    vi.spyOn(archive, 'extractTarGz').mockImplementation(async (source, destination) => {
+      await extract(source, destination);
+      return { stdout: '', stderr: 'No space left on device' };
+    });
+    await expect(manager.restoreApp(appUrn, saved.id)).rejects.toThrow();
+    await expectNewerLiveFiles();
+  });
+
+  it('reconciles restored version and stopped status before removing the committed recovery journal', async () => {
+    await write(path.join(appInstalledDir, 'version'), '7');
+    const saved = await savedBackupWithNewerLiveFiles();
+    await write(path.join(appInstalledDir, 'version'), '8');
+    vi.mocked(repository.getAppByUrn).mockResolvedValue({ id: 42 } as never);
+    vi.mocked(repository.updateAppById).mockRejectedValueOnce(new Error('Database unavailable'));
+    await expect(manager.restoreApp(appUrn, saved.id)).rejects.toThrow('Database unavailable');
+    expect(await manager.getPendingRestores()).toEqual([appUrn]);
+    expect(await fs.promises.readFile(path.join(appInstalledDir, 'version'), 'utf8')).toBe('7');
+    expect(repository.updateAppById).toHaveBeenCalledExactlyOnceWith(42, { status: 'stopped', version: 7 });
+    await manager.recoverRestore(appUrn);
+    expect(repository.updateAppById).toHaveBeenNthCalledWith(2, 42, { status: 'stopped', version: 7 });
+    expect(await manager.getPendingRestores()).toEqual([]);
+    expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('original data\n');
+  });
+
+  it.each(['missing.tar.gz', '../outside.tar.gz'])('does not leak extraction staging for unavailable backup %s', async (filename) => {
+    const before = (await fs.promises.readdir(root)).sort();
+    await expect(manager.restoreApp(appUrn, filename)).rejects.toThrow();
+    expect((await fs.promises.readdir(root)).sort()).toEqual(before);
   });
 
   it.each(['data', 'app', 'user-config'])('does not publish a backup after a failed %s copy', async (group) => {

@@ -37,8 +37,9 @@ export class AppService {
   ) {}
 
   public async bootstrap() {
+    await this.databaseService.migrate();
+    await this.appLifecycleService.recoverInterruptedRestores();
     try {
-      await this.databaseService.migrate();
       await this.docker.pruneNetworks();
 
       const { version, userSettings, __prod__ } = this.configuration.getConfig();

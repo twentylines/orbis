@@ -11,16 +11,44 @@ import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
 import { AppFilesManager } from '../apps/app-files-manager';
+import { AppsRepository } from '../apps/apps.repository';
+import { RestoreTransaction, preserveTreeMetadata } from './restore-transaction';
 
 @Injectable()
 export class BackupManager {
+  private readonly restoreTransaction: RestoreTransaction;
+
   constructor(
     private readonly archiveManager: ArchiveService,
     private readonly logger: LoggerService,
     private readonly config: ConfigurationService,
     private readonly filesystem: FilesystemService,
     private readonly appFilesManager: AppFilesManager,
-  ) {}
+    appsRepository: AppsRepository,
+  ) {
+    this.restoreTransaction = new RestoreTransaction(
+      filesystem,
+      logger,
+      () => path.join(config.get('directories').dataDir, 'state', 'app-restores'),
+      (appUrn) => {
+        const { appDataDir, appInstalledDir } = appFilesManager.getAppPaths(appUrn);
+        return { 'app-data': appDataDir, app: appInstalledDir, 'user-config': this.getBackupPaths(appUrn).userConfigDir };
+      },
+      async (appUrn) => {
+        const app = await appsRepository.getAppByUrn(appUrn);
+        if (!app) return;
+        const installed = await appFilesManager.getInstalledAppInfo(appUrn);
+        await appsRepository.updateAppById(app.id, {
+          status: 'stopped',
+          ...(typeof installed?.tipi_version === 'number' ? { version: installed.tipi_version } : {}),
+        });
+      },
+    );
+  }
+
+  public getPendingRestores = () => this.restoreTransaction.pendingApps();
+  public hasPendingRestore = (appUrn: AppUrn) => this.restoreTransaction.isPending(appUrn);
+  public recoverRestore = (appUrn: AppUrn) => this.restoreTransaction.recover(appUrn);
 
   private getBackupPaths(appUrn: AppUrn) {
     const { dataDir } = this.config.get('directories');
@@ -56,6 +84,7 @@ export class BackupManager {
   }
 
   public backupApp = async (appUrn: AppUrn) => {
+    if (await this.hasPendingRestore(appUrn)) throw new Error('Recover the interrupted restore before creating another backup');
     const { appName, appStoreId, backupDir, userConfigDir } = this.getBackupPaths(appUrn);
     const backupName = `${appName}-${appStoreId}-${Date.now()}-${randomUUID()}`;
 
@@ -86,6 +115,8 @@ export class BackupManager {
       if (!(await this.filesystem.copyDirectory(appInstalledDir, path.join(contentDir, 'app')))) {
         throw new Error('App files could not be copied into the backup');
       }
+      await preserveTreeMetadata(appDataDir, path.join(contentDir, 'app-data'));
+      await preserveTreeMetadata(appInstalledDir, path.join(contentDir, 'app'));
 
       const userConfig = await fs.promises.lstat(this.filesystem.getSafeFilePath(userConfigDir)).catch((error: NodeJS.ErrnoException) => {
         if (error.code === 'ENOENT') return null;
@@ -96,6 +127,7 @@ export class BackupManager {
         if (!(await this.filesystem.copyDirectory(userConfigDir, path.join(contentDir, 'user-config')))) {
           throw new Error('User configuration could not be copied into the backup');
         }
+        await preserveTreeMetadata(userConfigDir, path.join(contentDir, 'user-config'));
       } else if (userConfig) {
         throw new Error('User configuration is not a readable directory');
       }
@@ -137,14 +169,7 @@ export class BackupManager {
   };
 
   public restoreApp = async (appUrn: AppUrn, filename: string) => {
-    const restoreDir = await this.filesystem.createTempDirectory(appUrn);
-
-    if (!restoreDir) {
-      throw new Error('Failed to create temp directory');
-    }
-
     const { backupDir, backupPath: archive } = this.getBackupFilePath(appUrn, filename);
-    const { userConfigDir } = this.getBackupPaths(appUrn);
 
     if (!archive.startsWith(backupDir)) {
       throw new Error('Invalid backup file path');
@@ -157,17 +182,14 @@ export class BackupManager {
       throw new Error('The backup file does not exist');
     }
 
-    // Unzip the archive
-    await this.filesystem.createDirectory(restoreDir);
-
-    try {
-      this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(archive));
-
+    this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(archive));
+    await this.restoreTransaction.replace(appUrn, async (restoreDir) => {
       this.logger.info('Extracting archive...');
       const { stderr, stdout } = await this.archiveManager.extractTarGz(archive, restoreDir);
       this.logger.debug('--- archiveManager.extractTarGz ---');
       this.logger.debug('stderr:', stderr);
       this.logger.debug('stdout:', stdout);
+      if (stderr.trim()) throw new Error('The backup archive could not be extracted completely');
 
       const runValidationFsOperation = pLimit(16);
 
@@ -189,27 +211,12 @@ export class BackupManager {
         runValidationFsOperation,
       );
 
-      const { appInstalledDir, appDataDir } = this.appFilesManager.getAppPaths(appUrn);
-
-      // Remove old data directories
-      await this.filesystem.removeDirectory(appDataDir);
-      await this.filesystem.removeDirectory(appInstalledDir);
-      await this.filesystem.removeDirectory(userConfigDir);
-
-      await this.filesystem.createDirectory(appDataDir);
-      await this.filesystem.createDirectory(appInstalledDir);
-      await this.filesystem.createDirectory(userConfigDir);
-
-      // Copy data from the backup folder
-      await this.filesystem.copyDirectory(path.join(restoreDir, 'app-data'), appDataDir);
-      await this.filesystem.copyDirectory(path.join(restoreDir, 'app'), appInstalledDir);
-
-      if (await this.filesystem.isDirectory(path.join(restoreDir, 'user-config'))) {
-        await this.filesystem.copyDirectory(path.join(restoreDir, 'user-config'), userConfigDir);
-      }
-    } finally {
-      await this.filesystem.removeDirectory(restoreDir);
-    }
+      return {
+        'app-data': path.join(restoreDir, 'app-data'),
+        app: path.join(restoreDir, 'app'),
+        'user-config': (await this.filesystem.isDirectory(path.join(restoreDir, 'user-config'))) ? path.join(restoreDir, 'user-config') : null,
+      };
+    });
   };
 
   private validateRestoreArchiveEntries(entries: ArchiveEntry[]) {

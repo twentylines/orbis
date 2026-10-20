@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { DOCKERODE } from '@/modules/docker/docker.module';
 import { AppStatusSyncService } from '@/modules/app-lifecycle/app-status-sync.service';
+import { AppLifecycleService } from '@/modules/app-lifecycle/app-lifecycle.service';
 import YAML from 'yaml';
 
 const TRAEFIK_CONFIG = `api:
@@ -41,6 +42,7 @@ describe('AppService', () => {
   let configurationService = mock<ConfigurationService>();
   let githubService = mock<GithubService>();
   let appStatusSyncService = mock<AppStatusSyncService>();
+  let appLifecycleService = mock<AppLifecycleService>();
 
   beforeEach(async () => {
     const docker = { pruneNetworks: vi.fn() };
@@ -55,13 +57,14 @@ describe('AppService', () => {
         },
       ],
     })
-      .useMocker(mock)
+      .useMocker(() => mock())
       .compile();
 
     appService = moduleRef.get(AppService);
     configurationService = moduleRef.get(ConfigurationService);
     githubService = moduleRef.get(GithubService);
     appStatusSyncService = moduleRef.get(AppStatusSyncService);
+    appLifecycleService = moduleRef.get(AppLifecycleService);
   });
 
   it('reconciles persisted application states before serving the dashboard', async () => {
@@ -74,6 +77,14 @@ describe('AppService', () => {
     await appService.bootstrap();
 
     expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
+    expect(appLifecycleService.recoverInterruptedRestores).toHaveBeenCalledBefore(appStatusSyncService.syncAllAppStatuses);
+  });
+
+  it('fails startup before normal app activity if interrupted restore recovery fails', async () => {
+    appLifecycleService.recoverInterruptedRestores.mockRejectedValue(new Error('Restore recovery requires available storage'));
+    await expect(appService.bootstrap()).rejects.toThrow('Restore recovery requires available storage');
+    expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+    expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
   });
 
   describe('getVersion', () => {

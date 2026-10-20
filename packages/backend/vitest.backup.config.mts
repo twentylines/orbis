@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [swc.vite(), viteTsconfigPaths() as unknown] as Plugin[],
   test: {
     maxWorkers: 1,
-    include: ['src/modules/backups/__tests__/backup.manager.files.test.ts'],
+    include: ['src/modules/backups/__tests__/*.files.test.ts'],
     reporters: ['default'],
   },
 });

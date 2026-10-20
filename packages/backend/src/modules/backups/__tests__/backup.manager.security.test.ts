@@ -7,6 +7,7 @@ import type { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import type { LoggerService } from '@/core/logger/logger.service';
 import type { AppFilesManager } from '@/modules/apps/app-files-manager';
+import type { AppsRepository } from '@/modules/apps/apps.repository';
 import type { AppUrn } from '@runtipi/common/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackupManager } from '../backup.manager';
@@ -34,7 +35,7 @@ describe('BackupManager file security', () => {
       get: vi.fn().mockReturnValue({ dataDir: DATA_DIR }),
     } as unknown as ConfigurationService;
 
-    manager = new BackupManager({} as ArchiveService, logger, config, new FilesystemService(logger), {} as AppFilesManager);
+    manager = new BackupManager({} as ArchiveService, logger, config, new FilesystemService(logger), {} as AppFilesManager, {} as AppsRepository);
   });
 
   it('does not return backup paths for symlink targets', async () => {
@@ -107,7 +108,8 @@ describe('BackupManager restore security', () => {
     await fs.promises.mkdir(userConfigDir, { recursive: true });
     await fs.promises.writeFile(path.join(userConfigDir, 'app.env'), 'EXISTING=true\n');
 
-    backupManager = new BackupManager(archiveManager, logger, config, filesystem, appFilesManager);
+    const repository = { getAppByUrn: vi.fn().mockResolvedValue(null) } as unknown as AppsRepository;
+    backupManager = new BackupManager(archiveManager, logger, config, filesystem, appFilesManager, repository);
   });
 
   afterEach(async () => {

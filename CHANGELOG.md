@@ -2,6 +2,9 @@
 
 ## Unreleased — Backups
 
+- Stage restores before replacing live directories; retain originals through commit and recover interrupted swaps before app operations or startup.
+- Preserve file ownership, modes and timestamps in backup copies. Keep committed recovery state until the database version and stopped state are reconciled.
+- Track partial extraction for cleanup and avoid copying app data twice when staging is on the same filesystem. Reject incomplete extraction and copy failures.
 - Reflow backup filenames, dates, sizes and actions on narrow screens. Keep long filenames readable and size units together.
 - Show the selected backup separately from restore/delete warnings. Scroll long dialog content while keeping the heading and action visible.
 

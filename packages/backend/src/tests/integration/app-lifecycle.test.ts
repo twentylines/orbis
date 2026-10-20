@@ -60,6 +60,7 @@ describe('App lifecycle', () => {
   let appsRepository: AppsRepository;
   let filesystemService: FilesystemService;
   let appFilesManager: AppFilesManager;
+  let backupManager: BackupManager;
   const configurationService = mock<ConfigurationService>();
   let databaseService = mock<DatabaseService>();
   const dockerService = mock<DockerService>();
@@ -180,6 +181,7 @@ describe('App lifecycle', () => {
     appsRepository = moduleRef.get(AppsRepository);
     filesystemService = moduleRef.get(FilesystemService);
     appFilesManager = moduleRef.get(AppFilesManager);
+    backupManager = moduleRef.get(BackupManager);
 
     databaseService.db = db;
 
@@ -253,6 +255,79 @@ describe('App lifecycle', () => {
 
       // assert
       expect((fs as unknown as FsMock).tree()).toMatchSnapshot();
+    });
+  });
+
+  describe('restore app', () => {
+    const prepare = async (status: 'running' | 'stopped') => {
+      const info = await createAppInStore('test', { id: `restore-${status}`, tipi_version: 1 });
+      await appLifecycleService.installApp({ appUrn: info.urn, form: {}, skipRun: true });
+      await waitFor(async () => expect((await appsRepository.getAppByUrn(info.urn))?.status).toBe('stopped'));
+      const { appDataDir, appInstalledDir } = appFilesManager.getAppPaths(info.urn);
+      const overrides = path.join(DATA_DIR, 'user-config', 'test', info.id);
+      await fs.promises.mkdir(overrides, { recursive: true });
+      await fs.promises.writeFile(path.join(overrides, 'app.env'), 'CUSTOM=backup\n');
+      await fs.promises.writeFile(path.join(appDataDir, 'data', 'record'), 'backup data');
+      const savedTree = path.join('/tmp', `restore-fixture-${info.id}`);
+      archiveService.createTarGz.mockImplementation(async (source, destination) => {
+        expect(await filesystemService.copyDirectory(source, savedTree)).toBe(true);
+        await fs.promises.writeFile(destination, 'archive');
+        return { stdout: '', stderr: '' };
+      });
+      archiveService.extractTarGz.mockImplementation(async (_archive, destination) => {
+        expect(await filesystemService.copyDirectory(savedTree, destination)).toBe(true);
+        return { stdout: '', stderr: '' };
+      });
+      await appLifecycleService.backupApp({ appUrn: info.urn });
+      await waitFor(async () => {
+        expect((await appsRepository.getAppByUrn(info.urn))?.status).toBe('stopped');
+        expect(await backupManager.listBackupsByAppId(info.urn)).toHaveLength(1);
+      });
+      const [backup] = await backupManager.listBackupsByAppId(info.urn);
+      if (!backup) throw new Error('Expected saved fixture backup');
+      const file = path.join(appInstalledDir, 'config.json');
+      const installed = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+      await fs.promises.writeFile(file, JSON.stringify({ ...installed, tipi_version: 2 }));
+      const app = await appsRepository.getAppByUrn(info.urn);
+      if (!app) throw new Error('Expected installed fixture app');
+      await appsRepository.updateAppById(app.id, { version: 2 });
+      await fs.promises.writeFile(path.join(overrides, 'app.env'), 'CUSTOM=live\n');
+      await fs.promises.writeFile(path.join(appDataDir, 'data', 'record'), 'newer live data');
+      if (status === 'running') {
+        await appLifecycleService.startApp({ appUrn: info.urn });
+        await waitFor(async () => expect((await appsRepository.getAppByUrn(info.urn))?.status).toBe('running'));
+      }
+      return { info, backup, appDataDir, overrides };
+    };
+
+    it.each(['stopped', 'running'] as const)(
+      'restores the saved files and database version, then preserves the previous %s state',
+      async (status) => {
+        const { info, backup, appDataDir, overrides } = await prepare(status);
+        await appLifecycleService.restoreApp({ appUrn: info.urn, filename: backup.id });
+        await waitFor(async () => {
+          const app = await appsRepository.getAppByUrn(info.urn);
+          expect(app?.status).toBe(status);
+          expect(app?.version).toBe(1);
+        });
+        expect((await appFilesManager.getInstalledAppInfo(info.urn))?.tipi_version).toBe(1);
+        expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('backup data');
+        expect(await fs.promises.readFile(path.join(overrides, 'app.env'), 'utf8')).toBe('CUSTOM=backup\n');
+        expect(await backupManager.hasPendingRestore(info.urn)).toBe(false);
+        expect(await fs.promises.readFile(await backupManager.getBackupPath(info.urn, backup.id), 'utf8')).toBe('archive');
+      },
+    );
+
+    it('retains newer live files and database version after extraction fails', async () => {
+      const { info, backup, appDataDir, overrides } = await prepare('stopped');
+      archiveService.extractTarGz.mockResolvedValueOnce({ stdout: '', stderr: 'No space left on device' });
+      await appLifecycleService.restoreApp({ appUrn: info.urn, filename: backup.id });
+      await waitFor(async () => expect((await appsRepository.getAppByUrn(info.urn))?.status).toBe('stopped'));
+      expect((await appsRepository.getAppByUrn(info.urn))?.version).toBe(2);
+      expect((await appFilesManager.getInstalledAppInfo(info.urn))?.tipi_version).toBe(2);
+      expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'record'), 'utf8')).toBe('newer live data');
+      expect(await fs.promises.readFile(path.join(overrides, 'app.env'), 'utf8')).toBe('CUSTOM=live\n');
+      expect(await backupManager.hasPendingRestore(info.urn)).toBe(false);
     });
   });
 
