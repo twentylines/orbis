@@ -440,7 +440,7 @@ export default function Updates() {
               {(systemPackages.data.packageCount ?? 0) > 0 ? (
                 <>
                   <label className="desktop-host-package-search">
-                    <span>Find a package</span>
+                    <span>Name or repository</span>
                     <input
                       type="search"
                       value={packageSearch}
@@ -448,7 +448,6 @@ export default function Updates() {
                         setPackageSearch(event.target.value);
                         setShowAllPackages(false);
                       }}
-                      placeholder="Name or repository"
                     />
                   </label>
                   <div className="desktop-host-package-selection">

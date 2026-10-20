@@ -38,6 +38,8 @@ const inspectMonitorClamp = require('./monitor-clamp-checks.cjs');
 const inspectContainerNames = require('./container-name-checks.cjs');
 const inspectCompactCopy = require('./compact-copy-checks.cjs');
 const inspectSearchReading = require('./search-reading-checks.cjs');
+const inspectPackageField = require('./package-field-checks.cjs');
+const packageFieldsOnly = process.env.ORBIS_VISUAL_PACKAGE_FIELDS_ONLY === '1';
 const inspectAuthFields = require('./auth-field-checks.cjs');
 const authFieldsOnly = process.env.ORBIS_VISUAL_AUTH_FIELDS_ONLY === '1';
 const searchReadingOnly = process.env.ORBIS_VISUAL_SEARCH_READING_ONLY === '1';
@@ -124,7 +126,7 @@ if (![1, 2].includes(textScale)) throw new Error('ORBIS_VISUAL_TEXT_SCALE must b
 const base = 'http://localhost:8080';
 const screenshotDir = process.env.ORBIS_VISUAL_SCREENSHOT_DIR || path.join(__dirname, '..', 'screenshots', 'desktop-fixtures');
 const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
-const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1' || textOnly || comfortOnly;
+const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1' || textOnly || comfortOnly || packageFieldsOnly;
 const zoom = Number(process.env.ORBIS_VISUAL_ZOOM || 1);
 if (
   (textOnly ||
@@ -144,6 +146,7 @@ if (
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    packageFieldsOnly ||
     authFieldsOnly ||
     searchReadingOnly ||
     compactCopyOnly ||
@@ -484,6 +487,7 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    packageFieldsOnly ||
     authFieldsOnly ||
     searchReadingOnly ||
     compactCopyOnly ||
@@ -493,31 +497,33 @@ async function main() {
     hostSensorsOnly
       ? [
           {
-            name: authFieldsOnly
-              ? 'auth-fields'
-              : searchReadingOnly
-                ? 'search-reading'
-                : compactCopyOnly
-                  ? 'compact-copy'
-                  : containerNamesOnly
-                    ? 'container-names'
-                    : hostSensorsOnly
-                      ? 'host-sensors'
-                      : monitorClampOnly
-                        ? 'monitor-clamp'
-                        : monitorRefreshOnly
-                          ? 'monitor-refresh'
-                          : cachedRetryOnly
-                            ? 'cached-retry'
-                            : hostHistoryOnly
-                              ? 'host-history'
-                              : hostProcessesOnly
-                                ? 'host-processes'
-                                : hostDevicesOnly
-                                  ? 'host-devices'
-                                  : systemModeOnly
-                                    ? 'system-mode'
-                                    : 'connection',
+            name: packageFieldsOnly
+              ? 'package-fields'
+              : authFieldsOnly
+                ? 'auth-fields'
+                : searchReadingOnly
+                  ? 'search-reading'
+                  : compactCopyOnly
+                    ? 'compact-copy'
+                    : containerNamesOnly
+                      ? 'container-names'
+                      : hostSensorsOnly
+                        ? 'host-sensors'
+                        : monitorClampOnly
+                          ? 'monitor-clamp'
+                          : monitorRefreshOnly
+                            ? 'monitor-refresh'
+                            : cachedRetryOnly
+                              ? 'cached-retry'
+                              : hostHistoryOnly
+                                ? 'host-history'
+                                : hostProcessesOnly
+                                  ? 'host-processes'
+                                  : hostDevicesOnly
+                                    ? 'host-devices'
+                                    : systemModeOnly
+                                      ? 'system-mode'
+                                      : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -989,6 +995,17 @@ async function main() {
         capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
       });
       reports.push({ viewport: viewport.name, systemMode, errors });
+      await page.close();
+      continue;
+    }
+    if (packageFieldsOnly) {
+      const packageFields = await inspectPackageField({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, packageFields, errors });
       await page.close();
       continue;
     }
@@ -1688,6 +1705,7 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    packageFieldsOnly ||
     authFieldsOnly ||
     searchReadingOnly ||
     compactCopyOnly ||
@@ -1707,6 +1725,7 @@ async function main() {
           (hostProcessesOnly && !report.hostProcesses?.passed) ||
           (hostHistoryOnly && !report.hostHistory?.passed) ||
           (cachedRetryOnly && !report.cachedRetry?.passed) ||
+          (packageFieldsOnly && !report.packageFields?.passed) ||
           (authFieldsOnly && !report.authFields?.passed) ||
           (searchReadingOnly && !report.searchReading?.passed) ||
           (compactCopyOnly && !report.compactCopy?.passed) ||

@@ -22,6 +22,23 @@ const readMethods = new Set(['GET', 'HEAD']);
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const samePrivate = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message);
 
+function readAccountPreferences(response, expected, timeout = 20000) {
+  let timer;
+  return Promise.race([
+    response.json(),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Account preference body did not finish before route capture')), timeout);
+    }),
+  ])
+    .then((value) => {
+      assert.equal(response.status(), 200, 'Account preferences must load successfully before route capture');
+      samePrivate(value, expected, 'Loaded account preferences must match the independent baseline');
+      return { ok: true };
+    })
+    .catch((error) => ({ ok: false, error }))
+    .finally(() => clearTimeout(timer));
+}
+
 function parsePrivate(value, label) {
   try {
     return JSON.parse(value);
@@ -1347,6 +1364,7 @@ async function main() {
       const requestIds = new WeakMap();
       const requestDetails = new WeakMap();
       const pending = new Map();
+      const preferenceReads = new Map();
       const requestId = (request) => {
         if (!requestIds.has(request)) requestIds.set(request, ++nextRequest);
         return requestIds.get(request);
@@ -1427,6 +1445,11 @@ async function main() {
         if (target.origin !== config.origin.origin) return;
         if (!response.ok() && response.status() !== 304)
           report.readFailures.push({ group: groupName, path: safePath(target.pathname), status: response.status() });
+        if (target.pathname === '/api/desktop-preferences' && request.method() === 'GET') {
+          const read = readAccountPreferences(response, before.preferences);
+          preferenceReads.set(requestDetails.get(request)?.navigation, read);
+          jobs.push(read);
+        }
         const kind = request.resourceType();
         if (response.ok() && ['document', 'script', 'stylesheet', 'image', 'font'].includes(kind))
           jobs.push(
@@ -1596,6 +1619,30 @@ async function main() {
           await restoreText(page);
           await page.goto(`${config.origin.origin}${sample.path}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
           await page.locator(sample.ready).first().waitFor({ timeout: 20000 });
+          if (!anonymous) {
+            const deadline = Date.now() + 20000;
+            while (!preferenceReads.has(navigation) && Date.now() < deadline) await page.waitForTimeout(50);
+            assert.ok(preferenceReads.has(navigation), 'Account preference response must arrive before route capture');
+            const preferenceRead = await preferenceReads.get(navigation);
+            if (!preferenceRead.ok) throw preferenceRead.error;
+            await page.waitForFunction(
+              ({ mode, preset }) => {
+                const surface = document.querySelector('[data-desktop-mode]');
+                return surface?.dataset.desktopMode === mode && surface.dataset.desktopPreset === preset;
+              },
+              appearance,
+              { timeout: 15000 },
+            );
+            if (sample.name === 'home')
+              await page.waitForFunction(
+                () => {
+                  const summary = document.querySelector('.workspace-subline');
+                  return summary && summary.textContent !== 'Loading applications';
+                },
+                null,
+                { timeout: 20000 },
+              );
+          }
           if (sample.name === 'updates') {
             for (const label of [
               'Reading installed Orbis build…',
@@ -2110,4 +2157,4 @@ if (require.main === module) {
       process.exitCode = 1;
     });
 }
-module.exports = { main, selfCheck, checkTitleAlignment, browser: { scaleText, restoreText, wheelVisible, settled } };
+module.exports = { main, selfCheck, checkTitleAlignment, readAccountPreferences, browser: { scaleText, restoreText, wheelVisible, settled } };
