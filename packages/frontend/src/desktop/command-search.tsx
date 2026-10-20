@@ -221,7 +221,7 @@ export function CommandSearch() {
                   value={search}
                   type="search"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search apps and settings"
+                  placeholder="Search"
                   aria-label="Search apps and settings"
                   aria-controls="desktop-search-results"
                   onKeyDown={(event) => {

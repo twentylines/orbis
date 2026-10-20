@@ -36,6 +36,8 @@ const inspectCachedRetry = require('./cached-retry-focus-checks.cjs');
 const inspectMonitorRefresh = require('./monitor-refresh-checks.cjs');
 const inspectMonitorClamp = require('./monitor-clamp-checks.cjs');
 const inspectContainerNames = require('./container-name-checks.cjs');
+const inspectCompactCopy = require('./compact-copy-checks.cjs');
+const compactCopyOnly = process.env.ORBIS_VISUAL_COMPACT_COPY_ONLY === '1';
 const containerNamesOnly = process.env.ORBIS_VISUAL_CONTAINER_NAMES_ONLY === '1';
 const monitorClampOnly = process.env.ORBIS_VISUAL_MONITOR_CLAMP_ONLY === '1';
 const compactScaleOnly = process.env.ORBIS_VISUAL_COMPACT_SCALE_ONLY === '1';
@@ -138,6 +140,7 @@ if (
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    compactCopyOnly ||
     containerNamesOnly ||
     monitorClampOnly ||
     monitorRefreshOnly ||
@@ -475,31 +478,34 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    compactCopyOnly ||
     containerNamesOnly ||
     monitorClampOnly ||
     monitorRefreshOnly ||
     hostSensorsOnly
       ? [
           {
-            name: containerNamesOnly
-              ? 'container-names'
-              : hostSensorsOnly
-                ? 'host-sensors'
-                : monitorClampOnly
-                  ? 'monitor-clamp'
-                  : monitorRefreshOnly
-                    ? 'monitor-refresh'
-                    : cachedRetryOnly
-                      ? 'cached-retry'
-                      : hostHistoryOnly
-                        ? 'host-history'
-                        : hostProcessesOnly
-                          ? 'host-processes'
-                          : hostDevicesOnly
-                            ? 'host-devices'
-                            : systemModeOnly
-                              ? 'system-mode'
-                              : 'connection',
+            name: compactCopyOnly
+              ? 'compact-copy'
+              : containerNamesOnly
+                ? 'container-names'
+                : hostSensorsOnly
+                  ? 'host-sensors'
+                  : monitorClampOnly
+                    ? 'monitor-clamp'
+                    : monitorRefreshOnly
+                      ? 'monitor-refresh'
+                      : cachedRetryOnly
+                        ? 'cached-retry'
+                        : hostHistoryOnly
+                          ? 'host-history'
+                          : hostProcessesOnly
+                            ? 'host-processes'
+                            : hostDevicesOnly
+                              ? 'host-devices'
+                              : systemModeOnly
+                                ? 'system-mode'
+                                : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -828,6 +834,17 @@ async function main() {
         capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
       });
       reports.push({ viewport: viewport.name, hostSensors, errors });
+      await page.close();
+      continue;
+    }
+    if (compactCopyOnly) {
+      const compactCopy = await inspectCompactCopy({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, compactCopy, errors });
       await page.close();
       continue;
     }
@@ -1637,6 +1654,7 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    compactCopyOnly ||
     containerNamesOnly ||
     monitorClampOnly ||
     monitorRefreshOnly ||
@@ -1653,6 +1671,7 @@ async function main() {
           (hostProcessesOnly && !report.hostProcesses?.passed) ||
           (hostHistoryOnly && !report.hostHistory?.passed) ||
           (cachedRetryOnly && !report.cachedRetry?.passed) ||
+          (compactCopyOnly && !report.compactCopy?.passed) ||
           (containerNamesOnly && !report.containerNames?.passed) ||
           (monitorClampOnly && !report.monitorClamp?.passed) ||
           (monitorRefreshOnly && !report.monitorRefresh?.passed) ||

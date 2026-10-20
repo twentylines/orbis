@@ -281,7 +281,14 @@ export default function Updates() {
               <>
                 <strong>Installed: {build.data.version}</strong>
                 {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
-                {build.data.imageDigest ? <span>Image {build.data.imageDigest}</span> : <span>Image digest unavailable.</span>}
+                {build.data.imageDigest ? (
+                  <div className="desktop-update-image">
+                    <span>Image</span>
+                    <code title={build.data.imageDigest}>{build.data.imageDigest}</code>
+                  </div>
+                ) : (
+                  <span>Image digest unavailable.</span>
+                )}
                 {build.data.runtipiCompatibility ? <span>Runtipi compatibility: {build.data.runtipiCompatibility}</span> : null}
               </>
             ) : null}

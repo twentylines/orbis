@@ -362,6 +362,26 @@
   display: block;
   overflow-wrap: anywhere;
 }
+.desktop-update-image {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.desktop-update-image > span {
+  flex: none;
+}
+.desktop-update-image > code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
 .desktop-update-release {
   margin-top: 20px;
 }

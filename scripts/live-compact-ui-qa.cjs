@@ -9,13 +9,14 @@ const { isDeepStrictEqual, stripVTControlCharacters } = require('node:util');
 const { chromium } = require('@playwright/test');
 const { dom } = require('./host-devices-checks.cjs');
 const inspectSettingsAlignment = require('./settings-alignment-checks.cjs');
+const compactCopy = require('./compact-copy-checks.cjs');
 
 const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
 const dockerContext = 'colima-runtipi-test';
-const expectedTag = 'v0.1.0-beta.50';
-const reviewedCommit = '9366532feef08471c88a893fe53f4e440fd33012';
-const reviewedDigest = 'sha256:30ad1b4472a77f167ec35e2923e4626e916484d57c1ee12b025aebef97d713ff';
+const expectedTag = 'v0.1.0-beta.51';
+const reviewedCommit = '07dec2e9e8769edf8a1471f48c2bd72ef27437a4';
+const reviewedDigest = 'sha256:f85fd3e8d9ab565429e8340ba2a688941cc3ac0db563c7b8e4e99a4047abf7d7';
 const readMethods = new Set(['GET', 'HEAD']);
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const samePrivate = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message);
@@ -232,9 +233,9 @@ async function scaleText(page, factor) {
   await dom.settle(page);
 }
 
-const releasePath = '/tmp/orbis-beta50-release-check.json';
-const baselinePath = '/tmp/orbis-beta50-after-ota-records.private.json';
-const goPath = '/tmp/orbis-beta50-compact-ui-go.private.json';
+const releasePath = '/tmp/orbis-beta51-release-check-20261020.json';
+const baselinePath = '/tmp/orbis-beta51-after-ota-records.private.json';
+const goPath = '/tmp/orbis-beta51-compact-ui-go.private.json';
 const baseUrl = 'http://127.0.0.1:18080';
 const recordKeys = ['preferences', 'installed', 'apps', 'stores', 'links', 'userContext', 'appContext'];
 const groups = [
@@ -326,16 +327,16 @@ function diagnosticError(error, secrets = []) {
 }
 
 function validateOptions(env, argv, digest) {
-  assert.match(digest || '', /^sha256:[a-f0-9]{64}$/, 'Reviewed beta50 digest is not pinned; live audit is disabled');
+  assert.match(digest || '', /^sha256:[a-f0-9]{64}$/, 'Reviewed beta51 digest is not pinned; live audit is disabled');
   assert.deepEqual(argv, ['--allow-owned-published-compact-ui'], 'Explicit owned published compact UI argument is required');
   assert.equal(env.ORBIS_ALLOW_LIVE_COMPACT_UI_AUDIT, '1', 'Explicit published compact UI opt-in is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta50 is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_TAG, expectedTag, 'Only reviewed beta51 is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_COMMIT || '', /^[a-f0-9]{40}$/, 'Exact reviewed full commit is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta50 commit is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_COMMIT, reviewedCommit, 'Only the immutable reviewed beta51 commit is permitted');
   assert.match(env.ORBIS_AUDIT_EXPECTED_DIGEST || '', /^sha256:[a-f0-9]{64}$/, 'Exact reviewed published digest is required');
-  assert.equal(env.ORBIS_AUDIT_EXPECTED_DIGEST, digest, 'Only the independently verified beta50 image index is permitted');
+  assert.equal(env.ORBIS_AUDIT_EXPECTED_DIGEST, digest, 'Only the independently verified beta51 image index is permitted');
   assert.equal(env.ORBIS_AUDIT_COOKIE_FILE, ownedCookieFile, 'Only the primary owned observer cookie jar is permitted');
-  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta50 release manifest is permitted');
+  assert.equal(env.ORBIS_AUDIT_RELEASE_FILE, releasePath, 'Only the reviewed beta51 release manifest is permitted');
   assert.equal(env.ORBIS_AUDIT_BASELINE_FILE, baselinePath, 'Only the independently captured post-OTA baseline is permitted');
   assert.equal(env.ORBIS_AUDIT_GO_FILE, goPath, 'Independent post-OTA GO proof is required');
   const origin = new URL(env.ORBIS_AUDIT_URL || baseUrl);
@@ -964,6 +965,26 @@ async function nativeFocus(page, sample) {
   checkFocus(after);
   return { checked: true, keyboard: 'Native Tab after one explicit route-control focus', after: sanitized(after.active), scroll: after.scroll };
 }
+async function homeUsage(page, shot) {
+  const panel = page.locator('.container-resources.is-compact');
+  const cpu = panel.getByRole('button', { name: 'CPU', exact: true });
+  const memory = panel.getByRole('button', { name: 'Memory', exact: true });
+  await wheelVisible(page, cpu);
+  await cpu.focus();
+  await page.keyboard.press('Tab');
+  await settled(page);
+  assert.equal(await memory.evaluate((element) => element === document.activeElement), true, 'Native Tab must reach Home Memory control');
+  const memoryFocus = await measure(page, '.desktop-main');
+  checkFocus(memoryFocus);
+  await shot('usage-memory-focus');
+  await page.keyboard.press('Shift+Tab');
+  await settled(page);
+  assert.equal(await cpu.evaluate((element) => element === document.activeElement), true, 'Native Shift+Tab must reach Home CPU control');
+  const cpuFocus = await measure(page, '.desktop-main');
+  checkFocus(cpuFocus);
+  await shot('usage-cpu-focus');
+  return { passed: true, naturalWheel: true, nativeTab: true, memory: sanitized(memoryFocus.active), cpu: sanitized(cpuFocus.active) };
+}
 async function inspectModel(page, sample, group, appearance, shot, save, item) {
   const visual = page.locator('.desktop-host-visual');
   await wheelVisible(page, visual);
@@ -1004,6 +1025,8 @@ async function search(page, shot) {
     'Search must focus the actual input',
   );
   const opened = await measure(page, '.desktop-search-surface');
+  const placeholder = await compactCopy.placeholder(page);
+  compactCopy.checkPlaceholder(placeholder);
   assert.deepEqual(opened.words, [], 'Search ordinary words must remain whole');
   assert.deepEqual(opened.clipped, [], 'Search text must fit its allocation');
   assert.ok(
@@ -1021,7 +1044,15 @@ async function search(page, shot) {
   assert.equal(await trigger.evaluate((element) => element === document.activeElement), true, 'Search Escape must restore its real trigger');
   for (const key of Object.keys(before.scroll))
     assert.ok(Math.abs(after.scroll[key] - before.scroll[key]) <= 1, 'Search close must preserve actual prior reading position');
-  return { passed: true, opened: sanitized(opened), before: before.scroll, after: after.scroll, nativeEscape: true, returnedToTrigger: true };
+  return {
+    passed: true,
+    opened: sanitized(opened),
+    placeholder,
+    before: before.scroll,
+    after: after.scroll,
+    nativeEscape: true,
+    returnedToTrigger: true,
+  };
 }
 function checkFocusIdentity(value) {
   assert.equal(value.connected, true, 'Refresh must preserve the original connected control node');
@@ -1113,7 +1144,7 @@ async function main() {
     diagnosticFailures: [],
     cleanup: { groupContextsClosed: 0, anonymousContextsClosed: 0, readerClosed: false, browserClosed: false },
     scope: {
-      live: 'Actual immutable beta50 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
+      live: 'Actual immutable beta51 HTML/JS/CSS/images/API bodies and saved account appearance;30 authenticated route compositions plus4 anonymous Login/Reset views.',
       controlled:
         'Browser OS colour media matches the saved fixed mode (light for system); one320 doubled-computed-text group; documents alone use route.fetch/fulfill for CSP connect-src adjustment. Assets and API GET/HEAD use native browser transport. No response body substitutions.',
       writes: 'Only GET/HEAD are forwarded. No login/logout, preference, reset, TOTP, refresh, installation or lifecycle mutations.',
@@ -1230,6 +1261,7 @@ async function main() {
       runnerSha256: hash(fs.readFileSync(__filename)),
       browserUtilitiesSha256: hash(fs.readFileSync(require.resolve('./host-devices-checks.cjs'))),
       settingsInspectorSha256: hash(fs.readFileSync(require.resolve('./settings-alignment-checks.cjs'))),
+      compactCopyInspectorSha256: hash(fs.readFileSync(require.resolve('./compact-copy-checks.cjs'))),
     };
     report.coreChecks.push(verifyCore(release.image));
     browser = await chromium.launch({
@@ -1275,6 +1307,7 @@ async function main() {
       let navigation = 0;
       let nextRequest = 0;
       const requestIds = new WeakMap();
+      const requestDetails = new WeakMap();
       const pending = new Map();
       const requestId = (request) => {
         if (!requestIds.has(request)) requestIds.set(request, ++nextRequest);
@@ -1294,6 +1327,7 @@ async function main() {
           kind: request.resourceType(),
         };
         pending.set(entry.id, entry);
+        requestDetails.set(request, entry);
         network.push(entry);
       };
       const finished = (request) => {
@@ -1330,6 +1364,10 @@ async function main() {
         )
           report.assetFailures.push({
             group: groupName,
+            at: Date.now(),
+            requestId: requestId(request),
+            requestedNavigation: requestDetails.get(request)?.navigation,
+            failureNavigation: navigation,
             path: safePath(target.pathname),
             kind: request.resourceType(),
             messageHash: hash(request.failure()?.errorText || 'Asset failed'),
@@ -1361,8 +1399,30 @@ async function main() {
                 report.assets[`${safePath(target.pathname)}:${sha256}`] = { kind, bytes: body.length, sha256 };
               })
               .catch((error) => {
+                const detail = {
+                  event: 'asset-body-observer-failed',
+                  at: Date.now(),
+                  group: groupName,
+                  stage,
+                  requestId: requestId(request),
+                  requestedNavigation: requestDetails.get(request)?.navigation,
+                  failureNavigation: navigation,
+                  url: diagnosticUrl(response.url()),
+                  error: diagnosticError(error, secrets),
+                  closing,
+                };
+                network.push(detail);
                 if (!closing)
-                  report.assetFailures.push({ group: groupName, path: safePath(target.pathname), kind, messageHash: hash(error.message) });
+                  report.assetFailures.push({
+                    group: groupName,
+                    at: detail.at,
+                    requestId: detail.requestId,
+                    requestedNavigation: detail.requestedNavigation,
+                    failureNavigation: navigation,
+                    path: safePath(target.pathname),
+                    kind,
+                    messageHash: hash(error.message),
+                  });
               }),
           );
       };
@@ -1479,6 +1539,15 @@ async function main() {
           await restoreText(page);
           await page.goto(`${config.origin.origin}${sample.path}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
           await page.locator(sample.ready).first().waitFor({ timeout: 20000 });
+          if (sample.name === 'updates') {
+            for (const label of [
+              'Reading installed Orbis build…',
+              'Checking published Orbis releases…',
+              'Checking the local host service…',
+              'Reading the host package cache…',
+            ])
+              await page.getByText(label, { exact: true }).waitFor({ state: 'hidden', timeout: 45000 });
+          }
           await settled(page);
           await scaleText(page, group.textScale);
           await settled(page);
@@ -1493,6 +1562,11 @@ async function main() {
           check(metrics, sample, group, actualAppearance);
           assert.equal(await page.locator('.orbis-error-panel').count(), 0, 'Published route must not show fallback');
           if (sample.name === 'appearance') item.sharedGutters = sanitized(await inspectSettingsAlignment(page));
+          if (sample.name === 'updates') {
+            assert.equal(await page.locator('.desktop-update-image').count(), 1, 'Published installed digest must have its bounded row');
+            item.digest = await compactCopy.digest(page);
+            compactCopy.checkDigest(item.digest, config.expectedDigest);
+          }
           if (sample.name === 'reset')
             assert.equal(
               await page.locator('.desktop-auth pre').textContent(),
@@ -1502,7 +1576,10 @@ async function main() {
           if (sample.name === 'monitor') await inspectModel(page, sample, group, actualAppearance, shot, save, item);
           item.focus = await nativeFocus(page, sample);
           if (item.focus.checked) await shot(`${sample.name}-native-focus`);
-          if (sample.name === 'home') result.search = await search(page, (name) => shot(`${sample.name}-${name}`));
+          if (sample.name === 'home') {
+            item.usage = await homeUsage(page, (name) => shot(`${sample.name}-${name}`));
+            result.search = await search(page, (name) => shot(`${sample.name}-${name}`));
+          }
           if (sample.name === 'monitor') {
             const lower = page.locator('#host-sensors-title');
             await wheelVisible(page, lower);
@@ -1510,6 +1587,24 @@ async function main() {
             await shot(`${sample.name}-lower-reading`);
             if (group.refresh) await refresh(page, (name) => shot(`${sample.name}-${name}`), save, result);
           }
+          await page.waitForFunction(
+            () =>
+              [...document.images].every((image) => {
+                const r = image.getBoundingClientRect();
+                return !r.width || !r.height || r.bottom <= 0 || r.top >= innerHeight || (image.complete && image.naturalWidth > 0);
+              }),
+            null,
+            { timeout: 15000 },
+          );
+          const imageDeadline = Date.now() + 15000;
+          while ([...pending.values()].some((request) => request.kind === 'image') && Date.now() < imageDeadline) await page.waitForTimeout(100);
+          assert.equal(
+            [...pending.values()].some((request) => request.kind === 'image'),
+            false,
+            'Retain route until every requested image finishes',
+          );
+          await Promise.all(jobs);
+          item.imagesFinishedBeforeNavigation = true;
           item.passed = true;
           save();
         }
