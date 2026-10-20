@@ -16,9 +16,7 @@ export class BackupAppCommand extends AppLifecycleCommand {
 
     try {
       logger.info(`Stopping app ${appUrn} for backup`);
-      await dockerService.composeApp(appUrn, 'stop').catch((err) => {
-        logger.error(`Failed to stop app ${appUrn}:`, err);
-      });
+      await dockerService.composeApp(appUrn, 'stop');
 
       await backupManager.backupApp(appUrn);
 

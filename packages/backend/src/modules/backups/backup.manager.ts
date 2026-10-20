@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { extractAppUrn } from '@/common/helpers/app-helpers';
 import { pLimit, sanitizeFilename } from '@/common/helpers/file-helpers';
@@ -55,55 +57,81 @@ export class BackupManager {
 
   public backupApp = async (appUrn: AppUrn) => {
     const { appName, appStoreId, backupDir, userConfigDir } = this.getBackupPaths(appUrn);
-    const backupName = `${appName}-${appStoreId}-${Date.now()}`;
+    const backupName = `${appName}-${appStoreId}-${Date.now()}-${randomUUID()}`;
 
-    const tempDir = await this.filesystem.createTempDirectory(appUrn);
+    const tempDir = await this.filesystem.createTempDirectory(path.join(tmpdir(), `${appUrn}-`));
 
     if (!tempDir) {
       throw new Error('Failed to create temp directory');
     }
 
-    const archivePath = `${tempDir}.tar.gz`;
+    const contentDir = path.join(tempDir, 'content');
+    const archivePath = path.join(tempDir, 'backup.tar.gz');
+    let pendingPath: string | undefined;
 
     try {
+      await fs.promises.chmod(tempDir, 0o700);
       this.logger.info('Copying files to backup location...');
 
-      await this.filesystem.createDirectory(tempDir);
+      if (!(await this.filesystem.createDirectory(contentDir))) {
+        throw new Error('The backup staging directory could not be created');
+      }
 
       const { appDataDir, appInstalledDir } = this.appFilesManager.getAppPaths(appUrn);
 
-      await this.filesystem.copyDirectory(appDataDir, path.join(tempDir, 'app-data'), {
-        recursive: true,
-        filter: (src) => !src.includes('backups'),
+      if (!(await this.filesystem.copyDirectory(appDataDir, path.join(contentDir, 'app-data')))) {
+        throw new Error('App data could not be copied into the backup');
+      }
+
+      if (!(await this.filesystem.copyDirectory(appInstalledDir, path.join(contentDir, 'app')))) {
+        throw new Error('App files could not be copied into the backup');
+      }
+
+      const userConfig = await fs.promises.lstat(this.filesystem.getSafeFilePath(userConfigDir)).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
       });
-
-      await this.filesystem.copyDirectory(appInstalledDir, path.join(tempDir, 'app'));
-
-      if (await this.filesystem.isDirectory(userConfigDir)) {
+      if (userConfig?.isDirectory()) {
         this.logger.info('Including user configuration in backup...');
-        await this.filesystem.copyDirectory(userConfigDir, path.join(tempDir, 'user-config'));
+        if (!(await this.filesystem.copyDirectory(userConfigDir, path.join(contentDir, 'user-config')))) {
+          throw new Error('User configuration could not be copied into the backup');
+        }
+      } else if (userConfig) {
+        throw new Error('User configuration is not a readable directory');
       }
 
       this.logger.info('Creating archive...');
 
-      const { stdout, stderr } = await this.archiveManager.createTarGz(tempDir, archivePath);
+      const { stdout, stderr } = await this.archiveManager.createTarGz(contentDir, archivePath);
       this.logger.debug('--- archiveManager.createTarGz ---');
       this.logger.debug('stderr:', stderr);
       this.logger.debug('stdout:', stdout);
+      if (stderr.trim()) {
+        throw new Error('The backup archive could not be created completely');
+      }
+      await fs.promises.chmod(archivePath, 0o600);
 
       this.logger.info('Moving archive to backup directory...', backupDir);
 
-      await this.filesystem.createDirectory(backupDir);
-      await this.filesystem.copyFile(archivePath, path.join(backupDir, `${backupName}.tar.gz`));
+      if (!(await this.filesystem.createDirectory(backupDir))) {
+        throw new Error('The backup directory could not be created');
+      }
+      pendingPath = this.filesystem.getSafeFilePath(path.join(backupDir, `.${backupName}.partial`));
+      if (!(await this.filesystem.copyFile(archivePath, pendingPath))) {
+        throw new Error('The backup archive could not be saved');
+      }
+      this.validateRestoreArchiveEntries(await this.archiveManager.listTarGz(pendingPath));
+      const { backupPath } = this.getBackupFilePath(appUrn, `${backupName}.tar.gz`);
+      await fs.promises.rename(pendingPath, backupPath);
 
       this.logger.info('Backup completed!');
     } finally {
       try {
-        await this.filesystem.removeDirectory(tempDir);
-      } finally {
-        if (await this.filesystem.isFile(archivePath)) {
-          await this.filesystem.removeFile(archivePath);
+        if (pendingPath) {
+          await fs.promises.rm(pendingPath, { force: true });
         }
+      } finally {
+        await fs.promises.rm(tempDir, { recursive: true, force: true });
       }
     }
   };
@@ -365,6 +393,9 @@ export class BackupManager {
 
       const backups = await Promise.all(
         list.map(async (backup) => {
+          if (backup.startsWith('.') || !backup.endsWith('.tar.gz') || sanitizeFilename(backup) !== backup) {
+            return null;
+          }
           const backupPath = path.join(backupsDir, backup);
 
           if (!(await this.filesystem.isFile(backupPath))) {
