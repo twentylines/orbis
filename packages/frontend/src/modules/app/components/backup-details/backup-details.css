@@ -1,0 +1,63 @@
+.backup-details {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+.backup-filename {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--desktop-ink);
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.backup-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 20px;
+  color: var(--desktop-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.backup-metadata time {
+  min-width: 0;
+}
+.backup-size {
+  white-space: nowrap;
+}
+.backup-dialog {
+  max-height: calc(100dvh - 32px);
+}
+.backup-dialog :is(.modal-header, .modal-footer) {
+  flex-shrink: 0;
+}
+.backup-dialog .modal-body {
+  display: grid;
+  min-height: 0;
+  gap: 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.backup-dialog-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.backup-dialog-warning > svg {
+  flex: 0 0 22px;
+  margin-top: 2px;
+}
+.backup-dialog-warning > p {
+  min-width: 0;
+  margin: 0;
+  line-height: 1.65;
+}
+.backup-dialog .backup-details {
+  padding: 16px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-ink) 5%, transparent);
+}

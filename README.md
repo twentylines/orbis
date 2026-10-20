@@ -16,6 +16,8 @@ Orbis is currently in beta. Migration and recovery of a real homelab have not be
 
 Beta57 on a disposable test server.
 
+Development backup views with sample data: [Desktop](screenshots/backups/desktop.png) · [Phone restore dialog](screenshots/backups/phone-restore.png).
+
 ## Documentation
 
 - [Installation and migration](DEPLOYMENT.md)

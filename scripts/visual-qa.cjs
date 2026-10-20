@@ -41,6 +41,7 @@ const inspectSearchReading = require('./search-reading-checks.cjs');
 const inspectPackageField = require('./package-field-checks.cjs');
 const inspectStartup = require('./startup-appearance-checks.cjs');
 const startupOnly = process.env.ORBIS_VISUAL_STARTUP_ONLY === '1';
+const backupsOnly = process.env.ORBIS_VISUAL_BACKUPS_ONLY === '1';
 const packageFieldsOnly = process.env.ORBIS_VISUAL_PACKAGE_FIELDS_ONLY === '1';
 const inspectAuthFields = require('./auth-field-checks.cjs');
 const authFieldsOnly = process.env.ORBIS_VISUAL_AUTH_FIELDS_ONLY === '1';
@@ -131,7 +132,8 @@ const version = { current: '4.10.1', latest: '4.10.1', body: '', releases: [] };
 const hostUpdateFixture = process.env.ORBIS_VISUAL_HOST_UPDATE === '1' || textOnly || comfortOnly || packageFieldsOnly;
 const zoom = Number(process.env.ORBIS_VISUAL_ZOOM || 1);
 if (
-  (textOnly ||
+  (backupsOnly ||
+    textOnly ||
     compoundHomeOnly ||
     searchComfortOnly ||
     selectComfortOnly ||
@@ -484,6 +486,7 @@ async function main() {
   let preferences = freshPreferences();
   const reports = [];
   const viewports =
+    backupsOnly ||
     startupOnly ||
     connectionOnly ||
     systemModeOnly ||
@@ -529,7 +532,9 @@ async function main() {
                                       ? 'host-devices'
                                       : systemModeOnly
                                         ? 'system-mode'
-                                        : 'connection',
+                                        : backupsOnly
+                                          ? 'backups'
+                                          : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -838,6 +843,18 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (backupsOnly) {
+      const backups = await require('./backup-views-checks.cjs')({
+        page,
+        base,
+        preferences: freshPreferences(),
+        screenshotDir,
+        actions: actionRequests,
+      });
+      await page.close();
+      reports.push({ viewport: 'backups', backups, errors, pageClosed: page.isClosed() });
+      continue;
+    }
     if (startupOnly) {
       const startup = await inspectStartup({
         page,
@@ -1691,6 +1708,15 @@ async function main() {
       errors,
     });
     await Promise.race([page.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
+  }
+  if (backupsOnly) {
+    await browser.close();
+    const passed = reports.length === 1 && reports.every((report) => report.backups.passed && report.pageClosed && !report.errors.length);
+    const result = { passed, reports, browserClosed: !browser.isConnected(), scope: 'Source fixtures only; no real server or action requests' };
+    fs.writeFileSync(path.join(screenshotDir, 'backup-run.private.json'), `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (!passed) process.exitCode = 1;
+    return;
   }
   process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
   if (

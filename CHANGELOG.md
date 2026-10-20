@@ -1,5 +1,10 @@
 # Orbis changelog
 
+## Unreleased — Backups
+
+- Reflow backup filenames, dates, sizes and actions on narrow screens. Keep long filenames readable and size units together.
+- Show the selected backup separately from restore/delete warnings. Scroll long dialog content while keeping the heading and action visible.
+
 ## In progress — Updates and compact system-model spacing
 
 - Keep Updates cards at their natural height and separate stacked system readings from the transformed server model. Reflow headings/app rows and CPU/memory columns with enlarged text; preserve accessible long app names. Verify28 native and8 independent doubled-text source compositions after retaining real overflow failures.

@@ -5,10 +5,7 @@ import {
   restoreAppBackupMutation,
   uploadBackupMutation,
 } from '@/api-client/@tanstack/react-query.gen';
-import { DateFormat } from '@/components/date-format/date-format';
-import { FileSize } from '@/components/file-size/file-size';
 import { Button } from '@/components/ui/Button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
 import { TablePagination } from '@/components/ui/TablePagination/TablePagination';
 import { useDisclosure } from '@/lib/hooks/use-disclosure';
 import type { AppBackup, AppInfo, AppStatus } from '@/types/app.types';
@@ -17,6 +14,7 @@ import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
 import React from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { BackupDetails } from '../../components/backup-details/backup-details';
 import { BackupAppDialog } from '../../components/dialogs/backup-app-dialog/backup-app-dialog';
 import { DeleteAppBackupDialog } from '../../components/dialogs/delete-backup-dialog/delete-backup-dialog';
 import { RestoreAppDialog } from '../../components/dialogs/restore-app-dialog/restore-app-dialog';
@@ -114,7 +112,7 @@ export const AppBackups = ({ info, status }: Props) => {
   return (
     <div className="card app-backups">
       <div className="card-header d-flex justify-content-between align-items-center">
-        <div className="">
+        <div>
           <h3 className="h3 mb-0">{t('BACKUPS_LIST')}</h3>
         </div>
         <div className="app-backup-actions">
@@ -127,40 +125,24 @@ export const AppBackups = ({ info, status }: Props) => {
         </div>
       </div>
       {data.data.length ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('BACKUPS_LIST_ROW_TITLE_ID')}</TableHead>
-              <TableHead>{t('BACKUPS_LIST_ROW_TITLE_SIZE')}</TableHead>
-              <TableHead>{t('BACKUPS_LIST_ROW_TITLE_DATE')}</TableHead>
-              <TableHead align="right">{t('BACKUPS_LIST_ROW_TITLE_ACTIONS')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.data.map((backup) => (
-              <TableRow key={backup.id}>
-                <TableCell>{backup.id}</TableCell>
-                <TableCell>
-                  <FileSize size={backup.size} />
-                </TableCell>
-                <TableCell>
-                  <DateFormat date={new Date(backup.date)} />
-                </TableCell>
-                <TableCell align="right">
-                  <Button size="sm" variant="ghost" onClick={() => handleDownloadClick(backup)} disabled={disableActions} className="me-1">
-                    {t('APP_BACKUP_DOWNLOAD')}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleRestoreClick(backup)} disabled={disableActions} className="me-1">
-                    {t('APP_RESTORE_SUBMIT')}
-                  </Button>
-                  <Button size="sm" intent="danger" variant="ghost" onClick={() => handleDeleteClick(backup)} disabled={disableActions}>
-                    {t('DELETE_BACKUP_MODAL_SUBMIT')}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <ul className="app-backup-list">
+          {data.data.map((backup) => (
+            <li className="app-backup-row" key={backup.id}>
+              <BackupDetails backup={backup} />
+              <div className="app-backup-row-actions">
+                <Button size="sm" variant="ghost" onClick={() => handleDownloadClick(backup)} disabled={disableActions}>
+                  {t('APP_BACKUP_DOWNLOAD')}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => handleRestoreClick(backup)} disabled={disableActions}>
+                  {t('APP_RESTORE_SUBMIT')}
+                </Button>
+                <Button size="sm" intent="danger" variant="ghost" onClick={() => handleDeleteClick(backup)} disabled={disableActions}>
+                  {t('DELETE_BACKUP_MODAL_SUBMIT')}
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : (
         <p className="app-backups-empty">No backups. Create one or upload an existing backup.</p>
       )}
