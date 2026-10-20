@@ -59,6 +59,7 @@ describe('App lifecycle', () => {
   let marketplaceService: MarketplaceService;
   let appsRepository: AppsRepository;
   let filesystemService: FilesystemService;
+  let appFilesManager: AppFilesManager;
   const configurationService = mock<ConfigurationService>();
   let databaseService = mock<DatabaseService>();
   const dockerService = mock<DockerService>();
@@ -178,6 +179,7 @@ describe('App lifecycle', () => {
     marketplaceService = moduleRef.get(MarketplaceService);
     appsRepository = moduleRef.get(AppsRepository);
     filesystemService = moduleRef.get(FilesystemService);
+    appFilesManager = moduleRef.get(AppFilesManager);
 
     databaseService.db = db;
 
@@ -187,10 +189,18 @@ describe('App lifecycle', () => {
       return { stdout: '', stderr: '' };
     });
     archiveService.extractTarGz.mockResolvedValue({ stdout: '', stderr: '' });
+    archiveService.listTarGz.mockImplementation(async (archive) => {
+      if ((await fs.promises.readFile(archive, 'utf8')) !== 'archive') {
+        throw new Error('Invalid fixture archive');
+      }
+      return [
+        { path: './app-data/', type: 'd' },
+        { path: './app/', type: 'd' },
+      ];
+    });
     vi.spyOn(filesystemService, 'createTempDirectory').mockImplementation(async (prefix) => {
-      const tempDir = path.join('/tmp', `${prefix}-${Date.now()}`);
-      await fs.promises.mkdir(tempDir, { recursive: true });
-      return tempDir;
+      await fs.promises.mkdir('/tmp', { recursive: true });
+      return fs.promises.mkdtemp(path.join('/tmp', `${path.basename(prefix)}-`));
     });
 
     configurationService.getConfig.mockReturnValue(
@@ -247,6 +257,29 @@ describe('App lifecycle', () => {
   });
 
   describe('update app', () => {
+    it('preserves the installed version and data when backup validation fails', async () => {
+      const appInfo = await createAppInStore('test', { id: 'rejected-backup', tipi_version: 1 });
+      await appLifecycleService.installApp({ appUrn: appInfo.urn, form: {} });
+      await waitFor(async () => {
+        expect((await appsRepository.getAppByUrn(appInfo.urn))?.status).toBe('running');
+      });
+      const { appDataDir } = appFilesManager.getAppPaths(appInfo.urn);
+      await fs.promises.writeFile(path.join(appDataDir, 'data', 'preserved.txt'), 'original data');
+      await createAppInStore('test', { id: appInfo.id, tipi_version: 2 });
+      archiveService.listTarGz.mockRejectedValueOnce(new Error('Archive validation failed'));
+
+      await appLifecycleService.updateApp({ appUrn: appInfo.urn, performBackup: true });
+
+      await waitFor(async () => {
+        const app = await appsRepository.getAppByUrn(appInfo.urn);
+        expect(app?.status).toBe('stopped');
+        expect(app?.version).toBe(1);
+      });
+      expect((await appFilesManager.getInstalledAppInfo(appInfo.urn))?.tipi_version).toBe(1);
+      expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'preserved.txt'), 'utf8')).toBe('original data');
+      expect(await fs.promises.readdir(`${DATA_DIR}/backups/test/${appInfo.id}`)).toEqual([]);
+    });
+
     it('should successfully update an app to a newer version', async () => {
       // arrange
       const appInfo = await createAppInStore('test', { tipi_version: 1 });
@@ -367,7 +400,9 @@ describe('App lifecycle', () => {
       expect(app2?.status).toBe('running');
       expect(app3?.status).toBe('running');
 
-      const tree = (fs as unknown as FsMock).tree().replace(/-\d+\.tar\.gz/g, '-TIMESTAMP.tar.gz');
+      const tree = (fs as unknown as FsMock)
+        .tree()
+        .replace(/-\d+(?:-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\.tar\.gz/g, '-TIMESTAMP.tar.gz');
 
       expect(tree).toMatchSnapshot();
     });
