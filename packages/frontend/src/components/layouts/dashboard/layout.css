@@ -287,6 +287,9 @@ html:has(.desktop) {
 .desktop-view {
   min-width: 0;
 }
+.desktop-view-loading {
+  padding-inline: var(--desktop-bar-inset);
+}
 .desktop-view-app {
   position: relative;
   isolation: isolate;

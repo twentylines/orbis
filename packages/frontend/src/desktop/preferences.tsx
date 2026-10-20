@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { useUserContext } from '@/context/user-context';
-import { useUIStore } from '@/stores/ui-store';
+import { StartupSurface } from '@/components/startup/startup-surface';
+import toast from 'react-hot-toast';
 import { desktopWindowsSchema, type DesktopWindows, type DesktopWindowId, type DesktopWindowState } from '@runtipi/common/schemas';
 import { useResolvedColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
 
@@ -87,15 +88,18 @@ export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPr
   },
 });
 
-export function readCachedDesktopPreferences(): DesktopPreferences {
-  if (typeof window === 'undefined') return defaultDesktopPreferences;
+function readPreferenceCache() {
+  if (typeof window === 'undefined') return { preferences: defaultDesktopPreferences, available: true };
   try {
     const value: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
-    if (isPreferences(value)) return normalisePreferences(value);
+    return { preferences: isPreferences(value) ? normalisePreferences(value) : defaultDesktopPreferences, available: true };
   } catch {
-    // Error screens must also work when browser storage is unavailable.
+    return { preferences: defaultDesktopPreferences, available: false };
   }
-  return defaultDesktopPreferences;
+}
+
+export function readCachedDesktopPreferences(): DesktopPreferences {
+  return readPreferenceCache().preferences;
 }
 
 type PreferenceContext = {
@@ -108,14 +112,17 @@ type PreferenceContext = {
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
 };
 const Context = createContext<PreferenceContext | null>(null);
+const LOAD_NOTICE = 'desktop-preferences-load';
 
 export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const { isLoggedIn } = useUserContext();
-  const setDarkMode = useUIStore((state) => state.setDarkMode);
-  const [preferences, setPreferences] = useState(defaultDesktopPreferences);
+  const [cache] = useState(readPreferenceCache);
+  const [preferences, setPreferences] = useState(cache.preferences);
   const resolvedMode = useResolvedColourMode(preferences.mode);
-  const [cacheAvailable, setCacheAvailable] = useState(true);
-  const [hydrated, setHydrated] = useState(false);
+  const [cacheAvailable, setCacheAvailable] = useState(cache.available);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadError, setLoadError] = useState(false);
   const [serverReady, setServerReady] = useState(false);
   const [syncState, setSyncState] = useState<PreferenceContext['syncState']>('local');
   const revision = useRef(0);
@@ -123,17 +130,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
-      if (isPreferences(saved)) setPreferences(normalisePreferences(saved));
-    } catch {
-      setCacheAvailable(false);
-    }
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
+    if (isLoggedIn && !initialLoadComplete) return;
     try {
       const stored = JSON.stringify(preferences);
       localStorage.setItem(STORAGE_KEY, stored);
@@ -141,42 +138,83 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     } catch {
       setCacheAvailable(false);
     }
-  }, [hydrated, preferences]);
-
-  useEffect(() => {
-    if (hydrated) setDarkMode(resolvedMode === 'dark');
-  }, [hydrated, resolvedMode, setDarkMode]);
+  }, [initialLoadComplete, isLoggedIn, preferences]);
 
   useEffect(() => {
     if (!isLoggedIn) {
       setServerReady(false);
       setSyncState('local');
+      setInitialLoadComplete(false);
+      setLoadAttempt(0);
+      setLoadError(false);
       return;
     }
     const controller = new AbortController();
+    let disposed = false;
+    const timer = window.setTimeout(() => controller.abort(), 10000);
     const loadRevision = revision.current;
+    const canReplace = loadAttempt === 0 || acknowledgedRevision.current === loadRevision;
     setSyncState('loading');
+    setLoadError(false);
     fetch('/api/desktop-preferences', { credentials: 'include', signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('Preference load failed');
         const value: unknown = await response.json();
         if (!isPreferences(value)) throw new Error('Invalid server preferences');
-        if (controller.signal.aborted) return;
-        if (revision.current === loadRevision) {
+        if (controller.signal.aborted) throw new Error('Preference load expired');
+        if (revision.current === loadRevision && canReplace) {
           acknowledgedRevision.current = loadRevision;
           setPreferences(normalisePreferences(value));
         }
         setServerReady(true);
-        setSyncState(revision.current === loadRevision ? 'saved' : 'saving');
+        setSyncState(acknowledgedRevision.current === revision.current ? 'saved' : 'saving');
       })
       .catch(() => {
-        if (!controller.signal.aborted) setSyncState('error');
+        if (!disposed) {
+          setLoadError(true);
+          setSyncState('error');
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(timer);
+        if (!disposed) setInitialLoadComplete(true);
       });
-    return () => controller.abort();
-  }, [isLoggedIn]);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isLoggedIn, loadAttempt]);
 
   useEffect(() => {
-    if (!isLoggedIn || !serverReady || !hydrated || acknowledgedRevision.current === revision.current) return;
+    if (loadError) {
+      toast.error(
+        <>
+          <p>Appearance could not be loaded. Using this browser’s settings.</p>
+          <button
+            type="button"
+            className="btn btn-outline-primary"
+            onClick={() => {
+              const target =
+                document.querySelector<HTMLElement>('.desktop-search-trigger, .desktop-auth input') ??
+                document.querySelector<HTMLElement>('#root button:not([disabled]), #root a[href]') ??
+                document.getElementById('root');
+              target?.focus({ preventScroll: true });
+              toast.dismiss(LOAD_NOTICE);
+              setLoadAttempt((previous) => previous + 1);
+            }}
+          >
+            Retry
+          </button>
+        </>,
+        { id: LOAD_NOTICE, duration: Number.POSITIVE_INFINITY },
+      );
+    }
+    return () => toast.dismiss(LOAD_NOTICE);
+  }, [loadError]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !serverReady || acknowledgedRevision.current === revision.current) return;
     let superseded = false;
     const saveRevision = revision.current;
     setSyncState('saving');
@@ -204,7 +242,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       superseded = true;
       window.clearTimeout(timer);
     };
-  }, [preferences, serverReady, hydrated, isLoggedIn]);
+  }, [preferences, serverReady, isLoggedIn]);
 
   const update = (value: Partial<DesktopPreferences>) => {
     if (!isPreferences({ ...preferences, ...value })) return;
@@ -230,7 +268,9 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   };
 
   return (
-    <Context.Provider value={{ preferences, resolvedMode, cacheAvailable, update, updateWindow, reset, syncState }}>{children}</Context.Provider>
+    <Context.Provider value={{ preferences, resolvedMode, cacheAvailable, update, updateWindow, reset, syncState }}>
+      {isLoggedIn && !initialLoadComplete ? <StartupSurface /> : children}
+    </Context.Provider>
   );
 };
 

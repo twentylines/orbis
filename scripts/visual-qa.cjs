@@ -39,6 +39,8 @@ const inspectContainerNames = require('./container-name-checks.cjs');
 const inspectCompactCopy = require('./compact-copy-checks.cjs');
 const inspectSearchReading = require('./search-reading-checks.cjs');
 const inspectPackageField = require('./package-field-checks.cjs');
+const inspectStartup = require('./startup-appearance-checks.cjs');
+const startupOnly = process.env.ORBIS_VISUAL_STARTUP_ONLY === '1';
 const packageFieldsOnly = process.env.ORBIS_VISUAL_PACKAGE_FIELDS_ONLY === '1';
 const inspectAuthFields = require('./auth-field-checks.cjs');
 const authFieldsOnly = process.env.ORBIS_VISUAL_AUTH_FIELDS_ONLY === '1';
@@ -146,6 +148,7 @@ if (
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    startupOnly ||
     packageFieldsOnly ||
     authFieldsOnly ||
     searchReadingOnly ||
@@ -481,6 +484,7 @@ async function main() {
   let preferences = freshPreferences();
   const reports = [];
   const viewports =
+    startupOnly ||
     connectionOnly ||
     systemModeOnly ||
     hostDevicesOnly ||
@@ -497,33 +501,35 @@ async function main() {
     hostSensorsOnly
       ? [
           {
-            name: packageFieldsOnly
-              ? 'package-fields'
-              : authFieldsOnly
-                ? 'auth-fields'
-                : searchReadingOnly
-                  ? 'search-reading'
-                  : compactCopyOnly
-                    ? 'compact-copy'
-                    : containerNamesOnly
-                      ? 'container-names'
-                      : hostSensorsOnly
-                        ? 'host-sensors'
-                        : monitorClampOnly
-                          ? 'monitor-clamp'
-                          : monitorRefreshOnly
-                            ? 'monitor-refresh'
-                            : cachedRetryOnly
-                              ? 'cached-retry'
-                              : hostHistoryOnly
-                                ? 'host-history'
-                                : hostProcessesOnly
-                                  ? 'host-processes'
-                                  : hostDevicesOnly
-                                    ? 'host-devices'
-                                    : systemModeOnly
-                                      ? 'system-mode'
-                                      : 'connection',
+            name: startupOnly
+              ? 'startup'
+              : packageFieldsOnly
+                ? 'package-fields'
+                : authFieldsOnly
+                  ? 'auth-fields'
+                  : searchReadingOnly
+                    ? 'search-reading'
+                    : compactCopyOnly
+                      ? 'compact-copy'
+                      : containerNamesOnly
+                        ? 'container-names'
+                        : hostSensorsOnly
+                          ? 'host-sensors'
+                          : monitorClampOnly
+                            ? 'monitor-clamp'
+                            : monitorRefreshOnly
+                              ? 'monitor-refresh'
+                              : cachedRetryOnly
+                                ? 'cached-retry'
+                                : hostHistoryOnly
+                                  ? 'host-history'
+                                  : hostProcessesOnly
+                                    ? 'host-processes'
+                                    : hostDevicesOnly
+                                      ? 'host-devices'
+                                      : systemModeOnly
+                                        ? 'system-mode'
+                                        : 'connection',
             width: 1440,
             height: 1120,
           },
@@ -832,6 +838,17 @@ async function main() {
     });
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Hades', exact: true }).waitFor();
+    if (startupOnly) {
+      const startup = await inspectStartup({
+        page,
+        base,
+        preferences: freshPreferences(),
+        capture: (name, options) => capture(page, `${viewport.name}-${name}.png`, options),
+      });
+      reports.push({ viewport: viewport.name, startup, errors });
+      await page.close();
+      continue;
+    }
     if (compactScaleOnly) {
       const inspectCompactScale = require('./compact-scale-checks.cjs');
       const compactScale = await inspectCompactScale({
@@ -1705,6 +1722,7 @@ async function main() {
     hostProcessesOnly ||
     hostHistoryOnly ||
     cachedRetryOnly ||
+    startupOnly ||
     packageFieldsOnly ||
     authFieldsOnly ||
     searchReadingOnly ||
@@ -1718,6 +1736,7 @@ async function main() {
       reports.some(
         (report) =>
           report.errors.length ||
+          (startupOnly && !report.startup?.passed) ||
           (compactScaleOnly && !report.compactScale?.passed) ||
           (tilesOnly && !report.tileComfort?.passed) ||
           (systemModeOnly && !report.systemMode?.passed) ||

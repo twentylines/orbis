@@ -6,7 +6,7 @@ import { Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { ErrorPage } from '../error/error-page';
-import { DashboardLayout } from '../layouts/dashboard/layout';
+import { DashboardLayout, DashboardLayoutSuspense } from '../layouts/dashboard/layout';
 import { SSEProvider } from '../providers/sse/sse-provider';
 import { RouteWrapper } from './route-wrapper';
 
@@ -31,7 +31,13 @@ export default () => {
             fallbackRender={({ error, resetErrorBoundary }) => <ErrorPage error={error} onReset={resetErrorBoundary} />}
             onReset={reset}
           >
-            <Suspense fallback={null}>
+            <Suspense
+              fallback={
+                <DashboardLayoutSuspense>
+                  <output>Loading your workspace…</output>
+                </DashboardLayoutSuspense>
+              }
+            >
               <AppContextProvider>
                 <SSEProvider>
                   <Suspense fallback={<DashboardLayout />}>

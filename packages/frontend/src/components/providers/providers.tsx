@@ -2,13 +2,14 @@ import { UserContextProvider } from '@/context/user-context';
 import { MutationCache, QueryClient, QueryClientProvider, QueryErrorResetBoundary } from '@tanstack/react-query';
 import { type PropsWithChildren, Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { ErrorPage, FallbackSurface } from '../error/error-page';
+import { ErrorPage } from '../error/error-page';
+import { StartupSurface } from '../startup/startup-surface';
 import { I18nProvider } from './i18n/i18n-provider';
 import { SentryProvider } from './sentry/sentry-provider';
 import { AutoThemeProvider } from './theme/auto-theme-provider';
 import { ThemeProvider } from './theme/theme-provider';
 import { DebugPanel } from '../debug-panel/debug-panel';
-import { DesktopPreferencesProvider } from '@/desktop/preferences';
+import { DesktopPreferencesProvider, useDesktopPreferences } from '@/desktop/preferences';
 
 const queryClient = new QueryClient({
   mutationCache: new MutationCache({
@@ -21,12 +22,14 @@ const queryClient = new QueryClient({
   },
 });
 
-const PageSuspense = ({ children }: PropsWithChildren) => {
+const ThemedProviders = ({ children }: PropsWithChildren) => {
+  const { resolvedMode } = useDesktopPreferences();
   return (
-    <FallbackSurface>
-      <output>Loading Orbis…</output>
-      {children}
-    </FallbackSurface>
+    <ThemeProvider colourMode={resolvedMode}>
+      <AutoThemeProvider>
+        <I18nProvider>{children}</I18nProvider>
+      </AutoThemeProvider>
+    </ThemeProvider>
   );
 };
 
@@ -36,16 +39,12 @@ export const Providers = ({ children }: PropsWithChildren) => {
       <QueryErrorResetBoundary>
         {({ reset }) => (
           <ErrorBoundary fallbackRender={({ error, resetErrorBoundary }) => <ErrorPage error={error} onReset={resetErrorBoundary} />} onReset={reset}>
-            <Suspense fallback={<PageSuspense />}>
+            <Suspense fallback={<StartupSurface />}>
               <UserContextProvider>
                 <SentryProvider>
-                  <ThemeProvider>
-                    <AutoThemeProvider>
-                      <I18nProvider>
-                        <DesktopPreferencesProvider>{children}</DesktopPreferencesProvider>
-                      </I18nProvider>
-                    </AutoThemeProvider>
-                  </ThemeProvider>
+                  <DesktopPreferencesProvider>
+                    <ThemedProviders>{children}</ThemedProviders>
+                  </DesktopPreferencesProvider>
                 </SentryProvider>
               </UserContextProvider>
             </Suspense>

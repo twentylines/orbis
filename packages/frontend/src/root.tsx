@@ -8,6 +8,7 @@ import stylesheet from './app.css?url';
 import { Providers } from './components/providers/providers';
 import { FallbackSurface } from './components/error/error-page';
 import { ConfirmationDialog } from './desktop/confirmation';
+import { StartupSurface } from './components/startup/startup-surface';
 
 export const links: Route.LinksFunction = () => [
   { rel: 'stylesheet', href: stylesheet },
@@ -34,6 +35,10 @@ export async function clientLoader({ request }: Route.ActionArgs) {
   return redirect('/login');
 }
 
+export function HydrateFallback() {
+  return <StartupSurface />;
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handlePreloadError = () => {
@@ -57,7 +62,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <main id="root">
+        <main id="root" tabIndex={-1}>
           {children}
           <ScrollRestoration />
           <Scripts />

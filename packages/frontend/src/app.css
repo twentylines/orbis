@@ -7,6 +7,10 @@
   height: auto;
   display: flow-root;
 }
+#root:focus-visible {
+  outline: 3px solid var(--desktop-focus, #b75c3e);
+  outline-offset: -4px;
+}
 
 @media (min-width: 992px) {
   :host,
@@ -21,6 +25,61 @@ main {
 
 body {
   overflow-y: scroll;
+}
+
+html:has(.orbis-startup),
+body:has(.orbis-startup),
+.orbis-startup {
+  background: #dce3dd;
+  color: #233a34;
+}
+.orbis-startup {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 32px 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.orbis-startup-content {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  max-width: 100%;
+  text-align: center;
+}
+.orbis-startup-name {
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.orbis-startup img {
+  animation: orbis-startup-pulse 1.8s ease-in-out infinite alternate;
+}
+@keyframes orbis-startup-pulse {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-startup img {
+    animation: none;
+  }
+}
+.orbis-startup output {
+  font-size: 1rem;
+  line-height: 1.6;
+  text-wrap: balance;
+}
+@media (prefers-color-scheme: dark) {
+  html:has(.orbis-startup),
+  body:has(.orbis-startup),
+  .orbis-startup {
+    background: #142522;
+    color: #dce3dd;
+  }
 }
 
 html:has(.desktop),
