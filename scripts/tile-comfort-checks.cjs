@@ -1,7 +1,8 @@
 const auditAssert = require('node:assert/strict');
+const { browser: reading } = require('./live-compact-ui-qa.cjs');
 
 const installedCopy = [
-  { name: 'Orbis rehearsal', short_desc: 'Upgrade rehearsal with preserved settings and a private application network' },
+  { name: 'Audiobookshelf', short_desc: 'Private audiobook and podcast library with synchronised listening progress' },
   {
     name: 'Jellyfin Media Library and Transcoding Server',
     short_desc: 'Stream films, television shows and music from a private media library on your home server.',
@@ -13,7 +14,7 @@ const installedCopy = [
 ];
 const catalogueCopy = [
   {
-    name: 'Home Assistant Community Store and Automation Dashboard',
+    name: 'Audiobookshelf',
     short_desc: 'Control household lights, sensors and automations from one dashboard without sharing your private data.',
   },
   {
@@ -85,7 +86,20 @@ async function auditMetrics(page, route) {
       const hyphenations = [];
       const clipped = [];
       const rects = [];
+      const ellipses = [];
       for (const n of textNodes(e)) {
+        const word = n.parentElement.closest('.orbis-whole-word');
+        const name = word?.closest('.app-tile-name,.catalogue-tile-name');
+        const wordStyle = word && getComputedStyle(word);
+        const accessibleEllipsis =
+          name &&
+          name.title === name.textContent.trim() &&
+          wordStyle.whiteSpace === 'nowrap' &&
+          wordStyle.overflowX === 'hidden' &&
+          wordStyle.textOverflow === 'ellipsis' &&
+          word.scrollWidth > word.clientWidth + 1;
+        if (accessibleEllipsis)
+          ellipses.push({ text: word.textContent, title: name.title, box: box(word), scrollWidth: word.scrollWidth, clientWidth: word.clientWidth });
         for (const m of n.textContent.matchAll(/[A-Za-z][A-Za-z']{2,}/g)) {
           const r = document.createRange();
           r.setStart(n, m.index);
@@ -137,7 +151,9 @@ async function auditMetrics(page, route) {
               hyphenations.push(info);
             else wordIssues.push(info);
           }
-          for (const p of parts) {
+          for (const ink of parts) {
+            const wordBox = accessibleEllipsis && word.getBoundingClientRect();
+            const p = wordBox ? { ...ink.toJSON(), left: Math.max(ink.left, wordBox.left), right: Math.min(ink.right, wordBox.right) } : ink;
             rects.push({ left: p.left, right: p.right, top: p.top, bottom: p.bottom });
             if (p.left < bounds.left + 8 - 1 || p.right > bounds.right - 8 + 1 || p.top < bounds.top - 1 || p.bottom > bounds.bottom + 1)
               clipped.push(m[0]);
@@ -152,7 +168,7 @@ async function auditMetrics(page, route) {
           }
         }
       }
-      return { wordIssues, hyphenations, clipped, rects };
+      return { wordIssues, hyphenations, clipped, rects, ellipses };
     };
     const result = cards.map((e) => {
       const name = e.querySelector(route === 'apps' ? '.fw-bolder' : 'h3');
@@ -177,6 +193,7 @@ async function auditMetrics(page, route) {
         notice: notice ? { box: box(notice), minHeight: getComputedStyle(notice).minHeight, lineHeight: getComputedStyle(notice).lineHeight } : null,
         box: box(e),
         name: name.textContent.trim(),
+        nameTitle: name.title,
         description: description.textContent.trim(),
         accessibleName: e.getAttribute('aria-label') || e.closest('a')?.getAttribute('aria-label'),
         descriptionTitle: description.title,
@@ -279,6 +296,7 @@ function assertComposition(metrics, { routeName, viewport, apps, catalogue, audi
   for (let i = 0; i < expected.length; i++) {
     const card = metrics.cards[i];
     auditAssert.equal(card.name, expected[i].name, 'Complete fixture name must remain in DOM');
+    auditAssert.equal(card.nameTitle, expected[i].name, 'App-name title must expose the complete identifier');
     auditAssert.equal(card.description, expected[i].short_desc, 'Complete fixture description must remain in DOM');
     auditAssert.deepEqual(card.ink.wordIssues, [], 'Ordinary card words fractured');
     auditAssert.deepEqual(card.ink.clipped, [], 'Card text lost comfortable8px edge clearance');
@@ -431,6 +449,7 @@ module.exports = async function inspectTileComfort({
     mutations: [],
     preferencePuts: 0,
     browserErrors: [],
+    negativeControls: [],
   };
   const storageKey = 'server-desktop-preferences-v1';
   const originalStorage = await page.evaluate((key) => localStorage.getItem(key), storageKey);
@@ -493,11 +512,59 @@ module.exports = async function inspectTileComfort({
             );
             await auditSettle(page);
             await auditScale(page, scale);
+            if (viewport.width === 320 && scale === 2 && routeName === 'store') {
+              const words = page.locator('.catalogue-tile-name').first().locator('.orbis-whole-word');
+              await words.evaluateAll((elements) => {
+                for (const element of elements) element.classList.remove('orbis-whole-word');
+              });
+              try {
+                const negative = await auditMetrics(page, routeName);
+                auditAssert.ok(
+                  negative.cards[0].ink.wordIssues.some((issue) => issue.word === 'Audiobookshelf'),
+                  'The original Audiobookshelf word fracture must still be rejected',
+                );
+                await reading.wheelVisible(page, page.locator('.catalogue-tile-name').first());
+                await capture(`${tag}-original-fracture-negative`, { scrollTop: false, fullPage: false });
+                report.negativeControls.push({ mode, textScale: scale, route: routeName, rejected: negative.cards[0].ink.wordIssues });
+              } finally {
+                await page
+                  .locator('.catalogue-tile-name')
+                  .first()
+                  .locator('span span')
+                  .evaluateAll((elements) => {
+                    for (const element of elements) element.classList.add('orbis-whole-word');
+                  });
+              }
+            }
             const metrics = await auditMetrics(page, routeName);
             report.pending = { mode, textScale: scale, route: routeName, metrics };
             assertComposition(metrics, { routeName, viewport, apps, catalogue, auditLinks });
             await capture(tag, { scrollTop: false, fullPage: false });
             if (viewport.width < 1100) await capture(`${tag}-full-page`, { scrollTop: false, fullPage: true });
+            const name = page.locator(routeName === 'apps' ? '.app-tile-name' : '.catalogue-tile-name').first();
+            await reading.wheelVisible(page, name);
+            const nameVisibility = await name.evaluate((element) => {
+              const r = element.getBoundingClientRect();
+              const frame = element.closest('.desktop-route-window');
+              const content = frame.querySelector('.desktop-window-content');
+              return {
+                top: r.top,
+                bottom: r.bottom,
+                readingTop:
+                  frame.dataset.windowNavigation === 'desktop'
+                    ? content.getBoundingClientRect().top
+                    : document.querySelector('.desktop-system-bar').getBoundingClientRect().bottom,
+                readingBottom:
+                  frame.dataset.windowNavigation === 'desktop'
+                    ? content.getBoundingClientRect().bottom
+                    : document.querySelector('.desktop-dock').getBoundingClientRect().top,
+              };
+            });
+            auditAssert.ok(
+              nameVisibility.top >= nameVisibility.readingTop + 8 && nameVisibility.bottom <= nameVisibility.readingBottom - 8,
+              'App-name capture must show the entire name clear of navigation',
+            );
+            await capture(`${tag}-name-native-scroll`, { scrollTop: false, fullPage: false });
             const focus = routeName === 'store' ? await auditFocusFilters(page) : null;
             if (focus) await capture(`${tag}-filter-focus`, { scrollTop: false, fullPage: false });
             if (routeName === 'apps' && viewport.width === 320 && scale === 2) {
@@ -505,7 +572,7 @@ module.exports = async function inspectTileComfort({
               await page.waitForTimeout(400);
               await capture(`${tag}-custom-link-native-scroll`, { scrollTop: false, fullPage: false });
             }
-            report.compositions.push({ mode, textScale: scale, route: routeName, metrics, focus, capture: tag });
+            report.compositions.push({ mode, textScale: scale, route: routeName, metrics, nameVisibility, focus, capture: tag });
             delete report.pending;
           } catch (error) {
             await capture(`${tag}-failure`, { scrollTop: false, fullPage: viewport.width < 1100 }).catch(() => undefined);

@@ -1,6 +1,7 @@
 import type React from 'react';
 import './store-tile.css';
 import { AppLogo } from '@/components/app-logo/app-logo';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { Skeleton } from '@/components/ui/Skeleton/Skeleton';
 import type { AppInfoSimple } from '@/types/app.types';
 import { useTranslation } from 'react-i18next';
@@ -22,8 +23,12 @@ export const StoreTile: React.FC<{ app: AppInfoSimple; isLoading: boolean }> = (
         </Skeleton>
         <div className="card-body">
           <div className="d-flex align-items-center" style={{ columnGap: '0.75rem' }}>
-            <h3 className="text-bold mb-2">
-              <Skeleton loading={isLoading}>{app.name}</Skeleton>
+            <h3 className="text-bold mb-2 catalogue-tile-name" title={app.name}>
+              <Skeleton loading={isLoading}>
+                <span>
+                  <WrapWords text={app.name} />
+                </span>
+              </Skeleton>
             </h3>
             {isNew ? <div className="text-white badge me-1 bg-green">{t('APP_NEW')}</div> : null}
           </div>

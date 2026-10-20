@@ -1,4 +1,5 @@
 import { AppLogo } from '@/components/app-logo/app-logo';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import type { AppInfo, AppStatus as AppStatusType } from '@/types/app.types';
 import { IconAlertCircle, IconDownload, IconRotateClockwise } from '@tabler/icons-react';
 import type React from 'react';
@@ -33,7 +34,9 @@ export const AppTile: React.FC<{
         <AppLogo alt={`${info.name} logo`} urn={info.urn} size={60} />
         <div className="d-flex flex-column app-tile-copy">
           <div className="d-flex align-items-center gap-2">
-            <span className="fw-bolder">{info.name}</span>
+            <span className="fw-bolder app-tile-name" title={info.name}>
+              <WrapWords text={info.name} />
+            </span>
             {!docker || !['running', 'stopped'].includes(status) ? <AppStatus lite status={status} /> : null}
           </div>
           <div className="text-muted">{info.short_desc}</div>

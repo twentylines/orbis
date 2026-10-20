@@ -6,6 +6,10 @@
   align-self: stretch;
   min-width: 0;
 }
+.app-tile-name {
+  min-width: 0;
+  max-width: 100%;
+}
 .app-tile-copy > .docker-health {
   margin-top: auto;
 }
