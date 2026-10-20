@@ -916,6 +916,9 @@ function checkFocus(value) {
     'Complete native focus marker must clear real scroll/chrome clip edges',
   );
 }
+function wheelInset(available, height) {
+  return Math.max(8, Math.min(16, Math.floor((available - height) / 2)));
+}
 async function wheelVisible(page, locator) {
   for (let attempt = 0; attempt < 65; attempt++) {
     const value = await locator.evaluate((element) => {
@@ -923,21 +926,25 @@ async function wheelVisible(page, locator) {
       const frame = element.closest('.desktop-route-window');
       const content = frame?.querySelector('.desktop-window-content');
       const desktop = frame?.dataset.windowNavigation === 'desktop';
-      const top = desktop
-        ? content.getBoundingClientRect().top + 16
-        : (document.querySelector('.desktop-system-bar')?.getBoundingClientRect().bottom || 0) + 16;
-      const bottom = desktop
-        ? content.getBoundingClientRect().bottom - 16
-        : (document.querySelector('.desktop-dock')?.getBoundingClientRect().top || innerHeight) - 16;
+      const edgeTop = desktop
+        ? content.getBoundingClientRect().top
+        : document.querySelector('.desktop-system-bar')?.getBoundingClientRect().bottom || 0;
+      const edgeBottom = desktop
+        ? content.getBoundingClientRect().bottom
+        : document.querySelector('.desktop-dock')?.getBoundingClientRect().top || innerHeight;
       return {
         top: r.top,
         bottom: r.bottom,
-        limitTop: top,
-        limitBottom: bottom,
+        height: r.height,
+        edgeTop,
+        edgeBottom,
         x: Math.min(innerWidth - 30, r.left + 40),
-        y: Math.min(bottom - 20, top + 80),
       };
     });
+    const inset = wheelInset(value.edgeBottom - value.edgeTop, value.height);
+    value.limitTop = value.edgeTop + inset;
+    value.limitBottom = value.edgeBottom - inset;
+    value.y = Math.min(value.limitBottom - 20, value.limitTop + 80);
     if (value.top >= value.limitTop && value.bottom <= value.limitBottom) {
       await settled(page);
       return;
@@ -2064,6 +2071,9 @@ function selfCheck() {
     change(altered);
     assert.throws(() => checkTitleAlignment(altered, true));
   }
+  assert.equal(wheelInset(522.84375, 497.6875), 12);
+  assert.equal(wheelInset(522.84375, 44), 16);
+  assert.equal(wheelInset(200, 300), 8);
   return {
     passed: true,
     browserStarted: false,
