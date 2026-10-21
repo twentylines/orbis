@@ -47,14 +47,33 @@ export class AppLifecycleService {
     @Inject(DOCKERODE) private readonly docker: Dockerode,
   ) {
     this.logger.debug('Subscribing to app events...');
-    this.appEventsQueue.onEvent((data, reply) => this.invokeCommand(data, reply));
+    this.appEventsQueue.onEvent((data, reply, delivery) => this.invokeCommand(data, reply, delivery?.redelivered ?? false));
   }
 
-  async invokeCommand(data: typeof appEventSchema.infer, reply: (response: typeof appEventResultSchema.infer) => Promise<void>) {
+  async invokeCommand(data: typeof appEventSchema.infer, reply: (response: typeof appEventResultSchema.infer) => Promise<void>, redelivered = false) {
     await this.tasks.enqueue(data);
     const release = await this.mutex.acquire(data.appUrn);
 
     try {
+      if (data.command === 'restore') {
+        const previous = (await this.tasks.read()).tasks.find((task) => task.id === data.requestId);
+        if (previous && (previous.appUrn !== data.appUrn || previous.action !== data.command))
+          throw new Error('Restore request identity does not match its task');
+        if (redelivered || previous?.status !== 'queued') {
+          await this.recoverInterruptedRestore(data.appUrn);
+          await this.tasks.interrupt(data);
+          await reply({
+            success: previous?.status === 'succeeded',
+            message:
+              previous?.status === 'succeeded'
+                ? 'This restore request has already completed.'
+                : previous?.status === 'failed'
+                  ? 'This restore request has already failed. Review the app before retrying.'
+                  : 'This restore was interrupted. Review the app before starting a new restore.',
+          });
+          return;
+        }
+      }
       await this.tasks.start(data);
       let result: typeof appEventResultSchema.infer;
       try {

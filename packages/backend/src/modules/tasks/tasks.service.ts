@@ -143,6 +143,14 @@ export class TasksService implements OnModuleInit {
     });
   }
 
+  interrupt(event: TaskEvent) {
+    return this.change(event, (task) => {
+      if (!active.has(task.status)) return;
+      task.status = 'interrupted';
+      task.updatedAt = new Date().toISOString();
+    });
+  }
+
   async read(): Promise<TaskHistory> {
     await this.load();
     await this.writes;

@@ -1,5 +1,9 @@
 # Orbis changelog
 
+## Unreleased
+
+- Recover interrupted restore files without automatically running the restore again when the queue reconnects. Keep completed outcomes and reject duplicate restore execution.
+
 ## Beta60 — 21 October 2026
 
 - Keep backup filenames accessible on narrow screens, give the upload file picker its own space and keep the upload title, close control and footer visible with enlarged text.

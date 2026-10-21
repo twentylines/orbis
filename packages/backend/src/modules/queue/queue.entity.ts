@@ -36,7 +36,13 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
     }
   }
 
-  public onEvent(callback: (data: Infer<T> & { eventId: string }, reply: (response: InferIn<R>) => Promise<void>) => Promise<void>) {
+  public onEvent(
+    callback: (
+      data: Infer<T> & { eventId: string },
+      reply: (response: InferIn<R>) => Promise<void>,
+      delivery?: { redelivered: boolean },
+    ) => Promise<void>,
+  ) {
     try {
       this.rabbit.createConsumer(
         {
@@ -49,7 +55,7 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
           let rpcResultMessage = '';
 
           try {
-            await callback(req.body, reply);
+            await callback(req.body, reply, { redelivered: req.redelivered });
             rpcSuccess = true;
             rpcResultMessage = 'RPC processed successfully.';
           } catch (error) {
