@@ -25,6 +25,28 @@ HOST = REPLACE.HOST
 APPS = REPLACE.APPS
 
 
+class Terminal:
+    def __init__(self):
+        self.reader = open("/dev/tty", "r", encoding="utf-8")
+        try:
+            self.writer = open("/dev/tty", "w", encoding="utf-8")
+        except OSError:
+            self.reader.close()
+            raise
+
+    def ask(self, question):
+        self.writer.write(question)
+        self.writer.flush()
+        answer = self.reader.readline()
+        if not answer:
+            raise ValueError("Installation cancelled")
+        return answer
+
+    def close(self):
+        self.reader.close()
+        self.writer.close()
+
+
 def safe_root(path):
     path = path.expanduser().absolute()
     if path != path.resolve(strict=False) or any(ord(char) < 32 or ord(char) == 127 for char in str(path)):
@@ -184,19 +206,16 @@ def main():
     try:
         if not args.yes:
             try:
-                tty = open("/dev/tty", "r+")
+                tty = Terminal()
             except OSError as error:
                 raise ValueError("An interactive terminal is required, or provide --yes with an explicit --root and mode") from error
         elif args.root is None:
             raise ValueError("Unattended installation requires an explicit --root")
 
         def ask(question):
-            tty.write(question)
-            tty.flush()
-            answer = tty.readline()
-            if not answer:
-                raise ValueError("Installation cancelled")
-            return answer
+            if tty is None:
+                raise ValueError("An interactive terminal is required")
+            return tty.ask(question)
 
         supplied_root = safe_root(args.root) if args.root else None
         roots = {item["installRoot"] for item in report["installations"] if item.get("installRoot")}

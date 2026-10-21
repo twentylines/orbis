@@ -4,9 +4,13 @@ import hashlib
 import importlib.util
 import json
 import os
+import pty
+import select
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,6 +33,55 @@ HEALTHY = {"state": "running", "health": "healthy", "image": MANIFEST["image"] +
 
 
 class GuidedTests(unittest.TestCase):
+    def test_real_controlling_terminal_answers_are_independent_of_piped_stdin(self):
+        import fcntl
+        import termios
+        master, slave = pty.openpty()
+        script = str(Path(__file__).with_name("orbis-install.py").resolve())
+        code = (
+            "import importlib.util; "
+            f"s=importlib.util.spec_from_file_location('guided_terminal', {script!r}); "
+            "m=importlib.util.module_from_spec(s); s.loader.exec_module(m); "
+            "t=m.Terminal(); answer=t.ask('Choose a path: '); "
+            "print('TTY-ANSWER:'+answer.strip(),flush=True); t.close()"
+        )
+        def attach():
+            os.setsid()
+            fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+        process = None
+        try:
+            process = subprocess.Popen([sys.executable, "-u", "-c", code], stdin=subprocess.PIPE, stdout=slave, stderr=slave, pass_fds=(slave,), preexec_fn=attach)
+            os.close(slave)
+            slave = None
+            process.stdin.write(b"wrong-pipe-answer\n")
+            process.stdin.close()
+            output = b""
+            answered = False
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                if select.select([master], [], [], 0.1)[0]:
+                    try:
+                        chunk = os.read(master, 65536)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    output += chunk
+                    if not answered and b"Choose a path: " in output:
+                        os.write(master, b"/owned/test/path\n")
+                        answered = True
+            self.assertEqual(process.wait(timeout=2), 0, output.decode(errors="replace"))
+            self.assertTrue(answered)
+            self.assertIn(b"TTY-ANSWER:/owned/test/path", output)
+            self.assertNotIn(b"TTY-ANSWER:wrong-pipe-answer", output)
+        finally:
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+            os.close(master)
+            if slave is not None:
+                os.close(slave)
+
     def test_multiple_controllers_cannot_be_selected_silently(self):
         report = {"installations": [{"installRoot": "/opt/a", "product": "runtipi"}, {"installRoot": "/opt/b", "product": "runtipi"}]}
         with self.assertRaisesRegex(ValueError, "Several"):

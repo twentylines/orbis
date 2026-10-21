@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix piped interactive installation with separate terminal input/output streams and a real controlling-terminal regression check.
+
 - Package the Linux installer as a release-bound launcher and hashed helper archive, with guided Keep/Fresh selection, empty-server initialization and recorded recovery paths.
 - Enable the restricted host service through a dedicated Compose override, retain its configuration in enrollment checks, and resume identical partial helper copies after interruption.
 - Restrict startup network cleanup to unused networks explicitly labelled as Orbis-managed.
