@@ -1,9 +1,11 @@
-ARG NODE_VERSION="jod"
-ARG ALPINE_VERSION="3.21"
+ARG NODE_IMAGE="node:22.23.4-alpine3.23@sha256:206878a60dc7014193f418ab9259b6110c15fbd514b3044a267be706509944e4"
 ARG BUN_VERSION="1.3.0"
 
 FROM oven/bun:${BUN_VERSION}-alpine AS bun_base
-FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS node_base
+FROM ${NODE_IMAGE} AS node_base
+
+COPY packages/backend/scripts/verify-node-security.cjs /usr/local/lib/orbis/verify-node-security.cjs
+RUN node /usr/local/lib/orbis/verify-node-security.cjs
 
 # ---- BUILDER BASE ----
 FROM bun_base AS builder_base
@@ -79,6 +81,7 @@ LABEL io.orbis.installation-protocol="orbis.installation-state.v1"
 WORKDIR /app
 
 COPY --from=builder /app/runtime-node-modules ./node_modules
+COPY --from=builder /app/packages/backend/scripts/verify-node-security.cjs ./verify-node-security.cjs
 COPY --from=builder /app/packages/backend/scripts/verify-runtime-dependencies.cjs ./verify-runtime-dependencies.cjs
 RUN node ./verify-runtime-dependencies.cjs
 COPY --from=builder_base /deps/docker-binary /usr/local/bin/docker-compose

@@ -4,6 +4,9 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const { execFileSync } = require('node:child_process');
 const os = require('node:os');
+const { verifyNodeSecurity } = require('./verify-node-security.cjs');
+
+verifyNodeSecurity();
 
 const verifyArchiveRuntime = () => {
   const archiveRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'orbis-archive-runtime-'));

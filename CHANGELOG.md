@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Update the production and development runtime to Node.js 22.23.4 for the October 2026 security fixes, pin the multi-platform base image and check the security minimum during image builds and CI.
+
 - Run account-specific Orbis setup even when a migrated login session is still valid; save the server name, display mode and reporting choice, with an optional pairing shortcut.
 - Open the server rack as a floating card selector over a blurred background, with keyboard, touch and reduced-motion support.
 - Animate the dock splitting and merging as apps are minimized or restored, and smooth its compact layout, selection and page transitions.
