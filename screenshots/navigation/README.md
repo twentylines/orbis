@@ -1,6 +1,6 @@
 # Navigation, server clusters and app launchers
 
-Dashboard captures from 22 October 2026; login captures from 21 October 2026. These are original browser captures using sample apps and two Orbis instances on one disposable test machine. Each instance has a running demo app; five additional sample app records have no containers.
+Captures from 22 October 2026. Login and setup use the locally built frontend with an actual Orbis beta64 backend initialized on PostgreSQL 17 in a separate disposable Linux machine. They show the neutral default name and responsive authentication toolbar. The remaining captures use sample apps and two Orbis instances on another disposable test machine. Each instance has a running demo app; five additional sample app records have no containers.
 
 This gallery shows page navigation, direct selection through the animated 3D server cases, merged apps and updates, desktop launchers, the split dock and phone app management. Minimized apps share the navigation dock's bottom row, and navigation contracts to icons after the fourth minimized app. Phones use ordinary pages. The instances share a Docker daemon, so detected containers can appear under both servers. These captures do not demonstrate a physical multi-host deployment or a real homelab migration.
 

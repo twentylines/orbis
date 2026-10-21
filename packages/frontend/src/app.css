@@ -91,7 +91,10 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 .desktop-auth {
   --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
   position: relative;
-  padding-block: 88px 40px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  justify-content: stretch;
+  padding-block: 24px 40px;
   min-height: 100vh;
   background: #c9d0bc var(--desktop-wallpaper) center center / cover fixed;
   color: var(--desktop-ink);
@@ -110,6 +113,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   box-shadow: 0 28px 70px rgba(28, 39, 35, 0.17);
 }
 .desktop-auth-container {
+  align-self: center;
   padding-block: 24px;
 }
 .desktop-auth-identity {
@@ -193,11 +197,14 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   gap: 8px;
   padding: 10px 12px;
   white-space: normal;
+  color: var(--desktop-ink);
+  background: var(--desktop-code-background);
+  border-color: var(--desktop-line);
 }
 .desktop-setup-modes .btn[aria-pressed="true"] {
   color: var(--desktop-ink);
   border-color: var(--desktop-accent);
-  background: var(--desktop-code-background);
+  background: color-mix(in srgb, var(--desktop-accent) 14%, var(--desktop-surface));
 }
 .desktop-welcome :is(h2, h3, p, .orbis-switch) {
   margin: 0;
@@ -252,7 +259,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 @media (max-width: 640px) {
   .desktop-auth {
     background-attachment: scroll;
-    padding-block: 76px 24px;
+    padding-block: 16px 24px;
   }
   .desktop-auth .container-tight {
     width: min(100%, 480px);
@@ -281,17 +288,29 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 }
 
 .desktop-auth-toolbar {
-  position: absolute;
-  top: 24px;
-  right: 24px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
+  width: 100%;
+  padding-inline: 24px;
+  margin-bottom: 24px;
+}
+.desktop-auth-toolbar > .btn {
+  flex: 0 0 auto;
+  color: var(--desktop-ink);
+  background: var(--desktop-code-background);
+  border-color: var(--desktop-line);
+}
+.desktop-auth-toolbar > label {
+  flex: 0 0 11rem;
+  min-width: 0;
+  max-width: 100%;
 }
 @media (max-width: 480px) {
   .desktop-auth-toolbar {
-    right: 16px;
-    top: 16px;
+    padding-inline: 16px;
   }
 }
 
