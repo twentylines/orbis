@@ -47,7 +47,15 @@
 
 .log-terminal {
   height: 300px;
-  overflow-y: scroll;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-log-background);
+  color: var(--desktop-log-ink);
+  color-scheme: dark;
+  font-size: 0.8125rem;
+  line-height: 1.7;
 }
 
 .wrap-lines {

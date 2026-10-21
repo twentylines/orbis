@@ -4,6 +4,7 @@ import { StartupSurface } from '@/components/startup/startup-surface';
 import toast from 'react-hot-toast';
 import { desktopWindowsSchema, type DesktopWindows, type DesktopWindowId, type DesktopWindowState } from '@runtipi/common/schemas';
 import { useResolvedColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
+import { appearanceFromStored, preferenceStorageKey } from './appearance-cache';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
@@ -28,7 +29,7 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   windows: {},
   workspace: { order: [...widgetIds], hidden: [], wide: ['applications'], pinnedApps: [], showAllApps: false },
 };
-const STORAGE_KEY = 'server-desktop-preferences-v1';
+const STORAGE_KEY = preferenceStorageKey;
 
 type StoredWorkspacePreferences = Omit<WorkspacePreferences, 'pinnedApps' | 'showAllApps'> &
   Partial<Pick<WorkspacePreferences, 'pinnedApps' | 'showAllApps'>>;
@@ -91,8 +92,12 @@ export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPr
 function readPreferenceCache() {
   if (typeof window === 'undefined') return { preferences: defaultDesktopPreferences, available: true };
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
-    return { preferences: isPreferences(value) ? normalisePreferences(value) : defaultDesktopPreferences, available: true };
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const value: unknown = raw && raw.length <= 16 * 1024 ? JSON.parse(raw) : null;
+    return {
+      preferences: isPreferences(value) ? normalisePreferences(value) : { ...defaultDesktopPreferences, ...appearanceFromStored(value) },
+      available: true,
+    };
   } catch {
     return { preferences: defaultDesktopPreferences, available: false };
   }
@@ -269,7 +274,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
 
   return (
     <Context.Provider value={{ preferences, resolvedMode, cacheAvailable, update, updateWindow, reset, syncState }}>
-      {isLoggedIn && !initialLoadComplete ? <StartupSurface /> : children}
+      {isLoggedIn && !initialLoadComplete ? <StartupSurface appearance={preferences} /> : children}
     </Context.Provider>
   );
 };

@@ -1,5 +1,13 @@
 # Orbis changelog
 
+## Beta62 — 21 October 2026
+
+- Apply the selected appearance to Compose, notes and update-review editors, including gutters, selection, search and diff highlights.
+- Keep editor search, keyboard focus and drafts intact during resource refreshes and appearance changes. Reflow search controls and configuration tabs on narrow screens with enlarged text.
+- Use the browser's saved appearance for the initial loading screen, before the application bundle and server preferences arrive.
+- Share theme materials across operation notices and log terminals.
+- Stop optional seasonal effects in hidden tabs and reduced-motion mode; remove their canvas, timers and listeners when disabled.
+
 ## Beta61 — 21 October 2026
 
 - Recover interrupted restore files without automatically running the restore again when the queue reconnects. Keep completed outcomes and reject duplicate restore execution.

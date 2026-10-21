@@ -143,7 +143,7 @@ module.exports = async function inspectBackups({ page, base, preferences, screen
         await page.goto(`${base}/apps/test/media?tab=backups`, { waitUntil: 'domcontentloaded' });
         const card = page.locator('.app-backups');
         await card.getByRole('button', { name: 'Backup now', exact: false }).waitFor();
-        await page.waitForFunction((mode) => document.querySelector('[data-desktop-mode]')?.dataset.desktopMode === mode, mode);
+        await page.waitForFunction((mode) => document.querySelector('.desktop[data-desktop-mode]')?.dataset.desktopMode === mode, mode);
         await page.evaluate(() => document.fonts.ready);
         await browser.scaleText(page, group.scale);
         const rows = card.locator('.app-backup-row');

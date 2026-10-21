@@ -5,8 +5,7 @@ import { ScrollArea } from '@/components/ui/ScrollArea';
 import { StepContent, Stepper, StepTrigger, StepTriggerList } from '@/components/ui/Stepper/Stepper';
 import { Switch } from '@/components/ui/Switch';
 import { unifiedMergeView } from '@codemirror/merge';
-import { copilot } from '@uiw/codemirror-theme-copilot';
-import CodeMirror from '@uiw/react-codemirror';
+import { CodeEditor } from '@/components/code-editor/code-editor';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -18,7 +17,6 @@ import { redirect, useLocation, useNavigate, useNavigation, useParams } from 're
 import type { Route } from './+types/app-update-page';
 import { getApp } from '@/api-client';
 import yaml from 'yaml';
-import { useDesktopPreferences } from '@/desktop/preferences';
 import { shouldRevalidateToolRoute } from '@/desktop/window-navigation';
 import './app-update-page.css';
 
@@ -51,8 +49,6 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
   const params = useParams<{ storeId: string; appId: string }>();
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { resolvedMode } = useDesktopPreferences();
-  const editorTheme = resolvedMode === 'dark' ? copilot : 'light';
   const location = useLocation();
   const navigation = useNavigation();
   const navigationState = useRef(navigation.state);
@@ -94,6 +90,10 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
       return null;
     }
   }, [composeDiffQuery.data]);
+  const configOriginal = configDiffQuery.data?.current ?? '';
+  const composeOriginal = composeReview?.current ?? '';
+  const configReviewExtensions = useMemo(() => [unifiedMergeView({ original: configOriginal, mergeControls: false })], [configOriginal]);
+  const composeReviewExtensions = useMemo(() => [unifiedMergeView({ original: composeOriginal, mergeControls: false })], [composeOriginal]);
   const configReviewReady = configDiffQuery.isSuccess && typeof configDiffQuery.data?.new === 'string';
   const reviewFailed =
     configDiffQuery.isError ||
@@ -177,18 +177,13 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                 <div className="text-muted">{t('APP_UPDATE_CONFIGURATION_SUBTITLE')}</div>
                 {configDiffQuery.isLoading && <LoadingBlock />}
                 {configReviewReady && (
-                  <ScrollArea maxheight={500} className="mt-3 border rounded">
-                    <CodeMirror
+                  <ScrollArea maxheight={500} className="mt-3">
+                    <CodeEditor
+                      label={t('APP_UPDATE_CONFIGURATION_TITLE')}
                       value={configDiffQuery.data?.new ?? ''}
                       readOnly
                       height="400px"
-                      theme={editorTheme}
-                      extensions={[
-                        unifiedMergeView({
-                          original: configDiffQuery.data?.current ?? '',
-                          mergeControls: false,
-                        }),
-                      ]}
+                      extensions={configReviewExtensions}
                     />
                   </ScrollArea>
                 )}
@@ -197,18 +192,13 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                 <div className="text-muted">{t('APP_UPDATE_COMPOSE_SUBTITLE')}</div>
                 {composeDiffQuery.isLoading && <LoadingBlock />}
                 {composeDiffQuery.isSuccess && composeReview && (
-                  <ScrollArea maxheight={500} className="mt-3 border rounded">
-                    <CodeMirror
+                  <ScrollArea maxheight={500} className="mt-3">
+                    <CodeEditor
+                      label={t('APP_UPDATE_COMPOSE_TITLE')}
                       value={composeReview.new}
                       readOnly
                       height="400px"
-                      theme={editorTheme}
-                      extensions={[
-                        unifiedMergeView({
-                          original: composeReview.current,
-                          mergeControls: false,
-                        }),
-                      ]}
+                      extensions={composeReviewExtensions}
                     />
                   </ScrollArea>
                 )}

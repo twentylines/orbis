@@ -129,17 +129,13 @@
 .app-workspace-operation:hover {
   border-color: var(--desktop-accent);
 }
-.app-workspace .cm-editor {
-  border-radius: 10px;
-  overflow: hidden;
-}
 .app-workspace .log-terminal {
   padding: 20px;
   border: 1px solid var(--desktop-line);
   border-radius: 12px;
-  background: #0b1916;
-  color: #d8e6de;
-  font-size: 12px;
+  background: var(--desktop-log-background);
+  color: var(--desktop-log-ink);
+  font-size: 0.8125rem;
   line-height: 1.7;
 }
 .app-log-connection {

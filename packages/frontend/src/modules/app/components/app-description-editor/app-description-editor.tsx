@@ -1,9 +1,7 @@
 import { Markdown } from '@/components/markdown/markdown';
-import { copilot } from '@uiw/codemirror-theme-copilot';
-import ReactCodeMirror from '@uiw/react-codemirror';
+import { CodeEditor } from '@/components/code-editor/code-editor';
 import { AnimatePresence, motion } from 'framer-motion';
 import { markdown } from '@codemirror/lang-markdown';
-import { useDesktopPreferences } from '@/desktop/preferences';
 import { appDescriptionText } from '../../helpers/app-description';
 
 type Props = {
@@ -11,20 +9,20 @@ type Props = {
   setMeta: (meta: string) => void;
   isEditing: boolean;
 };
+const markdownExtensions = [markdown()];
 
 export const AppDescriptionEditor = ({ isEditing, meta, setMeta }: Props) => {
-  const { resolvedMode } = useDesktopPreferences();
   return (
     <AnimatePresence mode="wait">
       <motion.div key={isEditing ? 1 : 0} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         {isEditing ? (
-          <ReactCodeMirror
+          <CodeEditor
+            label="App notes"
             placeholder="My app notes in markdown..."
             value={meta}
             height="400px"
-            onChange={(e) => setMeta(e)}
-            theme={resolvedMode === 'dark' ? copilot : 'light'}
-            extensions={[markdown()]}
+            onChange={setMeta}
+            extensions={markdownExtensions}
           />
         ) : (
           <Markdown content={appDescriptionText(meta)} className="markdown" />

@@ -1,9 +1,8 @@
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
-import { copilot } from '@uiw/codemirror-theme-copilot';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
-import CodeMirror from '@uiw/react-codemirror';
+import { CodeEditor } from '@/components/code-editor/code-editor';
 import { yaml } from '@codemirror/lang-yaml';
 import { Alert, AlertDescription, AlertHeading, AlertIcon } from '@/components/ui/Alert/Alert';
 import type { AppInfo } from '@/types/app.types';
@@ -18,7 +17,7 @@ import {
 } from '@/api-client/@tanstack/react-query.gen';
 import toast from 'react-hot-toast';
 import type { TranslatableError } from '@/types/error.types';
-import { useDesktopPreferences } from '@/desktop/preferences';
+import './app-user-config.css';
 
 interface AppUserConfigProps {
   info: AppInfo;
@@ -27,6 +26,7 @@ interface AppUserConfigProps {
   initialSourceCompose?: string;
   initialIsEnabled?: boolean;
 }
+const yamlExtensions = [yaml()];
 
 export const AppUserConfig = (props: AppUserConfigProps) => {
   const { info } = props;
@@ -48,8 +48,6 @@ export const AppUserConfig = (props: AppUserConfigProps) => {
 
 export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose, initialSourceCompose, initialIsEnabled }: AppUserConfigProps) => {
   const { t } = useTranslation();
-  const { resolvedMode } = useDesktopPreferences();
-  const editorTheme = resolvedMode === 'dark' ? copilot : 'light';
   const [activeTab, setActiveTab] = useState('docker-compose');
 
   const [dockerCompose, setDockerCompose] = useState(initialDockerCompose ?? '');
@@ -105,53 +103,51 @@ export const AppUserConfigEditors = ({ info, initialAppEnv, initialDockerCompose
   };
 
   return (
-    <div className="card">
-      <div className="card-body">
-        <Alert variant="warning">
-          <AlertIcon>
-            <IconAlertCircle stroke={2} />
-          </AlertIcon>
-          <div>
-            <AlertHeading>{t('USER_CONFIG_WARNING_TITLE')}</AlertHeading>
-            <AlertDescription>{t('USER_CONFIG_WARNING_DESCRIPTION')}</AlertDescription>
-          </div>
-        </Alert>
+    <div className="app-user-config">
+      <Alert variant="warning">
+        <AlertIcon>
+          <IconAlertCircle stroke={2} />
+        </AlertIcon>
         <div>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="docker-compose">docker-compose.yml</TabsTrigger>
-              <TabsTrigger value="overrides">{t('USER_CONFIG_OVERRIDES_TAB_TITLE')}</TabsTrigger>
-            </TabsList>
-            <TabsContent value="docker-compose">
-              <CodeMirror readOnly value={initialSourceCompose} height="400px" extensions={[yaml()]} theme={editorTheme} />
-              <div className="mt-2 text-muted small">{t('USER_CONFIG_SOURCE_COMPOSE_DESCRIPTION')}</div>
-            </TabsContent>
-            <TabsContent value="overrides">
-              <div className="d-flex mb-3 align-items-center justify-content-between">
-                <Switch className="mt-2" label={t('USER_CONFIG_ENABLE')} checked={isEnabled} onCheckedChange={handleToggleEnabled} />
-                <Button onClick={handleSave}>{t('SAVE')}</Button>
-              </div>
-              <CodeMirror
-                readOnly={!isEnabled}
-                value={dockerCompose || (isEnabled ? placeholder : '')}
-                height="400px"
-                extensions={[yaml()]}
-                onChange={(value) => setDockerCompose(value)}
-                theme={editorTheme}
-              />
-              <Trans
-                t={t}
-                i18nKey="USER_CONFIG_DOCKER_MERGE_DESCRIPTION"
-                components={{
-                  // biome-ignore lint/a11y/useAnchorContent: not applicable
-                  a: <a target="_blank" rel="noopener" href="https://docs.docker.com/reference/compose-file/merge/" />,
-                  code: <code />,
-                }}
-                className="mt-2 d-block"
-              />
-            </TabsContent>
-          </Tabs>
+          <AlertHeading>{t('USER_CONFIG_WARNING_TITLE')}</AlertHeading>
+          <AlertDescription>{t('USER_CONFIG_WARNING_DESCRIPTION')}</AlertDescription>
         </div>
+      </Alert>
+      <div>
+        <Tabs className="app-user-config-tabs" value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="docker-compose">docker-compose.yml</TabsTrigger>
+            <TabsTrigger value="overrides">{t('USER_CONFIG_OVERRIDES_TAB_TITLE')}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="docker-compose">
+            <CodeEditor label="Source Compose" readOnly value={initialSourceCompose} height="400px" extensions={yamlExtensions} />
+            <div className="mt-2 text-muted small">{t('USER_CONFIG_SOURCE_COMPOSE_DESCRIPTION')}</div>
+          </TabsContent>
+          <TabsContent value="overrides">
+            <div className="app-user-config-actions">
+              <Switch label={t('USER_CONFIG_ENABLE')} checked={isEnabled} onCheckedChange={handleToggleEnabled} />
+              <Button onClick={handleSave}>{t('SAVE')}</Button>
+            </div>
+            <CodeEditor
+              label="Compose overrides"
+              readOnly={!isEnabled}
+              value={dockerCompose || (isEnabled ? placeholder : '')}
+              height="400px"
+              extensions={yamlExtensions}
+              onChange={setDockerCompose}
+            />
+            <Trans
+              t={t}
+              i18nKey="USER_CONFIG_DOCKER_MERGE_DESCRIPTION"
+              components={{
+                // biome-ignore lint/a11y/useAnchorContent: not applicable
+                a: <a target="_blank" rel="noopener" href="https://docs.docker.com/reference/compose-file/merge/" />,
+                code: <code />,
+              }}
+              className="mt-2 d-block"
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

@@ -1,0 +1,42 @@
+.app-user-config-tabs {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-user-config-tabs > [role="tablist"] > .card-header {
+  min-height: 0;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.app-user-config-tabs .nav-tabs {
+  gap: 8px;
+  margin: 0;
+  border: 0;
+}
+.app-user-config-tabs .nav-link {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--desktop-muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.app-user-config-tabs .nav-link[data-state="active"] {
+  border-color: var(--desktop-line);
+  background: var(--desktop-code-active);
+  color: var(--desktop-ink);
+}
+.app-user-config-tabs > [role="tabpanel"] > .card-body {
+  padding: 20px 0 0;
+}
+.app-user-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}

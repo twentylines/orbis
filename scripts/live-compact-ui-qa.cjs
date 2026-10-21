@@ -1627,7 +1627,7 @@ async function main() {
             if (!preferenceRead.ok) throw preferenceRead.error;
             await page.waitForFunction(
               ({ mode, preset }) => {
-                const surface = document.querySelector('[data-desktop-mode]');
+                const surface = document.querySelector('.desktop[data-desktop-mode]');
                 return surface?.dataset.desktopMode === mode && surface.dataset.desktopPreset === preset;
               },
               appearance,

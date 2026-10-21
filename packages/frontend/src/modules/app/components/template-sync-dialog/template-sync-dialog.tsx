@@ -4,12 +4,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import type { TranslatableError } from '@/types/error.types';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { unifiedMergeView } from '@codemirror/merge';
-import { copilot } from '@uiw/codemirror-theme-copilot';
-import CodeMirror from '@uiw/react-codemirror';
+import { CodeEditor } from '@/components/code-editor/code-editor';
 import { yaml } from '@codemirror/lang-yaml';
 
 interface TemplateSyncDialogProps {
@@ -27,6 +26,8 @@ export const TemplateSyncDialog = ({ appUrn, isOpen, onClose }: TemplateSyncDial
     queryFn: () => getTemplateDiff({ path: { urn: appUrn } }),
     enabled: isOpen && Boolean(appUrn),
   });
+  const original = diffData?.data?.current || '';
+  const reviewExtensions = useMemo(() => [yaml(), unifiedMergeView({ original, mergeControls: false })], [original]);
 
   const syncMutation = useMutation({
     mutationFn: () => syncWithTemplate({ path: { urn: appUrn } }),
@@ -93,20 +94,8 @@ export const TemplateSyncDialog = ({ appUrn, isOpen, onClose }: TemplateSyncDial
             </div>
 
             {viewMode === 'diff' && (
-              <ScrollArea maxheight={500} className="border rounded">
-                <CodeMirror
-                  value={diff.template || ''}
-                  readOnly
-                  height="400px"
-                  theme={copilot}
-                  extensions={[
-                    yaml(),
-                    unifiedMergeView({
-                      original: diff.current || '',
-                      mergeControls: false,
-                    }),
-                  ]}
-                />
+              <ScrollArea maxheight={500}>
+                <CodeEditor label={t('APP_SYNC_TITLE')} value={diff.template || ''} readOnly height="400px" extensions={reviewExtensions} />
               </ScrollArea>
             )}
 

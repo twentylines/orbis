@@ -1,10 +1,9 @@
 import { dynamicComposeSchemaYaml, convertLegacyToYaml, convertYamlToLegacy, dynamicComposeSchemaArk } from '@runtipi/common/schemas';
 import { useEffect, useState, useCallback } from 'react';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
-import CodeMirror from '@uiw/react-codemirror';
+import { CodeEditor } from '@/components/code-editor/code-editor';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { json as jsonLang } from '@codemirror/lang-json';
-import { copilot } from '@uiw/codemirror-theme-copilot';
 import { useTranslation } from 'react-i18next';
 import { stringify, parse } from 'yaml';
 import { type } from 'arktype';
@@ -12,7 +11,6 @@ import { deepClean } from '@/utils/objects';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs/tabs';
 import betterAjvErrors from 'better-ajv-errors';
 import Ajv from 'ajv/dist/2020';
-import { useDesktopPreferences } from '@/desktop/preferences';
 
 type Props = {
   onChange: (value: string, format: 'yaml' | 'json', error?: string) => void;
@@ -23,11 +21,11 @@ const jsonSchema = dynamicComposeSchemaArk.omit('schemaVersion').toJsonSchema({ 
 const ajv = new Ajv({ allErrors: true });
 ajv.addKeyword('message');
 const validateJson = ajv.compile(jsonSchema);
+const yamlExtensions = [yamlLang()];
+const jsonExtensions = [jsonLang()];
 
 export const ComposeEditor = ({ onChange, initialFormat = 'yaml' }: Props) => {
   const { t } = useTranslation();
-  const { resolvedMode } = useDesktopPreferences();
-  const editorTheme = resolvedMode === 'dark' ? copilot : 'light';
   const { services, composeExtras, setIsDirty, isDirty: isDirtyStore } = useMultiServiceStore();
   const [error, setError] = useState<string | undefined>(undefined);
   const [format, setFormat] = useState<'yaml' | 'json'>(initialFormat);
@@ -217,26 +215,26 @@ export const ComposeEditor = ({ onChange, initialFormat = 'yaml' }: Props) => {
           </TabsTrigger>
         </TabsList>
       </Tabs>
-      <div className="w-full space-y-2 overflow-hidden">
+      <div className="w-full space-y-2">
         <div style={{ display: format === 'yaml' ? 'block' : 'none' }}>
-          <CodeMirror
+          <CodeEditor
+            label="Compose YAML"
             placeholder={t('MULTI_SERVICE_YAML_EDIT_PLACEHOLDER')}
             value={yamlValue}
             height="400px"
-            extensions={[yamlLang()]}
+            extensions={yamlExtensions}
             onChange={handleYamlChange}
-            theme={editorTheme}
           />
         </div>
 
         <div style={{ display: format === 'json' ? 'block' : 'none' }}>
-          <CodeMirror
+          <CodeEditor
+            label="Compose JSON"
             placeholder={t('MULTI_SERVICE_JSON_EDIT_PLACEHOLDER')}
             value={jsonValue}
             height="400px"
-            extensions={[jsonLang()]}
+            extensions={jsonExtensions}
             onChange={handleJsonChange}
-            theme={editorTheme}
           />
         </div>
 

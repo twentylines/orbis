@@ -1,0 +1,36 @@
+.orbis-code-editor {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.orbis-code-editor .cm-editor {
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  overflow: visible;
+}
+.orbis-code-editor .cm-editor.cm-focused::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 2px solid var(--desktop-focus);
+  border-radius: 10px;
+  pointer-events: none;
+  /* Above sticky gutters and search panels, below completion tooltips. */
+  z-index: 400;
+}
+.orbis-code-editor .cm-scroller {
+  border-radius: inherit;
+  overflow: auto;
+}
+.orbis-code-editor .cm-editor:has(.cm-search) {
+  height: auto;
+}
+.orbis-code-editor .cm-editor:has(.cm-search) .cm-scroller {
+  /* biome-ignore lint/complexity/noImportantStyles: The CodeMirror integration fixes its scroller height with !important. */
+  height: min(25rem, 40svh) !important;
+  min-height: max(12rem, 8em);
+}
+.orbis-code-editor .cm-tooltip {
+  border-radius: 8px;
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--desktop-ink) 16%, transparent);
+}

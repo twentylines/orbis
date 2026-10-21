@@ -1,6 +1,7 @@
 /* Shared tokens also reach dialogs and menus rendered into body portals. */
 .orbis-theme,
-body:has(.orbis-theme) {
+body:has(.orbis-theme),
+html:has(.orbis-startup) {
   --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
   --desktop-ink: #192c29;
   --desktop-muted: #536b65;
@@ -8,6 +9,18 @@ body:has(.orbis-theme) {
   --desktop-preset-tint: #597b73;
   --desktop-status-muted: color-mix(in srgb, var(--desktop-muted) 60%, var(--desktop-ink));
   --desktop-glass-filter: blur(28px) saturate(1.45);
+  --desktop-code-background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
+  --desktop-code-gutter: color-mix(in srgb, var(--desktop-preset-tint) 10%, var(--desktop-surface));
+  --desktop-code-active: color-mix(in srgb, var(--desktop-preset-tint) 7%, transparent);
+  --desktop-code-selection: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-code-background));
+  --desktop-code-muted: color-mix(in srgb, var(--desktop-muted) 75%, var(--desktop-ink));
+  --desktop-code-accent: color-mix(in srgb, var(--desktop-accent) 75%, var(--desktop-ink));
+  --desktop-code-positive: color-mix(in srgb, var(--desktop-positive) 75%, var(--desktop-ink));
+  --desktop-code-negative: color-mix(in srgb, var(--desktop-negative) 75%, var(--desktop-ink));
+  --desktop-code-warning: color-mix(in srgb, var(--desktop-warning) 75%, var(--desktop-ink));
+  --desktop-code-info: color-mix(in srgb, var(--desktop-info) 75%, var(--desktop-ink));
+  --desktop-log-background: color-mix(in srgb, var(--desktop-preset-tint) 6%, #071311);
+  --desktop-log-ink: #dce8e0;
   --desktop-chrome-opaque: color-mix(in srgb, var(--desktop-preset-tint) 25%, #102322);
   --desktop-status-background: linear-gradient(
     125deg,
@@ -52,12 +65,14 @@ body:has(.orbis-theme) {
   --tblr-link-hover-color: var(--desktop-accent);
   --workspace-heading-ink: #132e2b;
   --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
+  color-scheme: light;
 }
 
 /* Compact pages share a type and spacing scale; text enlargement still reflows. */
 @media (max-width: 1099px), (max-height: 639px) {
   .orbis-theme,
-  body:has(.orbis-theme) {
+  body:has(.orbis-theme),
+  html:has(.orbis-startup) {
     --orbis-compact-title: 2rem;
     --orbis-compact-section: 1.125rem;
     --orbis-compact-reading: 1.75rem;
@@ -68,7 +83,8 @@ body:has(.orbis-theme) {
 }
 @media (max-width: 760px) {
   .orbis-theme,
-  body:has(.orbis-theme) {
+  body:has(.orbis-theme),
+  html:has(.orbis-startup) {
     --orbis-compact-title: 1.625rem;
     --orbis-compact-section: 1.0625rem;
     --orbis-compact-reading: 1.5rem;
@@ -79,7 +95,8 @@ body:has(.orbis-theme) {
 }
 @media (max-width: 380px) {
   .orbis-theme,
-  body:has(.orbis-theme) {
+  body:has(.orbis-theme),
+  html:has(.orbis-startup) {
     --orbis-compact-title: 1.5rem;
     --orbis-compact-section: 1rem;
     --orbis-compact-reading: 1.375rem;
@@ -105,17 +122,20 @@ body:has(.orbis-theme) .desktop-settings .dropdown-toggle {
 }
 
 .orbis-theme[data-desktop-wallpaper="tidal"],
-body:has(.orbis-theme[data-desktop-wallpaper="tidal"]) {
+body:has(.orbis-theme[data-desktop-wallpaper="tidal"]),
+html[data-desktop-wallpaper="tidal"]:has(.orbis-startup) {
   --desktop-wallpaper: url("/wallpapers/tidal.svg");
 }
 
 .orbis-theme[data-desktop-wallpaper="canopy"],
-body:has(.orbis-theme[data-desktop-wallpaper="canopy"]) {
+body:has(.orbis-theme[data-desktop-wallpaper="canopy"]),
+html[data-desktop-wallpaper="canopy"]:has(.orbis-startup) {
   --desktop-wallpaper: url("/wallpapers/canopy.svg");
 }
 
 .orbis-theme[data-desktop-preset="graphite"],
-body:has(.orbis-theme[data-desktop-preset="graphite"]) {
+body:has(.orbis-theme[data-desktop-preset="graphite"]),
+html[data-desktop-preset="graphite"]:has(.orbis-startup) {
   --desktop-preset-tint: #667176;
   --desktop-ink: #edf2ef;
   --desktop-muted: #aebbb3;
@@ -127,10 +147,12 @@ body:has(.orbis-theme[data-desktop-preset="graphite"]) {
   --desktop-accent: #d6a17e;
   --workspace-heading-ink: #edf2ef;
   --workspace-heading-shadow: rgba(5, 18, 17, 0.18);
+  color-scheme: dark;
 }
 
 .orbis-theme[data-desktop-preset="forest"],
-body:has(.orbis-theme[data-desktop-preset="forest"]) {
+body:has(.orbis-theme[data-desktop-preset="forest"]),
+html[data-desktop-preset="forest"]:has(.orbis-startup) {
   --desktop-preset-tint: #608069;
   --desktop-ink: #142b23;
   --desktop-muted: #4b6559;
@@ -142,7 +164,8 @@ body:has(.orbis-theme[data-desktop-preset="forest"]) {
 }
 
 .orbis-theme[data-desktop-preset="stone"],
-body:has(.orbis-theme[data-desktop-preset="stone"]) {
+body:has(.orbis-theme[data-desktop-preset="stone"]),
+html[data-desktop-preset="stone"]:has(.orbis-startup) {
   --desktop-preset-tint: #a68c74;
   --desktop-ink: #302924;
   --desktop-muted: #71685e;
@@ -154,7 +177,8 @@ body:has(.orbis-theme[data-desktop-preset="stone"]) {
 }
 
 .orbis-theme[data-desktop-preset="ocean"],
-body:has(.orbis-theme[data-desktop-preset="ocean"]) {
+body:has(.orbis-theme[data-desktop-preset="ocean"]),
+html[data-desktop-preset="ocean"]:has(.orbis-startup) {
   --desktop-preset-tint: #5a8b99;
   --desktop-ink: #172b32;
   --desktop-muted: #4d6972;
@@ -166,7 +190,8 @@ body:has(.orbis-theme[data-desktop-preset="ocean"]) {
 }
 
 .orbis-theme[data-desktop-preset="blush"],
-body:has(.orbis-theme[data-desktop-preset="blush"]) {
+body:has(.orbis-theme[data-desktop-preset="blush"]),
+html[data-desktop-preset="blush"]:has(.orbis-startup) {
   --desktop-preset-tint: #ae7e8a;
   --desktop-ink: #352828;
   --desktop-muted: #705f62;
@@ -178,7 +203,8 @@ body:has(.orbis-theme[data-desktop-preset="blush"]) {
 }
 
 .orbis-theme[data-desktop-mode="dark"],
-body:has(.orbis-theme[data-desktop-mode="dark"]) {
+body:has(.orbis-theme[data-desktop-mode="dark"]),
+html[data-desktop-mode="dark"]:has(.orbis-startup) {
   --desktop-accent: #e2b28d;
   --desktop-positive: #8fd1af;
   --desktop-negative: #efa99a;
@@ -199,10 +225,12 @@ body:has(.orbis-theme[data-desktop-mode="dark"]) {
   --desktop-highlight: rgba(196, 228, 212, 0.06);
   --workspace-heading-ink: #edf2ef;
   --workspace-heading-shadow: rgba(5, 18, 17, 0.18);
+  color-scheme: dark;
 }
 
 .orbis-theme[data-desktop-mode="light"][data-desktop-preset="graphite"],
-body:has(.orbis-theme[data-desktop-mode="light"][data-desktop-preset="graphite"]) {
+body:has(.orbis-theme[data-desktop-mode="light"][data-desktop-preset="graphite"]),
+html[data-desktop-mode="light"][data-desktop-preset="graphite"]:has(.orbis-startup) {
   --desktop-accent: #914725;
   --desktop-ink: #20312c;
   --desktop-muted: #50655b;
@@ -213,6 +241,7 @@ body:has(.orbis-theme[data-desktop-mode="light"][data-desktop-preset="graphite"]
   --desktop-line: rgba(45, 74, 57, 0.19);
   --workspace-heading-ink: #20312c;
   --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
+  color-scheme: light;
 }
 
 body:has(.orbis-theme) .modal-content,
@@ -449,4 +478,34 @@ body:has(.orbis-theme) .form-text a {
 body:has(.orbis-theme) a:not([class]):hover,
 body:has(.orbis-theme) .form-text a:hover {
   text-decoration: underline;
+}
+
+:where(.orbis-theme, body:has(.orbis-theme)) .workspace-message {
+  display: block;
+  margin: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-code-background);
+  color: var(--desktop-ink);
+  line-height: 1.6;
+}
+:where(.orbis-theme, body:has(.orbis-theme)) .workspace-message[role="alert"] {
+  border-color: color-mix(in srgb, var(--desktop-negative) 45%, var(--desktop-line));
+  background: color-mix(in srgb, var(--desktop-negative) 8%, var(--desktop-surface));
+}
+:where(.orbis-theme, body:has(.orbis-theme)) .workspace-message button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-ink) 5%, var(--desktop-surface));
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.4;
+  vertical-align: middle;
 }

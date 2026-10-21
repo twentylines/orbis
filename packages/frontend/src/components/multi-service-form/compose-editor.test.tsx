@@ -4,8 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
 import { ComposeEditor } from './compose-editor';
 
-vi.mock('@/desktop/preferences', () => ({ useDesktopPreferences: () => ({ preferences: { mode: 'light' }, resolvedMode: 'light' }) }));
-
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -20,12 +18,8 @@ vi.mock('@codemirror/lang-json', () => ({
   json: () => [],
 }));
 
-vi.mock('@uiw/codemirror-theme-copilot', () => ({
-  copilot: {},
-}));
-
-vi.mock('@uiw/react-codemirror', () => ({
-  default: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
+vi.mock('@/components/code-editor/code-editor', () => ({
+  CodeEditor: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
     <textarea aria-label="compose-editor" value={value} onChange={(event) => onChange(event.target.value)} />
   ),
 }));

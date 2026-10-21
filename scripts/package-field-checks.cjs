@@ -37,7 +37,7 @@ module.exports = async function inspectPackageField({ page, base, preferences, c
           const label = page.locator('.desktop-host-package-search');
           const input = label.locator('input');
           await input.waitFor();
-          await page.waitForFunction((mode) => document.querySelector('[data-desktop-mode]')?.dataset.desktopMode === mode, mode);
+          await page.waitForFunction((mode) => document.querySelector('.desktop[data-desktop-mode]')?.dataset.desktopMode === mode, mode);
           await dom.settle(page);
           await dom.scaleText(page, scale);
           await browser.wheelVisible(page, label);

@@ -579,7 +579,7 @@ async function loadedToast(page) {
 
 async function paintedMode(page, mode) {
   await page.waitForFunction((mode) => {
-    const roots = [...document.querySelectorAll('.desktop,[data-desktop-mode]')];
+    const roots = [...document.querySelectorAll('.orbis-theme[data-desktop-mode]')];
     return (
       roots.length >= 2 &&
       roots.every((root) => root.dataset.desktopMode === mode && root.dataset.desktopPreset === 'ocean') &&
@@ -602,7 +602,7 @@ async function paintedMode(page, mode) {
     const frame = document.querySelector('.desktop-route-window');
     const content = frame?.querySelector('.desktop-window-content');
     return {
-      roots: [...document.querySelectorAll('[data-desktop-mode]')].map((element) => ({
+      roots: [...document.querySelectorAll('.orbis-theme[data-desktop-mode]')].map((element) => ({
         className: element.className,
         mode: element.dataset.desktopMode,
         preset: element.dataset.desktopPreset,

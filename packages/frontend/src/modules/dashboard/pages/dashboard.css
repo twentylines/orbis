@@ -589,21 +589,6 @@
 .workspace-attention a {
   font-weight: 650;
 }
-.workspace-message {
-  padding: 20px;
-  border: 1px solid #bf836c;
-  border-radius: 12px;
-  background: #f9ebe4;
-  color: #653923;
-}
-.workspace-message button {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  text-decoration: underline;
-  color: inherit;
-  font-weight: 700;
-}
 .workspace-app-skeleton {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
