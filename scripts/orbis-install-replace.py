@@ -31,12 +31,13 @@ def load(name, key):
 
 TX = load("orbis-install-transaction.py", "orbis_transaction_for_replacement")
 COMPAT = load("orbis-install-compat.py", "orbis_compat_for_replacement")
+FRESH = load("orbis-install-fresh.py", "orbis_fresh_for_replacement")
 UPDATE = load("orbis-host-update.py", "orbis_update_for_replacement")
 APPS = TX.APPS
 HOST = APPS.HOST
 SCHEMA = "orbis.installation-replacement.v1"
 TERMINAL = {"complete", "rolled-back"}
-PRECOMMIT = {"prepared", "checkpointing", "checkpointed", "retaining-original", "holding", "held", "resuming", "resumed", "rolling-back"}
+PRECOMMIT = {"prepared", "checkpointing", "checkpointed", "retaining-original", "holding", "held", "resetting", "reset", "resuming", "resumed", "rolling-back"}
 
 
 class ReplacementError(ValueError):
@@ -108,13 +109,17 @@ def validate_review(value):
     TX.validate_review(value["checkpoint"])
     HOST.PLAN.require_installation_protocol(value["target"])
     COMPAT.require_compatible(value["database"]["ledger"], value["image"]["ledger"])
-    if value["mode"] != "keep" or value["root"] != value["checkpoint"]["root"] or value["dockerContext"] != value["checkpoint"]["dockerContext"]:
+    if value["mode"] not in {"keep", "fresh"} or value["root"] != value["checkpoint"]["root"] or value["dockerContext"] != value["checkpoint"]["dockerContext"]:
         raise ReplacementError("The replacement review has an unsupported mode or installation")
+    if value["mode"] == "fresh" and not isinstance(value.get("fresh"), dict):
+        raise ReplacementError("The Fresh account reset has not been reviewed")
     if value["checkpoint"]["journal"] != str(checkpoint_path(value["journal"])):
         raise ReplacementError("The checkpoint and replacement journals do not match")
 
 
-def review(root, reader, target, bundle, journal):
+def review(root, reader, target, bundle, journal, *, mode="keep"):
+    if mode not in {"keep", "fresh"}:
+        raise ReplacementError("Choose Keep or Fresh replacement")
     target = HOST.PLAN.require_installation_protocol(target)
     if HOST.PLAN.read_version(root) != target["runtipiCompatibility"].removeprefix("v"):
         raise ReplacementError("The installed Runtipi version needs a separate compatibility review")
@@ -136,7 +141,7 @@ def review(root, reader, target, bundle, journal):
     if planned["configuredImage"] != current["Config"]["Image"]:
         raise ReplacementError("The running and configured controller images differ")
     value = {
-        "schema": SCHEMA, "mode": "keep", "root": str(root), "dockerContext": reader.context,
+        "schema": SCHEMA, "mode": mode, "root": str(root), "dockerContext": reader.context,
         "journal": str(journal), "target": target, "image": image, "checkpoint": checkpoint,
         "files": files(root), "controllerName": current["Name"].removeprefix("/"),
         "controllerConfiguration": APPS.digest({key: current[key] for key in ("Config", "HostConfig")}),
@@ -144,6 +149,8 @@ def review(root, reader, target, bundle, journal):
     value["database"] = COMPAT.database(reader, role(value, "database"))
     COMPAT.require_compatible(value["database"]["ledger"], image["ledger"])
     COMPAT.idle_app_queue(reader, role(value, "queue"), stopped_controller=False)
+    if mode == "fresh":
+        value["fresh"] = FRESH.review(root, reader, current, role(value, "database"))
     value["reviewId"] = APPS.digest(value)
     validate_review(value)
     if files(root) != value["files"]:
@@ -190,6 +197,11 @@ def payload(record, reader, phase):
         if key.startswith("ORBIS_"):
             del environment[key]
     environment.update(ORBIS_VERSION=value["target"]["tag"], ORBIS_COMMIT=value["target"]["commit"], ORBIS_IMAGE_DIGEST=value["target"]["digest"])
+    if value.get("mode") == "fresh" and record.get("freshReset"):
+        key = FRESH.secret(Path(value["root"]))
+        if FRESH.key_hash(key) != record["freshReset"]["jwtHash"]:
+            raise ReplacementError("The Fresh signing key changed after its reset")
+        environment["JWT_SECRET"] = key
     if phase != "normal":
         environment.update(ORBIS_INSTALLER_PHASE=phase, ORBIS_INSTALLER_TRANSACTION=record["id"])
     body["Env"] = [key + "=" + item for key, item in sorted(environment.items())]
@@ -407,6 +419,8 @@ def rollback(record, reader):
 
 def finish(record, reader):
     value = record["review"]
+    if value.get("mode") == "fresh" and (not record.get("freshReset", {}).get("cacheRevoked") or not re.fullmatch(r"[0-9a-f]{64}", str(record["freshReset"].get("jwtHash", "")))):
+        raise ReplacementError("Fresh account revocation must finish before public activation")
     record["stage"] = "committing"
     save(record)
     check_originals(record, reader)
@@ -451,14 +465,14 @@ def finish(record, reader):
     TX.require_healthy(reader, raw["Id"], timeout=180)
     record["stage"] = "complete"
     save(record)
-    return {"schema": SCHEMA, "result": "orbis-installed", "mode": "keep", "releaseTag": value["target"]["tag"], "journal": value["journal"], "backup": value["checkpoint"]["storage"]["bundle"]}
+    return {"schema": SCHEMA, "result": "orbis-installed", "mode": value["mode"], "releaseTag": value["target"]["tag"], "journal": value["journal"], "backup": value["checkpoint"]["storage"]["bundle"]}
 
 
 def apply(root, reader, value, *, host_writers_stopped):
     validate_review(value)
     if not host_writers_stopped:
         raise ReplacementError("Confirm native host and remote storage writers are stopped before replacement")
-    fresh = review(root, reader, value["target"], Path(value["checkpoint"]["storage"]["bundle"]), Path(value["journal"]))
+    fresh = review(root, reader, value["target"], Path(value["checkpoint"]["storage"]["bundle"]), Path(value["journal"]), mode=value["mode"])
     if fresh != value:
         raise ReplacementError("The installation changed; review the replacement again")
     record = {"schema": SCHEMA, "id": str(uuid.uuid4()), "stage": "prepared", "review": value}
@@ -490,6 +504,16 @@ def apply(root, reader, value, *, host_writers_stopped):
         record["stage"] = "held"
         save(record)
         remove_candidate(record, reader)
+        if value["mode"] == "fresh":
+            record["stage"] = "resetting"
+            save(record)
+            check_originals(record, reader)
+            for identifier, selected_role in value["checkpoint"]["roles"].items():
+                if selected_role not in {"database", "queue"} and reader.app(identifier)["state"] not in {"exited", "created"}:
+                    raise ReplacementError("Keep every controller, proxy and app stopped during Fresh account reset")
+            record["freshReset"] = FRESH.reset(root, reader, role(value, "database"), value["fresh"])
+            record["stage"] = "reset"
+            save(record)
         record["stage"] = "resuming"
         save(record)
         create_candidate(record, reader, "resume")
@@ -499,7 +523,7 @@ def apply(root, reader, value, *, host_writers_stopped):
     except Exception as error:
         record["failure"] = {
             "stage": record["stage"], "type": type(error).__name__,
-            "message": str(error) if isinstance(error, (ReplacementError, COMPAT.CompatibilityError)) else "A replacement step could not finish",
+            "message": str(error) if isinstance(error, (ReplacementError, COMPAT.CompatibilityError, FRESH.FreshError)) else "A replacement step could not finish",
         }
         save(record)
         if record["stage"] in PRECOMMIT:
@@ -550,6 +574,7 @@ def main():
     parser.add_argument("--backup", type=Path)
     parser.add_argument("--journal", type=Path, required=True)
     parser.add_argument("--review", type=Path)
+    parser.add_argument("--mode", choices=("keep", "fresh"))
     parser.add_argument("--confirm-root")
     parser.add_argument("--host-writers-stopped", action="store_true")
     args = parser.parse_args()
@@ -564,7 +589,7 @@ def main():
             if args.action == "review":
                 if args.manifest is None or args.backup is None:
                     raise ReplacementError("A published release manifest and new private backup are required")
-                result = review(root, reader, json.loads(args.manifest.read_text()), args.backup.expanduser(), journal)
+                result = review(root, reader, json.loads(args.manifest.read_text()), args.backup.expanduser(), journal, mode=args.mode or "keep")
             else:
                 HOST.require_confirmation(root, args.confirm_root)
                 if args.action == "recover":
@@ -573,13 +598,15 @@ def main():
                     if args.review is None:
                         raise ReplacementError("A private saved replacement review is required")
                     value = TX.RESTORE.private_json(args.review.expanduser())
+                    if args.mode is not None and args.mode != value.get("mode"):
+                        raise ReplacementError("The requested mode differs from the saved replacement review")
                     if value.get("journal") != str(journal):
                         raise ReplacementError("The review belongs to another journal")
                     result = apply(root, reader, value, host_writers_stopped=args.host_writers_stopped)
         print(json.dumps(result, indent=2))
         return 0
     except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
-        message = str(error) if isinstance(error, (ReplacementError, COMPAT.CompatibilityError)) else "Replacement could not finish; inspect the private journal before continuing"
+        message = str(error) if isinstance(error, (ReplacementError, COMPAT.CompatibilityError, FRESH.FreshError)) else "Replacement could not finish; inspect the private journal before continuing"
         print(json.dumps({"schema": SCHEMA, "result": "replacement-failed", "message": message}), file=sys.stderr)
         return 2
 

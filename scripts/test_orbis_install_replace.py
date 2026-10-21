@@ -199,6 +199,26 @@ class ReplacementTests(unittest.TestCase):
                 with self.assertRaises(StopBeforeActivation):
                     REPLACE.finish(self.record, self.reader)
 
+    def test_fresh_resume_uses_rotated_secret_instead_of_retained_controller_environment(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".env").write_text('JWT_SECRET=rotated-fixture-key\n')
+            self.record["review"].update(mode="fresh", root=folder)
+            self.record["freshReset"] = {"jwtHash": REPLACE.FRESH.key_hash("rotated-fixture-key"), "cacheRevoked": True}
+            self.raw["Config"]["Env"].append("JWT_SECRET=old-fixture-key")
+            self.record["quiescedConfiguration"] = REPLACE.APPS.digest({key: self.raw[key] for key in ("Config", "HostConfig")})
+            body = self.create("resume")
+            self.assertEqual(dict(item.split("=", 1) for item in body["Env"])["JWT_SECRET"], "rotated-fixture-key")
+            (root / ".env").write_text('JWT_SECRET=unexpected-key\n')
+            with self.assertRaisesRegex(REPLACE.ReplacementError, "signing key changed"):
+                REPLACE.payload(self.record, self.reader, "normal")
+
+    def test_fresh_cannot_publish_before_credential_revocation_is_recorded(self):
+        self.record["review"]["mode"] = "fresh"
+        with self.assertRaisesRegex(REPLACE.ReplacementError, "revocation must finish"):
+            REPLACE.finish(self.record, self.reader)
+        self.assertEqual(self.record["stage"], "holding")
+
 
 if __name__ == "__main__":
     unittest.main()

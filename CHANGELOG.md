@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add Fresh controller replacement with account, session and workspace reset before user IDs are reused, retaining app metadata and storage. Recover interrupted resets from the verified installation checkpoint.
+
 - Update the production and development runtime to Node.js 22.23.4 for the October 2026 security fixes, pin the multi-platform base image and check the security minimum during image builds and CI.
 
 - Run account-specific Orbis setup even when a migrated login session is still valid; save the server name, display mode and reporting choice, with an optional pairing shortcut.

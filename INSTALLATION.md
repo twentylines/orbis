@@ -37,7 +37,7 @@ The installer needs Docker control plus access to the installation, external dat
 
 A separate host executor must handle the transaction so replacing the dashboard cannot stop its own installer. Separate installations can coexist with isolated ports, container names and data, but the replacement flow must stop the old controller before claiming its resources. Two controllers must never use the same writable database or installation tree.
 
-The browser setup and start-fresh replacement are not available yet. The Linux Keep-data executor below replaces a compatible CLI installation; the remaining commands are separately guarded installation tools.
+The guided browser installer and empty-server bootstrap are not available yet. The Linux executor below supports Keep and Fresh replacement for compatible CLI installations; the remaining commands are separately guarded installation tools.
 
 ## Replace Runtipi and keep data
 
@@ -74,7 +74,25 @@ python3 scripts/orbis-install-replace.py recover ROOT \
   --confirm-root ROOT --host-writers-stopped
 ```
 
-The journal determines rollback or forward recovery. Completed and recovered journals cannot be replayed. Preserve the journal and backup if configuration drift prevents recovery. This executor does not perform a fresh account reset, install the optional host administration service, or bootstrap an empty server; the complete installer will coordinate those steps.
+The journal determines rollback or forward recovery. Completed and recovered journals cannot be replayed. Preserve the journal and backup if configuration drift prevents recovery. This executor does not install the optional host administration service or bootstrap an empty server; the complete installer will coordinate those steps.
+
+## Replace Runtipi and start fresh
+
+Use the same requirements, verified image, private backup and journal as Keep replacement. Add `--mode fresh` when reviewing and applying:
+
+```sh
+umask 077
+python3 scripts/orbis-install-replace.py review ROOT \
+  --docker-context CONTEXT --mode fresh --manifest MANIFEST.json \
+  --backup BUNDLE --journal JOURNAL > FRESH-REVIEW.json
+python3 scripts/orbis-install-replace.py apply ROOT \
+  --docker-context CONTEXT --mode fresh --journal JOURNAL --review FRESH-REVIEW.json \
+  --confirm-root ROOT --host-writers-stopped
+```
+
+Fresh removes controller accounts, their saved dashboard links, workspace preferences and first-use completion markers. It rotates the signing key and clears cached sessions, forward-auth grants and two-factor challenges before account IDs can be reused. Create a new administrator after activation. App/store metadata, configuration, encryption seed, app data and storage mappings are retained, so recognized Runtipi apps keep their management features. Other Docker workloads remain available through Docker app discovery.
+
+This mode currently requires the standard writable `state`, `cache` and `.env` bind mounts. Custom account relationships, unknown cache formats, literal Compose signing-key overrides and custom state layouts are refused before downtime. The same recovery command restores the original installation before public activation or finishes the recorded cutover afterward. Keep the private backup and journal.
 
 ## Prepare app containers for an installation transaction
 
@@ -138,7 +156,7 @@ python3 scripts/orbis-install-transaction.py recover ROOT \
 
 Recovery quiesces the reviewed writers again, restores a completed verified checkpoint when available, starts the original services and running apps, checks controller health, and restores their restart policies. Originally stopped or never-started apps remain so. An interrupted recovery can continue; a completed one cannot be replayed. Container replacement, definition changes, unreviewed policy changes, a different daemon or a damaged completed backup cause a refusal. Keep the private journal and backups when a command fails. An interrupted native copy retains the installation lock until it exits, so recovery cannot race it.
 
-An incomplete backup from a failed checkpoint is never used for restore. No replacement or reset has occurred at that stage, so recovery can restart the original services. This helper currently requires those original containers to remain present. The complete Keep/Fresh cutover, compatibility validation and first-install bootstrap remain under development.
+An incomplete backup from a failed checkpoint is never used for restore. No replacement or reset has occurred at that stage, so recovery can restart the original services. This helper currently requires those original containers to remain present. Use the replacement executor above for a controller cutover; first-install bootstrap remains under development.
 
 ## Capture installation storage
 
