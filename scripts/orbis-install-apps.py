@@ -36,7 +36,7 @@ APP_FORMAT = (
     '"image":{{json .Config.Image}},"labels":{{json .Config.Labels}},'
     '"mounts":{{json .Mounts}},"state":{{json .State.Status}},'
     '"autoRemove":{{json .HostConfig.AutoRemove}},'
-    '"stopTimeout":{{json .Config.StopTimeout}},'
+    '"stopTimeout":{{json (index .Config "StopTimeout")}},'
     '"restartPolicy":{{json .HostConfig.RestartPolicy}}}'
 )
 POLICIES = {"no", "always", "unless-stopped", "on-failure"}
@@ -102,6 +102,8 @@ def app_record(raw: dict) -> dict:
     if timeout is not None and (type(timeout) is not int or not 0 <= timeout <= 3600):
         raise AppError("An app has an unbounded or unsupported stop timeout")
     identity = {key: raw[key] for key in ("id", "name", "imageId", "image", "labels", "mounts", "autoRemove", "stopTimeout")}
+    # Docker may reorder Mounts between inspections of the same container.
+    identity["mounts"] = sorted(raw["mounts"], key=lambda mount: mount["Destination"])
     return {
         "id": raw["id"], "name": raw["name"][1:],
         "appUrn": DETECT.text(raw["labels"].get("runtipi.appurn", "")) or None,

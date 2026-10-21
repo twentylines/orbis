@@ -50,7 +50,7 @@ python3 scripts/orbis-install-apps.py stop ROOT --docker-context CONTEXT \
   --journal JOURNAL --review-id REVIEW_ID --confirm-root ROOT
 ```
 
-`stop` disables automatic restarts for every reviewed app container, then stops the ones that were running. A changed plan is rejected before any container mutation. The private journal is written before changes and survives process termination. Do not repeat `stop` using an existing journal.
+`stop` disables automatic restarts for every reviewed app container, then stops the ones that were running. A changed plan is rejected before any container mutation. Docker mount ordering is normalized; changes to mount sources, destinations or permissions still invalidate the review. The private journal is written before changes and survives process termination. Do not repeat `stop` using an existing journal.
 
 After the original controller has recovered and is healthy:
 
@@ -62,6 +62,31 @@ python3 scripts/orbis-install-apps.py resume ROOT --docker-context CONTEXT \
 After a replacement, add `--controller-image ghcr.io/twentylines/orbis@sha256:DIGEST` to require the exact new Orbis image instead. Resume restores the previous running/stopped states and restart policies, including retry counts. It can continue a partially completed stop or resume, but refuses to replay a completed transaction. Missing or replaced app containers, changed definitions, another Docker daemon and an unhealthy controller require review before further actions.
 
 This step neither stops the controller nor proves data is ready for backup. The installation executor must stop the controller and all other writers, cover external storage, take a consistent backup, and prevent the replacement controller from starting app operations before resuming them. Keep the journal until the enclosing installation transaction is accepted or recovered.
+
+## Capture installation storage
+
+The source includes a Linux host helper for collecting the installation tree, external bind-mounted directories and files, and accessible local Docker volumes into one private backup. Nested sources are copied once. Temporary filesystems, the Docker control socket and read-only host timezone inputs are excluded.
+
+Run as root on the Docker host. `BUNDLE` must be a new destination in a private directory outside every source. Save the review privately:
+
+```sh
+umask 077
+python3 scripts/orbis-install-storage.py review BUNDLE \
+  --root ROOT --docker-context CONTEXT > REVIEW.json
+```
+
+The installation executor must stop every reviewed core and app container and disable its restart policy before capture. Other containers with writable mounts over these sources must also be stopped with restarts disabled. Native host processes and remote storage writers require separate review and shutdown; Docker metadata cannot prove they are quiet.
+
+```sh
+python3 scripts/orbis-install-storage.py capture BUNDLE \
+  --root ROOT --docker-context CONTEXT --review REVIEW.json \
+  --confirm-root ROOT --host-writers-stopped
+python3 scripts/orbis-install-storage.py verify BUNDLE
+```
+
+Capture rechecks Docker identities, mount definitions, source identities and writer states. It verifies copied bytes, ownership and permissions, checks file timestamps, and rereads the sources after the collection finishes. A changed source, restarted writer, missing resource or failed copy leaves an incomplete backup. Verification works independently of the original source paths and rejects incomplete or changed backups.
+
+The enclosing installation executor is responsible for consistent database and queue shutdown, controller replacement, selective reset and stopped-writer rollback. This helper is part of the source implementation; the complete Keep/Fresh installer and its end-to-end rehearsals remain in development.
 
 ## Controller hold and resume modes
 

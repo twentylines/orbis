@@ -5,6 +5,9 @@
 - Navigate between full pages from the dock with directional slide transitions.
 - Open registered apps through lightweight desktop launchers; use normal app pages on smaller screens.
 - Minimize app launchers into a compact tray above the dock, with spring transitions, keyboard restore and reduced-motion support. Stop polling minimized app details.
+- Add a host backup helper covering installation files, external bind mounts and local Docker volumes, with stopped-writer checks and offline verification.
+- Keep installer app reviews stable when Docker returns the same mounts in a different order.
+- Inspect containers that use Docker's default stop timeout.
 - Detect Docker apps outside the Orbis library, review their containers and uninstall while retaining persistent storage.
 - Show readable app names in operation history.
 - Keep dialog Close controls and enlarged text within their padded bounds.

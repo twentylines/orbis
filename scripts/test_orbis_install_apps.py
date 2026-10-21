@@ -163,6 +163,13 @@ class InstallationAppTests(unittest.TestCase):
         with self.assertRaisesRegex(APPS.AppError, "cannot be replayed"):
             APPS.resume(self.root, self.docker, self.journal)
 
+    def test_app_without_an_explicit_stop_timeout_can_stop_and_recover(self):
+        self.docker.apps[identifier("app-0")]["stopTimeout"] = None
+        self.stop()
+        self.assertEqual(next(timeout for args, timeout in self.docker.calls if args[0] == "stop"), 90)
+        APPS.resume(self.root, self.docker, self.journal)
+        self.assert_original_states()
+
     def test_partial_stop_failure_can_recover_without_a_new_stop(self):
         def fail(arguments):
             if arguments[0] == "stop":
@@ -199,6 +206,45 @@ class InstallationAppTests(unittest.TestCase):
                 if change == "policy": app["restartPolicy"] = {"Name": "always", "MaximumRetryCount": 0}
                 if change == "identity": self.docker.add_app(4)
                 if change == "mount": app["mounts"][0]["Source"] += "-other"
+                with self.assertRaisesRegex(APPS.AppError, "plan changed"):
+                    APPS.stop(self.root, self.docker, self.journal, reviewed["reviewId"])
+                self.assertEqual(self.docker.calls, [])
+                self.assertFalse(self.journal.exists())
+
+    def test_mount_order_changes_between_reads_do_not_invalidate_review_or_recovery(self):
+        app = self.docker.apps[identifier("app-0")]
+        app["mounts"].append({
+            "Type": "volume", "Name": "app-cache", "Source": "/var/lib/docker/volumes/app-cache/_data",
+            "Destination": "/cache", "RW": True, "Driver": "local",
+        })
+        original_read = self.docker.app
+        reads = 0
+
+        def reordered(container):
+            nonlocal reads
+            value = original_read(container)
+            reads += 1
+            if reads % 2:
+                value["mounts"].reverse()
+            return value
+
+        with mock.patch.object(self.docker, "app", side_effect=reordered):
+            reviewed = APPS.plan(self.root, self.docker)
+            self.assertEqual(APPS.plan(self.root, self.docker)["reviewId"], reviewed["reviewId"])
+            APPS.stop(self.root, self.docker, self.journal, reviewed["reviewId"])
+            APPS.resume(self.root, self.docker, self.journal)
+        self.assert_original_states()
+        self.assertEqual(app["mounts"][0]["Destination"], "/data")
+
+    def test_mount_changes_remain_bound_to_the_review_after_order_normalization(self):
+        for field, value in [("Source", "/other/data"), ("Destination", "/other"), ("RW", False), ("Propagation", "rshared")]:
+            with self.subTest(field=field):
+                self.docker = Docker(self.root)
+                app = self.docker.apps[identifier("app-0")]
+                app["mounts"].append({"Type": "tmpfs", "Destination": "/cache", "RW": True})
+                reviewed = APPS.plan(self.root, self.docker)
+                app["mounts"][0][field] = value
+                app["mounts"].reverse()
                 with self.assertRaisesRegex(APPS.AppError, "plan changed"):
                     APPS.stop(self.root, self.docker, self.journal, reviewed["reviewId"])
                 self.assertEqual(self.docker.calls, [])
