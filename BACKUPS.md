@@ -18,6 +18,8 @@ Restoring replaces the app's current managed data and overrides. Create a backup
 
 Orbis stops the app, validates the archive and stages the replacement directories before changing the live files. A successful restore updates the installed version in the database. An app that was running starts again; an app that was stopped stays stopped.
 
+Beta60 and later preserve existing app data permissions during normal lifecycle operations. Earlier betas inherited recursive permission changes that can broaden access to restored files when the app starts again.
+
 Staging needs space for the restored data alongside the current data. Extraction uses the app-data filesystem. Same-filesystem moves avoid a second full copy; data crossing filesystems is copied and checked before replacement. Insufficient space or permissions abort the restore.
 
 ## Interrupted restores

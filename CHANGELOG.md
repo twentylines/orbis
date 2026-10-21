@@ -1,6 +1,6 @@
 # Orbis changelog
 
-## Unreleased
+## Beta60 — 21 October 2026
 
 - Keep backup filenames accessible on narrow screens, give the upload file picker its own space and keep the upload title, close control and footer visible with enlarged text.
 
