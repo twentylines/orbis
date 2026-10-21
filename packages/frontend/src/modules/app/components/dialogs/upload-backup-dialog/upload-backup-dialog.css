@@ -1,3 +1,24 @@
-input[type="file"]::file-selector-button {
-  background-color: var(--tblr-bg-surface);
+.upload-backup-picker {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+.upload-backup-picker > .btn {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+}
+.upload-backup-description,
+.upload-backup-selection {
+  margin: 0;
+  line-height: 1.65;
+}
+.upload-backup-selection {
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.upload-backup-error {
+  color: var(--desktop-danger-fill);
 }

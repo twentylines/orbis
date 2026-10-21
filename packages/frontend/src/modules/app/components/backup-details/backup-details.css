@@ -14,6 +14,12 @@
   overflow-wrap: anywhere;
   user-select: text;
 }
+.app-backup-row .backup-filename {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .backup-metadata {
   display: flex;
   flex-wrap: wrap;

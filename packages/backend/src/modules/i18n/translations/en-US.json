@@ -255,6 +255,8 @@
   "APP_BACKUP_UPLOAD_SUCCESS": "Backup uploaded.",
   "APP_BACKUP_UPLOAD_ERROR": "Failed to upload backup",
   "APP_BACKUP_UPLOAD_FILE_LABEL": "Choose backup file",
+  "APP_BACKUP_UPLOAD_CHOOSE_FILE": "Choose file",
+  "APP_BACKUP_UPLOAD_CHANGE_FILE": "Change file",
   "APP_BACKUP_UPLOAD_FILE_PLACEHOLDER": "Select a .tar.gz file",
   "APP_BACKUP_UPLOAD_ALREADY_EXISTS": "A backup with this filename already exists",
   "SELECTED_FILE": "Selected file",

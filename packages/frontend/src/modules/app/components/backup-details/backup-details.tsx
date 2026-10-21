@@ -5,7 +5,9 @@ import './backup-details.css';
 
 export const BackupDetails = ({ backup }: { backup: AppBackup }) => (
   <div className="backup-details">
-    <code className="backup-filename">{backup.id}</code>
+    <code className="backup-filename" title={backup.id}>
+      {backup.id}
+    </code>
     <div className="backup-metadata">
       <time dateTime={new Date(backup.date).toISOString()}>
         <DateFormat date={new Date(backup.date)} />

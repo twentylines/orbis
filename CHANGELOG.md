@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep backup filenames accessible on narrow screens, give the upload file picker its own space and keep the upload title, close control and footer visible with enlarged text.
+
 - Preserve existing app data permissions when starting, stopping, restarting, updating or regenerating configuration, including after a backup restore. Prepare installation and reset data before startup without changing private files subsequently created by the app.
 
 ## Beta59 — 21 October 2026
