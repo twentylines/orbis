@@ -1,19 +1,21 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { IconExternalLink, IconMinus, IconSettings, IconX } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type PropsWithChildren, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { getAppOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Button } from '@/components/ui/Button';
 import { useAppContext } from '@/context/app-context';
-import { revealPageFocus, useDesktopWindows } from './window-viewport';
+import { useDesktopWindows } from './window-viewport';
 import { appDestinations } from './app-destinations';
 import './app-launcher.css';
 
 type LaunchRequest = { urn: string; name: string; preferredUrl?: string };
 const AppLauncherContext = createContext<(request: LaunchRequest) => boolean>(() => false);
+const AppTrayContext = createContext<ReactNode>(null);
 export const useAppLauncher = () => useContext(AppLauncherContext);
+export const MinimizedApps = () => useContext(AppTrayContext);
 
 export function AppLauncherProvider({ children }: PropsWithChildren) {
   const desktop = useDesktopWindows();
@@ -90,6 +92,55 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   );
 
   useLayoutEffect(() => {
+    const element = tray.current;
+    const dock = element?.closest<HTMLElement>('.desktop-dock') ?? document.querySelector<HTMLElement>('.desktop-dock');
+    if (!desktop || !trayVisible || !element || !dock || !minimized.length) {
+      if (dock) delete dock.dataset.minimizedCompact;
+      return;
+    }
+    const primary = dock.querySelector<HTMLElement>('.desktop-dock-main');
+    if (!primary) return;
+    dock.dataset.minimizedCompact = String(minimized.length > 3);
+    const measure = () => {
+      const item = element.querySelector<HTMLElement>('.app-tray-item');
+      const list = element.querySelector<HTMLElement>('.app-tray-list');
+      if (!item || !list) return;
+      const spacing = (target: Element, ...properties: string[]) => {
+        const style = getComputedStyle(target);
+        return properties.reduce((total, property) => total + (Number.parseFloat(style.getPropertyValue(property)) || 0), 0);
+      };
+      const inset = Number.parseFloat(getComputedStyle(dock).getPropertyValue('--desktop-inset')) || 24;
+      const gap = spacing(list, 'column-gap');
+      const padding =
+        spacing(element, 'padding-left', 'padding-right', 'border-left-width', 'border-right-width') + spacing(list, 'padding-left', 'padding-right');
+      const links = [...primary.querySelectorAll<HTMLElement>('.desktop-dock-item')];
+      const iconWidth = Number.parseFloat(getComputedStyle(dock).getPropertyValue('--orbis-dock-icon-width')) || 52;
+      const contractedWidth =
+        links.length * iconWidth +
+        spacing(primary, 'column-gap') * (links.length - 1) +
+        spacing(primary, 'padding-left', 'padding-right', 'border-left-width', 'border-right-width');
+      const navigation = (minimized.length > 3 ? contractedWidth : primary.offsetWidth) + spacing(dock, 'column-gap');
+      const available =
+        document.documentElement.clientWidth -
+        inset * 2 -
+        navigation -
+        spacing(dock, 'padding-left', 'padding-right', 'border-left-width', 'border-right-width') -
+        padding -
+        spacing(element, 'margin-left');
+      const slots = Math.max(1, Math.floor((available + gap) / (item.offsetWidth + gap)));
+      element.style.maxWidth = `${Math.min(slots, minimized.length) * (item.offsetWidth + gap) - gap + padding}px`;
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(primary);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [desktop, trayVisible, minimized.length]);
+
+  useLayoutEffect(() => {
     if (!minimizing || !selected || !panel || !trayVisible || !desktop) return;
     const target = trayButton(selected.urn);
     if (!target) return;
@@ -155,7 +206,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     if (!desktop || !element || !trayVisible) return;
     const previous = trayMotion.current?.playState === 'running' ? element.getBoundingClientRect().width : trayWidth.current;
     trayMotion.current?.cancel();
-    const width = element.getBoundingClientRect().width;
+    const width = Number.parseFloat(element.style.maxWidth) || element.getBoundingClientRect().width;
     if (!minimized.length) {
       if (reducedMotion()) {
         setTrayVisible(false);
@@ -164,8 +215,8 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       }
       const animation = element.animate(
         [
-          { width: `${previous || width}px`, opacity: 1, transform: 'translateX(-50%)' },
-          { width: '56px', opacity: 0, transform: 'translateX(-50%) translateY(8px) scale(.92)' },
+          { width: `${previous || width}px`, opacity: 1, transform: 'none' },
+          { width: '0px', opacity: 0, transform: 'scale(.92)' },
         ],
         { duration: 220, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' },
       );
@@ -183,37 +234,15 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     if (reducedMotion()) return;
     const animation = element.animate(
       [
-        { width: `${previous || 56}px`, opacity: previous ? 1 : 0, transform: 'translateX(-50%) translateY(6px) scale(.96)' },
-        { width: `${width}px`, opacity: 1, transform: 'translateX(-50%) translateY(-2px) scale(1.025)', offset: 0.7 },
-        { width: `${width}px`, opacity: 1, transform: 'translateX(-50%)' },
+        { width: `${previous || 0}px`, opacity: previous ? 1 : 0, transform: 'scale(.96)' },
+        { width: `${width}px`, opacity: 1, transform: 'scale(1.025)', offset: 0.7 },
+        { width: `${width}px`, opacity: 1, transform: 'none' },
       ],
       { duration: 560, easing: 'cubic-bezier(.22, 1, .36, 1)' },
     );
     trayMotion.current = animation;
     return () => animation.cancel();
   }, [desktop, minimized, trayVisible]);
-
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    const previous = root.style.getPropertyValue('--orbis-app-tray-height');
-    const element = tray.current;
-    let measuredHeight = -1;
-    const measure = () => {
-      const height = desktop && trayVisible && element ? element.offsetHeight + 12 : 0;
-      if (height === measuredHeight) return;
-      measuredHeight = height;
-      root.style.setProperty('--orbis-app-tray-height', `${height}px`);
-      if (document.activeElement instanceof HTMLElement) revealPageFocus(document.activeElement);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    if (element) observer.observe(element);
-    return () => {
-      observer.disconnect();
-      if (previous) root.style.setProperty('--orbis-app-tray-height', previous);
-      else root.style.removeProperty('--orbis-app-tray-height');
-    };
-  }, [desktop, trayVisible]);
 
   const minimize = () => {
     if (!selected || minimizing) return;
@@ -241,140 +270,150 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const managePath = `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}`;
   const status = data?.app?.status;
 
+  const minimizedApps = desktop ? (
+    <fieldset
+      ref={captureTray}
+      className="orbis-app-tray"
+      hidden={!trayVisible}
+      aria-label="Minimized apps"
+      title="Minimized apps — scroll horizontally for more"
+      aria-hidden={minimized.length === 0}
+    >
+      <ul className="app-tray-list">
+        {minimized.map((request) => (
+          <li key={request.urn} className="app-tray-item">
+            <Button
+              className="app-tray-restore"
+              data-minimized-app={request.urn}
+              aria-label={`Restore ${request.name}`}
+              title={request.name}
+              onClick={() => restore(request)}
+              onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
+            >
+              <AppLogo urn={request.urn} size={28} />
+            </Button>
+            <Button
+              className="app-tray-close"
+              size="icon"
+              aria-label={`Close ${request.name} launcher`}
+              onClick={() => {
+                const index = minimized.findIndex((item) => item.urn === request.urn);
+                const next = minimized[index + 1] ?? minimized[index - 1];
+                const target = next ? trayButton(next.urn) : document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]');
+                if (selected?.urn === request.urn && minimizing) {
+                  cancelMotion();
+                  focusMinimized.current = null;
+                  opener.current = target ?? null;
+                  setSelected(null);
+                }
+                setMinimized((current) => current.filter((item) => item.urn !== request.urn));
+                target?.focus({ preventScroll: true });
+              }}
+            >
+              <IconX size={16} aria-hidden="true" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </fieldset>
+  ) : null;
+
   return (
     <AppLauncherContext.Provider value={openApp}>
-      {children}
-      {desktop ? (
-        <nav ref={captureTray} className="orbis-app-tray" hidden={!trayVisible} aria-label="Minimized apps" aria-hidden={minimized.length === 0}>
-          <ul className="app-tray-list">
-            {minimized.map((request) => (
-              <li key={request.urn} className="app-tray-item">
-                <Button
-                  className="app-tray-restore"
-                  data-minimized-app={request.urn}
-                  aria-label={`Restore ${request.name}`}
-                  title={request.name}
-                  onClick={() => restore(request)}
-                  onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
-                >
-                  <AppLogo urn={request.urn} size={28} />
-                </Button>
-                <Button
-                  className="app-tray-close"
-                  size="icon"
-                  aria-label={`Close ${request.name} launcher`}
-                  onClick={() => {
-                    const index = minimized.findIndex((item) => item.urn === request.urn);
-                    const next = minimized[index + 1] ?? minimized[index - 1];
-                    const target = next ? trayButton(next.urn) : document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]');
-                    if (selected?.urn === request.urn && minimizing) {
-                      cancelMotion();
-                      focusMinimized.current = null;
-                      opener.current = target ?? null;
-                      setSelected(null);
-                    }
-                    setMinimized((current) => current.filter((item) => item.urn !== request.urn));
-                    target?.focus({ preventScroll: true });
-                  }}
-                >
-                  <IconX size={16} aria-hidden="true" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      ) : null}
-      <Dialog.Root
-        open={selected !== null && desktop}
-        modal={false}
-        onOpenChange={(open) => {
-          if (!open) {
-            cancelMotion();
-            setSelected(null);
-          }
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Content
-            ref={setPanel}
-            className="orbis-app-launcher"
-            data-minimizing={minimizing}
-            inert={minimizing || undefined}
-            onInteractOutside={(event) => event.preventDefault()}
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              const minimizedTarget = focusMinimized.current ? trayButton(focusMinimized.current) : null;
-              const target =
-                minimizedTarget ??
-                (opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]'));
-              target?.focus({ preventScroll: true });
-              focusMinimized.current = null;
-            }}
-          >
-            <header className="app-launcher-bar">
-              <span title={userSettings.internalIp || window.location.hostname}>{userSettings.internalIp || window.location.hostname}</span>
-              <div className="app-launcher-controls">
-                <Button className="app-launcher-close" size="icon" aria-label="Minimize app launcher" disabled={minimizing} onClick={minimize}>
-                  <IconMinus size={19} aria-hidden="true" />
-                </Button>
-                <Dialog.Close asChild>
-                  <Button className="app-launcher-close" size="icon" aria-label="Close app launcher" disabled={minimizing}>
-                    <IconX size={19} aria-hidden="true" />
+      <AppTrayContext.Provider value={minimizedApps}>
+        {children}
+        <Dialog.Root
+          open={selected !== null && desktop}
+          modal={false}
+          onOpenChange={(open) => {
+            if (!open) {
+              cancelMotion();
+              setSelected(null);
+            }
+          }}
+        >
+          <Dialog.Portal>
+            <Dialog.Content
+              ref={setPanel}
+              className="orbis-app-launcher"
+              data-minimizing={minimizing}
+              inert={minimizing || undefined}
+              onInteractOutside={(event) => event.preventDefault()}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                const minimizedTarget = focusMinimized.current ? trayButton(focusMinimized.current) : null;
+                const target =
+                  minimizedTarget ??
+                  (opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]'));
+                target?.focus({ preventScroll: true });
+                focusMinimized.current = null;
+              }}
+            >
+              <header className="app-launcher-bar">
+                <span title={userSettings.internalIp || window.location.hostname}>{userSettings.internalIp || window.location.hostname}</span>
+                <div className="app-launcher-controls">
+                  <Button className="app-launcher-close" size="icon" aria-label="Minimize app launcher" disabled={minimizing} onClick={minimize}>
+                    <IconMinus size={19} aria-hidden="true" />
                   </Button>
-                </Dialog.Close>
-              </div>
-            </header>
-            <div className="app-launcher-body">
-              <div className="app-launcher-identity">
-                <AppLogo urn={selected?.urn} size={64} />
-                <div>
-                  <Dialog.Title>{data?.info.name ?? selected?.name}</Dialog.Title>
-                  <span className="app-launcher-status">
-                    {status ? status.replaceAll('_', ' ') : details.isError ? 'Unavailable' : 'Loading app…'}
-                  </span>
+                  <Dialog.Close asChild>
+                    <Button className="app-launcher-close" size="icon" aria-label="Close app launcher" disabled={minimizing}>
+                      <IconX size={19} aria-hidden="true" />
+                    </Button>
+                  </Dialog.Close>
                 </div>
-              </div>
-              <Dialog.Description className="app-launcher-description">
-                {details.isError
-                  ? 'App details could not be loaded. Try again or open its settings.'
-                  : data?.info.no_gui
-                    ? 'This app runs without a web interface.'
-                    : status && status !== 'running'
-                      ? 'Open app settings to start or manage this app.'
-                      : 'Open the app on its server.'}
-              </Dialog.Description>
-              {primary ? (
-                <Button asChild intent="primary">
-                  <a href={primary.url} target="_blank" rel="noopener noreferrer">
-                    <IconExternalLink size={18} aria-hidden="true" />
-                    Open app
-                  </a>
+              </header>
+              <div className="app-launcher-body">
+                <div className="app-launcher-identity">
+                  <AppLogo urn={selected?.urn} size={64} />
+                  <div>
+                    <Dialog.Title>{data?.info.name ?? selected?.name}</Dialog.Title>
+                    <span className="app-launcher-status">
+                      {status ? status.replaceAll('_', ' ') : details.isError ? 'Unavailable' : 'Loading app…'}
+                    </span>
+                  </div>
+                </div>
+                <Dialog.Description className="app-launcher-description">
+                  {details.isError
+                    ? 'App details could not be loaded. Try again or open its settings.'
+                    : data?.info.no_gui
+                      ? 'This app runs without a web interface.'
+                      : status && status !== 'running'
+                        ? 'Open app settings to start or manage this app.'
+                        : 'Open the app on its server.'}
+                </Dialog.Description>
+                {primary ? (
+                  <Button asChild intent="primary">
+                    <a href={primary.url} target="_blank" rel="noopener noreferrer">
+                      <IconExternalLink size={18} aria-hidden="true" />
+                      Open app
+                    </a>
+                  </Button>
+                ) : null}
+                {destinations.length > 0 ? (
+                  <ul className="app-launcher-addresses" aria-label="App addresses">
+                    {destinations.map(({ label, url }) => (
+                      <li key={url}>
+                        <a href={url} target="_blank" rel="noopener noreferrer">
+                          <span>{label}</span>
+                          <span title={url}>{url}</span>
+                          <IconExternalLink size={16} aria-hidden="true" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {details.isError ? <Button onClick={() => void details.refetch()}>Retry</Button> : null}
+                <Button asChild variant="outline">
+                  <Link to={managePath} viewTransition onClick={() => setSelected(null)}>
+                    <IconSettings size={18} aria-hidden="true" />
+                    App settings
+                  </Link>
                 </Button>
-              ) : null}
-              {destinations.length > 0 ? (
-                <ul className="app-launcher-addresses" aria-label="App addresses">
-                  {destinations.map(({ label, url }) => (
-                    <li key={url}>
-                      <a href={url} target="_blank" rel="noopener noreferrer">
-                        <span>{label}</span>
-                        <span title={url}>{url}</span>
-                        <IconExternalLink size={16} aria-hidden="true" />
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {details.isError ? <Button onClick={() => void details.refetch()}>Retry</Button> : null}
-              <Button asChild variant="outline">
-                <Link to={managePath} viewTransition onClick={() => setSelected(null)}>
-                  <IconSettings size={18} aria-hidden="true" />
-                  App settings
-                </Link>
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      </AppTrayContext.Provider>
     </AppLauncherContext.Provider>
   );
 }

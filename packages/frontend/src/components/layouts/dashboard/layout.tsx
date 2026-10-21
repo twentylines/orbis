@@ -10,7 +10,7 @@ import { CommandSearch } from '@/desktop/command-search';
 import { desktopNavigation as navigation } from '@/desktop/navigation';
 import { useSectionMotion } from '@/desktop/section-motion';
 import { RouteSurface } from '@/desktop/route-surface';
-import { AppLauncherProvider } from '@/desktop/app-launcher';
+import { AppLauncherProvider, MinimizedApps } from '@/desktop/app-launcher';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { IconApps, IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, useMutation } from '@tanstack/react-query';
@@ -180,23 +180,28 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
         </main>
 
         <nav ref={dock} className="desktop-dock" aria-label="Main navigation">
-          {navigation
-            .filter((item) => item.path !== '/tasks')
-            .map(({ path, label, Icon, ...item }) => (
-              <Link
-                key={path}
-                to={path}
-                viewTransition
-                onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
-                className={`desktop-dock-item ${current?.path === path ? 'is-active' : ''}`}
-                aria-label={label}
-                aria-current={current?.path === path ? 'page' : undefined}
-                title={label}
-              >
-                <Icon size={22} stroke={1.7} aria-hidden="true" />
-                <span>{'dockLabel' in item ? item.dockLabel : label}</span>
-              </Link>
-            ))}
+          <div className="desktop-dock-main">
+            {navigation
+              .filter((item) => item.path !== '/tasks')
+              .map(({ path, label, Icon, ...item }) => (
+                <Link
+                  key={path}
+                  to={path}
+                  viewTransition
+                  onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
+                  className={`desktop-dock-item ${current?.path === path ? 'is-active' : ''}`}
+                  aria-label={label}
+                  aria-current={current?.path === path ? 'page' : undefined}
+                  title={label}
+                >
+                  <span className="desktop-dock-content">
+                    <Icon size={22} stroke={1.7} aria-hidden="true" />
+                    <span className="desktop-dock-label">{'dockLabel' in item ? item.dockLabel : label}</span>
+                  </span>
+                </Link>
+              ))}
+          </div>
+          <MinimizedApps />
         </nav>
       </div>
     </AppLauncherProvider>

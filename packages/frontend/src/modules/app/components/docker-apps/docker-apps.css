@@ -40,8 +40,9 @@
 .docker-app-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
   gap: 16px;
-  align-items: center;
+  align-items: start;
   padding: clamp(18px, 2vw, 24px);
   border: 1px solid var(--desktop-line);
   border-radius: 20px;
@@ -160,6 +161,7 @@
   .docker-app-card {
     gap: 14px;
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto;
   }
   .docker-app-removal .modal-footer > .btn {
     flex: 1 1 100%;

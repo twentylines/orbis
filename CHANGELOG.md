@@ -2,9 +2,12 @@
 
 ## Unreleased
 
+- Split the dock into navigation and minimized apps on one bottom row. Contract navigation to icons after the fourth minimized app and scroll longer app lists horizontally.
+- Center dock icons and labels without lifting buttons on hover. Preserve glass blur while switching sections.
+- Align Docker card headings and bottom action gutters when text is enlarged.
 - Apply the shared appearance, mode controls and responsive spacing to the first-run welcome screen.
 - Keep authentication focus markers clear of the viewport edge with enlarged text.
-- Refresh the navigation gallery from the published beta63 image.
+- Refresh the navigation gallery with the current source build.
 
 ## Beta63 — 21 October 2026
 

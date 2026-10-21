@@ -9,15 +9,20 @@
 html:active-view-transition .desktop-view-app {
   animation: none;
 }
-.desktop-dock {
+.desktop-dock-main {
   view-transition-name: orbis-dock;
+}
+.orbis-app-tray {
+  view-transition-name: orbis-minimized;
 }
 ::view-transition-old(root),
 ::view-transition-new(root),
 ::view-transition-old(orbis-header),
 ::view-transition-new(orbis-header),
 ::view-transition-old(orbis-dock),
-::view-transition-new(orbis-dock) {
+::view-transition-new(orbis-dock),
+::view-transition-old(orbis-minimized),
+::view-transition-new(orbis-minimized) {
   animation: none;
 }
 ::view-transition-group(orbis-section) {

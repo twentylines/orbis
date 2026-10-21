@@ -16,7 +16,7 @@ Orbis is currently in beta. Migration and recovery of a real homelab have not be
 
 [Minimized apps, light](screenshots/navigation/minimized-light.png) · [Minimized apps, dark](screenshots/navigation/minimized-dark.png)
 
-Published beta63 on a disposable test server, using sample apps. See the [gallery](screenshots/navigation/README.md).
+Current source build on a disposable test server, using sample apps. See the [gallery](screenshots/navigation/README.md).
 
 [Earlier beta62 gallery](screenshots/live-beta62/README.md) · [Login](screenshots/live-beta62/phone-login.png) · [Backup views](screenshots/backups/desktop.png)
 

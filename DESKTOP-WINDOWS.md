@@ -12,14 +12,14 @@ Pages scroll normally. Keyboard focus clears the sticky system bar, fixed dock a
 
 On screens at least 1100px wide and 640px high, selecting an app from Home or Apps opens a small launcher panel. It shows the app's current status, available server addresses and a link to app settings. The panel can remain open while navigating between sections. Escape or Close dismisses it.
 
-Minimize folds the launcher into a compact tray above the dock. The tray expands with a short spring motion as apps are added. Select an app icon to restore its launcher. Each icon has the full app name as its accessible label and hover tooltip, with a separate Close control. Opening a different app keeps the previous launcher in the tray. Reduced-motion preferences remove the minimize, restore and tray animations.
+Minimize splits the dock into two glass pills on the same bottom row: navigation and minimized apps. A short spring transition connects the split. After the fourth minimized app, navigation contracts to icons to leave more room for apps. Long lists scroll horizontally in whole app groups. Select an app icon to restore its launcher. Each icon has the full app name as its accessible label and hover tooltip, with a separate Close control. Opening a different app keeps the previous launcher in the tray. Reduced-motion preferences remove the minimize, restore and tray animations.
 
 The tray holds launcher names and app identifiers in the current browser tab. It does not embed app sessions or keep minimized app details polling. Reloading clears this list. Minimizing or closing a launcher leaves the Docker app running; an application's separate browser tab is unaffected.
 
 **Open app** opens the selected application address in a separate browser tab. Orbis does not preload or embed the application's interface. The launcher fetches details only for the selected app and refreshes them every 15 seconds while visible; background refreshes stop when the browser tab is hidden.
 
-On phones, tablets and short screens, app cards open their normal details page. App launch actions open the application's address directly. Resizing to a smaller screen closes the active desktop launcher and hides the tray. The minimized list returns if the same tab is resized back to a desktop viewport.
+On screens below the width or height threshold, app cards open their normal details page. Phones have no desktop launcher or minimized-app controls. Tablets use launchers only when they meet both size requirements. App launch actions open the application's address directly. Resizing to a smaller screen closes the active desktop launcher and hides the tray. The minimized list returns if the same tab is resized back to a desktop viewport.
 
 App addresses use the installed port, configured domain or local domain, TLS port and URL suffix. Apps that are stopped or have no web interface do not receive an active launch link. Existing account window placement data is retained for compatibility and is not used for section navigation.
 
-Page navigation and the minimized launcher tray are included in `v0.1.0-beta.63` and later.
+Page navigation and the original minimized launcher tray are included in `v0.1.0-beta.63`. The same-row split dock is in the current source build.

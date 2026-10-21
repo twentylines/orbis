@@ -281,8 +281,7 @@ html:has(.desktop) {
 .desktop-main {
   width: 100%;
   margin: 0 auto;
-  padding: 24px var(--desktop-inset)
-    max(154px, calc(var(--orbis-dock-height, 78px) + var(--orbis-app-tray-height, 0px) + 64px + env(safe-area-inset-bottom, 0px)));
+  padding: 24px var(--desktop-inset) max(154px, calc(var(--orbis-dock-height, 78px) + 64px + env(safe-area-inset-bottom, 0px)));
   min-height: calc(100vh - 78px);
 }
 .desktop-view {
@@ -678,16 +677,28 @@ html:has(.desktop) {
   margin: 4px 0 0 !important;
 }
 .desktop-dock {
+  --orbis-dock-icon-width: 52px;
   position: fixed;
   z-index: 18;
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  align-items: center;
   max-width: calc(100% - var(--desktop-inset) * 2);
-  overflow-x: auto;
+  overflow: visible;
   scroll-padding-inline: 7px;
-  scrollbar-width: thin;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  animation: orbis-dock-enter 0.55s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.desktop-dock-main {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
   gap: 4px;
   padding: 7px;
   border: 1px solid transparent;
@@ -696,7 +707,32 @@ html:has(.desktop) {
   box-shadow: 0 18px 45px rgba(6, 27, 26, 0.34);
   backdrop-filter: var(--desktop-glass-filter);
   -webkit-backdrop-filter: var(--desktop-glass-filter);
-  animation: orbis-dock-enter 0.55s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.desktop-dock:has(.orbis-app-tray:not([hidden])) .desktop-dock-main::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: calc(100% - 12px);
+  top: calc(50% - 12px);
+  width: 36px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--desktop-chrome);
+  filter: blur(3px);
+  pointer-events: none;
+  animation: orbis-dock-fission 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes orbis-dock-fission {
+  0%,
+  18% {
+    opacity: 0.85;
+    transform: scaleX(1.5);
+  }
+  75%,
+  100% {
+    opacity: 0;
+    transform: scaleX(0.1);
+  }
 }
 .desktop .desktop-dock-item {
   min-width: 88px;
@@ -712,25 +748,54 @@ html:has(.desktop) {
   color: rgba(245, 248, 242, 0.76);
   text-decoration: none;
   transition:
+    min-width 320ms 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 320ms 140ms cubic-bezier(0.22, 1, 0.36, 1),
     background 0.18s ease,
     transform 0.18s ease;
 }
-.desktop-dock-item span {
+.desktop-dock-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+}
+.desktop-dock-label {
   max-width: 100%;
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.18;
   white-space: nowrap;
+  max-height: 3em;
+  transition:
+    opacity 140ms 420ms ease,
+    max-width 280ms 140ms ease,
+    max-height 280ms 140ms ease;
+}
+.desktop-dock[data-minimized-compact="true"] .desktop-dock-item {
+  min-width: var(--orbis-dock-icon-width);
+  padding-inline: 14px;
+  gap: 0;
+}
+.desktop-dock[data-minimized-compact="true"] .desktop-dock-content {
+  gap: 0;
+}
+.desktop-dock[data-minimized-compact="true"] .desktop-dock-label {
+  max-width: 0;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    opacity 140ms ease,
+    max-width 280ms 140ms ease,
+    max-height 280ms 140ms ease;
 }
 .desktop-dock-item svg {
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .desktop-dock-item:hover {
   background: rgba(255, 255, 255, 0.13);
-  transform: translateY(-2px);
   text-decoration: none;
-}
-.desktop-dock-item:hover svg {
-  transform: translateY(-2px) scale(1.14);
 }
 .desktop-dock-item:active svg {
   transform: scale(0.9);
@@ -772,11 +837,9 @@ html:has(.desktop) {
 }
 @keyframes orbis-dock-enter {
   from {
-    opacity: 0;
     transform: translate(-50%, 25px) scale(0.93);
   }
   to {
-    opacity: 1;
     transform: translate(-50%, 0) scale(1);
   }
 }
@@ -942,13 +1005,21 @@ html:has(.desktop) {
     overflow: visible;
     border-radius: 16px;
   }
+  .desktop-dock-main {
+    width: 100%;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 4px 0;
+    border-radius: 16px;
+  }
   .desktop .desktop-dock-item {
     min-width: max-content;
     flex: 1 0 auto;
     min-height: 55px;
     padding-inline: 8px;
   }
-  .desktop-dock-item span {
+  .desktop-dock-content,
+  .desktop-dock-label {
     font-size: 10px;
   }
   .desktop-monitor-grid {
@@ -1031,6 +1102,9 @@ html:has(.desktop) {
     padding: 3px 2px;
     scroll-padding-inline: 3px;
   }
+  .desktop-dock-main {
+    padding: 3px 2px;
+  }
   .desktop .desktop-dock-item {
     min-width: 44px;
     padding-inline: 8px;
@@ -1053,7 +1127,8 @@ html:has(.desktop) {
 }
 @supports not (backdrop-filter: blur(1px)) {
   .desktop-system-bar,
-  .desktop-dock,
+  .desktop-dock-main,
+  .orbis-app-tray,
   .desktop-route-window[data-window-navigation="desktop"] .desktop-window-bar {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
