@@ -5,5 +5,10 @@ import { TasksModule } from '../tasks/tasks.module';
 import { DockerAppsController } from './docker-apps.controller';
 import { DockerAppsService } from './docker-apps.service';
 
-@Module({ imports: [AppsModule, DockerModule, TasksModule], controllers: [DockerAppsController], providers: [DockerAppsService] })
+@Module({
+  imports: [AppsModule, DockerModule, TasksModule],
+  controllers: [DockerAppsController],
+  providers: [DockerAppsService],
+  exports: [DockerAppsService],
+})
 export class DockerAppsModule {}

@@ -41,6 +41,7 @@ import { DesktopPreferencesModule } from './modules/desktop-preferences/desktop-
 import { HostUpdatesModule } from './modules/host-updates/host-updates.module';
 import { installationMiddleware } from './common/installation.middleware';
 import { DockerAppsModule } from './modules/docker-apps/docker-apps.module';
+import { ClusterModule } from './modules/cluster/cluster.module';
 
 const DEFAULT_THROTTLE_TTL = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 300;
@@ -76,6 +77,7 @@ const imports: (DynamicModule | typeof I18nModule)[] = [
   DesktopPreferencesModule,
   HostUpdatesModule,
   DockerAppsModule,
+  ClusterModule,
 ];
 
 const { NODE_ENV } = process.env;

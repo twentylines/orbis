@@ -24,6 +24,15 @@ import { HostDeviceHistoryService } from './host-device-history.service';
     HostSensorsService,
     HostDeviceHistoryService,
   ],
-  exports: [],
+  exports: [
+    SystemService,
+    OrbisReleaseService,
+    ContainerTelemetryService,
+    MetricHistoryService,
+    HostTelemetryService,
+    HostProcessesService,
+    HostSensorsService,
+    HostDeviceHistoryService,
+  ],
 })
 export class SystemModule {}
