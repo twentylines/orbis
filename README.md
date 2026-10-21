@@ -20,6 +20,7 @@ Development backup views with sample data: [Desktop](screenshots/backups/desktop
 
 ## Documentation
 
+- [Inspect existing Runtipi and Orbis installations](INSTALLATION.md)
 - [Installation and migration](DEPLOYMENT.md)
 - [Orbis and system updates](UPDATES.md)
 - [Linux host service](HOST-SERVICE.md)
