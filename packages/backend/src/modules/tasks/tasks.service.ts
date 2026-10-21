@@ -7,6 +7,7 @@ import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { taskRecordSchema, type TaskAction, type TaskHistory, type TaskRecord } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
+import { installationHeld } from '@/common/installation-mode';
 
 type TaskEvent = { requestId: string; appUrn: AppUrn; command: TaskAction };
 const limit = 300;
@@ -28,6 +29,7 @@ export class TasksService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    if (installationHeld()) return;
     await this.load();
   }
 

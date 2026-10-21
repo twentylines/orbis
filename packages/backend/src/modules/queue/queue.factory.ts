@@ -7,6 +7,7 @@ import { type } from 'arktype';
 import { Connection } from 'rabbitmq-client';
 import { EventPublisher } from './event.publisher';
 import { type ArkTypeSchema, Queue, type QueueObserver } from './queue.entity';
+import { installationMode } from '@/common/installation-mode';
 
 @Injectable()
 export class QueueFactory {
@@ -14,6 +15,33 @@ export class QueueFactory {
   private connectionAttempts = 0;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
+  private queues = new Map<string, { resumeAfterInstallation: () => void }>();
+  private installationPrepared = false;
+  private installationCompleted = false;
+
+  private async requireIdleApplicationQueue() {
+    if (!this.queues.has('app-events-queue')) throw new Error('Application queue is not initialized.');
+    const state = await this.rabbit.queueDeclare({ queue: 'app-events-queue', durable: true, autoDelete: false });
+    if (state.messageCount !== 0 || state.consumerCount !== 0) {
+      throw new Error('Installation cannot resume while app commands or another app consumer remain in the queue.');
+    }
+  }
+
+  public async prepareInstallationResume() {
+    if (installationMode().phase !== 'resume' || this.installationPrepared) return;
+    await this.requireIdleApplicationQueue();
+    this.queues.get('repo-queue')?.resumeAfterInstallation();
+    this.queues.get('system-events-queue')?.resumeAfterInstallation();
+    this.installationPrepared = true;
+  }
+
+  public async completeInstallationResume() {
+    if (installationMode().phase !== 'resume' || this.installationCompleted) return;
+    if (!this.installationPrepared) throw new Error('Installation queues have not passed preflight.');
+    await this.requireIdleApplicationQueue();
+    this.queues.get('app-events-queue')?.resumeAfterInstallation();
+    this.installationCompleted = true;
+  }
 
   public constructor(
     private readonly logger: LoggerService,
@@ -127,6 +155,8 @@ export class QueueFactory {
       queues: [{ autoDelete: false, durable: true, queue: queueName }],
     });
 
-    return new Queue(this.rabbit, rpcClient, publisher, queueName, workers, eventSchema, resultSchema, this.logger, params.observer);
+    const queue = new Queue(this.rabbit, rpcClient, publisher, queueName, workers, eventSchema, resultSchema, this.logger, params.observer);
+    this.queues.set(queueName, queue);
+    return queue;
   }
 }

@@ -9,12 +9,14 @@ import { GithubService } from '@/utils/github/github.service';
 import { faker } from '@faker-js/faker';
 import { Test } from '@nestjs/testing';
 import { fromPartial } from '@total-typescript/shoehorn';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { DOCKERODE } from '@/modules/docker/docker.module';
 import { AppStatusSyncService } from '@/modules/app-lifecycle/app-status-sync.service';
 import { AppLifecycleService } from '@/modules/app-lifecycle/app-lifecycle.service';
 import YAML from 'yaml';
+import { DatabaseService } from '@/core/database/database.service';
+import { QueueFactory } from '@/modules/queue/queue.factory';
 
 const TRAEFIK_CONFIG = `api:
   dashboard: true
@@ -43,9 +45,15 @@ describe('AppService', () => {
   let githubService = mock<GithubService>();
   let appStatusSyncService = mock<AppStatusSyncService>();
   let appLifecycleService = mock<AppLifecycleService>();
+  let databaseService = mock<DatabaseService>();
+  let queueFactory = mock<QueueFactory>();
+  let pruneNetworks = vi.fn();
+
+  afterEach(() => vi.unstubAllEnvs());
 
   beforeEach(async () => {
-    const docker = { pruneNetworks: vi.fn() };
+    pruneNetworks = vi.fn();
+    const docker = { pruneNetworks };
     const moduleRef = await Test.createTestingModule({
       providers: [
         AppService,
@@ -64,7 +72,10 @@ describe('AppService', () => {
     configurationService = moduleRef.get(ConfigurationService);
     githubService = moduleRef.get(GithubService);
     appStatusSyncService = moduleRef.get(AppStatusSyncService);
+    appStatusSyncService.syncAllAppStatuses.mockResolvedValue({ success: true, message: 'Synced', syncedCount: 0, skippedCount: 0, totalApps: 0 });
     appLifecycleService = moduleRef.get(AppLifecycleService);
+    databaseService = moduleRef.get(DatabaseService);
+    queueFactory = moduleRef.get(QueueFactory);
   });
 
   it('reconciles persisted application states before serving the dashboard', async () => {
@@ -77,6 +88,7 @@ describe('AppService', () => {
     await appService.bootstrap();
 
     expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
+    expect(pruneNetworks).toHaveBeenCalledOnce();
     expect(appLifecycleService.recoverInterruptedRestores).toHaveBeenCalledBefore(appStatusSyncService.syncAllAppStatuses);
   });
 
@@ -85,6 +97,95 @@ describe('AppService', () => {
     await expect(appService.bootstrap()).rejects.toThrow('Restore recovery requires available storage');
     expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
     expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
+  });
+
+  it('prepares the database while holding all app bootstrap work during installation', async () => {
+    vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
+    vi.stubEnv('ORBIS_INSTALLER_PHASE', 'hold');
+    const copy = vi.spyOn(appService, 'copyAssets');
+    const tls = vi.spyOn(appService, 'generateTlsCertificates');
+    await appService.bootstrap();
+    expect(databaseService.migrate).toHaveBeenCalledOnce();
+    expect(appLifecycleService.recoverInterruptedRestores).not.toHaveBeenCalled();
+    expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+    expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
+    expect(copy).not.toHaveBeenCalled();
+    expect(tls).not.toHaveBeenCalled();
+    expect(pruneNetworks).not.toHaveBeenCalled();
+    expect(queueFactory.prepareInstallationResume).not.toHaveBeenCalled();
+    expect(queueFactory.completeInstallationResume).not.toHaveBeenCalled();
+  });
+
+  it('resumes with status reconciliation and preserves the containers restored by the installer', async () => {
+    vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
+    vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
+    configurationService.getConfig.mockReturnValue(
+      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'local.test' }, __prod__: true }),
+    );
+    vi.spyOn(appService, 'copyAssets').mockResolvedValue();
+    vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
+    await appService.bootstrap();
+    expect(appLifecycleService.requireNoPendingRestores).toHaveBeenCalledBefore(appStatusSyncService.syncAllAppStatuses);
+    expect(appLifecycleService.requireNoPendingRestores).toHaveBeenCalledBefore(queueFactory.prepareInstallationResume);
+    expect(queueFactory.prepareInstallationResume).toHaveBeenCalledBefore(appStatusSyncService.syncAllAppStatuses);
+    expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledBefore(queueFactory.completeInstallationResume);
+    expect(appLifecycleService.recoverInterruptedRestores).not.toHaveBeenCalled();
+    expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+    expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
+    expect(pruneNetworks).not.toHaveBeenCalled();
+  });
+
+  it('fails installer resume instead of reporting a healthy partially initialized controller', async () => {
+    vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
+    vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
+    configurationService.getConfig.mockReturnValue(
+      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'local.test' }, __prod__: true }),
+    );
+    vi.spyOn(appService, 'copyAssets').mockRejectedValue(new Error('Asset initialization failed'));
+    await expect(appService.bootstrap()).rejects.toThrow('Asset initialization failed');
+    expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
+    expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+    expect(queueFactory.completeInstallationResume).not.toHaveBeenCalled();
+  });
+
+  it('refuses installer resume when restore recovery is still pending', async () => {
+    vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
+    vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
+    appLifecycleService.requireNoPendingRestores.mockRejectedValue(new Error('Restore needs review'));
+    await expect(appService.bootstrap()).rejects.toThrow('Restore needs review');
+    expect(appLifecycleService.recoverInterruptedRestores).not.toHaveBeenCalled();
+    expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
+    expect(queueFactory.prepareInstallationResume).not.toHaveBeenCalled();
+    expect(queueFactory.completeInstallationResume).not.toHaveBeenCalled();
+  });
+
+  it('refuses installer resume before app bootstrap if the application queue is not idle', async () => {
+    vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
+    vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
+    queueFactory.prepareInstallationResume.mockRejectedValue(new Error('Pending app commands'));
+    await expect(appService.bootstrap()).rejects.toThrow('Pending app commands');
+    expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
+    expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+    expect(queueFactory.completeInstallationResume).not.toHaveBeenCalled();
+  });
+
+  it('keeps app consumption held when status reconciliation reports failure', async () => {
+    vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
+    vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
+    configurationService.getConfig.mockReturnValue(
+      fromPartial({ version: '4.10.1', userSettings: { logLevel: 'info', allowErrorMonitoring: false }, __prod__: true }),
+    );
+    vi.spyOn(appService, 'copyAssets').mockResolvedValue();
+    vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
+    appStatusSyncService.syncAllAppStatuses.mockResolvedValue({
+      success: false,
+      message: 'Unavailable',
+      syncedCount: 0,
+      skippedCount: 0,
+      totalApps: 0,
+    });
+    await expect(appService.bootstrap()).rejects.toThrow('App status reconciliation failed');
+    expect(queueFactory.completeInstallationResume).not.toHaveBeenCalled();
   });
 
   describe('getVersion', () => {

@@ -8,6 +8,7 @@ import { mock } from 'vitest-mock-extended';
 import { AppsRepository } from '../apps/apps.repository';
 import { AppLifecycleCommandFactory } from './app-lifecycle-command.factory';
 import { AppLifecycleService } from './app-lifecycle.service';
+import { TasksService } from '../tasks/tasks.service';
 
 describe('Interrupted restore lifecycle guards', () => {
   const appUrn = createAppUrn('demo', 'store');
@@ -44,6 +45,26 @@ describe('Interrupted restore lifecycle guards', () => {
 
   afterEach(async () => {
     await module.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('refuses installer resume while an interrupted restore is present', async () => {
+    await expect(service.requireNoPendingRestores()).rejects.toThrow('An interrupted restore needs recovery');
+    expect(backups.recoverRestore).not.toHaveBeenCalled();
+    expect(docker.listContainers).not.toHaveBeenCalled();
+    backups.getPendingRestores.mockResolvedValue([]);
+    await expect(service.requireNoPendingRestores()).resolves.toBeUndefined();
+  });
+
+  it('holds direct lifecycle dispatch before task changes, locks or Docker commands', async () => {
+    vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
+    vi.stubEnv('ORBIS_INSTALLER_PHASE', 'hold');
+    const reply = vi.fn();
+    await service.invokeCommand({ command: 'start', appUrn, form: {}, requestId: 'f92e8862-38b5-4e81-bc84-f9131944872d' }, reply);
+    expect(reply).toHaveBeenCalledWith({ success: false, message: 'Installation is in progress. Wait for the installer to finish.' });
+    expect(module.get(TasksService).enqueue).not.toHaveBeenCalled();
+    expect(module.get(APP_ASYNC_MUTEX).acquire).not.toHaveBeenCalled();
+    expect(factory.createCommand).not.toHaveBeenCalled();
   });
 
   it('stops and verifies running app containers before replacing interrupted files', async () => {

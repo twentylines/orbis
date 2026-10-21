@@ -6,6 +6,7 @@ import { metricHistoryRanges, type MetricHistory, type MetricHistoryRange } from
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { SystemService } from './system.service';
+import { installationHeld } from '@/common/installation-mode';
 import { decodeBucket, encodeBucket, historyPoint, mergeBuckets, metricSample, type MetricBucket } from './metric-history.model';
 
 const retentionMs = 7 * 86400000;
@@ -38,6 +39,7 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
+    if (installationHeld()) return;
     await this.load();
     this.timer = setInterval(() => void this.collect(), 10000);
     this.timer.unref();

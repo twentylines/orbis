@@ -7,6 +7,7 @@ import { metricHistoryRanges, type HostDeviceHistory, type HostHistorySelection,
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { HostTelemetryService } from './host-telemetry.service';
+import { installationHeld } from '@/common/installation-mode';
 import {
   decodeHostHistory,
   encodeHostHistory,
@@ -60,6 +61,7 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
+    if (installationHeld()) return;
     await this.load();
     this.timer = setInterval(() => void this.collect(), 10000);
     this.timer.unref();

@@ -4,6 +4,7 @@ import { ConfigurationService } from '@/core/config/configuration.service';
 import { Injectable, type NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import jsonwebtoken from 'jsonwebtoken';
+import { installationHeld } from '@/common/installation-mode';
 import { UserRepository } from '../user/user.repository';
 
 type ForwardAuthSession = {
@@ -41,6 +42,7 @@ export class AuthMiddleware implements NestMiddleware {
   }
 
   async use(req: Request, _: Response, next: NextFunction) {
+    if (installationHeld()) return next();
     const sessionId = req.cookies[SESSION_COOKIE_NAME];
     const forwardAuthSessionId = req.cookies[FORWARD_AUTH_COOKIE_NAME];
     const bearerToken = req.headers.authorization;

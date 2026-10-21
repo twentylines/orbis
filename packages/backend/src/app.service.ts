@@ -17,6 +17,8 @@ import { DOCKERODE } from './modules/docker/docker.module';
 import Dockerode from 'dockerode';
 import { GithubService } from './utils/github/github.service';
 import YAML from 'yaml';
+import { installationMode } from './common/installation-mode';
+import { QueueFactory } from './modules/queue/queue.factory';
 
 @Injectable()
 export class AppService {
@@ -33,14 +35,23 @@ export class AppService {
     private readonly appLifecycleService: AppLifecycleService,
     private readonly appStatusSyncService: AppStatusSyncService,
     private readonly githubService: GithubService,
+    private readonly queueFactory: QueueFactory,
     @Inject(DOCKERODE) private docker: Dockerode,
   ) {}
 
   public async bootstrap() {
+    const installation = installationMode();
     await this.databaseService.migrate();
-    await this.appLifecycleService.recoverInterruptedRestores();
+    if (installation.phase === 'hold') {
+      this.logger.info('Installation mode: database prepared; app services remain held.');
+      return;
+    }
+    if (installation.phase === 'resume') {
+      await this.appLifecycleService.requireNoPendingRestores();
+      await this.queueFactory.prepareInstallationResume();
+    } else await this.appLifecycleService.recoverInterruptedRestores();
     try {
-      await this.docker.pruneNetworks();
+      if (installation.phase === 'normal') await this.docker.pruneNetworks();
 
       const { version, userSettings, __prod__ } = this.configuration.getConfig();
       const config = this.configuration.getConfig();
@@ -75,15 +86,18 @@ export class AppService {
       await this.copyAssets();
       await this.generateTlsCertificates({ localDomain: userSettings.localDomain });
 
-      if (__prod__ && (buster !== version || version === 'nightly')) {
+      if (installation.phase !== 'resume' && __prod__ && (buster !== version || version === 'nightly')) {
         this.appLifecycleService.restartRunningApps();
       }
 
       // Reconcile persisted app states before the dashboard serves its first status list.
-      await this.appStatusSyncService.syncAllAppStatuses();
+      const statuses = await this.appStatusSyncService.syncAllAppStatuses();
+      if (installation.phase === 'resume' && !statuses.success) throw new Error('App status reconciliation failed during installation resume.');
+      await this.queueFactory.completeInstallationResume();
     } catch (e) {
       this.logger.error(e);
       Sentry.captureException(e, { tags: { source: 'bootstrap' } });
+      if (installation.phase === 'resume') throw e;
     }
   }
 

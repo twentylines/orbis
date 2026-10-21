@@ -58,6 +58,6 @@ import { TasksService } from '../tasks/tasks.service';
       inject: [QueueFactory, ConfigurationService],
     },
   ],
-  exports: [AppEventsQueue, RepoEventsQueue, SystemEventsQueue, QueueHealthIndicator],
+  exports: [AppEventsQueue, RepoEventsQueue, SystemEventsQueue, QueueHealthIndicator, QueueFactory],
 })
 export class QueueModule {}

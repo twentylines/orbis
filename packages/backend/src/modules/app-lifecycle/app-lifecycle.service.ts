@@ -22,6 +22,7 @@ import { UpdateConfigHandler } from './handlers/update-config.handler';
 import { BackupAppHandler } from './handlers/backup-app.handler';
 import { RestoreAppHandler } from './handlers/restore-app.handler';
 import { TasksService } from '../tasks/tasks.service';
+import { INSTALLATION_MESSAGE, installationHeld } from '@/common/installation-mode';
 
 @Injectable()
 export class AppLifecycleService {
@@ -51,6 +52,10 @@ export class AppLifecycleService {
   }
 
   async invokeCommand(data: typeof appEventSchema.infer, reply: (response: typeof appEventResultSchema.infer) => Promise<void>, redelivered = false) {
+    if (installationHeld()) {
+      await reply({ success: false, message: INSTALLATION_MESSAGE });
+      return;
+    }
     await this.tasks.enqueue(data);
     const release = await this.mutex.acquire(data.appUrn);
 
@@ -117,6 +122,12 @@ export class AppLifecycleService {
     }
     await this.backups.recoverRestore(appUrn);
     this.logger.info(`Recovered interrupted restore for ${appUrn}; app remains stopped`);
+  }
+
+  public async requireNoPendingRestores() {
+    if ((await this.backups.getPendingRestores()).length) {
+      throw new Error('An interrupted restore needs recovery before installation can resume.');
+    }
   }
 
   public async recoverInterruptedRestores() {

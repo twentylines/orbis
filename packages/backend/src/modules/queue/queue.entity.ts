@@ -4,6 +4,7 @@ import { AMQPConnectionError, AMQPError, type Connection, type RPCClient } from 
 import { type } from 'arktype';
 import { scheduleCron, validateCronPattern } from './cron-scheduler';
 import type { EventPublisher } from './event.publisher';
+import { INSTALLATION_MESSAGE, installationHeld, installationMode } from '@/common/installation-mode';
 
 export type ArkTypeSchema<TOut = unknown, TIn = unknown> = {
   (data: TIn): TOut | type.errors;
@@ -16,6 +17,9 @@ type InferIn<T extends { infer: unknown; inferIn?: unknown }> = T extends { infe
 export type QueueObserver<T> = { queued: (event: T) => Promise<void>; unconfirmed: (event: T) => Promise<void> };
 
 export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: boolean; message: string }>> {
+  private enabled = installationMode().phase === 'normal';
+  private deferredConsumer?: () => void;
+
   constructor(
     private rabbit: Connection,
     private rpcClient: RPCClient,
@@ -27,6 +31,13 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
     private logger: LoggerService,
     private observer?: QueueObserver<Infer<T>>,
   ) {}
+
+  public resumeAfterInstallation() {
+    if (installationMode().phase !== 'resume' || this.enabled) return;
+    this.deferredConsumer?.();
+    this.deferredConsumer = undefined;
+    this.enabled = true;
+  }
 
   private async observe(phase: 'queued' | 'unconfirmed', event: Infer<T>) {
     try {
@@ -43,6 +54,15 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
       delivery?: { redelivered: boolean },
     ) => Promise<void>,
   ) {
+    if (installationHeld()) return;
+    if (!this.enabled) {
+      this.deferredConsumer = () => this.createConsumer(callback);
+      return;
+    }
+    this.createConsumer(callback);
+  }
+
+  private createConsumer(callback: Parameters<Queue<T, R>['onEvent']>[0]) {
     try {
       this.rabbit.createConsumer(
         {
@@ -86,6 +106,7 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
   }
 
   async publish(event: unknown): Promise<{ success: boolean; message: string } | Infer<R>> {
+    if (!this.enabled) return { success: false, message: INSTALLATION_MESSAGE };
     let accepted: Infer<T> | undefined;
     try {
       const eventData = this.eventSchema(event as never);
@@ -121,6 +142,7 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
   }
 
   public publishRepeatable(data: unknown, cronPattern: string) {
+    if (!this.enabled) return;
     if (!validateCronPattern(cronPattern)) {
       throw new Error('Invalid cron pattern');
     }

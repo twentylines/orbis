@@ -3,11 +3,12 @@ import { CacheService } from '@/core/cache/cache.service';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { UserRepository } from '@/modules/user/user.repository';
 import type { NextFunction, Request, Response } from 'express';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type MockProxy, mock } from 'vitest-mock-extended';
 import { AuthMiddleware } from '../auth.middleware';
 
 describe('AuthMiddleware', () => {
+  afterEach(() => vi.unstubAllEnvs());
   const user = {
     id: 1,
     username: 'operator@example.com',
@@ -29,6 +30,16 @@ describe('AuthMiddleware', () => {
     userRepository = mock<UserRepository>();
     middleware = new AuthMiddleware(cache, config, userRepository);
     next = vi.fn();
+  });
+
+  it('keeps installer health and status checks independent of saved user sessions', async () => {
+    vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
+    vi.stubEnv('ORBIS_INSTALLER_PHASE', 'hold');
+    const req = { cookies: { [SESSION_COOKIE_NAME]: 'saved-session' }, headers: {}, path: '/api/health' } as unknown as Request;
+    await middleware.use(req, {} as Response, next);
+    expect(next).toHaveBeenCalledOnce();
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(userRepository.getUserDtoById).not.toHaveBeenCalled();
   });
 
   it('ignores dashboard session cookies for traefik auth requests', async () => {

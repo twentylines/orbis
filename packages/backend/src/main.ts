@@ -11,6 +11,7 @@ import { AppModule } from './app.module';
 import { AppService } from './app.service';
 import { APP_DIR } from './common/constants';
 import { generateSystemEnvFile } from './common/helpers/env-helpers';
+import { captureInstallationMode } from './common/installation-mode';
 
 async function setupSwagger(app: INestApplication) {
   const { NODE_ENV } = process.env;
@@ -35,6 +36,7 @@ async function setupSwagger(app: INestApplication) {
 }
 
 async function bootstrap() {
+  captureInstallationMode();
   await generateSystemEnvFile();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {

@@ -39,6 +39,7 @@ import { AppConfigModule } from './modules/app-config/app-config.module';
 import { CustomAppsModule } from './modules/custom-apps/custom-apps.module';
 import { DesktopPreferencesModule } from './modules/desktop-preferences/desktop-preferences.module';
 import { HostUpdatesModule } from './modules/host-updates/host-updates.module';
+import { installationMiddleware } from './common/installation.middleware';
 
 const DEFAULT_THROTTLE_TTL = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 300;
@@ -109,6 +110,6 @@ if (NODE_ENV === 'production') {
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(AuthMiddleware).forRoutes('*all');
+    consumer.apply(installationMiddleware, AuthMiddleware).forRoutes('*all');
   }
 }

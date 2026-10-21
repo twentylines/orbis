@@ -23,7 +23,11 @@ For the existing explicit-root migration tools and their supported layouts, see 
 The installation flow being developed has two replacement choices:
 
 - **Replace Runtipi and keep data:** preserve accounts, encryption keys, settings, apps, app data and storage mappings.
-- **Replace Runtipi and start fresh:** initialize an empty Orbis installation and retain the previous installation for rollback.
+- **Replace Runtipi and start fresh:** reset Orbis accounts and dashboard preferences while retaining existing app containers and data. Detect those apps again, adopting compatible Runtipi app metadata and listing other Docker workloads as external apps. Retain the previous installation for rollback.
+
+Recognized Runtipi apps need their app/store identity, configuration, overrides and storage mappings to retain managed-app features. A container name or image alone is insufficient to reconstruct them. External app removal must identify the selected app's containers without removing Orbis infrastructure or implicitly deleting persistent data.
+
+Replacing the controller does not reverse database migrations or configuration changes made by a newer Runtipi version. The current migration tools support Runtipi 4.10.1 and must reject unsupported versions or layouts before modifying the installation. Runtipi also [warns against downgrading without a backup](https://runtipi.io/docs/reference/using-the-cli) and documents [breaking changes between versions](https://runtipi.io/docs/reference/breaking-updates).
 
 The installer needs Docker control plus access to the installation, external data and backup destinations. A host bootstrapper can provide this without a generally privileged container. Docker control on a rootful daemon itself confers host administration privileges; mounting its socket read-only does not restrict Docker API methods. Never publish an unauthenticated Docker API for installation.
 
@@ -58,3 +62,15 @@ python3 scripts/orbis-install-apps.py resume ROOT --docker-context CONTEXT \
 After a replacement, add `--controller-image ghcr.io/twentylines/orbis@sha256:DIGEST` to require the exact new Orbis image instead. Resume restores the previous running/stopped states and restart policies, including retry counts. It can continue a partially completed stop or resume, but refuses to replay a completed transaction. Missing or replaced app containers, changed definitions, another Docker daemon and an unhealthy controller require review before further actions.
 
 This step neither stops the controller nor proves data is ready for backup. The installation executor must stop the controller and all other writers, cover external storage, take a consistent backup, and prevent the replacement controller from starting app operations before resuming them. Keep the journal until the enclosing installation transaction is accepted or recovered.
+
+## Controller hold and resume modes
+
+The backend source includes an installer mode. This mode is not included in the published `v0.1.0-beta.62` image. An executor must select an image that implements the protocol before relying on it.
+
+Set both `ORBIS_INSTALLER_TRANSACTION` to a UUID v4 and `ORBIS_INSTALLER_PHASE` to `hold` or `resume` in the container environment. Incomplete or invalid input prevents startup. These values are captured before loading saved environment files; a saved file cannot release a held process. Changing the phase requires recreating the controller. There is no HTTP operation to release it.
+
+In `hold`, the controller runs database migrations but skips app bootstrap, queue consumers and publication, scheduled jobs, task recovery and metric collectors. API requests receive `503 ORBIS_INSTALLATION_IN_PROGRESS`, except read-only health and installation status requests. `GET /api/installation/status` reports the phase and transaction ID. A healthy held container is not a completed installation.
+
+Hold mode is not a read-only preview: startup can write migrations, generated environment files, logs and configuration defaults. Take and validate the enclosing transaction's rollback backup before starting the replacement controller, and keep all other writers stopped.
+
+In `resume`, pending restores prevent startup. App queue consumers remain disabled while the controller checks for pending app commands or another consumer, prepares its services and reconciles app status. It checks the app queue again before enabling app commands. Pending app messages are preserved and cause startup to fail; the installer must recover or review them rather than purge them. Resume skips automatic app restarts and global network pruning so the independent executor can preserve the reviewed containers and their running states.
