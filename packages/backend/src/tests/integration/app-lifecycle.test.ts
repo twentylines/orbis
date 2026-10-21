@@ -54,6 +54,58 @@ import { AppValidationService } from '@/modules/app-lifecycle/services/app-valid
 import { BackupAppHandler } from '@/modules/app-lifecycle/handlers/backup-app.handler';
 import { RestoreAppHandler } from '@/modules/app-lifecycle/handlers/restore-app.handler';
 
+vi.mock('@/common/helpers/exec-helpers', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/common/helpers/exec-helpers')>();
+  const copyMetadata = async (source: string, destination: string): Promise<void> => {
+    const metadata = await fs.promises.lstat(source);
+    if (metadata.isDirectory()) {
+      for (const name of await fs.promises.readdir(source)) await copyMetadata(path.join(source, name), path.join(destination, name));
+    }
+    await fs.promises.chown(destination, metadata.uid, metadata.gid);
+    await fs.promises.chmod(destination, metadata.mode & 0o7777);
+    await fs.promises.utimes(destination, metadata.atime, metadata.mtime);
+  };
+  return {
+    ...original,
+    spawnAsync: async (...args: Parameters<typeof original.spawnAsync>) => {
+      const [command, parameters] = args;
+      if (command === 'cp' && parameters.includes('--attributes-only')) {
+        expect(parameters).toContain('--preserve=mode,ownership,timestamps');
+        const source = parameters.at(-2);
+        const destination = parameters.at(-1);
+        if (!source || !destination) throw new Error('Missing fixture metadata paths');
+        await copyMetadata(path.resolve(source), destination);
+        return { stdout: '', stderr: '' };
+      }
+      if (command === 'touch' && parameters[0] === '-r') {
+        const source = parameters[1];
+        const destination = parameters.at(-1);
+        if (!source || !destination) throw new Error('Missing fixture timestamp paths');
+        const metadata = await fs.promises.lstat(source);
+        await fs.promises.utimes(destination, metadata.atime, metadata.mtime);
+        return { stdout: '', stderr: '' };
+      }
+      return original.spawnAsync(...args);
+    },
+  };
+});
+
+vi.mock('rabbitmq-client', async (importOriginal) => {
+  const original = await importOriginal<typeof import('rabbitmq-client')>();
+  return {
+    ...original,
+    Connection: class extends original.Connection {
+      constructor(options?: ConstructorParameters<typeof original.Connection>[0]) {
+        super(
+          process.env.ORBIS_TEST_QUEUE_PORT && typeof options === 'object'
+            ? { ...options, port: Number(process.env.ORBIS_TEST_QUEUE_PORT) }
+            : options,
+        );
+      }
+    },
+  };
+});
+
 let db: TestDatabase;
 const DB_NAME = 'applifecycletest';
 

@@ -7,13 +7,15 @@ import * as schema from '../../core/database/drizzle/schema';
 
 export type TestDatabase = Awaited<ReturnType<typeof createTestDatabase>>;
 
+const port = Number(process.env.ORBIS_TEST_DB_PORT ?? 5433);
+
 const getClient = () => {
   return new Client({
     user: 'postgres',
     host: 'localhost',
     database: 'postgres',
     password: 'postgres',
-    port: 5433,
+    port,
   });
 };
 
@@ -26,7 +28,7 @@ export const createTestDatabase = async (testsuite: string) => {
 
   await client.end();
 
-  const connectionString = `postgresql://postgres:postgres@localhost:5433/${testsuite}?connect_timeout=300`;
+  const connectionString = `postgresql://postgres:postgres@localhost:${port}/${testsuite}?connect_timeout=300`;
   const drizzleClient = drizzle(connectionString, { schema });
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
