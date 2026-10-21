@@ -1,5 +1,7 @@
 import importlib.util
+import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -48,6 +50,15 @@ class OrbisHostTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "in progress"):
                 with HOST.host_lock(self.root):
                     pass
+
+    def test_host_subprocess_inherits_the_lock_only_during_its_operation(self):
+        with HOST.host_lock(self.root) as descriptor:
+            expected = str(os.fstat(descriptor).st_ino)
+            command = [sys.executable, "-c", f"import os; print(os.fstat({descriptor}).st_ino)"]
+            result = HOST.run(command, self.root)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout.strip(), expected)
+        self.assertIsNone(HOST.LOCK_DESCRIPTOR.get())
 
     def test_start_requires_enrollment_and_uses_final_pinned_override(self):
         calls = []

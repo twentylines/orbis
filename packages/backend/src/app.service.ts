@@ -51,7 +51,7 @@ export class AppService {
       await this.queueFactory.prepareInstallationResume();
     } else await this.appLifecycleService.recoverInterruptedRestores();
     try {
-      if (installation.phase === 'normal') await this.docker.pruneNetworks();
+      if (installation.phase === 'normal') await this.docker.pruneNetworks({ filters: { label: ['orbis.managed=true'] } });
 
       const { version, userSettings, __prod__ } = this.configuration.getConfig();
       const config = this.configuration.getConfig();

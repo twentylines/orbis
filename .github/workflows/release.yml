@@ -75,8 +75,11 @@ jobs:
           cp "releases/${RELEASE_TAG}.md" release-notes.md
           printf '\n\nImage: %s@%s\n' "$IMAGE" "$IMAGE_DIGEST" >> release-notes.md
 
+      - name: Package the source-bound installer
+        run: python3 scripts/orbis-installer-bundle.py release-manifest.json installer-assets
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" release-manifest.json --title "Orbis $RELEASE_TAG" --notes-file release-notes.md --prerelease --verify-tag
+        run: gh release create "$RELEASE_TAG" release-manifest.json installer-assets/install-orbis.py installer-assets/orbis-installer-manifest.json installer-assets/orbis-installer.tar.gz --title "Orbis $RELEASE_TAG" --notes-file release-notes.md --prerelease --verify-tag

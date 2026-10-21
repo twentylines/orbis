@@ -32,6 +32,9 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      - name: Check Docker network cleanup ownership
+        run: node --test packages/backend/scripts/verify-network-prune.test.cjs
+
       - name: Check generated client and translation URL security
         run: bun test scripts/browser-dependencies.test.ts
 

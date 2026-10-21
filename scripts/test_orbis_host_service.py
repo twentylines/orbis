@@ -60,6 +60,15 @@ class InstalledManifestTests(unittest.TestCase):
             "digests": [f"{CURRENT['image']}@{CURRENT['digest']}"],
         }
 
+    def test_host_socket_override_is_part_of_the_enrollment_identity(self):
+        override = self.root / "orbis-host-compose.yml"
+        override.write_text('{"services":{"runtipi":{"environment":{"ORBIS_HOST_SOCKET":"/run/orbis/host.sock"}}}}')
+        self.assertFalse(SERVICE.enrollment_matches(self.root, "test-daemon", self.saved))
+        saved = SERVICE.HOST.installation_fingerprint(self.root, CURRENT, "test-daemon")
+        self.assertTrue(SERVICE.enrollment_matches(self.root, "test-daemon", saved))
+        override.write_text("operator changed the socket mount")
+        self.assertFalse(SERVICE.enrollment_matches(self.root, "test-daemon", saved))
+
     def inspect_result(self):
         return mock.Mock(returncode=0, stdout=json.dumps(self.metadata))
 

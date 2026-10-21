@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 
@@ -31,6 +32,7 @@ def load_script(name: str, module_name: str):
 PLAN = load_script("orbis-release-plan.py", "orbis_release_plan")
 STAGE = load_script("orbis-stage-release.py", "orbis_stage_release")
 STATE_NAME = ".orbis-host-state.json"
+LOCK_DESCRIPTOR = ContextVar("orbis_host_lock_descriptor", default=None)
 
 
 @contextmanager
@@ -42,13 +44,19 @@ def host_lock(root: Path):
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise ValueError("another Orbis host operation is in progress") from error
-        yield descriptor
+        token = LOCK_DESCRIPTOR.set(descriptor)
+        try:
+            yield descriptor
+        finally:
+            LOCK_DESCRIPTOR.reset(token)
     finally:
         os.close(descriptor)
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
+    descriptor = LOCK_DESCRIPTOR.get()
+    options = {"pass_fds": (descriptor,)} if descriptor is not None else {}
+    return subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False, **options)
 
 
 def docker(context: str, arguments: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -56,7 +64,7 @@ def docker(context: str, arguments: list[str], cwd: Path) -> subprocess.Complete
 
 
 def compose_args(root: Path) -> list[str]:
-    files = [root / "docker-compose.yml", root / "user-config" / "tipi-compose.yml", root / "orbis-compose.yml"]
+    files = [root / "docker-compose.yml", root / "user-config" / "tipi-compose.yml", root / "orbis-host-compose.yml", root / "orbis-compose.yml"]
     arguments = ["compose", "--project-name", "runtipi", "--env-file", str(root / ".env")]
     for file in files:
         if file.is_file():
@@ -65,9 +73,11 @@ def compose_args(root: Path) -> list[str]:
 
 
 def file_digest(path: Path) -> str | None:
+    if path.is_symlink():
+        raise ValueError(f"{path.name} must be a regular file")
     if not path.exists():
         return None
-    if path.is_symlink() or not path.is_file():
+    if not path.is_file():
         raise ValueError(f"{path.name} must be a regular file")
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -77,7 +87,9 @@ def installation_fingerprint(root: Path, manifest: dict[str, str], context: str)
     if override.is_symlink() or not override.is_file() or override.read_text(encoding="utf-8") != STAGE.staged_content(manifest):
         raise ValueError("the generated Orbis override does not match the reviewed manifest")
     PLAN.plan(root, manifest)
-    paths = ("docker-compose.yml", ".env", "user-config/tipi-compose.yml", "orbis-compose.yml")
+    paths = ["docker-compose.yml", ".env", "user-config/tipi-compose.yml", "orbis-compose.yml"]
+    if (root / "orbis-host-compose.yml").exists() or (root / "orbis-host-compose.yml").is_symlink():
+        paths.append("orbis-host-compose.yml")
     return {
         "schema": "orbis.host.v1",
         "root": str(root),

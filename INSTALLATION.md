@@ -24,7 +24,7 @@ For the existing explicit-root migration tools and their supported layouts, see 
 
 `docker pull` downloads an image. Detection, a setup screen and replacement require a running installer on the selected Docker host. Reaching a dashboard over HTTP does not provide Docker or filesystem access.
 
-The installation flow being developed has two replacement choices:
+The release installer has two replacement choices:
 
 - **Replace Runtipi and keep data:** preserve accounts, encryption keys, settings, apps, app data and storage mappings.
 - **Replace Runtipi and start fresh:** reset Orbis accounts and dashboard preferences while retaining existing app containers and data. Detect those apps again, adopting compatible Runtipi app metadata and listing other Docker workloads as external apps. Retain the previous installation for rollback.
@@ -37,7 +37,31 @@ The installer needs Docker control plus access to the installation, external dat
 
 A separate host executor must handle the transaction so replacing the dashboard cannot stop its own installer. Separate installations can coexist with isolated ports, container names and data, but the replacement flow must stop the old controller before claiming its resources. Two controllers must never use the same writable database or installation tree.
 
-The guided browser installer and empty-server bootstrap are not available yet. The Linux executor below supports Keep and Fresh replacement for compatible CLI installations; the remaining commands are separately guarded installation tools.
+The Linux installer uses a terminal for discovery, replacement choices and confirmation. The first browser sign-in completes account setup. The executor commands below remain available for reviewed maintenance and recovery.
+
+## Release installer
+
+Releases that include `install-orbis.py` also provide `orbis-installer-manifest.json` and `orbis-installer.tar.gz`. The launcher is bound to that release's source commit, image manifest and archive hash. It checks every packaged file before running the installer. No repository checkout is required; prompts read the terminal even when the launcher is supplied through a pipe.
+
+The supported host is 64-bit Linux with systemd, Python 3.10 or newer, a local rootful Docker Engine with API 1.44 or newer, Docker Compose, Git and rsync 3.1.3 or newer. Run with root privileges. The installer accepts an explicit Docker context and refuses remote Docker endpoints for host filesystem operations.
+
+- A discovered Runtipi CLI 4.10.1 installation offers **Keep** or **Fresh**, followed by the selected root, app-container count and private backup location. Native and remote storage writers must be stopped before replacement.
+- A new installation requires an empty directory and free dashboard ports. It creates private configuration, PostgreSQL 17, RabbitMQ 4 and Traefik 3.6 using pinned images. Database and queue ports remain private. Migration retains the original database and dependency configuration.
+- Successful setup enables the restricted systemd helper and a read-only host-socket mount. The helper provides browser-managed core and host operations. `--without-host-service` explicitly omits those host operations.
+- Interrupted initialization records its original source and journal. Rerunning the installer for that root offers recovery. Replacement recovery restores the original installation before activation or finishes the cutover after activation; new-server and helper setup recover forward without restoring over accepted app writes.
+
+Private installer and recovery files remain under `/var/lib/orbis/installer` by default. Preserve them when an operation fails. A launcher never substitutes a different release silently. Use a release with the required external-network protection for a new controller start.
+
+An older Orbis beta without that protection must be updated before this installer can recreate its controller to attach the host service. An already healthy, enrolled helper can continue running without a controller restart.
+
+For a read-only inventory from a reviewed source copy:
+
+```sh
+sudo python3 scripts/orbis-install.py --manifest MANIFEST.json \
+  --state-dir /var/lib/orbis/installer/manual --docker-context default --inspect
+```
+
+Unattended replacement additionally requires `--root`, `--mode keep` or `--mode fresh`, `--yes` and `--host-writers-stopped`. Interactive operation asks for the mode and exact installation path. Existing configurations and unsupported versions are never treated as an empty installation.
 
 ## Replace Runtipi and keep data
 
@@ -74,7 +98,7 @@ python3 scripts/orbis-install-replace.py recover ROOT \
   --confirm-root ROOT --host-writers-stopped
 ```
 
-The journal determines rollback or forward recovery. Completed and recovered journals cannot be replayed. Preserve the journal and backup if configuration drift prevents recovery. This executor does not install the optional host administration service or bootstrap an empty server; the complete installer will coordinate those steps.
+The journal determines rollback or forward recovery. Completed and recovered journals cannot be replayed. Preserve the journal and backup if configuration drift prevents recovery. This executor handles replacement only; the release installer coordinates empty-server initialization and the optional host administration service.
 
 ## Replace Runtipi and start fresh
 

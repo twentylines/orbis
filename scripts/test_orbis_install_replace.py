@@ -35,6 +35,22 @@ class Reader:
 
 
 class ReplacementTests(unittest.TestCase):
+    def test_review_seals_optional_host_override_and_rejects_symlinks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            baseline = REPLACE.files(root)
+            self.assertNotIn("orbis-host-compose.yml", baseline)
+            override = root / "orbis-host-compose.yml"
+            override.write_text("services: {}\n")
+            sealed = REPLACE.files(root)
+            self.assertIsNotNone(sealed[override.name])
+            override.write_text("services: {runtipi: {environment: {CHANGED: yes}}}\n")
+            self.assertNotEqual(REPLACE.files(root), sealed)
+            override.unlink()
+            override.symlink_to(root / "missing.yml")
+            with self.assertRaisesRegex(ValueError, "regular file"):
+                REPLACE.files(root)
+
     def setUp(self):
         self.reader = Reader()
         self.raw = {

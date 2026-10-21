@@ -96,7 +96,11 @@ def target_image(target):
 
 
 def files(root):
-    return {name: HOST.file_digest(root / name) for name in ("docker-compose.yml", ".env", "VERSION", "user-config/tipi-compose.yml", "orbis-compose.yml")}
+    names = ["docker-compose.yml", ".env", "VERSION", "user-config/tipi-compose.yml", "orbis-compose.yml"]
+    host_override = root / "orbis-host-compose.yml"
+    if host_override.exists() or host_override.is_symlink():
+        names.append(host_override.name)
+    return {name: HOST.file_digest(root / name) for name in names}
 
 
 def checkpoint_path(journal):

@@ -121,6 +121,11 @@ def plan(root: Path, manifest: dict[str, str]) -> dict:
     user_override = root / "user-config" / "tipi-compose.yml"
     if user_override.is_file():
         files.append(user_override)
+    host_override = root / "orbis-host-compose.yml"
+    if host_override.is_symlink():
+        raise ValueError("the host service override must not be a symlink")
+    if host_override.is_file():
+        files.append(host_override)
     current_override = root / "orbis-compose.yml"
     if current_override.is_file():
         files.append(current_override)

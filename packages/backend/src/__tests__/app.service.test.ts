@@ -89,6 +89,7 @@ describe('AppService', () => {
 
     expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
     expect(pruneNetworks).toHaveBeenCalledOnce();
+    expect(pruneNetworks).toHaveBeenCalledWith({ filters: { label: ['orbis.managed=true'] } });
     expect(appLifecycleService.recoverInterruptedRestores).toHaveBeenCalledBefore(appStatusSyncService.syncAllAppStatuses);
   });
 

@@ -103,7 +103,9 @@ def enrollment_matches(root: Path, context: str, saved: dict | None) -> bool:
     files = saved.get("files")
     if not isinstance(files, dict):
         return False
-    names = ("docker-compose.yml", ".env", "user-config/tipi-compose.yml", "orbis-compose.yml")
+    names = ["docker-compose.yml", ".env", "user-config/tipi-compose.yml", "orbis-compose.yml"]
+    if (root / "orbis-host-compose.yml").exists() or (root / "orbis-host-compose.yml").is_symlink():
+        names.append("orbis-host-compose.yml")
     return set(files) == set(names) and all(files[name] == HOST.file_digest(root / name) for name in names)
 
 

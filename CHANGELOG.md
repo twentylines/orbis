@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Package the Linux installer as a release-bound launcher and hashed helper archive, with guided Keep/Fresh selection, empty-server initialization and recorded recovery paths.
+- Enable the restricted host service through a dedicated Compose override, retain its configuration in enrollment checks, and resume identical partial helper copies after interruption.
+- Restrict startup network cleanup to unused networks explicitly labelled as Orbis-managed.
+
 - Add Fresh controller replacement with account, session and workspace reset before user IDs are reused, retaining app metadata and storage. Recover interrupted resets from the verified installation checkpoint.
 
 ## Beta64 — 22 October 2026

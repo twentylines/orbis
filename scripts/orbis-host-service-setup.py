@@ -174,8 +174,8 @@ def install(root: Path, context: str, source: Path, confirmation: str | None) ->
         return install_locked(root, context, source)
 
 
-def install_locked(root: Path, context: str, source: Path) -> dict[str, str]:
-    ready = preflight(root, context, source)
+def install_locked(root: Path, context: str, source: Path, *, resume: bool = False) -> dict[str, str]:
+    ready = preflight(root, context, source, allow_existing=True) if resume else preflight(root, context, source)
     files, unit = source_files(source)
     for directory in (INSTALL_DIR.parent, ENV_FILE.parent):
         if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
@@ -186,18 +186,32 @@ def install_locked(root: Path, context: str, source: Path) -> dict[str, str]:
             raise ValueError(f"setup directory must be root-owned and not writable by other users: {directory}")
     staged = Path(tempfile.mkdtemp(prefix=".host-service-", dir=INSTALL_DIR.parent))
     created = []
+    activating = False
     try:
         os.chmod(staged, 0o700)
         for file in files:
             shutil.copyfile(file, staged / file.name)
             os.chmod(staged / file.name, 0o600)
-        os.replace(staged, INSTALL_DIR)
-        created.append(INSTALL_DIR)
+        if resume and INSTALL_DIR.exists():
+            if INSTALL_DIR.is_symlink() or not INSTALL_DIR.is_dir() or {file.name for file in INSTALL_DIR.iterdir()} != {file.name for file in files}:
+                raise ValueError("the partial host service directory differs from its reviewed sources")
+            for file in files:
+                target = INSTALL_DIR / file.name
+                if target.is_symlink() or not target.is_file() or target.read_bytes() != file.read_bytes() or target.stat().st_uid != 0 or stat.S_IMODE(target.stat().st_mode) & 0o077:
+                    raise ValueError("a partial host service source changed; preserve it for review")
+            shutil.rmtree(staged)
+        else:
+            os.replace(staged, INSTALL_DIR)
+            created.append(INSTALL_DIR)
         environment = (
             f"ORBIS_SERVICE_SOURCE={systemd_quote(str(INSTALL_DIR / 'orbis-host-service.py'))}\n"
             f"ORBIS_ROOT={systemd_quote(str(root))}\n"
             f"ORBIS_DOCKER_CONTEXT={systemd_quote(context)}\n"
         )
+        for target, expected in ((ENV_FILE, environment.encode()), (UNIT_FILE, unit.read_bytes())):
+            if resume and (target.exists() or target.is_symlink()):
+                if target.is_symlink() or not target.is_file() or target.read_bytes() != expected or target.stat().st_uid != 0 or stat.S_IMODE(target.stat().st_mode) & 0o022:
+                    raise ValueError("a partial host service configuration changed; preserve it for review")
         descriptor, temporary = tempfile.mkstemp(prefix=".host-service-env-", dir=ENV_FILE.parent)
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             os.fchmod(stream.fileno(), 0o600)
@@ -213,6 +227,7 @@ def install_locked(root: Path, context: str, source: Path) -> dict[str, str]:
         if result.returncode:
             raise RuntimeError("systemd rejected the Orbis host service unit")
         run_systemctl("daemon-reload")
+        activating = True
         run_systemctl("enable", "--now", "orbis-host.service")
         deadline = time.monotonic() + 12
         while time.monotonic() < deadline:
@@ -237,7 +252,8 @@ def install_locked(root: Path, context: str, source: Path) -> dict[str, str]:
             time.sleep(0.4)
         raise RuntimeError("host service did not report the enrolled healthy core")
     except Exception:
-        subprocess.run(["/usr/bin/systemctl", "disable", "--now", "orbis-host.service"], capture_output=True, check=False)
+        if activating:
+            subprocess.run(["/usr/bin/systemctl", "disable", "--now", "orbis-host.service"], capture_output=True, check=False)
         for target in reversed(created):
             if target.is_dir():
                 shutil.rmtree(target)
