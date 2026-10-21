@@ -265,6 +265,24 @@ class InstallationDiscoveryTests(unittest.TestCase):
         self.assertEqual(len(report["unassignedManagedContainers"]), 1)
         self.assertEqual(reader.inspected, [])
 
+    def test_controller_local_compose_directory_maps_through_its_apps_bind(self):
+        app = container(2, name="notes", image="example/notes:1", project="notes_local", service="web", root="/data/apps/local/notes")
+        app.update(managed="true", appUrn="notes:local")
+        report = DETECT.discover(Reader([container(), app]))
+        self.assertEqual(report["installations"][0]["apps"][0]["container"]["id"], app["id"])
+        self.assertEqual(report["unassignedManagedContainers"], [])
+        self.assertFalse(report["hostFilesInspected"])
+
+    def test_shared_controller_alias_or_mismatched_urn_does_not_guess_ownership(self):
+        app = container(3, name="notes", image="example/notes:1", project="notes_local", service="web", root="/data/apps/local/notes")
+        app.update(managed="true", appUrn="notes:local")
+        reader = Reader([container(), container(2, name="other-core", root="/srv/other"), app], mount_list="per-root")
+        report = DETECT.discover(reader)
+        self.assertEqual(len(report["unassignedManagedContainers"]), 1)
+        self.assertTrue(all(not item["apps"] for item in report["installations"]))
+        app["appUrn"] = "different:local"
+        self.assertEqual(len(DETECT.discover(Reader([container(), app]))["unassignedManagedContainers"]), 1)
+
     def test_another_installations_app_is_not_assigned_to_the_selected_root(self):
         app = container(2, name="notes", image="example/notes:1", project="notes_local", service="notes", root="/srv/another/apps/local/notes")
         app.update(managed="true", appUrn="notes:local")

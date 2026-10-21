@@ -113,8 +113,34 @@ def app_record(raw: dict) -> dict:
     }
 
 
+def local_app_owners(row: dict, owners: list[dict]) -> list[dict]:
+    matches = []
+    for installation in owners:
+        for value in DETECT.app_directories(row, installation):
+            directory = Path(value)
+            if directory.is_symlink():
+                raise AppError("An app configuration uses a symlink alias requiring review")
+            if not directory.exists():
+                continue
+            if directory.resolve(strict=True) != directory or not directory.is_dir():
+                raise AppError("An app configuration directory needs local review")
+            found = False
+            for name in ("docker-compose.generated.yml", "docker-compose.yml"):
+                target = directory / name
+                if target.is_symlink():
+                    raise AppError("An app Compose file uses a symlink alias requiring review")
+                if target.exists():
+                    if not target.is_file() or target.resolve(strict=True) != target:
+                        raise AppError("An app Compose file needs local review")
+                    found = True
+            if found:
+                matches.append(installation)
+                break
+    return matches
+
+
 def selected_installation(reader: Docker, root: Path) -> tuple[dict, dict]:
-    report = DETECT.discover(reader)
+    report = DETECT.discover(reader, resolve_app_owners=local_app_owners)
     selected = [item for item in report["installations"] if item["installRoot"] == str(root)]
     if len(selected) != 1 or selected[0]["reviewRequired"]:
         raise AppError("The selected installation could not be identified unambiguously")

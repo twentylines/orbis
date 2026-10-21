@@ -125,6 +125,50 @@ def fingerprint(root: Path) -> dict[str, object]:
     return {"treeSha256": digest.hexdigest(), "entries": entries, "files": files, "bytes": bytes_read}
 
 
+def sync_path(root: Path) -> None:
+    files = set()
+    directories = []
+
+    def sync_file(path: Path) -> None:
+        metadata = path.lstat()
+        if stat.S_ISLNK(metadata.st_mode):
+            return
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError("snapshot contains an unsupported file type")
+        identity = (metadata.st_dev, metadata.st_ino)
+        if identity in files:
+            return
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            actual = os.fstat(descriptor)
+            if not stat.S_ISREG(actual.st_mode) or (actual.st_dev, actual.st_ino) != identity:
+                raise ValueError("snapshot file changed while being flushed")
+            os.fsync(descriptor)
+            files.add(identity)
+        finally:
+            os.close(descriptor)
+
+    if root.is_symlink():
+        raise ValueError("snapshot root must not be a symlink")
+    if not root.is_dir():
+        sync_file(root)
+        return
+    def unreadable(error):
+        raise error
+    for folder, names, contents in os.walk(root, followlinks=False, onerror=unreadable):
+        names.sort()
+        contents.sort()
+        directories.append(Path(folder))
+        for name in contents:
+            sync_file(Path(folder) / name)
+    for directory in reversed(directories):
+        descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+
 def write_sidecar(snapshot: Path, record: dict[str, object]) -> None:
     target = sidecar(snapshot)
     descriptor, name = tempfile.mkstemp(prefix=f".{snapshot.name}.", dir=snapshot.parent)
@@ -188,8 +232,9 @@ def capture(root: Path, snapshot: Path, release: str, docker_context: str) -> di
     }
     try:
         os.chmod(snapshot, 0o700)
+        sync_path(snapshot)
         write_sidecar(snapshot, record)
-    except OSError as error:
+    except (OSError, ValueError) as error:
         raise SnapshotError("snapshot-seal-failed") from error
     return record
 

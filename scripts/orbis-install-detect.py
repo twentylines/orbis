@@ -236,7 +236,26 @@ def published_ports(reader: DockerReader, rows: list[dict]) -> list[dict]:
     return sorted({(value["port"], value["containerId"]): value for value in ports}.values(), key=lambda value: (value["port"], value["containerId"]))
 
 
-def discover(reader: DockerReader) -> dict:
+def app_directories(row: dict, installation: dict) -> list[str]:
+    working = path(row["workingDir"])
+    if not working or installation["rootStatus"] != "confirmed-by-mounts":
+        return []
+    candidates = set()
+    for mount in installation["storage"]:
+        if mount["type"] != "bind" or mount["destination"] != "/data/apps":
+            continue
+        source = mount["source"]
+        if working != source and beneath(working, source):
+            candidates.add(working)
+        if beneath(working, mount["destination"]):
+            relative = posixpath.relpath(working, mount["destination"])
+            parts = relative.split("/")
+            if len(parts) == 2 and row["appUrn"] == f"{parts[1]}:{parts[0]}":
+                candidates.add(posixpath.join(source, relative))
+    return sorted(candidates)
+
+
+def discover(reader: DockerReader, *, resolve_app_owners=None) -> dict:
     daemon = reader.daemon()
     rows = reader.containers()
     validate_rows(rows)
@@ -284,18 +303,15 @@ def discover(reader: DockerReader) -> dict:
             ] if brand == "runtipi" else [],
         })
     unassigned = []
+    host_files_inspected = False
     controllers = {item["container"]["id"] for item in installations}
     for row in rows:
         if row["id"] in controllers or row["managed"].lower() != "true":
             continue
-        working = path(row["workingDir"])
-        owners = []
-        for installation in installations:
-            if installation["rootStatus"] != "confirmed-by-mounts":
-                continue
-            directories = [item["source"] for item in installation["storage"] if item["destination"] == "/data/apps" and item["type"] == "bind"]
-            if working and any(working != directory and beneath(working, directory) for directory in directories):
-                owners.append(installation)
+        owners = [item for item in installations if app_directories(row, item)]
+        if len(owners) > 1 and resolve_app_owners is not None:
+            owners = resolve_app_owners(row, owners)
+            host_files_inspected = True
         summary = {"container": {"id": row["id"], "name": row["name"], "state": row["state"]}, "appUrn": row["appUrn"] or None}
         if len(owners) != 1:
             unassigned.append(summary)
@@ -328,7 +344,7 @@ def discover(reader: DockerReader) -> dict:
         "installations": sorted(installations, key=lambda item: (item["installRoot"] or "", item["id"])),
         "newInstallationConflicts": {"names": names, "ports": ports},
         "unassignedManagedContainers": sorted(unassigned, key=lambda item: item["container"]["id"]),
-        "hostFilesInspected": False, "nativeHostPortsInspected": False, "executionAllowed": False,
+        "hostFilesInspected": host_files_inspected, "nativeHostPortsInspected": False, "executionAllowed": False,
         "requiredNextStep": "review-installation-and-backup-plan",
     }
 

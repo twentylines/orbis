@@ -315,6 +315,34 @@ class InstallationAppTests(unittest.TestCase):
             self.stop()
         self.assertEqual(self.docker.calls, [])
 
+    def test_controller_local_compose_paths_are_stopped_and_resumed(self):
+        self.docker.apps[identifier("app-0")]["labels"]["com.docker.compose.project.working_dir"] = "/data/apps/migrated/app0"
+        self.stop()
+        APPS.resume(self.root, self.docker, self.journal)
+        self.assert_original_states()
+
+    def test_shared_alias_requires_a_unique_real_host_compose_directory(self):
+        other = self.root.parent / "other"
+        owners = [
+            {"rootStatus": "confirmed-by-mounts", "storage": [{"type": "bind", "source": str(base / "apps"), "destination": "/data/apps"}]}
+            for base in (self.root, other)
+        ]
+        row = {"workingDir": "/data/apps/local/notes", "appUrn": "notes:local"}
+        self.assertEqual(APPS.local_app_owners(row, owners), [])
+        first = self.root / "apps/local/notes"
+        first.mkdir(parents=True)
+        (first / "docker-compose.generated.yml").write_text("synthetic config\n")
+        with mock.patch.object(Path, "read_text", side_effect=AssertionError("Do not read config contents")):
+            self.assertEqual(APPS.local_app_owners(row, owners), owners[:1])
+        second = other / "apps/local/notes"
+        second.mkdir(parents=True)
+        (second / "docker-compose.yml").write_text("synthetic config\n")
+        self.assertEqual(APPS.local_app_owners(row, owners), owners)
+        (first / "docker-compose.generated.yml").unlink()
+        (first / "docker-compose.generated.yml").symlink_to(second / "docker-compose.yml")
+        with self.assertRaisesRegex(APPS.AppError, "symlink"):
+            APPS.local_app_owners(row, owners)
+
     def test_unmanaged_containers_are_left_untouched(self):
         foreign = self.docker.apps[identifier("app-1")]
         foreign["labels"]["runtipi.managed"] = "false"

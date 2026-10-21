@@ -52,6 +52,8 @@ python3 scripts/orbis-install-apps.py stop ROOT --docker-context CONTEXT \
 
 `stop` disables automatic restarts for every reviewed app container, then stops the ones that were running. A changed plan is rejected before any container mutation. Docker mount ordering is normalized; changes to mount sources, destinations or permissions still invalidate the review. The private journal is written before changes and survives process termination. Do not repeat `stop` using an existing journal.
 
+App ownership accepts both host Compose directories and the controller's `/data/apps/STORE/APP` paths. The latter must match the app's URN and the controller's apps bind mount. If multiple controllers share that internal path, the host helper requires a unique, canonical app directory containing a regular Compose file. Symlink aliases and unresolved ownership require review; unassigned managed containers are not stopped.
+
 After the original controller has recovered and is healthy:
 
 ```sh
@@ -84,7 +86,33 @@ python3 scripts/orbis-install-storage.py capture BUNDLE \
 python3 scripts/orbis-install-storage.py verify BUNDLE
 ```
 
-Capture rechecks Docker identities, mount definitions, source identities and writer states. It verifies copied bytes, ownership and permissions, checks file timestamps, and rereads the sources after the collection finishes. A changed source, restarted writer, missing resource or failed copy leaves an incomplete backup. Verification works independently of the original source paths and rejects incomplete or changed backups.
+Capture rechecks Docker identities, mount definitions, nested host mounts, source identities and writer states. It verifies copied bytes, ownership, permissions and nanosecond timestamps, and rereads the sources after the collection finishes. New Linux collections also seal extended attributes, ACLs and hard-link groups within each resource. Data files and directory entries are flushed before publishing verification records. A changed source, restarted writer, missing resource or failed copy leaves an incomplete backup. Verification works independently of the original source paths and rejects incomplete or changed backups.
+
+## Recover installation storage
+
+The source includes a separate stopped-writer recovery helper. Run it as root on the Linux Docker host with rsync 3.1.3 or newer, built with ACL and extended-attribute support. Every writer must remain stopped with automatic restarts disabled, including native processes and remote storage clients.
+
+Review recovery against the original root and Docker daemon, then save that review privately:
+
+```sh
+umask 077
+python3 scripts/orbis-install-restore.py review BUNDLE \
+  --root ROOT --docker-context CONTEXT > RESTORE_REVIEW.json
+```
+
+The review binds the backup, destination identities and current container definitions. `extendedMetadataSealed` reports whether the collection includes the newer attribute and hard-link seals. Older collections still verify the fields recorded when they were created.
+
+Restoration replaces the contents of the reviewed resources with the backup, including removing files created afterward. `RESTORE_JOURNAL.json` must be outside every destination and the backup:
+
+```sh
+python3 scripts/orbis-install-restore.py restore BUNDLE \
+  --root ROOT --docker-context CONTEXT --review RESTORE_REVIEW.json \
+  --journal RESTORE_JOURNAL.json --confirm-root ROOT --host-writers-stopped
+```
+
+After an interruption, inspect the private journal and confirm that writers are still stopped. Use the same command with `recover` instead of `restore`. Recovery replays and verifies every resource; it does not trust previously completed resource indexes. A completed journal cannot be replayed.
+
+The helper preserves file-mount inodes, restores directory contents and metadata, and checks the restored data before completing its journal. It neither starts containers nor replaces the controller. Hard links spanning separate resource roots are not reconstructed; the complete migration executor must handle that topology before using this helper for such installations.
 
 The enclosing installation executor is responsible for consistent database and queue shutdown, controller replacement, selective reset and stopped-writer rollback. This helper is part of the source implementation; the complete Keep/Fresh installer and its end-to-end rehearsals remain in development.
 

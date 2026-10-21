@@ -1,4 +1,6 @@
 import importlib.util
+import os
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -174,6 +176,31 @@ class OrbisSnapshotTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, "snapshot-seal-failed")
         self.assertNotIn(secret, str(raised.exception))
+        self.assertFalse(SNAPSHOT.sidecar(destination).exists())
+
+    def test_file_data_is_flushed_once_before_child_and_parent_directories(self):
+        data = self.root / "data" / "postgres"
+        os.link(data / "record", data / "linked")
+        (self.root / "data" / "current").symlink_to("postgres", target_is_directory=True)
+        calls = []
+        original = os.fsync
+        def flush(descriptor):
+            metadata = os.fstat(descriptor)
+            calls.append((metadata.st_dev, metadata.st_ino, stat.S_ISDIR(metadata.st_mode)))
+            original(descriptor)
+        with mock.patch.object(SNAPSHOT.os, "fsync", side_effect=flush):
+            SNAPSHOT.sync_path(self.root)
+        self.assertEqual(len([item for item in calls if not item[2]]), 2)
+        self.assertTrue(all(not item[2] for item in calls[:2]))
+        expected = [(p.stat().st_dev, p.stat().st_ino, True) for p in (data, data.parent, self.root)]
+        self.assertEqual(calls[2:], expected)
+
+    def test_flush_failure_never_publishes_a_verified_snapshot(self):
+        destination = self.base / "snapshot"
+        with mock.patch.object(SNAPSHOT, "sync_path", side_effect=OSError("private flush failure")):
+            with self.assertRaises(SNAPSHOT.SnapshotError) as raised:
+                SNAPSHOT.capture(self.root, destination, "v0.1.0-beta.5", "test-daemon")
+        self.assertEqual(raised.exception.code, "snapshot-seal-failed")
         self.assertFalse(SNAPSHOT.sidecar(destination).exists())
 
 

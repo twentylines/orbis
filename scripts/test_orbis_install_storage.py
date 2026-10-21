@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import stat
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -126,6 +127,67 @@ class InstallationStorageTests(unittest.TestCase):
             if resource["kind"] == "file":
                 self.assertEqual(STORAGE.file_fingerprint(self.bundle / f"resource-{index:04d}"), STORAGE.file_fingerprint(self.file))
         self.assertEqual(self.docker.calls, [])
+
+    def test_mountinfo_decodes_nested_paths_and_ignores_other_trees(self):
+        nested = self.external / "space tab\tline\nslash\\"
+        nested.mkdir()
+        encoded = str(nested).replace("\\", "\\134").replace(" ", "\\040").replace("\t", "\\011").replace("\n", "\\012")
+        mountinfo = self.private / "mountinfo"
+        line = f"22 10 8:1 / {encoded} rw shared:7 - ext4 /dev/test rw\n"
+        mountinfo.write_text(line + line + "23 10 8:1 / /outside rw - ext4 /dev/test rw\n")
+        self.assertEqual(STORAGE.host_mounts([STORAGE.source_identity(self.external)], mountinfo), [STORAGE.source_identity(nested)])
+
+    def test_mountinfo_rejects_invalid_or_excessive_records(self):
+        mountinfo = self.private / "mountinfo"
+        for value in ["invalid\n", "22 10 8:1 / relative rw - ext4 /dev/test rw\n", "x" * 65537]:
+            with self.subTest(value=value[:40]):
+                mountinfo.write_text(value)
+                with self.assertRaises(STORAGE.StorageError):
+                    STORAGE.host_mounts([STORAGE.source_identity(self.external)], mountinfo)
+
+    @unittest.skipUnless(hasattr(os, "setxattr"), "requires extended attribute support")
+    def test_attribute_and_hardlink_tampering_are_detected_offline(self):
+        os.setxattr(self.file, "user.orbis-backup", b"private attribute")
+        os.link(self.external / "database.bin", self.external / "linked.bin")
+        self.capture()
+        manifest = STORAGE.verified_manifest(self.bundle)
+        file_index = next(i for i, item in enumerate(manifest["plan"]["resources"]) if item["source"] == str(self.file))
+        copied_file = self.bundle / f"resource-{file_index:04d}"
+        os.setxattr(copied_file, "user.orbis-backup", b"changed attribute")
+        with self.assertRaisesRegex(STORAGE.StorageError, "attributes"):
+            STORAGE.verify(self.bundle)
+        os.setxattr(copied_file, "user.orbis-backup", b"private attribute")
+        directory_index = next(i for i, item in enumerate(manifest["plan"]["resources"]) if item["source"] == str(self.external))
+        copied_link = self.bundle / f"resource-{directory_index:04d}" / "linked.bin"
+        replacement = copied_link.with_name("replacement")
+        subprocess.run(["cp", "-a", "--", str(copied_link), str(replacement)], check=True)
+        os.replace(replacement, copied_link)
+        os.utime(copied_link.parent, ns=(self.external.stat().st_atime_ns, self.external.stat().st_mtime_ns))
+        with self.assertRaisesRegex(STORAGE.StorageError, "attributes"):
+            STORAGE.verify(self.bundle)
+
+    def test_older_collections_without_attribute_seals_still_verify(self):
+        self.capture()
+        path = self.bundle / "storage.json"
+        manifest = json.loads(path.read_text())
+        for item in manifest["copies"]:
+            item.pop("attributes", None)
+        path.write_text(json.dumps(manifest))
+        self.assertEqual(STORAGE.verify(self.bundle)["result"], "storage-backup-verified")
+
+    @unittest.skipUnless(hasattr(os, "setxattr"), "requires extended attribute support")
+    def test_late_attribute_change_keeps_collection_incomplete(self):
+        os.setxattr(self.file, "user.orbis-backup", b"original")
+        original = STORAGE.SNAPSHOT.capture
+        def changed(source, *args):
+            result = original(source, *args)
+            if source == self.volume:
+                os.setxattr(self.file, "user.orbis-backup", b"changed after copying")
+            return result
+        with mock.patch.object(STORAGE.SNAPSHOT, "capture", side_effect=changed):
+            with self.assertRaisesRegex(STORAGE.StorageError, "attributes changed after"):
+                self.capture()
+        self.assertNotEqual(json.loads((self.bundle / "storage.json").read_text())["stage"], "complete")
 
     def test_running_controller_app_or_restart_policy_prevents_any_copy(self):
         for state in ["controller", "app", "policy"]:

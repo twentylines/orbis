@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add stopped-writer installation storage recovery with a persistent journal and interrupted-copy replay.
+- Verify Linux extended attributes, ACLs and hard links within collected resources; compare nanosecond timestamps during recovery and flush snapshot data before sealing it.
+- Recognize controller-local Compose paths when discovering installed apps, with host configuration checks for ambiguous controller mappings.
 - Split the dock into navigation and minimized apps on one bottom row. Contract navigation to icons after the fourth minimized app and scroll longer app lists horizontally.
 - Center dock icons and labels without lifting buttons on hover. Preserve glass blur while switching sections.
 - Align Docker card headings and bottom action gutters when text is enlarged.

@@ -94,6 +94,28 @@ def overlaps(first: Path, second: Path) -> bool:
     return first.is_relative_to(second) or second.is_relative_to(first)
 
 
+def host_mounts(resources: list[dict], mountinfo: Path | None = None) -> list[dict]:
+    if mountinfo is None and sys.platform != "linux":
+        return []
+    mounts = set()
+    with (mountinfo or Path("/proc/self/mountinfo")).open() as stream:
+        for line in stream:
+            if len(line) > 65536:
+                raise StorageError("Host mount information exceeds its limit")
+            fields = line.split()
+            if len(fields) < 10 or "-" not in fields[6:]:
+                raise StorageError("Host mount information is invalid")
+            decoded = re.sub(r"\\(040|011|012|134)", lambda match: chr(int(match[1], 8)), fields[4])
+            target = Path(decoded)
+            if not target.is_absolute():
+                raise StorageError("Host mount information contains an invalid path")
+            if any(target != Path(item["source"]) and target.is_relative_to(item["source"]) for item in resources):
+                mounts.add(target)
+            if len(mounts) > 4096:
+                raise StorageError("Installation storage exceeds the host mount limit")
+    return [source_identity(path) for path in sorted(mounts)]
+
+
 def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, existing_bundle: bool = False) -> dict:
     if root.is_symlink() or root.resolve(strict=True) != root or not root.is_dir():
         raise StorageError("The installation root must be an existing canonical directory")
@@ -167,6 +189,7 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
         "root": str(root), "dockerContext": reader.context, "daemonFingerprint": report["daemonFingerprint"],
         "bundle": str(bundle), "resources": resources,
         "containers": sorted([{key: value[key] for key in ("id", "name", "definitionHash")} for value in containers], key=lambda value: value["id"]),
+        "mountPoints": host_mounts(resources),
     }
     result = {
         "schema": SCHEMA, "readOnly": True, **identity, "identityHash": APPS.digest(identity),
@@ -192,6 +215,8 @@ def validate_review(saved: object) -> dict:
     if not isinstance(saved, dict) or saved.get("schema") != SCHEMA or saved.get("reviewId") != APPS.digest({key: value for key, value in saved.items() if key != "reviewId"}):
         raise StorageError("The storage review is invalid or was edited")
     identity = {key: saved[key] for key in ("root", "dockerContext", "daemonFingerprint", "bundle", "resources", "containers")}
+    if "mountPoints" in saved:
+        identity["mountPoints"] = saved["mountPoints"]
     if saved.get("identityHash") != APPS.digest(identity) or not isinstance(saved["resources"], list) or len(saved["resources"]) > 4096:
         raise StorageError("The storage review identity is invalid")
     return saved
@@ -231,6 +256,38 @@ def directory_metadata(source: Path) -> dict:
     return {"entriesSha256": digest.hexdigest(), "rootUid": root.st_uid, "rootGid": root.st_gid, "rootMtimeNs": root.st_mtime_ns}
 
 
+def attributes_metadata(source: Path) -> dict | None:
+    if not hasattr(os, "listxattr"):
+        if sys.platform == "linux":
+            raise StorageError("This Python runtime cannot verify extended storage attributes")
+        return None
+    digest = hashlib.sha256()
+    links = {}
+
+    def entry(path: Path, relative: str) -> None:
+        attributes = [
+            [name, hashlib.sha256(os.getxattr(path, name, follow_symlinks=False)).hexdigest()]
+            for name in sorted(os.listxattr(path, follow_symlinks=False))
+        ]
+        digest.update(json.dumps([relative, attributes], separators=(",", ":")).encode())
+        metadata = path.lstat()
+        if stat.S_ISREG(metadata.st_mode) and metadata.st_nlink > 1:
+            links.setdefault((metadata.st_dev, metadata.st_ino), []).append(relative)
+
+    entry(source, ".")
+    if source.is_dir():
+        def unreadable(error):
+            raise error
+        for folder, directories, files in os.walk(source, followlinks=False, onerror=unreadable):
+            directories.sort()
+            files.sort()
+            for name in [*directories, *files]:
+                path = Path(folder) / name
+                entry(path, str(path.relative_to(source)))
+    groups = sorted(sorted(paths) for paths in links.values() if len(paths) > 1)
+    return {"xattrsSha256": digest.hexdigest(), "hardlinksSha256": APPS.digest(groups)}
+
+
 def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> dict:
     validate_review(saved)
     if not host_writers_stopped:
@@ -247,9 +304,17 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
         if source_identity(source) != item:
             raise StorageError("A storage source was replaced before backup")
         copy = {"index": index, "kind": item["kind"]}
+        attributes = attributes_metadata(source)
         if item["kind"] == "directory":
             metadata = directory_metadata(source)
             record = SNAPSHOT.capture(source, destination, "installation-storage", reader.context)
+            # The private collection parent protects this tree; retain its root ACL mask.
+            os.chmod(destination, record["sourceRootMode"])
+            descriptor = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
             if directory_metadata(source) != metadata or directory_metadata(destination) != metadata:
                 raise StorageError("Directory ownership, permissions or timestamps changed while being copied")
             copy["directoryMetadata"] = metadata
@@ -259,6 +324,11 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
             if copied.returncode or file_fingerprint(source) != before or file_fingerprint(destination) != before:
                 raise StorageError("A storage file copy did not match its source")
             record = before
+            SNAPSHOT.sync_path(destination)
+        if attributes is not None:
+            if attributes_metadata(source) != attributes or attributes_metadata(destination) != attributes:
+                raise StorageError("Storage attributes or hard links changed while being copied")
+            copy["attributes"] = attributes
         copy["record"] = record
         manifest["copies"].append(copy)
         APPS.write_journal(target, manifest)
@@ -280,6 +350,8 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
             matches = file_fingerprint(source) == copy["record"]
         if not matches:
             raise StorageError("Storage changed after it was copied; keep every writer stopped and take a new backup")
+        if "attributes" in copy and attributes_metadata(source) != copy["attributes"]:
+            raise StorageError("Storage attributes changed after they were copied; take a new backup")
     require_quiet_existing(root, reader, saved)
     manifest["stage"] = "complete"
     APPS.write_journal(target, manifest)
@@ -294,7 +366,7 @@ def require_quiet_existing(root: Path, reader, saved: dict) -> None:
         raise StorageError("A reviewed storage writer restarted while backup was running")
 
 
-def verify(bundle: Path) -> dict:
+def verified_manifest(bundle: Path) -> dict:
     if bundle.is_symlink() or not bundle.is_dir() or bundle.stat().st_uid != os.geteuid() or stat.S_IMODE(bundle.stat().st_mode) & 0o077:
         raise StorageError("The storage backup must be a private directory owned by the installer user")
     bundle = bundle.resolve(strict=True)
@@ -320,6 +392,16 @@ def verify(bundle: Path) -> dict:
             raise StorageError("The storage backup no longer matches its verification record")
         if item["kind"] == "directory" and directory_metadata(source) != copy.get("directoryMetadata"):
             raise StorageError("The storage backup metadata no longer matches its verification record")
+        if "attributes" in copy and attributes_metadata(source) != copy["attributes"]:
+            raise StorageError("The storage backup attributes no longer match their verification record")
+    return manifest
+
+
+def verify(bundle: Path) -> dict:
+    manifest = verified_manifest(bundle)
+    plan = manifest["plan"]
+    copies = manifest["copies"]
+    bundle = bundle.resolve(strict=True)
     return {"schema": SCHEMA, "result": "storage-backup-verified", "bundle": str(bundle), "resources": len(copies), "reviewId": plan["reviewId"], "requiresStoppedWriterRestore": True}
 
 
