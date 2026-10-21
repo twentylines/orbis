@@ -14,6 +14,8 @@ Orbis is currently in beta. Migration and recovery of a real homelab have not be
 
 [Light app launcher](screenshots/navigation/launcher-light.png) · [Dark app launcher](screenshots/navigation/launcher-dark.png) · [Phone applications](screenshots/navigation/phone-applications.png) · [Phone uninstall review](screenshots/navigation/phone-uninstall.png)
 
+[Minimized apps, light](screenshots/navigation/minimized-light.png) · [Minimized apps, dark](screenshots/navigation/minimized-dark.png)
+
 Current source on a disposable test server. This navigation is not yet included in the published beta62 image.
 
 [Published beta62 gallery](screenshots/live-beta62/README.md) · [Login](screenshots/live-beta62/phone-login.png) · [Backup views](screenshots/backups/desktop.png)

@@ -60,8 +60,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
       if (element.offsetHeight) root.style.setProperty(property, `${element.offsetHeight}px`);
       if (bar?.offsetHeight) root.style.setProperty(barProperty, `${Math.ceil(Number.parseFloat(getComputedStyle(bar).top) + bar.offsetHeight)}px`);
       const active = document.activeElement;
-      if (active instanceof HTMLElement && active.closest('.desktop-route-window[data-window-navigation="page"] .desktop-window-content'))
-        revealPageFocus(active);
+      if (active instanceof HTMLElement && active.closest('#desktop-content')) revealPageFocus(active);
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -161,7 +160,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
           </div>
         </header>
 
-        <main className="desktop-main" id="desktop-content">
+        <main className="desktop-main" id="desktop-content" onFocusCapture={(event) => revealPageFocus(event.target)}>
           {isTool ? (
             <RouteSurface
               key={current.path}

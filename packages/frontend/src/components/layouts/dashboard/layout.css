@@ -281,7 +281,8 @@ html:has(.desktop) {
 .desktop-main {
   width: 100%;
   margin: 0 auto;
-  padding: 24px var(--desktop-inset) max(154px, calc(var(--orbis-dock-height, 78px) + 64px + env(safe-area-inset-bottom, 0px)));
+  padding: 24px var(--desktop-inset)
+    max(154px, calc(var(--orbis-dock-height, 78px) + var(--orbis-app-tray-height, 0px) + 64px + env(safe-area-inset-bottom, 0px)));
   min-height: calc(100vh - 78px);
 }
 .desktop-view {

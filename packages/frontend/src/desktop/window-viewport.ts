@@ -12,10 +12,15 @@ const snapshot = () => window.matchMedia(DESKTOP_WINDOW_QUERY).matches;
 export const useDesktopWindows = () => useSyncExternalStore(subscribe, snapshot, () => false);
 
 export function revealPageFocus(element: HTMLElement) {
-  if (!element.closest('.desktop-route-window[data-window-navigation="page"]')) return;
+  if (!element.closest('#desktop-content')) return;
   element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
   const top = (document.querySelector('.desktop-system-bar')?.getBoundingClientRect().bottom ?? 0) + 8;
-  const bottom = (document.querySelector('.desktop-dock')?.getBoundingClientRect().top ?? window.innerHeight) - 8;
+  const tray = document.querySelector('.orbis-app-tray:not([hidden]):not([aria-hidden="true"])');
+  const bottom =
+    Math.min(
+      tray?.getBoundingClientRect().top ?? window.innerHeight,
+      document.querySelector('.desktop-dock')?.getBoundingClientRect().top ?? window.innerHeight,
+    ) - 8;
   const bounds = element.getBoundingClientRect();
   // Nearest scrolling can leave a tall control behind sticky chrome on short screens.
   if (bounds.height > bottom - top) return;

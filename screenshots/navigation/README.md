@@ -8,5 +8,7 @@ Current Orbis source on a disposable test server, 21 October 2026. These changes
 - [Monitor](monitor.png)
 - [Light app launcher](launcher-light.png)
 - [Dark app launcher](launcher-dark.png)
+- [Minimized apps, light](minimized-light.png)
+- [Minimized apps, dark](minimized-dark.png)
 - [Phone applications](phone-applications.png)
 - [Phone uninstall review](phone-uninstall.png)

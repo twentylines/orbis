@@ -6,7 +6,7 @@
   display: flex;
   flex-direction: column;
   width: min(440px, calc(100vw - 48px));
-  max-height: calc(100dvh - var(--orbis-bar-bottom, 90px) - var(--orbis-dock-height, 78px) - 64px);
+  max-height: calc(100dvh - var(--orbis-bar-bottom, 90px) - var(--orbis-dock-height, 78px) - var(--orbis-app-tray-height, 0px) - 64px);
   color: var(--desktop-ink);
   background: transparent;
   border: 0;
@@ -16,6 +16,16 @@
   -webkit-backdrop-filter: var(--desktop-glass-filter);
   animation: app-launcher-enter 240ms cubic-bezier(0.22, 1, 0.36, 1);
   overflow: hidden;
+  transform-origin: top left;
+}
+.orbis-app-launcher[data-minimizing="true"] {
+  pointer-events: none;
+}
+.app-launcher-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
 }
 .app-launcher-bar {
   display: flex;
@@ -123,6 +133,77 @@
   align-self: center;
 }
 .orbis-app-launcher :focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.orbis-app-tray {
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  bottom: calc(var(--orbis-dock-height, 78px) + 34px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(680px, calc(100vw - 48px));
+  padding: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--desktop-chrome);
+  color: var(--desktop-chrome-ink);
+  box-shadow: 0 14px 36px rgba(4, 15, 15, 0.22);
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
+}
+.orbis-app-tray[hidden] {
+  display: none;
+}
+.app-tray-list {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px;
+  margin: 0;
+  list-style: none;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-padding-inline: 8px;
+}
+.app-tray-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  padding: 4px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--desktop-chrome-ink) 9%, transparent);
+}
+.orbis-app-tray .btn {
+  margin: 0;
+  min-height: 44px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+.orbis-app-tray .btn:hover {
+  background: color-mix(in srgb, var(--desktop-chrome-ink) 12%, transparent);
+}
+.orbis-app-tray .app-tray-restore {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 8px 10px;
+  border-radius: 14px;
+}
+.orbis-app-tray .app-tray-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  padding: 0;
+  flex: none;
+  border-radius: 14px;
+}
+.orbis-app-tray :focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: 3px;
 }
