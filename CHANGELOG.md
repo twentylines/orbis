@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retain the editable initial server name across sign-in and first-use settings.
+
 - Fix piped interactive installation with separate terminal input/output streams and a real controlling-terminal regression check.
 
 - Package the Linux installer as a release-bound launcher and hashed helper archive, with guided Keep/Fresh selection, empty-server initialization and recorded recovery paths.

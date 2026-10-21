@@ -68,8 +68,10 @@ describe('desktop preferences', () => {
   });
 
   it('persists validated preferences per user and rejects invalid values', async () => {
+    await fs.rm(path.join(directory, 'state', 'desktop', '7.json'), { force: true });
     const initial = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');
     expect(initial.body).toEqual(DEFAULT_DESKTOP_PREFERENCES);
+    expect(initial.body.serverName).toBe('Hades');
 
     const invalid = await request(app.getHttpServer())
       .put('/desktop-preferences')
