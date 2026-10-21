@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { IconPlus, IconSwitchHorizontal } from '@tabler/icons-react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
+import { IconPlus, IconSwitchHorizontal, IconX } from '@tabler/icons-react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { useDesktopPreferences } from './preferences';
 import type { Telemetry } from './telemetry';
 import { useAppContext } from '@/context/app-context';
@@ -226,55 +226,61 @@ function ServerSelector({
     else closing.current = setTimeout(() => onOpenChange(false), 340);
   };
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="cluster-selector"
-        size="lg"
-        onOpenAutoFocus={(event) => {
-          const content = event.target;
-          const rack = content instanceof HTMLElement ? content.querySelector<HTMLElement>('.cluster-rack-stage') : null;
-          if (rack) {
-            event.preventDefault();
-            rack.focus({ preventScroll: true });
-          }
-        }}
-        onCloseAutoFocus={(event) => {
-          const opener = returnFocus?.();
-          const target = opener?.isConnected
-            ? opener
-            : document.querySelector<HTMLElement>('.cluster-switcher, .desktop-dock-item[aria-current="page"]');
-          if (target) {
-            event.preventDefault();
-            target.focus({ preventScroll: true });
-          }
-        }}
-      >
-        <DialogHeader>
-          <div>
-            <span className="cluster-dialog-kicker">Switch server</span>
-            <DialogTitle>{cluster.data?.name || preferences.serverName}</DialogTitle>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="cluster-selector-backdrop" />
+        <Dialog.Content
+          className="cluster-selector orbis-theme"
+          data-desktop-preset={preferences.preset}
+          onOpenAutoFocus={(event) => {
+            const content = event.target;
+            const rack = content instanceof HTMLElement ? content.querySelector<HTMLElement>('.cluster-rack-stage') : null;
+            if (rack) {
+              event.preventDefault();
+              rack.focus({ preventScroll: true });
+            }
+          }}
+          onCloseAutoFocus={(event) => {
+            const opener = returnFocus?.();
+            const target = opener?.isConnected
+              ? opener
+              : document.querySelector<HTMLElement>('.cluster-switcher, .desktop-dock-item[aria-current="page"]');
+            if (target) {
+              event.preventDefault();
+              target.focus({ preventScroll: true });
+            }
+          }}
+        >
+          <div className="cluster-selector-heading">
+            <div>
+              <span className="cluster-dialog-kicker">Switch server</span>
+              <Dialog.Title>{cluster.data?.name || preferences.serverName}</Dialog.Title>
+            </div>
+            <Dialog.Close className="cluster-selector-close" aria-label="Close server selector">
+              <IconX size={20} aria-hidden="true" />
+            </Dialog.Close>
           </div>
-        </DialogHeader>
-        <DialogDescription className="visually-hidden">Browse the 3D rack and select a server to view its apps and status.</DialogDescription>
-        <div className="modal-body cluster-selector-body">
-          <RackDeck
-            servers={cluster.data?.servers ?? []}
-            localName={preferences.serverName}
-            selectedId={cluster.selectedId}
-            readings={readings}
-            onSelect={choose}
-            showMerged
-            entrance
-          />
-          {cluster.data?.role !== 'member' ? (
-            <Link className="cluster-pair-link" to="/settings?tab=cluster" onClick={() => onOpenChange(false)}>
-              <IconPlus size={17} aria-hidden="true" />
-              Pair a server
-            </Link>
-          ) : null}
-        </div>
-      </DialogContent>
-    </Dialog>
+          <Dialog.Description className="visually-hidden">Browse the 3D rack and select a server to view its apps and status.</Dialog.Description>
+          <div className="cluster-selector-body">
+            <RackDeck
+              servers={cluster.data?.servers ?? []}
+              localName={preferences.serverName}
+              selectedId={cluster.selectedId}
+              readings={readings}
+              onSelect={choose}
+              showMerged
+              entrance
+            />
+            {cluster.data?.role !== 'member' ? (
+              <Link className="cluster-pair-link" to="/settings?tab=cluster" onClick={() => onOpenChange(false)}>
+                <IconPlus size={17} aria-hidden="true" />
+                Pair a server
+              </Link>
+            ) : null}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

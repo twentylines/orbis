@@ -32,6 +32,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const [selected, setSelected] = useState<LaunchRequest | null>(null);
   const [minimized, setMinimized] = useState<LaunchRequest[]>([]);
   const [minimizing, setMinimizing] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [trayVisible, setTrayVisible] = useState(false);
   const [panel, setPanel] = useState<HTMLDivElement | null>(null);
   const tray = useRef<HTMLElement>(null);
@@ -53,6 +54,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     panelMotion.current?.cancel();
     panelMotion.current = null;
     setMinimizing(false);
+    setClosing(false);
   }, []);
   const openApp = useCallback(
     (request: LaunchRequest) => {
@@ -61,16 +63,11 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       restoreOrigin.current = null;
       focusMinimized.current = null;
       opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      setMinimized((current) => {
-        const remaining = current.filter((item) => item.urn !== request.urn);
-        return selected && selected.urn !== request.urn && !remaining.some((item) => item.urn === selected.urn)
-          ? [...remaining, selected]
-          : remaining;
-      });
+      setMinimized((current) => current.filter((item) => item.urn !== request.urn));
       setSelected(request);
       return true;
     },
-    [desktop, selected, cancelMotion],
+    [desktop, cancelMotion],
   );
   const details = useQuery({
     ...getAppOptions({ path: { urn: selected?.urn ?? '' } }),
@@ -213,6 +210,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     }
     const element = tray.current;
     if (!desktop || !element || !trayVisible) return;
+    const dock = element.closest<HTMLElement>('.desktop-dock');
     const previous = trayMotion.current?.playState === 'running' ? element.getBoundingClientRect().width : trayWidth.current;
     trayMotion.current?.cancel();
     const width = Number.parseFloat(element.style.maxWidth) || element.getBoundingClientRect().width;
@@ -224,33 +222,55 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       }
       const animation = element.animate(
         [
-          { width: `${previous || width}px`, opacity: 1, transform: 'none' },
-          { width: '0px', opacity: 0, transform: 'scale(.92)' },
+          { width: `${previous || width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px', opacity: 1, transform: 'none' },
+          { width: '0px', paddingInline: '0px', borderWidth: '0px', marginLeft: '-12px', opacity: 0, transform: 'scaleY(.84)' },
         ],
-        { duration: 220, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' },
+        { duration: 460, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'forwards' },
       );
+      if (dock) dock.dataset.trayMotion = 'joining';
       trayMotion.current = animation;
       void animation.finished.then(
         () => {
           setTrayVisible(false);
           trayWidth.current = 0;
+          if (dock) delete dock.dataset.trayMotion;
         },
         () => undefined,
       );
-      return () => animation.cancel();
+      return () => {
+        animation.cancel();
+        if (dock) delete dock.dataset.trayMotion;
+      };
     }
     trayWidth.current = width;
     if (reducedMotion()) return;
     const animation = element.animate(
       [
-        { width: `${previous || 0}px`, opacity: previous ? 1 : 0, transform: 'scale(.96)' },
-        { width: `${width}px`, opacity: 1, transform: 'scale(1.025)', offset: 0.7 },
-        { width: `${width}px`, opacity: 1, transform: 'none' },
+        {
+          width: `${previous || 0}px`,
+          paddingInline: previous ? '7px' : '0px',
+          borderWidth: previous ? '1px' : '0px',
+          marginLeft: previous ? '0px' : '-12px',
+          opacity: previous ? 1 : 0,
+          transform: 'scaleY(.9)',
+        },
+        { width: `${width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px', opacity: 1, transform: 'scaleY(1.035)', offset: 0.72 },
+        { width: `${width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px', opacity: 1, transform: 'none' },
       ],
-      { duration: 560, easing: 'cubic-bezier(.22, 1, .36, 1)' },
+      { duration: 620, easing: 'cubic-bezier(.22, 1, .36, 1)' },
     );
+    if (dock && !previous) dock.dataset.trayMotion = 'splitting';
     trayMotion.current = animation;
-    return () => animation.cancel();
+    void animation.finished.then(
+      () => {
+        if (dock) delete dock.dataset.trayMotion;
+      },
+      () => undefined,
+    );
+    return () => {
+      animation.cancel();
+      if (dock) delete dock.dataset.trayMotion;
+    };
   }, [desktop, minimized, trayVisible]);
 
   const minimize = () => {
@@ -260,15 +280,40 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     setMinimized((current) => (current.some((item) => item.urn === selected.urn) ? current : [...current, selected]));
     setMinimizing(true);
   };
+  const closeLauncher = () => {
+    if (!selected || minimizing || closing) return;
+    if (!panel || reducedMotion()) {
+      cancelMotion();
+      setSelected(null);
+      return;
+    }
+    const style = getComputedStyle(panel);
+    const start = { transform: style.transform, opacity: style.opacity };
+    cancelMotion();
+    setClosing(true);
+    const id = ++motionId.current;
+    const animation = panel.animate([start, { transform: 'translateY(12px) scale(.96)', opacity: 0 }], {
+      duration: 240,
+      easing: 'cubic-bezier(.4, 0, .8, 1)',
+      fill: 'forwards',
+    });
+    panelMotion.current = animation;
+    void animation.finished.then(
+      () => {
+        if (motionId.current !== id) return;
+        panelMotion.current = null;
+        setClosing(false);
+        setSelected(null);
+      },
+      () => undefined,
+    );
+  };
   const restore = (request: LaunchRequest) => {
     cancelMotion();
     restoreOrigin.current = trayButton(request.urn)?.getBoundingClientRect() ?? null;
     focusMinimized.current = null;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setMinimized((current) => {
-      const remaining = current.filter((item) => item.urn !== request.urn);
-      return selected && selected.urn !== request.urn && !remaining.some((item) => item.urn === selected.urn) ? [...remaining, selected] : remaining;
-    });
+    setMinimized((current) => current.filter((item) => item.urn !== request.urn));
     setSelected(request);
   };
 
@@ -341,10 +386,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
           open={selected !== null && desktop}
           modal={false}
           onOpenChange={(open) => {
-            if (!open) {
-              cancelMotion();
-              setSelected(null);
-            }
+            if (!open) closeLauncher();
           }}
         >
           <Dialog.Portal>
@@ -352,7 +394,8 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
               ref={setPanel}
               className="orbis-app-launcher"
               data-minimizing={minimizing}
-              inert={minimizing || undefined}
+              data-closing={closing}
+              inert={minimizing || closing || undefined}
               onInteractOutside={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => {
                 event.preventDefault();
@@ -369,11 +412,17 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                   {selected?.serverName || userSettings.internalIp || window.location.hostname}
                 </span>
                 <div className="app-launcher-controls">
-                  <Button className="app-launcher-close" size="icon" aria-label="Minimize app launcher" disabled={minimizing} onClick={minimize}>
+                  <Button
+                    className="app-launcher-close"
+                    size="icon"
+                    aria-label="Minimize app launcher"
+                    disabled={minimizing || closing}
+                    onClick={minimize}
+                  >
                     <IconMinus size={19} aria-hidden="true" />
                   </Button>
                   <Dialog.Close asChild>
-                    <Button className="app-launcher-close" size="icon" aria-label="Close app launcher" disabled={minimizing}>
+                    <Button className="app-launcher-close" size="icon" aria-label="Close app launcher" disabled={minimizing || closing}>
                       <IconX size={19} aria-hidden="true" />
                     </Button>
                   </Dialog.Close>

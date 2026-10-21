@@ -28,7 +28,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { Link } from 'react-router';
 import './dashboard.css';
 import { useCluster } from '@/desktop/cluster';
-import { ClusterApps, ClusterOverview } from '@/desktop/cluster-views';
+import { ClusterApps, ClusterOverview, clusterResourceBytes } from '@/desktop/cluster-views';
 
 const labels: Record<WidgetId, string> = {
   applications: 'Applications',
@@ -132,8 +132,18 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const diskSizeGb = diskAvailable ? (disk?.sizeBytes ?? 0) / 1024 ** 3 : null;
   const diskPercent = diskAvailable && disk?.sizeBytes ? ((disk.usedBytes ?? 0) / disk.sizeBytes) * 100 : null;
   const memoryTotal = system.data?.memory.totalBytes;
-  const memoryAvailable = typeof memoryTotal === 'number' && memoryTotal > 0 && typeof system.data?.memory.availableBytes === 'number';
-  const memoryPercent = memoryAvailable ? ((memoryTotal - (system.data?.memory.availableBytes ?? 0)) / memoryTotal) * 100 : null;
+  const memoryFree = system.data?.memory.availableBytes;
+  const memoryAvailable =
+    typeof memoryTotal === 'number' &&
+    Number.isFinite(memoryTotal) &&
+    memoryTotal > 0 &&
+    typeof memoryFree === 'number' &&
+    Number.isFinite(memoryFree) &&
+    memoryFree >= 0 &&
+    memoryFree <= memoryTotal;
+  const memoryUsed = memoryAvailable ? memoryTotal - memoryFree : null;
+  const memoryPercent = memoryUsed !== null && memoryTotal ? (memoryUsed / memoryTotal) * 100 : null;
+  const memoryAmount = memoryAvailable ? `${clusterResourceBytes(memoryUsed)} / ${clusterResourceBytes(memoryTotal)}` : 'Unavailable';
   const cpuPercent = system.data?.cpu.totalPercent;
   const networkInterfaces = system.data?.network.filter((item) => item.interface !== 'lo') ?? [];
   const networkRate = (field: 'rxBytesPerSecond' | 'txBytesPerSecond') =>
@@ -291,12 +301,32 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                 </span>
                 <span>{system.data ? (system.data.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU') : 'CPU'}</span>
               </Link>
-              <Link to="/monitor" viewTransition className="workspace-gauge" aria-label={`Open memory monitor, ${number(memoryPercent, '%')}`}>
+              <Link
+                to="/monitor"
+                viewTransition
+                className="workspace-gauge"
+                aria-label={`Open memory monitor, ${number(memoryPercent, '%')}, ${memoryAmount}`}
+              >
                 <span className="workspace-dial" style={{ '--dial-progress': `${Math.min(100, Math.max(0, memoryPercent ?? 0))}%` } as CSSProperties}>
                   <IconDeviceDesktopAnalytics size={17} aria-hidden="true" />
                   <strong>{typeof memoryPercent === 'number' ? number(memoryPercent, '%') : '—'}</strong>
                 </span>
-                <span>Host memory</span>
+                <span className="workspace-gauge-caption">
+                  <span>Host memory</span>
+                  <small className="workspace-memory-amount">
+                    {memoryAvailable ? (
+                      <>
+                        <span>{clusterResourceBytes(memoryUsed)}</span>
+                        <span aria-hidden="true">/</span>
+                        <span>{clusterResourceBytes(memoryTotal)}</span>
+                      </>
+                    ) : system.data ? (
+                      'Unavailable'
+                    ) : (
+                      '—'
+                    )}
+                  </small>
+                </span>
               </Link>
               <Link to="/monitor" viewTransition className="workspace-uptime">
                 <span>

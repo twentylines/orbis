@@ -14,6 +14,10 @@ The command only reads Docker metadata. It does not read environment values, pul
 
 A stopped controller remains discoverable while its container exists. If its containers have been removed, its saved files must be checked when choosing the installation directory; `no-controller-found` does not establish that the directory is empty.
 
+## First sign-in
+
+An existing account or saved login session still opens Orbis setup on first use. Confirm the server name, display mode and optional error reporting, and choose whether to open server pairing next. Completing setup preserves the account and installed apps. Completion is stored on the server for that account, independently of the inherited welcome flag and browser appearance cache. It persists across browsers, logins and appearance resets.
+
 For the existing explicit-root migration tools and their supported layouts, see [Installation and migration](DEPLOYMENT.md).
 
 ## Installer permissions and replacement choices

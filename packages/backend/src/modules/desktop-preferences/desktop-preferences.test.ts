@@ -33,6 +33,7 @@ describe('desktop preferences', () => {
     app = module.createNestApplication();
     app.use(((req, _res, next) => {
       if (req.headers.authorization === 'Bearer test') req.user = { id: 7 };
+      if (req.headers.authorization === 'Bearer other') req.user = { id: 8 };
       next();
     }) as NestMiddleware['use']);
     app.useGlobalPipes(new ArkValidationPipe());
@@ -47,6 +48,23 @@ describe('desktop preferences', () => {
   it('requires authentication for reading and writing', async () => {
     expect((await request(app.getHttpServer()).get('/desktop-preferences')).status).toBe(401);
     expect((await request(app.getHttpServer()).put('/desktop-preferences').send(DEFAULT_DESKTOP_PREFERENCES)).status).toBe(401);
+    expect((await request(app.getHttpServer()).get('/desktop-preferences/onboarding')).status).toBe(401);
+    expect((await request(app.getHttpServer()).post('/desktop-preferences/onboarding')).status).toBe(401);
+  });
+
+  it('keeps first-run setup separate from inherited accounts and appearance settings', async () => {
+    const status = () => request(app.getHttpServer()).get('/desktop-preferences/onboarding').set('Authorization', 'Bearer test');
+    expect((await status()).body).toEqual({ complete: false });
+    await request(app.getHttpServer()).put('/desktop-preferences').set('Authorization', 'Bearer test').send(DEFAULT_DESKTOP_PREFERENCES).expect(200);
+    expect((await status()).body).toEqual({ complete: false });
+    await request(app.getHttpServer()).post('/desktop-preferences/onboarding').set('Authorization', 'Bearer test').expect(201, { complete: true });
+    const stored = path.join(directory, 'state', 'onboarding', '7.json');
+    expect((await fs.stat(stored)).mode & 0o777).toBe(0o600);
+    await request(app.getHttpServer()).put('/desktop-preferences').set('Authorization', 'Bearer test').send(DEFAULT_DESKTOP_PREFERENCES).expect(200);
+    expect((await status()).body).toEqual({ complete: true });
+    const other = await request(app.getHttpServer()).get('/desktop-preferences/onboarding').set('Authorization', 'Bearer other').expect(200);
+    expect(other.body).toEqual({ complete: false });
+    await fs.rm(stored);
   });
 
   it('persists validated preferences per user and rejects invalid values', async () => {

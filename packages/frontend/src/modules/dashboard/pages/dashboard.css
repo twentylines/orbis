@@ -743,6 +743,25 @@
 .workspace-gauge:hover {
   transform: translateY(-4px);
 }
+.workspace-gauge-caption {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.workspace-memory-amount {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 6px;
+  color: var(--desktop-status-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.workspace-memory-amount > span {
+  white-space: nowrap;
+}
 .workspace-gauge:active {
   transform: scale(0.95);
 }

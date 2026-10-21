@@ -1,55 +1,87 @@
-import { acknowledgeWelcomeMutation } from '@/api-client/@tanstack/react-query.gen';
+import { acknowledgeWelcome } from '@/api-client';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { AuthLayout } from '@/components/layouts/auth/layout';
-import { IconBrandGithub, IconVersions } from '@tabler/icons-react';
+import { useDesktopPreferences } from '@/desktop/preferences';
+import { IconDeviceDesktop, IconMoon, IconSun } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 
 type Props = {
   allowErrorMonitoring: boolean;
 };
 
 export const Welcome = ({ allowErrorMonitoring }: Props) => {
+  const { preferences, update, completeOnboarding, syncState } = useDesktopPreferences();
+  const [name, setName] = useState(preferences.serverName);
   const [errorMonitoring, setErrorMonitoring] = useState(allowErrorMonitoring);
-
-  const openLink = (url: string) => {
-    window.open(url, '_blank', 'noopener noreferrer');
-  };
-
-  const acknowledge = useMutation({
-    ...acknowledgeWelcomeMutation(),
+  const [pairNext, setPairNext] = useState(false);
+  const navigate = useNavigate();
+  const setup = useMutation({
+    mutationFn: async () => {
+      await acknowledgeWelcome({ body: { allowErrorMonitoring: errorMonitoring }, throwOnError: true });
+      await completeOnboarding(name);
+      if (pairNext) await navigate('/settings?tab=cluster');
+    },
   });
+  const nameValid = name.trim().length > 0 && name.trim().length <= 40;
 
   return (
-    <AuthLayout>
-      <section className="desktop-welcome" aria-labelledby="welcome-title">
-        <h2 id="welcome-title" className="h2">
-          Before you start
-        </h2>
-        <p>When enabled, error reports go to Runtipi's Sentry service.</p>
-        <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Enable error reporting" />
-        <Button
-          intent="primary"
-          onClick={() => acknowledge.mutate({ body: { allowErrorMonitoring: errorMonitoring } })}
-          loading={acknowledge.isPending}
-          disabled={acknowledge.isPending}
-        >
-          Save and open dashboard
-        </Button>
-        <div className="desktop-welcome-community">
-          <h3>Project links</h3>
-          <p>Source code, release notes and issue reports.</p>
-          <div className="desktop-welcome-links">
-            <Button onClick={() => openLink('https://github.com/twentylines/orbis')}>
-              <IconBrandGithub aria-hidden="true" /> Source code
-            </Button>
-            <Button onClick={() => openLink('https://github.com/twentylines/orbis/releases')}>
-              <IconVersions aria-hidden="true" /> Releases
-            </Button>
-          </div>
+    <AuthLayout busy={setup.isPending}>
+      <form
+        className="desktop-welcome"
+        aria-labelledby="welcome-title"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (nameValid && !setup.isPending) setup.mutate();
+        }}
+      >
+        <div className="desktop-setup-intro">
+          <h2 id="welcome-title" className="h2">
+            Set up Orbis
+          </h2>
+          <p>Choose a server name and display mode. Your account and installed apps stay in place.</p>
         </div>
-      </section>
+        <fieldset className="desktop-setup-fields" disabled={setup.isPending}>
+          <Input
+            label="Server name"
+            name="setup-server-name"
+            value={name}
+            maxLength={40}
+            required
+            onChange={(event) => setName(event.target.value)}
+          />
+          <fieldset className="desktop-setup-modes">
+            <legend>Display mode</legend>
+            <div>
+              {(
+                [
+                  ['light', 'Light', IconSun],
+                  ['dark', 'Dark', IconMoon],
+                  ['system', 'Automatic', IconDeviceDesktop],
+                ] as const
+              ).map(([mode, label, Icon]) => (
+                <Button key={mode} type="button" variant="outline" aria-pressed={preferences.mode === mode} onClick={() => update({ mode })}>
+                  <Icon size={18} aria-hidden="true" />
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </fieldset>
+          <div className="desktop-setup-reporting">
+            <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Send error reports" />
+            <p>Optional. Reports are sent to the upstream Sentry service.</p>
+          </div>
+          <Switch checked={pairNext} onCheckedChange={setPairNext} label="Pair another server after setup" />
+        </fieldset>
+        {setup.isError ? <p role="alert">Setup could not be saved. Check the connection and try again.</p> : null}
+        {syncState === 'loading' ? <output>Loading server settings…</output> : null}
+        <Button type="submit" intent="primary" loading={setup.isPending} disabled={!nameValid || setup.isPending || syncState === 'loading'}>
+          Open dashboard
+        </Button>
+      </form>
     </AuthLayout>
   );
 };

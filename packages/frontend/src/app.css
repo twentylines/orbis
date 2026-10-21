@@ -151,6 +151,54 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   gap: 20px;
   min-width: 0;
 }
+.desktop-setup-intro,
+.desktop-setup-fields,
+.desktop-setup-reporting {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+.desktop-setup-fields,
+.desktop-setup-modes {
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  border: 0;
+}
+.desktop-setup-fields {
+  gap: 24px;
+}
+.desktop-setup-intro p,
+.desktop-setup-reporting p {
+  color: var(--desktop-muted);
+  line-height: 1.6;
+}
+.desktop-setup-modes legend {
+  float: none;
+  margin: 0 0 10px;
+  padding: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.desktop-setup-modes > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.desktop-setup-modes .btn {
+  flex: 1 1 100px;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  gap: 8px;
+  padding: 10px 12px;
+  white-space: normal;
+}
+.desktop-setup-modes .btn[aria-pressed="true"] {
+  color: var(--desktop-ink);
+  border-color: var(--desktop-accent);
+  background: var(--desktop-code-background);
+}
 .desktop-welcome :is(h2, h3, p, .orbis-switch) {
   margin: 0;
 }

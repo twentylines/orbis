@@ -14,6 +14,7 @@ import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
 import { IconApps, IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, useMutation } from '@tanstack/react-query';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useLayoutEffect, useRef, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches } from 'react-router';
 import './layout.css';
@@ -40,14 +41,15 @@ export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => {
 };
 
 export const DashboardLayout = ({ children }: PropsWithChildren) => {
-  const { userSettings, user, apps } = useAppContext();
+  const { userSettings, apps } = useAppContext();
   const { isLoggedIn } = useUserContext();
-  const { preferences, resolvedMode, update } = useDesktopPreferences();
+  const { preferences, resolvedMode, update, requiresOnboarding } = useDesktopPreferences();
   const location = useLocation();
   const matches = useMatches();
+  const reduceMotion = useReducedMotion();
   const dock = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
-    if (!user.hasSeenWelcome) return;
+    if (requiresOnboarding) return;
     const element = dock.current;
     if (!element) return;
     const root = document.documentElement;
@@ -75,7 +77,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
       if (previousBar) root.style.setProperty(barProperty, previousBar);
       else root.style.removeProperty(barProperty);
     };
-  }, [user.hasSeenWelcome]);
+  }, [requiresOnboarding]);
   const hasPageHeading = matches.some((match) =>
     ['app-details', 'app-details-store', 'custom-app', 'app-update', 'app-store-app-update'].includes(match.id),
   );
@@ -85,7 +87,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
   const logout = useMutation({ ...logoutMutation(), onSuccess: () => window.location.reload() });
 
-  if (!user.hasSeenWelcome) return <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />;
+  if (requiresOnboarding) return <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />;
 
   const current = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
   const isTool = current && current.path !== '/dashboard';
@@ -185,6 +187,14 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                     aria-current={current?.path === path ? 'page' : undefined}
                     title={label}
                   >
+                    {current?.path === path ? (
+                      <motion.span
+                        className="desktop-dock-selection"
+                        layoutId="orbis-dock-selection"
+                        transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 330, damping: 32, mass: 0.8 }}
+                        aria-hidden="true"
+                      />
+                    ) : null}
                     <span className="desktop-dock-content">
                       <Icon size={22} stroke={1.7} aria-hidden="true" />
                       <span className="desktop-dock-label">{'dockLabel' in item ? item.dockLabel : label}</span>

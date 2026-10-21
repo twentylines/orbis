@@ -115,6 +115,8 @@ type PreferenceContext = {
   updateWindow: (id: DesktopWindowId, value: DesktopWindowState) => void;
   reset: () => void;
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
+  requiresOnboarding: boolean;
+  completeOnboarding: (serverName: string) => Promise<void>;
 };
 const Context = createContext<PreferenceContext | null>(null);
 const LOAD_NOTICE = 'desktop-preferences-load';
@@ -129,6 +131,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [serverReady, setServerReady] = useState(false);
+  const [requiresOnboarding, setRequiresOnboarding] = useState(true);
+  const completingSetup = useRef(false);
   const [syncState, setSyncState] = useState<PreferenceContext['syncState']>('local');
   const revision = useRef(0);
   const acknowledgedRevision = useRef(0);
@@ -148,6 +152,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => {
     if (!isLoggedIn) {
       setServerReady(false);
+      setRequiresOnboarding(true);
       setSyncState('local');
       setInitialLoadComplete(false);
       setLoadAttempt(0);
@@ -161,17 +166,25 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     const canReplace = loadAttempt === 0 || acknowledgedRevision.current === loadRevision;
     setSyncState('loading');
     setLoadError(false);
-    fetch('/api/desktop-preferences', { credentials: 'include', signal: controller.signal })
-      .then(async (response) => {
+    Promise.all(
+      ['/api/desktop-preferences', '/api/desktop-preferences/onboarding'].map(async (url) => {
+        const response = await fetch(url, { credentials: 'include', signal: controller.signal });
         if (!response.ok) throw new Error('Preference load failed');
-        const value: unknown = await response.json();
+        return response.json() as Promise<unknown>;
+      }),
+    )
+      .then(([value, setup]) => {
         if (!isPreferences(value)) throw new Error('Invalid server preferences');
+        if (!setup || typeof setup !== 'object' || !('complete' in setup) || typeof setup.complete !== 'boolean') {
+          throw new Error('Invalid setup status');
+        }
         if (controller.signal.aborted) throw new Error('Preference load expired');
         if (revision.current === loadRevision && canReplace) {
           acknowledgedRevision.current = loadRevision;
           setPreferences(normalisePreferences(value));
         }
         setServerReady(true);
+        setRequiresOnboarding(!setup.complete);
         setSyncState(acknowledgedRevision.current === revision.current ? 'saved' : 'saving');
       })
       .catch(() => {
@@ -225,7 +238,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     setSyncState('saving');
     const timer = window.setTimeout(() => {
       const save = async () => {
-        if (superseded) return;
+        if (superseded || saveRevision !== revision.current) return;
         try {
           const response = await fetch('/api/desktop-preferences', {
             method: 'PUT',
@@ -250,6 +263,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   }, [preferences, serverReady, isLoggedIn]);
 
   const update = (value: Partial<DesktopPreferences>) => {
+    if (completingSetup.current) return;
     if (!isPreferences({ ...preferences, ...value })) return;
     revision.current += 1;
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
@@ -260,20 +274,57 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   };
 
   const reset = () => {
+    if (completingSetup.current) return;
     revision.current += 1;
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
     setPreferences({ ...defaultDesktopPreferences, workspace: { ...defaultDesktopPreferences.workspace } });
   };
 
   const updateWindow = (id: DesktopWindowId, value: DesktopWindowState) => {
+    if (completingSetup.current) return;
     if (!desktopWindowsSchema.allows({ [id]: value })) return;
     revision.current += 1;
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
     setPreferences((previous) => ({ ...previous, windows: { ...previous.windows, [id]: value } }));
   };
 
+  const completeOnboarding = async (serverName: string) => {
+    const next = { ...preferences, serverName: serverName.trim() };
+    if (!isLoggedIn || !serverReady || !isPreferences(next) || completingSetup.current) throw new Error('Setup cannot be saved yet. Try again.');
+    completingSetup.current = true;
+    const saveRevision = ++revision.current;
+    setSyncState('saving');
+    const save = async () => {
+      const saved = await fetch('/api/desktop-preferences', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      });
+      if (!saved.ok) throw new Error('Server settings could not be saved. Try again.');
+      const completed = await fetch('/api/desktop-preferences/onboarding', { method: 'POST', credentials: 'include' });
+      if (!completed.ok || (await completed.json()).complete !== true) throw new Error('Setup could not be completed. Try again.');
+      acknowledgedRevision.current = saveRevision;
+      setPreferences(next);
+      setRequiresOnboarding(false);
+      setSyncState('saved');
+    };
+    const pending = saveQueue.current.then(save, save);
+    saveQueue.current = pending.catch(() => undefined);
+    try {
+      await pending;
+    } catch (error) {
+      setSyncState('error');
+      throw error;
+    } finally {
+      completingSetup.current = false;
+    }
+  };
+
   return (
-    <Context.Provider value={{ preferences, resolvedMode, cacheAvailable, update, updateWindow, reset, syncState }}>
+    <Context.Provider
+      value={{ preferences, resolvedMode, cacheAvailable, update, updateWindow, reset, syncState, requiresOnboarding, completeOnboarding }}
+    >
       {isLoggedIn && !initialLoadComplete ? <StartupSurface appearance={preferences} /> : children}
     </Context.Provider>
   );

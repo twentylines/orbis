@@ -20,7 +20,7 @@ function revealAuthFocus(target: EventTarget) {
   });
 }
 
-export const AuthLayout = ({ children }: PropsWithChildren) => {
+export const AuthLayout = ({ children, busy = false }: PropsWithChildren<{ busy?: boolean }>) => {
   const locale = i18next.language;
 
   const { allowAutoThemes } = useUserContext();
@@ -37,6 +37,7 @@ export const AuthLayout = ({ children }: PropsWithChildren) => {
         <Button
           size="icon"
           variant="outline"
+          disabled={busy}
           aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
           onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
         >

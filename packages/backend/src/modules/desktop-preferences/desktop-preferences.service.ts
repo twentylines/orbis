@@ -27,6 +27,26 @@ export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonN
 export class DesktopPreferencesService {
   constructor(private readonly config: ConfigurationService) {}
 
+  private onboardingFile(userId: number) {
+    const { dataDir } = this.config.get('directories');
+    return path.join(dataDir, 'state', 'onboarding', `${userId}.json`);
+  }
+
+  async onboarding(userId: number) {
+    try {
+      const value: unknown = JSON.parse(await fs.readFile(this.onboardingFile(userId), 'utf8'));
+      return { complete: typeof value === 'object' && value !== null && 'version' in value && value.version === 1 };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return { complete: false };
+      throw error;
+    }
+  }
+
+  async completeOnboarding(userId: number) {
+    await this.writeState(this.onboardingFile(userId), { version: 1 });
+    return { complete: true };
+  }
+
   private fileFor(userId: number) {
     const { dataDir } = this.config.get('directories');
     return path.join(dataDir, 'state', 'desktop', `${userId}.json`);
@@ -59,6 +79,11 @@ export class DesktopPreferencesService {
       mode: preferences.mode ?? (preferences.preset === 'graphite' ? 'dark' : 'light'),
       workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...preferences.workspace },
     };
+    await this.writeState(file, value);
+    return value;
+  }
+
+  private async writeState(file: string, value: unknown) {
     await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
     const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
     try {
@@ -67,6 +92,5 @@ export class DesktopPreferencesService {
     } finally {
       await fs.rm(temporary, { force: true });
     }
-    return value;
   }
 }

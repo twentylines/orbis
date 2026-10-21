@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Run account-specific Orbis setup even when a migrated login session is still valid; save the server name, display mode and reporting choice, with an optional pairing shortcut.
+- Open the server rack as a floating card selector over a blurred background, with keyboard, touch and reduced-motion support.
+- Animate the dock splitting and merging as apps are minimized or restored, and smooth its compact layout, selection and page transitions.
+- Show used and total RAM alongside the percentage in Home system status.
+
 - Replace a compatible Runtipi controller while retaining accounts, apps and data, with verified image migration history, unpublished hold/resume checks and a retained original controller before activation.
 - Recover interrupted replacements without rewinding app writes after public activation begins.
 - Coordinate installation checkpoints and recovery across the original controller, apps, database and queue, retaining their running states and restart policies after interruption.

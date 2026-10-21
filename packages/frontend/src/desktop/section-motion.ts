@@ -29,7 +29,7 @@ export function useSectionMotion() {
           { opacity: 0, transform: `translateX(${to >= from ? 48 : -48}px)` },
           { opacity: 1, transform: 'none' },
         ],
-        { duration: 380, easing: 'cubic-bezier(.22, 1, .36, 1)' },
+        { duration: 480, easing: 'cubic-bezier(.22, 1, .36, 1)' },
       );
     }
     previous.current = location.pathname;
