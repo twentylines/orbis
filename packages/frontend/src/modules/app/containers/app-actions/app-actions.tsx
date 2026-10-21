@@ -39,6 +39,7 @@ import { useAppStatus } from '../../helpers/use-app-status';
 import { Tooltip } from 'react-tooltip';
 import { DropdownMenuSeparator } from '@/components/ui/DropdownMenu/DropdownMenu';
 import { useLocation, useNavigate } from 'react-router';
+import { useAppLauncher } from '@/desktop/app-launcher';
 
 interface IProps {
   app?: AppDetails | null;
@@ -68,6 +69,7 @@ const ActionButton: React.FC<BtnProps> = (props) => {
 type OpenType = 'local' | 'domain' | 'local_domain';
 
 export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps) => {
+  const openApp = useAppLauncher();
   const installDisclosure = useDisclosure();
   const stopDisclosure = useDisclosure();
   const restartDisclosure = useDisclosure();
@@ -350,7 +352,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       url = `https://${appLocalDomain}${info.url_suffix || ''}`;
     }
 
-    window.open(url, '_blank', 'noreferrer');
+    if (!openApp({ urn: info.urn, name: info.name, preferredUrl: url })) window.open(url, '_blank', 'noreferrer');
   };
 
   return (

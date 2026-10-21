@@ -74,3 +74,13 @@ In `hold`, the controller runs database migrations but skips app bootstrap, queu
 Hold mode is not a read-only preview: startup can write migrations, generated environment files, logs and configuration defaults. Take and validate the enclosing transaction's rollback backup before starting the replacement controller, and keep all other writers stopped.
 
 In `resume`, pending restores prevent startup. App queue consumers remain disabled while the controller checks for pending app commands or another consumer, prepares its services and reconciles app status. It checks the app queue again before enabling app commands. Pending app messages are preserved and cause startup to fail; the installer must recover or review them rather than purge them. Resume skips automatic app restarts and global network pruning so the independent executor can preserve the reviewed containers and their running states.
+
+## Detected Docker apps
+
+The current source adds a **Docker apps** section to Apps. This feature is not included in the published `v0.1.0-beta.62` image.
+
+Containers belonging to a Compose project are grouped using their project and configuration location. Other containers appear individually. Orbis infrastructure and apps already registered in the Orbis library are excluded from this list. Runtipi-labelled containers without an imported app record are identified as needing import; this list does not reconstruct missing Runtipi configuration from an image name.
+
+Uninstall opens a review of the exact containers and their persistent storage. The server requires authentication and the matching review fingerprint, rechecks container membership and definitions, stops the selected containers, and removes them without force or volume deletion. Bind-mounted files and named or anonymous Docker volumes are retained. Files stored only in a container's writable layer are removed with the container. Automatically removed containers are currently blocked because Docker may remove their anonymous volumes when stopped.
+
+Progress appears in Tasks with the app name. A private operation record is stored under `state/orbis-docker-apps/`; it includes container identities and retained storage, not environment values. Interrupted removals are not replayed automatically. Refresh the app list and review any remaining containers before retrying. Other tools can recreate a removed app, so disable any external deployment automation separately when retiring it.

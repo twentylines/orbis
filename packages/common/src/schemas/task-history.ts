@@ -19,6 +19,7 @@ const timestamp = type('string').narrow((value) => Number.isFinite(Date.parse(va
 export const taskRecordSchema = type({
   id: 'string.uuid',
   appUrn: arkAppUrn,
+  displayName: type('string').moreThanLength(0).lessThanLength(512).optional(),
   action: taskActionSchema,
   status: taskStatusSchema,
   createdAt: timestamp,

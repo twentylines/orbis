@@ -1,37 +1,21 @@
-# Orbis desktop windows
+# Navigation and app launchers
 
-Orbis uses one current first-party route window on screens at least 1100px wide and 640px high. Smaller screens use ordinary full-page sections with dock navigation. Normal browser URLs, authentication, app actions and account permissions remain authoritative.
+The dock switches between full pages on every screen size. Home and the Orbis wordmark open the workspace. Sections use normal browser URLs and Back/Forward navigation; there are no minimize, maximize or window placement controls for these pages.
 
-## Large-screen controls
+## Section transitions
 
-- **Full page** is the default and fills the space between the system bar and dock. Content scrolls inside the window while the title bar stays visible. If the screen is too short for the title bar and useful content space, the whole window scrolls inside those same bounds.
-- **Floating window** provides a movable title bar, a bottom-right resize control and contained content scrolling.
-- **Maximize** fits the available workspace between the system bar and dock. Restore returns to the previous placement.
-- **Snap left/right** divides that workspace into equal halves with a 16px gap. It requires room for two 520px windows.
-- **Move/resize with keyboard** uses arrow keys in 10px steps, Shift for 1px, Enter to save and Escape to cancel. Moving focus outside the title bar commits the adjustment.
-- **Minimize** contracts the current tool toward the dock and opens Home. The current route stays mounted, so an unsaved form survives minimizing and restoring. The current dock item and the Home restore button reopen the exact route and query.
-- **Close** returns to Home and discards the current route instance. Choosing another tool follows normal navigation and also replaces the route instance. Unsaved forms are not retained across that navigation or a page reload.
+Moving along the dock slides the content in the same direction. The system bar and dock stay in place. Browsers without View Transitions use a short entrance animation. Reduced-motion preferences disable these transitions.
 
-On large screens, Home and the Orbis brand minimize an open tool. Repeatedly selecting Home while it is already minimized does not add history entries. Minimize and restore are explicit URL states, so Back/Forward can recover their visibility. A minimized URL can be reloaded; it restores saved account placement, not unsaved form content.
+Pages scroll normally. Keyboard focus clears the sticky system bar and fixed dock. Resizing preserves the mounted page and its unsaved inputs. Changing sections or reloading follows ordinary page navigation; save form changes before leaving.
 
-## Phones, tablets and short viewports
+## Desktop app launchers
 
-Below either large-screen threshold, sections use a compact page heading and normal document scrolling. Home and the Orbis brand navigate to the workspace. The dock switches sections with the existing directional motion. Pages do not mount window controls or minimize/restore states.
+On screens at least 1100px wide and 640px high, selecting an app from Home or Apps opens a small launcher panel. It shows the app's current status, available server addresses and a link to app settings. The panel can remain open while navigating between sections. Escape or Close dismisses it.
 
-Opening a minimized desktop link on a small screen shows the requested section immediately, then removes its reserved visibility flag with a history replacement. Other query values and the hash are preserved. Resizing keeps the route/form subtree mounted and retains unsaved edits; saved desktop placement is restored when enough room is available again. An in-progress desktop window animation is canceled when the viewport becomes small.
+**Open app** opens the selected application address in a separate browser tab. Orbis does not preload or embed the application's interface. The launcher fetches details only for the selected app and refreshes them every 15 seconds while visible; background refreshes stop when the browser tab is hidden.
 
-Native page focus clears the measured sticky system bar and fixed dock. On short screens, controls that fit between them are explicitly revealed if native nearest scrolling leaves an edge under the chrome. Focused page headings use the active theme. Desktop windows clamp to the available workspace when the display changes. Reduced-motion preferences skip window and section motion.
+On phones, tablets and short screens, app cards open their normal details page. App launch actions open the application's address directly. Resizing to a smaller screen closes a desktop launcher.
 
-## Persistence and resource use
+App addresses use the installed port, configured domain or local domain, TLS port and URL suffix. Apps that are stopped or have no web interface do not receive an active launch link. Existing account window placement data is retained for compatibility and is not used for section navigation.
 
-Each account can save placement and bounds separately for Applications, Store, Monitor, Updates, Settings and Tasks. The existing private, atomic desktop-preference storage saves only after a gesture completes, with its usual 300ms debounce. Pointer movement uses animation frames and does not send a request per frame. Keyboard changes are committed once.
-
-Window state accepts only known tool IDs, modes and bounded integer coordinates. It cannot store a URL, application content or form draft. Existing accounts without window state default to full-page tools. Appearance export/import includes the placement map.
-
-Minimized tool content is hidden and inert. Its log EventSources close, including pending reconnect timers. Monitor history and tool polling pause. Home can still request shared host/container statistics, and the system bar continues global app events and task status. Server jobs continue independently of an open tool window.
-
-This model does not embed third-party applications or claim that their pages can be retained safely in frames. Installed app launch links retain the existing server-specific launch behavior.
-
-## Verification
-
-Preference HTTP tests cover authentication, round trips, old accounts, unknown tool IDs, invalid modes, fractional/out-of-range coordinates and rejected extra window data. Geometry tests cover display changes, useful minimum sizes, equal snapping and smaller-display fallback. Browser checks cover visible layout, draft preservation, exact-route/history behavior, pointer/keyboard controls, resizing and log/poll cleanup. Current iteration results are recorded in [release notes](https://github.com/twentylines/orbis/releases) before publication.
+This navigation is in current source. The published `v0.1.0-beta.62` image still has the previous desktop window behavior.

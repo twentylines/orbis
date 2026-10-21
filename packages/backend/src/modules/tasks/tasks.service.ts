@@ -9,7 +9,7 @@ import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
 import { installationHeld } from '@/common/installation-mode';
 
-type TaskEvent = { requestId: string; appUrn: AppUrn; command: TaskAction };
+type TaskEvent = { requestId: string; appUrn: AppUrn; command: TaskAction; displayName?: string };
 const limit = 300;
 const retentionDays = 30;
 const active = new Set<TaskRecord['status']>(['queued', 'running', 'unconfirmed']);
@@ -102,6 +102,7 @@ export class TasksService implements OnModuleInit {
             updatedAt: now,
             startedAt: null,
             finishedAt: null,
+            ...(event.displayName ? { displayName: event.displayName } : {}),
           };
           this.tasks.unshift(task);
         }

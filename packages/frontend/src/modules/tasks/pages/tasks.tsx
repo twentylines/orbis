@@ -135,7 +135,7 @@ export default function Tasks() {
                   </span>
                   <span className="task-identity">
                     <strong>
-                      {taskLabels[task.action]} <span>{names.get(task.appUrn) ?? appId}</span>
+                      {taskLabels[task.action]} <span>{names.get(task.appUrn) ?? task.displayName ?? appId}</span>
                     </strong>
                     <small>
                       {storeId} · <time dateTime={task.createdAt}>{new Date(task.createdAt).toLocaleString()}</time>

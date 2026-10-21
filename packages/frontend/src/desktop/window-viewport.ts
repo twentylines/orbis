@@ -12,7 +12,7 @@ const snapshot = () => window.matchMedia(DESKTOP_WINDOW_QUERY).matches;
 export const useDesktopWindows = () => useSyncExternalStore(subscribe, snapshot, () => false);
 
 export function revealPageFocus(element: HTMLElement) {
-  if (window.matchMedia(DESKTOP_WINDOW_QUERY).matches || !element.closest('.desktop-route-window[data-window-navigation="page"]')) return;
+  if (!element.closest('.desktop-route-window[data-window-navigation="page"]')) return;
   element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
   const top = (document.querySelector('.desktop-system-bar')?.getBoundingClientRect().bottom ?? 0) + 8;
   const bottom = (document.querySelector('.desktop-dock')?.getBoundingClientRect().top ?? window.innerHeight) - 8;

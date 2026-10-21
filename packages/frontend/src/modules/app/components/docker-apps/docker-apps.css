@@ -1,0 +1,180 @@
+.docker-apps-section {
+  min-width: 0;
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--desktop-line);
+}
+.docker-apps-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  margin-bottom: 16px;
+}
+.docker-apps-heading > div {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.docker-apps-heading h2 {
+  margin: 0;
+  font-size: var(--orbis-compact-section, 22px);
+}
+.docker-apps-heading p {
+  margin: 8px 0 0;
+  color: var(--desktop-muted);
+}
+.docker-apps-count,
+.docker-apps-empty {
+  margin: 0 0 16px;
+  color: var(--desktop-muted);
+}
+.docker-apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.docker-app-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: clamp(18px, 2vw, 24px);
+  border: 1px solid var(--desktop-line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 7%, var(--desktop-surface));
+}
+.docker-app-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 17%, var(--desktop-surface));
+  color: var(--desktop-ink);
+}
+.docker-app-copy {
+  min-width: 0;
+}
+.docker-app-copy h3 {
+  font-size: 1rem;
+  margin: 0 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.docker-app-copy p {
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.6;
+}
+.docker-app-copy .docker-app-origin {
+  margin-top: 8px;
+}
+.docker-app-card > .btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+.docker-app-removal .modal-title {
+  padding-right: 24px;
+}
+.docker-app-removal {
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+}
+.docker-app-removal :is(.modal-header, .modal-footer) {
+  flex-shrink: 0;
+}
+.docker-app-removal-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 16px;
+}
+.docker-app-removal .docker-app-removal-summary {
+  padding: 0;
+  border: 0;
+}
+.docker-app-review-body {
+  margin-top: 24px;
+}
+.docker-app-review-body h3 {
+  font-size: 1rem;
+  margin: 24px 0 12px;
+}
+.docker-app-review-body h3:first-child {
+  margin-top: 0;
+}
+.docker-app-review-list,
+.docker-app-storage-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.docker-app-review-list li,
+.docker-app-storage-list li {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.docker-app-review-list li > :last-child,
+.docker-app-storage-list li > :first-child {
+  color: var(--desktop-muted);
+}
+.docker-app-identifier {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.docker-app-storage-list code {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--desktop-code-background);
+  color: var(--desktop-ink);
+  font-size: 0.875em;
+}
+.docker-app-removal .modal-footer {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.docker-app-removal .modal-footer > .btn {
+  margin: 0;
+  min-height: 44px;
+  max-width: 100%;
+  line-height: 1.35;
+  white-space: normal;
+}
+@media (max-width: 420px) {
+  .docker-app-card {
+    gap: 14px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .docker-app-removal .modal-footer > .btn {
+    flex: 1 1 100%;
+  }
+}
+.orbis-app-library {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.orbis-app-library.is-empty .docker-apps-section {
+  margin: 0 0 28px;
+  padding-top: 0;
+  border-top: 0;
+}
+.orbis-managed-apps {
+  min-width: 0;
+}

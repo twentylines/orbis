@@ -16,8 +16,11 @@ import { ActionBar } from '@/components/action-bar/action-bar';
 import clsx from 'clsx';
 import { RestartAllButton, StartAllButton, StopAllButton } from '../components/batch-actions-dialog/batch-actions-dialog';
 import { useContainerTelemetry } from '@/desktop/containers';
+import { DockerAppsSection } from '../components/docker-apps/docker-apps';
+import { useAppLauncher } from '@/desktop/app-launcher';
 
 export default () => {
+  const openApp = useAppLauncher();
   const containers = useContainerTelemetry();
   const { data: apps } = useSuspenseQuery({
     ...getInstalledAppsOptions(),
@@ -44,7 +47,14 @@ export default () => {
 
     if (info.available) {
       return (
-        <Link key={app.id} to={`/apps/${storeId}/${appName}`} className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0">
+        <Link
+          key={app.id}
+          to={`/apps/${storeId}/${appName}`}
+          className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0"
+          onClick={(event) => {
+            if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0 && openApp(info)) event.preventDefault();
+          }}
+        >
           <AppTile
             key={info.urn}
             status={app.status}
@@ -68,12 +78,12 @@ export default () => {
     );
   };
 
-  return (
-    <>
+  const library = (
+    <div key="library" className="orbis-managed-apps">
       <details className={clsx('desktop-batch-controls', { 'd-none': installed.length <= 1 })}>
         <summary>
           <IconAdjustmentsHorizontal size={17} aria-hidden="true" />
-          Manage all apps
+          Manage Orbis apps
           <IconChevronDown size={15} aria-hidden="true" />
         </summary>
         <ActionBar>
@@ -90,8 +100,8 @@ export default () => {
       </details>
       {installed.length === 0 && customLinks.length === 0 ? (
         <EmptyPage
-          title="MY_APPS_EMPTY_TITLE"
-          subtitle="MY_APPS_EMPTY_SUBTITLE"
+          title="No apps in the Orbis library"
+          subtitle="Install an app or add a custom app. Other Docker apps are listed separately."
           redirectPath="/app-store"
           actionLabel="MY_APPS_EMPTY_ACTION"
           extraContent={
@@ -131,7 +141,14 @@ export default () => {
           />
         </div>
       )}
+    </div>
+  );
+  const dockerApps = <DockerAppsSection key="docker-apps" />;
+
+  return (
+    <div className={clsx('orbis-app-library', { 'is-empty': installed.length === 0 })}>
+      {installed.length === 0 ? [dockerApps, library] : [library, dockerApps]}
       <AddLinkDialog isOpen={addLinkDisclosure.isOpen} onClose={() => addLinkDisclosure.close()} />
-    </>
+    </div>
   );
 };

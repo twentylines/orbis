@@ -4,6 +4,8 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import clsx from 'clsx';
 import type * as React from 'react';
 import { useRef } from 'react';
+import { IconX } from '@tabler/icons-react';
+import { Button } from '../Button';
 import './Dialog.css';
 
 export type Sizes = 'sm' | 'md' | 'lg' | 'xl';
@@ -80,8 +82,10 @@ const DialogContent = ({
         }}
       >
         {children}
-        <DialogPrimitive.Close className="btn-close" aria-label="Close dialog">
-          <span data-testid="modal-close-button" className="btn-close" aria-hidden="true" />
+        <DialogPrimitive.Close asChild>
+          <Button className="orbis-dialog-close" size="icon" aria-label="Close dialog" data-testid="modal-close-button">
+            <IconX size={20} aria-hidden="true" />
+          </Button>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
     </DialogPortal>
@@ -89,7 +93,7 @@ const DialogContent = ({
 };
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div data-testid="modal-header" className={clsx('modal-header', className)} {...props} />
+  <div data-testid="modal-header" className={clsx('modal-header', 'orbis-dialog-header', className)} {...props} />
 );
 DialogHeader.displayName = 'DialogHeader';
 

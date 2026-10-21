@@ -24,6 +24,7 @@ import {
   type TaskHistory,
 } from './task-history.js';
 import type { ContainerReading, ContainerTelemetry } from './container-telemetry.js';
+import type { DockerApp, DockerApps, DockerAppRemoval } from './docker-apps.js';
 import type { HostFilesystem, HostNetwork, HostDisk, HostTelemetry } from './host-telemetry.js';
 import type { HostHistorySelection, HostHistoryDevice, HostHistoryPoint, HostDeviceHistory } from './host-device-history.js';
 import type { HostProcess, HostProcesses } from './host-processes.js';
@@ -90,6 +91,9 @@ export {
   type TaskHistory,
   type ContainerReading,
   type ContainerTelemetry,
+  type DockerApp,
+  type DockerApps,
+  type DockerAppRemoval,
   type HostFilesystem,
   type HostNetwork,
   type HostDisk,

@@ -8,15 +8,15 @@ Orbis is currently in beta. Migration and recovery of a real homelab have not be
 
 ## Screenshots
 
-![Orbis Monitor](screenshots/live-beta62/monitor.png)
+![Orbis Monitor](screenshots/navigation/monitor.png)
 
-[Workspace](screenshots/live-beta62/workspace.png) · [Applications](screenshots/live-beta62/applications.png) · [App Store](screenshots/live-beta62/app-store.png) · [Appearance](screenshots/live-beta62/appearance.png)
+[Workspace](screenshots/navigation/workspace.png) · [Applications](screenshots/navigation/applications.png) · [App Store](screenshots/navigation/app-store.png)
 
-[Phone workspace](screenshots/live-beta62/phone-workspace.png) · [Phone App Store](screenshots/live-beta62/phone-app-store.png) · [Login](screenshots/live-beta62/phone-login.png)
+[Light app launcher](screenshots/navigation/launcher-light.png) · [Dark app launcher](screenshots/navigation/launcher-dark.png) · [Phone applications](screenshots/navigation/phone-applications.png) · [Phone uninstall review](screenshots/navigation/phone-uninstall.png)
 
-Beta62 on a disposable test server.
+Current source on a disposable test server. This navigation is not yet included in the published beta62 image.
 
-Development backup views with sample data: [Desktop](screenshots/backups/desktop.png) · [Phone restore dialog](screenshots/backups/phone-restore.png).
+[Published beta62 gallery](screenshots/live-beta62/README.md) · [Login](screenshots/live-beta62/phone-login.png) · [Backup views](screenshots/backups/desktop.png)
 
 ## Documentation
 
@@ -27,7 +27,7 @@ Development backup views with sample data: [Desktop](screenshots/backups/desktop
 - [App stores](APP-STORES.md)
 - [App backups](BACKUPS.md)
 - [Monitoring](MONITORING.md)
-- [Desktop windows](DESKTOP-WINDOWS.md)
+- [Navigation and app launchers](DESKTOP-WINDOWS.md)
 - [Development changelog](CHANGELOG.md)
 
 ## Attribution

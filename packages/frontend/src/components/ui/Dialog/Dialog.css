@@ -23,6 +23,29 @@
 .orbis-modal-frame > .modal-status {
   z-index: 1;
 }
+.modal-content .orbis-dialog-header {
+  min-height: 72px;
+  padding-right: 76px;
+}
+.modal-content .orbis-dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--desktop-line, var(--tblr-border-color));
+  border-radius: 11px;
+  color: var(--desktop-ink, var(--tblr-body-color));
+  background: var(--desktop-code-background, var(--tblr-bg-surface));
+  box-shadow: none;
+}
+.orbis-dialog-close svg {
+  display: block;
+}
 .dimmed-background {
   animation-name: dimmedBackground;
   animation-duration: 0.2s;

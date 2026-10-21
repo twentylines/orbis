@@ -9,10 +9,9 @@ import { useTasks, taskIsActive } from '@/desktop/tasks';
 import { CommandSearch } from '@/desktop/command-search';
 import { desktopNavigation as navigation } from '@/desktop/navigation';
 import { useSectionMotion } from '@/desktop/section-motion';
-import { RouteWindow, type RouteWindowControls } from '@/desktop/route-window';
-import { isWindowMinimized, windowSearch } from '@/desktop/window-navigation';
-import { DESKTOP_WINDOW_QUERY, revealPageFocus, useDesktopWindows } from '@/desktop/window-viewport';
-import { desktopWindowIds, type DesktopWindowId } from '@runtipi/common/schemas';
+import { RouteSurface } from '@/desktop/route-surface';
+import { AppLauncherProvider } from '@/desktop/app-launcher';
+import { revealPageFocus } from '@/desktop/window-viewport';
 import { IconApps, IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, useMutation } from '@tanstack/react-query';
 import { useLayoutEffect, useRef, type PropsWithChildren } from 'react';
@@ -46,8 +45,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const { preferences, resolvedMode, update } = useDesktopPreferences();
   const location = useLocation();
   const matches = useMatches();
-  const windowControls = useRef<RouteWindowControls | null>(null);
-  const desktopWindows = useDesktopWindows();
   const dock = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     if (!user.hasSeenWelcome) return;
@@ -63,11 +60,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
       if (element.offsetHeight) root.style.setProperty(property, `${element.offsetHeight}px`);
       if (bar?.offsetHeight) root.style.setProperty(barProperty, `${Math.ceil(Number.parseFloat(getComputedStyle(bar).top) + bar.offsetHeight)}px`);
       const active = document.activeElement;
-      if (
-        !window.matchMedia(DESKTOP_WINDOW_QUERY).matches &&
-        active instanceof HTMLElement &&
-        active.closest('.desktop-route-window[data-window-navigation="page"] .desktop-window-content')
-      )
+      if (active instanceof HTMLElement && active.closest('.desktop-route-window[data-window-navigation="page"] .desktop-window-content'))
         revealPageFocus(active);
     };
     measure();
@@ -99,137 +92,114 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   if (!user.hasSeenWelcome) return <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />;
 
   const current = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
-  const windowId = current?.path.slice(1) as DesktopWindowId;
-  const isTool = desktopWindowIds.includes(windowId);
-  const minimized = desktopWindows && isTool && isWindowMinimized(location.search);
+  const isTool = current && current.path !== '/dashboard';
   return (
-    <div
-      className="desktop orbis-theme"
-      data-desktop-preset={preferences.preset}
-      data-desktop-mode={resolvedMode}
-      data-desktop-density={preferences.density}
-      data-desktop-wallpaper={preferences.wallpaper}
-    >
-      <header className="desktop-system-bar">
-        <Link
-          to="/dashboard"
-          viewTransition={!desktopWindows || !isTool}
-          onClick={(event) => {
-            if (desktopWindows && isTool) {
-              event.preventDefault();
-              windowControls.current?.minimize();
-            }
-          }}
-          className="desktop-brand"
-          aria-label={`Orbis workspace on ${preferences.serverName}`}
-        >
-          <img src="/icons/orbis.svg" width={28} height={28} alt="" />
-          <span className="desktop-product">Orbis</span>
-          <span className="desktop-server-name">{preferences.serverName}</span>
-        </Link>
-        <span className="desktop-current" aria-current="page">
-          {current?.label ?? 'Application'}
-        </span>
-        <div className="desktop-system-actions">
-          <Link
-            to="/tasks"
-            viewTransition
-            className="desktop-task-trigger"
-            aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}`}
-            title="Task centre"
-          >
-            <IconActivity size={20} aria-hidden="true" />
-            {activeTasks > 0 ? <span>{activeTasks}</span> : null}
+    <AppLauncherProvider>
+      <div
+        className="desktop orbis-theme"
+        data-desktop-preset={preferences.preset}
+        data-desktop-mode={resolvedMode}
+        data-desktop-density={preferences.density}
+        data-desktop-wallpaper={preferences.wallpaper}
+      >
+        <header className="desktop-system-bar">
+          <Link to="/dashboard" viewTransition className="desktop-brand" aria-label={`Orbis workspace on ${preferences.serverName}`}>
+            <img src="/icons/orbis.svg" width={28} height={28} alt="" />
+            <span className="desktop-product">Orbis</span>
+            <span className="desktop-server-name">{preferences.serverName}</span>
           </Link>
-          <button
-            type="button"
-            className="desktop-mode-toggle"
-            aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
-            aria-pressed={resolvedMode === 'dark'}
-            title={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
-            onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
-          >
-            {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
-            <span>{resolvedMode === 'dark' ? 'Light' : 'Dark'}</span>
-          </button>
-          <CommandSearch />
-          <output
-            className="desktop-connection"
-            data-connection-kind={connectionStatus === 'connected' && userSettings.internalIp ? 'address' : 'status'}
-            data-connection-state={connectionStatus}
-            aria-label={connectionStatus === 'connected' && userSettings.internalIp ? `Connected to server ${serverAddress}` : connectionLabel}
-            title={connectionLabel}
-          >
-            <span className={`desktop-connection-dot is-${connectionStatus}`} aria-hidden="true" />
-            <span className="desktop-connection-label">{connectionLabel}</span>
-          </output>
-          {busy > 0 ? (
-            <output className="desktop-operation">
-              {busy} request{busy === 1 ? '' : 's'} in progress
-            </output>
-          ) : null}
-          <button
-            type="button"
-            className="desktop-icon-button"
-            aria-label="Log out"
-            disabled={!isLoggedIn || logout.isPending || busy > 0}
-            onClick={() => logout.mutate({})}
-          >
-            <IconLogout size={20} aria-hidden="true" />
-          </button>
-        </div>
-      </header>
-
-      <main className="desktop-main" id="desktop-content">
-        {isTool ? (
-          <RouteWindow
-            key={windowId}
-            id={windowId}
-            label={current?.label ?? 'Application'}
-            icon={current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}
-            controlsRef={windowControls}
-          >
-            {!hasPageHeading && location.pathname.split('/').filter(Boolean).length > 1 ? (
-              <div className="desktop-route-title">
-                <PageTitle apps={apps} />
-              </div>
-            ) : null}
-            {children}
-          </RouteWindow>
-        ) : (
-          <div className="desktop-view desktop-view-home">{children}</div>
-        )}
-      </main>
-
-      <nav ref={dock} className="desktop-dock" aria-label="Desktop tools">
-        {navigation
-          .filter((item) => item.path !== '/tasks')
-          .map(({ path, label, Icon, ...item }) => (
+          <span className="desktop-current" aria-current="page">
+            {current?.label ?? 'Application'}
+          </span>
+          <div className="desktop-system-actions">
             <Link
-              key={path}
-              to={
-                minimized && current?.path === path
-                  ? { pathname: location.pathname, search: windowSearch(location.search, false), hash: location.hash }
-                  : path
-              }
-              viewTransition={!(desktopWindows && isTool && path === '/dashboard') && !(minimized && current?.path === path)}
-              onClick={(event) => {
-                if (desktopWindows && isTool && path === '/dashboard') {
-                  event.preventDefault();
-                  windowControls.current?.minimize();
-                }
-              }}
-              onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
-              className={`desktop-dock-item ${current?.path === path ? (minimized ? 'is-minimized' : 'is-active') : ''}`}
-              aria-label={label}
-              aria-current={current?.path === path ? 'page' : undefined}
-              title={minimized && current?.path === path ? `Restore ${label}` : label}
+              to="/tasks"
+              viewTransition
+              className="desktop-task-trigger"
+              aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}`}
+              title="Task centre"
             >
-              <Icon size={22} stroke={1.7} aria-hidden="true" />
-              <span>{'dockLabel' in item ? item.dockLabel : label}</span>
+              <IconActivity size={20} aria-hidden="true" />
+              {activeTasks > 0 ? <span>{activeTasks}</span> : null}
             </Link>
-          ))}
-      </nav>
-    </div>
+            <button
+              type="button"
+              className="desktop-mode-toggle"
+              aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+              aria-pressed={resolvedMode === 'dark'}
+              title={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+              onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
+            >
+              {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
+              <span>{resolvedMode === 'dark' ? 'Light' : 'Dark'}</span>
+            </button>
+            <CommandSearch />
+            <output
+              className="desktop-connection"
+              data-connection-kind={connectionStatus === 'connected' && userSettings.internalIp ? 'address' : 'status'}
+              data-connection-state={connectionStatus}
+              aria-label={connectionStatus === 'connected' && userSettings.internalIp ? `Connected to server ${serverAddress}` : connectionLabel}
+              title={connectionLabel}
+            >
+              <span className={`desktop-connection-dot is-${connectionStatus}`} aria-hidden="true" />
+              <span className="desktop-connection-label">{connectionLabel}</span>
+            </output>
+            {busy > 0 ? (
+              <output className="desktop-operation">
+                {busy} request{busy === 1 ? '' : 's'} in progress
+              </output>
+            ) : null}
+            <button
+              type="button"
+              className="desktop-icon-button"
+              aria-label="Log out"
+              disabled={!isLoggedIn || logout.isPending || busy > 0}
+              onClick={() => logout.mutate({})}
+            >
+              <IconLogout size={20} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <main className="desktop-main" id="desktop-content">
+          {isTool ? (
+            <RouteSurface
+              key={current.path}
+              label={current?.label ?? 'Application'}
+              icon={current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}
+            >
+              {!hasPageHeading && location.pathname.split('/').filter(Boolean).length > 1 ? (
+                <div className="desktop-route-title">
+                  <PageTitle apps={apps} />
+                </div>
+              ) : null}
+              {children}
+            </RouteSurface>
+          ) : (
+            <div className="desktop-view desktop-view-home">{children}</div>
+          )}
+        </main>
+
+        <nav ref={dock} className="desktop-dock" aria-label="Main navigation">
+          {navigation
+            .filter((item) => item.path !== '/tasks')
+            .map(({ path, label, Icon, ...item }) => (
+              <Link
+                key={path}
+                to={path}
+                viewTransition
+                onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
+                className={`desktop-dock-item ${current?.path === path ? 'is-active' : ''}`}
+                aria-label={label}
+                aria-current={current?.path === path ? 'page' : undefined}
+                title={label}
+              >
+                <Icon size={22} stroke={1.7} aria-hidden="true" />
+                <span>{'dockLabel' in item ? item.dockLabel : label}</span>
+              </Link>
+            ))}
+        </nav>
+      </div>
+    </AppLauncherProvider>
   );
 };

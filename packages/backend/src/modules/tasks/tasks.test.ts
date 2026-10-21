@@ -76,6 +76,14 @@ describe('persistent lifecycle history', () => {
     expect((await reloaded.read()).tasks[0]?.status).toBe('failed');
   });
 
+  it('preserves a detected app name for task history after its container is removed', async () => {
+    const pending = { ...event(), command: 'uninstall' as const, displayName: 'Photos and documents' };
+    await service.enqueue(pending);
+    await service.finish(pending, true);
+    const reloaded = new TasksService(config, logger);
+    expect((await reloaded.read()).tasks[0]?.displayName).toBe('Photos and documents');
+  });
+
   it('preserves corrupt history and shows storage unavailability while new operations continue in memory', async () => {
     await fs.mkdir(path.dirname(historyFile()), { recursive: true });
     await fs.writeFile(historyFile(), 'invalid-history');

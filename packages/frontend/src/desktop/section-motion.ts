@@ -9,6 +9,8 @@ export function useSectionMotion() {
   const location = useLocation();
   const navigation = useNavigation();
   const previous = useRef(location.pathname);
+  const fallback = useRef<Animation | undefined>(undefined);
+  useLayoutEffect(() => () => fallback.current?.cancel(), []);
   useLayoutEffect(() => {
     const next = navigation.location?.pathname ?? location.pathname;
     const from = sectionIndex(previous.current);
@@ -21,7 +23,8 @@ export function useSectionMotion() {
       !document.startViewTransition &&
       !window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ) {
-      document.querySelector('.desktop-view')?.animate(
+      fallback.current?.cancel();
+      fallback.current = document.querySelector('.desktop-view')?.animate(
         [
           { opacity: 0, transform: `translateX(${to >= from ? 48 : -48}px)` },
           { opacity: 1, transform: 'none' },

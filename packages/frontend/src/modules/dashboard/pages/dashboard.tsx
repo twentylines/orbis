@@ -7,6 +7,7 @@ import { useContainerTelemetry } from '@/desktop/containers';
 import { DockerHealth } from '@/components/docker-health/docker-health';
 import { ContainerResources } from '@/components/container-resources/container-resources';
 import { Button } from '@/components/ui/Button';
+import { useAppLauncher } from '@/desktop/app-launcher';
 import { Switch } from '@/components/ui/Switch';
 import { useTasks, taskIsActive, taskLabels, taskStates } from '@/desktop/tasks';
 import {
@@ -49,6 +50,7 @@ const rate = (value: number | null) => {
 };
 
 export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
+  const openApp = useAppLauncher();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) heading.current?.focus({ preventScroll: true });
@@ -214,6 +216,10 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
                     key={info.urn}
                     to={`/apps/${storeId}/${appId}`}
                     className="workspace-app"
+                    onClick={(event) => {
+                      if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0 && openApp(info))
+                        event.preventDefault();
+                    }}
                     aria-label={`${info.name}, ${app.status}${appUpdate ? ', update available' : ''}${workspace.pinnedApps.includes(info.urn) ? ', pinned' : ''}`}
                   >
                     <AppLogo urn={info.urn} size={54} alt="" />
@@ -325,7 +331,7 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
         ) : tasks.data?.tasks.length ? (
           <ol className="workspace-recent-tasks">
             {tasks.data.tasks.slice(0, 2).map((task) => {
-              const name = installed.find(({ info }) => info.urn === task.appUrn)?.info.name ?? task.appUrn.split(':')[0];
+              const name = installed.find(({ info }) => info.urn === task.appUrn)?.info.name ?? task.displayName ?? task.appUrn.split(':')[0];
               const title = `${taskLabels[task.action]} ${name}`;
               const time = new Date(task.updatedAt).toLocaleTimeString();
               return (

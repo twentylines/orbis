@@ -40,6 +40,7 @@ import { CustomAppsModule } from './modules/custom-apps/custom-apps.module';
 import { DesktopPreferencesModule } from './modules/desktop-preferences/desktop-preferences.module';
 import { HostUpdatesModule } from './modules/host-updates/host-updates.module';
 import { installationMiddleware } from './common/installation.middleware';
+import { DockerAppsModule } from './modules/docker-apps/docker-apps.module';
 
 const DEFAULT_THROTTLE_TTL = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 300;
@@ -74,6 +75,7 @@ const imports: (DynamicModule | typeof I18nModule)[] = [
   AppConfigModule,
   DesktopPreferencesModule,
   HostUpdatesModule,
+  DockerAppsModule,
 ];
 
 const { NODE_ENV } = process.env;
