@@ -1,11 +1,16 @@
 .cluster-rack,
 .cluster-selector {
   --cluster-base: #102421;
-  --cluster-base: rgb(from var(--desktop-panel-dark) r g b / 1);
   --cluster-machine: color-mix(in srgb, var(--desktop-preset-tint) 35%, var(--cluster-base));
   --cluster-side: color-mix(in srgb, var(--desktop-preset-tint) 18%, var(--cluster-base));
   --cluster-top: color-mix(in srgb, var(--desktop-preset-tint) 65%, var(--cluster-base));
   --cluster-muted: color-mix(in srgb, var(--desktop-chrome-ink) 76%, var(--cluster-machine));
+}
+@supports (color: rgb(from red r g b / 1)) {
+  .cluster-rack,
+  .cluster-selector {
+    --cluster-base: rgb(from var(--desktop-panel-dark) r g b / 1);
+  }
 }
 .cluster-rack {
   display: grid;
@@ -195,7 +200,9 @@
 .cluster-deck-slot:not([data-front]) .cluster-module-heading > svg {
   display: none;
 }
-.cluster-rack-stage:not([data-wide]) .cluster-deck-slot:not([data-front]) :is(.cluster-module-heading, .cluster-module-address, .cluster-module-meters, .cluster-module-footer) {
+.cluster-rack-stage:not([data-wide])
+  .cluster-deck-slot:not([data-front])
+  :is(.cluster-module-heading, .cluster-module-address, .cluster-module-meters, .cluster-module-footer) {
   visibility: hidden;
 }
 .cluster-module-address {
