@@ -33,7 +33,44 @@ The installer needs Docker control plus access to the installation, external dat
 
 A separate host executor must handle the transaction so replacing the dashboard cannot stop its own installer. Separate installations can coexist with isolated ports, container names and data, but the replacement flow must stop the old controller before claiming its resources. Two controllers must never use the same writable database or installation tree.
 
-The complete browser setup and both replacement transactions are not available yet. The commands below prepare app containers only; they do not perform a takeover or create a backup.
+The browser setup and start-fresh replacement are not available yet. The Linux Keep-data executor below replaces a compatible CLI installation; the remaining commands are separately guarded installation tools.
+
+## Replace Runtipi and keep data
+
+`scripts/orbis-install-replace.py` operates on a running Runtipi CLI 4.10.1 installation. Run it as root on the Linux Docker host, with Docker Engine API 1.44 or newer and the storage recovery tools described below. Download the published release's `release-manifest.json`, verify it with `orbis-release-check.py`, and pull the exact verified image digest before reviewing replacement. Tags alone are not accepted.
+
+The review verifies GitHub/GHCR release identity, the running controller and persistent Compose configuration. A temporary image probe reads the target's migration files without host mounts, network access or published ports. The installed PostgreSQL migration history must be an exact prefix of that image's history. Pending app operations, queued commands, unknown migration hashes and newer databases require review before downtime; no queue messages are purged.
+
+Choose a new private backup and journal outside every storage source:
+
+```sh
+umask 077
+python3 scripts/orbis-install-replace.py review ROOT \
+  --docker-context CONTEXT --manifest MANIFEST.json \
+  --backup BUNDLE --journal JOURNAL > REPLACEMENT-REVIEW.json
+```
+
+After separately stopping native and remote storage writers:
+
+```sh
+python3 scripts/orbis-install-replace.py apply ROOT \
+  --docker-context CONTEXT --journal JOURNAL --review REPLACEMENT-REVIEW.json \
+  --confirm-root ROOT --host-writers-stopped
+```
+
+The executor checkpoints the stopped installation and retains the original controller for rollback. Orbis first boots in hold mode, then verifies resume mode without publishing the dashboard's ports. Apps and the reverse proxy remain stopped during these checks. The persistent override changes the controller image and build identity; custom runtime mounts, network settings and resource limits are preserved.
+
+Before app containers or public dashboard ports become available, the journal records `committing`. Recovery before that point restores the original controller and verified backup. Recovery after that point finishes installing Orbis, preserving newly accepted app writes. Success removes the stopped original controller, restores service restart policies and records the installation for the host updater. The backup remains private on the host. Installer phase flags are absent from the final controller and persistent Compose override.
+
+For an interrupted or failed operation:
+
+```sh
+python3 scripts/orbis-install-replace.py recover ROOT \
+  --docker-context CONTEXT --journal JOURNAL \
+  --confirm-root ROOT --host-writers-stopped
+```
+
+The journal determines rollback or forward recovery. Completed and recovered journals cannot be replayed. Preserve the journal and backup if configuration drift prevents recovery. This executor does not perform a fresh account reset, install the optional host administration service, or bootstrap an empty server; the complete installer will coordinate those steps.
 
 ## Prepare app containers for an installation transaction
 

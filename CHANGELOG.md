@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace a compatible Runtipi controller while retaining accounts, apps and data, with verified image migration history, unpublished hold/resume checks and a retained original controller before activation.
+- Recover interrupted replacements without rewinding app writes after public activation begins.
 - Coordinate installation checkpoints and recovery across the original controller, apps, database and queue, retaining their running states and restart policies after interruption.
 - Keep the installation lock held by native copies after the installer exits, reject storage hard links crossing backup boundaries, and verify the controller's local Docker socket.
 - Preserve subsecond file and directory timestamps in app backups and restores, and verify the required archive and metadata tools during image builds.
