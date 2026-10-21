@@ -62,6 +62,20 @@ class OrbisReleaseCheckTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "platform"):
             CHECK.verify_index(body, digest, digest)
 
+    def test_checked_release_reports_the_published_installation_protocol(self):
+        body = json.dumps({"mediaType": "application/vnd.oci.image.index.v1+json", "manifests": [
+            {"platform": {"os": "linux", "architecture": "amd64"}},
+            {"platform": {"os": "linux", "architecture": "arm64"}},
+        ]}).encode()
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        manifest = {"schema": "orbis.release.v1", "image": CHECK.PLAN.IMAGE, "tag": TAG,
+                    "commit": "a" * 40, "digest": digest, "runtipiCompatibility": "4.10.1",
+                    "installationProtocol": CHECK.PLAN.INSTALLATION_PROTOCOL}
+        with patch.object(CHECK, "published_release", return_value=(ASSET, manifest["commit"], None, "Notes")), \
+             patch.object(CHECK, "read_json", side_effect=[manifest, {"token": "public-pull-token"}]), \
+             patch.object(CHECK, "read_url", return_value=(body, {"docker-content-digest": digest})):
+            self.assertEqual(CHECK.check(TAG)["installationProtocol"], CHECK.PLAN.INSTALLATION_PROTOCOL)
+
 
 if __name__ == "__main__":
     unittest.main()

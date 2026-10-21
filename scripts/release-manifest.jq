@@ -5,5 +5,6 @@
   commit: $commit,
   digest: $digest,
   platforms: ["linux/amd64", "linux/arm64"],
-  runtipiCompatibility: "4.10.1"
+  runtipiCompatibility: "4.10.1",
+  installationProtocol: "orbis.installation-state.v1"
 }

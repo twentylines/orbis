@@ -74,6 +74,7 @@ ARG ORBIS_VERSION=development
 ARG ORBIS_COMMIT
 ENV ORBIS_VERSION=${ORBIS_VERSION}
 ENV ORBIS_COMMIT=${ORBIS_COMMIT}
+LABEL io.orbis.installation-protocol="orbis.installation-state.v1"
 
 WORKDIR /app
 

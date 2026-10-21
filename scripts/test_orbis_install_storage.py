@@ -233,6 +233,14 @@ class InstallationStorageTests(unittest.TestCase):
         with self.assertRaisesRegex(STORAGE.StorageError, "symlink"):
             STORAGE.source_identity(alias)
 
+    def test_kernel_and_device_mounts_are_runtime_inputs_instead_of_backup_data(self):
+        for source in ["/proc", "/sys", "/dev/dri", "/dev/null"]:
+            for writable in [True, False]:
+                mount = {"Type": "bind", "Source": source, "Destination": "/host-input", "RW": writable}
+                self.assertIsNone(STORAGE.mount_source(self.docker, mount))
+        self.docker.apps[FIXTURES.identifier("app-0")]["mounts"].append({"Type": "bind", "Source": "/proc", "Destination": "/host/proc", "RW": False})
+        self.assertEqual(len(self.review()["resources"]), 4)
+
     def test_partial_copy_corruption_missing_resource_and_manifest_edits_are_not_verified(self):
         self.capture()
         target = self.bundle / "storage.json"

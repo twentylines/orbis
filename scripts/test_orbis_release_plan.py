@@ -36,6 +36,16 @@ class OrbisReleasePlanTests(unittest.TestCase):
                 PLAN.compose_config(Path("/tmp"), [Path("/tmp/docker-compose.yml")])
         self.assertNotIn("private-value", str(failure.exception))
 
+    def test_installation_requires_an_explicit_supported_protocol_without_breaking_legacy_updates(self):
+        self.assertEqual(PLAN.validate_manifest(MANIFEST), MANIFEST)
+        with self.assertRaisesRegex(ValueError, "does not declare"):
+            PLAN.require_installation_protocol(MANIFEST)
+        supported = {**MANIFEST, "installationProtocol": PLAN.INSTALLATION_PROTOCOL}
+        self.assertEqual(PLAN.require_installation_protocol(supported), supported)
+        for protocol in [None, 1, "normal", "orbis.installation-state.v2"]:
+            with self.subTest(protocol=protocol), self.assertRaisesRegex(ValueError, "unsupported installation protocol"):
+                PLAN.validate_manifest({**MANIFEST, "installationProtocol": protocol})
+
     @unittest.skipUnless(shutil.which("docker"), "Docker Compose is unavailable")
     def test_plan_keeps_core_services_and_user_override(self):
         with tempfile.TemporaryDirectory() as folder:

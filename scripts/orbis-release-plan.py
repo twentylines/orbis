@@ -20,6 +20,7 @@ PREFLIGHT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREFLIGHT)
 
 IMAGE = "ghcr.io/twentylines/orbis"
+INSTALLATION_PROTOCOL = "orbis.installation-state.v1"
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$")
@@ -38,7 +39,16 @@ def validate_manifest(raw: object) -> dict[str, str]:
         raise ValueError("release manifest has an invalid tag, commit, or digest")
     if raw["runtipiCompatibility"].removeprefix("v") != "4.10.1":
         raise ValueError("release manifest does not target the 4.10.1 compatibility base")
+    if "installationProtocol" in raw and raw["installationProtocol"] != INSTALLATION_PROTOCOL:
+        raise ValueError("release manifest has an unsupported installation protocol")
     return raw
+
+
+def require_installation_protocol(raw: object) -> dict[str, str]:
+    manifest = validate_manifest(raw)
+    if manifest.get("installationProtocol") != INSTALLATION_PROTOCOL:
+        raise ValueError("this release does not declare installer hold and resume support")
+    return manifest
 
 
 def override_yaml(manifest: dict[str, str]) -> str:

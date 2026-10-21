@@ -178,6 +178,7 @@ def verify_release(target: dict[str, str]) -> None:
         published.get("commit") != target["commit"]
         or published.get("image") != expected_image
         or published.get("runtipiCompatibility") != target["runtipiCompatibility"]
+        or ("installationProtocol" in target and published.get("installationProtocol") != target["installationProtocol"])
     ):
         raise ValueError("target manifest does not match the verified GitHub and GHCR release")
 

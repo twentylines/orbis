@@ -116,6 +116,15 @@ class OrbisHostUpdateTests(unittest.TestCase):
             UPDATE.HOST.saved_state(self.root), UPDATE.HOST.installation_fingerprint(self.root, TARGET, "test-daemon")
         )
 
+    def test_installer_capability_must_match_the_published_release(self):
+        target = {**TARGET, "installationProtocol": UPDATE.HOST.PLAN.INSTALLATION_PROTOCOL}
+        with self.assertRaisesRegex(ValueError, "verified GitHub and GHCR release"):
+            UPDATE.verify_release(target)
+        published = {"commit": TARGET["commit"], "image": TARGET_IMAGE, "runtipiCompatibility": "4.10.1", "installationProtocol": target["installationProtocol"]}
+        with mock.patch.object(UPDATE.CHECK, "check", return_value=published):
+            UPDATE.verify_release(target)
+            UPDATE.verify_release(TARGET)
+
     def test_failed_target_start_restores_previous_database_and_core(self):
         fake = FakeDocker(self.root, fail_target_start=True)
         with mock.patch.object(UPDATE.HOST, "docker", side_effect=fake):

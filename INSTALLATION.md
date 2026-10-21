@@ -65,7 +65,7 @@ This step neither stops the controller nor proves data is ready for backup. The 
 
 ## Capture installation storage
 
-The source includes a Linux host helper for collecting the installation tree, external bind-mounted directories and files, and accessible local Docker volumes into one private backup. Nested sources are copied once. Temporary filesystems, the Docker control socket and read-only host timezone inputs are excluded.
+The source includes a Linux host helper for collecting the installation tree, external bind-mounted directories and files, and accessible local Docker volumes into one private backup. Nested sources are copied once. Temporary filesystems, kernel/device mounts, the Docker control socket and read-only host timezone inputs are excluded.
 
 Run as root on the Docker host. `BUNDLE` must be a new destination in a private directory outside every source. Save the review privately:
 

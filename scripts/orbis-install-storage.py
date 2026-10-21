@@ -51,6 +51,9 @@ def mount_source(reader, mount: dict) -> Path | None:
     if kind not in {"bind", "volume"} or type(mount.get("RW")) is not bool:
         raise StorageError("Docker returned unsupported storage or mount permissions")
     if kind == "bind":
+        source_path = DETECT.path(mount.get("Source"))
+        if source_path and any(Path(source_path).is_relative_to(base) for base in ("/proc", "/sys", "/dev")):
+            return None
         if mount.get("Destination") in {"/var/run/docker.sock", "/run/docker.sock"} and mount.get("Source") in {"/var/run/docker.sock", "/run/docker.sock"}:
             return None
         if mount.get("RW") is False and mount.get("Source") in {"/etc/localtime", "/etc/timezone"}:

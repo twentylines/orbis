@@ -147,6 +147,7 @@ def check(tag: str) -> dict[str, object]:
         "commit": manifest["commit"],
         "image": f"{manifest['image']}@{manifest['digest']}",
         "runtipiCompatibility": manifest["runtipiCompatibility"],
+        "installationProtocol": manifest.get("installationProtocol"),
         "platforms": platforms,
         "publishedAt": published_at,
         "releaseUrl": f"https://github.com/twentylines/orbis/releases/tag/{quote(tag)}",
