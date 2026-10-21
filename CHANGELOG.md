@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refresh installed Orbis build details after a core update completes.
+
 - Retain the editable initial server name across sign-in and first-use settings.
 
 - Fix piped interactive installation with separate terminal input/output streams and a real controlling-terminal regression check.

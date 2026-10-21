@@ -135,6 +135,7 @@ function LocalUpdates() {
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [selectedPackages, setSelectedPackages] = useState<string[]>([]);
   const [reviewPackagePlan, setReviewPackagePlan] = useState<HostPackagePlan | null>(null);
+  const lastRefreshedCoreJob = useRef<string | null>(null);
   const lastRefreshedPackageJob = useRef<string | null>(null);
   const apps = useQuery(getInstalledAppsOptions());
   const build = useQuery({ queryKey: ['orbis-installed-build'], queryFn: ({ signal }) => loadInstalledBuild(signal), staleTime: 30 * 60 * 1000 });
@@ -233,6 +234,12 @@ function LocalUpdates() {
   const matchingSelection =
     matchingPackages.length > 0 && matchingPackages.length <= 250 && matchingPackages.every((item) => selectedPackages.includes(item.name));
   const matchingSelectionExceedsLimit = new Set([...selectedPackages, ...matchingPackages.map((item) => item.name)]).size > 250;
+  useEffect(() => {
+    if (job?.state === 'complete' && job.id !== lastRefreshedCoreJob.current) {
+      lastRefreshedCoreJob.current = job.id;
+      void build.refetch();
+    }
+  }, [job?.id, job?.state, build.refetch]);
   useEffect(() => {
     const completedId = packageJobState === 'complete' ? packageJob.data?.job?.id : null;
     if (completedId && completedId !== lastRefreshedPackageJob.current) {
