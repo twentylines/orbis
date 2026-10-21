@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Apply the shared appearance, mode controls and responsive spacing to the first-run welcome screen.
+- Keep authentication focus markers clear of the viewport edge with enlarged text.
+- Refresh the navigation gallery from the published beta63 image.
+
+## Beta63 — 21 October 2026
+
 - Navigate between full pages from the dock with directional slide transitions.
 - Open registered apps through lightweight desktop launchers; use normal app pages on smaller screens.
 - Minimize app launchers into a compact tray above the dock, with spring transitions, keyboard restore and reduced-motion support. Stop polling minimized app details.

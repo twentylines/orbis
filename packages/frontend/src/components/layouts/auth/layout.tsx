@@ -8,6 +8,18 @@ import { IconMoon, IconSun } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
 import type { PropsWithChildren } from 'react';
 
+function revealAuthFocus(target: EventTarget) {
+  if (!(target instanceof HTMLElement)) return;
+  requestAnimationFrame(() => {
+    if (document.activeElement !== target) return;
+    const bounds = target.getBoundingClientRect();
+    const inset = 12;
+    const bottom = window.innerHeight - inset;
+    const delta = bounds.top < inset ? bounds.top - inset : bounds.bottom > bottom ? bounds.bottom - bottom : 0;
+    if (delta) window.scrollBy({ top: delta, behavior: 'instant' });
+  });
+}
+
 export const AuthLayout = ({ children }: PropsWithChildren) => {
   const locale = i18next.language;
 
@@ -19,6 +31,7 @@ export const AuthLayout = ({ children }: PropsWithChildren) => {
       data-desktop-preset={preferences.preset}
       data-desktop-mode={resolvedMode}
       data-desktop-wallpaper={preferences.wallpaper}
+      onFocusCapture={(event) => revealAuthFocus(event.target)}
     >
       <div className="desktop-auth-toolbar">
         <Button

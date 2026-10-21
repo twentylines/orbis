@@ -137,6 +137,32 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   color: var(--desktop-muted);
   font-size: 12px;
 }
+.desktop-welcome {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.desktop-welcome :is(h2, h3, p, .orbis-switch) {
+  margin: 0;
+}
+.desktop-welcome h3 {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.desktop-welcome-community {
+  display: grid;
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1px solid var(--desktop-line);
+}
+.desktop-welcome-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.desktop-welcome-links > .btn {
+  flex: 1 1 140px;
+}
 .desktop-auth[data-desktop-mode="dark"][data-desktop-preset] {
   background-color: #283732;
   background-image: linear-gradient(rgba(7, 19, 18, 0.46), rgba(7, 19, 18, 0.65)), var(--desktop-wallpaper);

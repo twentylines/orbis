@@ -22,4 +22,4 @@ On phones, tablets and short screens, app cards open their normal details page. 
 
 App addresses use the installed port, configured domain or local domain, TLS port and URL suffix. Apps that are stopped or have no web interface do not receive an active launch link. Existing account window placement data is retained for compatibility and is not used for section navigation.
 
-This navigation is in current source. The published `v0.1.0-beta.62` image still has the previous desktop window behavior.
+Page navigation and the minimized launcher tray are included in `v0.1.0-beta.63` and later.

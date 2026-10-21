@@ -90,7 +90,7 @@ The enclosing installation executor is responsible for consistent database and q
 
 ## Controller hold and resume modes
 
-The backend source includes an installer mode. This mode is not included in the published `v0.1.0-beta.62` image. An executor must select an image that implements the protocol before relying on it.
+`v0.1.0-beta.63` and later include the `orbis.installation-state.v1` controller protocol. The release manifest and image label declare this capability; an executor must verify it before relying on hold or resume mode. The complete replacement installer remains in development.
 
 Set both `ORBIS_INSTALLER_TRANSACTION` to a UUID v4 and `ORBIS_INSTALLER_PHASE` to `hold` or `resume` in the container environment. Incomplete or invalid input prevents startup. These values are captured before loading saved environment files; a saved file cannot release a held process. Changing the phase requires recreating the controller. There is no HTTP operation to release it.
 
@@ -102,7 +102,7 @@ In `resume`, pending restores prevent startup. App queue consumers remain disabl
 
 ## Detected Docker apps
 
-The current source adds a **Docker apps** section to Apps. This feature is not included in the published `v0.1.0-beta.62` image.
+`v0.1.0-beta.63` and later include a **Docker apps** section in Apps.
 
 Containers belonging to a Compose project are grouped using their project and configuration location. Other containers appear individually. Orbis infrastructure and apps already registered in the Orbis library are excluded from this list. Runtipi-labelled containers without an imported app record are identified as needing import; this list does not reconstruct missing Runtipi configuration from an image name.
 

@@ -1,6 +1,8 @@
-# Navigation preview
+# Navigation and app launchers
 
-Current Orbis source on a disposable test server, 21 October 2026. These changes are not included in the published `v0.1.0-beta.62` image. Captures use sample apps and native browser rendering.
+Published `v0.1.0-beta.63`, captured on a disposable server on 21 October 2026. These are original browser captures using sample apps. The running demo was installed through Orbis; the five other sample app records have no containers.
+
+This gallery shows page navigation, desktop launchers, the minimized-app tray and phone app management. It does not demonstrate a real homelab migration.
 
 - [Workspace](workspace.png)
 - [Applications](applications.png)

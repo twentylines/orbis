@@ -1,7 +1,7 @@
 import { acknowledgeWelcomeMutation } from '@/api-client/@tanstack/react-query.gen';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
-import { getLogo } from '@/lib/theme/theme';
+import { AuthLayout } from '@/components/layouts/auth/layout';
 import { IconBrandDiscord, IconBrandGithub } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -22,53 +22,45 @@ export const Welcome = ({ allowErrorMonitoring }: Props) => {
   });
 
   return (
-    <div className="page page-center">
-      <div className="container container-tight py-4">
-        <div className="text-center mb-4">
-          <img alt="Orbis logo" src={getLogo(true)} height={50} width={50} style={{ maxWidth: '100%', height: 'auto' }} />
-        </div>
-        <div className="card card-md">
-          <div className="card-body">
-            <h2 className="h2 text-center mb-4">Welcome to Orbis</h2>
-            <p className="text-center mb-4">
-              Orbis is built on the free and open source Runtipi project. Please consider supporting the Runtipi maintainers by{' '}
-              <a target="_blank" href="https://github.com/runtipi/runtipi?sponsor=1" rel="noreferrer">
-                donating
-              </a>{' '}
-              or by{' '}
-              <a target="_blank" rel="noreferrer" href="https://github.com/runtipi/runtipi">
-                contributing to the codebase
-              </a>
-              .
-              <br />
-              <br />
-              Opt-in error reporting uses the inherited Runtipi integration. Reports from Orbis may reach the upstream service.
-            </p>
-            <div className="d-flex flex-column align-items-center">
-              <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Enable error reporting" />
-              <Button
-                intent="primary"
-                className="mt-3"
-                onClick={() => acknowledge.mutate({ body: { allowErrorMonitoring: errorMonitoring } })}
-                loading={acknowledge.isPending || acknowledge.isPending}
-                disabled={acknowledge.isPending || acknowledge.isPending}
-              >
-                Save and open dashboard
-              </Button>
-            </div>
-            <div className="hr-text">Runtipi community</div>
-            <div className="row justify-content-center gap-2">
-              <Button onClick={() => openLink('https://github.com/runtipi/runtipi/discussions')}>
-                <IconBrandGithub /> Github
-              </Button>
-              <Button onClick={() => openLink('https://discord.gg/WGW7YP7E5j')}>
-                <IconBrandDiscord />
-                Discord
-              </Button>
-            </div>
+    <AuthLayout>
+      <section className="desktop-welcome" aria-labelledby="welcome-title">
+        <h2 id="welcome-title" className="h2">
+          Before you start
+        </h2>
+        <p>Optional error reports use the inherited Runtipi integration and may be sent to its upstream service.</p>
+        <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Enable error reporting" />
+        <Button
+          intent="primary"
+          onClick={() => acknowledge.mutate({ body: { allowErrorMonitoring: errorMonitoring } })}
+          loading={acknowledge.isPending}
+          disabled={acknowledge.isPending}
+        >
+          Save and open dashboard
+        </Button>
+        <div className="desktop-welcome-community">
+          <h3>Runtipi community</h3>
+          <p>
+            Support the upstream maintainers by{' '}
+            <a target="_blank" href="https://github.com/runtipi/runtipi?sponsor=1" rel="noreferrer">
+              donating
+            </a>{' '}
+            or by{' '}
+            <a target="_blank" rel="noreferrer" href="https://github.com/runtipi/runtipi">
+              contributing to the codebase
+            </a>
+            .
+          </p>
+          <div className="desktop-welcome-links">
+            <Button onClick={() => openLink('https://github.com/runtipi/runtipi/discussions')}>
+              <IconBrandGithub aria-hidden="true" /> GitHub
+            </Button>
+            <Button onClick={() => openLink('https://discord.gg/WGW7YP7E5j')}>
+              <IconBrandDiscord aria-hidden="true" />
+              Discord
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </AuthLayout>
   );
 };
