@@ -15,6 +15,7 @@
 - Apply the shared appearance, mode controls and responsive spacing to the first-run welcome screen.
 - Keep authentication focus markers clear of the viewport edge with enlarged text.
 - Refresh the navigation gallery with the current source build.
+- Keep dialog status accents inside the rounded frame.
 
 ## Beta63 — 21 October 2026
 

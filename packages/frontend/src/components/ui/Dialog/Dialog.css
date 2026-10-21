@@ -21,6 +21,9 @@
   width: 100%;
 }
 .orbis-modal-frame > .modal-status {
+  top: 1px;
+  right: 20px;
+  left: 20px;
   z-index: 1;
 }
 .modal-content .orbis-dialog-header {
