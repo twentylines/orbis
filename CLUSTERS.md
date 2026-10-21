@@ -13,6 +13,8 @@ Use HTTPS with a certificate the admin server trusts. HTTP requires explicit con
 
 The server switcher appears beside logout once another server is paired. Its rack selector offers individual servers and a merged dashboard. Monitor switches all readings and histories to the chosen server. The merged Applications view labels apps by server and launches their actual server address. Desktop launchers retain separate identities for identical apps on different hosts; phones use ordinary links.
 
+Browse the rack objects directly in Monitor. Hover to spread the cases, drag or swipe to bring another server forward, then click or tap its case to select it. With a keyboard, use Left/Right to browse and Enter to select. The topbar switcher opens the same 3D rack, including an **All servers** case for merged views.
+
 ## Updates
 
 **Update all apps** queues available, non-ignored app updates with backups on reachable servers. Results distinguish queued requests from failures; a queued request is not a completed update. Use each server's task history to inspect completion.

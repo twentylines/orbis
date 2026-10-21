@@ -1,12 +1,14 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { IconCheck, IconChevronDown, IconLayersLinked, IconPlus, IconServer, IconSwitchHorizontal } from '@tabler/icons-react';
+import { IconPlus, IconSwitchHorizontal } from '@tabler/icons-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { useDesktopPreferences } from './preferences';
 import type { Telemetry } from './telemetry';
 import { useAppContext } from '@/context/app-context';
 import { useConnectionStore } from '@/stores/connection-store';
+import { useReducedMotion } from 'framer-motion';
+import { RackDeck } from './rack-deck';
 import './cluster.css';
 
 export type ClusterServer = { id: string; name: string; url: string; role: 'admin' | 'member'; local: boolean };
@@ -160,111 +162,21 @@ export function useCluster() {
   return value;
 }
 
-const percentage = (value: number | null | undefined) => (typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}%` : '—');
-const percentageWidth = (value: number | null | undefined) => `${Math.min(100, Math.max(0, value ?? 0))}%`;
-const serverAddress = (server: ClusterServer) => {
-  try {
-    return new URL(server.url).host;
-  } catch {
-    return server.local ? 'This server' : 'Address unavailable';
-  }
-};
-
-function ServerModule({
-  server,
-  reading,
-  selected,
-  onClick,
-  className = '',
-  opensSelector,
-  expanded,
-}: {
-  server: ClusterServer;
-  reading?: ServerReading;
-  selected: boolean;
-  onClick?: () => void;
-  className?: string;
-  opensSelector?: boolean;
-  expanded?: boolean;
-}) {
-  const { preferences } = useDesktopPreferences();
-  const name = server.local ? preferences.serverName : server.name;
-  return (
-    <button
-      type="button"
-      className={`cluster-module ${className}`}
-      aria-pressed={opensSelector ? undefined : selected}
-      aria-haspopup={opensSelector ? 'dialog' : undefined}
-      aria-expanded={opensSelector ? expanded : undefined}
-      onClick={onClick}
-      onFocus={(event) => {
-        if (event.currentTarget.matches(':focus-visible'))
-          event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'instant' });
-      }}
-      aria-label={`${name}, ${server.role === 'admin' ? 'admin server' : 'paired server'}${selected ? ', selected' : ''}`}
-    >
-      <span className="cluster-module-top" aria-hidden="true" />
-      <span className="cluster-module-side" aria-hidden="true" />
-      <span className="cluster-module-front">
-        <span className="cluster-module-heading">
-          <IconServer size={20} aria-hidden="true" />
-          <span>{name}</span>
-          {selected ? <IconCheck size={17} aria-hidden="true" /> : null}
-        </span>
-        <span className="cluster-module-address" title={serverAddress(server)}>
-          {serverAddress(server)}
-        </span>
-        <span className="cluster-module-meters">
-          <span>
-            <span>CPU</span>
-            <b>{percentage(reading?.cpu)}</b>
-            <i aria-hidden="true">
-              <span style={{ width: percentageWidth(reading?.cpu) }} />
-            </i>
-          </span>
-          <span>
-            <span>Memory</span>
-            <b>{percentage(reading?.memory)}</b>
-            <i aria-hidden="true">
-              <span style={{ width: percentageWidth(reading?.memory) }} />
-            </i>
-          </span>
-        </span>
-        <span className="cluster-module-footer">
-          <span>{server.role === 'admin' ? 'Admin server' : 'Member server'}</span>
-          {reading?.online === false ? <span>Offline</span> : server.local ? <span>Local</span> : null}
-        </span>
-      </span>
-    </button>
-  );
-}
-
-function ServerSelector({
-  open,
-  onOpenChange,
-  readings,
-  returnFocus,
-}: {
-  open: boolean;
-  onOpenChange: (value: boolean) => void;
-  readings?: Record<string, ServerReading>;
-  returnFocus?: () => HTMLElement | null;
-}) {
+function useRackReadings(enabled: boolean, readings?: Record<string, ServerReading>) {
   const cluster = useCluster();
-  const { preferences } = useDesktopPreferences();
   const servers = cluster.data?.servers ?? [];
   const samples = useQueries({
     queries: servers.map((server) => ({
       queryKey: ['cluster-server', server.id, 'telemetry'],
       queryFn: () => clusterRequest<Telemetry>(`/servers/${encodeURIComponent(server.id)}/read/telemetry`),
-      enabled: open,
+      enabled,
       staleTime: 9000,
-      refetchInterval: open ? 10000 : false,
+      refetchInterval: enabled ? 10000 : false,
       refetchIntervalInBackground: false,
       retry: false,
     })),
   });
-  const liveReadings = Object.fromEntries(
+  return Object.fromEntries(
     servers.map((server, index) => {
       const query = samples[index];
       const sample = query?.isError ? undefined : query?.data;
@@ -272,21 +184,46 @@ function ServerSelector({
       const available = sample?.memory.availableBytes;
       return [
         server.id,
-        sample
-          ? {
-              cpu: sample.cpu.totalPercent,
-              memory: typeof total === 'number' && total > 0 && typeof available === 'number' ? (1 - available / total) * 100 : null,
-              online: true,
-            }
-          : query?.isError
-            ? { cpu: null, memory: null, online: false }
-            : readings?.[server.id],
+        query?.isError
+          ? { cpu: null, memory: null, online: false }
+          : (readings?.[server.id] ??
+            (sample
+              ? {
+                  cpu: sample.cpu.totalPercent,
+                  memory: typeof total === 'number' && total > 0 && typeof available === 'number' ? (1 - available / total) * 100 : null,
+                  online: true,
+                }
+              : undefined)),
       ];
     }),
   );
+}
+
+function ServerSelector({
+  open,
+  onOpenChange,
+  returnFocus,
+}: {
+  open: boolean;
+  onOpenChange: (value: boolean) => void;
+  returnFocus?: () => HTMLElement | null;
+}) {
+  const cluster = useCluster();
+  const { preferences } = useDesktopPreferences();
+  const readings = useRackReadings(open);
+  const reduceMotion = useReducedMotion();
+  const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!open && closing.current) clearTimeout(closing.current);
+    return () => {
+      if (closing.current) clearTimeout(closing.current);
+    };
+  }, [open]);
   const choose = (id: string) => {
     cluster.select(id);
-    onOpenChange(false);
+    if (closing.current) clearTimeout(closing.current);
+    if (reduceMotion) onOpenChange(false);
+    else closing.current = setTimeout(() => onOpenChange(false), 340);
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -295,14 +232,10 @@ function ServerSelector({
         size="lg"
         onOpenAutoFocus={(event) => {
           const content = event.target;
-          const selected = content instanceof HTMLElement ? content.querySelector<HTMLButtonElement>('[aria-pressed="true"]') : null;
-          if (selected) {
+          const rack = content instanceof HTMLElement ? content.querySelector<HTMLElement>('.cluster-rack-stage') : null;
+          if (rack) {
             event.preventDefault();
-            requestAnimationFrame(() => {
-              if (!selected.isConnected) return;
-              selected.focus({ preventScroll: true });
-              selected.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'instant' });
-            });
+            rack.focus({ preventScroll: true });
           }
         }}
         onCloseAutoFocus={(event) => {
@@ -322,34 +255,24 @@ function ServerSelector({
             <DialogTitle>{cluster.data?.name || preferences.serverName}</DialogTitle>
           </div>
         </DialogHeader>
-        <DialogDescription>Choose a server to view its apps and status.</DialogDescription>
-        <section className="cluster-selection-rack" aria-label="Servers">
-          {(cluster.data?.servers.length ?? 0) > 1 ? (
-            <button type="button" className="cluster-merged-card" aria-pressed={cluster.merged} onClick={() => choose('all')}>
-              <IconLayersLinked size={30} aria-hidden="true" />
-              <strong>All servers</strong>
-              <span>{cluster.data?.servers.length} servers · merged apps and updates</span>
-              {cluster.merged ? <IconCheck size={18} aria-hidden="true" /> : null}
-            </button>
-          ) : null}
-          {cluster.data?.servers.map((server, index) => (
-            <div key={server.id} className="cluster-selection-slot" style={{ '--cluster-order': index } as CSSProperties}>
-              <ServerModule
-                server={server}
-                reading={liveReadings[server.id]}
-                selected={cluster.selectedId === server.id}
-                onClick={() => choose(server.id)}
-              />
-            </div>
-          ))}
+        <DialogDescription className="visually-hidden">Browse the 3D rack and select a server to view its apps and status.</DialogDescription>
+        <div className="modal-body cluster-selector-body">
+          <RackDeck
+            servers={cluster.data?.servers ?? []}
+            localName={preferences.serverName}
+            selectedId={cluster.selectedId}
+            readings={readings}
+            onSelect={choose}
+            showMerged
+            entrance
+          />
           {cluster.data?.role !== 'member' ? (
-            <Link className="cluster-pair-card" to="/settings?tab=cluster" onClick={() => onOpenChange(false)}>
-              <IconPlus size={28} aria-hidden="true" />
-              <strong>Pair a server</strong>
-              <span>Add another homelab to this cluster</span>
+            <Link className="cluster-pair-link" to="/settings?tab=cluster" onClick={() => onOpenChange(false)}>
+              <IconPlus size={17} aria-hidden="true" />
+              Pair a server
             </Link>
           ) : null}
-        </section>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -392,47 +315,35 @@ export function ServerRack({
 }) {
   const cluster = useCluster();
   const { preferences } = useDesktopPreferences();
-  const [open, setOpen] = useState(false);
-  const opener = useRef<HTMLElement | null>(null);
-  const openSelector = () => {
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setOpen(true);
-  };
-  const server = cluster.selectedServer ?? cluster.data?.servers.find((item) => item.local);
+  const [engaged, setEngaged] = useState(false);
   const currentReadings =
     cluster.selectedId && (cpu !== undefined || memory !== undefined)
       ? { ...readings, [cluster.selectedId]: { cpu: cpu ?? null, memory: memory ?? null, online } }
       : readings;
+  const liveReadings = useRackReadings(engaged, currentReadings);
   return (
     <div className="cluster-rack">
-      <div className="cluster-rack-caption">
-        <strong>{cluster.data?.name || preferences.serverName}</strong>
-        <span>
-          {cluster.merged ? 'All servers' : `${cluster.data?.servers.length ?? 1} server${(cluster.data?.servers.length ?? 1) === 1 ? '' : 's'}`}
-        </span>
-      </div>
-      <div className="cluster-rack-stage" data-count={Math.min(3, cluster.data?.servers.length ?? 1)}>
-        <span className="cluster-rack-shadow" aria-hidden="true" />
-        {(cluster.data?.servers.length ?? 0) > 1 ? <span className="cluster-rack-back cluster-rack-back-one" aria-hidden="true" /> : null}
-        {(cluster.data?.servers.length ?? 0) > 2 ? <span className="cluster-rack-back cluster-rack-back-two" aria-hidden="true" /> : null}
-        {server ? (
-          <ServerModule
-            server={server}
-            reading={currentReadings?.[server.id]}
-            selected={false}
-            opensSelector
-            expanded={open}
-            onClick={openSelector}
-          />
-        ) : (
-          <output className="cluster-rack-loading">{cluster.isError ? 'Server list unavailable' : 'Loading servers…'}</output>
-        )}
-      </div>
-      <button type="button" className="cluster-rack-open" onClick={openSelector} disabled={!server} aria-haspopup="dialog" aria-expanded={open}>
-        {cluster.merged ? 'Choose a server' : 'Switch or pair a server'}
-        <IconChevronDown size={16} aria-hidden="true" />
-      </button>
-      <ServerSelector open={open} onOpenChange={setOpen} readings={currentReadings} returnFocus={() => opener.current} />
+      {cluster.data?.role !== 'standalone' ? (
+        <div className="cluster-rack-caption">
+          <strong>{cluster.data?.name || preferences.serverName}</strong>
+          <span>
+            {cluster.data?.servers.length ?? 1} server{(cluster.data?.servers.length ?? 1) === 1 ? '' : 's'}
+          </span>
+        </div>
+      ) : null}
+      {cluster.data?.servers.length ? (
+        <RackDeck
+          servers={cluster.data.servers}
+          localName={preferences.serverName}
+          selectedId={cluster.selectedId}
+          readings={liveReadings}
+          onSelect={cluster.select}
+          onEngagedChange={setEngaged}
+          standalone={cluster.data.role === 'standalone'}
+        />
+      ) : (
+        <output className="cluster-rack-loading">{cluster.isError ? 'Server list unavailable' : 'Loading servers…'}</output>
+      )}
     </div>
   );
 }

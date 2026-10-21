@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Pair servers into named clusters with one admin host, expiring codes, signed commands and persistent replay protection.
-- Browse the 3D server rack by mouse, touch or keyboard; switch Monitor readings and histories, or merge server apps and update lists.
+- Browse actual server cases directly in the 3D rack, with hover, drag, swipe and keyboard selection. Use the same rack from the topbar switcher; switch Monitor readings and histories, or merge server apps and update lists.
 - Review Orbis updates separately from batch app updates, with server names and individual request outcomes.
 - Reserve the complete painted server-name glyphs, place uptime beside CPU and memory, simplify the mode toggle and improve login spacing.
 - Add stopped-writer installation storage recovery with a persistent journal and interrupted-copy replay.
