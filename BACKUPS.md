@@ -4,6 +4,14 @@ The staged restore and interruption recovery described below require Orbis beta5
 
 Open **Apps → an app → Backups** to create, upload, download, restore or delete a backup. A backup contains the managed app data, installed app files and user configuration overrides. External bind mounts, Docker named volumes and media outside the app directory require separate backups.
 
+## Uploads
+
+The upload corrections in development builds stream archives to private disk storage, validate their contents and app configuration, then publish the completed file. An existing backup with the same filename is kept; rename the upload to retain both.
+
+Allow enough free space for the incoming archive. App configuration metadata is limited to 1 MiB; this is separate from the app data inside the backup. Partial or invalid uploads do not enter the backup list. Cancelling stops a transfer or validation still in progress; a backup already published is retained. Temporary files left by an interrupted process are removed on the next upload for that app.
+
+Beta58 has a known upload validation and permissions issue. Use backups created by Orbis in that release.
+
 ## Restore
 
 Restoring replaces the app's current managed data and overrides. Create a backup first if you need to keep them.

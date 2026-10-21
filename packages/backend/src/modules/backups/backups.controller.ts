@@ -1,5 +1,6 @@
 import { castAppUrn } from '@/common/helpers/app-helpers';
 import { sanitizeFilename } from '@/common/helpers/file-helpers';
+import { LoggerService } from '@/core/logger/logger.service';
 import {
   BadRequestException,
   Body,
@@ -10,6 +11,7 @@ import {
   Param,
   Post,
   Query,
+  Req,
   Res,
   UploadedFile,
   UseGuards,
@@ -17,10 +19,11 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiResponse } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AppLifecycleService } from '../app-lifecycle/app-lifecycle.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { BackupsService } from './backups.service';
+import { BackupUploadStorage, type BackupUploadFile } from './backup-upload.storage';
 import { BackupRequestDto, DeleteAppBackupBodyDto, GetAppBackupsDto, GetAppBackupsQueryDto, RestoreAppBackupDto } from './dto/backups.dto';
 
 @Injectable()
@@ -30,6 +33,8 @@ export class BackupsController {
   constructor(
     private readonly backupsService: BackupsService,
     private readonly appLifecycleService: AppLifecycleService,
+    private readonly uploadStorage: BackupUploadStorage,
+    private readonly logger: LoggerService,
   ) {}
 
   @Post(':urn/backup')
@@ -105,27 +110,51 @@ export class BackupsController {
     },
   })
   @ApiResponse({ status: 201, description: 'Backup uploaded successfully' })
-  async uploadBackup(@Param('urn') urn: string, @UploadedFile() file?: { buffer: Buffer; originalname: string; mimetype: string }) {
+  async uploadBackup(
+    @Param('urn') urn: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @UploadedFile() file?: BackupUploadFile,
+  ) {
     if (!file) {
       throw new BadRequestException('No backup file provided');
     }
 
-    const sanitizedFilename = sanitizeFilename(file.originalname);
+    const aborted = new AbortController();
+    let saved = false;
+    let failure: unknown;
+    const cancel = () => {
+      if (!response.writableEnded) aborted.abort(new Error('The backup upload was cancelled'));
+    };
+    request.once('aborted', cancel);
+    response.once('close', cancel);
+    try {
+      if (request.aborted) cancel();
+      const sanitizedFilename = sanitizeFilename(file.originalname);
 
-    if (sanitizedFilename !== file.originalname) {
-      throw new BadRequestException('Invalid backup filename');
+      if (sanitizedFilename !== file.originalname) throw new BadRequestException('Invalid backup filename');
+
+      if (!sanitizedFilename.endsWith('.tar.gz')) throw new BadRequestException('File must be a .tar.gz backup file');
+
+      await this.backupsService.uploadBackup({ appUrn: castAppUrn(urn), filename: sanitizedFilename, sourceFile: file.path, signal: aborted.signal });
+      saved = true;
+    } catch (error) {
+      failure = error;
+    } finally {
+      request.removeListener('aborted', cancel);
+      response.removeListener('close', cancel);
     }
-
-    if (!sanitizedFilename.endsWith('.tar.gz') && file.mimetype !== 'application/gzip' && file.mimetype !== 'application/x-gzip') {
-      throw new BadRequestException('File must be a .tar.gz backup file');
+    try {
+      await this.uploadStorage.remove(file);
+    } catch (error) {
+      this.logger.warn(
+        saved
+          ? 'Backup saved; temporary upload cleanup will be retried on the next upload'
+          : 'Temporary upload cleanup will be retried on the next upload',
+        error,
+      );
     }
-
-    await this.backupsService.uploadBackup({
-      appUrn: castAppUrn(urn),
-      filename: sanitizedFilename,
-      fileBuffer: file.buffer,
-    });
-
+    if (!saved) throw failure;
     return { success: true };
   }
 }

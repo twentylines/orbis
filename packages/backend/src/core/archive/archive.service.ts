@@ -28,15 +28,24 @@ export class ArchiveService {
     return await spawnAsync('tar', args);
   };
 
-  listTarGz = async (sourceFile: string): Promise<ArchiveEntry[]> => {
-    const fileType = await spawnAsync('file', ['--brief', '--mime-type', sourceFile]);
+  listTarGz = async (sourceFile: string, signal?: AbortSignal): Promise<ArchiveEntry[]> => {
+    signal?.throwIfAborted();
+    const options = signal ? { signal } : undefined;
+    const fileType = options
+      ? await spawnAsync('file', ['--brief', '--mime-type', sourceFile], options)
+      : await spawnAsync('file', ['--brief', '--mime-type', sourceFile]);
     const mimeType = fileType.stdout.trim();
+    if (fileType.stderr.trim()) throw new Error('Invalid backup archive');
 
     const verboseArgs = mimeType === 'application/x-tar' ? ['-tvf', sourceFile] : ['-tzvf', sourceFile];
     const pathArgs = mimeType === 'application/x-tar' ? ['-tf', sourceFile] : ['-tzf', sourceFile];
 
     this.logger.debug(`Listing archive with args: tar ${verboseArgs.join(' ')}`);
-    const [verboseList, pathList] = await Promise.all([spawnAsync('tar', verboseArgs), spawnAsync('tar', pathArgs)]);
+    const [verboseList, pathList] = await Promise.all([
+      options ? spawnAsync('tar', verboseArgs, options) : spawnAsync('tar', verboseArgs),
+      options ? spawnAsync('tar', pathArgs, options) : spawnAsync('tar', pathArgs),
+    ]);
+    signal?.throwIfAborted();
 
     if (verboseList.stderr.trim() || pathList.stderr.trim()) {
       throw new Error('Invalid backup archive');
@@ -51,4 +60,35 @@ export class ArchiveService {
 
     return paths.map((entryPath, index) => ({ path: entryPath, type: verboseLines[index]?.[0] ?? '' }));
   };
+
+  readTarConfig = async (sourceFile: string, entry: string, signal?: AbortSignal): Promise<string> => {
+    signal?.throwIfAborted();
+    const fileType = await spawnAsync('file', ['--brief', '--mime-type', sourceFile], signal ? { signal } : undefined);
+    if (fileType.stderr.trim()) throw new Error('Invalid backup archive');
+    const flags = fileType.stdout.trim() === 'application/x-tar' ? '-xOf' : '-xzOf';
+    return new Promise((resolve, reject) => {
+      const child = spawn('tar', [flags, sourceFile, '--', entry], { signal, stdio: ['ignore', 'pipe', 'pipe'] });
+      const chunks: Buffer[] = [];
+      let bytes = 0;
+      let failure: Error | undefined;
+      child.stdout.on('data', (chunk: Buffer) => {
+        bytes += chunk.length;
+        if (bytes > 1024 * 1024) {
+          failure = new Error('Backup app configuration exceeds 1 MiB');
+          child.kill();
+        } else if (!failure) chunks.push(chunk);
+      });
+      child.stderr.on('data', () => {
+        failure ??= new Error('Invalid backup app configuration');
+      });
+      child.on('error', (error) => {
+        failure = error;
+      });
+      child.on('close', (code) => {
+        if (failure || code !== 0) reject(failure ?? new Error('Invalid backup app configuration'));
+        else resolve(Buffer.concat(chunks).toString('utf8'));
+      });
+    });
+  };
 }
+import { spawn } from 'node:child_process';

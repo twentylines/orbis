@@ -1,5 +1,11 @@
 # Orbis changelog
 
+## Unreleased — Backup uploads
+
+- Stream uploads to private disk staging instead of holding the archive in memory.
+- Validate archive contents and app identity before publishing a backup. Keep uploaded archives private and reject duplicate filenames without replacing existing backups.
+- Clean cancelled and failed transfers; retry abandoned temporary-file cleanup on the next upload. Limit app configuration metadata to 1 MiB without imposing a data-size limit on the archive.
+
 ## Beta58 — 21 October 2026
 
 - Include MIME detection and GNU tar in the runtime image. Verify binary contents, ownership, permissions and file/directory timestamps through an archive round trip during image builds.

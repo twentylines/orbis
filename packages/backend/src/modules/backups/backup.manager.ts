@@ -8,8 +8,10 @@ import { ArchiveService, type ArchiveEntry } from '@/core/archive/archive.servic
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { appInfoSchema } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
+import { type } from 'arktype';
 import { AppFilesManager } from '../apps/app-files-manager';
 import { AppsRepository } from '../apps/apps.repository';
 import { RestoreTransaction, preserveTreeMetadata } from './restore-transaction';
@@ -437,26 +439,123 @@ export class BackupManager {
     return backupPath;
   }
 
-  /**
-   * Upload a backup file
-   * @param appUrn - The app id
-   * @param filename - The filename of the backup
-   * @param fileBuffer - The file buffer
-   */
-  public async uploadBackup(appUrn: AppUrn, filename: string, fileBuffer: Buffer): Promise<void> {
-    const { backupDir, backupPath, sanitizedFilename } = this.getBackupFilePath(appUrn, filename);
-
-    // Create backup directory if it doesn't exist
-    await this.filesystem.createDirectory(backupDir);
-
-    // Check if file already exists
-    if (await this.filesystem.pathExists(backupPath)) {
-      throw new Error('A backup with this filename already exists');
+  private async validateUploadedArchive(appUrn: AppUrn, source: string, signal?: AbortSignal) {
+    try {
+      const entries = await this.archiveManager.listTarGz(source, signal);
+      this.validateRestoreArchiveEntries(entries);
+      const paths = new Map<string, ArchiveEntry>();
+      for (const entry of entries) {
+        const name = this.normalizeArchiveEntryPath(entry.path).replace(/\/$/, '');
+        if (paths.has(name)) throw new Error('Duplicate archive entry');
+        paths.set(name, entry);
+      }
+      for (const [name] of paths) {
+        let parent = path.posix.dirname(name);
+        while (parent !== '.') {
+          if (paths.get(parent)?.type === '-') throw new Error('An archive parent is not a directory');
+          parent = path.posix.dirname(parent);
+        }
+      }
+      for (const root of ['.', 'app', 'app-data', 'user-config']) {
+        if (paths.has(root) && paths.get(root)?.type !== 'd') throw new Error('An archive root is not a directory');
+      }
+      const hasData = [...paths.keys()].some((name) => name === 'app-data' || name.startsWith('app-data/'));
+      const configEntry = paths.get('app/config.json');
+      if (!hasData || !configEntry || configEntry.type !== '-' || paths.get('app-data')?.type === '-') {
+        throw new Error('Missing app data or configuration');
+      }
+      const config = JSON.parse(await this.archiveManager.readTarConfig(source, configEntry.path, signal));
+      const parsed = appInfoSchema({ ...config, urn: appUrn });
+      if (parsed instanceof type.errors || parsed.id !== extractAppUrn(appUrn).appName) throw new Error('Invalid app configuration');
+    } catch (error) {
+      signal?.throwIfAborted();
+      this.logger.warn('Rejected an invalid uploaded backup', error instanceof Error ? error.name : 'validation error');
+      throw new BadRequestException('The uploaded file is not a valid backup for this app');
     }
+  }
 
-    // Write the file
-    await this.filesystem.writeBinaryFile(backupPath, fileBuffer);
-
-    this.logger.info(`Backup uploaded successfully: ${sanitizedFilename}`);
+  public async uploadBackup(appUrn: AppUrn, filename: string, sourceFile: string, signal?: AbortSignal): Promise<void> {
+    const { backupDir, backupPath, sanitizedFilename } = this.getBackupFilePath(appUrn, filename);
+    const source = this.filesystem.getSafeFilePath(sourceFile);
+    const uploadRoot = path.join(backupDir, '.uploads');
+    const directory = path.dirname(source);
+    if (path.dirname(directory) !== uploadRoot || !path.basename(directory).startsWith('upload-') || path.basename(source) !== 'backup.tar.gz') {
+      throw new Error('Invalid backup upload staging path');
+    }
+    for (const parent of [uploadRoot, directory]) {
+      const stats = await fs.promises.lstat(parent);
+      if (!stats.isDirectory() || stats.isSymbolicLink() || (stats.mode & 0o777) !== 0o700 || stats.uid !== process.getuid?.()) {
+        throw new Error('The backup upload staging directory is not private');
+      }
+    }
+    const file = await fs.promises.open(source, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    let sibling: string | undefined;
+    let linked = false;
+    let publishedSource = source;
+    try {
+      const before = await file.stat();
+      if (!before.isFile() || (before.mode & 0o777) !== 0o600 || before.uid !== process.getuid?.() || before.nlink !== 1) {
+        throw new Error('The uploaded backup is not a private regular file');
+      }
+      signal?.throwIfAborted();
+      await this.validateUploadedArchive(appUrn, source, signal);
+      const after = await fs.promises.lstat(source);
+      if (
+        before.ino !== after.ino ||
+        before.dev !== after.dev ||
+        before.size !== after.size ||
+        before.mtimeMs !== after.mtimeMs ||
+        before.ctimeMs !== after.ctimeMs ||
+        before.mode !== after.mode ||
+        before.uid !== after.uid ||
+        before.gid !== after.gid ||
+        after.nlink !== 1
+      ) {
+        throw new Error('The uploaded backup changed during validation');
+      }
+      await file.sync();
+      signal?.throwIfAborted();
+      try {
+        await fs.promises.link(source, backupPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+        sibling = await fs.promises.mkdtemp(path.join(backupDir, '.orbis-upload-'));
+        publishedSource = path.join(sibling, 'backup.tar.gz');
+        await fs.promises.copyFile(source, publishedSource, fs.constants.COPYFILE_EXCL);
+        await fs.promises.chmod(publishedSource, 0o600);
+        const copy = await fs.promises.open(publishedSource, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+        try {
+          if ((await copy.stat()).size !== before.size) throw new Error('The uploaded backup copy is incomplete');
+          await copy.sync();
+        } finally {
+          await copy.close();
+        }
+        signal?.throwIfAborted();
+        await fs.promises.link(publishedSource, backupPath);
+      }
+      linked = true;
+      const parent = await fs.promises.open(backupDir, fs.constants.O_RDONLY);
+      try {
+        await parent.sync();
+      } finally {
+        await parent.close();
+      }
+      signal?.throwIfAborted();
+      this.logger.info(`Backup uploaded successfully: ${sanitizedFilename}`);
+    } catch (error) {
+      if (linked) {
+        const target = await fs.promises.lstat(backupPath).catch(() => null);
+        const staged = await fs.promises.lstat(publishedSource);
+        if (target?.ino === staged.ino && target.dev === staged.dev) await fs.promises.unlink(backupPath);
+      }
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new ConflictException('A backup with this filename already exists');
+      throw error;
+    } finally {
+      try {
+        await file.close();
+      } finally {
+        if (sibling) await fs.promises.rm(sibling, { recursive: true, force: true });
+      }
+    }
   }
 }
