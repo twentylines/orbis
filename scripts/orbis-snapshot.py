@@ -190,7 +190,7 @@ def write_sidecar(snapshot: Path, record: dict[str, object]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def capture(root: Path, snapshot: Path, release: str, docker_context: str) -> dict[str, object]:
+def capture(root: Path, snapshot: Path, release: str, docker_context: str, *, lock_fd: int | None = None) -> dict[str, object]:
     if root.is_symlink():
         raise ValueError("installation root must be a real directory")
     root = root.resolve(strict=True)
@@ -203,7 +203,7 @@ def capture(root: Path, snapshot: Path, release: str, docker_context: str) -> di
     except (OSError, ValueError) as error:
         raise SnapshotError("snapshot-source-read-failed") from error
     try:
-        copied = subprocess.run(["cp", "-a", str(root), str(snapshot)], capture_output=True, check=False)
+        copied = subprocess.run(["cp", "-a", str(root), str(snapshot)], capture_output=True, check=False, pass_fds=(lock_fd,) if lock_fd is not None else ())
     except OSError as error:
         raise SnapshotError("snapshot-copy-failed") from error
     if copied.returncode:

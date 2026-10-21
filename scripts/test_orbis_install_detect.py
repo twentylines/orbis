@@ -61,6 +61,13 @@ class Reader:
 
 
 class InstallationDiscoveryTests(unittest.TestCase):
+    def test_local_socket_comes_from_the_explicit_context_and_remote_endpoints_are_not_host_paths(self):
+        reader = DETECT.DockerReader("test-only")
+        for host, expected in [("unix:///run/custom-docker.sock", "/run/custom-docker.sock"), ("tcp://192.0.2.10:2376", None), ("ssh://example.test", None), ("unix://relative.sock", None)]:
+            with self.subTest(host=host), mock.patch.object(reader, "_object", return_value={"host": host}) as inspect:
+                self.assertEqual(reader.socket(), expected)
+                self.assertIn("test-only", inspect.call_args.args[0])
+
     def test_existing_stock_has_two_choices_without_authorizing_a_migration(self):
         report = DETECT.discover(Reader([container()]))
         self.assertEqual(report["result"], "runtipi-found")

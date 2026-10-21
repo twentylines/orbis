@@ -54,8 +54,15 @@ def mount_source(reader, mount: dict) -> Path | None:
         source_path = DETECT.path(mount.get("Source"))
         if source_path and any(Path(source_path).is_relative_to(base) for base in ("/proc", "/sys", "/dev")):
             return None
-        if mount.get("Destination") in {"/var/run/docker.sock", "/run/docker.sock"} and mount.get("Source") in {"/var/run/docker.sock", "/run/docker.sock"}:
-            return None
+        if mount.get("Destination") in {"/var/run/docker.sock", "/run/docker.sock"}:
+            if hasattr(reader, "socket"):
+                endpoint = reader.socket()
+                source = DETECT.path(mount.get("Source"))
+                if endpoint and source and Path(source).resolve(strict=True) == Path(endpoint).resolve(strict=True) and stat.S_ISSOCK(Path(source).stat().st_mode):
+                    return None
+                raise StorageError("A controller uses a different Docker socket from the selected local context")
+            if mount.get("Source") in {"/var/run/docker.sock", "/run/docker.sock"}:
+                return None
         if mount.get("RW") is False and mount.get("Source") in {"/etc/localtime", "/etc/timezone"}:
             return None
         source = DETECT.path(mount.get("Source"))
@@ -288,11 +295,38 @@ def attributes_metadata(source: Path) -> dict | None:
     return {"xattrsSha256": digest.hexdigest(), "hardlinksSha256": APPS.digest(groups)}
 
 
+def require_contained_hardlinks(resources: list[dict]) -> None:
+    # Each resource is restored separately. A link crossing those boundaries
+    # would silently become two files, or make an inode-preserving file restore
+    # overwrite an unreviewed sibling. Refuse it before claiming a full backup.
+    for item in resources:
+        source = Path(item["source"])
+        links = {}
+        def entry(path):
+            metadata = path.lstat()
+            if stat.S_ISREG(metadata.st_mode) and metadata.st_nlink > 1:
+                key = (metadata.st_dev, metadata.st_ino)
+                group = links.setdefault(key, [metadata.st_nlink, 0])
+                if group[0] != metadata.st_nlink:
+                    raise StorageError("Storage hard links changed during inspection")
+                group[1] += 1
+        entry(source)
+        if item["kind"] == "directory":
+            def unreadable(error):
+                raise error
+            for folder, _, files in os.walk(source, followlinks=False, onerror=unreadable):
+                for name in files:
+                    entry(Path(folder) / name)
+        if any(expected != found for expected, found in links.values()):
+            raise StorageError("A hard link crosses storage backup boundaries; review its linked paths before installation")
+
+
 def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> dict:
     validate_review(saved)
     if not host_writers_stopped:
         raise StorageError("Confirm native host and remote storage writers are stopped before backup")
     require_quiet(root, reader, saved)
+    require_contained_hardlinks(saved["resources"])
     bundle = Path(saved["bundle"])
     bundle.mkdir(mode=0o700)
     manifest = {"schema": SCHEMA, "stage": "copying", "plan": saved, "copies": []}
@@ -307,7 +341,8 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
         attributes = attributes_metadata(source)
         if item["kind"] == "directory":
             metadata = directory_metadata(source)
-            record = SNAPSHOT.capture(source, destination, "installation-storage", reader.context)
+            lock_fd = getattr(reader, "lock_fd", None)
+            record = SNAPSHOT.capture(source, destination, "installation-storage", reader.context, **({"lock_fd": lock_fd} if lock_fd is not None else {}))
             # The private collection parent protects this tree; retain its root ACL mask.
             os.chmod(destination, record["sourceRootMode"])
             descriptor = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -320,7 +355,8 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
             copy["directoryMetadata"] = metadata
         else:
             before = file_fingerprint(source)
-            copied = subprocess.run(["cp", "-a", "--", str(source), str(destination)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            lock_fd = getattr(reader, "lock_fd", None)
+            copied = subprocess.run(["cp", "-a", "--", str(source), str(destination)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, pass_fds=(lock_fd,) if lock_fd is not None else ())
             if copied.returncode or file_fingerprint(source) != before or file_fingerprint(destination) != before:
                 raise StorageError("A storage file copy did not match its source")
             record = before
@@ -335,6 +371,7 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
     manifest["stage"] = "verifying"
     APPS.write_journal(target, manifest)
     require_quiet_existing(root, reader, saved)
+    require_contained_hardlinks(saved["resources"])
     for item, copy in zip(saved["resources"], manifest["copies"]):
         source = Path(item["source"])
         if source_identity(source) != item:
@@ -438,7 +475,8 @@ def main() -> int:
                 validate_review(saved)
                 if saved.get("bundle") != str(args.bundle.expanduser()):
                     raise StorageError("The storage review belongs to another backup destination")
-                with APPS.HOST.host_lock(root):
+                with APPS.HOST.host_lock(root) as lock_fd:
+                    reader.lock_fd = lock_fd
                     result = capture(root, reader, saved, host_writers_stopped=args.host_writers_stopped)
         print(json.dumps(result, indent=2))
         return 0

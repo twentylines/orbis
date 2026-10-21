@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Coordinate installation checkpoints and recovery across the original controller, apps, database and queue, retaining their running states and restart policies after interruption.
+- Keep the installation lock held by native copies after the installer exits, reject storage hard links crossing backup boundaries, and verify the controller's local Docker socket.
 - Preserve subsecond file and directory timestamps in app backups and restores, and verify the required archive and metadata tools during image builds.
 
 - Pair servers into named clusters with one admin host, expiring codes, signed commands and persistent replay protection.

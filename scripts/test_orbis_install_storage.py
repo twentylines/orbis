@@ -2,6 +2,7 @@ import copy
 import importlib.util
 import json
 import os
+import socket
 import stat
 import subprocess
 import tempfile
@@ -114,6 +115,36 @@ class InstallationStorageTests(unittest.TestCase):
         self.assertEqual(self.docker.calls, [])
         self.assertFalse(self.bundle.exists())
         self.assertNotIn("private fixture data", json.dumps(reviewed))
+
+    def test_context_socket_is_not_storage_but_a_different_daemon_socket_is_rejected(self):
+        endpoint = self.private / "docker.sock"
+        with socket.socket(socket.AF_UNIX) as server:
+            server.bind(str(endpoint))
+            self.docker.socket = lambda: str(endpoint)
+            mount = {"Type": "bind", "Source": str(endpoint), "Destination": "/var/run/docker.sock", "RW": True}
+            self.assertIsNone(STORAGE.mount_source(self.docker, mount))
+            self.docker.socket = lambda: str(self.private / "another.sock")
+            with self.assertRaises((STORAGE.StorageError, OSError)):
+                STORAGE.mount_source(self.docker, mount)
+            self.docker.socket = lambda: str(self.file)
+            mount["Source"] = str(self.file)
+            with self.assertRaisesRegex(STORAGE.StorageError, "different Docker socket"):
+                STORAGE.mount_source(self.docker, mount)
+
+    def test_cross_resource_and_outside_hardlinks_cannot_be_silently_lost(self):
+        os.link(self.external / "database.bin", self.root / "linked-database.bin")
+        with self.assertRaisesRegex(STORAGE.StorageError, "hard link crosses"):
+            self.capture()
+        self.assertFalse(self.bundle.exists())
+        (self.root / "linked-database.bin").unlink()
+        os.link(self.file, self.parent / "unreviewed-sibling")
+        with self.assertRaisesRegex(STORAGE.StorageError, "hard link crosses"):
+            self.capture()
+        self.assertFalse(self.bundle.exists())
+
+    def test_internal_hardlinks_are_supported_in_one_resource(self):
+        os.link(self.external / "database.bin", self.external / "linked.bin")
+        STORAGE.require_contained_hardlinks(self.review()["resources"])
 
     def test_capture_and_offline_verification_preserve_binary_data_and_file_metadata(self):
         result = self.capture()

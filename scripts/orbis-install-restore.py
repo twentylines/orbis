@@ -142,14 +142,14 @@ def capacity(manifest: dict) -> None:
             raise RestoreError("A storage recovery destination needs more free space")
 
 
-def copy_resource(source: Path, destination: Path, item: dict, copy: dict) -> None:
+def copy_resource(source: Path, destination: Path, item: dict, copy: dict, *, lock_fd: int | None = None) -> None:
     if item["kind"] == "directory":
         # Force new file copies so existing hard links cannot alter files outside
         # this resource; -H rebuilds the backup's links inside the restored tree.
         result = subprocess.run([
             "rsync", "-aHAX", "--numeric-ids", "--ignore-times", "--modify-window=-1", "--delete", "--fsync",
             "--", str(source) + "/", str(destination) + "/",
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, pass_fds=(lock_fd,) if lock_fd is not None else ())
         if result.returncode:
             raise RestoreError("A storage directory could not be recovered; keep every writer stopped and retain its journal")
         metadata = copy["directoryMetadata"]
@@ -227,7 +227,8 @@ def restore(root: Path, reader, saved: dict, path: Path, *, host_writers_stopped
         record["active"] = index
         APPS.write_journal(path, record)
         source, destination = bundle / f"resource-{index:04d}", Path(item["source"])
-        copy_resource(source, destination, item, copy)
+        lock_fd = getattr(reader, "lock_fd", None)
+        copy_resource(source, destination, item, copy, **({"lock_fd": lock_fd} if lock_fd is not None else {}))
         verify_destination(destination, item, copy)
         record["completed"].append(index)
         APPS.write_journal(path, record)
@@ -259,7 +260,8 @@ def main() -> int:
             raise RestoreError("Run this helper as root on the Linux Docker host")
         root = args.root.expanduser().resolve(strict=True)
         reader = APPS.Docker(args.docker_context)
-        with APPS.HOST.host_lock(root):
+        with APPS.HOST.host_lock(root) as lock_fd:
+            reader.lock_fd = lock_fd
             if args.action == "review":
                 result = review(root, reader, args.bundle.expanduser())
             else:

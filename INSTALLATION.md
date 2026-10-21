@@ -65,6 +65,40 @@ After a replacement, add `--controller-image ghcr.io/twentylines/orbis@sha256:DI
 
 This step neither stops the controller nor proves data is ready for backup. The installation executor must stop the controller and all other writers, cover external storage, take a consistent backup, and prevent the replacement controller from starting app operations before resuming them. Keep the journal until the enclosing installation transaction is accepted or recovered.
 
+## Checkpoint the running installation
+
+The Linux host transaction helper coordinates the original controller, managed apps, database and queue. It requires root, local Docker access and the backup/recovery tools described below. It is a checkpoint and recovery command; it does not yet perform the replacement or reset accounts.
+
+Choose a new `BUNDLE` and `JOURNAL` inside a private directory outside the installation and every external storage source. Review and save the plan privately:
+
+```sh
+umask 077
+python3 scripts/orbis-install-transaction.py review ROOT \
+  --docker-context CONTEXT --backup BUNDLE --journal JOURNAL > INSTALL-REVIEW.json
+```
+
+After separately stopping native host processes and remote writers that use this storage:
+
+```sh
+python3 scripts/orbis-install-transaction.py checkpoint ROOT \
+  --docker-context CONTEXT --journal JOURNAL --review INSTALL-REVIEW.json \
+  --confirm-root ROOT --host-writers-stopped
+```
+
+The command saves the original container identities, running states and restart policies before any changes. It disables automatic restarts, stops the controller before apps, then stops the queue and database. It captures and verifies all reviewed storage. Success leaves those containers stopped and the journal at `ready`.
+
+To recover, including after an interrupted stop or copy:
+
+```sh
+python3 scripts/orbis-install-transaction.py recover ROOT \
+  --docker-context CONTEXT --journal JOURNAL \
+  --confirm-root ROOT --host-writers-stopped
+```
+
+Recovery quiesces the reviewed writers again, restores a completed verified checkpoint when available, starts the original services and running apps, checks controller health, and restores their restart policies. Originally stopped or never-started apps remain so. An interrupted recovery can continue; a completed one cannot be replayed. Container replacement, definition changes, unreviewed policy changes, a different daemon or a damaged completed backup cause a refusal. Keep the private journal and backups when a command fails. An interrupted native copy retains the installation lock until it exits, so recovery cannot race it.
+
+An incomplete backup from a failed checkpoint is never used for restore. No replacement or reset has occurred at that stage, so recovery can restart the original services. This helper currently requires those original containers to remain present. The complete Keep/Fresh cutover, compatibility validation and first-install bootstrap remain under development.
+
 ## Capture installation storage
 
 The source includes a Linux host helper for collecting the installation tree, external bind-mounted directories and files, and accessible local Docker volumes into one private backup. Nested sources are copied once. Temporary filesystems, kernel/device mounts, the Docker control socket and read-only host timezone inputs are excluded.
@@ -86,7 +120,7 @@ python3 scripts/orbis-install-storage.py capture BUNDLE \
 python3 scripts/orbis-install-storage.py verify BUNDLE
 ```
 
-Capture rechecks Docker identities, mount definitions, nested host mounts, source identities and writer states. It verifies copied bytes, ownership, permissions and nanosecond timestamps, and rereads the sources after the collection finishes. New Linux collections also seal extended attributes, ACLs and hard-link groups within each resource. Data files and directory entries are flushed before publishing verification records. A changed source, restarted writer, missing resource or failed copy leaves an incomplete backup. Verification works independently of the original source paths and rejects incomplete or changed backups.
+Capture rechecks Docker identities, mount definitions, nested host mounts, source identities and writer states. It verifies copied bytes, ownership, permissions and nanosecond timestamps, and rereads the sources after the collection finishes. New Linux collections also seal extended attributes, ACLs and hard-link groups within each resource. Hard links crossing resource boundaries or pointing outside the collected storage require manual review and are refused before copying. A controller's Docker socket must match the selected local context. Data files and directory entries are flushed before publishing verification records. A changed source, restarted writer, missing resource or failed copy leaves an incomplete backup. Verification works independently of the original source paths and rejects incomplete or changed backups.
 
 ## Recover installation storage
 

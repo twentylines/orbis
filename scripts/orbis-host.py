@@ -42,7 +42,7 @@ def host_lock(root: Path):
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise ValueError("another Orbis host operation is in progress") from error
-        yield
+        yield descriptor
     finally:
         os.close(descriptor)
 

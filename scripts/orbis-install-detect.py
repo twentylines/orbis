@@ -102,6 +102,12 @@ class DockerReader:
             raise InspectionError("Docker returned an invalid daemon identity")
         return value
 
+    def socket(self) -> str | None:
+        endpoint = self._object(["context", "inspect", self.context, "--format", '{"host":{{json .Endpoints.docker.Host}}}']).get("host")
+        if not isinstance(endpoint, str) or not endpoint.startswith("unix://"):
+            return None
+        return path(endpoint.removeprefix("unix://"))
+
     def containers(self) -> list[dict]:
         try:
             rows = [json.loads(line) for line in self._read(["container", "ls", "--all", "--no-trunc", "--format", LIST_FORMAT]).splitlines()]

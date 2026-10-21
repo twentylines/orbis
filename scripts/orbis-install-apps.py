@@ -76,6 +76,7 @@ class Docker(DETECT.DockerReader):
                 ["docker", "--context", self.context, "container", *arguments],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 check=False, timeout=timeout,
+                pass_fds=(self.lock_fd,) if getattr(self, "lock_fd", None) is not None else (),
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             raise RuntimeError("Docker did not finish the app operation; inspect the saved transaction before retrying") from error
@@ -389,7 +390,8 @@ def main() -> int:
             HOST.require_confirmation(root, args.confirm_root)
             if args.journal is None or (args.action == "stop" and args.review_id is None):
                 raise AppError("A private journal and the reviewed plan are required before stopping apps")
-            with HOST.host_lock(root):
+            with HOST.host_lock(root) as lock_fd:
+                reader.lock_fd = lock_fd
                 result = stop(root, reader, args.journal.expanduser(), args.review_id) if args.action == "stop" else resume(root, reader, args.journal.expanduser(), args.controller_image)
         print(json.dumps(result, indent=2))
         return 0
