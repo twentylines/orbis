@@ -1,6 +1,6 @@
 # Orbis changelog
 
-## Unreleased
+## Beta61 — 21 October 2026
 
 - Recover interrupted restore files without automatically running the restore again when the queue reconnects. Keep completed outcomes and reject duplicate restore execution.
 

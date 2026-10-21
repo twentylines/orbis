@@ -24,13 +24,13 @@ Staging needs space for the restored data alongside the current data. Extraction
 
 ## Interrupted restores
 
-Beta60 has a known queue redelivery issue: a restore interrupted by a core restart can run again after recovery. The fix is currently unreleased. Avoid restarting during a restore in that beta.
+Beta60 has a known queue redelivery issue: a restore interrupted by a core restart can run again after recovery. Use beta61 or later for recovery without automatic restore retries.
 
 Orbis records restore progress under `data/state/app-restores`. It retains the previous directories until the replacement is committed. An interrupted, uncommitted restore rolls back; a committed restore keeps the restored data and finishes database reconciliation and cleanup.
 
 Recovery stops the app's containers and runs before normal startup or another app operation. The app stays stopped after recovery. Start it from Apps after checking its state.
 
-The unreleased fix prevents an interrupted or completed restore request from running again. Review the app and its backups before submitting a new restore.
+Beta61 and later prevent an interrupted or completed restore request from running again. Review the app and its backups before submitting a new restore.
 
 If recovery storage is unavailable, Orbis refuses to continue startup or app operations. Restore access to the storage and restart Orbis. Keep the recovery journal and hidden `.orbis-restore-…` staging directories until recovery completes.
 

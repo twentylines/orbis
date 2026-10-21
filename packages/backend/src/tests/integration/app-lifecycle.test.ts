@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import realFs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { APP_DATA_DIR, APP_DIR, DATA_DIR } from '@/common/constants';
 import { ArchiveService } from '@/core/archive/archive.service';
@@ -26,10 +28,11 @@ import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
 import { SubnetManagerService } from '@/modules/network/subnet-manager.service';
 import { AppEventsQueue, appEventSchema } from '@/modules/queue/entities/app-events';
 import { QueueFactory } from '@/modules/queue/queue.factory';
+import { TasksService } from '@/modules/tasks/tasks.service';
 import { Test } from '@nestjs/testing';
 import { fromPartial } from '@total-typescript/shoehorn';
 import { eq } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import waitFor from 'wait-for-expect';
 import type { FsMock } from '../__mocks__/fs';
@@ -61,6 +64,8 @@ describe('App lifecycle', () => {
   let filesystemService: FilesystemService;
   let appFilesManager: AppFilesManager;
   let backupManager: BackupManager;
+  let tasksService: TasksService;
+  let taskDirectory: string;
   const configurationService = mock<ConfigurationService>();
   let databaseService = mock<DatabaseService>();
   const dockerService = mock<DockerService>();
@@ -92,6 +97,19 @@ describe('App lifecycle', () => {
 
   beforeAll(async () => {
     db = await createTestDatabase(DB_NAME);
+    taskDirectory = await realFs.mkdtemp(path.join(os.tmpdir(), 'orbis-lifecycle-task-history-'));
+    const historyConfig = mock<ConfigurationService>();
+    historyConfig.get.calledWith('directories').mockReturnValue({ dataDir: taskDirectory } as never);
+    tasksService = new TasksService(historyConfig, loggerService);
+    await tasksService.onModuleInit();
+  });
+
+  afterAll(async () => {
+    if (!taskDirectory) return;
+    await waitFor(async () => {
+      expect((await tasksService.read()).tasks.every((task) => ['succeeded', 'failed', 'interrupted'].includes(task.status))).toBe(true);
+    });
+    await realFs.rm(taskDirectory, { recursive: true, force: true });
   });
 
   beforeEach(async () => {
@@ -165,6 +183,10 @@ describe('App lifecycle', () => {
         {
           provide: LoggerService,
           useValue: loggerService,
+        },
+        {
+          provide: TasksService,
+          useValue: tasksService,
         },
         {
           provide: ArchiveService,
