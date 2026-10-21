@@ -48,6 +48,7 @@ export class InstallAppCommand extends AppLifecycleCommand {
       await marketplaceService.copyDataDir(appUrn, envMap);
 
       await this.ensureAppDir(appUrn, form);
+      await appFilesManager.setAppDataDirPermissions(appUrn);
 
       try {
         await dockerService.composeApp(appUrn, 'down --rmi all --remove-orphans');
@@ -70,8 +71,6 @@ export class InstallAppCommand extends AppLifecycleCommand {
       }
 
       await dockerService.composeApp(appUrn, `up --detach --force-recreate --remove-orphans ${forcePull ? '--pull always' : ''}`);
-      await appFilesManager.setAppDataDirPermissions(appUrn);
-
       return { success: true, message: `App ${appUrn} installed successfully` };
     } catch (err) {
       return this.handleAppError(err, appUrn, 'install');

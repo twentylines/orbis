@@ -1,5 +1,9 @@
 # Orbis changelog
 
+## Unreleased
+
+- Preserve existing app data permissions when starting, stopping, restarting, updating or regenerating configuration, including after a backup restore. Prepare installation and reset data before startup without changing private files subsequently created by the app.
+
 ## Beta59 — 21 October 2026
 
 - Stream uploads to private disk staging instead of holding the archive in memory.

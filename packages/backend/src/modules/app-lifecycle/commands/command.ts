@@ -66,9 +66,6 @@ export class AppLifecycleCommand {
       });
       throw new Error(`Error generating docker-compose.generated.yml file for app ${appUrn}.`);
     }
-
-    // Set permissions
-    await appFilesManager.setAppDataDirPermissions(appUrn);
   }
 
   protected handleAppError = async (err: unknown, appId: string, event: string): Promise<{ success: false; message: string }> => {

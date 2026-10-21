@@ -49,6 +49,7 @@ export class ResetAppCommand extends AppLifecycleCommand {
 
       await marketplaceService.copyDataDir(appUrn, envMap);
       await this.ensureAppDir(appUrn, form);
+      await appFilesManager.setAppDataDirPermissions(appUrn);
 
       return { success: true, message: `App ${appUrn} reset successfully` };
     } catch (err) {
