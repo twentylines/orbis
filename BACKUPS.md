@@ -6,7 +6,7 @@ Open **Apps → an app → Backups** to create, upload, download, restore or del
 
 ## Uploads
 
-The upload corrections in development builds stream archives to private disk storage, validate their contents and app configuration, then publish the completed file. An existing backup with the same filename is kept; rename the upload to retain both.
+In beta59 and later, uploads stream archives to private disk storage, validate their contents and app configuration, then publish the completed file. An existing backup with the same filename is kept; rename the upload to retain both.
 
 Allow enough free space for the incoming archive. App configuration metadata is limited to 1 MiB; this is separate from the app data inside the backup. Partial or invalid uploads do not enter the backup list. Cancelling stops a transfer or validation still in progress; a backup already published is retained. Temporary files left by an interrupted process are removed on the next upload for that app.
 

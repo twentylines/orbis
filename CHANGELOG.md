@@ -1,6 +1,6 @@
 # Orbis changelog
 
-## Unreleased — Backup uploads
+## Beta59 — 21 October 2026
 
 - Stream uploads to private disk staging instead of holding the archive in memory.
 - Validate archive contents and app identity before publishing a backup. Keep uploaded archives private and reject duplicate filenames without replacing existing backups.
