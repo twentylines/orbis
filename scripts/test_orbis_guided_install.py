@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -63,6 +64,20 @@ class GuidedTests(unittest.TestCase):
 
 
 class NewInstallationTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("docker"), "Docker Compose is unavailable")
+    def test_generated_stack_passes_the_real_release_planner(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            for name in [*NEW.HOST.PLAN.PREFLIGHT.DATA_PATHS, "data/postgres", "traefik/shared"]:
+                (root / name).mkdir(parents=True, exist_ok=True)
+            (root / ".env").write_text(f"ROOT_FOLDER_HOST='{root}'\nPOSTGRES_PASSWORD=owned-test-password\nRABBITMQ_PASSWORD=owned-test-password\n")
+            (root / "VERSION").write_text("4.10.1\n")
+            (root / "docker-compose.yml").write_text(json.dumps(NEW.compose(root, HEALTHY["image"], "/run/docker.sock", 18095, 19445)))
+            (root / "orbis-compose.yml").write_text(NEW.HOST.STAGE.staged_content(MANIFEST))
+            plan = NEW.HOST.PLAN.plan(root, MANIFEST)
+            self.assertEqual(plan["result"], "plan-ready")
+            self.assertEqual(plan["candidateImage"], HEALTHY["image"])
+
     def test_new_stack_pins_every_image_and_keeps_database_ports_private(self):
         config = NEW.compose(Path("/opt/orbis/server"), HEALTHY["image"], "/run/selected-docker.sock", 18170, 18171)
         services = config["services"]

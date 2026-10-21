@@ -109,8 +109,8 @@ def read_version(root: Path) -> str | None:
 
 def plan(root: Path, manifest: dict[str, str]) -> dict:
     inventory = PREFLIGHT.inspect(root)
-    if inventory["layout"] != "cli-v4":
-        raise ValueError("this planner requires a copied Runtipi CLI v4 installation")
+    if inventory["layout"] not in {"cli-v4", "orbis-v1"}:
+        raise ValueError("this planner requires a compatible Runtipi CLI v4 or Orbis installation")
     if inventory["result"] != "inventory-only":
         raise ValueError("the copied installation has unresolved preflight items")
     installed_version = read_version(root)

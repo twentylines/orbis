@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import tarfile
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -53,6 +54,28 @@ class BundleTests(unittest.TestCase):
     def test_private_notes_credentials_tests_and_unrelated_files_are_never_packaged(self):
         files = {**self.files, "HANDOFF.md": b"private", "AGENTS.md": b"private", ".env": b"secret", "scripts/test_orbis_host.py": b"test", ".orbis-private/orbis-secret.py": b"secret", "screenshots/private.png": b"pixels"}
         self.assertEqual(self.assets, BUILD.build(files, self.release_bytes))
+
+    def test_verified_real_package_can_import_every_installer_entry_point(self):
+        root = Path(__file__).resolve().parent.parent
+        files = {str(path.relative_to(root)): path.read_bytes() for path in (root / "scripts").glob("*.py") if BUILD.ALLOWED.fullmatch(str(path.relative_to(root)))}
+        unit = "packaging/systemd/orbis-host.service"
+        files[unit] = (root / unit).read_bytes()
+        assets = BUILD.build(files, self.release_bytes)
+        manifest = json.loads(assets[BUILD.MANIFEST])
+        verified = BOOT.verify_files(assets[BUILD.ARCHIVE], manifest)
+        with tempfile.TemporaryDirectory() as folder:
+            for name, data in verified.items():
+                destination = Path(folder) / name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(data)
+            entry = Path(folder) / "scripts/orbis-install.py"
+            spec = importlib.util.spec_from_file_location("packaged_guided_installer", entry)
+            guided = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(guided)
+            for name in ("install-orbis.py", "orbis-install-new.py", "orbis-host-service-enable.py"):
+                with self.subTest(name=name):
+                    module = guided.load(name, "packaged_" + name)
+                    self.assertEqual(Path(module.__file__).parent, entry.parent)
 
     def test_rejects_altered_manifest_and_wrong_release_identity(self):
         with self.assertRaisesRegex(ValueError, "match this release"):

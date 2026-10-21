@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +12,29 @@ SPEC.loader.exec_module(PREFLIGHT)
 
 
 class MigrationPreflightTests(unittest.TestCase):
+    def test_native_orbis_json_layout_requires_the_local_writable_database(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / ".env").write_text(f"ROOT_FOLDER_HOST={root}\n")
+            for name in [*PREFLIGHT.DATA_PATHS, "data/postgres"]:
+                (root / name).mkdir(parents=True)
+            mount = {"type": "bind", "source": str(root / "data/postgres"), "target": "/var/lib/postgresql/data", "read_only": False}
+            config = {"services": {"runtipi": {"image": "ghcr.io/twentylines/orbis@sha256:" + "a" * 64}, "runtipi-db": {"volumes": [mount]}}}
+            path = root / "docker-compose.yml"
+            path.write_text(json.dumps(config))
+            report = PREFLIGHT.inspect(root)
+            self.assertEqual(report["layout"], "orbis-v1")
+            self.assertEqual(report["result"], "inventory-only")
+            for key, value in [("source", "/outside/postgres"), ("read_only", True), ("type", "volume")]:
+                changed = json.loads(json.dumps(config))
+                changed["services"]["runtipi-db"]["volumes"][0][key] = value
+                path.write_text(json.dumps(changed))
+                with self.subTest(key=key):
+                    self.assertEqual(PREFLIGHT.inspect(root)["layout"], "unknown")
+            path.write_text(json.dumps(config))
+            (root / ".env").write_text("ROOT_FOLDER_HOST=/another/install\n")
+            self.assertEqual(PREFLIGHT.inspect(root)["result"], "review-required")
+
     def test_inventory_never_returns_env_values(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

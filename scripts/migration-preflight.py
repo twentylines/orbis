@@ -86,6 +86,17 @@ def detect_layout(root: Path) -> tuple[str, str, str]:
             compose = cli_compose.read_text(encoding="utf-8")
             if "./data/postgres:/var/lib/postgresql/data" in compose:
                 return "cli-v4", ".", "data/postgres"
+            try:
+                config = json.loads(compose)
+            except ValueError:
+                config = None
+            services = config.get("services") if isinstance(config, dict) else None
+            core = services.get("runtipi") if isinstance(services, dict) else None
+            database = services.get("runtipi-db") if isinstance(services, dict) else None
+            if isinstance(core, dict) and str(core.get("image", "")).startswith("ghcr.io/twentylines/orbis@sha256:") and isinstance(database, dict):
+                mounts = database.get("volumes")
+                if isinstance(mounts, list) and any(isinstance(mount, dict) and mount.get("type") == "bind" and mount.get("source") == str(root / "data/postgres") and mount.get("target") == "/var/lib/postgresql/data" and mount.get("read_only") is False for mount in mounts):
+                    return "orbis-v1", ".", "data/postgres"
         if dev_compose.is_file():
             compose = dev_compose.read_text(encoding="utf-8")
             if "pgdata:/var/lib/postgresql/data" in compose:
@@ -100,7 +111,7 @@ def inspect(root: Path) -> dict[str, object]:
     env_file = root / ".env"
     overrides = data_overrides(env_file)
     layout, default_base, database_path = detect_layout(root)
-    host_root = root_host_status(env_file, root) if layout == "cli-v4" else "not-applicable"
+    host_root = root_host_status(env_file, root) if layout in {"cli-v4", "orbis-v1"} else "not-applicable"
     directories = {
         suffix: inspect_directory(root, overrides.get(key, default_base), suffix)
         for suffix, key in DATA_PATHS.items()
