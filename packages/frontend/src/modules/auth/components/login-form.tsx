@@ -60,13 +60,13 @@ export const LoginForm: React.FC<IProps> = ({ loading, onSubmit, loginType }) =>
           className="mb-3 password-input"
           autoComplete="current-password"
         />
-        <div className="form-footer">
+        <div className="form-footer desktop-login-actions">
           <Button disabled={isDisabled} loading={loading} type="submit" intent="primary" className="w-100">
             {t('AUTH_LOGIN_SUBMIT')}
           </Button>
-        </div>
-        <div className="form-text text-center">
-          <Link to="/reset-password">{t('AUTH_FORM_FORGOT')}</Link>
+          <div className="form-text desktop-login-recovery">
+            <Link to="/reset-password">{t('AUTH_FORM_FORGOT')}</Link>
+          </div>
         </div>
       </form>
     </>

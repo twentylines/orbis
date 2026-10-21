@@ -43,10 +43,10 @@ html:has(.desktop) {
   background-color: #bdc8bc;
   background-image: var(--desktop-wallpaper);
 }
-.desktop a {
+.desktop :where(a:not(.btn)) {
   color: inherit;
 }
-.desktop a:hover {
+.desktop :where(a:not(.btn):hover) {
   color: var(--desktop-accent);
 }
 .desktop button:focus-visible,
@@ -192,11 +192,11 @@ html:has(.desktop) {
   text-align: left;
 }
 .desktop-mode-toggle {
-  gap: 8px;
   height: 40px;
-  width: calc(48px + 3em);
-  min-width: 84px;
-  padding: 0 11px;
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  justify-content: center;
   border-radius: 11px;
   font-size: 12px;
   font-weight: 690;

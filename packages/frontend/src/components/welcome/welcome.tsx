@@ -2,7 +2,7 @@ import { acknowledgeWelcomeMutation } from '@/api-client/@tanstack/react-query.g
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
 import { AuthLayout } from '@/components/layouts/auth/layout';
-import { IconBrandDiscord, IconBrandGithub } from '@tabler/icons-react';
+import { IconBrandGithub, IconVersions } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -27,7 +27,7 @@ export const Welcome = ({ allowErrorMonitoring }: Props) => {
         <h2 id="welcome-title" className="h2">
           Before you start
         </h2>
-        <p>Optional error reports use the inherited Runtipi integration and may be sent to its upstream service.</p>
+        <p>When enabled, error reports go to Runtipi's Sentry service.</p>
         <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Enable error reporting" />
         <Button
           intent="primary"
@@ -38,25 +38,14 @@ export const Welcome = ({ allowErrorMonitoring }: Props) => {
           Save and open dashboard
         </Button>
         <div className="desktop-welcome-community">
-          <h3>Runtipi community</h3>
-          <p>
-            Support the upstream maintainers by{' '}
-            <a target="_blank" href="https://github.com/runtipi/runtipi?sponsor=1" rel="noreferrer">
-              donating
-            </a>{' '}
-            or by{' '}
-            <a target="_blank" rel="noreferrer" href="https://github.com/runtipi/runtipi">
-              contributing to the codebase
-            </a>
-            .
-          </p>
+          <h3>Project links</h3>
+          <p>Source code, release notes and issue reports.</p>
           <div className="desktop-welcome-links">
-            <Button onClick={() => openLink('https://github.com/runtipi/runtipi/discussions')}>
-              <IconBrandGithub aria-hidden="true" /> GitHub
+            <Button onClick={() => openLink('https://github.com/twentylines/orbis')}>
+              <IconBrandGithub aria-hidden="true" /> Source code
             </Button>
-            <Button onClick={() => openLink('https://discord.gg/WGW7YP7E5j')}>
-              <IconBrandDiscord aria-hidden="true" />
-              Discord
+            <Button onClick={() => openLink('https://github.com/twentylines/orbis/releases')}>
+              <IconVersions aria-hidden="true" /> Releases
             </Button>
           </div>
         </div>

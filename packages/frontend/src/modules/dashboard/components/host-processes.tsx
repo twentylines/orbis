@@ -1,3 +1,4 @@
+import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import type { HostProcesses } from '@runtipi/common/schemas';
 import { useEffect, useRef, useState } from 'react';
@@ -5,18 +6,19 @@ import { useWindowVisible } from '@/desktop/window-visibility';
 import { resourceBytes } from '@/components/container-resources/container-resources';
 import './host-processes.css';
 
-async function loadProcesses(signal: AbortSignal): Promise<HostProcesses> {
-  const response = await fetch('/api/system/host-processes', { credentials: 'include', signal });
+async function loadProcesses(signal: AbortSignal, path: string): Promise<HostProcesses> {
+  const response = await fetch(path, { credentials: 'include', signal });
   if (!response.ok) throw new Error('Unable to read host processes');
   return response.json();
 }
 
 export function HostProcessesView() {
   const visible = useWindowVisible();
+  const path = useServerPath()('/api/system/host-processes');
   const [sort, setSort] = useState<'cpuPercent' | 'memoryBytes'>('cpuPercent');
   const query = useQuery({
-    queryKey: ['host-processes'],
-    queryFn: ({ signal }) => loadProcesses(signal),
+    queryKey: ['host-processes', path],
+    queryFn: ({ signal }) => loadProcesses(signal, path),
     enabled: visible,
     refetchInterval: (query) => {
       const value = query.state.data;

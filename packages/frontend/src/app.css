@@ -129,13 +129,22 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.desktop-auth-credit {
-  text-align: center;
+.desktop-login-actions {
+  display: grid;
+  gap: 16px;
+}
+.desktop-login-actions .desktop-login-recovery {
+  justify-self: center;
+  max-width: 100%;
   margin: 0;
-  padding: 16px 24px;
-  border-top: 1px solid var(--desktop-line);
-  color: var(--desktop-muted);
-  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.desktop-login-recovery a {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 8px;
 }
 .desktop-welcome {
   display: grid;
@@ -212,9 +221,6 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   }
   .desktop-auth .h2 {
     font-size: var(--orbis-compact-page-title);
-  }
-  .desktop-auth-credit {
-    padding: 12px 20px;
   }
   .desktop-auth pre {
     padding: 12px;

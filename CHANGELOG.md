@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Pair servers into named clusters with one admin host, expiring codes, signed commands and persistent replay protection.
+- Browse the 3D server rack by mouse, touch or keyboard; switch Monitor readings and histories, or merge server apps and update lists.
+- Review Orbis updates separately from batch app updates, with server names and individual request outcomes.
+- Reserve the complete painted server-name glyphs, place uptime beside CPU and memory, simplify the mode toggle and improve login spacing.
 - Add stopped-writer installation storage recovery with a persistent journal and interrupted-copy replay.
 - Verify Linux extended attributes, ACLs and hard links within collected resources; compare nanosecond timestamps during recovery and flush snapshot data before sealing it.
 - Recognize controller-local Compose paths when discovering installed apps, with host configuration checks for ambiguous controller mappings.

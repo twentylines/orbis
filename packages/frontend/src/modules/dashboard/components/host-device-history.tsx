@@ -1,3 +1,4 @@
+import { useServerPath } from '@/desktop/cluster-data';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
@@ -18,6 +19,7 @@ const ranges = [
 
 export function HostDeviceHistoryView() {
   const visible = useWindowVisible();
+  const serverPath = useServerPath();
   const queryClient = useQueryClient();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -31,10 +33,11 @@ export function HostDeviceHistoryView() {
     !/^(network|disk):\.{1,2}$/.test(requested)
       ? requested
       : null;
+  const path = serverPath(`/api/system/host-history?range=${range}${device ? `&device=${encodeURIComponent(device)}` : ''}`);
   const query = useQuery<HostDeviceHistory>({
-    queryKey: ['host-device-history', range, device],
+    queryKey: ['host-device-history', range, device, path],
     queryFn: async ({ signal }) => {
-      const response = await fetch(`/api/system/host-history?range=${range}${device ? `&device=${encodeURIComponent(device)}` : ''}`, {
+      const response = await fetch(path, {
         credentials: 'include',
         signal,
       });

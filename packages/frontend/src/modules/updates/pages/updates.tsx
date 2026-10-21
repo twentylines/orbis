@@ -8,6 +8,9 @@ import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import './updates.css';
+import { useCluster } from '@/desktop/cluster';
+import { ClusterUpdates } from '@/desktop/cluster-updates';
+import { UpdateAllButton } from '@/modules/app/components/update-all-button/update-all-button';
 
 type Release = { tag: string; publishedAt: string | null; body: string; url: string; imageManifestUrl: string | null };
 type Build = { version: string; commit: string | null; imageDigest: string | null; runtipiCompatibility: string | null };
@@ -118,6 +121,12 @@ async function loadOrbisReleases(signal: AbortSignal): Promise<Release[]> {
 }
 
 export default function Updates() {
+  const cluster = useCluster();
+  if (cluster.merged || (cluster.selectedServer && !cluster.selectedServer.local)) return <ClusterUpdates />;
+  return <LocalUpdates />;
+}
+
+function LocalUpdates() {
   const visible = useWindowVisible();
   const { user } = useAppContext();
   const [reviewPlan, setReviewPlan] = useState<HostPlan | null>(null);
@@ -243,6 +252,7 @@ export default function Updates() {
               <p>Updates from your configured app stores</p>
             </div>
           </div>
+          {available.length > 0 && user.operator ? <UpdateAllButton /> : null}
           {apps.isPending ? <p>Checking installed applications…</p> : null}
           {apps.isError ? <p role="alert">Application updates could not be checked. Try again from Applications.</p> : null}
           {apps.data && available.length === 0 ? <p>No app updates in the cached catalogue.</p> : null}
@@ -289,7 +299,6 @@ export default function Updates() {
                 ) : (
                   <span>Image digest unavailable.</span>
                 )}
-                {build.data.runtipiCompatibility ? <span>Runtipi compatibility: {build.data.runtipiCompatibility}</span> : null}
               </>
             ) : null}
           </div>

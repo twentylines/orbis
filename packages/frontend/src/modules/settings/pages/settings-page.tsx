@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
 import { Appearance } from '../containers/appearance';
+import { ClusterSettings } from '../containers/cluster-settings';
 
 const GeneralActionsContainer = lazy(() => import('../containers/general-actions').then((module) => ({ default: module.GeneralActionsContainer })));
 const UserSettingsContainer = lazy(() => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer })));
@@ -17,7 +18,7 @@ export default () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get('tab');
   const { userSettings, user } = useAppContext();
-  const currentTab = tab && ['actions', 'appearance', 'settings', 'security', 'appstores', 'logs'].includes(tab) ? tab : 'actions';
+  const currentTab = tab && ['actions', 'appearance', 'settings', 'security', 'cluster', 'appstores', 'logs'].includes(tab) ? tab : 'actions';
 
   const handleTabChange = (newTab: string) => {
     setSearchParams(
@@ -38,6 +39,7 @@ export default () => {
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="settings">{t('SETTINGS_GENERAL_TAB_TITLE')}</TabsTrigger>
           <TabsTrigger value="security">{t('SETTINGS_SECURITY_TAB_TITLE')}</TabsTrigger>
+          <TabsTrigger value="cluster">Cluster</TabsTrigger>
           <TabsTrigger value="appstores" className="d-none d-md-block">
             {t('SETTINGS_APPSTORES_TAB_TITLE')}
           </TabsTrigger>
@@ -69,6 +71,9 @@ export default () => {
           <Suspense>
             <SecurityContainer totpEnabled={Boolean(user.totpEnabled)} username={user.username} />
           </Suspense>
+        </TabsContent>
+        <TabsContent value="cluster">
+          <ClusterSettings />
         </TabsContent>
         <TabsContent value="appstores">
           <Suspense>

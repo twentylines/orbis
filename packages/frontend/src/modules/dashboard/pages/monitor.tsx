@@ -12,6 +12,9 @@ import { HostDevices } from '../components/host-devices';
 import { HostProcessesView } from '../components/host-processes';
 import { HostDeviceHistoryView } from '../components/host-device-history';
 import { HostSensorsView } from '../components/host-sensors';
+import { ServerRack, useCluster } from '@/desktop/cluster';
+import { useServerPath } from '@/desktop/cluster-data';
+import { ClusterOverview } from '@/desktop/cluster-views';
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return 'Unavailable';
@@ -27,17 +30,28 @@ const bytes = (value: number | null) => {
 };
 const percent = (value: number | null) => (value === null ? 'Unavailable' : `${value.toFixed(1)}%`);
 const width = (value: number | null) => `${Math.min(100, Math.max(0, value ?? 0))}%`;
-
 export default function Monitor() {
+  const { merged } = useCluster();
+  return merged ? <ClusterOverview /> : <ServerMonitor />;
+}
+
+function ServerMonitor() {
   const visible = useWindowVisible();
+  const { selectedServer, selectedId } = useCluster();
+  const telemetryPath = useServerPath()('/api/system/telemetry');
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedRange = searchParams.get('range');
   const range: MetricHistoryRange = selectedRange && Object.hasOwn(metricHistoryRanges, selectedRange) ? (selectedRange as MetricHistoryRange) : '1h';
   const history = useMetricHistory(range);
   const telemetry = useQuery<Telemetry>({
     enabled: visible,
-    queryKey: telemetryQueryKey,
-    queryFn: ({ signal }) => loadTelemetry(signal),
+    queryKey: selectedId ? ['cluster-server', selectedId, 'telemetry'] : [...telemetryQueryKey, telemetryPath],
+    queryFn: async ({ signal }) => {
+      if (telemetryPath === '/api/system/telemetry') return loadTelemetry(signal);
+      const response = await fetch(telemetryPath, { credentials: 'include', signal });
+      if (!response.ok) throw new Error('The selected server is unavailable');
+      return response.json();
+    },
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
   });
@@ -60,7 +74,9 @@ export default function Monitor() {
 
   return (
     <div className="desktop-monitor">
-      <p className="desktop-monitor-scope">CPU, memory, host devices and Orbis core network readings.</p>
+      <p className="desktop-monitor-scope">
+        {selectedServer && !selectedServer.local ? `${selectedServer.name} · ` : ''}CPU, memory, host devices and Orbis core network readings.
+      </p>
       <div className="desktop-monitor-live-status">
         <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} />
         <strong>{telemetry.isError ? 'Connection interrupted' : 'Live readings'}</strong>
@@ -75,59 +91,28 @@ export default function Monitor() {
         </div>
       ) : null}
       {telemetry.isPending ? <p>Loading system status…</p> : null}
+      <section className="desktop-host-overview" aria-labelledby="desktop-host-overview-title">
+        <div className="desktop-host-overview-copy" key={selectedId}>
+          <h2 id="desktop-host-overview-title">System status</h2>
+          <div className="desktop-host-overview-readings">
+            <div>
+              <span>{sample?.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU'}</span>
+              <strong>{percent(sample?.cpu.totalPercent ?? null)}</strong>
+            </div>
+            <div>
+              <span>Host memory</span>
+              <strong>{percent(memoryPercent)}</strong>
+            </div>
+            <div>
+              <span>Uptime</span>
+              <strong>{formatUptime(sample?.cpu.uptimeSeconds)}</strong>
+            </div>
+          </div>
+        </div>
+        <ServerRack cpu={sample?.cpu.totalPercent ?? null} memory={memoryPercent} online={telemetry.isPending ? undefined : !telemetry.isError} />
+      </section>
       {sample ? (
         <>
-          <output className="desktop-monitor-time">
-            Uptime {formatUptime(sample.cpu.uptimeSeconds)}
-            {telemetry.isError ? ' · Disconnected' : ''}
-          </output>
-          <section className="desktop-host-overview" aria-labelledby="desktop-host-overview-title">
-            <div className="desktop-host-overview-copy">
-              <h2 id="desktop-host-overview-title">System status</h2>
-              <div className="desktop-host-overview-readings">
-                <div>
-                  <span>{sample.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU'}</span>
-                  <strong>{percent(sample.cpu.totalPercent)}</strong>
-                </div>
-                <div>
-                  <span>Host memory</span>
-                  <strong>{percent(memoryPercent)}</strong>
-                </div>
-              </div>
-            </div>
-            <div className="desktop-host-visual" aria-hidden="true">
-              <div className="desktop-host-shadow" />
-              <div className="desktop-host-machine">
-                <div className="desktop-host-machine-top" />
-                <div className="desktop-host-machine-side" />
-                <div className="desktop-host-machine-front">
-                  <div className="desktop-host-machine-head">
-                    <span className="desktop-host-machine-mark">O</span>
-                    <span>ORBIS / LOCAL</span>
-                    <i className={telemetry.isError ? 'desktop-host-machine-led is-stale' : 'desktop-host-machine-led'} />
-                  </div>
-                  <div className="desktop-host-machine-bay">
-                    <span>CPU</span>
-                    <b>{percent(sample.cpu.totalPercent)}</b>
-                    <i>
-                      <span style={{ width: width(sample.cpu.totalPercent) }} />
-                    </i>
-                  </div>
-                  <div className="desktop-host-machine-bay">
-                    <span>MEMORY</span>
-                    <b>{percent(memoryPercent)}</b>
-                    <i>
-                      <span style={{ width: width(memoryPercent) }} />
-                    </i>
-                  </div>
-                  <div className="desktop-host-machine-base">
-                    <span>01</span>
-                    <span>SERVER MODULE</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
           <div className="monitor-history-toolbar">
             <fieldset className="monitor-history-ranges">
               <legend className="visually-hidden">History time range</legend>
@@ -299,7 +284,7 @@ export default function Monitor() {
         </>
       ) : null}
       <HostDeviceHistoryView />
-      <HostProcessesView />
+      <HostProcessesView key={telemetryPath} />
       <HostSensorsView />
     </div>
   );

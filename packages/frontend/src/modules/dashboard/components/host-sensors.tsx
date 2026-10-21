@@ -1,3 +1,4 @@
+import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import { IconChevronRight } from '@tabler/icons-react';
 import type { HostSensors, HostSensorStatus } from '@runtipi/common/schemas';
@@ -6,8 +7,8 @@ import { useWindowVisible } from '@/desktop/window-visibility';
 import { resourceBytes } from '@/components/container-resources/container-resources';
 import './host-sensors.css';
 
-async function loadSensors(signal: AbortSignal): Promise<HostSensors> {
-  const response = await fetch('/api/system/host-sensors', { credentials: 'include', signal });
+async function loadSensors(signal: AbortSignal, path: string): Promise<HostSensors> {
+  const response = await fetch(path, { credentials: 'include', signal });
   if (!response.ok) throw new Error('Unable to read hardware sensors');
   return response.json();
 }
@@ -31,9 +32,10 @@ function SensorCoverage({ omitted, unavailable }: { omitted: number; unavailable
 
 export function HostSensorsView() {
   const visible = useWindowVisible();
+  const path = useServerPath()('/api/system/host-sensors');
   const query = useQuery({
-    queryKey: ['host-sensors'],
-    queryFn: ({ signal }) => loadSensors(signal),
+    queryKey: ['host-sensors', path],
+    queryFn: ({ signal }) => loadSensors(signal, path),
     enabled: visible,
     refetchInterval: (query) => (query.state.data?.available === false && query.state.data.reason === 'Collecting sensor readings.' ? 2000 : 30_000),
     refetchIntervalInBackground: false,

@@ -38,6 +38,10 @@
   margin: 0;
   overflow-wrap: normal;
 }
+.workspace-heading h1 .orbis-whole-word {
+  box-sizing: border-box;
+  padding-inline-end: 0.1em;
+}
 .workspace-subline {
   margin: 14px 0 0;
   font-size: 13px;
@@ -691,6 +695,37 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 6em), 1fr));
   gap: max(12px, 1em);
+}
+.workspace-uptime {
+  text-decoration: none;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  min-width: 0;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--desktop-accent) 8%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.workspace-uptime > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.workspace-uptime svg {
+  flex: none;
+}
+.workspace-uptime strong {
+  font-variant-numeric: tabular-nums;
+}
+.cluster-home {
+  display: grid;
+  gap: 32px;
+  min-width: 0;
 }
 .workspace-gauge {
   display: flex;

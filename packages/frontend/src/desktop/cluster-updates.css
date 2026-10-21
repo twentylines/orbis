@@ -1,0 +1,93 @@
+.cluster-updates {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+  color: var(--desktop-ink);
+}
+.cluster-updates-heading,
+.cluster-update-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.cluster-updates :is(h2, h3, h4, p) {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.cluster-updates :is(h2, h3, h4) {
+  line-height: 1.3;
+}
+.cluster-updates p {
+  color: var(--desktop-muted);
+  margin-top: 8px;
+  line-height: 1.6;
+}
+.cluster-update-section {
+  min-width: 0;
+  padding: clamp(20px, 3vw, 32px);
+  border: 1px solid var(--desktop-line);
+  border-radius: 22px;
+  background: var(--desktop-surface);
+}
+.cluster-update-server {
+  padding-block: 24px;
+  border-top: 1px solid var(--desktop-line);
+  margin-top: 24px;
+  min-width: 0;
+}
+.cluster-update-server:last-child {
+  padding-bottom: 0;
+}
+.cluster-update-server > output {
+  display: block;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+.cluster-update-server ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding-left: 20px;
+  margin: 16px 0 0;
+}
+.cluster-update-server details {
+  margin-top: 16px;
+}
+.cluster-update-server summary {
+  padding-block: 10px;
+  cursor: pointer;
+}
+.cluster-update-notes {
+  margin-block: 16px;
+  line-height: 1.7;
+}
+.cluster-update-outcomes {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.cluster-update-outcomes li,
+.cluster-update-review li {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  background: var(--desktop-surface);
+  border: 1px solid var(--desktop-line);
+  border-radius: 14px;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.cluster-update-outcomes [data-failed="true"] {
+  border-color: var(--desktop-negative);
+}
+.cluster-update-review {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin-block: 24px;
+  list-style: none;
+}

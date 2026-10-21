@@ -11,7 +11,16 @@ import { useDesktopWindows } from './window-viewport';
 import { appDestinations } from './app-destinations';
 import './app-launcher.css';
 
-type LaunchRequest = { urn: string; name: string; preferredUrl?: string };
+type LaunchRequest = {
+  urn: string;
+  name: string;
+  preferredUrl?: string;
+  serverName?: string;
+  logoUrl?: string;
+  launchUrl?: string;
+  manageUrl?: string;
+  status?: string;
+};
 const AppLauncherContext = createContext<(request: LaunchRequest) => boolean>(() => false);
 const AppTrayContext = createContext<ReactNode>(null);
 export const useAppLauncher = () => useContext(AppLauncherContext);
@@ -65,8 +74,8 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   );
   const details = useQuery({
     ...getAppOptions({ path: { urn: selected?.urn ?? '' } }),
-    enabled: selected !== null && desktop,
-    refetchInterval: selected && desktop ? 15000 : false,
+    enabled: selected !== null && !selected.manageUrl && desktop,
+    refetchInterval: selected && !selected.manageUrl && desktop ? 15000 : false,
     refetchIntervalInBackground: false,
     retry: false,
   });
@@ -263,12 +272,18 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     setSelected(request);
   };
 
-  const data = details.data;
-  const destinations = data ? appDestinations(data, userSettings, window.location.hostname) : [];
+  const data = selected?.manageUrl ? undefined : details.data;
+  const destinations = selected?.manageUrl
+    ? selected.launchUrl
+      ? [{ label: selected.serverName || 'Server address', url: selected.launchUrl }]
+      : []
+    : data
+      ? appDestinations(data, userSettings, window.location.hostname)
+      : [];
   const primary = destinations.find((destination) => destination.url === normalizeAddress(selected?.preferredUrl)) ?? destinations[0];
   const [appId, storeId] = selected?.urn.split(':') ?? [];
   const managePath = `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}`;
-  const status = data?.app?.status;
+  const status = selected?.manageUrl ? selected.status : data?.app?.status;
 
   const minimizedApps = desktop ? (
     <fieldset
@@ -290,7 +305,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
               onClick={() => restore(request)}
               onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
             >
-              <AppLogo urn={request.urn} size={28} />
+              <AppLogo urn={request.urn} url={request.logoUrl} size={28} />
             </Button>
             <Button
               className="app-tray-close"
@@ -350,7 +365,9 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
               }}
             >
               <header className="app-launcher-bar">
-                <span title={userSettings.internalIp || window.location.hostname}>{userSettings.internalIp || window.location.hostname}</span>
+                <span title={selected?.serverName || userSettings.internalIp || window.location.hostname}>
+                  {selected?.serverName || userSettings.internalIp || window.location.hostname}
+                </span>
                 <div className="app-launcher-controls">
                   <Button className="app-launcher-close" size="icon" aria-label="Minimize app launcher" disabled={minimizing} onClick={minimize}>
                     <IconMinus size={19} aria-hidden="true" />
@@ -364,7 +381,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
               </header>
               <div className="app-launcher-body">
                 <div className="app-launcher-identity">
-                  <AppLogo urn={selected?.urn} size={64} />
+                  <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={64} />
                   <div>
                     <Dialog.Title>{data?.info.name ?? selected?.name}</Dialog.Title>
                     <span className="app-launcher-status">
@@ -373,7 +390,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                   </div>
                 </div>
                 <Dialog.Description className="app-launcher-description">
-                  {details.isError
+                  {!selected?.manageUrl && details.isError
                     ? 'App details could not be loaded. Try again or open its settings.'
                     : data?.info.no_gui
                       ? 'This app runs without a web interface.'
@@ -402,12 +419,18 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                     ))}
                   </ul>
                 ) : null}
-                {details.isError ? <Button onClick={() => void details.refetch()}>Retry</Button> : null}
+                {!selected?.manageUrl && details.isError ? <Button onClick={() => void details.refetch()}>Retry</Button> : null}
                 <Button asChild variant="outline">
-                  <Link to={managePath} viewTransition onClick={() => setSelected(null)}>
-                    <IconSettings size={18} aria-hidden="true" />
-                    App settings
-                  </Link>
+                  {selected?.manageUrl ? (
+                    <a href={selected.manageUrl} target="_blank" rel="noopener noreferrer">
+                      <IconSettings size={18} aria-hidden="true" /> App settings
+                    </a>
+                  ) : (
+                    <Link to={managePath} viewTransition onClick={() => setSelected(null)}>
+                      <IconSettings size={18} aria-hidden="true" />
+                      App settings
+                    </Link>
+                  )}
                 </Button>
               </div>
             </Dialog.Content>

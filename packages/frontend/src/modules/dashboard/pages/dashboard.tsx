@@ -20,12 +20,15 @@ import {
   IconDeviceDesktopAnalytics,
   IconPlus,
   IconPin,
+  IconClock,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import './dashboard.css';
+import { useCluster } from '@/desktop/cluster';
+import { ClusterApps, ClusterOverview } from '@/desktop/cluster-views';
 
 const labels: Record<WidgetId, string> = {
   applications: 'Applications',
@@ -50,6 +53,18 @@ const rate = (value: number | null) => {
 };
 
 export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
+  const cluster = useCluster();
+  if (cluster.merged || (cluster.selectedServer && !cluster.selectedServer.local))
+    return (
+      <div className="cluster-home">
+        <ClusterOverview />
+        <ClusterApps compact />
+      </div>
+    );
+  return <LocalDashboard focusOnMount={focusOnMount} />;
+}
+
+function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const openApp = useAppLauncher();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -254,7 +269,6 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
         <div className="workspace-section-heading">
           <div>
             <h2 id="workspace-activity-title">System status</h2>
-            <p>{system.data ? `Uptime ${formatUptime(system.data.cpu.uptimeSeconds)}` : 'Reading uptime…'}</p>
           </div>
           <Link to="/monitor" viewTransition aria-label="Expand System status">
             <IconDeviceDesktopAnalytics size={21} aria-hidden="true" />
@@ -283,6 +297,13 @@ export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boo
                   <strong>{typeof memoryPercent === 'number' ? number(memoryPercent, '%') : '—'}</strong>
                 </span>
                 <span>Host memory</span>
+              </Link>
+              <Link to="/monitor" viewTransition className="workspace-uptime">
+                <span>
+                  <IconClock size={18} aria-hidden="true" />
+                  Uptime
+                </span>
+                <strong>{system.data ? formatUptime(system.data.cpu.uptimeSeconds) : '—'}</strong>
               </Link>
             </div>
             <Link to="/monitor" viewTransition className="workspace-network">

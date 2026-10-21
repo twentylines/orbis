@@ -1,7 +1,12 @@
 import type { GetAppDto } from '@/api-client';
 
 type ServerAddresses = { localDomain?: string; sslPort?: number };
-export function appDestinations({ app, info, metadata }: GetAppDto, settings: ServerAddresses, hostname: string) {
+export type AppDestinationData = {
+  app?: Pick<NonNullable<GetAppDto['app']>, 'status' | 'openPort' | 'port' | 'exposedLocal' | 'exposed' | 'domain'> | null;
+  info: Pick<GetAppDto['info'], 'no_gui' | 'url_suffix' | 'https' | 'dynamic_config' | 'port'>;
+  metadata: Pick<GetAppDto['metadata'], 'localSubdomain'>;
+};
+export function appDestinations({ app, info, metadata }: AppDestinationData, settings: ServerAddresses, hostname: string) {
   if (!app || app.status !== 'running' || info.no_gui) return [];
   const result: { label: string; url: string }[] = [];
   const tlsPort = settings.sslPort && settings.sslPort !== 443 ? `:${settings.sslPort}` : '';

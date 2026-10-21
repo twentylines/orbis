@@ -1,0 +1,216 @@
+.cluster-settings {
+  min-width: 0;
+  padding: 8px 0 20px;
+}
+.cluster-settings-state {
+  padding: 16px 0;
+  color: var(--desktop-muted);
+}
+.cluster-settings-message {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--desktop-line);
+  background: color-mix(in srgb, var(--desktop-positive) 8%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.cluster-settings-message[data-failed="true"] {
+  background: color-mix(in srgb, var(--desktop-negative) 8%, var(--desktop-surface));
+}
+.cluster-settings-section {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 28px;
+  padding: 25px 0;
+  border-top: 1px solid var(--desktop-line);
+}
+.cluster-settings-section > * {
+  min-width: 0;
+}
+.cluster-settings-section h2 {
+  font-size: var(--orbis-compact-section, 18px);
+  margin: 0 0 8px;
+}
+.cluster-settings-section p {
+  max-width: 34ch;
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.65;
+}
+.cluster-settings-form {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 10px;
+}
+.cluster-settings-form > label {
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.6;
+  margin-top: 4px;
+}
+:where(.cluster-settings-form label) > span {
+  font-weight: 450;
+}
+.cluster-settings-form input:not([type="checkbox"]) {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 10px 12px;
+  background: var(--desktop-surface);
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  color: var(--desktop-ink);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.cluster-settings-input-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+}
+.cluster-settings-input-action > input {
+  flex: 1 1 190px;
+}
+.cluster-settings-input-action > button {
+  flex: 0 1 auto;
+}
+.cluster-settings-form > .cluster-settings-checkbox {
+  display: flex;
+  align-items: start;
+  gap: 12px;
+  margin: 10px 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.cluster-settings-checkbox input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: calc((1.6em - 18px) / 2 + 0.1em);
+  font: inherit;
+  accent-color: var(--desktop-action);
+}
+.cluster-settings-help {
+  display: block;
+  margin-top: 5px;
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+  line-height: 1.65;
+}
+.cluster-settings-membership {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 12px;
+}
+.cluster-settings-membership > strong {
+  overflow-wrap: anywhere;
+  font-size: 1.125rem;
+}
+.cluster-settings-membership > span {
+  color: var(--desktop-muted);
+}
+.cluster-invitation {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 12px;
+  margin-top: 5px;
+  padding: 18px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 8%, var(--desktop-surface));
+}
+.cluster-invitation > span {
+  font-size: 0.8125rem;
+  color: var(--desktop-muted);
+}
+.cluster-invitation output {
+  max-width: 100%;
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+  font-size: 1.375rem;
+  line-height: 1.6;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+.cluster-settings-servers {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cluster-settings-servers > li {
+  display: flex;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.cluster-settings-servers > li:first-child {
+  padding-top: 0;
+}
+.cluster-settings-servers > li > svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--desktop-muted);
+}
+.cluster-settings-servers > li > div {
+  display: flex;
+  flex: 1 1 150px;
+  flex-direction: column;
+  min-width: 0;
+  gap: 5px;
+}
+.cluster-settings-servers strong {
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+.cluster-settings-servers span {
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.cluster-settings-servers > li > button {
+  margin-left: auto;
+}
+@media (max-width: 760px) {
+  .cluster-settings-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    padding: 22px 0;
+  }
+  .cluster-settings-section p {
+    max-width: 58ch;
+  }
+}
+
+.cluster-remove-recovery {
+  padding: 0 24px 20px;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.65;
+}
+.cluster-remove-recovery p {
+  margin: 0 0 12px;
+}
+
+.cluster-remove-dialog button {
+  scroll-margin: 16px;
+}

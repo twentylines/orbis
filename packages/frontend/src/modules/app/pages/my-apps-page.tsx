@@ -18,8 +18,16 @@ import { RestartAllButton, StartAllButton, StopAllButton } from '../components/b
 import { useContainerTelemetry } from '@/desktop/containers';
 import { DockerAppsSection } from '../components/docker-apps/docker-apps';
 import { useAppLauncher } from '@/desktop/app-launcher';
+import { useCluster } from '@/desktop/cluster';
+import { ClusterApps } from '@/desktop/cluster-views';
 
 export default () => {
+  const cluster = useCluster();
+  if (cluster.merged || (cluster.selectedServer && !cluster.selectedServer.local)) return <ClusterApps />;
+  return <LocalApps />;
+};
+
+function LocalApps() {
   const openApp = useAppLauncher();
   const containers = useContainerTelemetry();
   const { data: apps } = useSuspenseQuery({
@@ -151,4 +159,4 @@ export default () => {
       <AddLinkDialog isOpen={addLinkDisclosure.isOpen} onClose={() => addLinkDisclosure.close()} />
     </div>
   );
-};
+}

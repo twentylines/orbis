@@ -11,6 +11,8 @@ import { useTranslation } from 'react-i18next';
 import { StoreSelector } from '@/components/store-selector/store-selector';
 import { CategorySelector } from '@/components/category-selector/category-selector';
 import { ActionBar } from '@/components/action-bar/action-bar';
+import { useCluster } from '@/desktop/cluster';
+import { ClusterStore } from '@/desktop/cluster-views';
 
 export const AppStorePageSuspense = () => {
   return (
@@ -29,6 +31,12 @@ export const AppStorePageSuspense = () => {
 };
 
 export default () => {
+  const cluster = useCluster();
+  if (cluster.merged || (cluster.selectedServer && !cluster.selectedServer.local)) return <ClusterStore />;
+  return <LocalStore />;
+};
+
+function LocalStore() {
   const params = useParams<{ storeId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -138,4 +146,4 @@ export default () => {
       </div>
     </>
   );
-};
+}

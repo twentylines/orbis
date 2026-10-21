@@ -1,3 +1,4 @@
+import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import { Fragment, useEffect, useRef } from 'react';
 import type { HostTelemetry } from '@runtipi/common/schemas';
@@ -31,8 +32,8 @@ function HistoryLink({ kind, name }: { kind: 'network' | 'disk'; name: string })
   );
 }
 
-async function loadHostDevices(signal: AbortSignal): Promise<HostTelemetry> {
-  const response = await fetch('/api/system/host-telemetry', { credentials: 'include', signal });
+async function loadHostDevices(signal: AbortSignal, path: string): Promise<HostTelemetry> {
+  const response = await fetch(path, { credentials: 'include', signal });
   if (!response.ok) throw new Error('Unable to read host devices');
   return response.json();
 }
@@ -83,9 +84,10 @@ function MountPath({ mount }: { mount: string }) {
 
 export function HostDevices() {
   const visible = useWindowVisible();
+  const path = useServerPath()('/api/system/host-telemetry');
   const query = useQuery({
-    queryKey: ['host-telemetry'],
-    queryFn: ({ signal }) => loadHostDevices(signal),
+    queryKey: ['host-telemetry', path],
+    queryFn: ({ signal }) => loadHostDevices(signal, path),
     enabled: visible,
     refetchInterval: (query) => (query.state.data?.available === false && query.state.data.reason === 'Collecting host readings.' ? 2000 : 10_000),
     refetchIntervalInBackground: false,
