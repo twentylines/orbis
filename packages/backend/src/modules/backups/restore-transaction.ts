@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { validateAppUrn } from '@/common/helpers/app-helpers';
+import { spawnAsync } from '@/common/helpers/exec-helpers';
 import type { FilesystemService } from '@/core/filesystem/filesystem.service';
 import type { LoggerService } from '@/core/logger/logger.service';
 import type { AppUrn } from '@runtipi/common/types';
@@ -39,17 +40,48 @@ const ensureDirectory = async (directory: string) => {
   await requireDirectory(directory);
 };
 
-export const preserveTreeMetadata = async (source: string, destination: string) => {
-  const original = await fs.promises.lstat(source);
-  const copied = await fs.promises.lstat(destination);
+const visitCopiedTree = async (source: string, destination: string, apply: boolean) => {
+  const original = await fs.promises.lstat(source, { bigint: true });
+  const copied = await fs.promises.lstat(destination, { bigint: true });
   if (!original.isFile() && !original.isDirectory()) throw new Error('Backup contains unsupported file types');
   if (original.isDirectory() !== copied.isDirectory() || original.isFile() !== copied.isFile()) throw new Error('Backup copy is incomplete');
   if (original.isDirectory()) {
-    for (const name of await fs.promises.readdir(source)) await preserveTreeMetadata(path.join(source, name), path.join(destination, name));
+    for (const name of await fs.promises.readdir(source)) await visitCopiedTree(path.join(source, name), path.join(destination, name), apply);
   }
-  if (original.uid !== copied.uid || original.gid !== copied.gid) await fs.promises.chown(destination, original.uid, original.gid);
-  await fs.promises.chmod(destination, original.mode & 0o7777);
-  await fs.promises.utimes(destination, original.atime, original.mtime);
+  if (apply) {
+    if (original.uid !== copied.uid || original.gid !== copied.gid) await fs.promises.chown(destination, Number(original.uid), Number(original.gid));
+    await fs.promises.chmod(destination, Number(original.mode & 0o7777n));
+    const result = await spawnAsync('touch', ['-r', source, '--', destination]);
+    if (result.stderr.trim()) throw new Error('Backup timestamps could not be preserved');
+  }
+};
+
+const verifyCopiedMetadata = async (source: string, destination: string): Promise<void> => {
+  const original = await fs.promises.lstat(source, { bigint: true });
+  const copied = await fs.promises.lstat(destination, { bigint: true });
+  if (original.uid !== copied.uid || original.gid !== copied.gid || original.mode !== copied.mode || original.mtimeNs !== copied.mtimeNs)
+    throw new Error('Backup copy did not preserve file metadata');
+  if (original.isDirectory())
+    for (const name of await fs.promises.readdir(source)) await verifyCopiedMetadata(path.join(source, name), path.join(destination, name));
+};
+
+export const preserveTreeMetadata = async (source: string, destination: string) => {
+  await visitCopiedTree(source, destination, process.platform !== 'linux');
+  if (process.platform === 'linux') {
+    // One metadata pass per tree avoids a process per file and does not recopy data.
+    const reference = (await fs.promises.lstat(source)).isDirectory() ? `${source}/.` : source;
+    const result = await spawnAsync('cp', [
+      '--attributes-only',
+      '--preserve=mode,ownership,timestamps',
+      '--recursive',
+      '--no-dereference',
+      '--',
+      reference,
+      destination,
+    ]);
+    if (result.stderr.trim()) throw new Error('Backup file metadata could not be preserved');
+  }
+  await verifyCopiedMetadata(source, destination);
 };
 
 const syncTree = async (directory: string) => {

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve subsecond file and directory timestamps in app backups and restores, and verify the required archive and metadata tools during image builds.
+
 - Pair servers into named clusters with one admin host, expiring codes, signed commands and persistent replay protection.
 - Browse actual server cases directly in the 3D rack, with hover, drag, swipe and keyboard selection. Use the same rack from the topbar switcher; switch Monitor readings and histories, or merge server apps and update lists.
 - Review Orbis updates separately from batch app updates, with server names and individual request outcomes.

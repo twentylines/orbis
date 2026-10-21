@@ -80,6 +80,30 @@ describe('BackupManager real files and archives', () => {
     expect(await fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).toBe('SETTING=original\n');
   });
 
+  it('preserves subsecond file and directory timestamps through backup and restore', async () => {
+    const file = path.join(appDataDir, 'data', 'record');
+    const directory = path.dirname(file);
+    await fs.promises.chmod(file, 0o640);
+    await fs.promises.utimes(file, 1700000000.123456, 1700000000.654321);
+    await fs.promises.chmod(directory, 0o750);
+    await fs.promises.utimes(directory, 1700000010.123456, 1700000010.654321);
+    const metadata = async (target: string) => {
+      const value = await fs.promises.stat(target, { bigint: true });
+      return { uid: value.uid, gid: value.gid, mode: value.mode & 0o7777n, mtime: value.mtimeNs };
+    };
+    const before = [await metadata(file), await metadata(directory)] as const;
+    expect(before[0].mtime % 1000000n).not.toBe(0n);
+    await manager.backupApp(appUrn);
+    const [saved] = await manager.listBackupsByAppId(appUrn);
+    if (!saved) throw new Error('Expected a saved backup');
+    await write(file, 'newer live data');
+    await fs.promises.chmod(file, 0o600);
+    await fs.promises.utimes(directory, 1800000000, 1800000000);
+    await manager.restoreApp(appUrn, saved.id);
+    expect([await metadata(file), await metadata(directory)]).toEqual(before);
+    expect(await fs.promises.readFile(file, 'utf8')).toBe('original data\n');
+  });
+
   const savedBackupWithNewerLiveFiles = async () => {
     await manager.backupApp(appUrn);
     const [saved] = await manager.listBackupsByAppId(appUrn);

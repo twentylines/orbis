@@ -22,13 +22,24 @@ const verifyArchiveRuntime = () => {
       fs.chownSync(nested, 1001, 1002);
     }
     fs.chmodSync(file, 0o640);
-    fs.utimesSync(file, 1700000000, 1700000000);
+    fs.utimesSync(file, 1700000000.123456, 1700000000.654321);
     fs.chmodSync(nested, 0o750);
-    fs.utimesSync(nested, 1700000010, 1700000010);
+    fs.utimesSync(nested, 1700000010.123456, 1700000010.654321);
     const original = fs.statSync(file);
+    const originalTime = fs.statSync(file, { bigint: true }).mtimeNs;
+    assert.notEqual(originalTime % 1000000n, 0n);
+    const metadataOnly = path.join(archiveRoot, 'metadata-only');
+    fs.writeFileSync(metadataOnly, 'Keep these different destination bytes');
+    if (process.platform === 'linux') {
+      execFileSync('cp', ['--attributes-only', '--preserve=mode,ownership,timestamps', '--', file, metadataOnly]);
+    } else {
+      execFileSync('touch', ['-r', file, '--', metadataOnly]);
+    }
+    assert.equal(fs.readFileSync(metadataOnly, 'utf8'), 'Keep these different destination bytes');
+    assert.equal(fs.statSync(metadataOnly, { bigint: true }).mtimeNs, originalTime);
     const originalDirectory = fs.statSync(nested);
     const archive = path.join(archiveRoot, 'backup.tar.gz');
-    execFileSync('tar', ['-czpf', archive, '-C', source, '.']);
+    execFileSync('tar', ['--format=pax', '-czpf', archive, '-C', source, '.']);
     const archiveMime = execFileSync('file', ['--brief', '--mime-type', archive], { encoding: 'utf8' }).trim();
     assert.ok(['application/gzip', 'application/x-gzip'].includes(archiveMime), `Unexpected backup MIME type: ${archiveMime}`);
     const paths = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' }).trim().split('\n');
@@ -40,6 +51,8 @@ const verifyArchiveRuntime = () => {
     const extracted = path.join(extractedDirectory, 'payload.bin');
     const actual = fs.statSync(extracted);
     assert.deepEqual(fs.readFileSync(extracted), payload);
+    assert.equal(fs.statSync(extracted, { bigint: true }).mtimeNs, originalTime);
+    assert.equal(fs.statSync(extractedDirectory, { bigint: true }).mtimeNs, fs.statSync(nested, { bigint: true }).mtimeNs);
     assert.deepEqual([actual.uid, actual.gid, actual.mode & 0o7777, actual.mtimeMs], [original.uid, original.gid, 0o640, original.mtimeMs]);
     const directory = fs.statSync(extractedDirectory);
     assert.deepEqual(
@@ -51,6 +64,8 @@ const verifyArchiveRuntime = () => {
       archiveRoundTripVerified: true,
       archiveOwnershipVerified: true,
       archiveDirectoryMetadataVerified: true,
+      archiveSubsecondTimestampsVerified: true,
+      metadataOnlyCopyVerified: true,
       archiveUid: actual.uid,
       archiveGid: actual.gid,
     };

@@ -9,7 +9,7 @@ export class ArchiveService {
   constructor(private readonly logger: LoggerService) {}
 
   createTarGz = async (sourceDir: string, destinationFile: string) => {
-    const args = ['-czpf', destinationFile, '-C', sourceDir, '.'];
+    const args = ['--format=pax', '-czpf', destinationFile, '-C', sourceDir, '.'];
     this.logger.debug(`Creating archive with args: tar ${args.join(' ')}`);
     return spawnAsync('tar', args);
   };
