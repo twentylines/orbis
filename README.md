@@ -4,7 +4,7 @@ Orbis is a Runtipi fork for managing self-hosted apps, Docker resources and serv
 
 Orbis is currently in beta. Migration and recovery of a real homelab have not been validated.
 
-[Releases and changelogs](https://github.com/twentylines/orbis/releases) · [Installation and migration](DEPLOYMENT.md) · [Licence](LICENSE)
+[Releases and changelogs](https://github.com/twentylines/orbis/releases) · [Installation and migration](DEPLOYMENT.md) · [Server clusters](CLUSTERS.md) · [Licence](LICENSE)
 
 ## Screenshots
 
@@ -16,9 +16,13 @@ Orbis is currently in beta. Migration and recovery of a real homelab have not be
 
 [Minimized apps, light](screenshots/navigation/minimized-light.png) · [Minimized apps, dark](screenshots/navigation/minimized-dark.png)
 
-Current source build on a disposable test server, using sample apps. See the [gallery](screenshots/navigation/README.md).
+[Server selector](screenshots/navigation/server-selector.png) · [Merged applications](screenshots/navigation/cluster-applications.png) · [Cluster updates](screenshots/navigation/cluster-updates.png) · [Pairing settings](screenshots/navigation/cluster-settings.png)
 
-[Earlier beta62 gallery](screenshots/live-beta62/README.md) · [Login](screenshots/live-beta62/phone-login.png) · [Backup views](screenshots/backups/desktop.png)
+[Login, light](screenshots/navigation/login-light.png) · [Login, dark](screenshots/navigation/login-dark.png) · [Phone login](screenshots/navigation/phone-login-light.png)
+
+Current source build with sample apps and two Orbis instances on one disposable test machine. See the [gallery](screenshots/navigation/README.md).
+
+[Earlier beta62 gallery](screenshots/live-beta62/README.md) · [Backup views](screenshots/backups/desktop.png)
 
 ## Documentation
 

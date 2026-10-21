@@ -196,7 +196,7 @@ export function ClusterSettings() {
               <span>
                 Allow HTTP on my private LAN
                 <span className="cluster-settings-help">
-                  Use HTTPS across the internet. HTTP pairing sends the pairing code over your local network without encryption.
+                  Use HTTPS when available. HTTP pairing sends the pairing code over your local network without encryption.
                 </span>
               </span>
             </label>
