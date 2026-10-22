@@ -246,7 +246,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
         type="search"
         value={search}
         onChange={(event) => setSearch(event.target.value)}
-        placeholder="App or server name"
+        placeholder="Search"
       />
       {servers.map((server, index) =>
         apps[index]?.isError || docker[index]?.isError ? (
@@ -420,8 +420,13 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
               <div className="cluster-app-actions">
                 {manageUrl ? (
                   <Button asChild>
-                    <Link to={manageUrl} target={server.local ? undefined : '_blank'} rel={server.local ? undefined : 'noopener noreferrer'}>
-                      Manage on server <IconExternalLink size={16} aria-hidden="true" />
+                    <Link
+                      to={manageUrl}
+                      target={server.local ? undefined : '_blank'}
+                      rel={server.local ? undefined : 'noopener noreferrer'}
+                      aria-label={`Manage ${entry.name} on ${serverName(server)}`}
+                    >
+                      Manage
                     </Link>
                   </Button>
                 ) : null}
