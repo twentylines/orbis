@@ -3,6 +3,7 @@
 
 import argparse
 import contextlib
+import errno
 import hashlib
 import importlib.util
 import ipaddress
@@ -29,6 +30,12 @@ IMAGES = {
     "traefik": "traefik@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d",
 }
 NETWORK = "runtipi_tipi_main_network"
+
+
+class PortInUseError(ValueError):
+    def __init__(self, port, owner="a host service"):
+        self.port = port
+        super().__init__(f"Dashboard port {port} is already used by {owner}")
 
 
 def server_ip(value=None):
@@ -75,15 +82,43 @@ def require_empty(root, reader, http, https):
         raise ValueError("Reserved controller containers already exist on this Docker host")
     if NETWORK in reader._read(["network", "ls", "--format", "{{.Name}}"] ).splitlines():
         raise ValueError("The controller network already exists; review the previous installation first")
-    published = APPS.DETECT.published_ports(reader, reader.containers())
-    if any(item["port"] in {http, https} for item in published):
-        raise ValueError("A selected dashboard port is already published by Docker")
+    published = APPS.DETECT.published_ports(reader, reader.containers(), wanted={http, https})
+    if published:
+        raise PortInUseError(published[0]["port"], f"Docker container {published[0]['container']}")
     for port in (http, https):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        families = (socket.AF_INET, socket.AF_INET6) if socket.has_ipv6 else (socket.AF_INET,)
+        for family in families:
             try:
-                probe.bind(("0.0.0.0", port))
+                with socket.socket(family, socket.SOCK_STREAM) as probe:
+                    if family == socket.AF_INET6:
+                        probe.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                    probe.bind(("::" if family == socket.AF_INET6 else "0.0.0.0", port))
             except OSError as error:
-                raise ValueError("A selected dashboard port is already in use on the host") from error
+                if family == socket.AF_INET6 and error.errno in {errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL, errno.ENOPROTOOPT}:
+                    continue
+                raise PortInUseError(port) from error
+
+
+def choose_ports(root, reader, http, https, ask=None):
+    for _ in range(16):
+        try:
+            require_empty(root, reader, http, https)
+            return http, https
+        except PortInUseError as error:
+            if ask is None:
+                flag = "--http-port" if error.port == http else "--https-port"
+                raise ValueError(f"{error}. Choose another port with {flag}") from error
+            protocol = "HTTP" if error.port == http else "HTTPS"
+            answer = ask(f"{error}.\nChoose a different {protocol} port (Enter to cancel): ").strip()
+            if not answer:
+                raise ValueError("Installation cancelled; existing containers were preserved")
+            if not answer.isascii() or not answer.isdigit() or len(answer) > 5:
+                raise ValueError("Enter a port number between 1 and 65535")
+            if protocol == "HTTP":
+                http = int(answer)
+            else:
+                https = int(answer)
+    raise ValueError("Too many occupied ports; choose free --http-port and --https-port values")
 
 
 def pointer(root, run, reader):

@@ -219,7 +219,8 @@ def inspect_container(reader: DockerReader, row: dict) -> dict:
     return core
 
 
-def published_ports(reader: DockerReader, rows: list[dict]) -> list[dict]:
+def published_ports(reader: DockerReader, rows: list[dict], *, wanted=None) -> list[dict]:
+    wanted = CORE_PORTS if wanted is None else wanted
     ports = []
     for row in rows:
         if row["state"] not in {"running", "restarting", "paused"} or not row["publishedPorts"]:
@@ -240,7 +241,7 @@ def published_ports(reader: DockerReader, rows: list[dict]) -> list[dict]:
                 number = int(value["HostPort"])
                 if not 1 <= number <= 65535:
                     raise InspectionError("Docker returned invalid published ports")
-                if number in CORE_PORTS and protocol.endswith("/tcp"):
+                if number in wanted and protocol.endswith("/tcp"):
                     ports.append({"port": number, "container": row["name"], "containerId": row["id"]})
     return sorted({(value["port"], value["containerId"]): value for value in ports}.values(), key=lambda value: (value["port"], value["containerId"]))
 

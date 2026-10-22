@@ -256,7 +256,7 @@ def main():
             return 0
         if selected and selected["product"] != "runtipi":
             raise ValueError("The controller cannot be replaced automatically")
-        if selected:
+        if selected or report.get("unassignedManagedContainers"):
             with display.step("Checking managed-container ownership"):
                 APPS.require_assigned(report)
         if root is None:
@@ -273,6 +273,11 @@ def main():
             mode = "fresh" if answer == "2" else "keep"
         if not selected and mode is not None:
             raise ValueError("No Runtipi installation matches the requested replacement mode")
+        new = None if selected else load("orbis-install-new.py", "orbis_guided_new")
+        if new:
+            args.http_port, args.https_port = new.choose_ports(root, reader, args.http_port, args.https_port, None if args.yes else ask)
+        remaining = 4 if selected else 3 + len(new.IMAGES)
+        display.set_remaining_steps(remaining + (0 if args.without_host_service else 1))
         enable = load("orbis-host-service-enable.py", "orbis_guided_enable")
         if not args.without_host_service:
             enable.available(root, reader.context)
@@ -289,7 +294,7 @@ def main():
 
         def confirm(chosen):
             if selected and not args.host_writers_stopped:
-                target = "Runtipi configuration and control-service storage" if args.backup_scope == "controller" else "this app storage"
+                target = "the controller's database, state or .env" if args.backup_scope == "controller" else "this app storage"
                 if args.yes or ask(f"Have native host processes and remote clients writing to {target} been stopped? [y/N]: ").strip().lower() != "y":
                     raise ValueError("Stop native and remote storage writers before replacing the installation")
             if not args.yes and ask(f"Type {chosen} to confirm installation: ").strip() != str(chosen):
@@ -298,7 +303,6 @@ def main():
         if selected:
             result = replacement(root, reader, manifest, state, mode, confirm, display, backup_scope=args.backup_scope)
         else:
-            new = load("orbis-install-new.py", "orbis_guided_new")
             result = new.install(root, reader, manifest, state, args, confirm, display=display)
         if not args.without_host_service:
             with display.step("Enabling system administration"):

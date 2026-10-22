@@ -108,6 +108,19 @@ class GuidedTests(unittest.TestCase):
             if slave is not None:
                 os.close(slave)
 
+    def test_orphaned_managed_apps_are_not_treated_as_an_empty_server(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            manifest = root / "manifest.json"; manifest.write_text(json.dumps(MANIFEST))
+            argv = ["installer", "--manifest", str(manifest), "--state-dir", str(root / "private"), "--yes", "--root", str(root / "new")]
+            report = {"installations": [], "unassignedManagedContainers": [{"container": {"name": "orphan", "id": "a" * 64}, "ownershipReasons": ["No confirmed controller"]}]}
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value=report), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release") as verify, mock.patch.object(GUIDE.subprocess, "run") as execute:
+                with self.assertRaisesRegex(ValueError, "orphan.*aaaaaaaaaaaa.*No confirmed controller"):
+                    GUIDE.main()
+                verify.assert_not_called()
+                execute.assert_not_called()
+            self.assertFalse((root / "new").exists())
+
     def test_multiple_controllers_cannot_be_selected_silently(self):
         report = {"installations": [{"installRoot": "/opt/a", "product": "runtipi"}, {"installRoot": "/opt/b", "product": "runtipi"}]}
         with self.assertRaisesRegex(ValueError, "Several"):
@@ -187,6 +200,42 @@ class NewInstallationTests(unittest.TestCase):
         for value in ["127.0.0.1", "::", "0.0.0.0", "224.0.0.1"]:
             with self.subTest(value=value), self.assertRaises(ValueError):
                 NEW.server_ip(value)
+
+    def test_new_setup_offers_another_port_without_stopping_existing_services(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reader = mock.Mock()
+            reader.containers.return_value = []
+            reader._read.return_value = ""
+            published = [{"port": 18280, "container": "existing-web", "containerId": "a" * 64}]
+            ask = mock.Mock(return_value="18281")
+            with mock.patch.object(NEW.APPS.DETECT, "published_ports", side_effect=[published, []]) as ports, mock.patch.object(NEW.socket, "socket"):
+                self.assertEqual(NEW.choose_ports(root, reader, 18280, 19443, ask), (18281, 19443))
+            self.assertIn("existing-web", ask.call_args.args[0])
+            self.assertEqual(ports.call_args_list[0].kwargs["wanted"], {18280, 19443})
+            reader.change.assert_not_called()
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_unattended_port_conflicts_give_the_exact_port_flag(self):
+        with mock.patch.object(NEW, "require_empty", side_effect=NEW.PortInUseError(19443, "Docker container existing-proxy")):
+            with self.assertRaisesRegex(ValueError, "19443.*existing-proxy.*--https-port"):
+                NEW.choose_ports(Path("/unused"), mock.Mock(), 18280, 19443)
+
+    @unittest.skipUnless(NEW.socket.has_ipv6, "requires IPv6")
+    def test_native_ipv6_only_listener_is_detected_before_installation(self):
+        with tempfile.TemporaryDirectory() as temporary, NEW.socket.socket(NEW.socket.AF_INET6, NEW.socket.SOCK_STREAM) as listener:
+            listener.setsockopt(NEW.socket.IPPROTO_IPV6, NEW.socket.IPV6_V6ONLY, 1)
+            try:
+                listener.bind(("::1", 0))
+            except OSError:
+                self.skipTest("IPv6 loopback is unavailable")
+            port = listener.getsockname()[1]
+            reader = mock.Mock()
+            reader.containers.return_value = []
+            reader._read.return_value = ""
+            with mock.patch.object(NEW.APPS.DETECT, "published_ports", return_value=[]):
+                with self.assertRaisesRegex(NEW.PortInUseError, str(port)):
+                    NEW.require_empty(Path(temporary), reader, port, 443 if port != 443 else 444)
         self.assertEqual(NEW.server_ip("192.168.20.10"), "192.168.20.10")
 
     def test_resume_after_public_start_preserves_environment_and_app_writes(self):

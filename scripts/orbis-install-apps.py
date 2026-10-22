@@ -166,7 +166,7 @@ def require_assigned(report: dict) -> None:
             details.append(f"  - {container['name']} ({container['id'][:12]}): {reasons}")
         if len(unassigned) > 32:
             details.append(f"  - {len(unassigned) - 32} more; use --inspect for the complete container list")
-        raise AppError("Unassigned managed containers need review before apps can be stopped. This review made no changes.\n" + "\n".join(details))
+        raise AppError("Unassigned managed containers need ownership review before continuing. This review made no changes.\n" + "\n".join(details))
 
 
 def selected_installation(reader: Docker, root: Path) -> tuple[dict, dict]:

@@ -41,8 +41,36 @@ class ControllerScopeTests(unittest.TestCase):
                 app["mounts"].append({"Type": "bind", "Source": str(source), "Destination": "/extra", "RW": True})
                 with self.assertRaisesRegex(TX.TransactionError, "Another container"):
                     self.review()
+                conflict = STORAGE.review(self.root, self.docker, self.bundle, scope="controller")["conflictingWriters"][0]
+                message = STORAGE.writer_conflict_message([conflict])
+                self.assertIn(app["id"][:12], message)
+                self.assertIn(app["name"].lstrip("/"), message)
+                self.assertIn(str(source) + " -> /extra", message)
                 app["mounts"].pop()
         self.assertEqual(self.docker.calls, [])
+
+    def shared_overrides(self):
+        config = self.root / "user-config"
+        config.mkdir()
+        (config / "tipi-compose.yml").write_text("services: {}\n")
+        original = self.docker.core
+        def core(identifier):
+            result = original(identifier)
+            result["mounts"].append({"Type": "bind", "Source": str(config), "Destination": "/data/user-config", "RW": True})
+            return result
+        self.docker.core = core
+        next(iter(self.docker.apps.values()))["mounts"].append({"Type": "bind", "Source": str(config), "Destination": "/shared-overrides", "RW": True})
+        return config
+
+    def test_app_shared_overrides_are_preserved_without_disabling_other_writer_checks(self):
+        config = self.shared_overrides()
+        value = self.review()
+        self.assertEqual(value["storage"]["resources"][0]["excludedPaths"], ["app-data", "user-config"])
+        self.assertEqual(value["storage"]["conflictingWriters"], [])
+        self.assertEqual(self.docker.calls, [])
+        next(iter(self.docker.apps.values()))["mounts"].append({"Type": "bind", "Source": str(self.root / ".env"), "Destination": "/core-secret", "RW": True})
+        with self.assertRaisesRegex(TX.TransactionError, "writable.* -> /core-secret"):
+            self.review()
 
     def test_metadata_inside_live_app_data_is_not_silently_excluded(self):
         database = self.docker.services[FIXTURES.identifier("runtipi-db")]
@@ -78,6 +106,7 @@ class ControllerScopeTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "linux", "requires Linux rsync with ACL/xattr support")
     def test_checkpoint_and_recovery_preserve_newer_live_app_writes(self):
+        config = self.shared_overrides()
         before_apps = copy.deepcopy(self.docker.apps)
         data = self.root / "app-data/app-0/live"
         data.write_bytes(b"before checkpoint")
@@ -98,8 +127,9 @@ class ControllerScopeTests(unittest.TestCase):
             TX.checkpoint(self.root, self.docker, value, host_writers_stopped=True)
         saved = STORAGE.verified_manifest(self.bundle)
         self.assertFalse((self.bundle / "resource-0000/app-data").exists())
-        self.assertEqual(saved["copies"][0]["record"]["excludedPaths"], ["app-data"])
+        self.assertEqual(saved["copies"][0]["record"]["excludedPaths"], ["app-data", "user-config"])
         data.write_bytes(b"newer live application data")
+        (config / "new-app-override.yml").write_text("newer live app override")
         inode_replacement = self.root / ".env-new"
         inode_replacement.write_bytes(b"rotated fresh authentication secret")
         os.replace(inode_replacement, self.root / ".env")
@@ -110,6 +140,7 @@ class ControllerScopeTests(unittest.TestCase):
         self.assertEqual((cache / "session").read_bytes(), b"original session")
         self.assertFalse((self.root / "orbis-compose.yml").exists())
         self.assertEqual(data.read_bytes(), b"newer live application data")
+        self.assertEqual((config / "new-app-override.yml").read_text(), "newer live app override")
         self.assertEqual(self.docker.apps, before_apps)
         self.assertTrue(all(args[-1] not in before_apps for args, _ in self.docker.calls))
 

@@ -60,7 +60,7 @@ def private_paths(root: Path, storage: dict, journal: Path) -> Path:
 def review(root: Path, reader, bundle: Path, journal: Path, *, scope: str = "full") -> dict:
     storage = STORAGE.review(root, reader, bundle, scope=scope)
     if storage["conflictingWriters"]:
-        raise TransactionError("Another container can write to this installation's storage")
+        raise TransactionError(STORAGE.writer_conflict_message(storage["conflictingWriters"]))
     journal = private_paths(root, storage, journal)
     if journal.exists() or journal.is_symlink():
         raise TransactionError("An installation transaction already exists; use its recovery command")

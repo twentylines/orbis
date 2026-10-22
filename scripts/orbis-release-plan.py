@@ -108,15 +108,7 @@ def read_version(root: Path) -> str | None:
 
 
 def plan(root: Path, manifest: dict[str, str]) -> dict:
-    inventory = PREFLIGHT.inspect(root)
-    if inventory["layout"] not in {"cli-v4", "orbis-v1"}:
-        raise ValueError("this planner requires a compatible Runtipi CLI v4 or Orbis installation")
-    if inventory["result"] != "inventory-only":
-        raise ValueError("the copied installation has unresolved preflight items")
-    installed_version = read_version(root)
-    if installed_version != manifest["runtipiCompatibility"].removeprefix("v"):
-        raise ValueError("the installed Runtipi version does not match this compatibility base")
-
+    root = root.resolve(strict=True)
     files = [root / "docker-compose.yml"]
     user_override = root / "user-config" / "tipi-compose.yml"
     if user_override.is_file():
@@ -131,6 +123,14 @@ def plan(root: Path, manifest: dict[str, str]) -> dict:
         files.append(current_override)
 
     current = compose_config(root, files)
+    inventory = PREFLIGHT.inspect(root, compose_config=current)
+    if inventory["layout"] not in {"cli-v4", "orbis-v1"}:
+        raise ValueError("this planner requires a compatible Runtipi CLI v4 or Orbis installation with its local writable database")
+    if inventory["result"] != "inventory-only":
+        raise ValueError("the copied installation has unresolved preflight items")
+    installed_version = read_version(root)
+    if installed_version != manifest["runtipiCompatibility"].removeprefix("v"):
+        raise ValueError("the installed Runtipi version does not match this compatibility base")
     candidate = compose_config(root, files, override_yaml(manifest))
     if config_invariants(current) != config_invariants(candidate):
         raise ValueError("Orbis override would change more than the core image and build identity")

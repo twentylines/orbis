@@ -51,10 +51,13 @@ class InstallerPresentationTests(unittest.TestCase):
                 output.seek(0); output.truncate()
                 ui.banner("v0.1.0-beta.68")
                 self.assertIn("v0.1.0-beta.68", output.getvalue())
-                if width < 64:
+                if width < 32:
+                    self.assertTrue(output.getvalue().startswith("Orbis\n"))
+                elif width < 64:
                     self.assertTrue(output.getvalue().startswith("Orbis  "))
                 else:
                     self.assertIn("(____( () )____)", output.getvalue())
+                self.assertTrue(all(len(line) <= width for line in output.getvalue().splitlines()))
 
     def test_failure_and_interrupt_restore_cursor_and_never_report_success(self):
         for error in (ValueError("ownership needs review"), KeyboardInterrupt()):
@@ -79,7 +82,7 @@ class InstallerPresentationTests(unittest.TestCase):
         self.assertIn("[stopped]", output.getvalue())
         self.assertNotIn("[ok]", output.getvalue())
 
-    def test_real_pty_shows_moving_orbit_scan_and_restores_cursor_before_prompt(self):
+    def test_real_pty_shows_one_animated_bar_and_restores_cursor_before_prompt(self):
         import fcntl
         import termios
         master, slave = pty.openpty()
@@ -120,7 +123,28 @@ class InstallerPresentationTests(unittest.TestCase):
                 os.close(slave)
         self.assertGreaterEqual(len(re.findall(rb"\r\x1b\[2K", output)), 3, repr(output))
         self.assertIn(b"[ok]", output)
+        self.assertNotIn(b".==>", output)
         self.assertLess(output.rfind(b"\x1b[?25h"), output.find(b"Ready for confirmation"))
+
+    def test_progress_counts_completed_stages_and_does_not_fake_download_percentages(self):
+        output = TerminalStream()
+        ui = UI.Presentation(stream=output, environ={"TERM": "xterm"}, color=False)
+        with ui.step("Detecting installations"):
+            pass
+        self.assertIn("=" * 54, ui.frame("Detected", 0, status="[ok]"))
+        ui.set_remaining_steps(3)
+        self.assertIn("1/4 stages", ui.frame("Downloading image", 2))
+        self.assertNotIn("%", ui.frame("Downloading image", 20))
+        with ui.step("Downloading image", completed=lambda: False):
+            pass
+        self.assertEqual(ui.completed, 1)
+        for label in ("Downloading image", "Starting Orbis", "Enabling system administration"):
+            with ui.step(label):
+                pass
+        self.assertEqual(ui.completed, ui.total)
+        self.assertIn("[ok] 4/4", output.getvalue())
+        self.assertEqual(output.getvalue().count("Step 02"), 2)
+        self.assertEqual(ui.frame("Done", 0, status="[ok]").count("="), 54)
 
 
 if __name__ == "__main__":

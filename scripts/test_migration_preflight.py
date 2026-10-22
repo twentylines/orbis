@@ -12,6 +12,27 @@ SPEC.loader.exec_module(PREFLIGHT)
 
 
 class MigrationPreflightTests(unittest.TestCase):
+    def test_normalized_runtipi_long_syntax_keeps_database_location_and_write_guards(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / ".env").write_text(f"ROOT_FOLDER_HOST={root}\n")
+            for name in [*PREFLIGHT.DATA_PATHS, "data/postgres"]:
+                (root / name).mkdir(parents=True)
+            (root / "docker-compose.yml").write_text("services: # normalized by Docker Compose\n")
+            mount = {"type": "bind", "source": str(root / "data/postgres"), "target": "/var/lib/postgresql/data", "read_only": False}
+            config = {"services": {"runtipi": {"image": "ghcr.io/runtipi/runtipi:v4.10.1"}, "runtipi-db": {"volumes": [mount]}}}
+            self.assertEqual(PREFLIGHT.inspect(root)["layout"], "unknown")
+            report = PREFLIGHT.inspect(root, compose_config=config)
+            self.assertEqual((report["layout"], report["result"]), ("cli-v4", "inventory-only"))
+            del mount["read_only"]
+            self.assertEqual(PREFLIGHT.inspect(root, compose_config=config)["result"], "inventory-only")
+            (root / "docker-compose.yml").write_text("./data/postgres:/var/lib/postgresql/data:ro\n")
+            for key, value in [("source", "/outside/postgres"), ("read_only", True), ("type", "volume")]:
+                changed = json.loads(json.dumps(config))
+                changed["services"]["runtipi-db"]["volumes"][0][key] = value
+                with self.subTest(key=key):
+                    self.assertEqual(PREFLIGHT.inspect(root, compose_config=changed)["layout"], "unknown")
+
     def test_native_orbis_json_layout_requires_the_local_writable_database(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder).resolve()

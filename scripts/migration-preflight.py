@@ -77,26 +77,30 @@ def inspect_directory(root: Path, base: str, suffix: str) -> dict[str, object]:
     return {"status": "present", "topLevelEntries": count}
 
 
-def detect_layout(root: Path) -> tuple[str, str, str]:
+def detect_layout(root: Path, *, compose_config=None) -> tuple[str, str, str]:
     """Distinguish a CLI installation from a source-tree Compose test stack."""
     cli_compose = root / "docker-compose.yml"
     dev_compose = root / "docker-compose.prod.yml"
     try:
         if cli_compose.is_file():
             compose = cli_compose.read_text(encoding="utf-8")
-            if "./data/postgres:/var/lib/postgresql/data" in compose:
+            if compose_config is None and "./data/postgres:/var/lib/postgresql/data" in compose:
                 return "cli-v4", ".", "data/postgres"
-            try:
-                config = json.loads(compose)
-            except ValueError:
-                config = None
+            config = compose_config
+            if config is None:
+                try:
+                    config = json.loads(compose)
+                except ValueError:
+                    config = None
             services = config.get("services") if isinstance(config, dict) else None
             core = services.get("runtipi") if isinstance(services, dict) else None
             database = services.get("runtipi-db") if isinstance(services, dict) else None
-            if isinstance(core, dict) and str(core.get("image", "")).startswith("ghcr.io/twentylines/orbis@sha256:") and isinstance(database, dict):
+            image = str(core.get("image", "")) if isinstance(core, dict) else ""
+            layout = "orbis-v1" if image.startswith("ghcr.io/twentylines/orbis@sha256:") else "cli-v4" if image.startswith("ghcr.io/runtipi/runtipi:") else None
+            if layout and isinstance(database, dict):
                 mounts = database.get("volumes")
-                if isinstance(mounts, list) and any(isinstance(mount, dict) and mount.get("type") == "bind" and mount.get("source") == str(root / "data/postgres") and mount.get("target") == "/var/lib/postgresql/data" and mount.get("read_only") is False for mount in mounts):
-                    return "orbis-v1", ".", "data/postgres"
+                if isinstance(mounts, list) and any(isinstance(mount, dict) and mount.get("type") == "bind" and mount.get("source") == str(root / "data/postgres") and mount.get("target") == "/var/lib/postgresql/data" and mount.get("read_only", False) is False for mount in mounts):
+                    return layout, ".", "data/postgres"
         if dev_compose.is_file():
             compose = dev_compose.read_text(encoding="utf-8")
             if "pgdata:/var/lib/postgresql/data" in compose:
@@ -106,11 +110,11 @@ def detect_layout(root: Path) -> tuple[str, str, str]:
     return "unknown", "", "unknown"
 
 
-def inspect(root: Path) -> dict[str, object]:
+def inspect(root: Path, *, compose_config=None) -> dict[str, object]:
     root = root.resolve(strict=True)
     env_file = root / ".env"
     overrides = data_overrides(env_file)
-    layout, default_base, database_path = detect_layout(root)
+    layout, default_base, database_path = detect_layout(root, compose_config=compose_config)
     host_root = root_host_status(env_file, root) if layout in {"cli-v4", "orbis-v1"} else "not-applicable"
     directories = {
         suffix: inspect_directory(root, overrides.get(key, default_base), suffix)

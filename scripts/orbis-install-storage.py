@@ -26,7 +26,7 @@ DETECT = APPS.DETECT
 SNAPSHOT = APPS.load_script("orbis-snapshot.py", "orbis_snapshot_for_storage")
 SCHEMA = "orbis.installation-storage.v1"
 SYSTEM_ROOTS = {"/", "/etc", "/var", "/var/lib", "/var/lib/docker", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/boot", "/root", "/home", "/opt", "/srv", "/mnt", "/media"}
-LIVE_CONTROLLER_DATA = {"/app-data", "/data/media", "/data/backups", "/data/logs"}
+LIVE_CONTROLLER_DATA = {"/app-data", "/data/media", "/data/backups", "/data/logs", "/data/user-config"}
 
 
 class StorageError(ValueError):
@@ -116,6 +116,15 @@ def resource_overlaps(source: Path, item: dict) -> bool:
     if any(source.is_relative_to(root / relative) for relative in item.get("excludedPaths", [])):
         return False
     return overlaps(source, root)
+
+
+def writer_conflict_message(conflicts: list[dict]) -> str:
+    lines = ["Another container can write to this installation's checkpoint storage:"]
+    for item in conflicts[:32]:
+        lines.append(f"  - {item['name']} ({item['id'][:12]}): writable {item['source']} -> {item['destination']} overlaps {item['resource']}")
+    if len(conflicts) > 32:
+        lines.append(f"  - {len(conflicts) - 32} more containers; inspect the storage review for the complete list")
+    return "\n".join(lines)
 
 
 def host_mounts(resources: list[dict], mountinfo: Path | None = None) -> list[dict]:
@@ -212,8 +221,9 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
             source = DETECT.path(mount.get("Source"))
             if not source:
                 raise StorageError("Docker returned invalid writable storage")
-            if any(resource_overlaps(Path(source).resolve(strict=False), item) for item in resources):
-                conflicts.append({"id": row["id"], "name": row["name"]})
+            covered = next((item for item in resources if resource_overlaps(Path(source).resolve(strict=False), item)), None)
+            if covered:
+                conflicts.append({"id": row["id"], "name": row["name"], "source": source, "destination": mount["Destination"], "resource": covered["source"]})
                 break
     estimates = []
     for index, item in enumerate(resources if check_capacity else []):
@@ -251,7 +261,7 @@ def require_quiet(root: Path, reader, saved: dict) -> None:
     if current["identityHash"] != saved["identityHash"]:
         raise StorageError("Storage sources or container identities changed since review")
     if current["conflictingWriters"]:
-        raise StorageError("Another container can write to the reviewed storage")
+        raise StorageError(writer_conflict_message(current["conflictingWriters"]))
     if any(item["state"] not in {"exited", "created"} or item["restartPolicy"]["Name"] != "no" for item in current["containerStates"]):
         raise StorageError("Stop every reviewed container and disable its restart policy before copying storage")
 
