@@ -1,4 +1,14 @@
-# Inspect an existing installation
+# Install Orbis
+
+Run this in your server's terminal:
+
+```sh
+curl -fsSL https://twentylines.github.io/orbis/install | sudo python3
+```
+
+The address serves the verified installer from the newest published Orbis release, including betas. It updates after release publication; no version number is needed. The installer detects an existing Runtipi installation and offers Keep or Fresh. Requirements and recovery details are below.
+
+## Inspect an existing installation
 
 With Python 3.10+ and Docker access, run this from an Orbis source checkout on the Docker host you want to inspect:
 

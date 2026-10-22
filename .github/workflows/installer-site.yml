@@ -1,0 +1,52 @@
+name: Orbis installer endpoint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/installer-site.yml'
+      - 'scripts/publish-installer-site.py'
+      - 'scripts/test_orbis_installer_site.py'
+  workflow_run:
+    workflows: ['Orbis release']
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orbis-installer-endpoint
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Check endpoint selection and verification
+        run: python3 -m unittest discover -s scripts -p 'test_orbis_installer_site.py' -v
+      - name: Verify the newest published installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api 'repos/twentylines/orbis/releases?per_page=100' > "$RUNNER_TEMP/orbis-releases.json"
+          python3 scripts/publish-installer-site.py "$RUNNER_TEMP/orbis-releases.json" "$RUNNER_TEMP/orbis-installer-site"
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/orbis-installer-site
+      - name: Publish installer endpoint
+        id: deployment
+        uses: actions/deploy-pages@v5

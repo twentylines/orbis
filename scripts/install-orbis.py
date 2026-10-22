@@ -38,7 +38,7 @@ def fetch(url, limit):
         return data
 
 
-def verify_manifest(data, identity):
+def verify_manifest(data, identity, *, required=REQUIRED):
     if not isinstance(identity, dict) or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?", str(identity.get("tag", ""))) or not re.fullmatch(r"[0-9a-f]{40}", str(identity.get("commit", ""))):
         raise ValueError("Use the installer published with an Orbis release")
     if sha(data) != identity.get("manifestSha256"):
@@ -52,7 +52,7 @@ def verify_manifest(data, identity):
         if not re.fullmatch(r"[0-9a-f]{64}", str(value.get(key, ""))):
             raise ValueError("Installer package hash is invalid")
     files = value.get("files")
-    if not isinstance(files, dict) or not REQUIRED.issubset(files) or not 1 <= len(files) <= 64:
+    if not isinstance(required, set) or not required or not isinstance(files, dict) or not required.issubset(files) or not 1 <= len(files) <= 64:
         raise ValueError("Installer file list is incomplete")
     total = 0
     for name, record in files.items():

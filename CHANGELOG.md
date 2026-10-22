@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Provide a stable short installer address that follows the newest published Orbis release, including betas, after checking its assets against the tagged source.
+
 - Correct installer ownership detection for managed core services, legacy app containers without URNs, and Compose launches with custom project directories or external apps folders. Unknown or conflicting ownership still blocks replacement before any app is stopped.
 - Identify unclassified containers by name and short ID with a reason, and check ownership before downloading the replacement image.
 - Add an Orbis ASCII wordmark, coloured orbital loading animations and stage progress to the terminal installer, with plain output for unattended runs, pipes and limited terminals.

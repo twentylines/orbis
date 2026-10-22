@@ -43,6 +43,14 @@ def committed_files(repository, commit):
     return result
 
 
+def release_launcher(template, identity):
+    if template.count(b"EXPECTED_RELEASE = None") != 1:
+        raise ValueError("The committed installer launcher has no unique release marker")
+    launcher = template.replace(b"EXPECTED_RELEASE = None", ("EXPECTED_RELEASE = " + repr(identity)).encode())
+    compile(launcher, LAUNCHER, "exec")
+    return launcher
+
+
 def build(files, release_bytes):
     release = json.loads(release_bytes)
     if not isinstance(release, dict) or release.get("schema") != "orbis.release.v1" or release.get("image") != "ghcr.io/twentylines/orbis":
@@ -74,12 +82,8 @@ def build(files, release_bytes):
         "files": {name: {"sha256": sha(data), "size": len(data)} for name, data in sorted(sources.items())},
     }
     manifest_bytes = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
-    launcher = files.get("scripts/" + LAUNCHER, b"")
-    if launcher.count(b"EXPECTED_RELEASE = None") != 1:
-        raise ValueError("The committed installer launcher has no unique release marker")
     identity = {"tag": release["tag"], "commit": release["commit"], "manifestSha256": sha(manifest_bytes)}
-    launcher = launcher.replace(b"EXPECTED_RELEASE = None", ("EXPECTED_RELEASE = " + repr(identity)).encode())
-    compile(launcher, LAUNCHER, "exec")
+    launcher = release_launcher(files.get("scripts/" + LAUNCHER, b""), identity)
     return {ARCHIVE: archive_bytes, MANIFEST: manifest_bytes, LAUNCHER: launcher}
 
 
