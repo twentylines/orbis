@@ -461,6 +461,25 @@
     padding-inline: 12px;
   }
 }
+@media (max-width: 560px) {
+  .cluster-selector-heading {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 8px;
+    padding-inline: 16px;
+  }
+  .cluster-selector-heading > div {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .cluster-selector-heading h2 {
+    font-size: clamp(1.25rem, 5vw, 1.75rem);
+  }
+  .cluster-selector-close {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .cluster-selector,
   .cluster-selector-backdrop,

@@ -9,6 +9,7 @@ import { useAppContext } from '@/context/app-context';
 import { useConnectionStore } from '@/stores/connection-store';
 import { useReducedMotion } from 'framer-motion';
 import { RackDeck } from './rack-deck';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import './cluster.css';
 
 export type ClusterServer = { id: string; name: string; url: string; role: 'admin' | 'member'; local: boolean };
@@ -262,7 +263,9 @@ export function ServerSelector({
           <div className="cluster-selector-heading">
             <div>
               <span className="cluster-dialog-kicker">{purpose === 'install' ? 'Install on a server' : 'Switch server'}</span>
-              <Dialog.Title>{cluster.data?.name || preferences.serverName}</Dialog.Title>
+              <Dialog.Title title={cluster.data?.name || preferences.serverName}>
+                <WrapWords text={cluster.data?.name || preferences.serverName} />
+              </Dialog.Title>
             </div>
             <Dialog.Close className="cluster-selector-close" aria-label="Close server selector">
               <IconX size={20} aria-hidden="true" />

@@ -170,7 +170,6 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
       <header className="cluster-updates-heading">
         <div>
           <h2>{local ? 'Updates' : cluster.merged ? cluster.data?.name : cluster.selectedServer?.name}</h2>
-          <p>Apps and Orbis update separately. Offline servers are excluded.</p>
         </div>
         <Link to="/settings?tab=cluster">Manage cluster</Link>
       </header>
@@ -200,36 +199,34 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
           <div>
             <h3 id="cluster-app-update-heading">App updates</h3>
             <p>
-              {appCount} available across {ready.length} reachable server{ready.length === 1 ? '' : 's'}
+              {appCount} available · {ready.length} server{ready.length === 1 ? '' : 's'}
             </p>
           </div>
           <Button disabled={!operator || busy || !appCount} onClick={() => setConfirmApps(true)}>
             {runApps.isPending ? 'Queuing updates…' : 'Update all apps'}
           </Button>
         </header>
-        {ready.map(({ server, apps }) => (
-          <div className="cluster-update-server" key={server.id}>
-            <h4>{server.name}</h4>
-            {apps.length ? (
+        {!appCount && ready.length && !inventories.some((query) => query.isPending) ? <p>No app updates available.</p> : null}
+        {ready
+          .filter(({ apps }) => apps.length > 0)
+          .map(({ server, apps }) => (
+            <div className="cluster-update-server" key={server.id}>
+              <h4>{server.name}</h4>
               <ul>
                 {apps.map(({ info }) => (
                   <li key={info.urn}>{info.name}</li>
                 ))}
               </ul>
-            ) : (
-              <p>No app updates.</p>
-            )}
-          </div>
-        ))}
+            </div>
+          ))}
       </section>
       <section className="cluster-update-section" aria-labelledby="cluster-orbis-update-heading">
         <header>
           <div>
             <h3 id="cluster-orbis-update-heading">Orbis updates</h3>
-            <p>Review each server’s changelog and snapshot before updating.</p>
           </div>
           <Button disabled={!operator || busy || !ready.some((entry) => entry.canPlan)} onClick={() => review.mutate()}>
-            {review.isPending ? 'Preparing review…' : 'Review all Orbis updates'}
+            {review.isPending ? 'Preparing review…' : 'Review updates'}
           </Button>
         </header>
         {ready.map(({ server, data, canPlan }) => (
@@ -244,8 +241,8 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
             </p>
             {data.status?.job ? (
               <output>
-                Update job: {data.status.job.state}
-                {data.status.job.message ? ` · ${data.status.job.message}` : ''}
+                {data.status.job.state === 'complete' ? 'Last update' : 'Update'}: {data.status.job.targetTag} · {data.status.job.state}
+                {data.status.job.message && data.status.job.state !== 'complete' ? ` · ${data.status.job.message}` : ''}
               </output>
             ) : null}
             {canPlan ? null : (

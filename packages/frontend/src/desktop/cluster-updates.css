@@ -91,3 +91,25 @@
   margin-block: 24px;
   list-style: none;
 }
+
+@media (max-width: 560px) {
+  .cluster-updates {
+    gap: 20px;
+  }
+  .cluster-update-section {
+    padding: 16px;
+    border-radius: 16px;
+  }
+  .cluster-update-section > header {
+    align-items: stretch;
+    gap: 16px;
+  }
+  .cluster-update-section > header > div,
+  .cluster-update-section > header > .btn {
+    flex: 1 1 100%;
+  }
+  .cluster-update-server {
+    margin-top: 20px;
+    padding-block: 20px;
+  }
+}

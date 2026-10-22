@@ -100,7 +100,21 @@ export async function clusterRequest<T>(
         response.on('error', reject);
         response.on('end', () => {
           if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
-            reject(new ServiceUnavailableException(`The paired server refused the request (${response.statusCode ?? 'no response'}).`));
+            let message = `The paired server refused the request (${response.statusCode ?? 'no response'}).`;
+            if ([400, 403, 404, 409, 422, 429].includes(response.statusCode ?? 0)) {
+              try {
+                const result: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+                if (result && typeof result === 'object' && 'message' in result) {
+                  const reason = result.message;
+                  if (typeof reason === 'string' && reason.trim() && reason.length <= 512 && !/\p{Cc}/u.test(reason)) {
+                    message = `Paired server: ${reason.trim()}`;
+                  }
+                }
+              } catch {
+                // Proxies can return HTML instead of the peer's structured error.
+              }
+            }
+            reject(new ServiceUnavailableException(message));
             return;
           }
           try {
