@@ -23,6 +23,7 @@ def load(name, module_name):
 REPLACE = load("orbis-install-replace.py", "orbis_guided_replace")
 HOST = REPLACE.HOST
 APPS = REPLACE.APPS
+UI = load("orbis-install-ui.py", "orbis_guided_ui")
 
 
 class Terminal:
@@ -136,15 +137,17 @@ def recover_pending(root, reader, state, ask, *, writers_stopped=False):
     return json.loads((state / (name + ".stdout.json")).read_text())
 
 
-def replacement(root, reader, manifest, state, mode, confirm):
+def replacement(root, reader, manifest, state, mode, confirm, display=None):
     REPLACE.TX.RESTORE.runtime()
     run = state / ("replacement-" + str(uuid.uuid4()))
     run.mkdir(mode=0o700)
     backup, journal = run / "backup", run / "transaction.json"
     review_path = run / "review.json"
-    with HOST.host_lock(root) as descriptor:
-        reader.lock_fd = descriptor
-        review = REPLACE.review(root, reader, manifest, backup, journal, mode=mode)
+    display = display or UI.Presentation(interactive=False)
+    with display.step("Reviewing app ownership and backup storage"):
+        with HOST.host_lock(root) as descriptor:
+            reader.lock_fd = descriptor
+            review = REPLACE.review(root, reader, manifest, backup, journal, mode=mode)
     reader.lock_fd = None
     APPS.write_journal(review_path, review)
     count = list(review["checkpoint"]["roles"].values()).count("app")
@@ -158,15 +161,16 @@ def replacement(root, reader, manifest, state, mode, confirm):
     APPS.write_journal(root / ".orbis-installation.json", {"schema": "orbis.installer-pointer.v1", "root": str(root), "dockerContext": reader.context, "kind": "replacement", "journal": str(journal), "executor": script, "executorSha256": hashlib.sha256(Path(script).read_bytes()).hexdigest()})
     arguments = [script, "apply", str(root), "--docker-context", reader.context, "--mode", mode, "--review", str(review_path), "--journal", str(journal), "--confirm-root", str(root), "--host-writers-stopped"]
     for attempt in range(3):
-        print("Checking the installation and creating its stopped-state backup…", flush=True)
-        code = command(arguments, run / f"apply-{attempt}.stdout.json", run / f"apply-{attempt}.stderr.json")
+        code = None
+        with display.step("Backing up storage and replacing the controller", completed=lambda: code == 0):
+            code = command(arguments, run / f"apply-{attempt}.stdout.json", run / f"apply-{attempt}.stderr.json")
+            if code and (journal.exists() or attempt == 2):
+                raise ValueError(f"Installation did not complete. Preserve {run}. Recover with: python3 {script} recover {root} --docker-context {reader.context} --journal {journal} --confirm-root {root} --host-writers-stopped")
         if code == 0:
             result = json.loads((run / f"apply-{attempt}.stdout.json").read_text())
             if result.get("result") != "orbis-installed" or result.get("mode") != mode:
                 raise ValueError("The executor did not report a completed installation; preserve its journal")
             return result
-        if journal.exists() or attempt == 2:
-            raise ValueError(f"Installation did not complete. Preserve {run}. Recover with: python3 {script} recover {root} --docker-context {reader.context} --journal {journal} --confirm-root {root} --host-writers-stopped")
         with HOST.host_lock(root) as descriptor:
             reader.lock_fd = descriptor
             refreshed = REPLACE.review(root, reader, manifest, backup, journal, mode=mode)
@@ -189,6 +193,8 @@ def main():
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--host-writers-stopped", action="store_true")
     parser.add_argument("--without-host-service", action="store_true")
+    parser.add_argument("--no-animation", action="store_true", help="show static installation progress")
+    parser.add_argument("--no-color", action="store_true", help="disable terminal colours")
     parser.add_argument("--http-port", type=int, default=80)
     parser.add_argument("--https-port", type=int, default=443)
     parser.add_argument("--server-ip")
@@ -198,10 +204,14 @@ def main():
     manifest = HOST.PLAN.require_installation_protocol(json.loads(args.manifest.read_text()))
     reader = APPS.Docker(args.docker_context)
     REPLACE.Engine(reader)
-    report = APPS.DETECT.discover(reader)
     if args.inspect:
+        report = APPS.DETECT.discover(reader)
         print(json.dumps(report, indent=2))
         return 0
+    display = UI.Presentation(interactive=not args.yes, color=not args.no_color, animation=not args.no_animation)
+    display.banner(manifest["tag"])
+    with display.step("Detecting existing installations"):
+        report = APPS.DETECT.discover(reader, resolve_app_owners=APPS.local_app_owners)
     tty = None
     try:
         if not args.yes:
@@ -240,6 +250,9 @@ def main():
             return 0
         if selected and selected["product"] != "runtipi":
             raise ValueError("The controller cannot be replaced automatically")
+        if selected:
+            with display.step("Checking managed-container ownership"):
+                APPS.require_assigned(report)
         if root is None:
             answer = ask("Installation directory [/opt/orbis/server]: ").strip()
             root = safe_root(Path(answer or "/opt/orbis/server"))
@@ -257,14 +270,15 @@ def main():
         enable = load("orbis-host-service-enable.py", "orbis_guided_enable")
         if not args.without_host_service:
             enable.available(root, reader.context)
-        REPLACE.UPDATE.verify_release(manifest)
+        with display.step("Verifying the Orbis release"):
+            REPLACE.UPDATE.verify_release(manifest)
         private = load("install-orbis.py", "orbis_guided_private")
         state = private.private_directory(args.state_dir.expanduser())
-        print(f"Downloading verified Orbis image {manifest['tag']}…", flush=True)
-        with (state / ("image-pull-" + str(uuid.uuid4()) + ".log")).open("xb") as log:
-            pulled = subprocess.run(["docker", "--context", reader.context, "pull", REPLACE.target_image(manifest)], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
-        if pulled.returncode:
-            raise RuntimeError(f"Docker could not pull the verified image; inspect the private logs in {state}")
+        with display.step("Downloading the verified Orbis image"):
+            with (state / ("image-pull-" + str(uuid.uuid4()) + ".log")).open("xb") as log:
+                pulled = subprocess.run(["docker", "--context", reader.context, "pull", REPLACE.target_image(manifest)], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
+            if pulled.returncode:
+                raise RuntimeError(f"Docker could not pull the verified image; inspect the private logs in {state}")
         enable.require_scoped_cleanup(root, reader.context, REPLACE.target_image(manifest))
 
         def confirm(chosen):
@@ -275,13 +289,13 @@ def main():
                 raise ValueError("Installation cancelled; no controller was replaced")
 
         if selected:
-            result = replacement(root, reader, manifest, state, mode, confirm)
+            result = replacement(root, reader, manifest, state, mode, confirm, display)
         else:
             new = load("orbis-install-new.py", "orbis_guided_new")
-            result = new.install(root, reader, manifest, state, args, confirm)
+            result = new.install(root, reader, manifest, state, args, confirm, display=display)
         if not args.without_host_service:
-            print("Enabling host updates and system administration…", flush=True)
-            enable.enable(root, reader.context, Path(__file__).parent)
+            with display.step("Enabling system administration"):
+                enable.enable(root, reader.context, Path(__file__).parent)
         print(f"\nOrbis {manifest['tag']} is installed at {root}. Open the server address in your browser to sign in or create an administrator.")
         print(json.dumps(result, indent=2))
         return 0
@@ -293,6 +307,9 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except KeyboardInterrupt:
+        print("\nInstallation interrupted. Keep the recovery files before retrying.", file=sys.stderr)
+        sys.exit(130)
     except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         print(f"Orbis installation stopped: {error}", file=sys.stderr)
         sys.exit(2)

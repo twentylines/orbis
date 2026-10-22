@@ -140,13 +140,25 @@ def local_app_owners(row: dict, owners: list[dict]) -> list[dict]:
     return matches
 
 
+def require_assigned(report: dict) -> None:
+    if report["unassignedManagedContainers"]:
+        unassigned = report["unassignedManagedContainers"]
+        details = []
+        for item in unassigned[:32]:
+            container = item["container"]
+            reasons = "; ".join(item["ownershipReasons"])
+            details.append(f"  - {container['name']} ({container['id'][:12]}): {reasons}")
+        if len(unassigned) > 32:
+            details.append(f"  - {len(unassigned) - 32} more; use --inspect for the complete container list")
+        raise AppError("Unassigned managed containers need review before apps can be stopped. This review made no changes.\n" + "\n".join(details))
+
+
 def selected_installation(reader: Docker, root: Path) -> tuple[dict, dict]:
     report = DETECT.discover(reader, resolve_app_owners=local_app_owners)
     selected = [item for item in report["installations"] if item["installRoot"] == str(root)]
     if len(selected) != 1 or selected[0]["reviewRequired"]:
         raise AppError("The selected installation could not be identified unambiguously")
-    if report["unassignedManagedContainers"]:
-        raise AppError("Unassigned managed containers need review before apps can be stopped")
+    require_assigned(report)
     return report, selected[0]
 
 

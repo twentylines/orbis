@@ -2,6 +2,7 @@
 """Initialize an empty Orbis installation and resume its recorded startup."""
 
 import argparse
+import contextlib
 import hashlib
 import importlib.util
 import ipaddress
@@ -147,7 +148,7 @@ def finish(record, reader, journal):
     return {"result": "orbis-installed", "mode": "new", "releaseTag": manifest["tag"], "journal": str(journal)}
 
 
-def install(root, reader, manifest, state, args, confirm):
+def install(root, reader, manifest, state, args, confirm, display=None):
     require_empty(root, reader, args.http_port, args.https_port)
     address = server_ip(args.server_ip)
     endpoint = REPLACE.Engine(reader).endpoint
@@ -155,11 +156,13 @@ def install(root, reader, manifest, state, args, confirm):
     print(f"\nNew installation: {root}\nServer: {address}\nDashboard ports: {args.http_port} / {args.https_port}\nRelease: {manifest['tag']}\n")
     confirm(root)
     for name, image in IMAGES.items():
-        print(f"Downloading {name}…", flush=True)
-        with (run / (name + "-pull.log")).open("xb") as log:
-            result = subprocess.run(["docker", "--context", reader.context, "pull", image], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
-        if result.returncode:
-            raise RuntimeError(f"A required image could not be downloaded. Installation directory is unchanged; logs: {run}")
+        with display.step(f"Downloading {name}") if display else contextlib.nullcontext():
+            if display is None:
+                print(f"Downloading {name}…", flush=True)
+            with (run / (name + "-pull.log")).open("xb") as log:
+                result = subprocess.run(["docker", "--context", reader.context, "pull", image], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
+            if result.returncode:
+                raise RuntimeError(f"A required image could not be downloaded. Installation directory is unchanged; logs: {run}")
     root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     for parent in [root.parent, *root.parent.parents]:
         details = parent.lstat()
@@ -177,7 +180,8 @@ def install(root, reader, manifest, state, args, confirm):
         journal = run / "transaction.json"; APPS.write_journal(journal, record)
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         pointer(root, run, reader)
-        return finish(record, reader, journal)
+        with display.step("Starting Orbis and checking its health") if display else contextlib.nullcontext():
+            return finish(record, reader, journal)
 
 
 def main():

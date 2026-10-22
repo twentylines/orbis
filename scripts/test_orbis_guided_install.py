@@ -2,6 +2,7 @@ import contextlib
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import pty
@@ -33,6 +34,31 @@ HEALTHY = {"state": "running", "health": "healthy", "image": MANIFEST["image"] +
 
 
 class GuidedTests(unittest.TestCase):
+    def test_inspection_keeps_stdout_json_without_starting_the_terminal_display(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest = root / "manifest.json"; manifest.write_text(json.dumps(MANIFEST))
+            argv = ["installer", "--manifest", str(manifest), "--state-dir", str(root / "private"), "--inspect"]
+            output = io.StringIO()
+            report = {"installations": [], "unassignedManagedContainers": []}
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value=report), mock.patch.object(GUIDE.UI, "Presentation") as display, contextlib.redirect_stdout(output):
+                self.assertEqual(GUIDE.main(), 0)
+                self.assertEqual(json.loads(output.getvalue()), report)
+                display.assert_not_called()
+
+    def test_unassigned_container_error_precedes_downloads_and_replacement(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            manifest = root / "manifest.json"; manifest.write_text(json.dumps(MANIFEST))
+            selected = {"installRoot": str(root), "product": "runtipi", "version": "4.10.1", "reviewRequired": []}
+            argv = ["installer", "--manifest", str(manifest), "--state-dir", str(root / "private"), "--yes", "--root", str(root), "--mode", "keep"]
+            message = "Unassigned: notes (123456789abc): Compose paths conflict"
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value={"installations": [selected]}), mock.patch.object(GUIDE.APPS, "require_assigned", side_effect=ValueError(message)), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release") as verify, mock.patch.object(GUIDE.subprocess, "run") as execute:
+                with self.assertRaisesRegex(ValueError, "notes.*Compose paths conflict"):
+                    GUIDE.main()
+                verify.assert_not_called()
+                execute.assert_not_called()
+
     def test_real_controlling_terminal_answers_are_independent_of_piped_stdin(self):
         import fcntl
         import termios

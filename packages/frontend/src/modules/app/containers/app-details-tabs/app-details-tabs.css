@@ -71,14 +71,6 @@
   hyphens: auto;
   hyphenate-limit-chars: 6 3 3;
 }
-@media (max-width: 480px) {
-  .app-detail-tabs .markdown h1 {
-    font-size: 1.125rem;
-  }
-  .app-detail-tabs .markdown h2 {
-    font-size: 1rem;
-  }
-}
 .app-detail-tabs .datagrid-content {
   overflow-wrap: anywhere;
 }
@@ -93,6 +85,14 @@
   .app-detail-tabs .markdown h3 {
     font-size: var(--orbis-compact-page-title, 20px);
     line-height: 1.4;
+  }
+}
+@media (max-width: 480px) {
+  .app-detail-tabs .markdown h1 {
+    font-size: 1.125rem;
+  }
+  .app-detail-tabs .markdown h2 {
+    font-size: 1rem;
   }
 }
 .app-panel-loading,

@@ -280,6 +280,66 @@ class InstallationDiscoveryTests(unittest.TestCase):
         self.assertEqual(report["unassignedManagedContainers"], [])
         self.assertFalse(report["hostFilesInspected"])
 
+    def test_managed_core_sidecars_are_core_services_even_with_custom_container_names(self):
+        rows = [container()]
+        for number, service in enumerate(sorted(DETECT.CORE_SERVICES - {"runtipi"}), 2):
+            row = container(number, image="example/core:1", name=f"custom-{service}", service=service)
+            row["managed"] = "true"
+            rows.append(row)
+        report = DETECT.discover(Reader(rows))
+        self.assertEqual(report["unassignedManagedContainers"], [])
+        self.assertEqual(report["installations"][0]["apps"], [])
+
+    def test_core_service_label_without_matching_root_is_not_trusted(self):
+        for service, project, root in [("runtipi-db", "runtipi", "/other"), ("runtipi-db", "other", "/srv/runtipi"), ("unrecognized", "runtipi", "/srv/runtipi")]:
+            with self.subTest(service=service, project=project, root=root):
+                row = container(2, image="example/core:1", name="foreign-db", service=service, project=project, root=root)
+                row["managed"] = "true"
+                report = DETECT.discover(Reader([container(), row]))
+                self.assertEqual(report["unassignedManagedContainers"][0]["container"]["id"], row["id"])
+
+    def test_compose_file_label_changes_invalidate_discovery(self):
+        app = container(2, name="notes", image="example/notes:1", project="notes", service="web", root="/data")
+        app.update(managed="true", appUrn="notes:local", configFiles="/data/apps/local/notes/docker-compose.yml")
+        after = copy.deepcopy([container(), app])
+        after[-1]["configFiles"] = "/other/docker-compose.yml"
+        with self.assertRaisesRegex(DETECT.InspectionError, "changed during discovery"):
+            DETECT.discover(Reader([container(), app], after=after))
+
+    def test_legacy_controller_local_apps_without_urn_map_to_the_confirmed_apps_bind(self):
+        for working in ("/data/apps/notes", "/data/apps/local/notes"):
+            with self.subTest(working=working):
+                app = container(2, name="notes", image="example/notes:1", project="notes", service="web", root=working)
+                app["managed"] = "true"
+                report = DETECT.discover(Reader([container(), app]))
+                self.assertEqual(report["unassignedManagedContainers"], [])
+                self.assertEqual(report["installations"][0]["apps"][0]["container"]["id"], app["id"])
+
+    def test_compose_file_labels_support_overridden_project_directory_and_external_apps_bind(self):
+        app = container(2, name="notes", image="example/notes:1", project="custom-project", service="web", root="/data")
+        app.update(managed="true", appUrn="notes:local", configFiles="/data/apps/local/notes/docker-compose.generated.yml,/data/user-config/local/notes/docker-compose.yml")
+        data = mounts()
+        next(item for item in data if item["Destination"] == "/data/apps")["Source"] = "/mnt/installed-apps"
+        report = DETECT.discover(Reader([container(), app], mount_list=data))
+        self.assertEqual(report["unassignedManagedContainers"], [])
+        self.assertEqual(report["installations"][0]["apps"][0]["container"]["id"], app["id"])
+
+    def test_conflicting_compose_paths_and_urn_stay_unassigned_with_reasons(self):
+        for working, urn, config in [
+            ("/data/apps/local/other", "notes:local", "/data/apps/local/notes/docker-compose.yml"),
+            ("/data", "other:local", "/data/apps/local/notes/docker-compose.yml"),
+            ("", "notes:local", ""),
+            ("/other", "notes:local", "/unrelated/docker-compose.yml"),
+        ]:
+            with self.subTest(working=working, urn=urn):
+                app = container(2, name="notes", image="example/notes:1", project="notes", service="web", root=working)
+                app.update(managed="true", appUrn=urn, configFiles=config)
+                report = DETECT.discover(Reader([container(), app]))
+                item = report["unassignedManagedContainers"][0]
+                self.assertEqual(item["container"]["id"], app["id"])
+                self.assertTrue(item["ownershipReasons"])
+                self.assertEqual(report["installations"][0]["apps"], [])
+
     def test_shared_controller_alias_or_mismatched_urn_does_not_guess_ownership(self):
         app = container(3, name="notes", image="example/notes:1", project="notes_local", service="web", root="/data/apps/local/notes")
         app.update(managed="true", appUrn="notes:local")

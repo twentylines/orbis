@@ -30,6 +30,7 @@ LIST_FORMAT = (
     '"project":{{json (.Label "com.docker.compose.project")}},'
     '"service":{{json (.Label "com.docker.compose.service")}},'
     '"workingDir":{{json (.Label "com.docker.compose.project.working_dir")}},'
+    '"configFiles":{{json (.Label "com.docker.compose.project.config_files")}},'
     '"managed":{{json (.Label "runtipi.managed")}},"appUrn":{{json (.Label "runtipi.appurn")}},'
     '"state":{{json .State}},"publishedPorts":{{json .Ports}}}'
 )
@@ -135,6 +136,7 @@ def validate_rows(rows: list[dict]) -> None:
             raise InspectionError("Docker returned invalid container inventory")
         for key in ("id", "name", "image", "project", "service", "workingDir", "state", "publishedPorts", "managed", "appUrn"):
             text(row.get(key))
+        text(row.get("configFiles", ""))
         if not IDENTIFIER.fullmatch(row["id"]) or row["id"] in identifiers or not row["name"] or row["name"] in names:
             raise InspectionError("Docker returned duplicate or invalid container identities")
         identifiers.add(row["id"])
@@ -242,23 +244,53 @@ def published_ports(reader: DockerReader, rows: list[dict]) -> list[dict]:
     return sorted({(value["port"], value["containerId"]): value for value in ports}.values(), key=lambda value: (value["port"], value["containerId"]))
 
 
-def app_directories(row: dict, installation: dict) -> list[str]:
+def app_directory_evidence(row: dict, installation: dict) -> tuple[list[str], str | None]:
+    if installation["rootStatus"] != "confirmed-by-mounts":
+        return [], "Controller installation root is not confirmed by its mounts"
+    mounts = [item for item in installation["storage"] if item["type"] == "bind" and item["destination"] == "/data/apps"]
+    if not mounts:
+        return [], "Controller has no confirmed apps bind mount"
+
+    def mapped(directory):
+        candidates = set()
+        for mount in mounts:
+            source = mount["source"]
+            if directory and directory != source and beneath(directory, source):
+                candidates.add(directory)
+            if directory and directory != mount["destination"] and beneath(directory, mount["destination"]):
+                relative = posixpath.relpath(directory, mount["destination"])
+                parts = relative.split("/")
+                # Older containers can lack appurn. Their Compose path must still
+                # identify one app under the controller's actual apps bind.
+                if row["appUrn"] and (len(parts) != 2 or row["appUrn"] != f"{parts[1]}:{parts[0]}"):
+                    return set(), "App URN conflicts with the controller-local Compose directory"
+                if len(parts) in {1, 2}:
+                    candidates.add(posixpath.join(source, relative))
+        return candidates, None
+
     working = path(row["workingDir"])
-    if not working or installation["rootStatus"] != "confirmed-by-mounts":
-        return []
-    candidates = set()
-    for mount in installation["storage"]:
-        if mount["type"] != "bind" or mount["destination"] != "/data/apps":
-            continue
-        source = mount["source"]
-        if working != source and beneath(working, source):
-            candidates.add(working)
-        if beneath(working, mount["destination"]):
-            relative = posixpath.relpath(working, mount["destination"])
-            parts = relative.split("/")
-            if len(parts) == 2 and row["appUrn"] == f"{parts[1]}:{parts[0]}":
-                candidates.add(posixpath.join(source, relative))
-    return sorted(candidates)
+    directories, reason = mapped(working)
+    if reason:
+        return [], reason
+    files = set()
+    config_files = row.get("configFiles", "")
+    for filename in config_files.split(",") if config_files else []:
+        filename = path(filename) or (path(posixpath.join(working, filename)) if working else None)
+        if filename and posixpath.basename(filename) in {"docker-compose.generated.yml", "docker-compose.yml"}:
+            found, reason = mapped(posixpath.dirname(filename))
+            if reason:
+                return [], reason
+            files.update(found)
+    if directories and files and directories != files:
+        return [], "Compose working directory and config files identify different apps"
+    if config_files and not files:
+        return [], "Compose config files do not identify an app in this controller's apps bind mount"
+    candidates = files or directories
+    return sorted(candidates), None if candidates else "Compose paths do not identify an app in this controller's apps bind mount"
+
+
+def app_directories(row: dict, installation: dict) -> list[str]:
+    return app_directory_evidence(row, installation)[0]
 
 
 def discover(reader: DockerReader, *, resolve_app_owners=None) -> dict:
@@ -311,15 +343,25 @@ def discover(reader: DockerReader, *, resolve_app_owners=None) -> dict:
     unassigned = []
     host_files_inspected = False
     controllers = {item["container"]["id"] for item in installations}
+    # Core services can carry runtipi.managed too. They have already been
+    # classified by project, service and installation root, not by their name.
+    core_ids = {identifier for item in installations for identifier in item["ownedCoreContainers"]}
     for row in rows:
-        if row["id"] in controllers or row["managed"].lower() != "true":
+        if row["id"] in controllers | core_ids or row["managed"].lower() != "true":
             continue
         owners = [item for item in installations if app_directories(row, item)]
+        candidates = len(owners)
         if len(owners) > 1 and resolve_app_owners is not None:
             owners = resolve_app_owners(row, owners)
             host_files_inspected = True
         summary = {"container": {"id": row["id"], "name": row["name"], "state": row["state"]}, "appUrn": row["appUrn"] or None}
         if len(owners) != 1:
+            summary["compose"] = {"project": row["project"], "service": row["service"], "workingDir": row["workingDir"], "configFiles": row.get("configFiles", "")}
+            summary["ownershipReasons"] = (
+                ["Compose paths match multiple controllers; no unique local app configuration could establish ownership"] if candidates > 1
+                else sorted({app_directory_evidence(row, item)[1] for item in installations}) if installations
+                else ["No controller with a confirmed installation root was found"]
+            )
             unassigned.append(summary)
             continue
         owner = owners[0]

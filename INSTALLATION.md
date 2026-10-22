@@ -45,6 +45,10 @@ Releases that include `install-orbis.py` also provide `orbis-installer-manifest.
 
 The supported host is 64-bit Linux with systemd, Python 3.10 or newer, a local rootful Docker Engine with API 1.44 or newer, Docker Compose, Git and rsync 3.1.3 or newer. Run with root privileges. The installer accepts an explicit Docker context and refuses remote Docker endpoints for host filesystem operations.
 
+The terminal installer shows an Orbis logo and animated progress during installation stages. Use `--no-animation` for static progress or `--no-color` to disable colours. `NO_COLOR`, CI environments, unattended runs and piped output use plain progress without cursor animations. Inspection output remains JSON.
+
+App ownership uses Compose working-directory and configuration-file paths mapped through the controller's actual apps mount. This supports relocated apps folders, overridden project directories and older managed containers without app URNs. Core services are classified separately by their Compose project, service and installation root. Names and a managed label alone do not establish ownership. Conflicting or unknown containers block replacement; the error lists names, short IDs and reasons, and `--inspect` includes the complete metadata report. The installer checks again before stopping services.
+
 - A discovered Runtipi CLI 4.10.1 installation offers **Keep** or **Fresh**, followed by the selected root, app-container count and private backup location. Native and remote storage writers must be stopped before replacement.
 - A new installation requires an empty directory and free dashboard ports. It creates private configuration, PostgreSQL 17, RabbitMQ 4 and Traefik 3.6 using pinned images. Database and queue ports remain private. Migration retains the original database and dependency configuration.
 - Successful setup enables the restricted systemd helper and a read-only host-socket mount. The helper provides browser-managed core and host operations. `--without-host-service` explicitly omits those host operations.

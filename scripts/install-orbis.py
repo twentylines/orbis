@@ -20,7 +20,7 @@ EXPECTED_RELEASE = None
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
 ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|packaging/systemd/orbis-host\.service")
-REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-release-check.py", "packaging/systemd/orbis-host.service"}
+REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-release-check.py", "packaging/systemd/orbis-host.service"}
 
 
 def sha(data):

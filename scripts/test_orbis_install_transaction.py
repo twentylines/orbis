@@ -38,7 +38,7 @@ class Docker(FIXTURES.Docker):
     def containers(self):
         rows = super().containers()
         for item in self.services.values():
-            rows.append({"id": item["id"], "name": item["name"][1:], "image": item["image"], "project": "runtipi", "service": item["name"][1:], "workingDir": str(self.root), "managed": "", "appUrn": "", "state": item["state"], "publishedPorts": ""})
+            rows.append({"id": item["id"], "name": item["name"][1:], "image": item["image"], "project": "runtipi", "service": item["name"][1:], "workingDir": str(self.root), "managed": item["labels"].get("runtipi.managed", ""), "appUrn": "", "state": item["state"], "publishedPorts": ""})
         return rows
 
     def app(self, key):
@@ -122,6 +122,23 @@ class TransactionTests(unittest.TestCase):
         self.assertFalse(self.journal.exists())
         self.assertEqual(self.docker.calls, [])
         self.assertNotIn("private-value-not-for-output", json.dumps(value))
+
+    def test_managed_core_labels_remain_in_backup_and_recover_as_core_services(self):
+        for item in self.docker.services.values():
+            item["labels"]["runtipi.managed"] = "true"
+        before = copy.deepcopy(self.docker.apps)
+        sentinel = self.root / "app-data/app-0/existing.bin"
+        sentinel.write_bytes(b"preserved existing application data\x00")
+        record = self.quiesce()
+        roles = record["review"]["roles"]
+        self.assertEqual(roles[identifier("runtipi-db")], "database")
+        self.assertEqual(roles[identifier("runtipi-queue")], "queue")
+        self.assertEqual(roles[identifier("runtipi-reverse-proxy")], "proxy")
+        self.assertEqual(len(record["review"]["storage"]["containerStates"]), 7)
+        self.recover()
+        self.assertEqual(self.states(), self.original)
+        self.assertEqual(self.docker.apps, before)
+        self.assertEqual(sentinel.read_bytes(), b"preserved existing application data\x00")
 
     def test_requires_healthy_original_and_all_required_services(self):
         self.docker.controller_health = "unhealthy"

@@ -77,6 +77,7 @@ class Docker:
                 "project": labels["com.docker.compose.project"], "service": labels["com.docker.compose.service"],
                 "workingDir": labels["com.docker.compose.project.working_dir"],
                 "managed": labels["runtipi.managed"], "appUrn": labels["runtipi.appurn"],
+                "configFiles": labels.get("com.docker.compose.project.config_files", ""),
                 "state": app["state"], "publishedPorts": "",
             })
         return rows
@@ -311,9 +312,38 @@ class InstallationAppTests(unittest.TestCase):
 
     def test_unassigned_managed_apps_are_never_stopped(self):
         self.docker.apps[identifier("app-0")]["labels"]["com.docker.compose.project.working_dir"] = "/other/apps/app0"
-        with self.assertRaisesRegex(APPS.AppError, "Unassigned"):
+        with self.assertRaisesRegex(APPS.AppError, "Unassigned") as raised:
+            self.stop()
+        self.assertIn(f"app-0 ({identifier('app-0')[:12]})", str(raised.exception))
+        self.assertIn("Compose paths do not identify an app", str(raised.exception))
+        self.assertIn("This review made no changes", str(raised.exception))
+        self.assertEqual(self.docker.calls, [])
+        self.assertFalse(self.journal.exists())
+
+    def test_custom_project_directory_uses_config_files_and_preserves_app_definitions_and_data(self):
+        app = self.docker.apps[identifier("app-0")]
+        app["labels"].update({
+            "com.docker.compose.project.working_dir": "/data",
+            "com.docker.compose.project.config_files": "/data/apps/migrated/app0/docker-compose.generated.yml,/data/user-config/migrated/app0/docker-compose.yml",
+        })
+        sentinel = self.root / "app-data.bin"
+        sentinel.write_bytes(b"\x00existing app data\xff")
+        before = copy.deepcopy(self.docker.apps)
+        self.stop()
+        APPS.resume(self.root, self.docker, self.journal)
+        self.assertEqual(self.docker.apps, before)
+        self.assertEqual(sentinel.read_bytes(), b"\x00existing app data\xff")
+        self.assertTrue(all(args[0] in {"update", "stop", "start"} for args, _ in self.docker.calls))
+
+    def test_conflicting_compose_files_fail_before_any_journal_or_mutation(self):
+        app = self.docker.apps[identifier("app-0")]
+        app["labels"]["com.docker.compose.project.config_files"] = str(self.root / "apps/migrated/other/docker-compose.yml")
+        before = copy.deepcopy(self.docker.apps)
+        with self.assertRaisesRegex(APPS.AppError, "different apps"):
             self.stop()
         self.assertEqual(self.docker.calls, [])
+        self.assertEqual(self.docker.apps, before)
+        self.assertFalse(self.journal.exists())
 
     def test_controller_local_compose_paths_are_stopped_and_resumed(self):
         self.docker.apps[identifier("app-0")]["labels"]["com.docker.compose.project.working_dir"] = "/data/apps/migrated/app0"
