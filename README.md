@@ -6,6 +6,16 @@ Orbis is currently in beta. Migration and recovery of a real homelab have not be
 
 [Releases and changelogs](https://github.com/twentylines/orbis/releases) · [Installation and migration](DEPLOYMENT.md) · [Server clusters](CLUSTERS.md) · [Licence](LICENSE)
 
+## Install
+
+Run on your Linux Docker host with Python 3.10 or newer:
+
+```sh
+curl -fsSL https://twentylines.github.io/orbis/install | sudo python3
+```
+
+This fetches the newest published release, including betas. See [installation requirements and replacement choices](INSTALLATION.md).
+
 ## Screenshots
 
 ![Orbis Monitor](screenshots/navigation/monitor.png)
@@ -16,7 +26,9 @@ Orbis is currently in beta. Migration and recovery of a real homelab have not be
 
 [Minimized apps, light](screenshots/navigation/minimized-light.png) · [Minimized apps, dark](screenshots/navigation/minimized-dark.png)
 
-[Server selector](screenshots/navigation/server-selector.png) · [Merged applications](screenshots/navigation/cluster-applications.png) · [Cluster updates](screenshots/navigation/cluster-updates.png) · [Pairing settings](screenshots/navigation/cluster-settings.png)
+[Server selector](screenshots/navigation/server-selector.png) · [Merged applications](screenshots/navigation/cluster-applications.png) · [Cluster updates](screenshots/cluster-updates/desktop-light.png) · [Pairing settings](screenshots/navigation/cluster-settings.png)
+
+[Cluster updates, dark](screenshots/cluster-updates/desktop-dark.png) · [Phone server selector](screenshots/cluster-updates/phone-selector.png) · [Cluster gallery](screenshots/cluster-updates/README.md)
 
 [Login, light](screenshots/navigation/login-light.png) · [Login, dark](screenshots/navigation/login-dark.png) · [Phone login](screenshots/navigation/phone-login-light.png)
 
