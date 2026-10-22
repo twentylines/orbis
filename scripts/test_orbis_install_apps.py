@@ -91,7 +91,7 @@ class Docker:
             "id": self.controller_id, "imageId": self.controller_image_id,
             "mounts": [
                 {"Type": "bind", "Source": str(self.root / name), "Destination": destination}
-                for name, destination in [(".env", "/data/.env"), ("docker-compose.yml", "/data/docker-compose.yml"), ("apps", "/data/apps")]
+                for name, destination in [(".env", "/data/.env"), ("docker-compose.yml", "/data/docker-compose.yml"), ("apps", "/data/apps"), ("app-data", "/app-data")]
             ],
         }
 
@@ -344,6 +344,61 @@ class InstallationAppTests(unittest.TestCase):
         self.assertEqual(self.docker.calls, [])
         self.assertEqual(self.docker.apps, before)
         self.assertFalse(self.journal.exists())
+
+    def maintenance_app(self):
+        app = self.docker.apps[identifier("app-0")]
+        app["labels"].update({
+            "runtipi.appurn": "notes:_user", "com.docker.compose.project": "notes__user",
+            "com.docker.compose.project.working_dir": str(self.root.parent),
+            "com.docker.compose.project.config_files": str(self.root.parent / "maintenance-base.yml") + "," + str(self.root.parent / "updates/release.yml"),
+        })
+        app["mounts"][0]["Source"] = str(self.root / "app-data/_user/notes/data/service")
+        directory = self.root / "apps/_user/notes"; directory.mkdir(parents=True)
+        (directory / "config.json").write_text('{"id":"notes"}')
+        (directory / "docker-compose.generated.yml").write_text("services: {}")
+        return app, directory
+
+    def test_registered_app_relaunched_from_external_compose_is_proven_by_identity_data_and_local_config(self):
+        app, _ = self.maintenance_app()
+        original = copy.deepcopy(self.docker.apps)
+        report, installation = APPS.selected_installation(self.docker, self.root)
+        matched = next(item for item in installation["apps"] if item["container"]["id"] == app["id"])
+        self.assertEqual(matched["ownershipEvidence"], "registered-app-and-data-bind")
+        self.assertTrue(report["hostFilesInspected"])
+        self.assertEqual(report["unassignedManagedContainers"], [])
+        self.assertEqual(self.docker.calls, [])
+        self.assertEqual(self.docker.apps, original)
+
+    def test_installed_alias_does_not_have_to_equal_the_source_catalogue_id(self):
+        _, directory = self.maintenance_app()
+        (directory / "config.json").write_text('{"id":"source-template-name"}')
+        report, installation = APPS.selected_installation(self.docker, self.root)
+        self.assertEqual(report["unassignedManagedContainers"], [])
+        self.assertEqual(len(installation["apps"]), 3)
+        self.assertEqual(self.docker.calls, [])
+
+    def test_external_compose_labels_alone_or_wrong_data_cannot_claim_an_installation(self):
+        app, directory = self.maintenance_app()
+        for change in ("data", "project", "registration", "compose", "symlink", "invalid-id", "invalid-json"):
+            with self.subTest(change=change):
+                raw = copy.deepcopy(app)
+                if change == "data": self.docker.apps[app["id"]]["mounts"][0]["Source"] = str(self.root / "app-data/_user/different/data")
+                if change == "project": app["labels"]["com.docker.compose.project"] = "unrelated"
+                if change in {"invalid-id", "invalid-json"}:
+                    (directory / "config.json").write_text('{"id":"../different"}' if change == "invalid-id" else "invalid")
+                removed = directory / ("config.json" if change in {"registration", "symlink"} else "docker-compose.generated.yml")
+                if change in {"registration", "compose", "symlink"}:
+                    content = removed.read_text(); removed.unlink()
+                    if change == "symlink": removed.symlink_to(directory / "docker-compose.generated.yml")
+                with self.assertRaises(APPS.AppError):
+                    APPS.plan(self.root, self.docker)
+                self.assertEqual(self.docker.calls, [])
+                self.assertFalse(self.journal.exists())
+                self.docker.apps[app["id"]] = raw; app = self.docker.apps[app["id"]]
+                if change in {"registration", "compose", "symlink"}:
+                    removed.unlink(missing_ok=True); removed.write_text(content)
+                if change in {"invalid-id", "invalid-json"}:
+                    (directory / "config.json").write_text('{"id":"notes"}')
 
     def test_controller_local_compose_paths_are_stopped_and_resumed(self):
         self.docker.apps[identifier("app-0")]["labels"]["com.docker.compose.project.working_dir"] = "/data/apps/migrated/app0"

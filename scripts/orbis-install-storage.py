@@ -26,6 +26,7 @@ DETECT = APPS.DETECT
 SNAPSHOT = APPS.load_script("orbis-snapshot.py", "orbis_snapshot_for_storage")
 SCHEMA = "orbis.installation-storage.v1"
 SYSTEM_ROOTS = {"/", "/etc", "/var", "/var/lib", "/var/lib/docker", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/boot", "/root", "/home", "/opt", "/srv", "/mnt", "/media"}
+LIVE_CONTROLLER_DATA = {"/app-data", "/data/media", "/data/backups", "/data/logs"}
 
 
 class StorageError(ValueError):
@@ -103,6 +104,20 @@ def overlaps(first: Path, second: Path) -> bool:
     return first.is_relative_to(second) or second.is_relative_to(first)
 
 
+def resource_identity(item: dict) -> dict:
+    value = source_identity(Path(item["source"]))
+    if item.get("excludedPaths"):
+        value["excludedPaths"] = list(SNAPSHOT.excluded_paths(item["excludedPaths"]))
+    return value
+
+
+def resource_overlaps(source: Path, item: dict) -> bool:
+    root = Path(item["source"])
+    if any(source.is_relative_to(root / relative) for relative in item.get("excludedPaths", [])):
+        return False
+    return overlaps(source, root)
+
+
 def host_mounts(resources: list[dict], mountinfo: Path | None = None) -> list[dict]:
     if mountinfo is None and sys.platform != "linux":
         return []
@@ -118,14 +133,16 @@ def host_mounts(resources: list[dict], mountinfo: Path | None = None) -> list[di
             target = Path(decoded)
             if not target.is_absolute():
                 raise StorageError("Host mount information contains an invalid path")
-            if any(target != Path(item["source"]) and target.is_relative_to(item["source"]) for item in resources):
+            if any(target != Path(item["source"]) and target.is_relative_to(item["source"]) and resource_overlaps(target, item) for item in resources):
                 mounts.add(target)
             if len(mounts) > 4096:
                 raise StorageError("Installation storage exceeds the host mount limit")
     return [source_identity(path) for path in sorted(mounts)]
 
 
-def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, existing_bundle: bool = False) -> dict:
+def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, existing_bundle: bool = False, scope: str = "full") -> dict:
+    if scope not in {"full", "controller"}:
+        raise StorageError("Choose a full or controller storage backup")
     if root.is_symlink() or root.resolve(strict=True) != root or not root.is_dir():
         raise StorageError("The installation root must be an existing canonical directory")
     bundle = APPS.journal_path(bundle, root)
@@ -134,16 +151,26 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
     report, installation = APPS.selected_installation(reader, root)
     rows = reader.containers()
     DETECT.validate_rows(rows)
-    owned = {installation["container"]["id"], *(app["container"]["id"] for app in installation["apps"])}
+    app_ids = {app["container"]["id"] for app in installation["apps"]}
+    owned = {installation["container"]["id"]}
+    if scope == "full":
+        owned.update(app_ids)
     owned.update(row["id"] for row in rows if row["project"] == "runtipi" and row["service"] in DETECT.CORE_SERVICES and DETECT.path(row["workingDir"]) == str(root))
     containers = []
     sources = {root}
+    live_paths = set()
     for row in rows:
         if row["id"] not in owned:
             continue
         record, mounts = container_record(reader, row)
         containers.append(record)
         for mount in mounts:
+            if scope == "controller" and row["id"] == installation["container"]["id"] and mount["Destination"] in LIVE_CONTROLLER_DATA:
+                source = DETECT.path(mount.get("Source"))
+                if source:
+                    live_paths.add(Path(source))
+                    live_paths.add(Path(source).resolve(strict=False))
+                continue
             source = mount_source(reader, mount, controller=row["id"] == installation["container"]["id"])
             if source is not None:
                 source_identity(source)
@@ -152,11 +179,18 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
     sources = sorted(sources, key=lambda source: (len(source.parts), str(source)))
     resources = []
     for source in sources:
+        if scope == "controller" and any(source.is_relative_to(live) for live in live_paths):
+            raise StorageError("Controller metadata and application data share a storage root; review their separation before a controller-only backup")
         if any(source.is_relative_to(Path(item["source"])) for item in resources):
             continue
         if overlaps(source, bundle):
             raise StorageError("The storage backup must be outside every source being copied")
-        resources.append(source_identity(source))
+        item = source_identity(source)
+        if scope == "controller":
+            excluded = [live.relative_to(source).as_posix() for live in live_paths if live.is_relative_to(source)]
+            if excluded:
+                item["excludedPaths"] = list(SNAPSHOT.excluded_paths(excluded))
+        resources.append(item)
     if len(resources) > 4096:
         raise StorageError("Installation storage exceeds the resource limit")
     conflicts = []
@@ -178,13 +212,13 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
             source = DETECT.path(mount.get("Source"))
             if not source:
                 raise StorageError("Docker returned invalid writable storage")
-            if any(overlaps(Path(source).resolve(strict=False), Path(item["source"])) for item in resources):
+            if any(resource_overlaps(Path(source).resolve(strict=False), item) for item in resources):
                 conflicts.append({"id": row["id"], "name": row["name"]})
                 break
     estimates = []
     for index, item in enumerate(resources if check_capacity else []):
         if item["kind"] == "directory":
-            estimate = SNAPSHOT.preflight(Path(item["source"]), bundle.parent / f".orbis-storage-check-{index}")
+            estimate = SNAPSHOT.preflight(Path(item["source"]), bundle.parent / f".orbis-storage-check-{index}", **({"excluded": item["excludedPaths"]} if item.get("excludedPaths") else {}))
             estimates.append(estimate["bytes"])
         else:
             estimates.append(Path(item["source"]).stat().st_size)
@@ -200,6 +234,8 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
         "containers": sorted([{key: value[key] for key in ("id", "name", "definitionHash")} for value in containers], key=lambda value: value["id"]),
         "mountPoints": host_mounts(resources),
     }
+    if scope == "controller":
+        identity.update(backupScope=scope, preservedAppContainers=sorted(app_ids))
     result = {
         "schema": SCHEMA, "readOnly": True, **identity, "identityHash": APPS.digest(identity),
         "containerStates": sorted(containers, key=lambda value: value["id"]),
@@ -211,7 +247,7 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
 
 
 def require_quiet(root: Path, reader, saved: dict) -> None:
-    current = review(root, reader, Path(saved["bundle"]))
+    current = review(root, reader, Path(saved["bundle"]), scope=saved.get("backupScope", "full"))
     if current["identityHash"] != saved["identityHash"]:
         raise StorageError("Storage sources or container identities changed since review")
     if current["conflictingWriters"]:
@@ -226,8 +262,15 @@ def validate_review(saved: object) -> dict:
     identity = {key: saved[key] for key in ("root", "dockerContext", "daemonFingerprint", "bundle", "resources", "containers")}
     if "mountPoints" in saved:
         identity["mountPoints"] = saved["mountPoints"]
+    if "backupScope" in saved:
+        if saved["backupScope"] != "controller" or not isinstance(saved.get("preservedAppContainers"), list) or any(not DETECT.IDENTIFIER.fullmatch(str(value)) for value in saved["preservedAppContainers"]):
+            raise StorageError("The controller backup scope is invalid")
+        identity.update(backupScope=saved["backupScope"], preservedAppContainers=saved["preservedAppContainers"])
     if saved.get("identityHash") != APPS.digest(identity) or not isinstance(saved["resources"], list) or len(saved["resources"]) > 4096:
         raise StorageError("The storage review identity is invalid")
+    for item in saved["resources"]:
+        if item.get("excludedPaths") and (saved.get("backupScope") != "controller" or item.get("kind") != "directory" or list(SNAPSHOT.excluded_paths(item["excludedPaths"])) != item["excludedPaths"]):
+            raise StorageError("Storage exclusions do not match the reviewed controller scope")
     return saved
 
 
@@ -245,12 +288,12 @@ def file_fingerprint(source: Path) -> dict:
     return {"sha256": digest.hexdigest(), "bytes": metadata.st_size, "mode": stat.S_IMODE(metadata.st_mode), "uid": metadata.st_uid, "gid": metadata.st_gid, "mtimeNs": metadata.st_mtime_ns}
 
 
-def directory_metadata(source: Path) -> dict:
+def directory_metadata(source: Path, *, excluded=()) -> dict:
     digest = hashlib.sha256()
     root = source.stat()
     def unreadable(error):
         raise error
-    for folder, directories, files in os.walk(source, followlinks=False, onerror=unreadable):
+    for folder, directories, files in SNAPSHOT.filtered_walk(source, excluded):
         directories.sort()
         files.sort()
         for name in [*directories, *files]:
@@ -265,7 +308,7 @@ def directory_metadata(source: Path) -> dict:
     return {"entriesSha256": digest.hexdigest(), "rootUid": root.st_uid, "rootGid": root.st_gid, "rootMtimeNs": root.st_mtime_ns}
 
 
-def attributes_metadata(source: Path) -> dict | None:
+def attributes_metadata(source: Path, *, excluded=()) -> dict | None:
     if not hasattr(os, "listxattr"):
         if sys.platform == "linux":
             raise StorageError("This Python runtime cannot verify extended storage attributes")
@@ -287,7 +330,7 @@ def attributes_metadata(source: Path) -> dict | None:
     if source.is_dir():
         def unreadable(error):
             raise error
-        for folder, directories, files in os.walk(source, followlinks=False, onerror=unreadable):
+        for folder, directories, files in SNAPSHOT.filtered_walk(source, excluded):
             directories.sort()
             files.sort()
             for name in [*directories, *files]:
@@ -316,7 +359,7 @@ def require_contained_hardlinks(resources: list[dict]) -> None:
         if item["kind"] == "directory":
             def unreadable(error):
                 raise error
-            for folder, _, files in os.walk(source, followlinks=False, onerror=unreadable):
+            for folder, _, files in SNAPSHOT.filtered_walk(source, item.get("excludedPaths", [])):
                 for name in files:
                     entry(Path(folder) / name)
         if any(expected != found for expected, found in links.values()):
@@ -337,14 +380,15 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
     for index, item in enumerate(saved["resources"]):
         source = Path(item["source"])
         destination = bundle / f"resource-{index:04d}"
-        if source_identity(source) != item:
+        if resource_identity(item) != item:
             raise StorageError("A storage source was replaced before backup")
         copy = {"index": index, "kind": item["kind"]}
-        attributes = attributes_metadata(source)
+        options = {"excluded": item["excludedPaths"]} if item.get("excludedPaths") else {}
+        attributes = attributes_metadata(source, **options)
         if item["kind"] == "directory":
-            metadata = directory_metadata(source)
+            metadata = directory_metadata(source, **options)
             lock_fd = getattr(reader, "lock_fd", None)
-            record = SNAPSHOT.capture(source, destination, "installation-storage", reader.context, **({"lock_fd": lock_fd} if lock_fd is not None else {}))
+            record = SNAPSHOT.capture(source, destination, "installation-storage", reader.context, **options, **({"lock_fd": lock_fd} if lock_fd is not None else {}))
             # The private collection parent protects this tree; retain its root ACL mask.
             os.chmod(destination, record["sourceRootMode"])
             descriptor = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -352,7 +396,7 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
                 os.fsync(descriptor)
             finally:
                 os.close(descriptor)
-            if directory_metadata(source) != metadata or directory_metadata(destination) != metadata:
+            if directory_metadata(source, **options) != metadata or directory_metadata(destination) != metadata:
                 raise StorageError("Directory ownership, permissions or timestamps changed while being copied")
             copy["directoryMetadata"] = metadata
         else:
@@ -364,7 +408,7 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
             record = before
             SNAPSHOT.sync_path(destination)
         if attributes is not None:
-            if attributes_metadata(source) != attributes or attributes_metadata(destination) != attributes:
+            if attributes_metadata(source, **options) != attributes or attributes_metadata(destination) != attributes:
                 raise StorageError("Storage attributes or hard links changed while being copied")
             copy["attributes"] = attributes
         copy["record"] = record
@@ -376,20 +420,21 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
     require_contained_hardlinks(saved["resources"])
     for item, copy in zip(saved["resources"], manifest["copies"]):
         source = Path(item["source"])
-        if source_identity(source) != item:
+        options = {"excluded": item["excludedPaths"]} if item.get("excludedPaths") else {}
+        if resource_identity(item) != item:
             raise StorageError("A storage source was replaced while backup was running")
         if item["kind"] == "directory":
-            actual = SNAPSHOT.fingerprint(source)
+            actual = SNAPSHOT.fingerprint(source, **options)
             matches = (
                 all(copy["record"].get(key) == value for key, value in actual.items())
-                and directory_metadata(source) == copy["directoryMetadata"]
+                and directory_metadata(source, **options) == copy["directoryMetadata"]
                 and stat.S_IMODE(source.stat().st_mode) == copy["record"]["sourceRootMode"]
             )
         else:
             matches = file_fingerprint(source) == copy["record"]
         if not matches:
             raise StorageError("Storage changed after it was copied; keep every writer stopped and take a new backup")
-        if "attributes" in copy and attributes_metadata(source) != copy["attributes"]:
+        if "attributes" in copy and attributes_metadata(source, **options) != copy["attributes"]:
             raise StorageError("Storage attributes changed after they were copied; take a new backup")
     require_quiet_existing(root, reader, saved)
     manifest["stage"] = "complete"
@@ -398,7 +443,7 @@ def capture(root: Path, reader, saved: dict, *, host_writers_stopped: bool) -> d
 
 
 def require_quiet_existing(root: Path, reader, saved: dict) -> None:
-    current = review(root, reader, Path(saved["bundle"]), check_capacity=False, existing_bundle=True)
+    current = review(root, reader, Path(saved["bundle"]), check_capacity=False, existing_bundle=True, scope=saved.get("backupScope", "full"))
     if current["identityHash"] != saved["identityHash"] or current["conflictingWriters"]:
         raise StorageError("Docker or storage changed while backup was running")
     if any(item["state"] not in {"exited", "created"} or item["restartPolicy"]["Name"] != "no" for item in current["containerStates"]):
@@ -427,6 +472,8 @@ def verified_manifest(bundle: Path) -> dict:
             raise StorageError("The storage backup resource order is invalid")
         source = bundle / f"resource-{index:04d}"
         record = SNAPSHOT.verify(source) if item["kind"] == "directory" else file_fingerprint(source)
+        if record.get("excludedPaths", []) != item.get("excludedPaths", []):
+            raise StorageError("The storage backup exclusions differ from the reviewed scope")
         if record != copy.get("record"):
             raise StorageError("The storage backup no longer matches its verification record")
         if item["kind"] == "directory" and directory_metadata(source) != copy.get("directoryMetadata"):

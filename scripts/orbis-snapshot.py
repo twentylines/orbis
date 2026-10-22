@@ -47,7 +47,37 @@ def prepare(root: Path, snapshot: Path) -> None:
         raise ValueError("snapshot destination must be outside the installation")
 
 
-def preflight(root: Path, snapshot: Path) -> dict[str, int]:
+def excluded_paths(values) -> tuple[str, ...]:
+    if not isinstance(values, (list, tuple)) or len(values) > 512:
+        raise ValueError("snapshot exclusions are invalid")
+    for value in values:
+        if not isinstance(value, str) or not value or len(value) > 4096 or any(ord(c) < 32 or ord(c) == 127 for c in value) or Path(value).is_absolute() or Path(value).as_posix() != value or any(part in {".", ".."} for part in value.split("/")):
+            raise ValueError("snapshot exclusions must be relative paths without aliases")
+    return tuple(sorted(set(values)))
+
+
+def filtered_walk(root: Path, excluded=()):
+    excluded = excluded_paths(excluded)
+    def unreadable(error):
+        raise error
+    def included(folder, name):
+        relative = (Path(folder) / name).relative_to(root).as_posix()
+        return not any(relative == value or relative.startswith(value + "/") for value in excluded)
+    for folder, directories, files in os.walk(root, topdown=True, followlinks=False, onerror=unreadable):
+        directories[:] = sorted(name for name in directories if included(folder, name))
+        files[:] = sorted(name for name in files if included(folder, name))
+        yield folder, directories, files
+
+
+def rsync_excludes(excluded):
+    def literal(value):
+        for char in ("\\", "*", "?", "["):
+            value = value.replace(char, "\\" + char)
+        return value
+    return ["--exclude=/" + literal(value) for value in excluded_paths(excluded)]
+
+
+def preflight(root: Path, snapshot: Path, *, excluded=()) -> dict[str, int]:
     """Check tree shape and destination capacity without reading file contents."""
     prepare(root, snapshot)
     root = root.resolve(strict=True)
@@ -58,7 +88,7 @@ def preflight(root: Path, snapshot: Path) -> dict[str, int]:
     def unreadable(error: OSError) -> None:
         raise error
 
-    for folder, directory_names, file_names in os.walk(root, topdown=True, followlinks=False, onerror=unreadable):
+    for folder, directory_names, file_names in filtered_walk(root, excluded):
         for name in [*directory_names, *file_names]:
             item = Path(folder) / name
             metadata = item.lstat()
@@ -80,7 +110,7 @@ def preflight(root: Path, snapshot: Path) -> dict[str, int]:
     return {"entries": entries, "files": files, "bytes": bytes_required}
 
 
-def fingerprint(root: Path) -> dict[str, object]:
+def fingerprint(root: Path, *, excluded=()) -> dict[str, object]:
     if not root.is_dir() or root.is_symlink():
         raise ValueError("snapshot tree must be a real directory")
     root = root.resolve(strict=True)
@@ -91,7 +121,7 @@ def fingerprint(root: Path) -> dict[str, object]:
     def unreadable(error: OSError) -> None:
         raise error
 
-    for folder, directory_names, file_names in os.walk(root, topdown=True, followlinks=False, onerror=unreadable):
+    for folder, directory_names, file_names in filtered_walk(root, excluded):
         directory_names.sort()
         file_names.sort()
         for name in [*directory_names, *file_names]:
@@ -125,7 +155,7 @@ def fingerprint(root: Path) -> dict[str, object]:
     return {"treeSha256": digest.hexdigest(), "entries": entries, "files": files, "bytes": bytes_read}
 
 
-def sync_path(root: Path) -> None:
+def sync_path(root: Path, *, excluded=()) -> None:
     files = set()
     directories = []
 
@@ -155,7 +185,7 @@ def sync_path(root: Path) -> None:
         return
     def unreadable(error):
         raise error
-    for folder, names, contents in os.walk(root, followlinks=False, onerror=unreadable):
+    for folder, names, contents in filtered_walk(root, excluded):
         names.sort()
         contents.sort()
         directories.append(Path(folder))
@@ -190,26 +220,32 @@ def write_sidecar(snapshot: Path, record: dict[str, object]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def capture(root: Path, snapshot: Path, release: str, docker_context: str, *, lock_fd: int | None = None) -> dict[str, object]:
+def capture(root: Path, snapshot: Path, release: str, docker_context: str, *, lock_fd: int | None = None, excluded=()) -> dict[str, object]:
     if root.is_symlink():
         raise ValueError("installation root must be a real directory")
     root = root.resolve(strict=True)
     root_mode = stat.S_IMODE(root.stat().st_mode)
     expanded = snapshot.expanduser()
     snapshot = expanded.parent.resolve(strict=True) / expanded.name
-    preflight(root, snapshot)
+    excluded = excluded_paths(excluded)
+    preflight(root, snapshot, excluded=excluded)
     try:
-        before = fingerprint(root)
+        before = fingerprint(root, excluded=excluded)
     except (OSError, ValueError) as error:
         raise SnapshotError("snapshot-source-read-failed") from error
     try:
-        copied = subprocess.run(["cp", "-a", str(root), str(snapshot)], capture_output=True, check=False, pass_fds=(lock_fd,) if lock_fd is not None else ())
+        if excluded:
+            snapshot.mkdir(mode=0o700)
+            arguments = ["rsync", "-aHAX", "--numeric-ids", "--modify-window=-1", *rsync_excludes(excluded), "--", str(root) + "/", str(snapshot) + "/"]
+        else:
+            arguments = ["cp", "-a", str(root), str(snapshot)]
+        copied = subprocess.run(arguments, capture_output=True, check=False, pass_fds=(lock_fd,) if lock_fd is not None else ())
     except OSError as error:
         raise SnapshotError("snapshot-copy-failed") from error
     if copied.returncode:
         raise SnapshotError("snapshot-copy-failed")
     try:
-        after = fingerprint(root)
+        after = fingerprint(root, excluded=excluded)
     except (OSError, ValueError) as error:
         raise SnapshotError("snapshot-source-read-failed") from error
     if after != before:
@@ -230,6 +266,8 @@ def capture(root: Path, snapshot: Path, release: str, docker_context: str, *, lo
         "sourceRootMode": root_mode,
         **saved,
     }
+    if excluded:
+        record["excludedPaths"] = list(excluded)
     try:
         os.chmod(snapshot, 0o700)
         sync_path(snapshot)

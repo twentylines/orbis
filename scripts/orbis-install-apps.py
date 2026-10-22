@@ -114,10 +114,11 @@ def app_record(raw: dict) -> dict:
     }
 
 
-def local_app_owners(row: dict, owners: list[dict]) -> list[dict]:
+def local_app_owners(row: dict, owners: list[dict], *, registered: bool = False) -> list[dict]:
     matches = []
     for installation in owners:
-        for value in DETECT.app_directories(row, installation):
+        directories = DETECT.registered_app_directories(row, installation) if registered else DETECT.app_directories(row, installation)
+        for value in directories:
             directory = Path(value)
             if directory.is_symlink():
                 raise AppError("An app configuration uses a symlink alias requiring review")
@@ -126,18 +127,33 @@ def local_app_owners(row: dict, owners: list[dict]) -> list[dict]:
             if directory.resolve(strict=True) != directory or not directory.is_dir():
                 raise AppError("An app configuration directory needs local review")
             found = False
-            for name in ("docker-compose.generated.yml", "docker-compose.yml"):
+            for name in ("docker-compose.generated.yml", "docker-compose.yml", "config.json"):
                 target = directory / name
                 if target.is_symlink():
                     raise AppError("An app Compose file uses a symlink alias requiring review")
                 if target.exists():
                     if not target.is_file() or target.resolve(strict=True) != target:
                         raise AppError("An app Compose file needs local review")
-                    found = True
-            if found:
+                    if name != "config.json":
+                        found = True
+            metadata_matches = not registered
+            metadata = directory / "config.json"
+            if registered and metadata.is_file() and metadata.stat().st_size <= 1024 * 1024:
+                try:
+                    value = json.loads(metadata.read_text(encoding="utf-8"))
+                    # The catalogue ID can differ from an installed alias. The
+                    # installed URN is established by its directory and mounts.
+                    metadata_matches = isinstance(value, dict) and isinstance(value.get("id"), str) and DETECT.APP_PART.fullmatch(value["id"]) is not None
+                except (ValueError, UnicodeError):
+                    metadata_matches = False
+            if found and metadata_matches:
                 matches.append(installation)
                 break
     return matches
+
+
+def local_registered_app_owners(row: dict, owners: list[dict]) -> list[dict]:
+    return local_app_owners(row, owners, registered=True)
 
 
 def require_assigned(report: dict) -> None:
@@ -154,7 +170,7 @@ def require_assigned(report: dict) -> None:
 
 
 def selected_installation(reader: Docker, root: Path) -> tuple[dict, dict]:
-    report = DETECT.discover(reader, resolve_app_owners=local_app_owners)
+    report = DETECT.discover(reader, resolve_app_owners=local_app_owners, resolve_registered_app_owners=local_registered_app_owners)
     selected = [item for item in report["installations"] if item["installRoot"] == str(root)]
     if len(selected) != 1 or selected[0]["reviewRequired"]:
         raise AppError("The selected installation could not be identified unambiguously")

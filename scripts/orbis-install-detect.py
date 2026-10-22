@@ -25,6 +25,7 @@ IMAGE_BASES = {"ghcr.io/runtipi/runtipi": "runtipi", "ghcr.io/twentylines/orbis"
 IDENTIFIER = re.compile(r"^[0-9a-f]{64}$")
 CONTEXT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 VERSION = re.compile(r"^v?\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.-]+)?$")
+APP_PART = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 LIST_FORMAT = (
     '{"id":{{json .ID}},"name":{{json .Names}},"image":{{json .Image}},'
     '"project":{{json (.Label "com.docker.compose.project")}},'
@@ -293,7 +294,37 @@ def app_directories(row: dict, installation: dict) -> list[str]:
     return app_directory_evidence(row, installation)[0]
 
 
-def discover(reader: DockerReader, *, resolve_app_owners=None) -> dict:
+def registered_app_identity(row: dict) -> tuple[str, str] | None:
+    parts = row["appUrn"].split(":")
+    if len(parts) != 2 or any(not APP_PART.fullmatch(part) for part in parts) or row["project"] != "_".join(parts):
+        return None
+    return parts[0], parts[1]
+
+
+def registered_app_directories(row: dict, installation: dict) -> list[str]:
+    identity = registered_app_identity(row)
+    if identity is None or installation["rootStatus"] != "confirmed-by-mounts":
+        return []
+    app, store = identity
+    return [posixpath.join(mount["source"], store, app) for mount in installation["storage"] if mount["type"] == "bind" and mount["destination"] == "/data/apps"]
+
+
+def app_data_owners(row: dict, installations: list[dict], mounts: list[dict]) -> list[dict]:
+    identity = registered_app_identity(row)
+    if identity is None:
+        return []
+    app, store = identity
+    owners = []
+    for installation in installations:
+        if not registered_app_directories(row, installation):
+            continue
+        data = [posixpath.join(item["source"], store, app) for item in installation["storage"] if item["type"] == "bind" and item["destination"] == "/app-data"]
+        if any(mount.get("Type") == "bind" and path(mount.get("Source")) and beneath(path(mount["Source"]), source) for mount in mounts for source in data):
+            owners.append(installation)
+    return owners
+
+
+def discover(reader: DockerReader, *, resolve_app_owners=None, resolve_registered_app_owners=None) -> dict:
     daemon = reader.daemon()
     rows = reader.containers()
     validate_rows(rows)
@@ -351,6 +382,30 @@ def discover(reader: DockerReader, *, resolve_app_owners=None) -> dict:
             continue
         owners = [item for item in installations if app_directories(row, item)]
         candidates = len(owners)
+        core = None
+        data_reason = None
+        data_owned = False
+        if not owners and registered_app_identity(row) and any(registered_app_directories(row, item) for item in installations):
+            # A maintenance tool can launch a registered app using Compose files
+            # elsewhere. Never infer that ownership from its labels alone.
+            path_claims = any(
+                app_directories({**row, "configFiles": ""}, item) or app_directories({**row, "workingDir": ""}, item)
+                or app_directory_evidence(row, item)[1] in {
+                    "App URN conflicts with the controller-local Compose directory",
+                    "Compose working directory and config files identify different apps",
+                }
+                for item in installations
+            )
+            if not path_claims:
+                core = inspect_container(reader, row)
+                matched = app_data_owners(row, installations, validate_mounts(core.get("mounts")))
+                if matched:
+                    candidates = len(matched)
+                    data_reason = "App identity and data bind match, but no unique registered local app configuration was verified"
+                    if resolve_registered_app_owners is not None:
+                        owners = resolve_registered_app_owners(row, matched)
+                        host_files_inspected = True
+                        data_owned = len(owners) == 1
         if len(owners) > 1 and resolve_app_owners is not None:
             owners = resolve_app_owners(row, owners)
             host_files_inspected = True
@@ -358,14 +413,17 @@ def discover(reader: DockerReader, *, resolve_app_owners=None) -> dict:
         if len(owners) != 1:
             summary["compose"] = {"project": row["project"], "service": row["service"], "workingDir": row["workingDir"], "configFiles": row.get("configFiles", "")}
             summary["ownershipReasons"] = (
-                ["Compose paths match multiple controllers; no unique local app configuration could establish ownership"] if candidates > 1
+                ["Ownership evidence matches multiple controllers; no unique local app configuration could establish ownership"] if candidates > 1
+                else [data_reason] if data_reason
                 else sorted({app_directory_evidence(row, item)[1] for item in installations}) if installations
                 else ["No controller with a confirmed installation root was found"]
             )
             unassigned.append(summary)
             continue
         owner = owners[0]
-        core = inspect_container(reader, row)
+        core = core or inspect_container(reader, row)
+        if data_owned:
+            summary["ownershipEvidence"] = "registered-app-and-data-bind"
         summary["storage"] = storage_mounts(validate_mounts(core.get("mounts")), owner["installRoot"], app=True)
         owner["apps"].append(summary)
     for installation in installations:

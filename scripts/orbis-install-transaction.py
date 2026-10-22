@@ -57,8 +57,8 @@ def private_paths(root: Path, storage: dict, journal: Path) -> Path:
     return journal
 
 
-def review(root: Path, reader, bundle: Path, journal: Path) -> dict:
-    storage = STORAGE.review(root, reader, bundle)
+def review(root: Path, reader, bundle: Path, journal: Path, *, scope: str = "full") -> dict:
+    storage = STORAGE.review(root, reader, bundle, scope=scope)
     if storage["conflictingWriters"]:
         raise TransactionError("Another container can write to this installation's storage")
     journal = private_paths(root, storage, journal)
@@ -85,7 +85,7 @@ def review(root: Path, reader, bundle: Path, journal: Path) -> dict:
     value["reviewId"] = APPS.digest(value)
     validate_review(value)
     require_healthy(reader, controller)
-    if STORAGE.review(root, reader, bundle) != storage:
+    if STORAGE.review(root, reader, bundle, scope=scope) != storage:
         raise TransactionError("The installation changed during review")
     return value
 
@@ -103,7 +103,7 @@ def require_healthy(reader, identifier: str, timeout: int = 0) -> None:
 
 def identities(root: Path, reader, value: dict) -> dict:
     storage = value["storage"]
-    current = STORAGE.review(root, reader, Path(storage["bundle"]), check_capacity=False, existing_bundle=True)
+    current = STORAGE.review(root, reader, Path(storage["bundle"]), check_capacity=False, existing_bundle=True, scope=storage.get("backupScope", "full"))
     if current["identityHash"] != storage["identityHash"] or current["conflictingWriters"]:
         raise TransactionError("Container definitions, storage, or Docker changed; keep the recovery journal")
     expected = {item["id"]: item for item in storage["containerStates"]}
@@ -144,7 +144,7 @@ def checkpoint(root: Path, reader, value: dict, *, host_writers_stopped: bool) -
     validate_review(value)
     if not host_writers_stopped:
         raise TransactionError("Confirm native host and remote storage writers are stopped before checkpointing")
-    if review(root, reader, Path(value["storage"]["bundle"]), Path(value["journal"])) != value:
+    if review(root, reader, Path(value["storage"]["bundle"]), Path(value["journal"]), scope=value["storage"].get("backupScope", "full")) != value:
         raise TransactionError("The installation changed; review it again before stopping services")
     RESTORE.runtime()
     record = {"schema": SCHEMA, "id": str(uuid.uuid4()), "stage": "prepared", "review": value}

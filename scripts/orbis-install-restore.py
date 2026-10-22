@@ -53,7 +53,7 @@ def destinations(manifest: dict) -> None:
         raise RestoreError("The storage recovery destinations are invalid")
     for item in resources:
         destination = Path(item["source"])
-        if STORAGE.source_identity(destination) != item:
+        if STORAGE.resource_identity(item) != item:
             raise RestoreError("A recovery destination was replaced or changed type; retain the backup")
         if item["kind"] == "file" and destination.stat().st_nlink != 1:
             raise RestoreError("A file-mount recovery destination has additional hard links requiring review")
@@ -84,7 +84,7 @@ def writers(root: Path, reader, manifest: dict) -> list[dict]:
                 source = APPS.DETECT.path(mount.get("Source"))
                 if source is None:
                     raise RestoreError("Docker returned an invalid writable storage source")
-                if any(STORAGE.overlaps(Path(source).resolve(strict=False), target) for target in resources):
+                if any(STORAGE.resource_overlaps(Path(source).resolve(strict=False), item) for item in plan["resources"]):
                     relevant = True
         if relevant:
             record, _ = STORAGE.container_record(reader, row)
@@ -148,7 +148,7 @@ def copy_resource(source: Path, destination: Path, item: dict, copy: dict, *, lo
         # this resource; -H rebuilds the backup's links inside the restored tree.
         result = subprocess.run([
             "rsync", "-aHAX", "--numeric-ids", "--ignore-times", "--modify-window=-1", "--delete", "--fsync",
-            "--", str(source) + "/", str(destination) + "/",
+            *STORAGE.SNAPSHOT.rsync_excludes(item.get("excludedPaths", [])), "--", str(source) + "/", str(destination) + "/",
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, pass_fds=(lock_fd,) if lock_fd is not None else ())
         if result.returncode:
             raise RestoreError("A storage directory could not be recovered; keep every writer stopped and retain its journal")
@@ -156,7 +156,7 @@ def copy_resource(source: Path, destination: Path, item: dict, copy: dict, *, lo
         os.chown(destination, metadata["rootUid"], metadata["rootGid"])
         os.chmod(destination, copy["record"]["sourceRootMode"])
         os.utime(destination, ns=(destination.stat().st_atime_ns, metadata["rootMtimeNs"]))
-        STORAGE.SNAPSHOT.sync_path(destination)
+        STORAGE.SNAPSHOT.sync_path(destination, **({"excluded": item["excludedPaths"]} if item.get("excludedPaths") else {}))
     else:
         descriptor = os.open(destination, os.O_WRONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(descriptor, "wb") as output:
@@ -181,20 +181,21 @@ def copy_resource(source: Path, destination: Path, item: dict, copy: dict, *, lo
 
 
 def verify_destination(destination: Path, item: dict, copy: dict) -> None:
-    if STORAGE.source_identity(destination) != item:
+    if STORAGE.resource_identity(item) != item:
         raise RestoreError("A storage destination changed identity during recovery")
     if item["kind"] == "file":
         matches = STORAGE.file_fingerprint(destination) == copy["record"]
     else:
-        actual = STORAGE.SNAPSHOT.fingerprint(destination)
+        options = {"excluded": item["excludedPaths"]} if item.get("excludedPaths") else {}
+        actual = STORAGE.SNAPSHOT.fingerprint(destination, **options)
         matches = (
             all(copy["record"].get(key) == value for key, value in actual.items())
-            and STORAGE.directory_metadata(destination) == copy["directoryMetadata"]
+            and STORAGE.directory_metadata(destination, **options) == copy["directoryMetadata"]
             and stat.S_IMODE(destination.stat().st_mode) == copy["record"]["sourceRootMode"]
         )
     if not matches:
         raise RestoreError("Recovered storage did not match the verified backup; keep every writer stopped")
-    if "attributes" in copy and STORAGE.attributes_metadata(destination) != copy["attributes"]:
+    if "attributes" in copy and STORAGE.attributes_metadata(destination, **({"excluded": item["excludedPaths"]} if item.get("excludedPaths") else {})) != copy["attributes"]:
         raise RestoreError("Recovered storage attributes did not match the verified backup")
 
 

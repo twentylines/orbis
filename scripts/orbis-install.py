@@ -137,7 +137,7 @@ def recover_pending(root, reader, state, ask, *, writers_stopped=False):
     return json.loads((state / (name + ".stdout.json")).read_text())
 
 
-def replacement(root, reader, manifest, state, mode, confirm, display=None):
+def replacement(root, reader, manifest, state, mode, confirm, display=None, *, backup_scope="controller"):
     REPLACE.TX.RESTORE.runtime()
     run = state / ("replacement-" + str(uuid.uuid4()))
     run.mkdir(mode=0o700)
@@ -147,15 +147,20 @@ def replacement(root, reader, manifest, state, mode, confirm, display=None):
     with display.step("Reviewing app ownership and backup storage"):
         with HOST.host_lock(root) as descriptor:
             reader.lock_fd = descriptor
-            review = REPLACE.review(root, reader, manifest, backup, journal, mode=mode)
+            review = REPLACE.review(root, reader, manifest, backup, journal, mode=mode, backup_scope=backup_scope)
     reader.lock_fd = None
     APPS.write_journal(review_path, review)
-    count = list(review["checkpoint"]["roles"].values()).count("app")
+    storage = review["checkpoint"]["storage"]
+    count = len(storage["preservedAppContainers"]) if backup_scope == "controller" else list(review["checkpoint"]["roles"].values()).count("app")
     print(f"\nInstallation: {root}\nRelease: {manifest['tag']}\nMode: {mode.title()}\nApp containers: {count}\nBackup: {backup}\n")
     if mode == "fresh":
         print("Fresh removes dashboard accounts, saved links and workspace preferences. Apps and their data are retained. Existing logins will be revoked.")
     else:
         print("Keep preserves accounts, settings, installed apps and their data.")
+    if backup_scope == "controller":
+        print("App containers keep running. The backup covers Runtipi configuration and control services; app data is excluded. Control services pause briefly during replacement.")
+    else:
+        print("The full backup pauses managed apps and control services, including their persistent data.")
     confirm(root)
     script = str(Path(__file__).with_name("orbis-install-replace.py"))
     APPS.write_journal(root / ".orbis-installation.json", {"schema": "orbis.installer-pointer.v1", "root": str(root), "dockerContext": reader.context, "kind": "replacement", "journal": str(journal), "executor": script, "executorSha256": hashlib.sha256(Path(script).read_bytes()).hexdigest()})
@@ -173,7 +178,7 @@ def replacement(root, reader, manifest, state, mode, confirm, display=None):
             return result
         with HOST.host_lock(root) as descriptor:
             reader.lock_fd = descriptor
-            refreshed = REPLACE.review(root, reader, manifest, backup, journal, mode=mode)
+            refreshed = REPLACE.review(root, reader, manifest, backup, journal, mode=mode, backup_scope=backup_scope)
         reader.lock_fd = None
         if semantic_review(refreshed) != semantic_review(review):
             raise ValueError("Installation configuration or container identities changed after confirmation. Nothing was replaced; run the installer again")
@@ -189,6 +194,7 @@ def main():
     parser.add_argument("--docker-context", default="default")
     parser.add_argument("--root", type=Path)
     parser.add_argument("--mode", choices=("keep", "fresh"))
+    parser.add_argument("--backup-scope", choices=("controller", "full"), default="controller", help="back up control services while apps run (default), or pause apps for a full backup")
     parser.add_argument("--inspect", action="store_true")
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--host-writers-stopped", action="store_true")
@@ -211,7 +217,7 @@ def main():
     display = UI.Presentation(interactive=not args.yes, color=not args.no_color, animation=not args.no_animation)
     display.banner(manifest["tag"])
     with display.step("Detecting existing installations"):
-        report = APPS.DETECT.discover(reader, resolve_app_owners=APPS.local_app_owners)
+        report = APPS.DETECT.discover(reader, resolve_app_owners=APPS.local_app_owners, resolve_registered_app_owners=APPS.local_registered_app_owners)
     tty = None
     try:
         if not args.yes:
@@ -283,13 +289,14 @@ def main():
 
         def confirm(chosen):
             if selected and not args.host_writers_stopped:
-                if args.yes or ask("Have native host processes and remote clients writing to this app storage been stopped? [y/N]: ").strip().lower() != "y":
+                target = "Runtipi configuration and control-service storage" if args.backup_scope == "controller" else "this app storage"
+                if args.yes or ask(f"Have native host processes and remote clients writing to {target} been stopped? [y/N]: ").strip().lower() != "y":
                     raise ValueError("Stop native and remote storage writers before replacing the installation")
             if not args.yes and ask(f"Type {chosen} to confirm installation: ").strip() != str(chosen):
                 raise ValueError("Installation cancelled; no controller was replaced")
 
         if selected:
-            result = replacement(root, reader, manifest, state, mode, confirm, display)
+            result = replacement(root, reader, manifest, state, mode, confirm, display, backup_scope=args.backup_scope)
         else:
             new = load("orbis-install-new.py", "orbis_guided_new")
             result = new.install(root, reader, manifest, state, args, confirm, display=display)

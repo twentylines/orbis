@@ -121,7 +121,7 @@ def validate_review(value):
         raise ReplacementError("The checkpoint and replacement journals do not match")
 
 
-def review(root, reader, target, bundle, journal, *, mode="keep"):
+def review(root, reader, target, bundle, journal, *, mode="keep", backup_scope="full"):
     if mode not in {"keep", "fresh"}:
         raise ReplacementError("Choose Keep or Fresh replacement")
     target = HOST.PLAN.require_installation_protocol(target)
@@ -132,7 +132,7 @@ def review(root, reader, target, bundle, journal, *, mode="keep"):
     UPDATE.verify_release(target)
     Engine(reader)
     image = COMPAT.image_ledger(reader, target)
-    checkpoint = TX.review(root, reader, bundle, checkpoint_path(journal))
+    checkpoint = TX.review(root, reader, bundle, checkpoint_path(journal), scope=backup_scope)
     journal = TX.private_paths(root, checkpoint["storage"], journal)
     if journal.exists() or journal.is_symlink():
         raise ReplacementError("A replacement journal already exists; recover it instead")
@@ -361,7 +361,7 @@ def check_originals(record, reader):
         if expected["state"] != "running" and actual["state"] != expected["state"]:
             raise ReplacementError("An originally stopped app changed state during replacement")
     for item in value["checkpoint"]["storage"]["resources"]:
-        if TX.STORAGE.source_identity(Path(item["source"])) != item:
+        if TX.STORAGE.resource_identity(item) != item:
             raise ReplacementError("An installation storage source changed identity")
 
 
@@ -476,7 +476,7 @@ def apply(root, reader, value, *, host_writers_stopped):
     validate_review(value)
     if not host_writers_stopped:
         raise ReplacementError("Confirm native host and remote storage writers are stopped before replacement")
-    fresh = review(root, reader, value["target"], Path(value["checkpoint"]["storage"]["bundle"]), Path(value["journal"]), mode=value["mode"])
+    fresh = review(root, reader, value["target"], Path(value["checkpoint"]["storage"]["bundle"]), Path(value["journal"]), mode=value["mode"], backup_scope=value["checkpoint"]["storage"].get("backupScope", "full"))
     if fresh != value:
         raise ReplacementError("The installation changed; review the replacement again")
     record = {"schema": SCHEMA, "id": str(uuid.uuid4()), "stage": "prepared", "review": value}
@@ -579,6 +579,7 @@ def main():
     parser.add_argument("--journal", type=Path, required=True)
     parser.add_argument("--review", type=Path)
     parser.add_argument("--mode", choices=("keep", "fresh"))
+    parser.add_argument("--backup-scope", choices=("controller", "full"), default="full")
     parser.add_argument("--confirm-root")
     parser.add_argument("--host-writers-stopped", action="store_true")
     args = parser.parse_args()
@@ -593,7 +594,7 @@ def main():
             if args.action == "review":
                 if args.manifest is None or args.backup is None:
                     raise ReplacementError("A published release manifest and new private backup are required")
-                result = review(root, reader, json.loads(args.manifest.read_text()), args.backup.expanduser(), journal, mode=args.mode or "keep")
+                result = review(root, reader, json.loads(args.manifest.read_text()), args.backup.expanduser(), journal, mode=args.mode or "keep", backup_scope=args.backup_scope)
             else:
                 HOST.require_confirmation(root, args.confirm_root)
                 if args.action == "recover":

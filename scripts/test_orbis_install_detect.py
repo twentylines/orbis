@@ -357,7 +357,7 @@ class InstallationDiscoveryTests(unittest.TestCase):
         report = DETECT.discover(reader)
         self.assertEqual(report["installations"][0]["apps"], [])
         self.assertEqual(len(report["unassignedManagedContainers"]), 1)
-        self.assertNotIn(app["id"], reader.inspected)
+        self.assertIn(app["id"], reader.inspected)
 
     def test_ambiguous_nested_app_directories_require_review(self):
         nested = container(2, name="nested", root="/srv/runtipi/apps/nested")

@@ -59,12 +59,16 @@ The terminal installer shows an Orbis logo and animated progress during installa
 
 App ownership uses Compose working-directory and configuration-file paths mapped through the controller's actual apps mount. This supports relocated apps folders, overridden project directories and older managed containers without app URNs. Core services are classified separately by their Compose project, service and installation root. Names and a managed label alone do not establish ownership. Conflicting or unknown containers block replacement; the error lists names, short IDs and reasons, and `--inspect` includes the complete metadata report. The installer checks again before stopping services.
 
-- A discovered Runtipi CLI 4.10.1 installation offers **Keep** or **Fresh**, followed by the selected root, app-container count and private backup location. Native and remote storage writers must be stopped before replacement.
+Apps launched by a separate maintenance tool can also be recognized when their Compose project and app URN agree, their persistent data bind belongs to the confirmed installation, and their local app registration contains valid metadata and Compose configuration. An installed alias may differ from its catalogue ID. Conflicting paths or missing registration still require review.
+
+- A discovered Runtipi CLI 4.10.1 installation offers **Keep** or **Fresh**, followed by the selected root, app-container count and private backup location. By default, app containers keep running. The backup covers configuration and control-service storage, excluding app data, media, backups and logs. Only the controller, database, queue and reverse proxy pause; app access through that proxy may be interrupted briefly. Native processes and remote clients writing to the backed-up configuration or control-service storage must be stopped.
 - A new installation requires an empty directory and free dashboard ports. It creates private configuration, PostgreSQL 17, RabbitMQ 4 and Traefik 3.6 using pinned images. Database and queue ports remain private. Migration retains the original database and dependency configuration.
 - Successful setup enables the restricted systemd helper and a read-only host-socket mount. The helper provides browser-managed core and host operations. `--without-host-service` explicitly omits those host operations.
 - Interrupted initialization records its original source and journal. Rerunning the installer for that root offers recovery. Replacement recovery restores the original installation before activation or finishes the cutover after activation; new-server and helper setup recover forward without restoring over accepted app writes.
 
 Private installer and recovery files remain under `/var/lib/orbis/installer` by default. Preserve them when an operation fails. A launcher never substitutes a different release silently. Use a release with the required external-network protection for a new controller start.
+
+The default replacement checkpoint is not an application-data backup. Keep your normal app backups. Recovery protects excluded app data, including writes made after the checkpoint. Writable mounts covering both live app data and control-service metadata require review before replacement. For an explicitly requested full stopped-state backup, pass `--backup-scope full`; this also pauses managed app containers. Existing full-backup journals retain their original recovery scope.
 
 An older Orbis beta without that protection must be updated before this installer can recreate its controller to attach the host service. An already healthy, enrolled helper can continue running without a controller restart.
 
@@ -89,7 +93,7 @@ Choose a new private backup and journal outside every storage source:
 umask 077
 python3 scripts/orbis-install-replace.py review ROOT \
   --docker-context CONTEXT --manifest MANIFEST.json \
-  --backup BUNDLE --journal JOURNAL > REPLACEMENT-REVIEW.json
+  --backup BUNDLE --journal JOURNAL --backup-scope controller > REPLACEMENT-REVIEW.json
 ```
 
 After separately stopping native and remote storage writers:
@@ -100,7 +104,7 @@ python3 scripts/orbis-install-replace.py apply ROOT \
   --confirm-root ROOT --host-writers-stopped
 ```
 
-The executor checkpoints the stopped installation and retains the original controller for rollback. Orbis first boots in hold mode, then verifies resume mode without publishing the dashboard's ports. Apps and the reverse proxy remain stopped during these checks. The persistent override changes the controller image and build identity; custom runtime mounts, network settings and resource limits are preserved.
+The executor checkpoints the reviewed storage and retains the original controller for rollback. Orbis first boots in hold mode, then verifies resume mode without publishing the dashboard's ports. With the controller scope above, apps keep their existing containers, state and restart policies; the reverse proxy remains stopped during these checks. The persistent override changes the controller image and build identity; custom runtime mounts, network settings and resource limits are preserved. The low-level executor defaults to the legacy full scope when `--backup-scope` is omitted.
 
 Before app containers or public dashboard ports become available, the journal records `committing`. Recovery before that point restores the original controller and verified backup. Recovery after that point finishes installing Orbis, preserving newly accepted app writes. Success removes the stopped original controller, restores service restart policies and records the installation for the host updater. The backup remains private on the host. Installer phase flags are absent from the final controller and persistent Compose override.
 
