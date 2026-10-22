@@ -7,6 +7,7 @@ import re
 import select
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from unittest import mock
@@ -58,6 +59,48 @@ class InstallerPresentationTests(unittest.TestCase):
                 else:
                     self.assertIn("(____( () )____)", output.getvalue())
                 self.assertTrue(all(len(line) <= width for line in output.getvalue().splitlines()))
+
+    def test_active_completed_and_failed_frames_fit_very_narrow_and_resized_terminals(self):
+        ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
+        ui.set_remaining_steps(12)
+        for width in (80, 18, 14, 12, 8, 39, 64, 120):
+            with self.subTest(width=width), mock.patch.object(ui, "width", return_value=width):
+                for status in (None, "[ok]", "[stopped]"):
+                    value = ui.frame("Downloading", 5, 1234, status, detail="layers 12/4096")
+                    self.assertLessEqual(len(value), width - 1)
+        with mock.patch.object(ui, "width", return_value=80):
+            self.assertIn("layers 3/8", ui.frame("Downloading", 4, detail="layers 3/8"))
+            self.assertNotIn("%", ui.frame("Downloading", 4, detail="layers 3/8"))
+
+    def test_layer_details_follow_incremental_private_log_updates_without_echoing_diagnostics(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "pull.log"
+            progress = UI.PullProgress(path)
+            self.assertIsNone(progress())
+            path.write_bytes(b"abcdef123456: Pulling fs layer\n123456abcdef: Already exists\nabcdef123456: Download comp")
+            self.assertEqual(progress(), "layers 1/2")
+            with path.open("ab") as stream:
+                stream.write(b"lete\nabcdef123456: Extracting [==>] 5MB/10MB\n")
+                stream.write(b"abcdef123456: Pull complete\r\n\x1b[2Jsecret diagnostic\nStatus: Downloaded newer image\n")
+            self.assertEqual(progress(), "layers 2/2")
+            self.assertEqual(progress(), "layers 2/2")
+            self.assertNotIn("secret", progress())
+            self.assertNotIn("\033", progress())
+
+    def test_noisy_or_unrecognized_pull_output_is_bounded_and_does_not_claim_download_progress(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "pull.log"
+            progress = UI.PullProgress(path)
+            path.write_bytes(b"x" * 100000)
+            self.assertIsNone(progress())
+            self.assertLessEqual(len(progress.pending), 4096)
+            self.assertEqual(progress.offset, 65536)
+            self.assertIsNone(progress())
+            with path.open("ab") as stream:
+                stream.write(b"\n" + b"".join(f"{index:012x}: Already exists\n".encode() for index in range(4200)))
+            for _ in range(5):
+                progress()
+            self.assertEqual(progress(), "layers 4096/4096")
 
     def test_failure_and_interrupt_restore_cursor_and_never_report_success(self):
         for error in (ValueError("ownership needs review"), KeyboardInterrupt()):

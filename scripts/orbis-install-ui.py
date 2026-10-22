@@ -3,6 +3,7 @@
 
 import contextlib
 import os
+import re
 import shutil
 import sys
 import threading
@@ -17,6 +18,35 @@ WORDMARK = (
     r"| |_| |  _ <| |_) || | ___) |",
     r" \___/|_| \_\____/|___|____/ ",
 )
+
+
+class PullProgress:
+    """Read bounded Docker layer updates from the existing private pull log."""
+
+    def __init__(self, path):
+        self.path = path
+        self.offset = 0
+        self.pending = b""
+        self.layers = {}
+
+    def __call__(self):
+        try:
+            with self.path.open("rb") as stream:
+                stream.seek(self.offset)
+                data = stream.read(65536)
+                self.offset = stream.tell()
+        except OSError:
+            return None
+        lines = (self.pending + data).split(b"\n")
+        self.pending = lines.pop()[-4096:]
+        for line in lines:
+            match = re.fullmatch(rb"([0-9a-f]{6,64}): (Pulling fs layer|Waiting|Downloading|Verifying Checksum|Download complete|Extracting|Pull complete|Already exists)(?:\s+.*)?", line.rstrip(b"\r"))
+            if match and (match[1] in self.layers or len(self.layers) < 4096):
+                self.layers[match[1]] = match[2]
+        if not self.layers:
+            return None
+        ready = sum(status in {b"Pull complete", b"Already exists"} for status in self.layers.values())
+        return f"layers {ready}/{len(self.layers)}"
 
 
 class Presentation:
@@ -65,15 +95,17 @@ class Presentation:
             raise ValueError("Installation stage count is invalid")
         self.total = self.completed + count
 
-    def frame(self, label, tick, elapsed=0, status=None):
+    def frame(self, label, tick, elapsed=0, status=None, detail=None):
         width = max(1, self.width() - 1)
         count = f"{self.completed}/{self.total} stages" if self.total else "Working"
         caption = f"{status or count}  {elapsed:.1f}s"
         if status and self.total:
             caption = f"{status} {self.completed}/{self.total}  {elapsed:.1f}s"
+        if detail and not status and width >= 64:
+            caption = f"{count}  /  {detail}  /  {elapsed:.1f}s"
         if width < 36:
             caption = status or (f"{self.completed}/{self.total}" if self.total else f"{elapsed:.0f}s")
-        if width < 14:
+        if width < len(caption) + 8:
             return caption[:width]
         cells = max(4, min(54, width - len(caption) - 4))
         done = min(cells, int(cells * self.completed / self.total)) if self.total else (cells if status == "[ok]" else 0)
@@ -86,14 +118,15 @@ class Presentation:
         for index in range(cells):
             if index < done:
                 track.append(self.paint("█" if self.unicode else "=", "36"))
-            elif status is None and done <= index < end and abs(index - head) < 2:
-                track.append(self.paint("█" if self.unicode else "#", "1;33"))
+            elif status is None and done <= index < end and abs(index - head) < 3:
+                distance = abs(index - head)
+                track.append(self.paint(("█", "▓", "░")[distance] if self.unicode else ("#", "=", ".")[distance], "1;33" if distance == 0 else "33"))
             else:
                 track.append(self.paint("─" if self.unicode else "-", "90"))
         return self.paint("[", "90") + "".join(track) + self.paint("]", "90") + "  " + caption
 
     @contextlib.contextmanager
-    def step(self, label, *, completed=None):
+    def step(self, label, *, completed=None, detail=None):
         if not self.animation:
             self.write(f"{label}...\n")
             yield
@@ -106,7 +139,7 @@ class Presentation:
         def draw():
             tick = 1
             while not stopped.wait(0.1):
-                self.write("\r\033[2K" + self.frame(label, tick, time.monotonic() - started))
+                self.write("\r\033[2K" + self.frame(label, tick, time.monotonic() - started, detail=detail() if detail else None))
                 tick += 1
 
         worker = threading.Thread(target=draw, name="orbis-installer-display", daemon=True)

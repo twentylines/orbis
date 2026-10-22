@@ -221,6 +221,56 @@ class NewInstallationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "19443.*existing-proxy.*--https-port"):
                 NEW.choose_ports(Path("/unused"), mock.Mock(), 18280, 19443)
 
+    def test_port_typing_errors_retry_instead_of_aborting_setup(self):
+        for http, https, conflict, valid, expected in [
+            (18280, 19443, 18280, "18281", (18281, 19443)),
+            (18280, 19443, 19443, "19444", (18280, 19444)),
+        ]:
+            other = https if conflict == http else http
+            ask = mock.Mock(side_effect=["eighty", "０８０", "0", "65536", str(other), valid])
+            reader = mock.Mock()
+            with self.subTest(conflict=conflict), mock.patch.object(NEW, "require_empty", side_effect=[NEW.PortInUseError(conflict, "existing service"), None]) as preflight, contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(NEW.choose_ports(Path("/unused"), reader, http, https, ask), expected)
+                self.assertEqual(preflight.call_count, 2)
+                self.assertEqual(ask.call_count, 6)
+                reader.change.assert_not_called()
+
+    def test_port_selection_cancellation_and_exhaustion_preserve_existing_services(self):
+        for answers, reason in [([""], "cancelled"), (["invalid"] * 16, "Too many port attempts")]:
+            reader = mock.Mock()
+            with self.subTest(reason=reason), mock.patch.object(NEW, "require_empty", side_effect=NEW.PortInUseError(80, "existing proxy")), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaisesRegex(ValueError, reason):
+                    NEW.choose_ports(Path("/unused"), reader, 80, 443, mock.Mock(side_effect=answers))
+                reader.change.assert_not_called()
+
+    def test_last_allowed_port_answer_is_still_checked(self):
+        reader = mock.Mock()
+        ask = mock.Mock(side_effect=["invalid"] * 15 + ["18080"])
+        with mock.patch.object(NEW, "require_empty", side_effect=[NEW.PortInUseError(80), None]), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(NEW.choose_ports(Path("/unused"), reader, 80, 443, ask), (18080, 443))
+        self.assertEqual(ask.call_count, 16)
+        reader.change.assert_not_called()
+
+    def test_cancel_and_failed_dependency_pulls_leave_the_installation_directory_untouched(self):
+        for failure in ("cancel", "pull-error", "pull-timeout"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                parent = Path(folder); root = parent / "server"; root.mkdir()
+                state = parent / "private"; state.mkdir()
+                data = parent / "external-app-data"; data.write_bytes(b"existing application data")
+                reader = mock.Mock(context="test")
+                args = SimpleNamespace(http_port=18080, https_port=18443, server_ip=None)
+                confirm = mock.Mock(side_effect=ValueError("Installation cancelled") if failure == "cancel" else None)
+                result = subprocess.CompletedProcess([], 1)
+                timeout = subprocess.TimeoutExpired("docker pull", 900)
+                with mock.patch.object(NEW, "require_empty"), mock.patch.object(NEW, "server_ip", return_value="192.168.20.10"), mock.patch.object(NEW.REPLACE, "Engine", return_value=SimpleNamespace(endpoint="/run/docker.sock")), mock.patch.object(NEW.subprocess, "run", return_value=result, side_effect=timeout if failure == "pull-timeout" else None) as execute, contextlib.redirect_stdout(io.StringIO()):
+                    with self.assertRaises((ValueError, RuntimeError, subprocess.TimeoutExpired)):
+                        NEW.install(root, reader, MANIFEST, state, args, confirm)
+                    if failure == "cancel":
+                        execute.assert_not_called()
+                self.assertEqual(list(root.iterdir()), [])
+                self.assertEqual(data.read_bytes(), b"existing application data")
+                reader.change.assert_not_called()
+
     @unittest.skipUnless(NEW.socket.has_ipv6, "requires IPv6")
     def test_native_ipv6_only_listener_is_detected_before_installation(self):
         with tempfile.TemporaryDirectory() as temporary, NEW.socket.socket(NEW.socket.AF_INET6, NEW.socket.SOCK_STREAM) as listener:

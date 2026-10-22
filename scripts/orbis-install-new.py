@@ -23,6 +23,7 @@ SPEC = importlib.util.spec_from_file_location("orbis_new_replace", Path(__file__
 REPLACE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REPLACE)
 HOST, APPS = REPLACE.HOST, REPLACE.APPS
+UI = REPLACE.load("orbis-install-ui.py", "orbis_new_ui")
 SCHEMA = "orbis.new-installation.v1"
 IMAGES = {
     "postgres": "postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
@@ -100,25 +101,33 @@ def require_empty(root, reader, http, https):
 
 
 def choose_ports(root, reader, http, https, ask=None):
-    for _ in range(16):
-        try:
-            require_empty(root, reader, http, https)
-            return http, https
-        except PortInUseError as error:
+    error = None
+    for attempt in range(17):
+        if error is None:
+            try:
+                require_empty(root, reader, http, https)
+                return http, https
+            except PortInUseError as conflict:
+                error = conflict
+        if error is not None:
             if ask is None:
                 flag = "--http-port" if error.port == http else "--https-port"
                 raise ValueError(f"{error}. Choose another port with {flag}") from error
+            if attempt == 16:
+                break
             protocol = "HTTP" if error.port == http else "HTTPS"
             answer = ask(f"{error}.\nChoose a different {protocol} port (Enter to cancel): ").strip()
             if not answer:
                 raise ValueError("Installation cancelled; existing containers were preserved")
-            if not answer.isascii() or not answer.isdigit() or len(answer) > 5:
-                raise ValueError("Enter a port number between 1 and 65535")
+            if not answer.isascii() or not answer.isdigit() or len(answer) > 5 or not 1 <= int(answer) <= 65535 or int(answer) == (https if protocol == "HTTP" else http):
+                print("Enter a port between 1 and 65535, different from the other dashboard port.", file=sys.stderr)
+                continue
             if protocol == "HTTP":
                 http = int(answer)
             else:
                 https = int(answer)
-    raise ValueError("Too many occupied ports; choose free --http-port and --https-port values")
+            error = None
+    raise ValueError("Too many port attempts; choose free --http-port and --https-port values")
 
 
 def pointer(root, run, reader):
@@ -191,10 +200,11 @@ def install(root, reader, manifest, state, args, confirm, display=None):
     print(f"\nNew installation: {root}\nServer: {address}\nDashboard ports: {args.http_port} / {args.https_port}\nRelease: {manifest['tag']}\n")
     confirm(root)
     for name, image in IMAGES.items():
-        with display.step(f"Downloading {name}") if display else contextlib.nullcontext():
+        pull_log = run / (name + "-pull.log")
+        with display.step(f"Downloading {name}", detail=UI.PullProgress(pull_log)) if display else contextlib.nullcontext():
             if display is None:
                 print(f"Downloading {name}…", flush=True)
-            with (run / (name + "-pull.log")).open("xb") as log:
+            with pull_log.open("xb") as log:
                 result = subprocess.run(["docker", "--context", reader.context, "pull", image], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
             if result.returncode:
                 raise RuntimeError(f"A required image could not be downloaded. Installation directory is unchanged; logs: {run}")

@@ -285,8 +285,9 @@ def main():
             REPLACE.UPDATE.verify_release(manifest)
         private = load("install-orbis.py", "orbis_guided_private")
         state = private.private_directory(args.state_dir.expanduser())
-        with display.step("Downloading the verified Orbis image"):
-            with (state / ("image-pull-" + str(uuid.uuid4()) + ".log")).open("xb") as log:
+        pull_log = state / ("image-pull-" + str(uuid.uuid4()) + ".log")
+        with display.step("Downloading the verified Orbis image", detail=UI.PullProgress(pull_log)):
+            with pull_log.open("xb") as log:
                 pulled = subprocess.run(["docker", "--context", reader.context, "pull", REPLACE.target_image(manifest)], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
             if pulled.returncode:
                 raise RuntimeError(f"Docker could not pull the verified image; inspect the private logs in {state}")
