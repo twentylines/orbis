@@ -44,13 +44,15 @@ def source_identity(source: Path) -> dict:
     return {"source": str(source), "kind": kind, "device": metadata.st_dev, "inode": metadata.st_ino}
 
 
-def mount_source(reader, mount: dict) -> Path | None:
+def mount_source(reader, mount: dict, *, controller: bool = False) -> Path | None:
     kind = mount.get("Type")
     if kind == "tmpfs":
         return None
     if kind not in {"bind", "volume"} or type(mount.get("RW")) is not bool:
         raise StorageError("Docker returned unsupported storage or mount permissions")
     if kind == "bind":
+        if controller and mount.get("RW") is False and mount.get("Source") == "/run/orbis" and mount.get("Destination") == "/run/orbis":
+            return None
         source_path = DETECT.path(mount.get("Source"))
         if source_path and any(Path(source_path).is_relative_to(base) for base in ("/proc", "/sys", "/dev")):
             return None
@@ -142,7 +144,7 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
         record, mounts = container_record(reader, row)
         containers.append(record)
         for mount in mounts:
-            source = mount_source(reader, mount)
+            source = mount_source(reader, mount, controller=row["id"] == installation["container"]["id"])
             if source is not None:
                 source_identity(source)
                 sources.add(source)

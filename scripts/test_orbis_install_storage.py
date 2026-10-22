@@ -131,6 +131,35 @@ class InstallationStorageTests(unittest.TestCase):
             with self.assertRaisesRegex(STORAGE.StorageError, "different Docker socket"):
                 STORAGE.mount_source(self.docker, mount)
 
+    def test_readonly_controller_host_socket_does_not_exclude_persistent_storage(self):
+        original = self.docker.core
+
+        def core(identifier):
+            result = original(identifier)
+            result["mounts"].append({"Type": "bind", "Source": "/run/orbis", "Destination": "/run/orbis", "RW": False})
+            return result
+
+        with mock.patch.object(self.docker, "core", side_effect=core):
+            reviewed = self.review()
+            self.assertEqual({item["source"] for item in reviewed["resources"]}, {str(self.root), str(self.external), str(self.file), str(self.volume)})
+            self.assertEqual(self.capture()["resources"], 4)
+            self.assertEqual(STORAGE.verify(self.bundle)["result"], "storage-backup-verified")
+
+    def test_host_socket_exception_does_not_hide_app_runtime_storage(self):
+        self.docker.apps[FIXTURES.identifier("app-0")]["mounts"].append(
+            {"Type": "bind", "Source": "/run/orbis", "Destination": "/run/orbis", "RW": False}
+        )
+        with self.assertRaisesRegex(STORAGE.StorageError, "system path"):
+            self.review()
+
+    def test_host_socket_exception_requires_the_exact_readonly_controller_mount(self):
+        for changes in [{"RW": True}, {"Source": "/run/other"}, {"Destination": "/app-data"}]:
+            with self.subTest(changes=changes):
+                mount = {"Type": "bind", "Source": "/run/orbis", "Destination": "/run/orbis", "RW": False, **changes}
+                source = STORAGE.mount_source(self.docker, mount, controller=True)
+                with self.assertRaisesRegex(STORAGE.StorageError, "system path"):
+                    STORAGE.source_identity(source)
+
     def test_cross_resource_and_outside_hardlinks_cannot_be_silently_lost(self):
         os.link(self.external / "database.bin", self.root / "linked-database.bin")
         with self.assertRaisesRegex(STORAGE.StorageError, "hard link crosses"):

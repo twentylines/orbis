@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Exclude the controller's read-only host-administration socket from installation storage backups while retaining app files, bind mounts and volumes.
+
 - Refresh installed Orbis build details after a core update completes.
 
 - Retain the editable initial server name across sign-in and first-use settings.
