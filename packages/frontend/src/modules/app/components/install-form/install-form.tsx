@@ -1,4 +1,4 @@
-import type { GetRandomPortResponse } from '@/api-client';
+import type { AppContextDto, GetRandomPortResponse } from '@/api-client';
 import { getRandomPortMutation } from '@/api-client/@tanstack/react-query.gen';
 import { Button } from '@/components/ui/Button';
 import { Input, InputGroup } from '@/components/ui/Input';
@@ -26,7 +26,11 @@ interface IProps {
   info: AppInfo;
   loading?: boolean;
   formId: string;
+  targetSettings?: InstallSettings;
+  getTargetPort?: () => Promise<GetRandomPortResponse>;
 }
+
+export type InstallSettings = Pick<AppContextDto['userSettings'], 'guestDashboard' | 'localDomain' | 'internalIp' | 'domain' | 'maxBackups'>;
 
 export type FormValues = {
   port?: string;
@@ -44,10 +48,10 @@ export type FormValues = {
 
 const typeFilter = (field: FormField) => !hiddenTypes.includes(field.type);
 
-export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit, initialValues, loading, formId }) => {
+export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit, initialValues, loading, formId, targetSettings, getTargetPort }) => {
   const { t } = useTranslation();
   const { userSettings } = useAppContext();
-  const { guestDashboard, localDomain, internalIp, domain, maxBackups: globalMaxBackups } = userSettings;
+  const { guestDashboard, localDomain, internalIp, domain, maxBackups: globalMaxBackups } = targetSettings ?? userSettings;
 
   const {
     register,
@@ -80,6 +84,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
 
   const randomPortMutation = useMutation({
     ...getRandomPortMutation(),
+    ...(getTargetPort ? { mutationFn: getTargetPort } : {}),
     onError: (e: TranslatableError) => {
       toast.error(t(e.message, e.intlParams));
     },

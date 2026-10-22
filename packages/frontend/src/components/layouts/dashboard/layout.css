@@ -1056,6 +1056,18 @@ html:has(.desktop) {
   }
 }
 @media (max-width: 480px) {
+  .desktop-dock-main {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(44px, 1fr));
+    gap: 0;
+  }
+  .desktop .desktop-dock-item {
+    min-width: 0;
+    padding-inline: 4px;
+  }
+  .desktop-dock-label {
+    display: none;
+  }
   .desktop-server-name {
     display: none;
   }

@@ -145,8 +145,8 @@ export class AppLifecycleService {
     return this.startAppHandler.execute(params.appUrn, { skipPull: params.skipPull });
   }
 
-  async installApp(params: { appUrn: AppUrn; form: unknown; skipRun?: boolean }) {
-    return this.installAppHandler.execute(params.appUrn, { form: params.form, skipRun: params.skipRun });
+  async installApp(params: { appUrn: AppUrn; form: unknown; skipRun?: boolean; requireNew?: boolean }) {
+    return this.installAppHandler.execute(params.appUrn, { form: params.form, skipRun: params.skipRun, requireNew: params.requireNew });
   }
 
   public async stopApp(params: { appUrn: AppUrn }) {

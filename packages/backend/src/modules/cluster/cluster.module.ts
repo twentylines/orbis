@@ -7,13 +7,24 @@ import { HostUpdatesModule } from '../host-updates/host-updates.module';
 import { HostUpdatesGuard } from '../host-updates/host-updates.guard';
 import { DockerAppsModule } from '../docker-apps/docker-apps.module';
 import { MarketplaceModule } from '../marketplace/marketplace.module';
+import { AppStoreModule } from '../app-stores/app-store.module';
+import { ClusterInstallService } from './cluster-install.service';
 import { ClusterController } from './cluster.controller';
 import { ClusterService } from './cluster.service';
 import { ClusterStateService } from './cluster-state.service';
 
 @Module({
-  imports: [ConfigurationModule, AppsModule, AppLifecycleModule, SystemModule, HostUpdatesModule, DockerAppsModule, MarketplaceModule],
+  imports: [
+    ConfigurationModule,
+    AppsModule,
+    AppLifecycleModule,
+    SystemModule,
+    HostUpdatesModule,
+    DockerAppsModule,
+    MarketplaceModule,
+    AppStoreModule,
+  ],
   controllers: [ClusterController],
-  providers: [ClusterService, ClusterStateService, HostUpdatesGuard],
+  providers: [ClusterService, ClusterStateService, ClusterInstallService, HostUpdatesGuard],
 })
 export class ClusterModule {}

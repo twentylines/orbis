@@ -4,7 +4,7 @@ import { AsyncMutex } from '@/utils/mutex/async-mutex';
 import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
 import { AppStoreRepository } from '@/modules/app-stores/app-store.repository';
 import { appStoreLockKey } from '@/modules/app-stores/app-store-lock';
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { ConflictException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
 import { type } from 'arktype';
 import { AppsRepository } from '../../apps/apps.repository';
@@ -19,6 +19,7 @@ import { type HandlerResult, type ILifecycleHandler, generateRequestId } from '.
 export type InstallAppParams = {
   form: unknown;
   skipRun?: boolean;
+  requireNew?: boolean;
 };
 
 @Injectable()
@@ -44,7 +45,7 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
       throw new TranslatableError('SYSTEM_ERROR_INVALID_BODY', undefined, HttpStatus.BAD_REQUEST, { cause: parsedForm });
     }
 
-    const createdApp = await this.reserveApp(appUrn, parsedForm);
+    const createdApp = await this.reserveApp(appUrn, parsedForm, params?.requireNew);
     if (!createdApp) return this.startAppHandler.execute(appUrn);
 
     const requestId = generateRequestId();
@@ -68,12 +69,13 @@ export class InstallAppHandler implements ILifecycleHandler<InstallAppParams> {
     return { requestId };
   }
 
-  private async reserveApp(appUrn: AppUrn, parsedForm: typeof appFormSchema.infer) {
+  private async reserveApp(appUrn: AppUrn, parsedForm: typeof appFormSchema.infer, requireNew = false) {
     const { appName, appStoreId } = extractAppUrn(appUrn);
     const release = await this.mutex.acquire(appStoreLockKey(appStoreId));
     try {
       const app = await this.appRepository.getAppByUrn(appUrn);
       if (app) {
+        if (requireNew) throw new ConflictException('This app is already installed on the selected server.');
         await this.appRepository.updateAppById(app.id, { config: parsedForm, ...parsedForm });
         return undefined;
       }

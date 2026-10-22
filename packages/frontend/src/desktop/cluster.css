@@ -311,6 +311,12 @@
   -webkit-backdrop-filter: blur(36px) saturate(0.7);
   animation: cluster-backdrop-in 420ms ease both;
 }
+.cluster-selector-backdrop[data-purpose="install"] {
+  z-index: 2100;
+}
+.cluster-selector[data-purpose="install"] {
+  z-index: 2101;
+}
 .cluster-selector {
   --cluster-base: #e0e9e3;
   --cluster-machine: color-mix(in srgb, var(--desktop-preset-tint) 24%, #edf2ed);

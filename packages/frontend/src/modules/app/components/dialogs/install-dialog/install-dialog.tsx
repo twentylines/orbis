@@ -13,6 +13,9 @@ import toast from 'react-hot-toast';
 import { Trans, useTranslation } from 'react-i18next';
 import { InstallFormButtons } from '../../install-form-buttons/install-form-buttons';
 import { type FormValues, InstallForm } from '../../install-form/install-form';
+import { useOptionalCluster } from '@/desktop/cluster';
+import { ClusterInstallDialog } from '@/desktop/cluster-install';
+import { useAppContext } from '@/context/app-context';
 
 interface IProps {
   info: AppInfo;
@@ -21,6 +24,15 @@ interface IProps {
 }
 
 export const InstallDialog: React.FC<IProps> = ({ info, isOpen, onClose }) => {
+  const cluster = useOptionalCluster();
+  const { user } = useAppContext();
+  if (user.operator && cluster?.data?.role === 'admin' && cluster.data.servers.length > 1) {
+    return <ClusterInstallDialog urn={info.urn} serverId={cluster.data.localId} name={info.name} isOpen={isOpen} onClose={onClose} />;
+  }
+  return <LocalInstallDialog info={info} isOpen={isOpen} onClose={onClose} />;
+};
+
+const LocalInstallDialog: React.FC<IProps> = ({ info, isOpen, onClose }) => {
   const { t } = useTranslation();
   const { setOptimisticStatus } = useAppStatus();
   const formId = useId();
@@ -30,7 +42,7 @@ export const InstallDialog: React.FC<IProps> = ({ info, isOpen, onClose }) => {
     onError: (e: TranslatableError) => {
       toast.error(t(e.message, e.intlParams));
     },
-    onMutate: () => {
+    onSuccess: () => {
       setOptimisticStatus('installing', info.urn);
       onClose();
     },

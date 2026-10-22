@@ -1,6 +1,6 @@
 # Server clusters
 
-A cluster has one admin server and up to 12 member servers. Apps and their data remain on the host where they run. The admin server collects status and app inventories, and sends signed update requests to members. Member servers cannot issue commands to the admin or to one another.
+A cluster has one admin server and up to 12 member servers. Apps and their data remain on the host where they run. The admin server collects status and app inventories, and sends signed installation and update requests to members. Member servers cannot issue commands to the admin or to one another.
 
 ## Pair a server
 
@@ -15,6 +15,12 @@ The server switcher appears beside logout once another server is paired. Its rac
 
 Browse the rack objects directly in Monitor. Hover to spread the cases, drag or swipe to bring another server forward, then click or tap its case to select it. With a keyboard, use Left/Right to browse and Enter to select. The topbar switcher opens the same 3D rack, including an **All servers** case for merged views.
 
+## Install apps
+
+Select a paired server through the rack in **Store** to browse its catalogue without leaving the admin dashboard. Opening an app loads that server's configuration form. **Change server** opens the rack selector to choose where the app will run; the form then uses the target host's app version, network settings and port allocator.
+
+When switching hosts, the app is matched by its configured store origin and branch rather than by a host-specific store identifier. The store must already be enabled on the target host. Orbis checks architecture, form values and app settings on that host, and refuses to overwrite an existing installation. An accepted request starts an installation; check Applications on that server for its eventual status.
+
 ## Updates
 
 **Update all apps** queues available, non-ignored app updates with backups on reachable servers. Results distinguish queued requests from failures; a queued request is not a completed update. Use each server's task history to inspect completion.
@@ -25,8 +31,8 @@ Host operating-system packages retain their separate local update workflow. Pair
 
 ## Permissions and recovery
 
-Cluster setup, pairing, removal and update commands require an operator browser session on the admin server. A joining host must also be authorized locally before it can produce a code. Paired requests use distinct per-member secrets, signed bodies, short timestamp windows and persistent replay protection. Codes and secrets are never included in the dashboard response. The private configuration is `state/cluster.json` in the Orbis data directory; include it in private backups and never publish it.
+Cluster setup, pairing, removal, installation and update commands require an operator browser session on the admin server. A joining host must also be authorized locally before it can produce a code. Paired requests use distinct per-member secrets, signed bodies, short timestamp windows and persistent replay protection. Codes and secrets are never included in the dashboard response. The private configuration is `state/cluster.json` in the Orbis data directory; include it in private backups and never publish it.
 
 Remove a member from the admin server while it is reachable. Removal revokes trust on the member before deleting the admin's record. An offline revocation fails visibly and can be retried. The recovery option **Forget unreachable server** deletes only the admin's record; leave the cluster locally on that member to revoke its saved trust as well. Local host accounts remain available for recovery and are not shared across the cluster.
 
-Pairing does not move workloads, merge storage or make applications highly available. Remote app settings, installation and detected-container uninstall open the host's own dashboard; they are not silently applied to the admin server. Keep the admin reachable to use merged views. Each member continues running its existing apps if the admin is offline.
+Pairing does not move workloads, merge storage or make applications highly available. Remote app settings and detected-container uninstall open the host's own dashboard; they are not silently applied to the admin server. Keep the admin reachable to use merged views. Each member continues running its existing apps if the admin is offline.

@@ -199,14 +199,20 @@ function useRackReadings(enabled: boolean, readings?: Record<string, ServerReadi
   );
 }
 
-function ServerSelector({
+export function ServerSelector({
   open,
   onOpenChange,
   returnFocus,
+  selectedId,
+  onSelect,
+  purpose = 'switch',
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   returnFocus?: () => HTMLElement | null;
+  selectedId?: string;
+  onSelect?: (id: string) => void;
+  purpose?: 'switch' | 'install';
 }) {
   const cluster = useCluster();
   const { preferences } = useDesktopPreferences();
@@ -220,7 +226,8 @@ function ServerSelector({
     };
   }, [open]);
   const choose = (id: string) => {
-    cluster.select(id);
+    if (onSelect) onSelect(id);
+    else cluster.select(id);
     if (closing.current) clearTimeout(closing.current);
     if (reduceMotion) onOpenChange(false);
     else closing.current = setTimeout(() => onOpenChange(false), 340);
@@ -228,9 +235,10 @@ function ServerSelector({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="cluster-selector-backdrop" />
+        <Dialog.Overlay className="cluster-selector-backdrop" data-purpose={purpose} />
         <Dialog.Content
           className="cluster-selector orbis-theme"
+          data-purpose={purpose}
           data-desktop-preset={preferences.preset}
           onOpenAutoFocus={(event) => {
             const content = event.target;
@@ -253,25 +261,29 @@ function ServerSelector({
         >
           <div className="cluster-selector-heading">
             <div>
-              <span className="cluster-dialog-kicker">Switch server</span>
+              <span className="cluster-dialog-kicker">{purpose === 'install' ? 'Install on a server' : 'Switch server'}</span>
               <Dialog.Title>{cluster.data?.name || preferences.serverName}</Dialog.Title>
             </div>
             <Dialog.Close className="cluster-selector-close" aria-label="Close server selector">
               <IconX size={20} aria-hidden="true" />
             </Dialog.Close>
           </div>
-          <Dialog.Description className="visually-hidden">Browse the 3D rack and select a server to view its apps and status.</Dialog.Description>
+          <Dialog.Description className="visually-hidden">
+            {purpose === 'install'
+              ? 'Select the server that will run this app.'
+              : 'Browse the 3D rack and select a server to view its apps and status.'}
+          </Dialog.Description>
           <div className="cluster-selector-body">
             <RackDeck
               servers={cluster.data?.servers ?? []}
               localName={preferences.serverName}
-              selectedId={cluster.selectedId}
+              selectedId={selectedId ?? cluster.selectedId}
               readings={readings}
               onSelect={choose}
-              showMerged
+              showMerged={purpose === 'switch'}
               entrance
             />
-            {cluster.data?.role !== 'member' ? (
+            {purpose === 'switch' && cluster.data?.role !== 'member' ? (
               <Link className="cluster-pair-link" to="/settings?tab=cluster" onClick={() => onOpenChange(false)}>
                 <IconPlus size={17} aria-hidden="true" />
                 Pair a server

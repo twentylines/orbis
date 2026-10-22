@@ -51,6 +51,42 @@ const createFixture = () => {
 };
 
 describe('InstallAppHandler backup retention', () => {
+  it('rejects a new-only install without changing or starting the existing app', async () => {
+    const fixture = createFixture();
+    const existing = createMockApp({ id: 19, config: { SECRET: 'saved' }, port: 18992 });
+    fixture.appRepository.getAppByUrn.mockResolvedValue(existing);
+
+    await expect(fixture.handler.execute(appUrn, { form: { port: 18993 }, requireNew: true })).rejects.toThrow('already installed');
+
+    expect(fixture.appRepository.updateAppById).not.toHaveBeenCalled();
+    expect(fixture.appRepository.createApp).not.toHaveBeenCalled();
+    expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
+    expect(fixture.appEventsQueue.publish).not.toHaveBeenCalled();
+    expect(existing.config).toEqual({ SECRET: 'saved' });
+  });
+
+  it('serializes competing new-only installs so only one can reserve the app', async () => {
+    const fixture = createFixture();
+    let installed: ReturnType<typeof createMockApp> | undefined;
+    fixture.appRepository.getAppByUrn.mockImplementation(async () => installed);
+    fixture.appRepository.createApp.mockImplementation(async (row) => {
+      installed = createMockApp({ ...row, id: 19 });
+      return installed;
+    });
+    const results = await Promise.allSettled([
+      fixture.handler.execute(appUrn, { form: { port: 18993 }, requireNew: true }),
+      fixture.handler.execute(appUrn, { form: { port: 18994 }, requireNew: true }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(fixture.appRepository.createApp).toHaveBeenCalledOnce();
+    expect(fixture.appEventsQueue.publish).toHaveBeenCalledOnce();
+    expect(fixture.appRepository.updateAppById).not.toHaveBeenCalled();
+    expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
+    expect(installed?.port).toBe(18993);
+  });
+
   it.each([
     { label: 'global default', input: {}, expected: null },
     { label: 'disabled retention', input: { maxBackups: 0 }, expected: 0 },

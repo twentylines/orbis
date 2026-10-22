@@ -19,6 +19,7 @@ import { MarketplaceService } from '../marketplace/marketplace.service';
 import { castAppUrn } from '@/common/helpers/app-helpers';
 import { ClusterStateService, clusterName } from './cluster-state.service';
 import { CLUSTER_PROTOCOL, clusterRequest, signedHeaders } from './cluster-transport';
+import { ClusterInstallService } from './cluster-install.service';
 
 @Injectable()
 export class ClusterService {
@@ -38,6 +39,7 @@ export class ClusterService {
     private readonly updates: HostUpdatesService,
     private readonly dockerApps: DockerAppsService,
     private readonly marketplace: MarketplaceService,
+    private readonly installs: ClusterInstallService,
   ) {}
 
   async pair(body: Record<string, unknown>) {
@@ -147,6 +149,12 @@ export class ClusterService {
 
   private async localRead(resource: string, params: Record<string, unknown>) {
     switch (resource) {
+      case 'catalogue':
+        return this.installs.catalogue(params);
+      case 'install-context':
+        return this.installs.context(params);
+      case 'install-port':
+        return this.installs.randomPort();
       case 'icon': {
         if (typeof params.urn !== 'string' || params.urn.length > 256) throw new BadRequestException('Choose one app icon.');
         const { image } = await this.marketplace.getAppImage(castAppUrn(params.urn));
@@ -220,6 +228,8 @@ export class ClusterService {
 
   private async localCommand(action: string, payload: Record<string, unknown>) {
     switch (action) {
+      case 'install-app':
+        return this.installs.install(payload);
       case 'update-apps': {
         const apps = (await this.apps.getInstalledApps()).filter(
           ({ app, metadata }) => Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion,

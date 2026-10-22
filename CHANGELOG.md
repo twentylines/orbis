@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Install apps on paired servers from the admin dashboard, using animated server selection, target-host forms and port allocation, signed operator commands and protection against overwriting existing installations.
+- Keep the phone dock in one evenly spaced icon row and prevent narrow catalogue headings from splitting into orphan letters.
+
 - Exclude the controller's read-only host-administration socket from installation storage backups while retaining app files, bind mounts and volumes.
 
 - Refresh installed Orbis build details after a core update completes.

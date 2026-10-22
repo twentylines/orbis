@@ -18,6 +18,7 @@ import type { Telemetry } from './telemetry';
 import { formatUptime } from './uptime';
 import { useWindowVisible } from './window-visibility';
 import './cluster-views.css';
+import { ClusterCatalogue } from './cluster-catalogue';
 
 export type ClusterManagedApp = AppDestinationData & {
   app: NonNullable<AppDestinationData['app']> & Pick<NonNullable<GetAppDto['app']>, 'id' | 'version' | 'ignoredVersion'>;
@@ -453,47 +454,41 @@ export function ClusterStore() {
         <ServerRack />
       </div>
       {servers.length ? null : <output className="cluster-view-loading">Loading servers…</output>}
-      <div className="cluster-summary-grid">
-        {servers.map((server) => {
-          const name = server.local ? preferences.serverName : server.name;
-          const storeUrl = serverPath(server, '/app-store');
-          return (
-            <article key={server.id} className="cluster-summary-card cluster-store-card">
-              <div className="cluster-app-identity">
-                <span className="cluster-docker-icon">
-                  <IconServer size={27} aria-hidden="true" />
-                </span>
-                <div>
-                  <h3 title={name}>
-                    <WrapWords text={name} />
-                  </h3>
-                  <span className="cluster-store-address" title={serverAddress(server)}>
-                    {serverAddress(server)}
+      {servers.length === 1 && servers[0] ? (
+        <ClusterCatalogue key={servers[0].id} server={servers[0]} />
+      ) : (
+        <div className="cluster-summary-grid">
+          {servers.map((server) => {
+            const name = server.local ? preferences.serverName : server.name;
+            const storeUrl = serverPath(server, '/app-store');
+            return (
+              <article key={server.id} className="cluster-summary-card cluster-store-card">
+                <div className="cluster-app-identity">
+                  <span className="cluster-docker-icon">
+                    <IconServer size={27} aria-hidden="true" />
                   </span>
+                  <div>
+                    <h3 title={name}>
+                      <WrapWords text={name} />
+                    </h3>
+                    <span className="cluster-store-address" title={serverAddress(server)}>
+                      {serverAddress(server)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <p>{server.role === 'admin' ? 'Admin server' : 'Paired server'}</p>
-              {storeUrl ? (
-                <Button asChild intent="primary">
-                  <Link
-                    to={storeUrl}
-                    aria-label={`Open app store on ${name}`}
-                    target={server.local ? undefined : '_blank'}
-                    rel={server.local ? undefined : 'noopener noreferrer'}
-                    onClick={() => {
-                      if (server.local) cluster.select(server.id);
-                    }}
-                  >
-                    Open store <IconExternalLink size={17} aria-hidden="true" />
-                  </Link>
-                </Button>
-              ) : (
-                <p>Server address unavailable.</p>
-              )}
-            </article>
-          );
-        })}
-      </div>
+                <p>{server.role === 'admin' ? 'Admin server' : 'Paired server'}</p>
+                {storeUrl ? (
+                  <Button intent="primary" onClick={() => cluster.select(server.id)} aria-label={`Browse apps on ${name}`}>
+                    Browse apps <IconArrowRight size={17} aria-hidden="true" />
+                  </Button>
+                ) : (
+                  <p>Server address unavailable.</p>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

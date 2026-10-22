@@ -1,0 +1,48 @@
+.cluster-install-target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 18px;
+  margin-bottom: 24px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  background: var(--desktop-status-background);
+}
+.cluster-install-target > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 10em;
+}
+.cluster-install-target svg {
+  flex: none;
+}
+.cluster-install-target span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.cluster-install-target strong {
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.cluster-install-target small {
+  color: var(--desktop-muted);
+  line-height: 1.5;
+}
+.cluster-install-error {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: var(--desktop-code-background);
+}
+.cluster-install-error p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
