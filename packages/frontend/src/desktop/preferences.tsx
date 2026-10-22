@@ -2,7 +2,15 @@ import { createContext, useContext, useEffect, useRef, useState, type PropsWithC
 import { useUserContext } from '@/context/user-context';
 import { StartupSurface } from '@/components/startup/startup-surface';
 import toast from 'react-hot-toast';
-import { desktopWindowsSchema, type DesktopWindows, type DesktopWindowId, type DesktopWindowState } from '@runtipi/common/schemas';
+import {
+  desktopWindowsSchema,
+  desktopAppearanceSchema,
+  normaliseDesktopAppearance,
+  type DesktopAppearance,
+  type DesktopWindows,
+  type DesktopWindowId,
+  type DesktopWindowState,
+} from '@runtipi/common/schemas';
 import { useResolvedColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
 import { appearanceFromStored, preferenceStorageKey } from './appearance-cache';
 
@@ -18,23 +26,28 @@ export type DesktopPreferences = {
   wallpaper: 'sandstone' | 'tidal' | 'canopy';
   workspace: WorkspacePreferences;
   windows: DesktopWindows;
+  appearance: DesktopAppearance;
 };
 
 export const defaultDesktopPreferences: DesktopPreferences = {
-  serverName: 'Hades',
+  serverName: 'Server',
   preset: 'frost',
   mode: 'light',
   density: 'comfortable',
   wallpaper: 'sandstone',
   windows: {},
+  appearance: normaliseDesktopAppearance(),
   workspace: { order: [...widgetIds], hidden: [], wide: ['applications'], pinnedApps: [], showAllApps: false },
 };
 const STORAGE_KEY = preferenceStorageKey;
 
 type StoredWorkspacePreferences = Omit<WorkspacePreferences, 'pinnedApps' | 'showAllApps'> &
   Partial<Pick<WorkspacePreferences, 'pinnedApps' | 'showAllApps'>>;
-type StoredDesktopPreferences = Omit<DesktopPreferences, 'mode' | 'wallpaper' | 'workspace' | 'windows'> &
-  Partial<Pick<DesktopPreferences, 'mode' | 'wallpaper' | 'windows'>> & { workspace?: StoredWorkspacePreferences };
+type StoredDesktopPreferences = Omit<DesktopPreferences, 'mode' | 'wallpaper' | 'workspace' | 'windows' | 'appearance'> &
+  Partial<Pick<DesktopPreferences, 'mode' | 'wallpaper' | 'windows'>> & {
+    workspace?: StoredWorkspacePreferences;
+    appearance?: typeof desktopAppearanceSchema.infer;
+  };
 
 const isWidgetList = (value: unknown): value is WidgetId[] =>
   Array.isArray(value) && value.length <= widgetIds.length && new Set(value).size === value.length && value.every((item) => widgetIds.includes(item));
@@ -68,7 +81,8 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
     ['comfortable', 'compact'].includes(String(candidate.density)) &&
     (candidate.wallpaper === undefined || ['sandstone', 'tidal', 'canopy'].includes(String(candidate.wallpaper))) &&
     (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace)) &&
-    (candidate.windows === undefined || desktopWindowsSchema.allows(candidate.windows))
+    (candidate.windows === undefined || desktopWindowsSchema.allows(candidate.windows)) &&
+    (candidate.appearance === undefined || desktopAppearanceSchema.allows(candidate.appearance))
   );
 };
 
@@ -79,6 +93,7 @@ export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPr
   density: value.density,
   wallpaper: value.wallpaper ?? defaultDesktopPreferences.wallpaper,
   windows: value.windows ?? {},
+  appearance: normaliseDesktopAppearance(value.appearance),
   mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'light'),
   workspace: {
     order: value.workspace?.order ?? [...widgetIds],
@@ -112,6 +127,9 @@ type PreferenceContext = {
   resolvedMode: ResolvedColourMode;
   cacheAvailable: boolean;
   update: (value: Partial<DesktopPreferences>) => void;
+  updateAppearance: (value: Partial<DesktopAppearance>) => void;
+  wallpaperRevision: number;
+  refreshWallpaper: () => void;
   updateWindow: (id: DesktopWindowId, value: DesktopWindowState) => void;
   reset: () => void;
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
@@ -125,6 +143,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const { isLoggedIn } = useUserContext();
   const [cache] = useState(readPreferenceCache);
   const [preferences, setPreferences] = useState(cache.preferences);
+  const [wallpaperRevision, setWallpaperRevision] = useState(0);
   const resolvedMode = useResolvedColourMode(preferences.mode);
   const [cacheAvailable, setCacheAvailable] = useState(cache.available);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -280,6 +299,13 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     setPreferences({ ...defaultDesktopPreferences, workspace: { ...defaultDesktopPreferences.workspace } });
   };
 
+  const updateAppearance = (value: Partial<DesktopAppearance>) => {
+    if (completingSetup.current || !desktopAppearanceSchema.allows(value)) return;
+    revision.current += 1;
+    setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
+    setPreferences((previous) => ({ ...previous, appearance: { ...previous.appearance, ...value } }));
+  };
+
   const updateWindow = (id: DesktopWindowId, value: DesktopWindowState) => {
     if (completingSetup.current) return;
     if (!desktopWindowsSchema.allows({ [id]: value })) return;
@@ -323,7 +349,20 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
 
   return (
     <Context.Provider
-      value={{ preferences, resolvedMode, cacheAvailable, update, updateWindow, reset, syncState, requiresOnboarding, completeOnboarding }}
+      value={{
+        preferences,
+        resolvedMode,
+        cacheAvailable,
+        update,
+        updateAppearance,
+        wallpaperRevision,
+        refreshWallpaper: () => setWallpaperRevision((value) => value + 1),
+        updateWindow,
+        reset,
+        syncState,
+        requiresOnboarding,
+        completeOnboarding,
+      }}
     >
       {isLoggedIn && !initialLoadComplete ? <StartupSurface appearance={preferences} /> : children}
     </Context.Provider>

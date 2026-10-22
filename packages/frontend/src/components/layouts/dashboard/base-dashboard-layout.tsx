@@ -1,6 +1,7 @@
 import type { PropsWithChildren, ReactNode } from 'react';
 import './layout.css';
 import { useDesktopPreferences } from '@/desktop/preferences';
+import { DesktopWallpaper } from '@/desktop/wallpaper';
 
 type BaseDashboardLayoutProps = PropsWithChildren<{
   header: ReactNode;
@@ -18,6 +19,7 @@ export const BaseDashboardLayout = ({ header, pageTitle, layoutActions, showPage
       data-desktop-preset={preferences.preset}
       data-desktop-wallpaper={preferences.wallpaper}
     >
+      <DesktopWallpaper />
       {header}
       <main className="desktop-guest-main">
         {showPageHeader && (

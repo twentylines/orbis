@@ -5,15 +5,17 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { desktopPreferencesSchema } from './desktop-preferences.dto';
+import { normaliseDesktopAppearance } from '@runtipi/common/schemas';
 
 export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonNullable<DesktopPreferences['workspace']> } = {
-  serverName: 'Hades',
+  serverName: 'Server',
   preset: 'frost',
   mode: 'light',
   density: 'comfortable',
   wallpaper: 'sandstone',
   windows: {},
+  appearance: normaliseDesktopAppearance(),
   workspace: {
     order: ['applications', 'activity', 'storage', 'attention'],
     hidden: [],
@@ -64,6 +66,7 @@ export class DesktopPreferencesService {
             ...result,
             mode: result.mode ?? (result.preset === 'graphite' ? 'dark' : 'light'),
             workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...result.workspace },
+            appearance: normaliseDesktopAppearance(result.appearance),
           };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return DEFAULT_DESKTOP_PREFERENCES;
@@ -78,6 +81,7 @@ export class DesktopPreferencesService {
       ...preferences,
       mode: preferences.mode ?? (preferences.preset === 'graphite' ? 'dark' : 'light'),
       workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...preferences.workspace },
+      appearance: normaliseDesktopAppearance(preferences.appearance),
     };
     await this.writeState(file, value);
     return value;

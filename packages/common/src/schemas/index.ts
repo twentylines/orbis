@@ -39,6 +39,7 @@ import {
   type DesktopWindowBounds,
   type DesktopWindows,
 } from './desktop-windows.js';
+import { desktopAppearanceSchema, defaultDesktopAppearance, normaliseDesktopAppearance, type DesktopAppearance } from './desktop-appearance.js';
 
 export {
   desktopWindowIds,
@@ -114,4 +115,8 @@ export {
   type MetricSummary,
   type MetricHistoryPoint,
   type MetricHistory,
+  desktopAppearanceSchema,
+  defaultDesktopAppearance,
+  normaliseDesktopAppearance,
+  type DesktopAppearance,
 };

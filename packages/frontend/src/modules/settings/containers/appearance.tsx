@@ -7,6 +7,7 @@ import {
 } from '@/desktop/preferences';
 import { useEffect, useRef, useState } from 'react';
 import { IconDeviceDesktop, IconMoonStars, IconSunHigh } from '@tabler/icons-react';
+import { WallpaperSettings } from './wallpaper-settings';
 import './appearance.css';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
@@ -18,16 +19,11 @@ const presets: { value: DesktopPreferences['preset']; title: string; description
   { value: 'blush', title: 'Blush', description: 'Rose' },
 ];
 
-const wallpapers: { value: DesktopPreferences['wallpaper']; title: string }[] = [
-  { value: 'sandstone', title: 'Sandstone' },
-  { value: 'tidal', title: 'Tidal' },
-  { value: 'canopy', title: 'Canopy' },
-];
-
 export const Appearance = () => {
   const { preferences, cacheAvailable, update, reset, syncState } = useDesktopPreferences();
   const [name, setName] = useState(preferences.serverName);
   const [message, setMessage] = useState('');
+  const [wallpaperSettingsRevision, setWallpaperSettingsRevision] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => setName(preferences.serverName), [preferences.serverName]);
@@ -48,7 +44,8 @@ export const Appearance = () => {
   };
 
   const exportSettings = () => {
-    const blob = new Blob([JSON.stringify(preferences, null, 2)], { type: 'application/json' });
+    const exported = { ...preferences, appearance: { ...preferences.appearance, wallpaperImage: null } };
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -67,7 +64,9 @@ export const Appearance = () => {
     try {
       const value: unknown = JSON.parse(await file.text());
       if (!isPreferences(value)) throw new Error('Invalid appearance settings');
-      update(normalisePreferences(value));
+      const imported = normalisePreferences(value);
+      update({ ...imported, appearance: { ...imported.appearance, wallpaperImage: null } });
+      setWallpaperSettingsRevision((revision) => revision + 1);
       setName(value.serverName);
       setMessage('Appearance and workspace settings imported.');
     } catch {
@@ -174,26 +173,7 @@ export const Appearance = () => {
           </button>
         </div>
       </section>
-      <section className="appearance-section" aria-labelledby="appearance-wallpaper">
-        <div>
-          <h2 id="appearance-wallpaper">Wallpaper</h2>
-          <p>Wallpapers are stored on this server.</p>
-        </div>
-        <div className="appearance-wallpapers">
-          {wallpapers.map(({ value, title }) => (
-            <button
-              key={value}
-              type="button"
-              className="appearance-wallpaper"
-              aria-pressed={preferences.wallpaper === value}
-              onClick={() => update({ wallpaper: value })}
-            >
-              <span className={`appearance-wallpaper-preview appearance-wallpaper-${value}`} aria-hidden="true" />
-              <strong>{title}</strong>
-            </button>
-          ))}
-        </div>
-      </section>
+      <WallpaperSettings key={wallpaperSettingsRevision} />
       <section className="appearance-section" aria-labelledby="appearance-density">
         <div>
           <h2 id="appearance-density">Density</h2>
@@ -211,7 +191,7 @@ export const Appearance = () => {
       <section className="appearance-section" aria-labelledby="appearance-transfer">
         <div>
           <h2 id="appearance-transfer">Import and export</h2>
-          <p>Export or import theme and workspace settings. Credentials are excluded.</p>
+          <p>Export or import theme and workspace settings. Credentials and uploaded images are excluded.</p>
         </div>
         <div className="appearance-actions">
           <button type="button" onClick={exportSettings}>
@@ -235,6 +215,7 @@ export const Appearance = () => {
             type="button"
             onClick={() => {
               reset();
+              setWallpaperSettingsRevision((revision) => revision + 1);
               setName(defaultDesktopPreferences.serverName);
               setMessage('Appearance and workspace restored to defaults.');
             }}

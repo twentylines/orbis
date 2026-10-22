@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add private account wallpapers with PNG/JPEG/WebP uploads, fill/fit, positioning, dimming and blur; retain the selected image during interrupted replacement and exclude uploads from settings exports and signed-out screens.
+- Keep wallpaper controls aligned with enlarged text and visible keyboard focus; cancel pending uploads when importing settings or restoring defaults.
+
 - Provide a stable short installer address that follows the newest published Orbis release, including betas, after checking its assets against the tagged source.
 
 - Correct installer ownership detection for managed core services, legacy app containers without URNs, and Compose launches with custom project directories or external apps folders. Unknown or conflicting ownership still blocks replacement before any app is stopped.

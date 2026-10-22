@@ -32,7 +32,7 @@ This fetches the newest published release, including betas. See [installation re
 
 [Login, light](screenshots/navigation/login-light.png) · [Login, dark](screenshots/navigation/login-dark.png) · [Phone login](screenshots/navigation/phone-login-light.png)
 
-[First-run setup](screenshots/navigation/onboarding-light.png)
+[First-run setup](screenshots/navigation/onboarding-light.png) · [Appearance, light](screenshots/appearance/desktop-light.png) · [Appearance, dark](screenshots/appearance/desktop-dark.png)
 
 Current source build with sample apps and two Orbis instances on one disposable test machine. See the [gallery](screenshots/navigation/README.md).
 

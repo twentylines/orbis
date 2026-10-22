@@ -3,6 +3,7 @@ import { useUserContext } from '@/context/user-context';
 import type { Locale } from '@/lib/i18n/locales';
 import { getLogo } from '@/lib/theme/theme';
 import { useDesktopPreferences } from '@/desktop/preferences';
+import { DesktopWallpaper } from '@/desktop/wallpaper';
 import i18next from 'i18next';
 import { IconMoon, IconSun } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
@@ -33,6 +34,7 @@ export const AuthLayout = ({ children, busy = false }: PropsWithChildren<{ busy?
       data-desktop-wallpaper={preferences.wallpaper}
       onFocusCapture={(event) => revealAuthFocus(event.target)}
     >
+      <DesktopWallpaper />
       <div className="desktop-auth-toolbar">
         <Button
           size="icon"

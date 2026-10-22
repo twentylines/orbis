@@ -4,6 +4,7 @@ import { useUserContext } from '@/context/user-context';
 import { Welcome } from '@/components/welcome/welcome';
 import { PageTitle } from '@/components/page-title/page-title';
 import { useDesktopPreferences } from '@/desktop/preferences';
+import { DesktopWallpaper } from '@/desktop/wallpaper';
 import { useTasks, taskIsActive } from '@/desktop/tasks';
 import { CommandSearch } from '@/desktop/command-search';
 import { desktopNavigation as navigation } from '@/desktop/navigation';
@@ -28,6 +29,7 @@ export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => {
       data-desktop-preset={preferences.preset}
       data-desktop-wallpaper={preferences.wallpaper}
     >
+      <DesktopWallpaper />
       <div className="desktop-system-bar">
         <span className="desktop-brand">
           <img src="/icons/orbis.svg" width={28} height={28} alt="" /> Orbis
@@ -101,6 +103,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
           data-desktop-density={preferences.density}
           data-desktop-wallpaper={preferences.wallpaper}
         >
+          <DesktopWallpaper />
           <header className="desktop-system-bar">
             <Link to="/dashboard" viewTransition className="desktop-brand" aria-label="Orbis workspace">
               <img src="/icons/orbis.svg" width={28} height={28} alt="" />
