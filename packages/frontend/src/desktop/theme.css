@@ -572,6 +572,12 @@ body:has(.orbis-theme) .rt-Skeleton {
   border-radius: 12px;
 }
 
+body:has(.orbis-theme) .form-text {
+  display: block;
+  margin-block: 8px 0;
+  line-height: 1.5;
+}
+
 body:has(.orbis-theme) .form-help {
   background: color-mix(in srgb, var(--desktop-accent) 10%, var(--desktop-surface));
   color: var(--desktop-ink);

@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/Button';
 import { DockActivity } from '@/desktop/desktop-activity';
 import { DockGlass } from '@/desktop/dock-companion';
 import { useNavigationWarmup } from '@/desktop/navigation-warmup';
+import { OrbisUpdateNotice } from '@/desktop/orbis-update-notice';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
 import { IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
@@ -148,6 +149,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                   {sectionLabel}
                 </span>
               </span>
+              <OrbisUpdateNotice />
               <div className="desktop-system-actions">
                 <Link
                   to="/tasks"

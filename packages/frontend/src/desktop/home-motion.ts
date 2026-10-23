@@ -11,6 +11,8 @@ const tileSelector = [
   '.workspace-all-hidden',
   '.cluster-home > *',
 ].join(', ');
+const openingSelector =
+  '.workspace-heading, .workspace-apps, .workspace-widget:not(.workspace-widget-applications) > section, .workspace-all-hidden, .cluster-home > *';
 
 export function useHomeMotion(key: string, active: boolean, direction: number) {
   const entrance = useRef({ key, direction });
@@ -22,29 +24,47 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
     if (!root) return;
     const entered = new WeakSet<HTMLElement>();
     const animations = new Set<Animation>();
-    let frame = 0;
+    const opening = Boolean(document.querySelector('[data-initial-startup]'));
+    let openingStart: number | null = null;
     const animate = () => {
       if (document.querySelector('[data-initial-startup]:not([data-revealing])')) return;
       const view = root.querySelector<HTMLElement>('.desktop-view-home');
       if (!view) return;
       view.dataset.homeEntry = key;
-      const tiles = [...view.querySelectorAll<HTMLElement>(tileSelector)].filter((tile) => !entered.has(tile));
-      const distance = Math.min(40, innerWidth * 0.055) * entryDirection;
+      const tiles = [...view.querySelectorAll<HTMLElement>(opening ? openingSelector : tileSelector)].filter((tile) => !entered.has(tile));
+      const distance = opening ? Math.min(72, innerWidth * 0.08) : Math.min(40, innerWidth * 0.055) * entryDirection;
+      const now = document.timeline.currentTime;
+      if (opening && openingStart === null && typeof now === 'number') openingStart = now;
+      const start = opening ? openingStart : now;
+      const viewBounds = view.getBoundingClientRect();
       const positions = tiles.map((tile) => {
         const bounds = tile.getBoundingClientRect();
-        return { tile, delay: Math.min(96, Math.max(0, bounds.left / innerWidth) * 72 + Math.max(0, bounds.top / innerHeight) * 24) };
+        return {
+          tile,
+          delay: opening
+            ? Math.min(120, Math.max(0, (bounds.left - viewBounds.left) / Math.max(1, viewBounds.width)) * 120)
+            : Math.min(96, Math.max(0, bounds.left / innerWidth) * 72 + Math.max(0, bounds.top / innerHeight) * 24),
+        };
       });
       for (const { tile, delay } of positions) {
         entered.add(tile);
         const animation = tile.animate(
-          [
-            { opacity: 0, transform: `translateX(${distance}px)`, offset: 0 },
-            { opacity: 1, offset: 0.3 },
-            { opacity: 1, transform: 'none', offset: 1 },
-          ],
-          { duration: 420, delay, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' },
+          opening
+            ? [{ transform: `translate3d(${distance}px, 0, 0)` }, { transform: 'translate3d(0, 0, 0)' }]
+            : [
+                { opacity: 0, transform: `translateX(${distance}px)`, offset: 0 },
+                { opacity: 1, offset: 0.3 },
+                { opacity: 1, transform: 'none', offset: 1 },
+              ],
+          {
+            duration: opening ? 760 : 420,
+            delay,
+            easing: opening ? 'cubic-bezier(.2, .7, .2, 1)' : 'cubic-bezier(.16, 1, .3, 1)',
+            fill: 'backwards',
+          },
         );
         animation.id = 'orbis-home-tile';
+        if (typeof start === 'number') animation.startTime = start;
         animations.add(animation);
         void animation.finished.then(
           () => {
@@ -57,16 +77,12 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
     };
     const observer = new MutationObserver((records) => {
       if (
-        frame ||
         !records.some((record) =>
           [...record.addedNodes].some((node) => node instanceof Element && (node.matches(tileSelector) || node.querySelector(tileSelector))),
         )
       )
         return;
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        animate();
-      });
+      animate();
     });
     observer.observe(root, { childList: true, subtree: true });
     animate();
@@ -74,7 +90,6 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
     return () => {
       window.removeEventListener('orbis-startup-reveal', animate);
       observer.disconnect();
-      cancelAnimationFrame(frame);
       for (const animation of animations) animation.cancel();
       const view = root.querySelector<HTMLElement>('.desktop-view-home');
       if (view?.dataset.homeEntry === key) delete view.dataset.homeEntry;

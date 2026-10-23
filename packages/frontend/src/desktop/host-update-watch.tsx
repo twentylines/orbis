@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, useSyncExternal
 import { useQuery } from '@tanstack/react-query';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from './window-visibility';
+import { installedOrbisBuildOptions } from './orbis-release';
 import {
   advanceCoreUpdate,
   claimCoreRefresh,
@@ -128,15 +129,7 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
     refetchIntervalInBackground: false,
   });
   const build = useQuery({
-    queryKey: ['orbis-installed-build'],
-    queryFn: async ({ signal }): Promise<{ version: string }> => {
-      const response = await fetch('/api/system/build', {
-        credentials: 'same-origin',
-        signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
-      });
-      if (!response.ok) throw new Error('Updated build is unavailable');
-      return response.json();
-    },
+    ...installedOrbisBuildOptions(),
     enabled: enabled && active,
     staleTime: 0,
     retry: false,

@@ -15,9 +15,8 @@ import { ClusterUpdates } from '@/desktop/cluster-updates';
 import { UpdateAllButton } from '@/modules/app/components/update-all-button/update-all-button';
 import { UpdateTerminal } from './update-terminal';
 import { rememberAcceptedCoreUpdate, prepareDesktopForCoreUpdate } from '@/desktop/host-update-watch';
+import { installedOrbisBuildOptions, orbisReleasesOptions, newerOrbisRelease } from '@/desktop/orbis-release';
 
-type Release = { tag: string; publishedAt: string | null; body: string; url: string; imageManifestUrl: string | null };
-type Build = { version: string; commit: string | null; imageDigest: string | null; runtipiCompatibility: string | null };
 type HostJob = { id: string; state: string; targetTag: string; startedAt: number; finishedAt?: number; message?: string; phase?: string | null };
 type HostStatus = {
   available: boolean;
@@ -112,19 +111,6 @@ async function hostRequest<T>(path: string, body?: object, signal?: AbortSignal)
   return result as T;
 }
 
-async function loadInstalledBuild(signal: AbortSignal): Promise<Build> {
-  const response = await fetch('/api/system/build', { signal, credentials: 'same-origin' });
-  if (!response.ok) throw new Error(`Installed build check failed (${response.status})`);
-  return response.json();
-}
-
-async function loadOrbisReleases(signal: AbortSignal): Promise<Release[]> {
-  const response = await fetch('/api/system/orbis-release', { signal, credentials: 'same-origin' });
-  if (!response.ok) throw new Error(`Orbis release check failed (${response.status})`);
-  const release: Release | null = await response.json();
-  return release ? [release] : [];
-}
-
 export default function Updates() {
   const cluster = useCluster();
   if (cluster.merged || (cluster.selectedServer && !cluster.selectedServer.local)) return <ClusterUpdates />;
@@ -151,16 +137,14 @@ function LocalUpdates() {
     refetchOnWindowFocus: false,
   });
   const build = useQuery({
-    queryKey: ['orbis-installed-build'],
-    queryFn: ({ signal }) => loadInstalledBuild(signal),
+    ...installedOrbisBuildOptions(),
     enabled: visible,
     staleTime: 60_000,
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   });
   const releases = useQuery({
-    queryKey: ['orbis-github-releases'],
-    queryFn: ({ signal }) => loadOrbisReleases(signal),
+    ...orbisReleasesOptions(),
     enabled: visible,
     staleTime: 60_000,
     refetchOnMount: 'always',
@@ -258,9 +242,8 @@ function LocalUpdates() {
   )[job?.phase ?? ''];
   const jobBusy = job?.state === 'running' || job?.state === 'recovering';
   const canPlan = Boolean(
-    latest?.imageManifestUrl &&
-      build.data &&
-      latest.tag !== build.data.version &&
+    build.data &&
+      newerOrbisRelease(latest, build.data.version) &&
       user?.operator === true &&
       host.data?.available &&
       host.data.enrolled &&

@@ -1,16 +1,11 @@
 .cluster-rack,
 .cluster-selector {
-  --cluster-base: #102421;
-  --cluster-machine: color-mix(in srgb, var(--desktop-preset-tint) 35%, var(--cluster-base));
-  --cluster-side: color-mix(in srgb, var(--desktop-preset-tint) 18%, var(--cluster-base));
-  --cluster-top: color-mix(in srgb, var(--desktop-preset-tint) 65%, var(--cluster-base));
-  --cluster-muted: color-mix(in srgb, var(--desktop-chrome-ink) 76%, var(--cluster-machine));
-}
-@supports (color: rgb(from red r g b / 1)) {
-  .cluster-rack,
-  .cluster-selector {
-    --cluster-base: rgb(from var(--desktop-panel-dark) r g b / 1);
-  }
+  --cluster-base: #15252c;
+  --cluster-machine: color-mix(in srgb, var(--desktop-preset-tint) 16%, var(--cluster-base));
+  --cluster-side: color-mix(in srgb, var(--desktop-preset-tint) 9%, #0d1a20);
+  --cluster-top: color-mix(in srgb, var(--desktop-preset-tint) 28%, #64777e);
+  --cluster-ink: #f0f6f4;
+  --cluster-muted: #c4d3d0;
 }
 .cluster-rack {
   display: grid;
@@ -54,7 +49,7 @@
   place-items: center;
   width: 100%;
   min-width: 0;
-  padding: 32px 24px 24px;
+  padding: 40px 24px 48px;
   isolation: isolate;
   overflow: hidden;
   border-radius: 18px;
@@ -94,11 +89,10 @@
 .cluster-rack-shadow {
   position: absolute;
   width: min(70%, 300px);
-  height: 20px;
-  bottom: 20px;
+  height: 36px;
+  bottom: 18px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--desktop-panel-dark) 23%, transparent);
-  filter: blur(13px);
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--desktop-panel-dark) 32%, transparent), transparent 70%);
   pointer-events: none;
 }
 .cluster-module {
@@ -111,7 +105,7 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--desktop-chrome-ink);
+  color: var(--cluster-ink);
   text-align: left;
   font: inherit;
   transform-style: preserve-3d;
@@ -132,6 +126,7 @@
   inset: 0 0 auto;
   height: var(--cluster-depth);
   background: var(--cluster-top);
+  border: 1px solid color-mix(in srgb, var(--cluster-top) 70%, var(--cluster-side));
   transform-origin: center bottom;
   transform: translateY(-100%) rotateX(90deg);
 }
@@ -166,10 +161,11 @@
   gap: 12px;
   min-height: 228px;
   padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--cluster-top) 36%, var(--cluster-machine));
+  border: 1px solid color-mix(in srgb, var(--cluster-top) 62%, var(--cluster-machine));
   border-radius: 5px;
-  background: var(--cluster-machine);
-  box-shadow: 0 16px 24px rgba(4, 15, 19, 0.16);
+  background: linear-gradient(155deg, color-mix(in srgb, var(--cluster-top) 10%, var(--cluster-machine)), var(--cluster-machine) 65%);
+  color: var(--cluster-ink);
+  box-shadow: 8px 10px 16px rgba(4, 15, 19, 0.16);
   backface-visibility: hidden;
 }
 .cluster-module-heading {
@@ -192,7 +188,7 @@
   white-space: nowrap;
 }
 .cluster-module-heading > svg:last-child:not(:first-child) {
-  color: var(--desktop-chrome-ink);
+  color: var(--cluster-ink);
 }
 .cluster-deck-slot[data-side="after"] .cluster-module-heading > span {
   text-align: right;
@@ -249,13 +245,13 @@
   height: 3px;
   border-radius: 4px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--desktop-chrome-ink) 16%, var(--cluster-side));
+  background: color-mix(in srgb, var(--cluster-ink) 16%, var(--cluster-side));
 }
 .cluster-module-meters i > span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--desktop-accent) 75%, var(--desktop-chrome-ink));
+  background: color-mix(in srgb, var(--desktop-preset-tint) 60%, var(--cluster-ink));
   transition: width 500ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .cluster-module-footer {
@@ -455,7 +451,7 @@
 }
 @media (max-width: 760px) {
   .cluster-rack-stage:not([data-wide]) {
-    padding-block: 16px;
+    padding-block: 32px 44px;
   }
   .cluster-selector-body {
     padding-inline: 12px;

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
-import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
+import { metricHistoryRanges, type HostSensors, type MetricHistoryRange } from '@runtipi/common/schemas';
+import { IconActivity, IconArrowDown, IconArrowUp, IconCpu, IconDatabase, IconDeviceDesktopAnalytics, IconNetwork } from '@tabler/icons-react';
 import { useMetricHistory } from '@/desktop/metric-history';
 import { MetricChart } from '@/components/metric-chart/metric-chart';
 import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
@@ -15,12 +16,11 @@ import { HostSensorsView } from '../components/host-sensors';
 import { ServerRack, useCluster } from '@/desktop/cluster';
 import { useServerPath } from '@/desktop/cluster-data';
 import { ClusterOverview } from '@/desktop/cluster-views';
-
-import { SystemGauges } from '../components/system-gauges';
-import { usagePercent } from '../components/system-readings';
+import { useDesktopPreferences } from '@/desktop/preferences';
+import { statusNetwork, usagePercent } from '../components/system-readings';
 
 const bytes = (value: number | null) => {
-  if (value === null || !Number.isFinite(value)) return 'Unavailable';
+  if (value === null || !Number.isFinite(value) || value < 0) return 'Unavailable';
   if (value < 1024) return `${value.toFixed(0)} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
   let amount = value;
@@ -31,8 +31,9 @@ const bytes = (value: number | null) => {
   } while (amount >= 1024 && index < units.length - 1);
   return `${amount.toFixed(amount < 10 ? 1 : 0)} ${units[index]}`;
 };
-const percent = (value: number | null) => (value === null ? 'Unavailable' : `${value.toFixed(1)}%`);
+const percent = (value: number | null) => (value === null || !Number.isFinite(value) ? 'Unavailable' : `${value.toFixed(1)}%`);
 const width = (value: number | null) => `${Math.min(100, Math.max(0, value ?? 0))}%`;
+const rate = (value: number | null | undefined) => (value === null || value === undefined ? 'Unavailable' : `${bytes(value)}/s`);
 export default function Monitor() {
   const { merged } = useCluster();
   return merged ? <ClusterOverview /> : <ServerMonitor />;
@@ -41,7 +42,9 @@ export default function Monitor() {
 function ServerMonitor() {
   const visible = useWindowVisible();
   const { selectedServer, selectedId } = useCluster();
+  const { preferences } = useDesktopPreferences();
   const telemetryPath = useServerPath()('/api/system/telemetry');
+  const sensorsPath = useServerPath()('/api/system/host-sensors');
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedRange = searchParams.get('range');
   const range: MetricHistoryRange = selectedRange && Object.hasOwn(metricHistoryRanges, selectedRange) ? (selectedRange as MetricHistoryRange) : '1h';
@@ -59,6 +62,34 @@ function ServerMonitor() {
     refetchIntervalInBackground: false,
   });
   const sample = telemetry.data;
+  const sensors = useQuery<HostSensors>({
+    queryKey: ['host-sensors', sensorsPath],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(sensorsPath, { credentials: 'include', signal });
+      if (!response.ok) throw new Error('Hardware readings are unavailable');
+      return response.json();
+    },
+    enabled: visible,
+    refetchInterval: (query) => (query.state.data?.available === false && query.state.data.reason === 'Collecting sensor readings.' ? 2000 : 30_000),
+    refetchIntervalInBackground: false,
+  });
+  const cpuSensor =
+    !sensors.isError && sensors.data?.available && !sensors.data.stale
+      ? (sensors.data.temperatures
+          .filter(
+            (sensor) =>
+              sensor.status === 'available' &&
+              sensor.celsius !== null &&
+              /(?:coretemp|k10temp|zenpower|cpu[_ -]?thermal|\bcpu\b|package id|\btctl\b|\btdie\b)/i.test(`${sensor.chip} ${sensor.label}`),
+          )
+          .sort((left, right) => {
+            const packageSensor = (label: string) => /package|\btctl\b|\btdie\b/i.test(label);
+            return (
+              Number(packageSensor(right.label)) - Number(packageSensor(left.label)) ||
+              (right.celsius ?? Number.NEGATIVE_INFINITY) - (left.celsius ?? Number.NEGATIVE_INFINITY)
+            );
+          })[0] ?? null)
+      : null;
   const host = useHostReadings();
   const currentHost = host.data?.available && !host.data.stale && !host.isError ? host.data : null;
   const hostDisk = currentHost?.filesystems.find((disk) => disk.mount === '/');
@@ -71,6 +102,9 @@ function ServerMonitor() {
       ? sample.memory.totalBytes - sample.memory.availableBytes
       : null;
   const memoryPercent = usagePercent(usedMemory, sample?.memory.totalBytes ?? null);
+  const storagePercent = usagePercent(disk?.usedBytes ?? null, disk?.sizeBytes ?? null);
+  const network = statusNetwork(currentHost ?? undefined, sample);
+  const serverName = selectedServer && !selectedServer.local ? selectedServer.name : preferences.serverName;
   const usedSwap =
     sample?.memory.swapTotalBytes !== null &&
     sample?.memory.swapFreeBytes !== null &&
@@ -81,14 +115,16 @@ function ServerMonitor() {
 
   return (
     <div className="desktop-monitor">
-      <p className="desktop-monitor-scope">
-        {selectedServer && !selectedServer.local ? `${selectedServer.name} · ` : ''}CPU, memory, host devices and Orbis core network readings.
-      </p>
-      <div className="desktop-monitor-live-status">
-        <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} />
-        <strong>{telemetry.isError ? 'Connection interrupted' : 'Live readings'}</strong>
-        <span>Updates every 5 seconds</span>
-      </div>
+      <header className="monitor-page-heading">
+        <div>
+          <h2>System overview</h2>
+          <p title={serverName}>{serverName}</p>
+        </div>
+        <div className="desktop-monitor-live-status">
+          <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} aria-hidden="true" />
+          <span>{telemetry.isError ? 'Readings delayed' : telemetry.isPending ? 'Connecting' : 'Live · every 5 seconds'}</span>
+        </div>
+      </header>
       {telemetry.isError ? (
         <div className="workspace-message" role="alert">
           The server did not return a telemetry sample. Last values may be stale.{' '}
@@ -98,27 +134,101 @@ function ServerMonitor() {
         </div>
       ) : null}
       {telemetry.isPending ? <p>Loading system status…</p> : null}
-      <section className="desktop-host-overview" aria-labelledby="desktop-host-overview-title">
+      <section className="desktop-host-overview" aria-label="Current system readings">
         <div className="desktop-host-overview-copy" key={selectedId}>
-          <h2 id="desktop-host-overview-title">System status</h2>
-          <SystemGauges
-            cpu={sample?.cpu.totalPercent ?? null}
-            clockGHz={sample?.cpu.reportedClockGHz}
-            memoryUsed={usedMemory}
-            memoryTotal={sample?.memory.totalBytes ?? null}
-            diskUsed={disk?.usedBytes ?? null}
-            diskTotal={disk?.sizeBytes ?? null}
-            diskLabel={hostDisk ? 'Storage' : 'Core storage'}
-          />
-          <p className="desktop-host-overview-uptime">
-            Uptime <strong>{formatUptime(sample?.cpu.uptimeSeconds)}</strong>
-          </p>
+          <dl className="monitor-summary-grid">
+            <div className="monitor-summary-stat">
+              <dt>
+                <IconCpu size={18} aria-hidden="true" />
+                CPU
+              </dt>
+              <dd className="monitor-summary-value">{percent(sample?.cpu.totalPercent ?? null)}</dd>
+              <dd className="monitor-summary-detail">{sample?.cpu.scope === 'runtime' ? 'Core container load' : 'Total utilisation'}</dd>
+              <dd className="workspace-meter" aria-hidden="true">
+                <span style={{ width: width(sample?.cpu.totalPercent ?? null) }} />
+              </dd>
+            </div>
+            <div className="monitor-summary-stat">
+              <dt>
+                <IconDeviceDesktopAnalytics size={18} aria-hidden="true" />
+                Memory
+              </dt>
+              <dd className="monitor-summary-value">{percent(memoryPercent)}</dd>
+              <dd className="monitor-summary-detail">
+                {bytes(usedMemory)} / {bytes(sample?.memory.totalBytes ?? null)}
+              </dd>
+              <dd className="workspace-meter" aria-hidden="true">
+                <span style={{ width: width(memoryPercent) }} />
+              </dd>
+            </div>
+            <div className="monitor-summary-stat">
+              <dt>
+                <IconDatabase size={18} aria-hidden="true" />
+                {hostDisk ? 'Storage' : 'Core storage'}
+              </dt>
+              <dd className="monitor-summary-value">{percent(storagePercent)}</dd>
+              <dd className="monitor-summary-detail">
+                {bytes(disk?.usedBytes ?? null)} / {bytes(disk?.sizeBytes ?? null)}
+              </dd>
+              <dd className="workspace-meter" aria-hidden="true">
+                <span style={{ width: width(storagePercent) }} />
+              </dd>
+            </div>
+            <div className="monitor-summary-stat monitor-summary-network">
+              <dt>
+                <IconNetwork size={18} aria-hidden="true" />
+                {network?.label ?? 'Network'}
+              </dt>
+              <dd className="monitor-summary-value">
+                <IconArrowDown size={16} aria-hidden="true" />
+                <span className="visually-hidden">Download </span>
+                {rate(network?.rxBytesPerSecond)}
+              </dd>
+              <dd className="monitor-summary-detail">
+                <IconArrowUp size={14} aria-hidden="true" />
+                <span className="visually-hidden">Upload </span>
+                {rate(network?.txBytesPerSecond)}
+              </dd>
+              <dd className="monitor-summary-interface" title={network?.interface}>
+                {network?.interface ?? 'No interface reading'}
+              </dd>
+            </div>
+          </dl>
+          <dl className="monitor-system-facts">
+            <div>
+              <dt>Uptime</dt>
+              <dd>{formatUptime(sample?.cpu.uptimeSeconds)}</dd>
+            </div>
+            <div>
+              <dt>CPU clock</dt>
+              <dd>
+                {typeof sample?.cpu.reportedClockGHz === 'number' && Number.isFinite(sample.cpu.reportedClockGHz)
+                  ? `${sample.cpu.reportedClockGHz.toFixed(2)} GHz`
+                  : 'Unavailable'}
+              </dd>
+            </div>
+            <div>
+              <dt>Logical CPUs</dt>
+              <dd>{sample?.cpu.perCorePercent.length || 'Unavailable'}</dd>
+            </div>
+            <div title={cpuSensor ? `Reported by ${cpuSensor.label} (${cpuSensor.chip})` : undefined}>
+              <dt>CPU temperature</dt>
+              <dd>{cpuSensor?.celsius !== null && cpuSensor?.celsius !== undefined ? `${cpuSensor.celsius.toFixed(1)} °C` : 'Unavailable'}</dd>
+            </div>
+          </dl>
         </div>
-        <ServerRack cpu={sample?.cpu.totalPercent ?? null} memory={memoryPercent} online={telemetry.isPending ? undefined : !telemetry.isError} />
+        <div className="monitor-rack-panel">
+          <span className="monitor-rack-label">
+            <IconActivity size={15} aria-hidden="true" />
+            Server hardware
+          </span>
+          <ServerRack cpu={sample?.cpu.totalPercent ?? null} memory={memoryPercent} online={telemetry.isPending ? undefined : !telemetry.isError} />
+        </div>
       </section>
       {sample ? (
         <>
           <div className="monitor-history-toolbar">
+            <h2>Performance history</h2>
             <fieldset className="monitor-history-ranges">
               <legend className="visually-hidden">History time range</legend>
               {(

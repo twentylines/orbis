@@ -12,6 +12,7 @@ html:has(.desktop) {
   --desktop-bar-inset: 11px;
   min-height: 100vh;
   display: flow-root;
+  overflow-x: clip;
   position: relative;
   isolation: isolate;
   color: var(--desktop-ink);
@@ -107,6 +108,7 @@ html:has(.desktop) {
   align-items: center;
   flex: none;
 }
+.desktop-update-notice,
 .desktop-search-trigger,
 .desktop-mode-toggle,
 .desktop-task-trigger,
@@ -134,6 +136,7 @@ html:has(.desktop) {
   border-radius: 11px;
   color: var(--desktop-chrome-ink);
 }
+.desktop-update-notice svg,
 .desktop-task-trigger svg,
 .desktop-mode-toggle svg,
 .desktop-search-trigger svg,
@@ -153,6 +156,7 @@ html:has(.desktop) {
   font-weight: 800;
   text-align: center;
 }
+.desktop-update-notice:hover,
 .desktop-search-trigger:hover,
 .desktop-mode-toggle:hover,
 .desktop .desktop-task-trigger:hover,
@@ -160,11 +164,68 @@ html:has(.desktop) {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.31);
 }
+.desktop-update-notice:active,
 .desktop-search-trigger:active,
 .desktop-mode-toggle:active,
 .desktop-icon-button:active:not(:disabled) {
   background: rgba(255, 255, 255, 0.24);
 }
+
+.desktop-update-notice {
+  height: 40px;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 11px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.25;
+  text-decoration: none;
+  white-space: nowrap;
+  animation: orbis-update-notice-enter 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.desktop .desktop-update-notice,
+.desktop .desktop-update-notice:is(:hover, :focus-visible, :active) {
+  color: var(--desktop-chrome-ink);
+  text-decoration: none;
+}
+.desktop-system-bar:has(.desktop-update-notice) {
+  height: auto;
+  min-height: 64px;
+  flex-wrap: wrap;
+  padding-block: var(--desktop-bar-inset);
+  row-gap: 11px;
+}
+@keyframes orbis-update-notice-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 600px) {
+  .desktop-update-notice {
+    order: 3;
+    flex: 1 0 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 0.625rem;
+    white-space: normal;
+  }
+  .desktop-update-notice span {
+    min-width: 0;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+  .desktop-update-notice svg {
+    display: none;
+  }
+}
+
 .desktop-search-trigger {
   gap: 10px;
   height: 40px;

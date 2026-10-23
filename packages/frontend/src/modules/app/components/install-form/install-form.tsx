@@ -134,7 +134,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
             disabled={loading}
             placeholder={domain ? `${appName}.${domain}` : `${appName}.example.com`}
           />
-          <span className="text-muted">{t('APP_INSTALL_FORM_DOMAIN_NAME_HINT')}</span>
+          <p className="form-text text-muted">{t('APP_INSTALL_FORM_DOMAIN_NAME_HINT')}</p>
         </div>
       )}
     </>
@@ -296,7 +296,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
                 placeholder="8484"
                 className="flex-grow-1"
               />
-              <span className="text-muted">{t('APP_INSTALL_FORM_PORT_HINT')}</span>
+              <p className="form-text text-muted">{t('APP_INSTALL_FORM_PORT_HINT')}</p>
             </div>
           )}
         </div>
@@ -327,7 +327,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
           error={errors.maxBackups?.message}
           placeholder={globalMaxBackups === 0 ? undefined : globalMaxBackups.toString()}
         />
-        <span className="text-muted">{t('APP_INSTALL_FORM_MAX_BACKUPS_HINT', { value: globalMaxBackups })}</span>
+        <p className="form-text text-muted">{t('APP_INSTALL_FORM_MAX_BACKUPS_HINT', { value: globalMaxBackups })}</p>
       </div>
       <div className="mb-3">
         <Controller
