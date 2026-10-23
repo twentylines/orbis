@@ -1,5 +1,8 @@
+import { StartupSurface } from '@/components/startup/startup-surface';
+import { animateSessionExit, rememberLogout } from '@/desktop/session-motion';
+import toast from 'react-hot-toast';
 import { useReducedMotion } from '@/desktop/motion-preferences';
-import { logoutMutation } from '@/api-client/@tanstack/react-query.gen';
+import { logout } from '@/api-client';
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
 import { Welcome } from '@/components/welcome/welcome';
@@ -15,10 +18,10 @@ import { AppLauncherProvider, MinimizedApps } from '@/desktop/app-launcher';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
 import { IconApps, IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
-import { useIsMutating, useMutation } from '@tanstack/react-query';
+import { useIsMutating } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { useLayoutEffect, useRef, type PropsWithChildren } from 'react';
-import { Link, useLocation, useMatches } from 'react-router';
+import { Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { Link, useLocation, useMatches, useNavigation } from 'react-router';
 import './layout.css';
 
 export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => {
@@ -49,6 +52,10 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const { preferences, resolvedMode, update, requiresOnboarding } = useDesktopPreferences();
   const location = useLocation();
   const matches = useMatches();
+  const routeNavigation = useNavigation();
+  const [loggingOff, setLoggingOff] = useState(false);
+  const leaving = useRef(false);
+  const desktop = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const dock = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -88,17 +95,52 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const busy = useIsMutating();
   const tasks = useTasks();
   const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
-  const logout = useMutation({ ...logoutMutation(), onSuccess: () => window.location.reload() });
+  const handleLogout = async () => {
+    if (leaving.current) return;
+    leaving.current = true;
+    toast.dismiss();
+    setLoggingOff(true);
+    rememberLogout(true);
+    const exit = animateSessionExit(desktop.current, Boolean(reduceMotion));
+    try {
+      await Promise.all([logout({ throwOnError: true }), exit.finished]);
+      rememberLogout(true);
+      window.location.replace('/login');
+    } catch {
+      exit.cancel();
+      rememberLogout(false);
+      leaving.current = false;
+      setLoggingOff(false);
+      toast.error('Unable to log out. Try again.');
+    }
+  };
 
   if (requiresOnboarding) return <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />;
 
   const current = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
   const isTool = current && current.path !== '/dashboard';
+  const pendingPath = routeNavigation.location?.pathname;
+  const pendingSection = pendingPath ? navigation.find((item) => pendingPath === item.path || pendingPath.startsWith(`${item.path}/`)) : undefined;
+  const dockSection = pendingSection ?? current;
+  const routeContent = (
+    <Suspense
+      fallback={
+        <output className="desktop-route-loading">
+          <span className="desktop-loading-spinner" aria-hidden="true" />
+          Loading {current?.label.toLowerCase() ?? 'page'}…
+        </output>
+      }
+    >
+      {children}
+    </Suspense>
+  );
   return (
     <ClusterProvider>
       <AppLauncherProvider>
         <div
+          ref={desktop}
           className="desktop orbis-theme"
+          data-session-state={loggingOff ? 'logging-out' : undefined}
           data-desktop-preset={preferences.preset}
           data-desktop-mode={resolvedMode}
           data-desktop-density={preferences.density}
@@ -106,7 +148,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
         >
           <DesktopWallpaper />
           <header className="desktop-system-bar">
-            <Link to="/dashboard" viewTransition className="desktop-brand" aria-label="Orbis workspace">
+            <Link to="/dashboard" className="desktop-brand" aria-label="Orbis workspace">
               <img src="/icons/orbis.svg" width={28} height={28} alt="" />
               <span className="desktop-product">Orbis</span>
               <span className="desktop-server-name">
@@ -114,12 +156,18 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               </span>
             </Link>
             <span className="desktop-current" aria-current="page">
-              {current?.label ?? 'Application'}
+              {pendingSection ? (
+                <span className="desktop-navigation-pending">
+                  <span className="desktop-loading-spinner" aria-hidden="true" />
+                  {pendingSection.label}
+                </span>
+              ) : (
+                (current?.label ?? 'Application')
+              )}
             </span>
             <div className="desktop-system-actions">
               <Link
                 to="/tasks"
-                viewTransition
                 className="desktop-task-trigger"
                 aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}`}
                 title="Task centre"
@@ -149,30 +197,31 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                 type="button"
                 className="desktop-icon-button"
                 aria-label="Log out"
-                disabled={!isLoggedIn || logout.isPending || busy > 0}
-                onClick={() => logout.mutate({})}
+                disabled={!isLoggedIn || loggingOff || busy > 0}
+                onClick={() => void handleLogout()}
               >
                 <IconLogout size={20} aria-hidden="true" />
               </button>
             </div>
           </header>
 
-          <main className="desktop-main" id="desktop-content" onFocusCapture={(event) => revealPageFocus(event.target)}>
+          <main
+            className="desktop-main"
+            id="desktop-content"
+            aria-busy={routeNavigation.state !== 'idle'}
+            onFocusCapture={(event) => revealPageFocus(event.target)}
+          >
             {isTool ? (
-              <RouteSurface
-                key={current.path}
-                label={current?.label ?? 'Application'}
-                icon={current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}
-              >
+              <RouteSurface label={current?.label ?? 'Application'} icon={current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}>
                 {!hasPageHeading && location.pathname.split('/').filter(Boolean).length > 1 ? (
                   <div className="desktop-route-title">
                     <PageTitle apps={apps} />
                   </div>
                 ) : null}
-                {children}
+                {routeContent}
               </RouteSurface>
             ) : (
-              <div className="desktop-view desktop-view-home">{children}</div>
+              <div className="desktop-view desktop-view-home">{routeContent}</div>
             )}
           </main>
 
@@ -184,14 +233,14 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                   <Link
                     key={path}
                     to={path}
-                    viewTransition
                     onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
-                    className={`desktop-dock-item ${current?.path === path ? 'is-active' : ''}`}
+                    className={`desktop-dock-item ${dockSection?.path === path ? 'is-active' : ''}`}
                     aria-label={label}
                     aria-current={current?.path === path ? 'page' : undefined}
+                    aria-busy={pendingSection?.path === path || undefined}
                     title={label}
                   >
-                    {current?.path === path ? (
+                    {dockSection?.path === path ? (
                       <motion.span
                         className="desktop-dock-selection"
                         layoutId="orbis-dock-selection"
@@ -200,7 +249,10 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                       />
                     ) : null}
                     <span className="desktop-dock-content">
-                      <Icon size={22} stroke={1.7} aria-hidden="true" />
+                      <span className="desktop-dock-icon">
+                        <Icon size={22} stroke={1.7} aria-hidden="true" />
+                        {pendingSection?.path === path ? <span className="desktop-loading-spinner" aria-hidden="true" /> : null}
+                      </span>
                       <span className="desktop-dock-label">{'dockLabel' in item ? item.dockLabel : label}</span>
                     </span>
                   </Link>
@@ -208,6 +260,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             </div>
             <MinimizedApps />
           </nav>
+          {loggingOff ? <StartupSurface loggingOff /> : null}
         </div>
       </AppLauncherProvider>
     </ClusterProvider>

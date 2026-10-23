@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Plan, apply, or recover a digest-pinned Orbis core update on a CLI v4 host.
 
-The update stops the core services after refusing active Runtipi app containers,
-captures a verified stopped-state tree, and restores it if the new core fails.
+The update pauses control services, captures verified control storage, and
+restores it if the new core fails. App containers and their data remain live.
+Legacy releases retain their original whole-installation backup protocol.
 Only the explicit Docker context is used for runtime operations.
 """
 
@@ -15,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 
 
@@ -183,6 +185,29 @@ def verify_release(target: dict[str, str]) -> None:
         raise ValueError("target manifest does not match the verified GitHub and GHCR release")
 
 
+def controller_tools(context: str, lock_fd: int | None = None):
+    tools = load_script("orbis-install-transaction.py", "orbis_controller_update_transaction")
+    reader = tools.APPS.Docker(context)
+    reader.lock_fd = lock_fd
+    return tools, reader
+
+
+def checkpoint_path(snapshot: Path) -> Path:
+    return snapshot.with_name(snapshot.name + ".checkpoint.json")
+
+
+def restore_core_policies(root: Path, context: str, checkpoint: dict) -> None:
+    tools, reader = controller_tools(context, HOST.LOCK_DESCRIPTOR.get())
+    core_ownership(root, context)
+    for original in tools.ordered(checkpoint, starting=True):
+        role = checkpoint["roles"][original["id"]]
+        name = {"controller": "runtipi", "database": "runtipi-db", "queue": "runtipi-queue", "proxy": "runtipi-reverse-proxy"}[role]
+        identifier = docker_checked(context, ["inspect", "--format", "{{.Id}}", name], root, "the updated core identity is unavailable")
+        policy = tools.APPS.policy(original["restartPolicy"])
+        flag = policy["Name"] + (f":{policy['MaximumRetryCount']}" if policy["Name"] == "on-failure" else "")
+        reader.change(["update", "--restart", flag, identifier])
+
+
 def update_plan(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path) -> dict[str, object]:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", context):
         raise ValueError("Docker context name is invalid")
@@ -192,7 +217,6 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
         raise ValueError("rsync is required to restore a stopped installation snapshot")
     if journal_path(snapshot).exists() or journal_path(snapshot).is_symlink():
         raise ValueError("an update journal already exists for this snapshot destination")
-    snapshot_estimate = SNAPSHOT.preflight(root, snapshot)
     expected = HOST.installation_fingerprint(root, current, context)
     HOST.require_current_state(root, expected)
     candidate = HOST.PLAN.plan(root, target)
@@ -204,9 +228,16 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
     core = HOST.current_core(root, context)
     if core.get("image") != current_image or core.get("state") != "running" or core.get("health") != "healthy":
         raise ValueError("the enrolled Orbis core must be running and healthy")
-    require_quiet_apps(root, context)
     verify_release(target)
-    return {
+    scoped = target.get("installationProtocol") == HOST.PLAN.INSTALLATION_PROTOCOL
+    if scoped:
+        tools, reader = controller_tools(context)
+        checkpoint = tools.review(root, reader, snapshot, checkpoint_path(snapshot), scope="controller")
+        snapshot_bytes = checkpoint["storage"]["estimatedBytes"]
+    else:
+        require_quiet_apps(root, context)
+        snapshot_bytes = SNAPSHOT.preflight(root, snapshot)["bytes"]
+    result = {
         "result": "ready-to-update",
         "root": str(root),
         "dockerContext": context,
@@ -214,9 +245,12 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
         "targetTag": target["tag"],
         "targetImage": f"{target['image']}@{target['digest']}",
         "snapshot": str(snapshot),
-        "snapshotBytes": snapshot_estimate["bytes"],
-        "runningAppsMustBeStopped": True,
+        "snapshotBytes": snapshot_bytes,
+        "runningAppsMustBeStopped": not scoped,
     }
+    if scoped:
+        result["checkpoint"] = checkpoint
+    return result
 
 
 def stop_core(root: Path, context: str, allow_absent: bool = False) -> None:
@@ -244,8 +278,53 @@ def start_core(root: Path, context: str, force_recreate: bool = False) -> None:
 
 
 def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, record: dict[str, object]) -> None:
+    origin = record.setdefault("rollbackStartedFrom", record["stage"])
     record["stage"] = "rolling-back"
     write_journal(snapshot, record)
+    if record.get("backupScope") == "controller":
+        tools, reader = controller_tools(context, HOST.LOCK_DESCRIPTOR.get())
+        checkpoint = record["checkpoint"]
+        tools.validate_review(checkpoint)
+        if origin in {"stopping", "stopped", "snapshotting", "snapshot-ready"}:
+            checkpoint_journal = checkpoint_path(snapshot)
+            if not checkpoint_journal.exists() and not checkpoint_journal.is_symlink():
+                # Checkpointing writes its journal before changing any service.
+                expected = HOST.installation_fingerprint(root, current, context)
+                HOST.require_current_state(root, expected)
+                core_ownership(root, context)
+                core = HOST.current_core(root, context)
+                if core.get("image") != f"{current['image']}@{current['digest']}" or core.get("state") != "running" or core.get("health") != "healthy":
+                    raise RuntimeError("previous Orbis release is not healthy before service downtime")
+                record["stage"] = "aborted"
+                write_journal(snapshot, record)
+                return
+            if tools.read_record(checkpoint_journal, root, reader)["stage"] != "recovered":
+                tools.recover(root, reader, checkpoint_journal, host_writers_stopped=True)
+        else:
+            existing = core_ownership(root, context, allow_absent=True)
+            for name in CORE_SERVICES:
+                if name in existing:
+                    identifier = docker_checked(context, ["inspect", "--format", "{{.Id}}", name], root, "the core identity could not be inspected for recovery")
+                    reader.change(["update", "--restart", "no", identifier])
+            stop_core(root, context, allow_absent=True)
+            manifest = tools.STORAGE.verified_manifest(snapshot)
+            if manifest["plan"] != checkpoint["storage"]:
+                raise ValueError("the control storage backup does not match this update")
+            reviewed = tools.RESTORE.review(root, reader, snapshot)
+            restore_journal = snapshot.with_name(snapshot.name + ".restore.json")
+            if restore_journal.exists() and tools.RESTORE.private_json(restore_journal).get("stage") == "complete":
+                restore_journal = snapshot.with_name(snapshot.name + f".restore-{uuid.uuid4()}.json")
+            tools.RESTORE.restore(root, reader, reviewed, restore_journal, host_writers_stopped=True, recover=restore_journal.exists())
+            start_core(root, context, force_recreate=True)
+            restore_core_policies(root, context, checkpoint)
+        expected = HOST.installation_fingerprint(root, current, context)
+        HOST.require_current_state(root, expected)
+        core = HOST.current_core(root, context)
+        if core.get("image") != f"{current['image']}@{current['digest']}" or core.get("health") != "healthy":
+            raise RuntimeError("previous Orbis release did not recover to a healthy state")
+        record["stage"] = "rolled-back"
+        write_journal(snapshot, record)
+        return
     stop_core(root, context, allow_absent=True)
     require_quiet_apps(root, context)
     if SNAPSHOT.sidecar(snapshot).is_file():
@@ -277,8 +356,8 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
 
 
 def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path) -> dict[str, object]:
-    with HOST.host_lock(root):
-        update_plan(root, current, target, context, snapshot)
+    with HOST.host_lock(root) as lock_fd:
+        planned = update_plan(root, current, target, context, snapshot)
         record = {
             "schema": JOURNAL_SCHEMA,
             "root": str(root),
@@ -288,6 +367,8 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             "targetDigest": target["digest"],
             "stage": "preparing",
         }
+        if "checkpoint" in planned:
+            record.update(backupScope="controller", checkpoint=planned["checkpoint"])
         write_journal(snapshot, record)
         try:
             docker_checked(context, ["pull", f"{target['image']}@{target['digest']}"], root, "Docker could not pull the verified Orbis image")
@@ -295,13 +376,17 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             write_journal(snapshot, record)
             record["stage"] = "stopping"
             write_journal(snapshot, record)
-            stop_core(root, context)
-            require_quiet_apps(root, context)
-            record["stage"] = "stopped"
-            write_journal(snapshot, record)
-            record["stage"] = "snapshotting"
-            write_journal(snapshot, record)
-            SNAPSHOT.capture(root, snapshot, current["tag"], context)
+            if record.get("backupScope") == "controller":
+                tools, reader = controller_tools(context, lock_fd)
+                tools.checkpoint(root, reader, planned["checkpoint"], host_writers_stopped=True)
+            else:
+                stop_core(root, context)
+                require_quiet_apps(root, context)
+                record["stage"] = "stopped"
+                write_journal(snapshot, record)
+                record["stage"] = "snapshotting"
+                write_journal(snapshot, record)
+                SNAPSHOT.capture(root, snapshot, current["tag"], context)
             record["stage"] = "snapshot-ready"
             write_journal(snapshot, record)
             HOST.STAGE.stage(root, target)
@@ -312,6 +397,8 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             if core.get("image") != f"{target['image']}@{target['digest']}" or core.get("state") != "running" or core.get("health") != "healthy":
                 raise RuntimeError("new Orbis core did not reach the verified image and healthy state")
             HOST.write_state(root, HOST.installation_fingerprint(root, target, context))
+            if record.get("backupScope") == "controller":
+                restore_core_policies(root, context, planned["checkpoint"])
             record["stage"] = "complete"
             write_journal(snapshot, record)
             return {"result": "healthy", "releaseTag": target["tag"], "snapshot": str(snapshot), "journal": str(journal_path(snapshot))}
@@ -327,6 +414,8 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
                 record["stage"] = "rollback-failed"
                 write_journal(snapshot, record)
                 raise RuntimeError(f"update and automatic rollback failed; preserve {snapshot} and inspect the stopped installation") from rollback_error
+            if record["stage"] == "aborted":
+                raise RuntimeError("update stopped before service downtime") from error
             raise RuntimeError("update failed; the previous release was restored and is healthy") from error
 
 
@@ -355,6 +444,8 @@ def recover(root: Path, current: dict[str, str], target: dict[str, str], context
             record["stage"] = "rollback-failed"
             write_journal(snapshot, record)
             raise RuntimeError(f"recovery failed; preserve {snapshot} and inspect the stopped installation") from error
+        if record["stage"] == "aborted":
+            return {"result": "aborted-before-downtime", "releaseTag": current["tag"]}
         return {"result": "rolled-back", "releaseTag": current["tag"], "snapshot": str(snapshot)}
 
 

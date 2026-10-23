@@ -12,7 +12,7 @@ html:has(.orbis-startup) {
   --desktop-negative: var(--orbis-negative, var(--desktop-base-negative));
   --desktop-warning: var(--orbis-warning, var(--desktop-base-warning));
   --desktop-info: var(--orbis-info, var(--desktop-base-info));
-  --desktop-focus: var(--orbis-focus, var(--desktop-base-focus));
+  --desktop-focus: var(--desktop-ink);
   --desktop-panel-dark: var(--orbis-panel-dark, var(--desktop-base-panel-dark));
   --desktop-glass-filter: var(--orbis-glass-filter, var(--desktop-base-glass-filter));
   --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
@@ -353,6 +353,8 @@ body:has(.orbis-theme) :is(.form-control, .form-select):focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--desktop-accent) 14%, transparent);
 }
 body:has(.orbis-theme) .btn {
+  --tblr-btn-box-shadow: none;
+  --tblr-btn-active-shadow: none;
   max-width: 100%;
   white-space: normal;
   min-height: 40px;
@@ -361,6 +363,11 @@ body:has(.orbis-theme) .btn {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  box-shadow: none;
+}
+body:has(.orbis-theme) :is(.card-header, .card-footer) {
+  background: transparent;
+  box-shadow: none;
 }
 body:has(.orbis-theme) .btn:not(.btn-icon) {
   min-width: 0;

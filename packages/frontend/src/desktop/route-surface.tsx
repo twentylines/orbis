@@ -13,6 +13,7 @@ export function RouteSurface({ label, icon, children }: PropsWithChildren<{ labe
 
   return (
     <section className="desktop-view desktop-view-app desktop-route-window desktop-route-page" data-window-navigation="page" aria-label={label}>
+      <div className="desktop-route-surface" aria-hidden="true" />
       <header className="desktop-page-heading">
         <span className="desktop-window-icon" aria-hidden="true">
           {icon}

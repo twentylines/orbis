@@ -1,6 +1,6 @@
 # Navigation, server clusters and app launchers
 
-Monitor, Workspace and phone Apps were refreshed on 23 October 2026 from the current source build on a disposable Linux host with IT-Tools installed.
+Monitor and desktop/phone app details were captured on 23 October 2026 from the beta78 source build on a disposable Linux host with IT-Tools installed. Workspace and phone Apps were captured earlier that day from the beta77 source build. These are unedited browser screenshots using actual app and monitoring responses.
 
 The other captures are from 22 October 2026. Login views use the locally built frontend with an actual Orbis beta66 backend on a disposable Linux machine. The setup view uses a beta64 backend. The remaining captures use sample apps and two Orbis instances on another disposable test machine. Each instance has a running demo app; five additional sample app records have no containers.
 
@@ -13,6 +13,8 @@ The selector uses floating cards over background blur. Home shows used and total
 - [Applications](applications.png)
 - [App Store](app-store.png)
 - [Monitor](monitor.png)
+- [App details](app-details.png)
+- [Phone app details](phone-app-details.png)
 - [Server selector](server-selector.png)
 - [Selected member Monitor](monitor-atlas.png)
 - [Merged workspace](cluster-workspace.png)

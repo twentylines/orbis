@@ -43,6 +43,33 @@ PLAN = HOST.PLAN
 CHECK = UPDATE.CHECK
 PLAN_TTL_SECONDS = 15 * 60
 BODY_LIMIT = 64 * 1024
+PACKAGE_OUTPUT_BYTES = 8192
+
+
+def terminal_tail(path: Path) -> dict:
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return {"text": "", "bytes": 0, "truncated": False, "updatedAt": None}
+    with os.fdopen(descriptor, "rb") as stream:
+        metadata = os.fstat(stream.fileno())
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.geteuid() or metadata.st_nlink != 1 or stat.S_IMODE(metadata.st_mode) & 0o077:
+            raise ValueError("package output must be a private regular file")
+        start = max(0, metadata.st_size - PACKAGE_OUTPUT_BYTES)
+        stream.seek(start)
+        raw = stream.read(PACKAGE_OUTPUT_BYTES)
+    if start:
+        raw = raw.partition(b"\n")[2]
+    text = raw.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))", "", text)
+    text = "".join(char for char in text if char in "\n\t" or ord(char) >= 32 and ord(char) != 127)
+    def public_url(match):
+        value = re.sub(r"(?<=://)[^/\s]*@", "[redacted]@", match[0])
+        return re.split(r"[?#]", value, maxsplit=1)[0] + ("?[redacted]" if "?" in value or "#" in value else "")
+    text = re.sub(r"https?://[^\s]+", public_url, text)
+    text = re.sub(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/-]+=*", r"\1 [redacted]", text)
+    text = re.sub(r"(?im)\b(password|passwd|token|secret|api[_-]?key|authorization)(\s*(?::|=)\s*|\s+)[^\n]+", r"\1\2[redacted]", text)
+    return {"text": text, "bytes": metadata.st_size, "truncated": start > 0, "updatedAt": metadata.st_mtime}
 
 
 def write_private(path: Path, data: dict) -> None:
@@ -93,6 +120,7 @@ def manifest_for_tag(tag: str) -> dict[str, str]:
             "commit": published["commit"],
             "digest": image.removeprefix(f"{PLAN.IMAGE}@"),
             "runtipiCompatibility": published["runtipiCompatibility"],
+            **({"installationProtocol": published["installationProtocol"]} if "installationProtocol" in published else {}),
         }
     )
 
@@ -199,7 +227,7 @@ class HostService:
             if not isinstance(job.get("createdAt"), (int, float)):
                 raise ValueError("package job record is invalid")
             if time.time() - job["createdAt"] <= 5:
-                return {"available": True, "job": {key: job.get(key) for key in ("id", "state", "createdAt", "startedAt", "finishedAt", "message", "exitCode", "rebootRequired", "operationCount")}}
+                return {"available": True, "job": self.public_package_job(job)}
             identifier = job.get("id")
             if not isinstance(identifier, str):
                 raise ValueError("package job record is invalid")
@@ -224,9 +252,19 @@ class HostService:
                     job = refreshed
         return {
             "available": True,
-            "job": {key: job.get(key) for key in ("id", "state", "createdAt", "startedAt", "finishedAt", "message", "exitCode", "rebootRequired", "operationCount")}
+            "job": self.public_package_job(job)
             if job
             else None,
+        }
+
+    def public_package_job(self, job: dict) -> dict:
+        identifier = job.get("id")
+        if not isinstance(identifier, str):
+            raise ValueError("package job identity is invalid")
+        uuid.UUID(identifier)
+        return {
+            **{key: job.get(key) for key in ("id", "state", "createdAt", "startedAt", "finishedAt", "message", "exitCode", "rebootRequired", "operationCount")},
+            "output": terminal_tail(self.state_dir / f"package-job-{identifier}.log"),
         }
 
     def package_plan(self, names: list[str]) -> dict:
@@ -328,6 +366,12 @@ class HostService:
         enrolled = self.state_matches(saved)
         core = HOST.current_core(self.root, self.context)
         job = read_private(self.job_file)
+        phase = None
+        if job and job.get("state") == "running":
+            journal = read_private(UPDATE.journal_path(Path(job["snapshot"]))) if isinstance(job.get("snapshot"), str) else None
+            phase = journal.get("stage") if journal else "preparing"
+            if phase not in UPDATE.FAILURE_STAGES | UPDATE.TERMINAL_STAGES:
+                phase = "preparing"
         if job and job.get("state") == "interrupted":
             journal = read_private(UPDATE.journal_path(Path(job["snapshot"])))
             stage = journal.get("stage") if journal else None
@@ -359,7 +403,7 @@ class HostService:
             "coreState": core.get("state"),
             "coreHealth": core.get("health"),
             "imageMatches": bool(enrolled and saved and core.get("image") == f"{PLAN.IMAGE}@{saved.get('digest')}"),
-            "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")} | UPDATE.safe_failure(job)
+            "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")} | {"phase": phase} | UPDATE.safe_failure(job)
             if job
             else None,
         }
@@ -394,7 +438,7 @@ class HostService:
             "targetTag": target["tag"],
             "targetDigest": target["digest"],
             "snapshotBytes": result["snapshotBytes"],
-            "appsMustBeStopped": True,
+            "appsMustBeStopped": result.get("runningAppsMustBeStopped", True),
         }
 
     def _read_plan(self, plan_id: str) -> dict:
@@ -431,7 +475,6 @@ class HostService:
             snapshot = Path(plan["snapshot"])
             if snapshot.parent != self.snapshots or snapshot.name != f"orbis-{target['tag']}-{plan_id}":
                 raise ValueError("update plan has an invalid snapshot destination")
-            UPDATE.update_plan(self.root, current, target, self.context, snapshot)
             job = {
                 "schema": "orbis.host-service-job.v1",
                 "id": plan_id,

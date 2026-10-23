@@ -1,5 +1,5 @@
 :root :is(.desktop-system-bar, .desktop-dock, .orbis-app-tray, .desktop-window-bar) {
-  --desktop-focus: var(--orbis-chrome-focus, var(--desktop-base-focus));
+  --desktop-focus: var(--desktop-chrome-ink);
 }
 :root[data-orbis-transparency="solid"] :is(.cluster-selector, .desktop-search-veil, .modal-backdrop) {
   background: var(--desktop-chrome-opaque);

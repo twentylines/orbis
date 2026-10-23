@@ -476,7 +476,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                       <IconSettings size={18} aria-hidden="true" /> App settings
                     </a>
                   ) : (
-                    <Link to={managePath} viewTransition onClick={() => setSelected(null)}>
+                    <Link to={managePath} onClick={() => setSelected(null)}>
                       <IconSettings size={18} aria-hidden="true" />
                       App settings
                     </Link>

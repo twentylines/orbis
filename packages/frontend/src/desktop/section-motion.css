@@ -1,70 +1,59 @@
-/* biome-ignore-all lint/correctness/noUnknownTypeSelector: View Transition names are identifiers, not element selectors. */
-.desktop-view {
-  view-transition-name: orbis-section;
+/* Live surfaces stay interactive and keep their backdrop filters while moving. */
+.desktop-route-surface {
+  will-change: height, width;
 }
-.desktop-system-bar {
-  view-transition-name: orbis-header;
+.desktop-route-loading,
+.desktop-navigation-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
-/* biome-ignore lint/correctness/noUnknownPseudoClass: Standard View Transition pseudo-class is newer than this CSS linter. */
-html:active-view-transition .desktop-view-app {
-  animation: none;
+.desktop-route-loading {
+  min-height: 160px;
+  width: 100%;
+  justify-content: center;
+  padding: 28px;
+  color: var(--desktop-muted);
 }
-.desktop-dock-main {
-  view-transition-name: orbis-dock;
+.desktop-navigation-pending {
+  min-width: 0;
+  max-width: 100%;
 }
-.orbis-app-tray {
-  view-transition-name: orbis-minimized;
+.desktop-loading-spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: orbis-navigation-spin 800ms linear infinite;
 }
-::view-transition-old(root),
-::view-transition-new(root),
-::view-transition-old(orbis-header),
-::view-transition-new(orbis-header),
-::view-transition-old(orbis-dock),
-::view-transition-new(orbis-dock),
-::view-transition-old(orbis-minimized),
-::view-transition-new(orbis-minimized) {
-  animation: none;
+.desktop-dock-item[aria-busy="true"] .desktop-dock-icon > svg {
+  opacity: 0.35;
 }
-::view-transition-group(orbis-section) {
-  animation-duration: 480ms;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+.desktop-dock-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
 }
-::view-transition-old(orbis-section) {
-  animation: orbis-section-out 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.desktop-dock-icon .desktop-loading-spinner {
+  position: absolute;
+  inset: 3px;
+  z-index: 2;
 }
-::view-transition-new(orbis-section) {
-  animation: orbis-section-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-::view-transition-image-pair(orbis-section) {
-  isolation: isolate;
-}
-@keyframes orbis-section-in {
-  from {
-    opacity: 0;
-    transform: translateX(calc(var(--orbis-slide-direction, 1) * 64px));
-  }
+@keyframes orbis-navigation-spin {
   to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes orbis-section-out {
-  from {
-    opacity: 1;
-    transform: none;
-  }
-  to {
-    opacity: 0;
-    transform: translateX(calc(var(--orbis-slide-direction, 1) * -48px));
+    transform: rotate(360deg);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(orbis-section),
-  ::view-transition-old(orbis-section),
-  ::view-transition-new(orbis-section),
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
+  .desktop-loading-spinner {
     animation: none;
+    border-style: dotted;
+    border-right-color: currentColor;
   }
 }

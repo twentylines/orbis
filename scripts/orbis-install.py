@@ -5,8 +5,10 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -187,6 +189,92 @@ def replacement(root, reader, manifest, state, mode, confirm, display=None, *, b
     return result
 
 
+def release_order(tag):
+    match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?", tag)
+    if not match:
+        raise ValueError("The installed release cannot be compared safely; use the Update Center")
+    pre = match[4]
+    identifiers = tuple((0, int(part)) if part.isdigit() else (1, part) for part in (pre or "").split("."))
+    return (*map(int, match.group(1, 2, 3)), int(pre is None), identifiers if pre else ())
+
+
+def host_request(socket_path, endpoint, body=None):
+    connection = REPLACE.UnixConnection(str(socket_path))
+    connection.timeout = 120
+    try:
+        payload = None if body is None else json.dumps(body)
+        connection.request("GET" if body is None else "POST", endpoint, payload, {"Content-Type": "application/json"})
+        response = connection.getresponse()
+        raw = response.read(1024 * 1024 + 1)
+        if len(raw) > 1024 * 1024:
+            raise ValueError("The update service response exceeded its limit")
+        result = json.loads(raw)
+        if not 200 <= response.status < 300:
+            raise ValueError(result.get("error", "The update request was rejected"))
+        if not isinstance(result, dict):
+            raise ValueError("The update service returned an invalid response")
+        return result
+    finally:
+        connection.close()
+
+
+def update_existing(root, reader, target, display, *, without_host_service=False):
+    upgrade = load("orbis-host-service-upgrade.py", "orbis_guided_helper_upgrade")
+    current = upgrade.SERVICE.installed_manifest(root, reader.context)
+    if release_order(target["tag"]) < release_order(current["tag"]):
+        raise ValueError(f"Installed {current['tag']} is newer than this installer. Use the latest installer; no downgrade was made")
+    display.set_remaining_steps(2 if without_host_service else 4)
+    with display.step("Verifying the Orbis release"):
+        REPLACE.UPDATE.verify_release(target)
+    if not without_host_service:
+        with display.step("Updating the host service"):
+            enable = load("orbis-host-service-enable.py", "orbis_guided_update_enable")
+            enable.enable(root, reader.context, Path(__file__).parent)
+            upgrade.upgrade(root, reader.context, Path(__file__).parent, str(root))
+    if current["digest"] == target["digest"]:
+        print(f"Orbis {current['tag']} is up to date at {root}.")
+        return {"result": "up-to-date", "releaseTag": current["tag"]}
+    if current["tag"] == target["tag"]:
+        raise ValueError("The same release tag has a different digest; inspect its published identity before updating")
+    if without_host_service:
+        private = load("install-orbis.py", "orbis_guided_update_private")
+        snapshots = private.private_directory(Path("/var/lib/orbis/snapshots"))
+        snapshot = snapshots / ("orbis-" + target["tag"] + "-" + str(uuid.uuid4()))
+        with display.step("Updating Orbis and verifying server health"):
+            return REPLACE.UPDATE.apply_update(root, current, target, reader.context, snapshot)
+    socket_path = upgrade.SETUP.SOCKET_FILE
+    with display.step("Checking the release and backup storage"):
+        checked = host_request(socket_path, "/v1/plan", {"tag": target["tag"]})
+        if checked.get("targetTag") != target["tag"] or checked.get("targetDigest") != target["digest"]:
+            raise ValueError("The checked update does not match the verified installer release")
+    with display.step("Updating Orbis and verifying server health"):
+        try:
+            accepted = host_request(socket_path, "/v1/apply", {"planId": checked["planId"]})
+        except OSError as error:
+            status = host_request(socket_path, "/v1/status")
+            observed = status.get("job") or {}
+            if observed.get("id") != checked["planId"]:
+                raise ValueError(f"Update acknowledgement was lost. Inspect job {checked['planId']} in Updates before retrying") from error
+            accepted = {"jobId": observed["id"], "state": observed["state"]}
+        job_id = accepted.get("jobId")
+        if job_id != checked["planId"]:
+            raise ValueError("Update acknowledgement changed. Check Updates before retrying")
+        deadline = time.monotonic() + 1800
+        while time.monotonic() < deadline:
+            status = host_request(socket_path, "/v1/status")
+            job = status.get("job") or {}
+            if job.get("id") != job_id:
+                raise ValueError(f"The update status changed. Inspect job {job_id} before retrying")
+            if job.get("state") == "complete":
+                if status.get("currentDigest") != target["digest"] or not status.get("imageMatches") or status.get("coreHealth") != "healthy":
+                    raise ValueError("The update finished without the expected healthy image; inspect Updates before retrying")
+                return {"result": "orbis-updated", "releaseTag": target["tag"], "jobId": job_id}
+            if job.get("state") not in {"queued", "running"}:
+                raise ValueError(f"{job.get('message') or 'The update needs inspection'}. Job: {job_id}. Do not retry until resolved")
+            time.sleep(1)
+        raise ValueError(f"Update {job_id} is still running. Follow it in Updates; do not start another update")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
@@ -249,10 +337,8 @@ def main():
         if selected and selected["product"] == "orbis":
             if args.mode:
                 raise ValueError("Orbis is already installed. Use Settings for resets or Updates for a core update")
-            print(f"Orbis is already installed at {root}.")
-            if not args.without_host_service:
-                enable = load("orbis-host-service-enable.py", "orbis_guided_enable")
-                enable.enable(root, reader.context, Path(__file__).parent)
+            result = update_existing(root, reader, manifest, display, without_host_service=args.without_host_service)
+            print(json.dumps(result, indent=2))
             return 0
         if selected and selected["product"] != "runtipi":
             raise ValueError("The controller cannot be replaced automatically")

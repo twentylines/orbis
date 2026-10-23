@@ -86,6 +86,7 @@ export type HostPackageJobStatus = {
     exitCode?: number;
     rebootRequired?: boolean;
     operationCount?: number;
+    output?: { text: string; bytes: number; truncated: boolean; updatedAt: number | null };
   };
 };
 

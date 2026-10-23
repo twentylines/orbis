@@ -370,18 +370,20 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       />
       <TemplateSyncDialog appUrn={info.urn} isOpen={syncTemplateDisclosure.isOpen} onClose={syncTemplateDisclosure.close} />
       <fieldset className="app-actions" aria-label="Application actions" tabIndex={-1} data-dialog-focus-fallback>
-        {buttons.map((button) => {
-          return createElement(button.type, {
-            ...button.props,
-            key: button.key,
-          });
-        })}
+        <div className="app-actions-primary">
+          {buttons.map((button) => {
+            return createElement(button.type, {
+              ...button.props,
+              key: button.key,
+            });
+          })}
+        </div>
         {listItems.length + listItemsAdvanced.length + listItemsDestructive.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button name="more" className="more-button" aria-label="More application actions" title="More application actions">
                 <IconDots size={14} />
-                {((updateAvailable && !versionIsIgnored) || app?.pendingRestart) && <span className="badge badge-dot bg-red badge-notification" />}
+                {((updateAvailable && !versionIsIgnored) || app?.pendingRestart) && <span className="app-action-notice" aria-hidden="true" />}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

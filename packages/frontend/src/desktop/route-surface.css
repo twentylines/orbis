@@ -3,7 +3,26 @@
   padding: 0;
   animation: none;
   border-color: transparent;
-  box-shadow: 0 24px 64px rgba(4, 15, 15, 0.18);
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.desktop .desktop-view-app.desktop-route-window.desktop-route-page[data-window-navigation="page"] {
+  box-shadow: none;
+}
+.desktop-route-surface {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--desktop-surface);
+  backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
+  -webkit-backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
+  pointer-events: none;
 }
 .desktop-route-page .desktop-page-heading {
   display: flex;

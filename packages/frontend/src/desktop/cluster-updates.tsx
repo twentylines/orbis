@@ -25,7 +25,6 @@ type Status = {
 };
 type Inventory = { apps: AppUpdates; build: { version: string }; release: Release | null; releaseFailed: boolean; status: Status | null };
 type Plan = { planId: string; targetTag: string; currentTag: string; snapshotBytes: number; appsMustBeStopped: boolean };
-type Reviewed = { server: ClusterServer; plan: Plan };
 type Outcome = { server: string; message: string; failed: boolean };
 const serverPath = (id: string) => `/servers/${encodeURIComponent(id)}`;
 const read = <T,>(id: string, resource: string) => clusterRequest<T>(`${serverPath(id)}/read/${resource}`);
@@ -59,7 +58,6 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
     })),
   });
   const [confirmApps, setConfirmApps] = useState(false);
-  const [reviewed, setReviewed] = useState<Reviewed[]>([]);
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   const ready = servers.flatMap((server, index) => {
     const inventory = inventories[index];
@@ -110,31 +108,11 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
       await queryClient.invalidateQueries({ queryKey: ['cluster-updates'] });
     },
   });
-  const review = useMutation({
+  const runOrbis = useMutation({
     mutationFn: async () => {
-      setOutcomes([]);
-      const plans: Reviewed[] = [];
-      for (const entry of ordered(ready.filter((item) => item.canPlan))) {
-        try {
-          const plan = await command<Plan>(entry.server.id, 'plan-orbis', { tag: entry.data.release?.tag });
-          plans.push({ server: entry.server, plan });
-        } catch (error) {
-          setOutcomes((current) => [
-            ...current,
-            { server: entry.server.name, message: error instanceof Error ? error.message : 'Could not review this update.', failed: true },
-          ]);
-        }
-      }
-      setReviewed(plans);
-    },
-  });
-  const apply = useMutation({
-    mutationFn: async () => {
-      const plans = ordered(reviewed);
-      setReviewed([]);
       setOutcomes([]);
       let failed = false;
-      for (const entry of plans) {
+      for (const entry of ordered(ready.filter((item) => item.canPlan))) {
         if (entry.server.local && failed) {
           setOutcomes((current) => [
             ...current,
@@ -143,10 +121,11 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
           continue;
         }
         try {
-          await command(entry.server.id, 'apply-orbis', { planId: entry.plan.planId });
+          const plan = await command<Plan>(entry.server.id, 'plan-orbis', { tag: entry.data.release?.tag });
+          await command(entry.server.id, 'apply-orbis', { planId: plan.planId });
           setOutcomes((current) => [
             ...current,
-            { server: entry.server.name, message: 'Orbis update started. Check its job status before retrying.', failed: false },
+            { server: entry.server.name, message: 'Orbis update started. Follow its status below.', failed: false },
           ]);
         } catch (error) {
           failed = true;
@@ -154,7 +133,7 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
             ...current,
             {
               server: entry.server.name,
-              message: `${error instanceof Error ? error.message : 'No acknowledgement.'} Check this server’s update job before retrying.`,
+              message: `${error instanceof Error ? error.message : 'No acknowledgement.'} Check the update status before retrying.`,
               failed: true,
             },
           ]);
@@ -162,8 +141,9 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
       }
       await queryClient.invalidateQueries({ queryKey: ['cluster-updates'] });
     },
+    retry: false,
   });
-  const busy = runApps.isPending || review.isPending || apply.isPending;
+  const busy = runApps.isPending || runOrbis.isPending;
   const operator = user.operator && cluster.data?.role !== 'member';
   return (
     <div className="cluster-updates">
@@ -225,8 +205,8 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
           <div>
             <h3 id="cluster-orbis-update-heading">Orbis updates</h3>
           </div>
-          <Button disabled={!operator || busy || !ready.some((entry) => entry.canPlan)} onClick={() => review.mutate()}>
-            {review.isPending ? 'Preparing review…' : 'Review updates'}
+          <Button disabled={!operator || busy || !ready.some((entry) => entry.canPlan)} onClick={() => runOrbis.mutate()}>
+            {runOrbis.isPending ? 'Updating…' : 'Update all Orbis'}
           </Button>
         </header>
         {ready.map(({ server, data, canPlan }) => (
@@ -241,7 +221,7 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
             </p>
             {data.status?.job ? (
               <output>
-                {data.status.job.state === 'complete' ? 'Last update' : 'Update'}: {data.status.job.targetTag} · {data.status.job.state}
+                {data.status.job.state === 'complete' ? 'Last update' : 'Update'} · {data.status.job.state}
                 {data.status.job.message && data.status.job.state !== 'complete' ? ` · ${data.status.job.message}` : ''}
               </output>
             ) : null}
@@ -254,13 +234,13 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
               </p>
             )}
             {data.release ? (
-              <details>
-                <summary>Changelog · {data.release.tag}</summary>
-                <Markdown className="cluster-update-notes" content={data.release.body} />
+              <section className="cluster-release-changelog" aria-label="Changelog">
+                <h5>Changelog</h5>
+                <Markdown className="cluster-update-notes" content={data.release.body.trimStart().replace(/^#\s+Orbis[^\n]*\r?\n(?:\r?\n)*/i, '')} />
                 <a href={data.release.url} target="_blank" rel="noopener noreferrer">
                   View release on GitHub
                 </a>
-              </details>
+              </section>
             ) : (
               <p>{data.releaseFailed ? 'Release check unavailable. App updates can still be queued.' : 'No published release found.'}</p>
             )}
@@ -285,40 +265,6 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
               Cancel
             </Button>
             <Button onClick={() => runApps.mutate()}>Update all apps</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={reviewed.length > 0}
-        onOpenChange={(open) => {
-          if (!open) setReviewed([]);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Review Orbis updates</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            Member servers update first; the admin server updates last. Its connection may close during restart. These plans cover only the servers
-            listed below.
-          </DialogDescription>
-          <ul className="cluster-update-review">
-            {reviewed.map(({ server, plan }) => (
-              <li key={server.id}>
-                <strong>{server.name}</strong>
-                <span>
-                  {plan.currentTag} → {plan.targetTag}
-                </span>
-                <span>Snapshot: {(plan.snapshotBytes / 1024 ** 2).toFixed(1)} MB</span>
-                {plan.appsMustBeStopped ? <span>Apps must be stopped before applying this plan.</span> : null}
-              </li>
-            ))}
-          </ul>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReviewed([])}>
-              Cancel
-            </Button>
-            <Button onClick={() => apply.mutate()}>Update all Orbis</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

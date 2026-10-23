@@ -7,8 +7,8 @@ import { useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
 import { Appearance } from '../containers/appearance';
 import { ClusterSettings } from '../containers/cluster-settings';
+import { GeneralActionsContainer } from '../containers/general-actions';
 
-const GeneralActionsContainer = lazy(() => import('../containers/general-actions').then((module) => ({ default: module.GeneralActionsContainer })));
 const UserSettingsContainer = lazy(() => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer })));
 const SecurityContainer = lazy(() => import('../containers/security').then((module) => ({ default: module.SecurityContainer })));
 const LogsContainer = lazy(() => import('../containers/logs').then((module) => ({ default: module.LogsContainer })));
@@ -55,9 +55,7 @@ export default () => {
           </DropdownMenu>
         </TabsList>
         <TabsContent value="actions">
-          <Suspense>
-            <GeneralActionsContainer />
-          </Suspense>
+          <GeneralActionsContainer />
         </TabsContent>
         <TabsContent value="appearance">
           <Appearance />

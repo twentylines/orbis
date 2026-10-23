@@ -28,7 +28,7 @@
 }
 .app-workspace-hero {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) auto;
+  grid-template-columns: 96px minmax(0, 1fr) minmax(240px, 320px);
   align-items: center;
   gap: 24px;
   padding-bottom: 28px;
@@ -71,6 +71,7 @@
 }
 .app-workspace-controls {
   min-width: 0;
+  width: 100%;
   max-width: 360px;
 }
 .app-workspace-facts {

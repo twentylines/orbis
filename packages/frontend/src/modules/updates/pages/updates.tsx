@@ -12,10 +12,11 @@ import './updates.css';
 import { useCluster } from '@/desktop/cluster';
 import { ClusterUpdates } from '@/desktop/cluster-updates';
 import { UpdateAllButton } from '@/modules/app/components/update-all-button/update-all-button';
+import { UpdateTerminal } from './update-terminal';
 
 type Release = { tag: string; publishedAt: string | null; body: string; url: string; imageManifestUrl: string | null };
 type Build = { version: string; commit: string | null; imageDigest: string | null; runtipiCompatibility: string | null };
-type HostJob = { id: string; state: string; targetTag: string; startedAt: number; finishedAt?: number; message?: string };
+type HostJob = { id: string; state: string; targetTag: string; startedAt: number; finishedAt?: number; message?: string; phase?: string | null };
 type HostStatus = {
   available: boolean;
   enrolled?: boolean;
@@ -78,6 +79,7 @@ type HostPackageJob = {
   message?: string;
   rebootRequired?: boolean;
   operationCount?: number;
+  output?: { text: string; bytes: number; truncated: boolean; updatedAt: number | null };
 };
 type HostPackageJobStatus = { available: boolean; job: HostPackageJob | null };
 
@@ -97,7 +99,7 @@ async function hostRequest<T>(path: string, body?: object, signal?: AbortSignal)
     credentials: 'same-origin',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
-    signal,
+    signal: signal ?? AbortSignal.timeout(path === 'plan' ? 100_000 : path === 'packages/plan' || path === 'packages/apply' ? 70_000 : 20_000),
   });
   const result: unknown = await response.json();
   if (!response.ok) {
@@ -130,7 +132,7 @@ export default function Updates() {
 function LocalUpdates() {
   const visible = useWindowVisible();
   const { user } = useAppContext();
-  const [reviewPlan, setReviewPlan] = useState<HostPlan | null>(null);
+  const [coreRequestStage, setCoreRequestStage] = useState<'checking' | 'starting' | null>(null);
   const [packageSearch, setPackageSearch] = useState('');
   const [showAllPackages, setShowAllPackages] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
@@ -179,7 +181,7 @@ function LocalUpdates() {
     queryKey: ['orbis-host-package-job'],
     queryFn: ({ signal }) => hostRequest<HostPackageJobStatus>('packages/job', undefined, signal),
     enabled: visible && user?.operator === true,
-    refetchInterval: (query) => (['queued', 'running'].includes(query.state.data?.job?.state ?? '') ? 3000 : 30_000),
+    refetchInterval: (query) => (['queued', 'running'].includes(query.state.data?.job?.state ?? '') ? 1500 : 30_000),
     retry: 1,
   });
   const planPackages = useMutation({
@@ -188,28 +190,43 @@ function LocalUpdates() {
   });
   const applyPackages = useMutation({
     mutationFn: (planId: string) => hostRequest<{ jobId: string; state: string }>('packages/apply', { planId }),
+    retry: false,
     onSuccess: () => {
       setReviewPackagePlan(null);
       setSelectedPackages([]);
       void packageJob.refetch();
     },
   });
-  const plan = useMutation({
-    mutationFn: (tag: string) => hostRequest<HostPlan>('plan', { tag }),
-    onSuccess: (result) => setReviewPlan(result),
-  });
-  const apply = useMutation({
-    mutationFn: (planId: string) => hostRequest<{ jobId: string; state: string }>('apply', { planId }),
-    onSuccess: () => {
-      setReviewPlan(null);
+  const updateCore = useMutation({
+    mutationFn: async (tag: string) => {
+      setCoreRequestStage('checking');
+      const checked = await hostRequest<HostPlan>('plan', { tag });
+      if (checked.targetTag !== tag) throw new Error('The checked release changed. Refresh before updating.');
+      setCoreRequestStage('starting');
+      return hostRequest<{ jobId: string; state: string }>('apply', { planId: checked.planId });
+    },
+    onSettled: () => {
+      setCoreRequestStage(null);
       void host.refetch();
     },
+    retry: false,
   });
   const recover = useMutation({
     mutationFn: (jobId: string) => hostRequest<{ jobId: string; state: string }>('recover', { jobId }),
     onSuccess: () => void host.refetch(),
   });
   const job = host.data?.job;
+  const corePhase = (
+    {
+      preparing: 'Checking the release and backup storage…',
+      pulled: 'Image downloaded. Preparing the backup…',
+      stopping: 'Backing up control data. Apps keep running.',
+      stopped: 'Control services paused for backup…',
+      snapshotting: 'Backing up control data…',
+      'snapshot-ready': 'Backup verified. Applying the update…',
+      staged: 'Starting Orbis and checking server health…',
+    } as Record<string, string>
+  )[job?.phase ?? ''];
   const jobBusy = job?.state === 'running' || job?.state === 'recovering';
   const canPlan = Boolean(
     latest?.imageManifestUrl &&
@@ -260,7 +277,11 @@ function LocalUpdates() {
               <p>Updates from your configured app stores</p>
             </div>
           </div>
-          {available.length > 0 && user.operator ? <UpdateAllButton /> : null}
+          {available.length > 0 && user.operator ? (
+            <div className="desktop-update-actions">
+              <UpdateAllButton />
+            </div>
+          ) : null}
           {apps.isPending ? <p>Checking installed applications…</p> : null}
           {apps.isError ? <p role="alert">Application updates could not be checked. Try again from Applications.</p> : null}
           {apps.data && available.length === 0 ? <p>No app updates in the cached catalogue.</p> : null}
@@ -321,18 +342,23 @@ function LocalUpdates() {
           {latest ? (
             <div className="desktop-update-release">
               <div className="desktop-update-release-title">
-                <strong>{latest.tag}</strong>
+                <strong>{latest.tag === build.data?.version ? 'Current release' : latest.tag}</strong>
                 <time>{latest.publishedAt ? new Date(latest.publishedAt).toLocaleDateString() : 'Date unavailable'}</time>
               </div>
-              <p>{latest.imageManifestUrl ? 'Published image manifest available.' : 'No Orbis image manifest is attached to this release.'}</p>
-              <details>
-                <summary>Read changelog</summary>
+              {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
+              <section className="desktop-release-changelog" aria-labelledby="orbis-changelog-title">
+                <h3 id="orbis-changelog-title">Changelog</h3>
                 {latest.body ? (
-                  <Markdown content={latest.body} className="desktop-update-markdown" tabIndex={0} label={`${latest.tag} changelog`} />
+                  <Markdown
+                    content={latest.body.trimStart().replace(/^#\s+Orbis[^\n]*\r?\n(?:\r?\n)*/i, '')}
+                    className="desktop-update-markdown"
+                    tabIndex={0}
+                    label={`${latest.tag} changelog`}
+                  />
                 ) : (
                   <p>No changelog provided.</p>
                 )}
-              </details>
+              </section>
               <a href={latest.url} target="_blank" rel="noreferrer">
                 View release on GitHub <IconArrowRight size={16} aria-hidden="true" />
               </a>
@@ -359,10 +385,8 @@ function LocalUpdates() {
           ) : null}
           {job ? (
             <output className={`desktop-update-job ${jobBusy ? 'is-busy' : ''}`} aria-live="polite">
-              <strong>
-                {job.state === 'running' ? 'Installing' : job.state === 'recovering' ? 'Recovering' : 'Last host operation'}: {job.targetTag}
-              </strong>
-              <span>{job.message || (jobBusy ? 'The browser may briefly disconnect while the core restarts.' : job.state)}</span>
+              <strong>{job.state === 'running' ? 'Installing Orbis' : job.state === 'recovering' ? 'Recovering Orbis' : 'Last update'}</strong>
+              <span>{job.message || corePhase || (jobBusy ? 'The server will reconnect automatically after restart.' : job.state)}</span>
               {job.state === 'interrupted' ? (
                 <button type="button" disabled={recover.isPending} onClick={() => recover.mutate(job.id)}>
                   {recover.isPending ? 'Starting recovery…' : 'Restore previous release'}
@@ -370,43 +394,21 @@ function LocalUpdates() {
               ) : null}
             </output>
           ) : null}
-          {canPlan && latest && !reviewPlan ? (
-            <button className="desktop-update-action" type="button" disabled={plan.isPending} onClick={() => plan.mutate(latest.tag)}>
-              {plan.isPending ? 'Checking release and snapshot space…' : `Prepare update to ${latest.tag}`}
+          {canPlan && latest ? (
+            <button className="desktop-update-action" type="button" disabled={updateCore.isPending} onClick={() => updateCore.mutate(latest.tag)}>
+              {updateCore.isPending ? 'Updating…' : 'Update'}
             </button>
           ) : null}
-          {reviewPlan && latest?.tag === reviewPlan.targetTag ? (
-            <div className="desktop-update-plan">
-              <strong>Review core update</strong>
-              <p>
-                {reviewPlan.currentTag} to {reviewPlan.targetTag}
-              </p>
-              <p>Verified image: {reviewPlan.targetDigest}</p>
-              <p>
-                Installation snapshot estimate:{' '}
-                {new Intl.NumberFormat(undefined, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(
-                  Math.ceil(reviewPlan.snapshotBytes / 1_000_000),
-                )}
-                . Managed apps must be stopped and will stay stopped.
-              </p>
-              <div className="desktop-update-plan-actions">
-                <button type="button" disabled={apply.isPending} onClick={() => apply.mutate(reviewPlan.planId)}>
-                  {apply.isPending ? 'Starting update…' : 'Install reviewed release'}
-                </button>
-                <button type="button" disabled={apply.isPending} onClick={() => setReviewPlan(null)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
+          {coreRequestStage ? (
+            <output className="desktop-update-note" aria-live="polite">
+              {coreRequestStage === 'checking'
+                ? 'Checking the release and backup storage…'
+                : 'Starting the update. The server will reconnect automatically.'}
+            </output>
           ) : null}
-          {plan.isError ? (
+          {updateCore.isError ? (
             <p className="desktop-update-note" role="alert">
-              {plan.error.message}
-            </p>
-          ) : null}
-          {apply.isError ? (
-            <p className="desktop-update-note" role="alert">
-              {apply.error.message}. Check the host operation status before retrying.
+              {updateCore.error.message} Check the update status before retrying.
             </p>
           ) : null}
           {recover.isError ? (
@@ -440,6 +442,7 @@ function LocalUpdates() {
               {packageJob.data.job.rebootRequired ? <span>The host requests a reboot. Orbis has not rebooted it.</span> : null}
             </output>
           ) : null}
+          {packageJob.data?.job ? <UpdateTerminal output={packageJob.data.job.output} state={packageJob.data.job.state} /> : null}
           {systemPackages.data?.available ? (
             <>
               <div className="desktop-host-package-summary">

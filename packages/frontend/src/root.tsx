@@ -10,6 +10,7 @@ import { FallbackSurface } from './components/error/error-page';
 import { ConfirmationDialog } from './desktop/confirmation';
 import { StartupSurface } from './components/startup/startup-surface';
 import { appearanceBootstrap } from './desktop/appearance-cache';
+import { sessionExitBootstrap } from './desktop/session-motion';
 
 export const links: Route.LinksFunction = () => [
   { rel: 'stylesheet', href: stylesheet },
@@ -59,6 +60,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta charSet="UTF-8" />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Only static code and a fixed allowlist enter this script. */}
         <script data-orbis-appearance dangerouslySetInnerHTML={{ __html: appearanceBootstrap }} />
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code reads only a timestamp from this tab's session storage. */}
+        <script data-orbis-session dangerouslySetInnerHTML={{ __html: sessionExitBootstrap }} />
         <script src="/js/tabler.min.js" async />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <Meta />

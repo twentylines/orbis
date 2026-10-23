@@ -1,0 +1,90 @@
+.desktop-update-terminal {
+  margin-block: 18px;
+  overflow: hidden;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--desktop-ink) 5%, var(--desktop-surface));
+  color: var(--desktop-ink);
+}
+.desktop-update-terminal > header,
+.desktop-update-terminal > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 18px;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.desktop-update-terminal > header {
+  border-bottom: 1px solid var(--desktop-line);
+}
+.desktop-update-terminal > header > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--desktop-ink);
+}
+.desktop-terminal-status {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--desktop-muted);
+}
+.desktop-update-terminal[data-state="running"] .desktop-terminal-status,
+.desktop-update-terminal[data-state="queued"] .desktop-terminal-status {
+  background: var(--desktop-accent);
+  animation: orbis-terminal-pulse 1.5s ease-in-out infinite;
+}
+.desktop-update-terminal[data-state="complete"] .desktop-terminal-status {
+  background: var(--desktop-positive);
+}
+.desktop-update-terminal:is([data-state="failed"], [data-state="interrupted"]) .desktop-terminal-status {
+  background: var(--desktop-negative);
+}
+.desktop-update-terminal > pre {
+  min-height: 160px;
+  max-height: 340px;
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: inherit;
+  background: transparent;
+  font:
+    0.8125rem / 1.7 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  scrollbar-color: var(--desktop-line) transparent;
+}
+.desktop-update-terminal > pre:focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: -5px;
+}
+.desktop-update-terminal > footer {
+  border-top: 1px solid var(--desktop-line);
+}
+.desktop-update-terminal > footer > button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  color: var(--desktop-ink);
+  background: var(--desktop-surface);
+  font: inherit;
+}
+@keyframes orbis-terminal-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-terminal-status {
+    animation: none;
+  }
+}

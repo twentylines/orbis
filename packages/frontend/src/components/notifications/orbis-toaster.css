@@ -18,6 +18,11 @@
   scrollbar-width: thin;
   scrollbar-color: var(--desktop-line) transparent;
   pointer-events: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 .orbis-notifications:empty {
@@ -38,9 +43,9 @@ body:not(:has(.desktop)) .orbis-notifications {
   border-radius: 18px;
   background: var(--desktop-surface);
   color: var(--desktop-ink);
-  box-shadow:
-    0 12px 32px rgba(5, 22, 17, 0.18),
-    inset 0 1px var(--desktop-highlight);
+  box-shadow: none;
+  isolation: isolate;
+  clip-path: inset(0 round 18px);
   backdrop-filter: var(--orbis-glass-filter, blur(22px) saturate(1.15));
   -webkit-backdrop-filter: var(--orbis-glass-filter, blur(22px) saturate(1.15));
   pointer-events: auto;

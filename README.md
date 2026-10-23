@@ -20,7 +20,7 @@ This fetches the newest published release, including betas. See [installation re
 
 ![Orbis Monitor](screenshots/navigation/monitor.png)
 
-[Workspace](screenshots/navigation/workspace.png) · [Applications](screenshots/navigation/applications.png) · [App Store](screenshots/navigation/app-store.png)
+[Workspace](screenshots/navigation/workspace.png) · [Applications](screenshots/navigation/applications.png) · [App Store](screenshots/navigation/app-store.png) · [App details](screenshots/navigation/app-details.png) · [Phone app details](screenshots/navigation/phone-app-details.png)
 
 [Light app launcher](screenshots/navigation/launcher-light.png) · [Dark app launcher](screenshots/navigation/launcher-dark.png) · [Phone applications](screenshots/navigation/phone-applications.png) · [Phone uninstall review](screenshots/navigation/phone-uninstall.png)
 
@@ -34,7 +34,7 @@ This fetches the newest published release, including betas. See [installation re
 
 [First-run setup](screenshots/navigation/onboarding-light.png) · [Appearance, light](screenshots/appearance/desktop-light.png) · [Appearance, dark](screenshots/appearance/desktop-dark.png)
 
-Monitor, Workspace and phone Apps show the current source build on a disposable Linux host with a real installed app. Other views show earlier beta builds; see the [gallery](screenshots/navigation/README.md).
+Monitor and app details show the beta78 source build on a disposable Linux host with a real installed app. Workspace and phone Apps are from beta77; other views show earlier beta builds. See the [gallery](screenshots/navigation/README.md).
 
 [Earlier beta62 gallery](screenshots/live-beta62/README.md) · [Backup views](screenshots/backups/desktop.png)
 

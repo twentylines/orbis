@@ -194,7 +194,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             >
               <IconPin size={18} aria-hidden="true" />
             </Button>
-            <Link to="/apps" viewTransition>
+            <Link to="/apps">
               View all <IconArrowRight size={18} aria-hidden="true" />
             </Link>
           </div>
@@ -221,9 +221,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             <IconApps size={28} stroke={1.5} aria-hidden="true" />
             <strong>No apps installed</strong>
             <p>Install an app from the App Store.</p>
-            <Link to="/app-store" viewTransition>
-              Open App Store
-            </Link>
+            <Link to="/app-store">Open App Store</Link>
           </div>
         ) : null}
         {installed.length > 0 ? (
@@ -281,7 +279,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
           <div>
             <h2 id="workspace-activity-title">System status</h2>
           </div>
-          <Link to="/monitor" viewTransition aria-label="Expand System status">
+          <Link to="/monitor" aria-label="Expand System status">
             <IconDeviceDesktopAnalytics size={21} aria-hidden="true" />
           </Link>
         </div>
@@ -295,19 +293,14 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
         ) : (
           <div className="workspace-metrics">
             <div className="workspace-gauges">
-              <Link to="/monitor" viewTransition className="workspace-gauge" aria-label={`Open CPU monitor, ${number(cpuPercent, '%')}`}>
+              <Link to="/monitor" className="workspace-gauge" aria-label={`Open CPU monitor, ${number(cpuPercent, '%')}`}>
                 <span className="workspace-dial" style={{ '--dial-progress': `${Math.min(100, Math.max(0, cpuPercent ?? 0))}%` } as CSSProperties}>
                   <IconCpu size={17} aria-hidden="true" />
                   <strong>{typeof cpuPercent === 'number' ? number(cpuPercent, '%') : '—'}</strong>
                 </span>
                 <span>{system.data ? (system.data.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU') : 'CPU'}</span>
               </Link>
-              <Link
-                to="/monitor"
-                viewTransition
-                className="workspace-gauge"
-                aria-label={`Open memory monitor, ${number(memoryPercent, '%')}, ${memoryAmount}`}
-              >
+              <Link to="/monitor" className="workspace-gauge" aria-label={`Open memory monitor, ${number(memoryPercent, '%')}, ${memoryAmount}`}>
                 <span className="workspace-dial" style={{ '--dial-progress': `${Math.min(100, Math.max(0, memoryPercent ?? 0))}%` } as CSSProperties}>
                   <IconDeviceDesktopAnalytics size={17} aria-hidden="true" />
                   <strong>{typeof memoryPercent === 'number' ? number(memoryPercent, '%') : '—'}</strong>
@@ -329,7 +322,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                   </small>
                 </span>
               </Link>
-              <Link to="/monitor" viewTransition className="workspace-uptime">
+              <Link to="/monitor" className="workspace-uptime">
                 <span>
                   <IconClock size={18} aria-hidden="true" />
                   Uptime
@@ -337,7 +330,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                 <strong>{system.data ? formatUptime(system.data.cpu.uptimeSeconds) : '—'}</strong>
               </Link>
             </div>
-            <Link to="/monitor" viewTransition className="workspace-network">
+            <Link to="/monitor" className="workspace-network">
               <span className="workspace-network-heading">
                 <IconArrowsDownUp size={17} aria-hidden="true" /> Core network
               </span>
@@ -372,7 +365,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             <h2 id="workspace-operations-title">Recent operations</h2>
             <p>{activeTasks.length ? `${activeTasks.length} in progress` : 'Application activity'}</p>
           </div>
-          <Link to="/tasks" viewTransition>
+          <Link to="/tasks">
             View all <IconArrowRight size={18} aria-hidden="true" />
           </Link>
         </div>
@@ -388,7 +381,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
               const time = new Date(task.updatedAt).toLocaleTimeString();
               return (
                 <li key={task.id}>
-                  <Link to="/tasks" viewTransition aria-label={`${title}, ${taskStates[task.status]}, ${time}`} title={title}>
+                  <Link to="/tasks" aria-label={`${title}, ${taskStates[task.status]}, ${time}`} title={title}>
                     <span>
                       <strong>
                         {taskLabels[task.action]} <span className="workspace-recent-app-name">{name}</span>
@@ -424,11 +417,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
         ) : (
           <p>Waiting for application status.</p>
         )}
-        {attention > 0 ? (
-          <Link to="/apps" viewTransition>
-            Review applications
-          </Link>
-        ) : null}
+        {attention > 0 ? <Link to="/apps">Review applications</Link> : null}
       </section>
     ),
   };
@@ -458,7 +447,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
           >
             <IconAdjustmentsHorizontal size={18} aria-hidden="true" /> <span>{editing ? 'Done editing' : 'Edit workspace'}</span>
           </button>
-          <Link to="/app-store" viewTransition className="workspace-add">
+          <Link to="/app-store" className="workspace-add">
             <IconPlus size={18} aria-hidden="true" /> <span>Install an app</span>
           </Link>
         </div>

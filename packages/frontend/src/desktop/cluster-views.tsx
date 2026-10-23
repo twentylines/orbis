@@ -129,7 +129,7 @@ export function ClusterOverview() {
               <strong>{pending ? '—' : servers.length - responding}</strong>
             </div>
           </div>
-          <Link to="/updates" viewTransition className="cluster-view-text-link">
+          <Link to="/updates" className="cluster-view-text-link">
             Review updates <IconArrowRight size={17} aria-hidden="true" />
           </Link>
         </div>
@@ -235,7 +235,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
           </p>
         </div>
         <Button asChild>
-          <Link to="/updates" viewTransition>
+          <Link to="/updates">
             Updates <IconArrowRight size={17} aria-hidden="true" />
           </Link>
         </Button>

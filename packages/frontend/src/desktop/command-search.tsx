@@ -56,7 +56,7 @@ export function CommandSearch() {
     setDebounced('');
     const path = pendingPath.current;
     pendingPath.current = null;
-    if (path) void navigate(path, { viewTransition: !reducedMotion() && path.split('/')[1] !== window.location.pathname.split('/')[1] });
+    if (path) void navigate(path);
   }, [navigate]);
 
   const close = useCallback(
