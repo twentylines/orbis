@@ -117,6 +117,33 @@ class ReplacementTests(unittest.TestCase):
             with self.subTest(setting=setting):
                 self.assertEqual(self.create("hold")["HostConfig"]["OomKillDisable"], expected)
 
+    def test_only_probed_logging_defaults_and_original_overrides_are_accepted(self):
+        self.raw["HostConfig"]["LogConfig"] = {"Type": "json-file", "Config": {"max-file": "5"}}
+        self.record["quiescedConfiguration"] = REPLACE.APPS.digest({key: self.raw[key] for key in ("Config", "HostConfig")})
+        defaults = {"Type": "json-file", "Config": {"max-size": "10m", "max-file": "3"}}
+        self.record["review"]["image"]["loggingDefaults"] = REPLACE.COMPAT.logging_defaults(defaults)
+        for change in (None, "override", "default", "missing", "extra", "driver", "binds"):
+            with self.subTest(change=change):
+                self.create("hold")
+                config = self.created["HostConfig"]["LogConfig"]
+                config["Config"]["max-size"] = "10m"
+                if change == "override": config["Config"]["max-file"] = "6"
+                if change == "default": config["Config"]["max-size"] = "20m"
+                if change == "missing": config["Config"].pop("max-size")
+                if change == "extra": config["Config"]["labels"] = "unreviewed"
+                if change == "driver": config["Type"] = "local"
+                if change == "binds": self.created["HostConfig"]["Binds"].append("/unreviewed:/extra:rw")
+                if change is None:
+                    self.assertEqual(REPLACE.candidate(self.record, self.reader)["Id"], NEW)
+                    self.record["candidate"] = {"id": NEW, "definition": REPLACE.candidate_definition(self.created)}
+                    config["Config"]["max-size"] = "20m"
+                    with self.assertRaisesRegex(REPLACE.ReplacementError, "definition changed"):
+                        REPLACE.candidate(self.record, self.reader)
+                    self.record.pop("candidate")
+                else:
+                    with self.assertRaisesRegex(REPLACE.ReplacementError, "Binds" if change == "binds" else "LogConfig"):
+                        REPLACE.candidate(self.record, self.reader)
+
     def test_wrong_transaction_image_or_phase_is_not_removed_or_adopted(self):
         for key, value in [("Image", "sha256:" + "f" * 64), ("transaction", "another"), ("phase", "normal")]:
             self.create("hold")
@@ -128,8 +155,25 @@ class ReplacementTests(unittest.TestCase):
     def test_unrecorded_created_container_must_match_full_creation_intent(self):
         self.create("hold")
         self.created["HostConfig"]["Binds"].append("/unreviewed:/data/extra:rw")
-        with self.assertRaisesRegex(REPLACE.ReplacementError, "host settings"):
+        with self.assertRaisesRegex(REPLACE.ReplacementError, "host settings: Binds") as error:
             REPLACE.candidate(self.record, self.reader)
+        self.assertNotIn("/unreviewed", str(error.exception))
+
+    def test_apply_accepts_live_estimate_growth_but_not_identity_or_configuration_drift(self):
+        class BeforeMutation(BaseException):
+            pass
+        value = {"mode": "keep", "target": TARGET, "journal": "/private/replacement.json", "files": {".env": "sealed"}, "checkpoint": {"roles": {OLD: "controller"}, "storage": {"bundle": "/private/backup", "resources": [{"inode": 1}], "estimatedBytes": 4096}}}
+        for field in ("size", "inode", "files"):
+            changed = copy.deepcopy(value)
+            changed["checkpoint"]["storage"]["estimatedBytes"] += 4096
+            if field == "inode":
+                changed["checkpoint"]["storage"]["resources"][0]["inode"] += 1
+            if field == "files":
+                changed["files"][".env"] = "different"
+            with self.subTest(field=field), mock.patch.object(REPLACE, "validate_review"), mock.patch.object(REPLACE, "review", return_value=changed), mock.patch.object(REPLACE, "save", side_effect=BeforeMutation()) as save:
+                with self.assertRaises(BeforeMutation if field == "size" else REPLACE.ReplacementError):
+                    REPLACE.apply(Path("/install"), self.reader, value, host_writers_stopped=True)
+                self.assertEqual(save.call_count, 1 if field == "size" else 0)
 
     def test_rejected_owned_creation_can_be_removed_without_starting_it(self):
         with tempfile.TemporaryDirectory() as folder:

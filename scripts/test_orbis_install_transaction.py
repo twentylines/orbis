@@ -150,6 +150,36 @@ class TransactionTests(unittest.TestCase):
             self.review()
         self.assertEqual(self.docker.calls, [])
 
+    def test_live_size_estimates_do_not_invalidate_an_unchanged_review(self):
+        original = TX.STORAGE.review
+        calls = []
+        def growing(*args, **kwargs):
+            value = original(*args, **kwargs)
+            calls.append(kwargs)
+            value["estimatedBytes"] += len(calls) * 4096
+            value["reviewId"] = TX.APPS.digest({key: item for key, item in value.items() if key != "reviewId"})
+            return value
+        with mock.patch.object(TX.STORAGE, "review", side_effect=growing):
+            self.review()
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(call.get("check_capacity", True) for call in calls))
+        self.assertEqual(self.docker.calls, [])
+
+    def test_live_size_changes_cannot_hide_storage_identity_changes(self):
+        original = TX.STORAGE.review
+        calls = 0
+        def changed(*args, **kwargs):
+            nonlocal calls
+            value = original(*args, **kwargs)
+            calls += 1
+            if calls == 2:
+                value["estimatedBytes"] += 4096
+                value["resources"][0]["inode"] += 1
+            return value
+        with mock.patch.object(TX.STORAGE, "review", side_effect=changed), self.assertRaisesRegex(TX.TransactionError, "changed during review"):
+            self.review()
+        self.assertEqual(self.docker.calls, [])
+
     def test_journal_cannot_be_in_app_storage(self):
         self.journal = self.root / "app-data" / "journal.json"
         with self.assertRaises(ValueError):

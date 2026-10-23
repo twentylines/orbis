@@ -143,6 +143,34 @@ class GuidedTests(unittest.TestCase):
         self.assertNotEqual(GUIDE.semantic_review(value), GUIDE.semantic_review(changed))
         self.assertEqual(value, original)
 
+    def test_executor_failures_are_reported_once_without_guessing_storage_churn(self):
+        for rolled_back in (False, True):
+            with self.subTest(rolled_back=rolled_back), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder) / "install"; root.mkdir()
+                state = Path(folder) / "private"; state.mkdir(mode=0o700)
+                reader = SimpleNamespace(context="default", lock_fd=None)
+                review = {"checkpoint": {"storage": {"preservedAppContainers": []}}}
+                def execute(arguments, output, errors):
+                    errors.write_text(json.dumps({"schema": GUIDE.REPLACE.SCHEMA, "result": "replacement-failed", "message": "A reviewed setting differs: DnsOptions"}))
+                    if rolled_back:
+                        GUIDE.APPS.write_journal(Path(arguments[arguments.index("--journal") + 1]), {"stage": "rolled-back", "failure": {"message": "Host settings differ: DnsOptions"}})
+                    return 2
+                output = io.StringIO()
+                with mock.patch.object(GUIDE.REPLACE.TX.RESTORE, "runtime"), mock.patch.object(GUIDE.HOST, "host_lock", return_value=contextlib.nullcontext(1)), mock.patch.object(GUIDE.REPLACE, "review", return_value=review), mock.patch.object(GUIDE, "command", side_effect=execute) as command, contextlib.redirect_stdout(output):
+                    with self.assertRaisesRegex(ValueError, "DnsOptions") as failure:
+                        GUIDE.replacement(root, reader, MANIFEST, state, "keep", lambda _: None)
+                self.assertEqual(command.call_count, 1)
+                self.assertNotIn("Storage usage changed", output.getvalue())
+                self.assertNotIn("Recover with", str(failure.exception))
+                self.assertIn("recovered" if rolled_back else "Nothing was replaced", str(failure.exception))
+
+    def test_unstructured_executor_logs_remain_private(self):
+        with tempfile.TemporaryDirectory() as folder:
+            errors = Path(folder) / "stderr.json"
+            for content in ("private fixture value", json.dumps({"schema": "wrong", "message": "private fixture value"}), "x" * 20000):
+                errors.write_text(content)
+                self.assertEqual(GUIDE.executor_failure(errors), "The replacement executor could not finish")
+
     def test_wrong_recovery_executor_never_runs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -2,7 +2,6 @@
 """Install Orbis or replace a discovered Runtipi installation on this host."""
 
 import argparse
-import copy
 import hashlib
 import json
 import os
@@ -82,14 +81,18 @@ def select_installation(report, root=None, ask=None):
 
 
 def semantic_review(value):
-    result = copy.deepcopy(value)
-    result.pop("reviewId", None)
-    checkpoint = result["checkpoint"]
-    checkpoint.pop("reviewId", None)
-    storage = checkpoint["storage"]
-    storage.pop("reviewId", None)
-    storage.pop("estimatedBytes", None)
-    return result
+    return REPLACE.semantic_review(value)
+
+
+def executor_failure(path):
+    try:
+        with path.open() as stream:
+            value = json.loads(stream.read(16385))
+        if value.get("schema") == REPLACE.SCHEMA and value.get("result") == "replacement-failed" and isinstance(value.get("message"), str):
+            return " ".join(value["message"].split())[:800]
+    except (OSError, ValueError, AttributeError):
+        pass
+    return "The replacement executor could not finish"
 
 
 def command(arguments, out, err):
@@ -165,26 +168,23 @@ def replacement(root, reader, manifest, state, mode, confirm, display=None, *, b
     script = str(Path(__file__).with_name("orbis-install-replace.py"))
     APPS.write_journal(root / ".orbis-installation.json", {"schema": "orbis.installer-pointer.v1", "root": str(root), "dockerContext": reader.context, "kind": "replacement", "journal": str(journal), "executor": script, "executorSha256": hashlib.sha256(Path(script).read_bytes()).hexdigest()})
     arguments = [script, "apply", str(root), "--docker-context", reader.context, "--mode", mode, "--review", str(review_path), "--journal", str(journal), "--confirm-root", str(root), "--host-writers-stopped"]
-    for attempt in range(3):
-        code = None
-        with display.step("Backing up storage and replacing the controller", completed=lambda: code == 0):
-            code = command(arguments, run / f"apply-{attempt}.stdout.json", run / f"apply-{attempt}.stderr.json")
-            if code and (journal.exists() or attempt == 2):
-                raise ValueError(f"Installation did not complete. Preserve {run}. Recover with: python3 {script} recover {root} --docker-context {reader.context} --journal {journal} --confirm-root {root} --host-writers-stopped")
-        if code == 0:
-            result = json.loads((run / f"apply-{attempt}.stdout.json").read_text())
-            if result.get("result") != "orbis-installed" or result.get("mode") != mode:
-                raise ValueError("The executor did not report a completed installation; preserve its journal")
-            return result
-        with HOST.host_lock(root) as descriptor:
-            reader.lock_fd = descriptor
-            refreshed = REPLACE.review(root, reader, manifest, backup, journal, mode=mode, backup_scope=backup_scope)
-        reader.lock_fd = None
-        if semantic_review(refreshed) != semantic_review(review):
-            raise ValueError("Installation configuration or container identities changed after confirmation. Nothing was replaced; run the installer again")
-        print("Storage usage changed while the host was live; refreshing the size estimate.", flush=True)
-        review = refreshed
-        APPS.write_journal(review_path, review)
+    code = None
+    output, errors = run / "apply-0.stdout.json", run / "apply-0.stderr.json"
+    with display.step("Backing up storage and replacing the controller", completed=lambda: code == 0):
+        code = command(arguments, output, errors)
+        if code:
+            reason = executor_failure(errors)
+            if not journal.exists():
+                raise ValueError(f"{reason}. Nothing was replaced. Private logs: {run}")
+            record = REPLACE.TX.RESTORE.private_json(journal)
+            if record.get("stage") == "rolled-back":
+                reason = record.get("failure", {}).get("message") or reason
+                raise ValueError(f"{reason}. The original Runtipi installation was recovered. Private logs: {run}")
+            raise ValueError(f"{reason}. Preserve {run}. Recover with: python3 {script} recover {root} --docker-context {reader.context} --journal {journal} --confirm-root {root} --host-writers-stopped")
+    result = json.loads(output.read_text())
+    if result.get("result") != "orbis-installed" or result.get("mode") != mode:
+        raise ValueError("The executor did not report a completed installation; preserve its journal")
+    return result
 
 
 def main():

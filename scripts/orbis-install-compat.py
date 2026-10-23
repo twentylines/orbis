@@ -2,6 +2,7 @@
 """Check an installed database against migrations inside a pinned Orbis image."""
 
 import json
+import hashlib
 import re
 import uuid
 
@@ -101,7 +102,16 @@ def idle_app_queue(reader, identifier: str, *, stopped_controller: bool) -> dict
     return state
 
 
-def image_ledger(reader, target: dict) -> dict:
+def logging_defaults(value: dict) -> dict:
+    if not isinstance(value, dict) or not isinstance(value.get("Type"), str) or not re.fullmatch(r"[!-~]{1,256}", value["Type"]):
+        raise CompatibilityError("Docker returned invalid logging defaults")
+    options = {} if value.get("Config") is None else value["Config"]
+    if not isinstance(options, dict) or len(options) > 128 or any(not isinstance(key, str) or not 1 <= len(key) <= 256 or not isinstance(item, str) or len(item) > 16384 for key, item in options.items()):
+        raise CompatibilityError("Docker returned invalid logging defaults")
+    return {"driver": value["Type"], "options": {key: hashlib.sha256(item.encode()).hexdigest() for key, item in options.items()}}
+
+
+def image_ledger(reader, target: dict, *, logging_driver=None) -> dict:
     reference = f"{target['image']}@{target['digest']}"
     metadata = reader._object([
         "image", "inspect", "--format", '{"id":{{json .Id}},"os":{{json .Os}},"labels":{{json .Config.Labels}}}', reference,
@@ -112,15 +122,18 @@ def image_ledger(reader, target: dict) -> dict:
     ):
         raise CompatibilityError("The local Orbis image does not match the verified release")
     token = str(uuid.uuid4())
+    if logging_driver is not None:
+        logging_defaults({"Type": logging_driver})
     identifier = reader._read([
         "container", "create", "--name", "orbis-install-probe-" + token,
         "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--memory", "96m", "--cpus", "0.5", "--pids-limit", "64", "--restart", "no",
-        "--label", "io.orbis.installation.probe=" + token, "--entrypoint", "node", reference, "-e", IMAGE_PROBE,
+        "--label", "io.orbis.installation.probe=" + token, *(["--log-driver", logging_driver] if logging_driver is not None else []), "--entrypoint", "node", reference, "-e", IMAGE_PROBE,
     ])
     if not re.fullmatch(r"[0-9a-f]{64}", identifier):
         raise CompatibilityError("The isolated image probe did not return a container identity")
     try:
+        defaults = logging_defaults(reader._object(["container", "inspect", "--format", "{{json .HostConfig.LogConfig}}", identifier])) if logging_driver is not None else None
         expected = ledger(bounded_json(reader._read(["container", "start", "--attach", identifier])))
     finally:
         raw = reader.app(identifier)
@@ -129,4 +142,4 @@ def image_ledger(reader, target: dict) -> dict:
         if raw.get("state") == "running":
             reader.change(["stop", identifier])
         reader.change(["rm", identifier])
-    return {"image": reference, "imageId": metadata["id"], "ledger": expected}
+    return {"image": reference, "imageId": metadata["id"], "ledger": expected, **({"loggingDefaults": defaults} if defaults is not None else {})}

@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import unittest
+from unittest import mock
 
 
 SPEC = importlib.util.spec_from_file_location("install_compat", __import__('pathlib').Path(__file__).with_name("orbis-install-compat.py"))
@@ -24,6 +25,41 @@ class Reader:
 
 
 class CompatibilityTests(unittest.TestCase):
+    def test_logging_defaults_are_bounded_and_contain_no_option_values(self):
+        value = {"Type": "logging-plugin:1", "Config": {"token": "private-fixture-value", "endpoint": "private-fixture-endpoint"}}
+        result = COMPAT.logging_defaults(value)
+        self.assertEqual(result["driver"], "logging-plugin:1")
+        self.assertEqual(set(result["options"]), {"token", "endpoint"})
+        self.assertNotIn("private-fixture", json.dumps(result))
+        for invalid in ({}, {"Type": "bad\nname"}, {"Type": "json-file", "Config": []}, {"Type": "json-file", "Config": {"limit": 3}}, {"Type": "json-file", "Config": {"limit": "x" * 16385}}):
+            with self.subTest(invalid_type=type(invalid)), self.assertRaises(COMPAT.CompatibilityError):
+                COMPAT.logging_defaults(invalid)
+
+    def test_existing_image_probe_seals_the_original_logging_driver_defaults(self):
+        target = {"image": "ghcr.io/twentylines/orbis", "digest": "sha256:" + "a" * 64, "commit": "b" * 40}
+        identifier, image_id, token = "c" * 64, "sha256:" + "d" * 64, "probe-token"
+        class Probe:
+            def __init__(self): self.calls = []
+            def _object(self, args):
+                self.calls.append(args)
+                if args[0] == "image": return {"id": image_id, "os": "linux", "labels": {"org.opencontainers.image.revision": target["commit"]}}
+                return {"Type": "json-file", "Config": {"max-size": "10m"}}
+            def _read(self, args):
+                self.calls.append(args)
+                return identifier if args[1] == "create" else json.dumps([migration(1)])
+            def app(self, key):
+                assert key == identifier
+                return {"imageId": image_id, "labels": {"io.orbis.installation.probe": token}, "state": "exited"}
+            def change(self, args): self.calls.append(args)
+        probe = Probe()
+        with mock.patch.object(COMPAT.uuid, "uuid4", return_value=token):
+            result = COMPAT.image_ledger(probe, target, logging_driver="json-file")
+        create = next(call for call in probe.calls if call[:2] == ["container", "create"])
+        self.assertEqual(create[create.index("--log-driver") + 1], "json-file")
+        self.assertEqual(result["loggingDefaults"], COMPAT.logging_defaults({"Type": "json-file", "Config": {"max-size": "10m"}}))
+        self.assertNotIn("10m", json.dumps(result))
+        self.assertEqual(probe.calls[-1], ["rm", identifier])
+
     def test_known_prefix_and_exact_history_are_compatible(self):
         target = [migration(1), migration(2)]
         COMPAT.require_compatible(target[:1], target)

@@ -105,6 +105,26 @@ class ControllerScopeTests(unittest.TestCase):
         self.assertEqual(SNAPSHOT.rsync_excludes(["data[*]?"]), [r"--exclude=/data\[\*]\?"])
 
     @unittest.skipUnless(sys.platform == "linux", "requires Linux rsync with ACL/xattr support")
+    def test_live_controller_growth_is_copied_after_quiescing_without_stopping_apps(self):
+        database = self.root / "controller-data"
+        database.write_bytes(b"original database")
+        original = STORAGE.review
+        def growing(*args, **kwargs):
+            if self.docker.controller_state == "running":
+                with database.open("ab") as stream:
+                    stream.write(b"x" * 4096)
+            return original(*args, **kwargs)
+        before_apps = copy.deepcopy(self.docker.apps)
+        with mock.patch.object(STORAGE, "review", side_effect=growing):
+            value = self.review()
+            TX.checkpoint(self.root, self.docker, value, host_writers_stopped=True)
+        self.assertGreater(len(database.read_bytes()), value["storage"]["estimatedBytes"])
+        self.assertEqual((self.bundle / "resource-0000/controller-data").read_bytes(), database.read_bytes())
+        STORAGE.verified_manifest(self.bundle)
+        self.assertEqual(self.docker.apps, before_apps)
+        self.assertTrue(all(args[-1] not in before_apps for args, _ in self.docker.calls))
+
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux rsync with ACL/xattr support")
     def test_checkpoint_and_recovery_preserve_newer_live_app_writes(self):
         config = self.shared_overrides()
         before_apps = copy.deepcopy(self.docker.apps)

@@ -204,7 +204,7 @@ class InstallerPresentationTests(unittest.TestCase):
             pass
         self.assertIn("=" * 54, ui.frame("Detected", 0, status="[ok]"))
         ui.set_remaining_steps(3)
-        self.assertIn("1/4 stages", ui.frame("Downloading image", 2))
+        self.assertNotIn("stages", ui.frame("Downloading image", 2))
         self.assertNotIn("%", ui.frame("Downloading image", 20))
         with ui.step("Downloading image", completed=lambda: False):
             pass
@@ -213,9 +213,21 @@ class InstallerPresentationTests(unittest.TestCase):
             with ui.step(label):
                 pass
         self.assertEqual(ui.completed, ui.total)
-        self.assertIn("[ok] 4/4", output.getvalue())
-        self.assertEqual(output.getvalue().count("Step 02"), 2)
+        self.assertIn("[ok]", output.getvalue())
+        self.assertEqual(output.getvalue().count("[2/4] Downloading image"), 2)
+        self.assertIn("[4/4] Enabling system administration", output.getvalue())
+        self.assertNotIn("Step ", output.getvalue())
         self.assertEqual(ui.frame("Done", 0, status="[ok]").count("="), 54)
+
+    def test_plain_output_uses_the_same_bracketed_stage_label(self):
+        output = io.StringIO()
+        ui = UI.Presentation(stream=output)
+        ui.set_remaining_steps(2)
+        with ui.step("Verifying the release"):
+            pass
+        with ui.step("Starting Orbis"):
+            pass
+        self.assertEqual(output.getvalue(), "[1/2] Verifying the release...\n[2/2] Starting Orbis...\n")
 
 
 if __name__ == "__main__":

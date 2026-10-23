@@ -256,6 +256,12 @@ def review(root: Path, reader, bundle: Path, *, check_capacity: bool = True, exi
     return result
 
 
+def semantic_review(value: dict) -> dict:
+    # Live databases and logs may grow before their writers are paused. Capacity
+    # is checked on every review; neither byte estimates nor their seal are identity.
+    return {key: item for key, item in value.items() if key not in {"reviewId", "estimatedBytes"}}
+
+
 def require_quiet(root: Path, reader, saved: dict) -> None:
     current = review(root, reader, Path(saved["bundle"]), scope=saved.get("backupScope", "full"))
     if current["identityHash"] != saved["identityHash"]:

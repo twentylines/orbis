@@ -8,6 +8,7 @@ rolls back; after activation begins, recovery finishes the recorded cutover.
 
 import argparse
 import copy
+import hashlib
 import http.client
 import importlib.util
 import json
@@ -121,6 +122,10 @@ def validate_review(value):
         raise ReplacementError("The checkpoint and replacement journals do not match")
 
 
+def semantic_review(value):
+    return {key: TX.semantic_review(item) if key == "checkpoint" else item for key, item in value.items() if key != "reviewId"}
+
+
 def review(root, reader, target, bundle, journal, *, mode="keep", backup_scope="full"):
     if mode not in {"keep", "fresh"}:
         raise ReplacementError("Choose Keep or Fresh replacement")
@@ -131,7 +136,6 @@ def review(root, reader, target, bundle, journal, *, mode="keep", backup_scope="
         raise ReplacementError("Use the Orbis updater for an already adopted installation")
     UPDATE.verify_release(target)
     Engine(reader)
-    image = COMPAT.image_ledger(reader, target)
     checkpoint = TX.review(root, reader, bundle, checkpoint_path(journal), scope=backup_scope)
     journal = TX.private_paths(root, checkpoint["storage"], journal)
     if journal.exists() or journal.is_symlink():
@@ -140,6 +144,7 @@ def review(root, reader, target, bundle, journal, *, mode="keep", backup_scope="
     current = inspect(reader, controller)
     if current["Config"]["Image"] != "ghcr.io/runtipi/runtipi:v4.10.1" or current["Name"] != "/runtipi" or current["HostConfig"].get("ContainerIDFile"):
         raise ReplacementError("The original controller requires a separate configuration review")
+    image = COMPAT.image_ledger(reader, target, logging_driver=current["HostConfig"]["LogConfig"]["Type"])
     # Validate persistent Compose intent as well as the actual running container.
     planned = HOST.PLAN.plan(root, target)
     if planned["configuredImage"] != current["Config"]["Image"]:
@@ -260,8 +265,25 @@ def matches_intent(record, reader, raw):
             actual, item = sorted(actual or []), sorted(item or [])
         if actual != item:
             raise ReplacementError("A newly created controller differs from its recorded configuration intent")
-    if canonical_host(raw["HostConfig"]) != canonical_host(intended["HostConfig"]):
-        raise ReplacementError("A newly created controller differs from its reviewed host settings")
+    actual_host, intended_host = canonical_host(raw["HostConfig"]), canonical_host(intended["HostConfig"])
+    defaults = record["review"]["image"].get("loggingDefaults")
+    if defaults is not None:
+        actual_log, intended_log = actual_host.get("LogConfig", {}), intended_host.get("LogConfig", {})
+        actual_options, intended_options = actual_log.get("Config") or {}, intended_log.get("Config") or {}
+        inherited = defaults["options"]
+        # Docker merges daemon logging defaults into a new container. Verify them
+        # against the isolated image probe, while retaining every explicit override.
+        if (
+            actual_log.get("Type") != intended_log.get("Type") or defaults["driver"] != intended_log.get("Type")
+            or set(actual_options) != set(inherited) | set(intended_options)
+            or any(actual_options.get(key) != item for key, item in intended_options.items())
+            or any(hashlib.sha256(actual_options[key].encode()).hexdigest() != item for key, item in inherited.items() if key not in intended_options)
+        ):
+            raise ReplacementError("A newly created controller differs from its reviewed host settings: LogConfig")
+        intended_host["LogConfig"] = copy.deepcopy(actual_log)
+    different = sorted(key for key in actual_host.keys() | intended_host.keys() if actual_host.get(key) != intended_host.get(key))
+    if different:
+        raise ReplacementError("A newly created controller differs from its reviewed host settings: " + ", ".join(different))
     networks = raw.get("NetworkSettings", {}).get("Networks", {})
     if set(networks) != set(intended["NetworkingConfig"]["EndpointsConfig"]):
         raise ReplacementError("A newly created controller has different network attachments")
@@ -477,7 +499,7 @@ def apply(root, reader, value, *, host_writers_stopped):
     if not host_writers_stopped:
         raise ReplacementError("Confirm native host and remote storage writers are stopped before replacement")
     fresh = review(root, reader, value["target"], Path(value["checkpoint"]["storage"]["bundle"]), Path(value["journal"]), mode=value["mode"], backup_scope=value["checkpoint"]["storage"].get("backupScope", "full"))
-    if fresh != value:
+    if semantic_review(fresh) != semantic_review(value):
         raise ReplacementError("The installation changed; review the replacement again")
     record = {"schema": SCHEMA, "id": str(uuid.uuid4()), "stage": "prepared", "review": value}
     record["retainedName"] = "orbis-previous-" + record["id"]
@@ -527,7 +549,7 @@ def apply(root, reader, value, *, host_writers_stopped):
     except Exception as error:
         record["failure"] = {
             "stage": record["stage"], "type": type(error).__name__,
-            "message": str(error) if isinstance(error, (ReplacementError, COMPAT.CompatibilityError, FRESH.FreshError)) else "A replacement step could not finish",
+            "message": str(error) if isinstance(error, (ReplacementError, COMPAT.CompatibilityError, FRESH.FreshError, TX.TransactionError, TX.STORAGE.StorageError)) else "A replacement step could not finish",
         }
         save(record)
         if record["stage"] in PRECOMMIT:
@@ -611,7 +633,7 @@ def main():
         print(json.dumps(result, indent=2))
         return 0
     except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
-        message = str(error) if isinstance(error, (ReplacementError, COMPAT.CompatibilityError, FRESH.FreshError)) else "Replacement could not finish; inspect the private journal before continuing"
+        message = str(error) if isinstance(error, (ReplacementError, COMPAT.CompatibilityError, FRESH.FreshError, TX.TransactionError, TX.STORAGE.StorageError)) else "Replacement could not finish; inspect the private journal before continuing"
         print(json.dumps({"schema": SCHEMA, "result": "replacement-failed", "message": message}), file=sys.stderr)
         return 2
 

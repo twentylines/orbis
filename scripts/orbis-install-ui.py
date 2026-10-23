@@ -99,18 +99,15 @@ class Presentation:
 
     def frame(self, label, tick, elapsed=0, status=None, detail=None, fraction=None):
         width = max(1, self.width() - 1)
-        count = f"{self.completed}/{self.total} stages" if self.total else "Working"
-        caption = f"{status or count}  {elapsed:.1f}s"
-        if status and self.total:
-            caption = f"{status} {self.completed}/{self.total}  {elapsed:.1f}s"
+        caption = f"{status}  {elapsed:.1f}s" if status else f"{elapsed:.1f}s"
         if detail and not status and width >= 64:
-            caption = f"{count}  /  {detail}  /  {elapsed:.1f}s"
+            caption = f"{detail}  /  {elapsed:.1f}s"
         if width < 36:
-            caption = status or (f"{self.completed}/{self.total}" if self.total else f"{elapsed:.0f}s")
+            caption = status or f"{elapsed:.0f}s"
         if width < len(caption) + 8:
             return caption[:width]
         cells = max(4, min(54, width - len(caption) - 4))
-        # The bar belongs to the current operation; stage counts stay separate.
+        # The bar belongs to the current operation; the heading identifies its stage.
         # Layer counts are not byte percentages, and unknown work stays animated.
         done = cells if status == "[ok]" else min(cells, int(cells * fraction)) if fraction is not None else 0
         end = cells
@@ -131,8 +128,9 @@ class Presentation:
 
     @contextlib.contextmanager
     def step(self, label, *, completed=None, detail=None):
+        heading = f"[{self.completed + 1}/{self.total}] {label}" if self.total else label
         if not self.animation:
-            self.write(f"{label}...\n")
+            self.write(f"{heading}...\n")
             yield
             if completed is None or completed():
                 self.completed += 1
@@ -150,7 +148,6 @@ class Presentation:
         worker = threading.Thread(target=draw, name="orbis-installer-display", daemon=True)
         success = False
         try:
-            heading = f"Step {self.completed + 1:02d}  {label}"
             self.write(textwrap.fill(heading, width=max(16, self.width() - 1), subsequent_indent="  ", break_long_words=False, break_on_hyphens=False) + "\n")
             self.write("\033[?25l" + self.frame(label, 0))
             worker.start()

@@ -57,6 +57,10 @@ def private_paths(root: Path, storage: dict, journal: Path) -> Path:
     return journal
 
 
+def semantic_review(value: dict) -> dict:
+    return {key: STORAGE.semantic_review(item) if key == "storage" else item for key, item in value.items() if key != "reviewId"}
+
+
 def review(root: Path, reader, bundle: Path, journal: Path, *, scope: str = "full") -> dict:
     storage = STORAGE.review(root, reader, bundle, scope=scope)
     if storage["conflictingWriters"]:
@@ -85,7 +89,7 @@ def review(root: Path, reader, bundle: Path, journal: Path, *, scope: str = "ful
     value["reviewId"] = APPS.digest(value)
     validate_review(value)
     require_healthy(reader, controller)
-    if STORAGE.review(root, reader, bundle, scope=scope) != storage:
+    if STORAGE.semantic_review(STORAGE.review(root, reader, bundle, scope=scope)) != STORAGE.semantic_review(storage):
         raise TransactionError("The installation changed during review")
     return value
 
@@ -144,7 +148,7 @@ def checkpoint(root: Path, reader, value: dict, *, host_writers_stopped: bool) -
     validate_review(value)
     if not host_writers_stopped:
         raise TransactionError("Confirm native host and remote storage writers are stopped before checkpointing")
-    if review(root, reader, Path(value["storage"]["bundle"]), Path(value["journal"]), scope=value["storage"].get("backupScope", "full")) != value:
+    if semantic_review(review(root, reader, Path(value["storage"]["bundle"]), Path(value["journal"]), scope=value["storage"].get("backupScope", "full"))) != semantic_review(value):
         raise TransactionError("The installation changed; review it again before stopping services")
     RESTORE.runtime()
     record = {"schema": SCHEMA, "id": str(uuid.uuid4()), "stage": "prepared", "review": value}
