@@ -23,11 +23,11 @@ export function useSectionMotion() {
   const location = useLocation();
   const navigation = useNavigation();
   const navigationType = useNavigationType();
-  const path = navigation.location?.pathname ?? location.pathname;
-  const key = navigation.location?.key ?? location.key;
+  const path = location.pathname;
+  const key = location.key;
   const previous = useRef({ path: location.pathname, key: location.key, index: undefined as number | undefined });
   const committed = useRef({ path: location.pathname, index: historyIndex() });
-  const action = navigation.location ? (historyIndex() !== previous.current.index ? 'POP' : 'PUSH') : navigationType;
+  const action = navigationType;
   useHomeMotion(
     location.key,
     location.pathname === '/dashboard',
@@ -39,6 +39,7 @@ export function useSectionMotion() {
   const capture = useRef<(() => void) | null>(null);
   const animatedSurface = useRef<HTMLElement | null>(null);
   const generation = useRef(0);
+  const cleanupMotion = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
     previous.current.index = historyIndex();
@@ -70,6 +71,7 @@ export function useSectionMotion() {
     cache();
     return () => {
       generation.current++;
+      cleanupMotion.current?.();
       for (const animation of animations.current) animation.cancel();
       animations.current = [];
       capture.current = null;
@@ -90,6 +92,9 @@ export function useSectionMotion() {
     const before = previous.current;
     const nextIndex = historyIndex();
     previous.current = { path, key, index: nextIndex };
+    const fromSection = sectionIndex(before.path);
+    const toSection = sectionIndex(path);
+    if (fromSection === toSection) return;
     const view = document.querySelector<HTMLElement>(routeSelector);
     if (!view) return;
     const surface = view.querySelector<HTMLElement>(surfaceSelector);
@@ -99,17 +104,17 @@ export function useSectionMotion() {
         ? visibleSectionBounds(view.getBoundingClientRect(), window.innerHeight)
         : (origin.current ?? settled.current);
     origin.current = null;
+    cleanupMotion.current?.();
     generation.current++;
     const run = generation.current;
     for (const animation of animations.current) animation.cancel();
     animations.current = [];
     view.dataset.sectionPhase = 'ready';
+    delete view.dataset.sectionMotion;
     const bounds = view.getBoundingClientRect();
     const to = visibleSectionBounds(bounds, window.innerHeight);
     settled.current = to;
-    const fromSection = sectionIndex(before.path);
-    const toSection = sectionIndex(path);
-    if (fromSection === toSection || prefersReducedMotion() || typeof view.animate !== 'function') return;
+    if (prefersReducedMotion() || typeof view.animate !== 'function') return;
     const direction = sectionDirection(fromSection, toSection, action, before.index, nextIndex);
     if (!surface) return;
     view.dataset.sectionMotion = 'true';
@@ -176,7 +181,7 @@ export function useSectionMotion() {
       if (typeof startedAt === 'number') animation.startTime = startedAt;
       observer.observe(element);
     }
-    return () => {
+    cleanupMotion.current = () => {
       observer.disconnect();
       cancelAnimationFrame(resizeFrame);
     };

@@ -80,6 +80,50 @@ describe('BackupManager real files and archives', () => {
     expect(await fs.promises.readFile(path.join(userConfigDir, 'app.env'), 'utf8')).toBe('SETTING=original\n');
   });
 
+  it('round-trips application log symlinks, their targets and metadata without following them', async () => {
+    const logs = path.join(appDataDir, 'data', 'logs');
+    await write(path.join(logs, 'dated log.log'), 'original log\n');
+    const latest = path.join(logs, 'latest.log');
+    await fs.promises.symlink('dated log.log', latest);
+    const before = await fs.promises.lstat(latest, { bigint: true });
+    await manager.backupApp(appUrn);
+    const [saved] = await manager.listBackupsByAppId(appUrn);
+    if (!saved) throw new Error('Expected a complete backup');
+    const entries = await archive.listTarGz(await manager.getBackupPath(appUrn, saved.id));
+    expect(entries).toContainEqual({ path: './app-data/data/logs/latest.log', type: 'l', linkTarget: 'dated log.log' });
+    await fs.promises.unlink(latest);
+    await write(path.join(logs, 'dated log.log'), 'changed log\n');
+    await manager.restoreApp(appUrn, saved.id);
+    expect(await fs.promises.readlink(latest)).toBe('dated log.log');
+    expect(await fs.promises.readFile(latest, 'utf8')).toBe('original log\n');
+    const after = await fs.promises.lstat(latest, { bigint: true });
+    expect({ uid: after.uid, gid: after.gid, mode: after.mode, mtime: after.mtimeNs }).toEqual({
+      uid: before.uid,
+      gid: before.gid,
+      mode: before.mode,
+      mtime: before.mtimeNs,
+    });
+  });
+
+  it.each(['absolute', 'escape', 'cycle', 'dangling'])(
+    'rejects a source %s symlink without reading its target or publishing a backup',
+    async (kind) => {
+      const link = path.join(appDataDir, 'data', 'unsafe');
+      const target =
+        kind === 'absolute'
+          ? path.join(appDataDir, 'data', 'record')
+          : kind === 'escape'
+            ? '../../../outside'
+            : kind === 'cycle'
+              ? 'unsafe'
+              : 'missing';
+      await fs.promises.symlink(target, link);
+      await expect(manager.backupApp(appUrn)).rejects.toThrow('Backup contains unsupported file types');
+      expect(await manager.listBackupsByAppId(appUrn)).toEqual([]);
+      expect(await fs.promises.readlink(link)).toBe(target);
+    },
+  );
+
   it('preserves subsecond file and directory timestamps through backup and restore', async () => {
     const file = path.join(appDataDir, 'data', 'record');
     const directory = path.dirname(file);

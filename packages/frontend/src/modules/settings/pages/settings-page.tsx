@@ -1,12 +1,13 @@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAppContext } from '@/context/app-context';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
 import { Appearance } from '../containers/appearance';
 import { ClusterSettings } from '../containers/cluster-settings';
+import { DelayedRouteLoading } from '@/desktop/route-loading';
 
 const UserSettingsContainer = lazy(() => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer })));
 const SecurityContainer = lazy(() => import('../containers/security').then((module) => ({ default: module.SecurityContainer })));
@@ -18,8 +19,15 @@ export default () => {
   const tab = searchParams.get('tab');
   const { userSettings, user } = useAppContext();
   const currentTab = tab && ['appearance', 'settings', 'security', 'cluster', 'appstores', 'logs'].includes(tab) ? tab : 'appearance';
+  const panels = useRef<HTMLDivElement>(null);
+  const reservedHeight = useRef(0);
 
   const handleTabChange = (newTab: string) => {
+    const body = panels.current?.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"] > .card-body');
+    if (body) {
+      const style = getComputedStyle(body);
+      reservedHeight.current = body.getBoundingClientRect().height - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom);
+    }
     setSearchParams(
       (previous) => {
         const next = new URLSearchParams(previous);
@@ -29,9 +37,14 @@ export default () => {
       { preventScrollReset: true },
     );
   };
+  const loading = (
+    <div className="desktop-route-placeholder" style={{ minHeight: reservedHeight.current || undefined }}>
+      <DelayedRouteLoading label="Loading settings…" />
+    </div>
+  );
 
   return (
-    <div className="desktop-settings">
+    <div className="desktop-settings" ref={panels}>
       <Tabs value={currentTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
@@ -56,12 +69,12 @@ export default () => {
           <Appearance />
         </TabsContent>
         <TabsContent value="settings">
-          <Suspense>
+          <Suspense fallback={loading}>
             <UserSettingsContainer initialValues={userSettings} />
           </Suspense>
         </TabsContent>
         <TabsContent value="security">
-          <Suspense>
+          <Suspense fallback={loading}>
             <SecurityContainer totpEnabled={Boolean(user.totpEnabled)} username={user.username} />
           </Suspense>
         </TabsContent>
@@ -69,12 +82,12 @@ export default () => {
           <ClusterSettings />
         </TabsContent>
         <TabsContent value="appstores">
-          <Suspense>
+          <Suspense fallback={loading}>
             <AppStoresContainer />
           </Suspense>
         </TabsContent>
         <TabsContent value="logs">
-          <Suspense>
+          <Suspense fallback={loading}>
             <LogsContainer />
           </Suspense>
         </TabsContent>

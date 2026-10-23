@@ -15,6 +15,7 @@ import { type } from 'arktype';
 import { AppFilesManager } from '../apps/app-files-manager';
 import { AppsRepository } from '../apps/apps.repository';
 import { RestoreTransaction, preserveTreeMetadata } from './restore-transaction';
+import { validateArchiveLinks, validateBackupTree } from './backup-links';
 
 @Injectable()
 export class BackupManager {
@@ -110,11 +111,11 @@ export class BackupManager {
 
       const { appDataDir, appInstalledDir } = this.appFilesManager.getAppPaths(appUrn);
 
-      if (!(await this.filesystem.copyDirectory(appDataDir, path.join(contentDir, 'app-data')))) {
+      if (!(await this.filesystem.copyDirectory(appDataDir, path.join(contentDir, 'app-data'), { verbatimSymlinks: true, dereference: false }))) {
         throw new Error('App data could not be copied into the backup');
       }
 
-      if (!(await this.filesystem.copyDirectory(appInstalledDir, path.join(contentDir, 'app')))) {
+      if (!(await this.filesystem.copyDirectory(appInstalledDir, path.join(contentDir, 'app'), { verbatimSymlinks: true, dereference: false }))) {
         throw new Error('App files could not be copied into the backup');
       }
       await preserveTreeMetadata(appDataDir, path.join(contentDir, 'app-data'));
@@ -126,10 +127,12 @@ export class BackupManager {
       });
       if (userConfig?.isDirectory()) {
         this.logger.info('Including user configuration in backup...');
-        if (!(await this.filesystem.copyDirectory(userConfigDir, path.join(contentDir, 'user-config')))) {
+        if (
+          !(await this.filesystem.copyDirectory(userConfigDir, path.join(contentDir, 'user-config'), { verbatimSymlinks: true, dereference: false }))
+        ) {
           throw new Error('User configuration could not be copied into the backup');
         }
-        await preserveTreeMetadata(userConfigDir, path.join(contentDir, 'user-config'));
+        await preserveTreeMetadata(userConfigDir, path.join(contentDir, 'user-config'), false);
       } else if (userConfig) {
         throw new Error('User configuration is not a readable directory');
       }
@@ -222,11 +225,8 @@ export class BackupManager {
   };
 
   private validateRestoreArchiveEntries(entries: ArchiveEntry[]) {
+    validateArchiveLinks(entries, (entry) => this.normalizeArchiveEntryPath(entry));
     for (const entry of entries) {
-      if (entry.type !== '-' && entry.type !== 'd') {
-        throw new Error('Backup contains unsupported file types');
-      }
-
       const entryPath = this.normalizeArchiveEntryPath(entry.path);
 
       if (entryPath === '.') {
@@ -276,6 +276,7 @@ export class BackupManager {
     if (!directoryStats.isDirectory()) {
       throw new Error('Backup contains unsupported file types');
     }
+    if (directory === rootDirectory) await validateBackupTree(rootDirectory, options.allowSymlinks);
 
     const entries = await runFsOperation(() => fs.promises.readdir(directory, { withFileTypes: true }));
     const rootPath = path.resolve(rootDirectory);
@@ -300,10 +301,9 @@ export class BackupManager {
           const linkTarget = await runFsOperation(() => fs.promises.readlink(entryPath));
           const resolvedTarget = path.resolve(path.dirname(entryPath), linkTarget);
 
-          if (!this.isPathInsideOrEqual(rootPath, resolvedTarget)) {
+          if (path.isAbsolute(linkTarget) || !this.isPathInsideOrEqual(rootPath, resolvedTarget)) {
             throw new Error('Backup contains unsupported file types');
           }
-
           continue;
         }
 

@@ -7,6 +7,7 @@ import type { FilesystemService } from '@/core/filesystem/filesystem.service';
 import type { LoggerService } from '@/core/logger/logger.service';
 import type { AppUrn } from '@runtipi/common/types';
 import { assertNoRestoreMounts } from './restore-mounts';
+import { validateBackupTree } from './backup-links';
 
 const groups = ['app-data', 'app', 'user-config'] as const;
 type Group = (typeof groups)[number];
@@ -43,12 +44,30 @@ const ensureDirectory = async (directory: string) => {
 const visitCopiedTree = async (source: string, destination: string, apply: boolean) => {
   const original = await fs.promises.lstat(source, { bigint: true });
   const copied = await fs.promises.lstat(destination, { bigint: true });
-  if (!original.isFile() && !original.isDirectory()) throw new Error('Backup contains unsupported file types');
-  if (original.isDirectory() !== copied.isDirectory() || original.isFile() !== copied.isFile()) throw new Error('Backup copy is incomplete');
+  if (!original.isFile() && !original.isDirectory() && !original.isSymbolicLink()) throw new Error('Backup contains unsupported file types');
+  if (
+    original.isDirectory() !== copied.isDirectory() ||
+    original.isFile() !== copied.isFile() ||
+    original.isSymbolicLink() !== copied.isSymbolicLink()
+  )
+    throw new Error('Backup copy is incomplete');
+  if (original.isSymbolicLink() && (await fs.promises.readlink(source)) !== (await fs.promises.readlink(destination)))
+    throw new Error('Backup copy changed a symbolic link');
+  if (original.isSymbolicLink() && !apply) {
+    // GNU cp must recreate copied links to preserve their ownership and nanosecond timestamps.
+    await fs.promises.unlink(destination);
+    return;
+  }
   if (original.isDirectory()) {
     for (const name of await fs.promises.readdir(source)) await visitCopiedTree(path.join(source, name), path.join(destination, name), apply);
   }
   if (apply) {
+    if (original.isSymbolicLink()) {
+      await fs.promises.unlink(destination);
+      const result = await spawnAsync('cp', ['-pP', '--', source, destination]);
+      if (result.stderr.trim()) throw new Error('Backup symbolic link metadata could not be preserved');
+      return;
+    }
     if (original.uid !== copied.uid || original.gid !== copied.gid) await fs.promises.chown(destination, Number(original.uid), Number(original.gid));
     await fs.promises.chmod(destination, Number(original.mode & 0o7777n));
     const result = await spawnAsync('touch', ['-r', source, '--', destination]);
@@ -65,7 +84,8 @@ const verifyCopiedMetadata = async (source: string, destination: string): Promis
     for (const name of await fs.promises.readdir(source)) await verifyCopiedMetadata(path.join(source, name), path.join(destination, name));
 };
 
-export const preserveTreeMetadata = async (source: string, destination: string) => {
+export const preserveTreeMetadata = async (source: string, destination: string, allowLinks = true) => {
+  await validateBackupTree(source, allowLinks);
   await visitCopiedTree(source, destination, process.platform !== 'linux');
   if (process.platform === 'linux') {
     // One metadata pass per tree avoids a process per file and does not recopy data.
@@ -96,7 +116,7 @@ const syncTree = async (directory: string) => {
       } finally {
         await handle.close();
       }
-    } else throw new Error('Backup contains unsupported file types');
+    } else if (!entry.isSymbolicLink()) throw new Error('Backup contains unsupported file types');
   }
   await syncDirectory(directory);
 };
@@ -324,11 +344,12 @@ export class RestoreTransaction {
               }
             }
             if (!moved) {
-              if (!(await this.filesystem.copyDirectory(source, incoming, { preserveTimestamps: true })))
+              if (!(await this.filesystem.copyDirectory(source, incoming, { preserveTimestamps: true, verbatimSymlinks: true, dereference: false })))
                 throw new Error('App files could not be staged for restore');
               await preserveTreeMetadata(source, incoming);
             }
           } else await fs.promises.mkdir(incoming);
+          await validateBackupTree(incoming);
           await syncTree(incoming);
           await syncDirectory(workspace);
           await syncDirectory(path.dirname(workspace));

@@ -72,6 +72,26 @@
   grid-column: 1 / -1;
   container-type: inline-size;
 }
+.desktop-updates-host > p {
+  margin-block: 16px;
+}
+.desktop-updates-host > .desktop-update-note {
+  margin-block: 16px;
+}
+.desktop-host-package-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-block: 16px;
+}
+.desktop-host-package-error p {
+  flex: 1 1 16em;
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.5;
+}
 .desktop-host-package-summary {
   display: flex;
   align-items: center;

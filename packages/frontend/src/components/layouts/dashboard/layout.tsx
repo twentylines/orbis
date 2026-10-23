@@ -24,13 +24,13 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { Button } from '@/components/ui/Button';
 import { DockActivity } from '@/desktop/desktop-activity';
 import { DockGlass } from '@/desktop/dock-companion';
+import { DockSelection } from '@/desktop/dock-selection';
 import { useNavigationWarmup } from '@/desktop/navigation-warmup';
 import { OrbisUpdateNotice } from '@/desktop/orbis-update-notice';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
 import { IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, QueryErrorResetBoundary } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
 import { Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches, useNavigation } from 'react-router';
 import './layout.css';
@@ -150,7 +150,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                   {sectionLabel}
                 </span>
               </span>
-              <OrbisUpdateNotice />
               <div className="desktop-system-actions">
                 <Link
                   to="/tasks"
@@ -172,6 +171,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                   {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
                 </button>
                 <CommandSearch />
+                <OrbisUpdateNotice />
                 <ClusterConnection />
                 <ClusterSwitcher />
                 <button
@@ -215,6 +215,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               <DockGlass />
               <DockActivity />
               <div className="desktop-dock-main">
+                <DockSelection path={dockSection?.path} reduced={Boolean(reduceMotion)} />
                 {navigation
                   .filter((item) => item.path !== '/tasks')
                   .map(({ path, label, Icon, ...item }) => (
@@ -234,14 +235,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                       aria-busy={pendingSection?.path === path || undefined}
                       title={label}
                     >
-                      {dockSection?.path === path ? (
-                        <motion.span
-                          className="desktop-dock-selection"
-                          layoutId="orbis-dock-selection"
-                          transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 330, damping: 32, mass: 0.8 }}
-                          aria-hidden="true"
-                        />
-                      ) : null}
                       <span className="desktop-dock-content">
                         <span className="desktop-dock-icon">
                           <Icon size={22} stroke={1.7} aria-hidden="true" />

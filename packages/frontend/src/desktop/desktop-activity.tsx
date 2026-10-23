@@ -1,5 +1,5 @@
 /* biome-ignore-all lint/a11y/noNoninteractiveTabindex: The bounded activity list needs native keyboard scrolling. */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
 import { IconApps, IconChevronDown, IconChevronUp, IconPackage, IconServerCog } from '@tabler/icons-react';
@@ -7,11 +7,13 @@ import { Link } from 'react-router';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { useAppContext } from '@/context/app-context';
 import { useReducedMotion } from './motion-preferences';
+import { prefersReducedMotion } from './motion-setting';
 import { useHostUpdateWatch } from './host-update-watch';
 import { useTasks } from './tasks';
 import { useDesktopWindows } from './window-viewport';
 import { desktopActivity, type DesktopActivityItem } from './desktop-activity-state';
 import { DockCompanion } from './dock-companion';
+import { sectionMotionTiming } from './section-motion-geometry';
 import './desktop-activity.css';
 
 function focusDock() {
@@ -37,6 +39,11 @@ export function DockActivity() {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const flyover = useRef<HTMLElement>(null);
+  const bindFlyover = useCallback((element: HTMLElement | null) => {
+    flyover.current = element;
+    if (element) element.style.clipPath = prefersReducedMotion() ? 'none' : 'inset(0 0 100% 0)';
+  }, []);
   const focusWithin = useRef(false);
   const [shape, setShape] = useState({ width: 360, height: 280, triggerWidth: 210, triggerHeight: 68 });
   const hasActivity = Boolean(activity) && desktop;
@@ -73,7 +80,7 @@ export function DockActivity() {
       window.removeEventListener('resize', measure);
     };
   }, [open]);
-  const transition = reduced ? { duration: 0 } : { type: 'spring' as const, stiffness: 330, damping: 34, mass: 0.8 };
+  const transition = { duration: reduced ? 0 : sectionMotionTiming.surface / 1000, ease: [0.32, 0.08, 0.24, 1] as [number, number, number, number] };
   return (
     <DockCompanion visible={hasActivity} side="left">
       {displayed ? (
@@ -117,7 +124,7 @@ export function DockActivity() {
               </button>
             </Dialog.Trigger>
             <AnimatePresence>
-              {open ? (
+              {open && hasActivity ? (
                 <Dialog.Content
                   asChild
                   forceMount
@@ -129,20 +136,24 @@ export function DockActivity() {
                   }}
                 >
                   <motion.section
+                    ref={bindFlyover}
+                    onUpdate={(latest) => {
+                      const element = flyover.current;
+                      const height = Number(latest.height);
+                      const overlap = Math.max(0, Number(latest.y) - 12);
+                      if (!element || !Number.isFinite(height) || height <= 0 || !Number.isFinite(overlap)) return;
+                      const visible = Math.max(0, 1 - overlap / height);
+                      element.style.clipPath =
+                        overlap < 0.01 ? 'none' : visible < 0.001 ? 'inset(0 0 100% 0)' : `inset(-60px -60px ${overlap}px -60px)`;
+                      element.style.setProperty('--activity-shadow-opacity', `${0.2 * visible}`);
+                    }}
                     className="desktop-activity-flyover"
                     initial={{ width: shape.triggerWidth, height: shape.triggerHeight, y: shape.triggerHeight + 12, borderRadius: 24 }}
                     animate={{ width: shape.width, height: shape.height, y: 0, borderRadius: 22 }}
                     exit={{ width: shape.triggerWidth, height: shape.triggerHeight, y: shape.triggerHeight + 12, borderRadius: 24 }}
                     transition={transition}
                   >
-                    <motion.div
-                      ref={panel}
-                      className="desktop-activity-panel"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: reduced ? 0 : 0.12, delay: reduced ? 0 : 0.16 }}
-                    >
+                    <div ref={panel} className="desktop-activity-panel">
                       <div className="desktop-activity-heading">
                         <Dialog.Title>Activity</Dialog.Title>
                         <Dialog.Close asChild>
@@ -177,7 +188,7 @@ export function DockActivity() {
                           </Link>
                         ) : null}
                       </div>
-                    </motion.div>
+                    </div>
                   </motion.section>
                 </Dialog.Content>
               ) : null}

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { prefersReducedMotion } from './motion-setting';
+import { sectionMotionEasing, sectionMotionTiming } from './section-motion-geometry';
 
 const shapeEvent = 'orbis-dock-shape';
 
@@ -35,14 +36,35 @@ export function DockCompanion({
     const move = () => {
       const width = Number.parseFloat(getComputedStyle(inner).width);
       const current = Number.parseFloat(getComputedStyle(outer).width);
+      const primary = outer.closest('.desktop-dock')?.querySelector('.desktop-dock-main');
+      const mainHeight = primary ? Number.parseFloat(getComputedStyle(primary).height) : 78;
+      const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-trigger');
+      const controlStyle = controls ? getComputedStyle(controls) : null;
+      const padding = controlStyle
+        ? ['padding-top', 'padding-bottom', 'border-top-width', 'border-bottom-width'].reduce(
+            (total, property) => total + (Number.parseFloat(controlStyle.getPropertyValue(property)) || 0),
+            0,
+          )
+        : 0;
+      const contentHeight = controls
+        ? Math.max(...[...controls.children].map((child) => Number.parseFloat(getComputedStyle(child).height) || 0), 0) + padding
+        : mainHeight;
+      const height = Math.max(mainHeight, contentHeight, Number.parseFloat(controlStyle?.minHeight ?? '') || 0);
+      const currentHeight = initialized.current ? Number.parseFloat(getComputedStyle(inner).height) : mainHeight;
+      const targetHeight = visible ? height : mainHeight;
       const inset = getComputedStyle(outer)[margin];
       const transform =
         initialized.current && current > 0.5 ? getComputedStyle(inner).transform : side === 'right' ? `translateX(${-width}px)` : 'none';
       const targetWidth = visible ? width : 0;
       const targetMargin = visible ? '0px' : '-12px';
-      if (initialized.current && Math.abs(targetWidth - Number.parseFloat(outer.style.width)) < 0.5 && outer.style[margin] === targetMargin) return;
+      if (
+        initialized.current &&
+        Math.abs(targetWidth - Number.parseFloat(outer.style.width)) < 0.5 &&
+        Math.abs(targetHeight - Number.parseFloat(inner.style.height)) < 0.1 &&
+        outer.style[margin] === targetMargin
+      )
+        return;
       if (!initialized.current) {
-        const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-trigger');
         if (controls) controls.style.clipPath = side === 'right' ? `inset(0 0 0 ${width}px)` : `inset(0 ${width}px 0 0)`;
       }
       initialized.current = true;
@@ -50,6 +72,8 @@ export function DockCompanion({
       for (const animation of motions.current) animation.cancel();
       const targetTransform = !visible && side === 'right' ? `translateX(${-width}px)` : 'none';
       outer.style.width = `${targetWidth}px`;
+      outer.style.height = `${targetHeight}px`;
+      inner.style.height = `${targetHeight}px`;
       outer.style[margin] = targetMargin;
       inner.style.transform = targetTransform;
       const finish = () => {
@@ -66,15 +90,21 @@ export function DockCompanion({
         return;
       }
       outer.dataset.pillMotion = visible ? 'splitting' : 'joining';
-      const options = { duration: 620, easing: 'cubic-bezier(.32, 0, .18, 1)' };
+      const options = { duration: sectionMotionTiming.surface, easing: sectionMotionEasing };
       const sizing = outer.animate(
         [
-          { width: `${current}px`, [margin]: inset },
-          { width: `${targetWidth}px`, [margin]: targetMargin },
+          { width: `${current}px`, height: `${currentHeight}px`, [margin]: inset },
+          { width: `${targetWidth}px`, height: `${targetHeight}px`, [margin]: targetMargin },
         ],
         options,
       );
-      const travel = inner.animate([{ transform }, { transform: targetTransform }], options);
+      const travel = inner.animate(
+        [
+          { transform, height: `${currentHeight}px` },
+          { transform: targetTransform, height: `${targetHeight}px` },
+        ],
+        options,
+      );
       sizing.id = 'orbis-dock-pill-size';
       travel.id = 'orbis-dock-pill-travel';
       motions.current = [sizing, travel];

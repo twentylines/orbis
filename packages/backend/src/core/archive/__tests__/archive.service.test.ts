@@ -2,11 +2,14 @@ import { spawnAsync } from '@/common/helpers/exec-helpers';
 import type { LoggerService } from '@/core/logger/logger.service';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ArchiveService } from '../archive.service';
+import { readTarMetadata } from '../tar-metadata';
 
 vi.mock('@/common/helpers/exec-helpers', () => ({
   spawnAsync: vi.fn(),
 }));
 
+vi.mock('../tar-metadata', () => ({ readTarMetadata: vi.fn() }));
+const metadataMock = vi.mocked(readTarMetadata);
 const spawnAsyncMock = vi.mocked(spawnAsync);
 
 const createLogger = () =>
@@ -17,33 +20,19 @@ const createLogger = () =>
 describe('ArchiveService', () => {
   beforeEach(() => {
     spawnAsyncMock.mockReset();
+    metadataMock.mockReset();
   });
 
-  it('lists archive paths and types from production tar output', async () => {
-    const archive = '/data/backups/_user/demoapp3/demoapp3-symlink-poc.tar.gz';
-    const verboseOutput = [
-      'drwxr-xr-x root/root         0 2026-06-10 18:20:41 app-data/',
-      'drwxr-xr-x root/root         0 2026-06-10 18:20:41 app/',
-      'drwxr-xr-x root/root         0 2026-06-10 18:20:41 user-config/',
-      'lrwxr-xr-x root/root         0 2026-06-10 18:20:41 user-config/app.env -> /data/state/proof.txt',
-    ].join('\n');
-    const pathOutput = ['app-data/', 'app/', 'user-config/', 'user-config/app.env'].join('\n');
-
-    spawnAsyncMock
-      .mockResolvedValueOnce({ stdout: 'application/gzip\n', stderr: '' })
-      .mockResolvedValueOnce({ stdout: `${verboseOutput}\n`, stderr: '' })
-      .mockResolvedValueOnce({ stdout: `${pathOutput}\n`, stderr: '' });
-
-    const archiveService = new ArchiveService(createLogger());
-
-    await expect(archiveService.listTarGz(archive)).resolves.toEqual([
+  it('reads structured paths, types and link targets without parsing tar display text', async () => {
+    const archive = '/data/backups/store/demo/backup.tar.gz';
+    const entries = [
       { path: 'app-data/', type: 'd' },
-      { path: 'app/', type: 'd' },
-      { path: 'user-config/', type: 'd' },
-      { path: 'user-config/app.env', type: 'l' },
-    ]);
-
-    expect(spawnAsyncMock).toHaveBeenNthCalledWith(2, 'tar', ['-tzvf', archive]);
-    expect(spawnAsyncMock).toHaveBeenNthCalledWith(3, 'tar', ['-tzf', archive]);
+      { path: 'app-data/logs/latest.log', type: 'l', linkTarget: 'dated.log' },
+    ];
+    spawnAsyncMock.mockResolvedValueOnce({ stdout: 'application/gzip\n', stderr: '' });
+    metadataMock.mockResolvedValueOnce(entries);
+    await expect(new ArchiveService(createLogger()).listTarGz(archive)).resolves.toEqual(entries);
+    expect(spawnAsyncMock).toHaveBeenCalledExactlyOnceWith('file', ['--brief', '--mime-type', archive]);
+    expect(metadataMock).toHaveBeenCalledExactlyOnceWith(archive, true, undefined);
   });
 });

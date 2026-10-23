@@ -107,7 +107,10 @@ async function hostRequest<T>(path: string, body?: object, signal?: AbortSignal)
     credentials: 'same-origin',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
-    signal: signal ?? AbortSignal.timeout(path === 'plan' ? 100_000 : path === 'packages/plan' || path === 'packages/apply' ? 70_000 : 20_000),
+    signal: AbortSignal.any([
+      ...(signal ? [signal] : []),
+      AbortSignal.timeout(path === 'plan' ? 100_000 : path === 'packages/plan' || path === 'packages/apply' ? 70_000 : 20_000),
+    ]),
   });
   const result: unknown = await response.json();
   if (!response.ok) {
@@ -531,7 +534,14 @@ function LocalUpdates() {
           </Dialog>
           {user?.operator !== true ? <p>Host package details require an operator account.</p> : null}
           {user?.operator === true && systemPackages.isPending ? <p>Reading the host package cache…</p> : null}
-          {systemPackages.isError ? <p role="alert">Host package details are unavailable. The installed host helper may need an upgrade.</p> : null}
+          {systemPackages.isError ? (
+            <div className="desktop-host-package-error" role="alert">
+              <p>System updates could not be loaded. Check the server connection and try again.</p>
+              <button type="button" className="desktop-update-action" onClick={() => void systemPackages.refetch()}>
+                Retry system updates
+              </button>
+            </div>
+          ) : null}
           {systemPackages.data && !systemPackages.data.available ? (
             <p>{systemPackages.data.reason || 'This host does not have a supported package manager.'}</p>
           ) : null}

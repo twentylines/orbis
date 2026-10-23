@@ -64,6 +64,7 @@ html:has(.desktop) {
   min-width: 0;
   font-size: 1rem;
   font-weight: 720;
+  line-height: 1;
   text-decoration: none;
   white-space: nowrap;
   flex: 0 0 auto;
@@ -77,22 +78,38 @@ html:has(.desktop) {
   letter-spacing: -0.035em;
 }
 .desktop-server-name {
+  position: relative;
   min-width: 0;
   max-width: 175px;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-left: 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.22);
+  padding-block: 2px;
+  padding-left: 11px;
   color: var(--orbis-chrome-muted, rgba(244, 249, 244, 0.7));
-  font-size: 0.8125rem;
+  font-size: inherit;
   font-weight: 600;
 }
+.desktop-server-name::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  translate: 0 -50%;
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.22);
+}
 .desktop-current {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
+  height: 40px;
   font-size: 0.8125rem;
   font-weight: 650;
-  padding: 8px 13px;
-  border-radius: 9px;
+  line-height: 1.25;
+  padding: 0 13px;
+  border-radius: 11px;
   background: rgba(255, 255, 255, 0.09);
 }
 .desktop-current-label {
@@ -106,7 +123,10 @@ html:has(.desktop) {
   display: flex;
   gap: 11px;
   align-items: center;
-  flex: none;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .desktop-update-notice,
 .desktop-search-trigger,
@@ -206,7 +226,7 @@ html:has(.desktop) {
   }
 }
 @media (max-width: 600px) {
-  .desktop-update-notice {
+  .desktop-system-bar .desktop-system-actions > .desktop-update-notice {
     order: 3;
     flex: 1 0 100%;
     min-width: 0;
@@ -766,7 +786,7 @@ html:has(.desktop) {
   position: relative;
   display: flex;
   flex: none;
-  align-self: stretch;
+  align-self: center;
   width: 0;
   min-width: 0;
   margin: 0;
@@ -874,10 +894,16 @@ html:has(.desktop) {
 .desktop .desktop-dock-item.is-active:hover {
   background: transparent;
 }
-.desktop-dock-selection {
+.desktop-dock-selection-layer {
   position: absolute;
   inset: 0;
+  overflow: clip;
   border-radius: inherit;
+  pointer-events: none;
+}
+.desktop-dock-selection {
+  position: absolute;
+  border-radius: 14px;
   background: rgba(245, 248, 242, 0.2);
   pointer-events: none;
 }

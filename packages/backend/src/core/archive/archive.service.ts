@@ -1,8 +1,10 @@
 import { spawnAsync } from '@/common/helpers/exec-helpers';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
+import { readTarMetadata } from './tar-metadata';
 
-export type ArchiveEntry = { path: string; type: string };
+export type { ArchiveEntry } from './tar-metadata';
+import type { ArchiveEntry } from './tar-metadata';
 
 @Injectable()
 export class ArchiveService {
@@ -37,28 +39,8 @@ export class ArchiveService {
     const mimeType = fileType.stdout.trim();
     if (fileType.stderr.trim()) throw new Error('Invalid backup archive');
 
-    const verboseArgs = mimeType === 'application/x-tar' ? ['-tvf', sourceFile] : ['-tzvf', sourceFile];
-    const pathArgs = mimeType === 'application/x-tar' ? ['-tf', sourceFile] : ['-tzf', sourceFile];
-
-    this.logger.debug(`Listing archive with args: tar ${verboseArgs.join(' ')}`);
-    const [verboseList, pathList] = await Promise.all([
-      options ? spawnAsync('tar', verboseArgs, options) : spawnAsync('tar', verboseArgs),
-      options ? spawnAsync('tar', pathArgs, options) : spawnAsync('tar', pathArgs),
-    ]);
-    signal?.throwIfAborted();
-
-    if (verboseList.stderr.trim() || pathList.stderr.trim()) {
-      throw new Error('Invalid backup archive');
-    }
-
-    const verboseLines = verboseList.stdout.split('\n').filter(Boolean);
-    const paths = pathList.stdout.split('\n').filter(Boolean);
-
-    if (verboseLines.length !== paths.length) {
-      throw new Error('Invalid backup archive');
-    }
-
-    return paths.map((entryPath, index) => ({ path: entryPath, type: verboseLines[index]?.[0] ?? '' }));
+    if (!['application/x-tar', 'application/gzip', 'application/x-gzip'].includes(mimeType)) throw new Error('Invalid backup archive');
+    return readTarMetadata(sourceFile, mimeType !== 'application/x-tar', signal);
   };
 
   readTarConfig = async (sourceFile: string, entry: string, signal?: AbortSignal): Promise<string> => {
