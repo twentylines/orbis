@@ -105,4 +105,66 @@ describe('Orbis release feed', () => {
     expect(results.every((release) => release === previous)).toBe(true);
     expect(request).toHaveBeenCalledTimes(4);
   });
+
+  it('keeps the previous installable release while a newer tag is building, then discovers its manifest', async () => {
+    vi.useFakeTimers();
+    const next = 'v0.1.0-beta.10';
+    const feed = FEED.replace('<feed>', `<feed><entry><id>tag:github.com,2008:Repository/1419897175/${next}</id></entry>`);
+    let ready = false;
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/releases.atom')) return new Response(feed);
+      if (url.endsWith('.md')) return new Response('# Release notes');
+      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') {
+        return new Response(null, { status: url.includes(`/${next}/`) && !ready ? 404 : 200 });
+      }
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+    expect((await service.latest())?.tag).toBe(TAG);
+    expect((await service.latest())?.imageManifestUrl).toContain(`/${TAG}/`);
+    expect(request).toHaveBeenCalledTimes(5);
+
+    vi.advanceTimersByTime(60_000);
+    expect((await service.latest())?.tag).toBe(TAG);
+    expect(request).toHaveBeenCalledTimes(8);
+    ready = true;
+    vi.advanceTimersByTime(60_000);
+    const updated = await Promise.all(Array.from({ length: 8 }, () => service.latest()));
+    expect(updated.every((release) => release?.tag === next && release.imageManifestUrl?.includes(`/${next}/`))).toBe(true);
+    expect(request).toHaveBeenCalledTimes(11);
+  });
+
+  it('skips an unpublished tag whose notes are missing', async () => {
+    const next = 'v0.1.0-beta.10';
+    const feed = FEED.replace('<feed>', `<feed><entry><id>tag:github.com,2008:Repository/1419897175/${next}</id></entry>`);
+    vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases.atom')) return new Response(feed);
+      if (url.includes(`/${next}/`)) return new Response(null, { status: 404 });
+      if (url.endsWith(`/${TAG}.md`)) return new Response('# Published release');
+      if (url.endsWith('/release-manifest.json')) return new Response(null);
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    expect((await new OrbisReleaseService().latest())?.tag).toBe(TAG);
+  });
+
+  it('retains a known installable release on a manifest outage instead of treating the outage as an unpublished tag', async () => {
+    vi.useFakeTimers();
+    const next = 'v0.1.0-beta.10';
+    let outage = false;
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases.atom')) return new Response(outage ? FEED.replace(TAG, next) : FEED);
+      if (url.endsWith('.md')) return new Response('# Release notes');
+      if (url.endsWith('/release-manifest.json')) return new Response(null, { status: outage ? 503 : 200 });
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+    const previous = await service.latest();
+    outage = true;
+    vi.advanceTimersByTime(60_000);
+    expect(await service.latest()).toBe(previous);
+    expect(request).toHaveBeenCalledTimes(6);
+  });
 });
