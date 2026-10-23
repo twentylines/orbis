@@ -95,6 +95,16 @@ const contrast = (first: number[], second: number[]) =>
   (Math.max(luminance(first), luminance(second)) + 0.05) / (Math.min(luminance(first), luminance(second)) + 0.05);
 
 describe('saved appearance applied before hydration and to live materials', () => {
+  test('keeps menu blur independent from panels and disables both for solid surfaces', () => {
+    const result = apply({ glassBlur: 12, chromeBlur: 48 });
+    expect(result.properties.get('--orbis-glass-filter')).toBe('blur(12px) saturate(1.2)');
+    expect(result.properties.get('--orbis-chrome-filter')).toBe('blur(48px) saturate(1.2)');
+    expect(apply({ chromeBlur: 65 }).properties.has('--orbis-chrome-filter')).toBe(false);
+    expect(apply({ chromeBlur: 0 }).properties.get('--orbis-chrome-filter')).toBe('none');
+    const solid = apply({ glassBlur: 12, chromeBlur: 48, transparency: 'solid' });
+    expect(solid.properties.get('--orbis-chrome-filter')).toBe('none');
+    expect(solid.properties.get('--orbis-glass-filter')).toBe('none');
+  });
   test('keeps the theme defaults exact and removes stale overrides on reset', () => {
     const result = apply({});
     expect([...result.properties.keys()].sort()).toEqual(['--orbis-chrome-focus', '--orbis-chrome-muted']);

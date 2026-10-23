@@ -17,6 +17,7 @@
   --desktop-focus: var(--desktop-ink);
   --desktop-panel-dark: var(--orbis-panel-dark, var(--desktop-base-panel-dark));
   --desktop-glass-filter: var(--orbis-glass-filter, var(--desktop-base-glass-filter));
+  --desktop-chrome-filter: var(--orbis-chrome-filter, var(--desktop-glass-filter));
   --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
   --desktop-ink: #192c29;
   --desktop-base-muted: #485f59;

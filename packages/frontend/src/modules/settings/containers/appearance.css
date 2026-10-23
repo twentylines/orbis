@@ -332,6 +332,9 @@
   color: var(--desktop-muted);
 }
 .appearance-range input {
+  appearance: none;
+  -webkit-appearance: none;
+  --range-track-size: 6px;
   display: block;
   width: 100%;
   min-width: 0;
@@ -339,6 +342,41 @@
   margin: 6px 0 0;
   accent-color: var(--desktop-accent);
   color-scheme: light;
+  background: transparent;
+  cursor: pointer;
+}
+.appearance-range[data-dragging] input {
+  --range-track-size: 22px;
+}
+.appearance-range input::-webkit-slider-runnable-track {
+  height: var(--range-track-size);
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--desktop-accent) var(--range-fill), var(--desktop-line) var(--range-fill));
+  transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.appearance-range input::-moz-range-track {
+  height: var(--range-track-size);
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--desktop-accent) var(--range-fill), var(--desktop-line) var(--range-fill));
+  transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.appearance-range input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  margin-top: calc((var(--range-track-size) - 22px) / 2);
+  background: var(--desktop-accent);
+  transition: margin-top 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.appearance-range input::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--desktop-accent);
 }
 .desktop[data-desktop-mode="dark"] .appearance-range input {
   color-scheme: dark;

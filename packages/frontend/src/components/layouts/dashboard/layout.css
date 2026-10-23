@@ -52,8 +52,8 @@ html:has(.desktop) {
   border: 1px solid transparent;
   border-radius: 18px;
   box-shadow: 0 16px 42px rgba(6, 27, 26, 0.22);
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  backdrop-filter: var(--desktop-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-chrome-filter);
   animation: orbis-chrome-enter 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 .desktop-brand {
@@ -302,8 +302,8 @@ html:has(.desktop) {
   background:
     radial-gradient(circle at 20% -70%, color-mix(in srgb, var(--desktop-preset-tint) 18%, transparent), transparent 38%), var(--desktop-chrome);
   box-shadow: 0 13px 24px rgba(18, 43, 37, 0.12);
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  backdrop-filter: var(--desktop-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-chrome-filter);
 }
 .desktop-window-icon {
   width: 38px;
@@ -689,8 +689,8 @@ html:has(.desktop) {
   border-radius: 20px;
   background: var(--desktop-chrome);
   box-shadow: 0 18px 45px rgba(6, 27, 26, 0.34);
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  backdrop-filter: var(--desktop-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-chrome-filter);
 }
 .desktop-dock-glass {
   position: absolute;
@@ -698,8 +698,8 @@ html:has(.desktop) {
   z-index: -1;
   pointer-events: none;
   background: var(--desktop-chrome);
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  backdrop-filter: var(--desktop-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-chrome-filter);
 }
 .desktop-dock-companion {
   position: relative;

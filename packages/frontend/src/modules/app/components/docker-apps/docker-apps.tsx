@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { containerTelemetryKey } from '@/desktop/containers';
 import './docker-apps.css';
+import { selectLibraryApps, type LibraryFilters } from '@/desktop/app-library';
 
 const inventoryKey = ['docker-apps'] as const;
 async function read<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -16,7 +17,7 @@ async function read<T>(url: string, signal: AbortSignal): Promise<T> {
   return response.json();
 }
 
-export function DockerAppsSection() {
+export function DockerAppsSection({ filters = { search: '', category: '', sort: 'az' } }: { filters?: LibraryFilters }) {
   const visible = useWindowVisible();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<DockerApp | null>(null);
@@ -69,6 +70,11 @@ export function DockerAppsSection() {
     setSelected(app);
   };
   const count = inventory.data?.apps.reduce((sum, app) => sum + app.containers.length, 0) ?? 0;
+  const matching = selectLibraryApps(
+    (inventory.data?.apps ?? []).map((entry) => ({ key: entry.id, name: entry.name, entry })),
+    filters,
+    {},
+  );
 
   return (
     <section ref={section} className="docker-apps-section" aria-labelledby="docker-apps-title" tabIndex={-1} data-dialog-focus-fallback>
@@ -90,30 +96,33 @@ export function DockerAppsSection() {
       {inventory.data ? (
         <>
           <p className="docker-apps-count">
-            {inventory.data.apps.length} {inventory.data.apps.length === 1 ? 'app' : 'apps'} · {count} {count === 1 ? 'container' : 'containers'}
+            {matching.length} of {inventory.data.apps.length} apps · {count} {count === 1 ? 'container' : 'containers'}
           </p>
           {inventory.data.apps.length === 0 ? (
             <p className="docker-apps-empty">No additional Docker apps found.</p>
           ) : (
-            <ul className="docker-apps-grid">
-              {inventory.data.apps.map((app) => (
-                <li key={app.id} className="docker-app-card">
-                  <span className="docker-app-icon">
-                    <IconBrandDocker size={28} stroke={1.5} aria-hidden="true" />
-                  </span>
-                  <div className="docker-app-copy">
-                    <h3 title={app.name}>{app.name}</h3>
-                    <p>
-                      {app.running} running · {app.containers.length} {app.containers.length === 1 ? 'container' : 'containers'}
-                    </p>
-                    {app.source === 'runtipi' ? <p className="docker-app-origin">Runtipi configuration not imported</p> : null}
-                  </div>
-                  <Button onClick={() => openReview(app)} aria-label={`Review uninstall for ${app.name}`} data-docker-app-id={app.id}>
-                    <IconTrash size={18} aria-hidden="true" /> Uninstall
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <>
+              {matching.length === 0 ? <p className="docker-apps-empty">No Docker apps match these filters.</p> : null}
+              <ul className="docker-apps-grid">
+                {matching.map(({ entry: app }) => (
+                  <li key={app.id} className="docker-app-card">
+                    <span className="docker-app-icon">
+                      <IconBrandDocker size={28} stroke={1.5} aria-hidden="true" />
+                    </span>
+                    <div className="docker-app-copy">
+                      <h3 title={app.name}>{app.name}</h3>
+                      <p>
+                        {app.running} running · {app.containers.length} {app.containers.length === 1 ? 'container' : 'containers'}
+                      </p>
+                      {app.source === 'runtipi' ? <p className="docker-app-origin">Runtipi configuration not imported</p> : null}
+                    </div>
+                    <Button onClick={() => openReview(app)} aria-label={`Review uninstall for ${app.name}`} data-docker-app-id={app.id}>
+                      <IconTrash size={18} aria-hidden="true" /> Uninstall
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </>
       ) : null}

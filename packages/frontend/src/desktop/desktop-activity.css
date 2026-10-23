@@ -27,8 +27,8 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  backdrop-filter: var(--desktop-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-chrome-filter);
 }
 .desktop-activity-trigger:focus-visible,
 .desktop-activity-heading button:focus-visible,
@@ -87,8 +87,8 @@
   color: var(--desktop-chrome-ink);
   border: 1px solid transparent;
   outline: none;
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  backdrop-filter: var(--desktop-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-chrome-filter);
   box-shadow: 0 16px 42px rgb(0 0 0 / 0.2);
 }
 .desktop-activity-panel {

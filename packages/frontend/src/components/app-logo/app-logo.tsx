@@ -1,16 +1,16 @@
 import clsx from 'clsx';
-import type React from 'react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import './app-logo.css';
 
-export const AppLogo: React.FC<{
+type AppLogoProps = {
   urn?: string;
   url?: string;
   size?: number;
   className?: string;
   alt?: string;
   placeholder?: boolean;
-}> = ({ urn, url, size = 80, className = '', alt = '' }) => {
+};
+export const AppLogo = memo(function AppLogo({ urn, url, size = 80, className = '', alt = '' }: AppLogoProps) {
   const logoUrl = url || (urn ? `/api/marketplace/apps/${encodeURIComponent(urn)}/image` : '/app-not-found.jpg');
   const [failed, setFailed] = useState<string | null>(null);
 
@@ -27,4 +27,4 @@ export const AppLogo: React.FC<{
       onError={() => setFailed(logoUrl)}
     />
   );
-};
+});

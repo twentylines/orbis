@@ -111,7 +111,8 @@ export function useSectionMotion() {
     let resizing: Animation | null = null;
     let targetHeight = to.height;
     const content = view.querySelectorAll<HTMLElement>('.desktop-page-heading, .desktop-window-content');
-    const observer = new ResizeObserver(() => {
+    let resizeFrame = 0;
+    const resize = () => {
       if (view.dataset.routePending || view.querySelector('.desktop-route-placeholder')) return;
       const style = getComputedStyle(view);
       const naturalHeight =
@@ -128,6 +129,13 @@ export function useSectionMotion() {
           easing,
         }),
       );
+    };
+    const observer = new ResizeObserver(() => {
+      if (!resizeFrame)
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = 0;
+          resize();
+        });
     });
     const finish = () => {
       if (
@@ -137,6 +145,7 @@ export function useSectionMotion() {
       )
         return;
       observer.disconnect();
+      cancelAnimationFrame(resizeFrame);
       view.dataset.sectionPhase = 'ready';
       settled.current = visibleSectionBounds(view.getBoundingClientRect(), window.innerHeight);
     };
@@ -152,7 +161,10 @@ export function useSectionMotion() {
       );
       if (action !== 'POP') observer.observe(element);
     }
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(resizeFrame);
+    };
   }, [key, path, action]);
 
   useLayoutEffect(() => {

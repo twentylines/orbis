@@ -3,11 +3,21 @@ import { useDesktopPreferences } from '@/desktop/preferences';
 import { useReducedTransparency } from '@/desktop/motion-preferences';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AppearanceRange } from './appearance-controls';
+import { applyAppearanceRuntime } from '@/desktop/appearance-runtime';
+import type { DesktopAppearance } from '@runtipi/common/schemas';
 
 export function MaterialSettings() {
   const { preferences, resolvedMode, updateAppearance } = useDesktopPreferences();
   const value = preferences.appearance;
   const systemSolid = useReducedTransparency();
+  const systemTransparency =
+    matchMedia('(prefers-reduced-transparency: reduce)').matches || matchMedia('(prefers-reduced-transparency: no-preference)').matches;
+  const preview = (key: keyof DesktopAppearance) => (next: number) => {
+    if (key === 'glassBlur' || key === 'chromeBlur') {
+      const token = key === 'glassBlur' ? '--orbis-glass-filter' : '--orbis-chrome-filter';
+      document.documentElement.style.setProperty(token, next === 0 ? 'none' : `blur(${next}px) saturate(1.2)`);
+    } else applyAppearanceRuntime({ ...value, [key]: next }, resolvedMode);
+  };
   const section = useRef<HTMLElement>(null);
   const [colour, setColour] = useState(value.accent ?? '#914725');
   const [message, setMessage] = useState('');
@@ -95,6 +105,7 @@ export function MaterialSettings() {
               max={100}
               value={value.surfaceOpacity ?? defaults.surface}
               disabled={opaque}
+              onPreview={preview('surfaceOpacity')}
               onChange={(surfaceOpacity) => updateAppearance({ surfaceOpacity })}
             />
             <AppearanceRange
@@ -103,21 +114,41 @@ export function MaterialSettings() {
               max={100}
               value={value.chromeOpacity ?? defaults.chrome}
               disabled={opaque}
+              onPreview={preview('chromeOpacity')}
               onChange={(chromeOpacity) => updateAppearance({ chromeOpacity })}
             />
             <AppearanceRange
-              label="Glass blur"
+              label="Panel blur"
               max={40}
               unit="px"
               value={value.glassBlur ?? 28}
               disabled={opaque}
+              onPreview={preview('glassBlur')}
               onChange={(glassBlur) => updateAppearance({ glassBlur })}
             />
-            <AppearanceRange label="Glass tint" max={30} value={value.glassTint ?? 0} onChange={(glassTint) => updateAppearance({ glassTint })} />
+            <AppearanceRange
+              label="Bar and dock blur"
+              max={64}
+              unit="px"
+              value={value.chromeBlur ?? value.glassBlur ?? 28}
+              disabled={opaque}
+              onPreview={preview('chromeBlur')}
+              onChange={(chromeBlur) => updateAppearance({ chromeBlur })}
+            />
+            <AppearanceRange
+              label="Glass tint"
+              max={30}
+              value={value.glassTint ?? 0}
+              onPreview={preview('glassTint')}
+              onChange={(glassTint) => updateAppearance({ glassTint })}
+            />
           </div>
           {opaque ? <p>Solid surfaces are enabled. Opacity and blur will apply when glass is enabled.</p> : null}
           <div className="appearance-actions">
-            <button type="button" onClick={() => updateAppearance({ surfaceOpacity: null, chromeOpacity: null, glassBlur: null, glassTint: null })}>
+            <button
+              type="button"
+              onClick={() => updateAppearance({ surfaceOpacity: null, chromeOpacity: null, glassBlur: null, chromeBlur: null, glassTint: null })}
+            >
               Reset glass
             </button>
           </div>
@@ -137,7 +168,7 @@ export function MaterialSettings() {
               Reduce motion
             </button>
           </fieldset>
-          {value.lowEffects ? <p>Low effects also reduces movement.</p> : null}
+          {value.lowEffects ? <p>Energy saving also reduces movement.</p> : null}
         </div>
       </section>
       <section className="appearance-section" aria-labelledby="appearance-transparency">
@@ -146,10 +177,16 @@ export function MaterialSettings() {
           <p>Use solid surfaces when you prefer less background detail.</p>
         </div>
         <fieldset className="appearance-choice" aria-label="Transparency preference">
-          <button type="button" aria-pressed={value.transparency === 'system'} onClick={() => updateAppearance({ transparency: 'system' })}>
-            Follow system
-          </button>
-          <button type="button" aria-pressed={value.transparency === 'glass'} onClick={() => updateAppearance({ transparency: 'glass' })}>
+          {systemTransparency ? (
+            <button type="button" aria-pressed={value.transparency === 'system'} onClick={() => updateAppearance({ transparency: 'system' })}>
+              Use device setting
+            </button>
+          ) : null}
+          <button
+            type="button"
+            aria-pressed={value.transparency === 'glass' || (!systemTransparency && value.transparency === 'system')}
+            onClick={() => updateAppearance({ transparency: 'glass' })}
+          >
             Glass
           </button>
           <button type="button" aria-pressed={value.transparency === 'solid'} onClick={() => updateAppearance({ transparency: 'solid' })}>
@@ -159,11 +196,11 @@ export function MaterialSettings() {
       </section>
       <section className="appearance-section" aria-labelledby="appearance-effects">
         <div>
-          <h2 id="appearance-effects">Effects</h2>
-          <p>Disable blur, shadows and decorative motion on slower devices.</p>
+          <h2 id="appearance-effects">Performance</h2>
+          <p>Choose energy saving when you prefer solid surfaces and reduced movement.</p>
         </div>
         <div className="appearance-low-effects">
-          <Switch label="Low effects" checked={value.lowEffects} onCheckedChange={(lowEffects) => updateAppearance({ lowEffects })} />
+          <Switch label="Energy saving" checked={value.lowEffects} onCheckedChange={(lowEffects) => updateAppearance({ lowEffects })} />
         </div>
       </section>
     </>

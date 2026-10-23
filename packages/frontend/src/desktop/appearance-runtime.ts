@@ -74,6 +74,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     'chrome-muted',
     'panel-dark',
     'glass-filter',
+    'chrome-filter',
   ];
   const next = new Map<string, string>();
   const set = (name: string, value: string) => next.set(name, value);
@@ -146,6 +147,9 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   if (materialChanged || chromeAdjusted) set('chrome', css(tintedChrome));
   if (solid || blur === 0) set('glass-filter', 'none');
   else if (blur !== null) set('glass-filter', `blur(${blur}px) saturate(1.2)`);
+  const chromeBlur = numeric('chromeBlur', 0, 64);
+  if (solid || chromeBlur === 0) set('chrome-filter', 'none');
+  else if (chromeBlur !== null) set('chrome-filter', `blur(${chromeBlur}px) saturate(1.2)`);
 
   const accent = typeof options.accent === 'string' && /^#[a-f0-9]{6}$/i.test(options.accent) ? colour(options.accent) : null;
   set('chrome-muted', css(readable(mix(chromeInk, originalChrome, 0.25), chromeBackgrounds(tintedChrome), true)));

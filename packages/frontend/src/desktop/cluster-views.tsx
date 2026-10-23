@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from 'react';
+import type { MouseEvent } from 'react';
 import { Link } from 'react-router';
 import { useQueries } from '@tanstack/react-query';
 import { IconArrowRight, IconBrandDocker, IconExternalLink, IconRefresh, IconServer } from '@tabler/icons-react';
@@ -10,7 +10,9 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { appDestinations, type AppDestinationData } from './app-destinations';
-import { useAppLauncher } from './app-launcher';
+import { useAppLauncher, useOpenedApps } from './app-launcher';
+import { AppLibraryControls, useLibraryFilters } from './app-library-controls';
+import { selectLibraryApps } from './app-library';
 import { appDockerHealth } from './container-health';
 import { clusterRequest, ServerRack, useCluster, type ClusterServer, type ServerReading } from './cluster';
 import { useDesktopPreferences } from './preferences';
@@ -21,8 +23,8 @@ import './cluster-views.css';
 import { ClusterCatalogue } from './cluster-catalogue';
 
 export type ClusterManagedApp = AppDestinationData & {
-  app: NonNullable<AppDestinationData['app']> & Pick<NonNullable<GetAppDto['app']>, 'id' | 'version' | 'ignoredVersion'>;
-  info: AppDestinationData['info'] & Pick<GetAppDto['info'], 'urn' | 'name' | 'available'>;
+  app: NonNullable<AppDestinationData['app']> & Pick<NonNullable<GetAppDto['app']>, 'id' | 'version' | 'ignoredVersion' | 'createdAt'>;
+  info: AppDestinationData['info'] & Pick<GetAppDto['info'], 'urn' | 'name' | 'available' | 'categories'>;
   metadata: AppDestinationData['metadata'] & Pick<GetAppDto['metadata'], 'latestVersion'>;
 };
 type ServerApps = { installed: ClusterManagedApp[]; addresses: { localDomain?: string; sslPort?: number } };
@@ -187,17 +189,36 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
   const { cluster, servers } = useScopedServers();
   const { preferences } = useDesktopPreferences();
   const openApp = useAppLauncher();
-  const [search, setSearch] = useState('');
+  const { filters, change } = useLibraryFilters();
+  const opened = useOpenedApps();
   const apps = useServerReadings<ServerApps>(servers, 'apps', 30000);
   const docker = useServerReadings<DockerApps>(servers, 'docker-apps', 30000);
   const containers = useServerReadings<ContainerTelemetry>(servers, 'containers', 30000);
   const serverName = (server: ClusterServer) => (server.local ? preferences.serverName : server.name);
-  const term = search.trim().toLocaleLowerCase();
-  const matches = (name: string, server: ClusterServer) => !term || `${name} ${serverName(server)}`.toLocaleLowerCase().includes(term);
-  const managed = servers.flatMap((server, index) => (apps[index]?.data?.installed ?? []).map((entry) => ({ server, index, entry })));
-  const detected = servers.flatMap((server, index) => (docker[index]?.data?.apps ?? []).map((entry) => ({ server, index, entry })));
-  const managedMatches = managed.filter(({ entry, server }) => matches(entry.info.name, server));
-  const detectedMatches = detected.filter(({ entry, server }) => matches(entry.name, server));
+  const managed = servers.flatMap((server, index) =>
+    (apps[index]?.data?.installed ?? []).map((entry) => ({
+      server,
+      index,
+      entry,
+      key: server.local ? entry.info.urn : `${server.id}/${entry.info.urn}`,
+      name: entry.info.name,
+      categories: entry.info.categories,
+      installedAt: entry.app.createdAt * 1000,
+      searchText: serverName(server),
+    })),
+  );
+  const detected = servers.flatMap((server, index) =>
+    (docker[index]?.data?.apps ?? []).map((entry) => ({
+      server,
+      index,
+      entry,
+      key: `${server.id}/docker/${entry.id}`,
+      name: entry.name,
+      searchText: serverName(server),
+    })),
+  );
+  const managedMatches = selectLibraryApps(managed, filters, opened);
+  const detectedMatches = selectLibraryApps(detected, filters, opened);
   const pending = apps.some((query) => query.isPending) || docker.some((query) => query.isPending);
   const launch = (event: MouseEvent<HTMLAnchorElement>, server: ClusterServer, entry: ClusterManagedApp, logoUrl: string, launchUrl?: string) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -209,6 +230,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
       openApp({
         urn: `${server.id}/${entry.info.urn}`,
         name: entry.info.name,
+        recentKey: server.local ? entry.info.urn : `${server.id}/${entry.info.urn}`,
         serverName: serverName(server),
         logoUrl,
         launchUrl,
@@ -240,14 +262,18 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
           </Link>
         </Button>
       </header>
-      <Input
-        name="cluster-app-search"
-        label="Find an app"
-        type="search"
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Search"
-      />
+      {compact ? (
+        <Input
+          name="cluster-app-search"
+          label="Find an app"
+          type="search"
+          value={filters.search}
+          onChange={(event) => change('q', event.target.value)}
+          placeholder="Search"
+        />
+      ) : (
+        <AppLibraryControls filters={filters} change={change} categories={managed.flatMap((entry) => entry.categories ?? [])} />
+      )}
       {servers.map((server, index) =>
         apps[index]?.isError || docker[index]?.isError ? (
           <div className="cluster-inventory-error" role="alert" key={server.id}>
@@ -281,7 +307,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
       docker.every((query) => !query.isError) ? (
         <p className="cluster-view-empty">No apps found on {cluster.merged ? 'these servers' : 'this server'}.</p>
       ) : null}
-      {term && managed.length + detected.length > 0 && managedMatches.length + detectedMatches.length === 0 ? (
+      {(filters.search || filters.category) && managed.length + detected.length > 0 && managedMatches.length + detectedMatches.length === 0 ? (
         <p className="cluster-view-empty">No apps match this search.</p>
       ) : null}
       <ul className="cluster-app-grid">

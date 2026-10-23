@@ -17,7 +17,10 @@ import clsx from 'clsx';
 import { RestartAllButton, StartAllButton, StopAllButton } from '../components/batch-actions-dialog/batch-actions-dialog';
 import { useContainerTelemetry } from '@/desktop/containers';
 import { DockerAppsSection } from '../components/docker-apps/docker-apps';
-import { useAppLauncher } from '@/desktop/app-launcher';
+import { useAppLauncher, useOpenedApps } from '@/desktop/app-launcher';
+import { selectLibraryApps } from '@/desktop/app-library';
+import { AppLibraryControls, useLibraryFilters } from '@/desktop/app-library-controls';
+import { useWindowVisible } from '@/desktop/window-visibility';
 import { useCluster } from '@/desktop/cluster';
 import { ClusterApps } from '@/desktop/cluster-views';
 
@@ -28,10 +31,15 @@ export default () => {
 };
 
 function LocalApps() {
+  const { filters, change } = useLibraryFilters();
+  const opened = useOpenedApps();
+  const visible = useWindowVisible();
   const openApp = useAppLauncher();
   const containers = useContainerTelemetry();
   const { data: apps } = useSuspenseQuery({
     ...getInstalledAppsOptions(),
+    refetchInterval: visible ? 15000 : false,
+    refetchIntervalInBackground: false,
   });
 
   const { data: links } = useSuspenseQuery({
@@ -46,6 +54,23 @@ function LocalApps() {
 
   const { installed } = apps;
   const { links: customLinks = [] } = links;
+  const matching = selectLibraryApps(
+    installed.map((entry) => ({
+      key: entry.info.urn,
+      name: entry.info.name,
+      categories: entry.info.categories,
+      installedAt: entry.app.createdAt * 1000,
+      searchText: entry.info.short_desc,
+      entry,
+    })),
+    filters,
+    opened,
+  );
+  const matchingLinks = selectLibraryApps(
+    customLinks.map((entry) => ({ key: `link:${entry.id}`, name: entry.title, searchText: entry.description ?? undefined, entry })),
+    filters,
+    opened,
+  );
 
   const renderApp = ({ info, app, metadata }: (typeof installed)[number]) => {
     const versionIsIgnored = app.ignoredVersion === metadata.latestVersion;
@@ -53,29 +78,26 @@ function LocalApps() {
 
     const [appName, storeId] = info.urn.split(':');
 
-    if (info.available) {
-      return (
-        <Link
-          key={app.id}
-          to={`/apps/${storeId}/${appName}`}
-          className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0"
-          onClick={(event) => {
-            if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0 && openApp(info)) event.preventDefault();
-          }}
-        >
-          <AppTile
-            key={info.urn}
-            status={app.status}
-            info={info}
-            updateAvailable={updateAvailable}
-            pendingRestart={app.pendingRestart}
-            docker={{ data: containers.data, stale: containers.isError }}
-          />
-        </Link>
-      );
-    }
-
-    return null;
+    return (
+      <Link
+        key={app.id}
+        to={`/apps/${storeId}/${appName}`}
+        className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0"
+        onClick={(event) => {
+          if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0 && openApp(info)) event.preventDefault();
+        }}
+      >
+        <AppTile
+          key={info.urn}
+          status={app.status}
+          info={info}
+          updateAvailable={updateAvailable}
+          pendingRestart={app.pendingRestart}
+          recentlyInstalled={app.createdAt * 1000 > Date.now() - 7 * 86400000}
+          docker={{ data: containers.data, stale: containers.isError }}
+        />
+      </Link>
+    );
   };
 
   const renderLink = (link: CustomLink) => {
@@ -88,6 +110,10 @@ function LocalApps() {
 
   const library = (
     <div key="library" className="orbis-managed-apps">
+      <AppLibraryControls filters={filters} change={change} categories={installed.flatMap(({ info }) => info.categories ?? [])} />
+      <output className="app-library-results">
+        {matching.length} of {installed.length} apps{matchingLinks.length ? ` · ${matchingLinks.length} links` : ''}
+      </output>
       <details className={clsx('desktop-batch-controls', { 'd-none': installed.length <= 1 })}>
         <summary>
           <IconAdjustmentsHorizontal size={17} aria-hidden="true" />
@@ -133,8 +159,11 @@ function LocalApps() {
         />
       ) : (
         <div className="row row-cards desktop-installed-grid" data-testid="apps-list">
-          {installed.map(renderApp)}
-          {customLinks.map(renderLink)}
+          {matching.map(({ entry }) => renderApp(entry))}
+          {matchingLinks.map(({ entry }) => renderLink(entry))}
+          {matching.length + matchingLinks.length === 0 ? (
+            <p className="app-library-empty">No apps match these filters. Clear the search or choose another category.</p>
+          ) : null}
           <ButtonTile
             title={t('CUSTOM_APP_ADD_TITLE')}
             subtitle={t('CUSTOM_APP_ADD_SUBTITLE')}
@@ -151,7 +180,7 @@ function LocalApps() {
       )}
     </div>
   );
-  const dockerApps = <DockerAppsSection key="docker-apps" />;
+  const dockerApps = <DockerAppsSection key="docker-apps" filters={filters} />;
 
   return (
     <div className={clsx('orbis-app-library', { 'is-empty': installed.length === 0 })}>

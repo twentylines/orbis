@@ -13,6 +13,7 @@ import { appDestinations } from './app-destinations';
 import { DockCompanion } from './dock-companion';
 import { dockFlightTargetLeft } from './dock-motion-geometry';
 import './app-launcher.css';
+import { readOpenedApps, rememberOpenedApp, type OpenedApps } from './app-library';
 
 type LaunchRequest = {
   urn: string;
@@ -23,17 +24,35 @@ type LaunchRequest = {
   launchUrl?: string;
   manageUrl?: string;
   status?: string;
+  recentKey?: string;
 };
 const dockFocusTarget = () =>
   document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]') ?? document.querySelector<HTMLElement>('.desktop-dock-item');
 const AppLauncherContext = createContext<(request: LaunchRequest) => boolean>(() => false);
 const AppTrayContext = createContext<ReactNode>(null);
+const OpenedAppsContext = createContext<OpenedApps>({});
+export const useOpenedApps = () => useContext(OpenedAppsContext);
 export const useAppLauncher = () => useContext(AppLauncherContext);
 export const MinimizedApps = () => useContext(AppTrayContext);
 
 export function AppLauncherProvider({ children }: PropsWithChildren) {
   const desktop = useDesktopWindows();
-  const { userSettings } = useAppContext();
+  const { userSettings, user } = useAppContext();
+  const recentStorageKey = `orbis-opened-apps-v1:${user.id}`;
+  const [opened, setOpened] = useState<OpenedApps>(() => {
+    try {
+      return readOpenedApps(localStorage.getItem(recentStorageKey));
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(recentStorageKey, JSON.stringify(opened));
+    } catch {
+      /* Opening apps still works when storage is blocked. */
+    }
+  }, [opened, recentStorageKey]);
   const [selected, setSelected] = useState<LaunchRequest | null>(null);
   const [minimized, setMinimized] = useState<LaunchRequest[]>([]);
   const [minimizing, setMinimizing] = useState(false);
@@ -69,6 +88,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   }, []);
   const openApp = useCallback(
     (request: LaunchRequest) => {
+      setOpened((previous) => rememberOpenedApp(previous, request.recentKey ?? request.urn, Date.now()));
       if (!desktop) return false;
       cancelMotion();
       restoreOrigin.current = null;
@@ -153,23 +173,32 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
         spacing(element, 'margin-left');
       const slots = Math.max(1, Math.floor((available + gap) / (item.offsetWidth + gap)));
       const width = `${Math.min(slots, minimized.length) * (item.offsetWidth + gap) - gap + padding}px`;
-      element.style.width = width;
-      element.style.maxWidth = width;
+      if (element.style.width !== width) element.style.width = width;
+      if (element.style.maxWidth !== width) element.style.maxWidth = width;
+    };
+    let layoutFrame = 0;
+    const schedule = () => {
+      if (!layoutFrame)
+        layoutFrame = requestAnimationFrame(() => {
+          layoutFrame = 0;
+          measure();
+        });
     };
     measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(schedule);
     observer.observe(primary);
     for (const child of dock.children) if (child !== element) observer.observe(child);
     const changes = new MutationObserver(() => {
       for (const child of dock.children) if (child !== element) observer.observe(child);
-      measure();
+      schedule();
     });
     changes.observe(dock, { childList: true });
-    window.addEventListener('resize', measure);
+    window.addEventListener('resize', schedule);
     return () => {
       observer.disconnect();
       changes.disconnect();
-      window.removeEventListener('resize', measure);
+      window.removeEventListener('resize', schedule);
+      cancelAnimationFrame(layoutFrame);
     };
   }, [desktop, trayVisible, minimized.length]);
 
@@ -467,115 +496,117 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   );
 
   return (
-    <AppLauncherContext.Provider value={openApp}>
-      <AppTrayContext.Provider value={minimizedApps}>
-        {children}
-        <Dialog.Root
-          open={selected !== null && desktop}
-          modal={false}
-          onOpenChange={(open) => {
-            if (!open) closeLauncher();
-          }}
-        >
-          <Dialog.Portal>
-            <Dialog.Content
-              ref={capturePanel}
-              className="orbis-app-launcher"
-              data-minimizing={minimizing}
-              data-closing={closing}
-              inert={minimizing || closing || undefined}
-              onInteractOutside={(event) => event.preventDefault()}
-              onCloseAutoFocus={(event) => {
-                event.preventDefault();
-                const minimizedTarget = focusMinimized.current ? trayButton(focusMinimized.current) : null;
-                const target = minimizedTarget ?? (opener.current?.isConnected ? opener.current : dockFocusTarget());
-                target?.focus({ preventScroll: true });
-                focusMinimized.current = null;
-              }}
-            >
-              <span className="app-launcher-flight-mark" aria-hidden="true">
-                <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={28} />
-              </span>
-              <header className="app-launcher-bar">
-                <span title={selected?.serverName || userSettings.internalIp || window.location.hostname}>
-                  {selected?.serverName || userSettings.internalIp || window.location.hostname}
+    <OpenedAppsContext.Provider value={opened}>
+      <AppLauncherContext.Provider value={openApp}>
+        <AppTrayContext.Provider value={minimizedApps}>
+          {children}
+          <Dialog.Root
+            open={selected !== null && desktop}
+            modal={false}
+            onOpenChange={(open) => {
+              if (!open) closeLauncher();
+            }}
+          >
+            <Dialog.Portal>
+              <Dialog.Content
+                ref={capturePanel}
+                className="orbis-app-launcher"
+                data-minimizing={minimizing}
+                data-closing={closing}
+                inert={minimizing || closing || undefined}
+                onInteractOutside={(event) => event.preventDefault()}
+                onCloseAutoFocus={(event) => {
+                  event.preventDefault();
+                  const minimizedTarget = focusMinimized.current ? trayButton(focusMinimized.current) : null;
+                  const target = minimizedTarget ?? (opener.current?.isConnected ? opener.current : dockFocusTarget());
+                  target?.focus({ preventScroll: true });
+                  focusMinimized.current = null;
+                }}
+              >
+                <span className="app-launcher-flight-mark" aria-hidden="true">
+                  <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={28} />
                 </span>
-                <div className="app-launcher-controls">
-                  <Button
-                    className="app-launcher-close"
-                    size="icon"
-                    aria-label="Minimize app launcher"
-                    disabled={minimizing || closing}
-                    onClick={minimize}
-                  >
-                    <IconMinus size={19} aria-hidden="true" />
-                  </Button>
-                  <Dialog.Close asChild>
-                    <Button className="app-launcher-close" size="icon" aria-label="Close app launcher" disabled={minimizing || closing}>
-                      <IconX size={19} aria-hidden="true" />
+                <header className="app-launcher-bar">
+                  <span title={selected?.serverName || userSettings.internalIp || window.location.hostname}>
+                    {selected?.serverName || userSettings.internalIp || window.location.hostname}
+                  </span>
+                  <div className="app-launcher-controls">
+                    <Button
+                      className="app-launcher-close"
+                      size="icon"
+                      aria-label="Minimize app launcher"
+                      disabled={minimizing || closing}
+                      onClick={minimize}
+                    >
+                      <IconMinus size={19} aria-hidden="true" />
                     </Button>
-                  </Dialog.Close>
-                </div>
-              </header>
-              <div className="app-launcher-body">
-                <div className="app-launcher-identity">
-                  <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={64} />
-                  <div>
-                    <Dialog.Title>{data?.info.name ?? selected?.name}</Dialog.Title>
-                    <span className="app-launcher-status">
-                      {status ? status.replaceAll('_', ' ') : details.isError ? 'Unavailable' : 'Loading app…'}
-                    </span>
+                    <Dialog.Close asChild>
+                      <Button className="app-launcher-close" size="icon" aria-label="Close app launcher" disabled={minimizing || closing}>
+                        <IconX size={19} aria-hidden="true" />
+                      </Button>
+                    </Dialog.Close>
                   </div>
-                </div>
-                <Dialog.Description className="app-launcher-description">
-                  {!selected?.manageUrl && details.isError
-                    ? 'App details could not be loaded. Try again or open its settings.'
-                    : data?.info.no_gui
-                      ? 'This app runs without a web interface.'
-                      : status && status !== 'running'
-                        ? 'Open app settings to start or manage this app.'
-                        : 'Open the app on its server.'}
-                </Dialog.Description>
-                {primary ? (
-                  <Button asChild intent="primary">
-                    <a href={primary.url} target="_blank" rel="noopener noreferrer">
-                      <IconExternalLink size={18} aria-hidden="true" />
-                      Open app
-                    </a>
+                </header>
+                <div className="app-launcher-body">
+                  <div className="app-launcher-identity">
+                    <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={64} />
+                    <div>
+                      <Dialog.Title>{data?.info.name ?? selected?.name}</Dialog.Title>
+                      <span className="app-launcher-status">
+                        {status ? status.replaceAll('_', ' ') : details.isError ? 'Unavailable' : 'Loading app…'}
+                      </span>
+                    </div>
+                  </div>
+                  <Dialog.Description className="app-launcher-description">
+                    {!selected?.manageUrl && details.isError
+                      ? 'App details could not be loaded. Try again or open its settings.'
+                      : data?.info.no_gui
+                        ? 'This app runs without a web interface.'
+                        : status && status !== 'running'
+                          ? 'Open app settings to start or manage this app.'
+                          : 'Open the app on its server.'}
+                  </Dialog.Description>
+                  {primary ? (
+                    <Button asChild intent="primary">
+                      <a href={primary.url} target="_blank" rel="noopener noreferrer">
+                        <IconExternalLink size={18} aria-hidden="true" />
+                        Open app
+                      </a>
+                    </Button>
+                  ) : null}
+                  {destinations.length > 0 ? (
+                    <ul className="app-launcher-addresses" aria-label="App addresses">
+                      {destinations.map(({ label, url }) => (
+                        <li key={url}>
+                          <a href={url} target="_blank" rel="noopener noreferrer">
+                            <span>{label}</span>
+                            <span title={url}>{url}</span>
+                            <IconExternalLink size={16} aria-hidden="true" />
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {!selected?.manageUrl && details.isError ? <Button onClick={() => void details.refetch()}>Retry</Button> : null}
+                  <Button asChild variant="outline">
+                    {selected?.manageUrl ? (
+                      <a href={selected.manageUrl} target="_blank" rel="noopener noreferrer">
+                        <IconSettings size={18} aria-hidden="true" /> App settings
+                      </a>
+                    ) : (
+                      <Link to={managePath} onClick={() => setSelected(null)}>
+                        <IconSettings size={18} aria-hidden="true" />
+                        App settings
+                      </Link>
+                    )}
                   </Button>
-                ) : null}
-                {destinations.length > 0 ? (
-                  <ul className="app-launcher-addresses" aria-label="App addresses">
-                    {destinations.map(({ label, url }) => (
-                      <li key={url}>
-                        <a href={url} target="_blank" rel="noopener noreferrer">
-                          <span>{label}</span>
-                          <span title={url}>{url}</span>
-                          <IconExternalLink size={16} aria-hidden="true" />
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {!selected?.manageUrl && details.isError ? <Button onClick={() => void details.refetch()}>Retry</Button> : null}
-                <Button asChild variant="outline">
-                  {selected?.manageUrl ? (
-                    <a href={selected.manageUrl} target="_blank" rel="noopener noreferrer">
-                      <IconSettings size={18} aria-hidden="true" /> App settings
-                    </a>
-                  ) : (
-                    <Link to={managePath} onClick={() => setSelected(null)}>
-                      <IconSettings size={18} aria-hidden="true" />
-                      App settings
-                    </Link>
-                  )}
-                </Button>
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
-      </AppTrayContext.Provider>
-    </AppLauncherContext.Provider>
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        </AppTrayContext.Provider>
+      </AppLauncherContext.Provider>
+    </OpenedAppsContext.Provider>
   );
 }
 

@@ -74,9 +74,19 @@ export function DockCompanion({
       void Promise.all(motions.current.map((animation) => animation.finished)).then(finish, () => undefined);
     };
     move();
-    const observer = new ResizeObserver(move);
+    let resizeFrame = 0;
+    const observer = new ResizeObserver(() => {
+      if (!resizeFrame)
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = 0;
+          move();
+        });
+    });
     observer.observe(inner);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(resizeFrame);
+    };
   }, [present, visible, side]);
 
   useLayoutEffect(

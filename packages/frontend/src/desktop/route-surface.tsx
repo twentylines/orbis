@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, type CSSProperties, type PropsWithChi
 import { revealPageFocus } from './window-viewport';
 import { prefersReducedMotion } from './motion-setting';
 import { sectionMotionTiming } from './section-motion-geometry';
+import { useDesktopPreferences } from './preferences';
 import './route-surface.css';
 
 const sizes = new Map<string, number>();
@@ -18,7 +19,8 @@ export function RouteSurface({
   const waiting = useRef<{ key: string; height: number } | null>(null);
   const measured = useRef<{ key: string; height: number } | null>(null);
   const reveal = useRef<{ animation: Animation; target: number } | null>(null);
-  const sizeKey = `${section}:${window.innerWidth}:${getComputedStyle(document.documentElement).getPropertyValue('--orbis-text-scale')}`;
+  const { preferences } = useDesktopPreferences();
+  const sizeKey = `${section}:${window.innerWidth}:${preferences.appearance.textScale}`;
   const reserve = useMemo(() => sizes.get(sizeKey) ?? Math.max(280, window.innerHeight - 210), [sizeKey]);
   useLayoutEffect(() => {
     const view = surface.current;
@@ -55,6 +57,7 @@ export function RouteSurface({
       if (!content || !heading) return;
       const height = Math.ceil(content.offsetHeight + heading.offsetHeight + 2);
       sizes.set(sizeKey, height);
+      if (sizes.size > 64) sizes.delete(sizes.keys().next().value as string);
       const previous = waiting.current ?? measured.current;
       waiting.current = null;
       measured.current = { key: sizeKey, height };
@@ -67,6 +70,7 @@ export function RouteSurface({
         }
         return;
       }
+      if (!previous || previous.key !== sizeKey || Math.abs(previous.height - height) < 1 || prefersReducedMotion()) return;
       const moving = view
         .getAnimations()
         .some(
@@ -75,17 +79,22 @@ export function RouteSurface({
             animation.effect instanceof KeyframeEffect &&
             animation.effect.getKeyframes().some((frame) => frame.height),
         );
-      if (!previous || previous.key !== sizeKey || moving || Math.abs(previous.height - height) < 1 || prefersReducedMotion()) return;
+      if (moving) return;
       animateTo(previous.height, height);
     };
-    const observer = new ResizeObserver(measure);
+    let resizeFrame = 0;
+    const observer = new ResizeObserver(() => {
+      if (!resizeFrame)
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = 0;
+          measure();
+        });
+    });
     for (const child of view.children) if (child.classList.contains('desktop-window-content') || child.tagName === 'HEADER') observer.observe(child);
     measure();
-    const changes = new MutationObserver(measure);
-    changes.observe(view, { childList: true, subtree: true });
     return () => {
       observer.disconnect();
-      changes.disconnect();
+      cancelAnimationFrame(resizeFrame);
       reveal.current?.animation.cancel();
       reveal.current = null;
       delete view.dataset.cardRevealing;

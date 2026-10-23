@@ -191,6 +191,7 @@ export class ClusterService {
           installed: (await this.apps.getInstalledApps()).map(({ app, info, metadata }) => ({
             app: {
               id: app.id,
+              createdAt: app.createdAt,
               status: app.status,
               version: app.version,
               ignoredVersion: app.ignoredVersion,
@@ -204,6 +205,7 @@ export class ClusterService {
               urn: info.urn,
               name: info.name,
               available: info.available,
+              categories: info.categories,
               no_gui: info.no_gui,
               url_suffix: info.url_suffix,
               port: info.port,
