@@ -29,6 +29,7 @@ const createFixture = (performBackup = true) => {
   const appsRepository = mock<AppsRepository>();
   const config = mock<ConfigurationService>();
   const docker = mock<Dockerode>();
+  docker.listContainers.mockResolvedValue([]);
   const steps: string[] = [];
   let installedSource = 'v1';
 
@@ -87,6 +88,7 @@ const createFixture = (performBackup = true) => {
     appHelpers,
     backupManager,
     appsRepository,
+    docker,
     ensureAppDir,
     steps,
     getInstalledSource: () => installedSource,
@@ -94,6 +96,32 @@ const createFixture = (performBackup = true) => {
 };
 
 describe('UpdateAppCommand', () => {
+  it('restores the original running container when the pre-update backup fails', async () => {
+    const fixture = createFixture();
+    const container = mock<Dockerode.Container>();
+    let running = true;
+    fixture.docker.listContainers.mockResolvedValue([{ Id: 'original-container' } as Dockerode.ContainerInfo]);
+    fixture.docker.getContainer.mockReturnValue(container);
+    container.inspect.mockImplementation(async () => ({ State: { Running: running } }) as Dockerode.ContainerInspectInfo);
+    fixture.dockerService.composeApp.mockImplementation(async () => {
+      running = false;
+      return { success: true, stdout: '', stderr: '' };
+    });
+    container.start.mockImplementation(async () => {
+      running = true;
+    });
+    fixture.backupManager.backupApp.mockRejectedValue(new Error('Backup storage is full'));
+
+    const result = await fixture.command.execute(appUrn, {});
+
+    expect(result).toEqual({ success: false, message: 'Backup storage is full', statePreserved: true });
+    expect(running).toBe(true);
+    expect(container.start).toHaveBeenCalledOnce();
+    expect(fixture.appFilesManager.deleteAppFolder).not.toHaveBeenCalled();
+    expect(fixture.marketplaceService.copyAppFromRepoToInstalled).not.toHaveBeenCalled();
+    expect(fixture.appHelpers.generateEnvFile).not.toHaveBeenCalled();
+  });
+
   it.each([
     { override: null, expected: 7 },
     { override: 0, expected: 0 },

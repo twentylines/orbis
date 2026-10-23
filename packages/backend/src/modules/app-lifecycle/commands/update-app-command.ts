@@ -1,8 +1,6 @@
 import { LoggerService } from '@/core/logger/logger.service';
 import { AppFilesManager } from '@/modules/apps/app-files-manager';
 import { AppHelpers } from '@/modules/apps/app.helpers';
-import { AppsRepository } from '@/modules/apps/apps.repository';
-import { BackupManager } from '@/modules/backups/backup.manager';
 import { DockerService } from '@/modules/docker/docker.service';
 import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
 import type { AppEventFormInput } from '@/modules/queue/entities/app-events';
@@ -12,7 +10,6 @@ import type Dockerode from 'dockerode';
 import { AppLifecycleCommand } from './command';
 import { dynamicComposeSchemaYaml } from '@runtipi/common/schemas';
 import { type } from 'arktype';
-import { ConfigurationService } from '@/core/config/configuration.service';
 
 export class UpdateAppCommand extends AppLifecycleCommand {
   constructor(
@@ -29,9 +26,6 @@ export class UpdateAppCommand extends AppLifecycleCommand {
     const dockerService = this.moduleRef.get(DockerService, { strict: false });
     const marketplaceService = this.moduleRef.get(MarketplaceService, { strict: false });
     const appHelpers = this.moduleRef.get(AppHelpers, { strict: false });
-    const backupManager = this.moduleRef.get(BackupManager, { strict: false });
-    const appsRepository = this.moduleRef.get(AppsRepository, { strict: false });
-    const config = this.moduleRef.get(ConfigurationService, { strict: false });
 
     const composeToInstall = await marketplaceService.getSourceDockerComposeYaml(appUrn);
     const compose = dynamicComposeSchemaYaml(composeToInstall.content);
@@ -43,13 +37,8 @@ export class UpdateAppCommand extends AppLifecycleCommand {
 
     try {
       if (this.performBackup) {
-        await dockerService.composeApp(appUrn, 'stop');
-        await backupManager.backupApp(appUrn);
-
-        const app = await appsRepository.getAppByUrn(appUrn);
-        const maxBackups = app?.maxBackups ?? config.get('userSettings').maxBackups;
-
-        await backupManager.cleanupOldBackups(appUrn, maxBackups);
+        const backup = await this.backupApp(appUrn);
+        if (!backup.success) return backup;
       }
 
       logger.info(`Updating app ${appUrn}`);

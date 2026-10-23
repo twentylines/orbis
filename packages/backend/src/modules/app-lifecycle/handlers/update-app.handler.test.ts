@@ -166,6 +166,22 @@ describe('UpdateAppHandler settings preservation', () => {
     ]);
   });
 
+  it('keeps the previous status, version and settings when a failed backup restored the original containers', async () => {
+    const fixture = await createFixture(9, 'running');
+    fixture.appEventsQueue.publish.mockResolvedValue({ success: false, message: 'Backup storage failed', statePreserved: true });
+
+    await fixture.handler.execute(appUrn, { performBackup: true });
+    await vi.waitFor(() => expect(fixture.getStored().status).toBe('running'));
+
+    expect(fixture.getStored()).toEqual(fixture.original);
+    expect(fixture.startAppHandler.execute).not.toHaveBeenCalled();
+    expect(fixture.statusManager.emitEvent).toHaveBeenCalledExactlyOnceWith({ appUrn, event: 'update_error', error: 'Backup storage failed' });
+    expect(fixture.appRepository.updateAppById.mock.calls).toEqual([
+      [12, { status: 'updating' }],
+      [12, { status: 'running' }],
+    ]);
+  });
+
   it('rejects an unknown app before queuing or changing any status', async () => {
     const fixture = await createFixture(null);
     fixture.appRepository.getAppByUrn.mockResolvedValue(undefined);

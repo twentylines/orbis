@@ -34,9 +34,11 @@ export class BackupAppHandler implements ILifecycleHandler {
 
     const requestId = generateRequestId();
 
-    this.appEventsQueue.publish({ appUrn, command: 'backup', requestId, form: app.config }).then(async ({ success, message }) => {
+    this.appEventsQueue.publish({ appUrn, command: 'backup', requestId, form: app.config }).then(async (result) => {
+      const { success, message } = result;
+      const statePreserved = 'statePreserved' in result && result.statePreserved;
       if (success) {
-        if (appStatusBeforeBackup === 'running') {
+        if (appStatusBeforeBackup === 'running' && !statePreserved) {
           await this.startAppHandler.execute(appUrn);
         } else {
           await this.statusManager.emitSuccess({
@@ -51,7 +53,7 @@ export class BackupAppHandler implements ILifecycleHandler {
           appId: app.id,
           appUrn,
           event: 'backup_error',
-          status: 'stopped',
+          status: statePreserved ? appStatusBeforeBackup : 'stopped',
           error: message ?? 'Unknown error',
         });
       }

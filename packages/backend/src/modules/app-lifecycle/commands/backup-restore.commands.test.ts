@@ -31,6 +31,7 @@ describe.each(['backup', 'restore'] as const)('%s requires a stopped application
     ]);
     const moduleRef = { get: (token: unknown) => services.get(token) } as ModuleRef;
     const docker = mock<Dockerode>();
+    docker.listContainers.mockResolvedValue([]);
     const command = action === 'backup' ? new BackupAppCommand(moduleRef, docker) : new RestoreAppCommand(moduleRef, docker, 'saved.tar.gz');
     return { command, dockerService, backupManager };
   };
@@ -38,7 +39,11 @@ describe.each(['backup', 'restore'] as const)('%s requires a stopped application
   it('does not read or replace app files when stopping fails', async () => {
     const { command, dockerService, backupManager } = fixture();
     dockerService.composeApp.mockRejectedValue(new Error('The app could not be stopped'));
-    expect(await command.execute(appUrn)).toEqual({ success: false, message: 'The app could not be stopped' });
+    expect(await command.execute(appUrn)).toEqual({
+      success: false,
+      message: 'The app could not be stopped',
+      ...(action === 'backup' ? { statePreserved: true } : {}),
+    });
     expect(backupManager.backupApp).not.toHaveBeenCalled();
     expect(backupManager.restoreApp).not.toHaveBeenCalled();
     expect(backupManager.cleanupOldBackups).not.toHaveBeenCalled();

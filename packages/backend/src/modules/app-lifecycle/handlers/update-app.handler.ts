@@ -49,7 +49,8 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
 
     const requestId = generateRequestId();
 
-    this.appEventsQueue.publish({ command: 'update', appUrn, requestId, form: app.config, performBackup }).then(async ({ success, message }) => {
+    this.appEventsQueue.publish({ command: 'update', appUrn, requestId, form: app.config, performBackup }).then(async (result) => {
+      const { success, message } = result;
       if (success) {
         const appInfo = await this.appFilesManager.getInstalledAppInfo(appUrn);
 
@@ -63,8 +64,9 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
         }
       } else {
         this.logger.error(`Failed to update app ${appUrn}: ${message}`);
+        const status = 'statePreserved' in result && result.statePreserved ? appStatusBeforeUpdate : 'stopped';
+        await this.appRepository.updateAppById(app.id, { status });
         this.statusManager.emitEvent({ appUrn, event: 'update_error', error: message });
-        await this.appRepository.updateAppById(app.id, { status: 'stopped' });
       }
     });
 

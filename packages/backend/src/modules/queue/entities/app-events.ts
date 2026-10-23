@@ -49,6 +49,7 @@ export type AppEvent = typeof appEventSchema.infer;
 export const appEventResultSchema = type({
   success: 'boolean',
   message: 'string',
+  statePreserved: 'boolean?',
 });
 
 export type AppEventFormInput = typeof queueAppFormSchema.inferIn;

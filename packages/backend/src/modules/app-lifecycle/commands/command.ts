@@ -1,7 +1,10 @@
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { AppFilesManager } from '@/modules/apps/app-files-manager';
+import { AppsRepository } from '@/modules/apps/apps.repository';
+import { BackupManager } from '@/modules/backups/backup.manager';
 import { DockerComposeBuilder } from '@/modules/docker/builders/compose.builder';
+import { DockerService } from '@/modules/docker/docker.service';
 import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
 import { SubnetManagerService } from '@/modules/network/subnet-manager.service';
 import type { AppEventFormInput } from '@/modules/queue/entities/app-events';
@@ -10,12 +13,32 @@ import type { AppUrn } from '@runtipi/common/types';
 import * as Sentry from '@sentry/nestjs';
 import { type } from 'arktype';
 import Dockerode from 'dockerode';
+import { backupAppWithRuntime } from './backup-app-runtime';
 
 export class AppLifecycleCommand {
   constructor(
     protected moduleRef: ModuleRef,
     protected docker: Dockerode,
   ) {}
+
+  protected async backupApp(appUrn: AppUrn, resumeAfterSuccess = false) {
+    const backups = this.moduleRef.get(BackupManager, { strict: false });
+    const repository = this.moduleRef.get(AppsRepository, { strict: false });
+    const config = this.moduleRef.get(ConfigurationService, { strict: false });
+    const result = await backupAppWithRuntime({
+      appUrn,
+      docker: this.docker,
+      dockerService: this.moduleRef.get(DockerService, { strict: false }),
+      resumeAfterSuccess,
+      backup: async () => {
+        await backups.backupApp(appUrn);
+        const app = await repository.getAppByUrn(appUrn);
+        await backups.cleanupOldBackups(appUrn, app?.maxBackups ?? config.get('userSettings').maxBackups);
+      },
+    });
+    if (!result.success) Sentry.captureException(new Error(result.message), { tags: { appId: appUrn, event: 'backup' } });
+    return result;
+  }
 
   protected async ensureAppDir(appUrn: AppUrn, form: AppEventFormInput): Promise<void> {
     const appFilesManager = this.moduleRef.get(AppFilesManager, { strict: false });
