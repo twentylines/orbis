@@ -28,6 +28,7 @@ class PullProgress:
         self.offset = 0
         self.pending = b""
         self.layers = {}
+        self.fraction = None
 
     def __call__(self):
         try:
@@ -46,6 +47,7 @@ class PullProgress:
         if not self.layers:
             return None
         ready = sum(status in {b"Pull complete", b"Already exists"} for status in self.layers.values())
+        self.fraction = ready / len(self.layers)
         return f"layers {ready}/{len(self.layers)}"
 
 
@@ -95,7 +97,7 @@ class Presentation:
             raise ValueError("Installation stage count is invalid")
         self.total = self.completed + count
 
-    def frame(self, label, tick, elapsed=0, status=None, detail=None):
+    def frame(self, label, tick, elapsed=0, status=None, detail=None, fraction=None):
         width = max(1, self.width() - 1)
         count = f"{self.completed}/{self.total} stages" if self.total else "Working"
         caption = f"{status or count}  {elapsed:.1f}s"
@@ -108,8 +110,10 @@ class Presentation:
         if width < len(caption) + 8:
             return caption[:width]
         cells = max(4, min(54, width - len(caption) - 4))
-        done = min(cells, int(cells * self.completed / self.total)) if self.total else (cells if status == "[ok]" else 0)
-        end = min(cells, max(done + 1, int(cells * (self.completed + 1) / self.total))) if self.total else cells
+        # The bar belongs to the current operation; stage counts stay separate.
+        # Layer counts are not byte percentages, and unknown work stays animated.
+        done = cells if status == "[ok]" else min(cells, int(cells * fraction)) if fraction is not None else 0
+        end = cells
         span = max(1, end - done)
         period = max(1, 2 * (span - 1))
         position = tick % period
@@ -139,7 +143,8 @@ class Presentation:
         def draw():
             tick = 1
             while not stopped.wait(0.1):
-                self.write("\r\033[2K" + self.frame(label, tick, time.monotonic() - started, detail=detail() if detail else None))
+                summary = detail() if detail else None
+                self.write("\r\033[2K" + self.frame(label, tick, time.monotonic() - started, detail=summary, fraction=getattr(detail, "fraction", None)))
                 tick += 1
 
         worker = threading.Thread(target=draw, name="orbis-installer-display", daemon=True)

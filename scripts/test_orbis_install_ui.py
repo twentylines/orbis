@@ -79,13 +79,41 @@ class InstallerPresentationTests(unittest.TestCase):
             self.assertIsNone(progress())
             path.write_bytes(b"abcdef123456: Pulling fs layer\n123456abcdef: Already exists\nabcdef123456: Download comp")
             self.assertEqual(progress(), "layers 1/2")
+            self.assertEqual(progress.fraction, 0.5)
             with path.open("ab") as stream:
                 stream.write(b"lete\nabcdef123456: Extracting [==>] 5MB/10MB\n")
                 stream.write(b"abcdef123456: Pull complete\r\n\x1b[2Jsecret diagnostic\nStatus: Downloaded newer image\n")
             self.assertEqual(progress(), "layers 2/2")
+            self.assertEqual(progress.fraction, 1)
             self.assertEqual(progress(), "layers 2/2")
             self.assertNotIn("secret", progress())
             self.assertNotIn("\033", progress())
+
+    def test_newly_discovered_layers_do_not_claim_a_byte_percentage(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "pull.log"
+            progress = UI.PullProgress(path)
+            self.assertIsNone(progress.fraction)
+            path.write_bytes(b"abcdef123456: Already exists\n")
+            self.assertEqual(progress(), "layers 1/1")
+            with path.open("ab") as stream:
+                stream.write(b"123456abcdef: Pulling fs layer\n")
+            self.assertEqual(progress(), "layers 1/2")
+            self.assertEqual(progress.fraction, 0.5)
+
+    def test_operation_bar_uses_layer_completion_and_unknown_work_animates_across_its_track(self):
+        ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
+        ui.set_remaining_steps(12)
+        with mock.patch.object(ui, "width", return_value=120):
+            frames = [ui.frame("Downloading", tick).split("]")[0][1:] for tick in range(54)]
+            self.assertEqual({frame.index("#") for frame in frames}, set(range(54)))
+            for fraction, cells in ((0, 0), (0.5, 27), (1, 54)):
+                bar = ui.frame("Downloading", 5, detail="layers 1/2", fraction=fraction).split("]")[0][1:]
+                self.assertEqual(len(bar) - len(bar.lstrip("=")), cells)
+            self.assertEqual(ui.frame("Done", 0, status="[ok]").count("="), 54)
+            stopped = ui.frame("Failed", 0, status="[stopped]")
+            self.assertNotIn("#", stopped)
+            self.assertNotIn("=", stopped)
 
     def test_noisy_or_unrecognized_pull_output_is_bounded_and_does_not_claim_download_progress(self):
         with tempfile.TemporaryDirectory() as folder:
