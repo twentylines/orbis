@@ -2,7 +2,7 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 
 const REPO = 'twentylines/orbis';
 const TAG = /^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$/;
-const CACHE_MS = 15 * 60 * 1000;
+const CACHE_MS = 60 * 1000;
 const PENDING_RELEASE_CACHE_MS = 30 * 1000;
 
 export type OrbisRelease = {
@@ -42,6 +42,7 @@ export class OrbisReleaseService {
     const feed = await this.request(`https://github.com/${REPO}/releases.atom`, 'GET', 512 * 1024);
     const latest = latestTagFromAtom(feed);
     if (!latest) return null;
+    if (this.cached?.value?.tag === latest.tag && this.cached.value.imageManifestUrl) return this.cached.value;
     const tag = latest.tag;
     const manifestUrl = `https://github.com/${REPO}/releases/download/${tag}/release-manifest.json`;
     const notesUrl = `https://raw.githubusercontent.com/${REPO}/${tag}/releases/${tag}.md`;

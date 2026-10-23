@@ -53,6 +53,8 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
         return { apps, build, release: releaseResult.value, releaseFailed: releaseResult.failed, status };
       },
       enabled: visible,
+      refetchOnMount: 'always',
+      refetchOnWindowFocus: 'always',
       refetchInterval: 15_000,
       refetchIntervalInBackground: false,
       retry: false,

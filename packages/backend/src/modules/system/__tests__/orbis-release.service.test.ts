@@ -57,6 +57,52 @@ describe('Orbis release feed', () => {
     expect(request).toHaveBeenCalledTimes(6);
     vi.advanceTimersByTime(60_000);
     expect((await service.latest())?.imageManifestUrl).not.toBeNull();
-    expect(request).toHaveBeenCalledTimes(6);
+    expect(request).toHaveBeenCalledTimes(7);
+  });
+
+  it('finds a new release after one minute without downloading unchanged notes again', async () => {
+    vi.useFakeTimers();
+    let tag = TAG;
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/releases.atom')) return new Response(FEED.replace(TAG, tag));
+      if (url.endsWith(`/${tag}.md`)) return new Response(`# ${tag}`);
+      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') return new Response(null);
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+    expect((await service.latest())?.tag).toBe(TAG);
+    vi.advanceTimersByTime(59_999);
+    await service.latest();
+    expect(request).toHaveBeenCalledTimes(3);
+    vi.advanceTimersByTime(1);
+    await Promise.all(Array.from({ length: 8 }, () => service.latest()));
+    expect(request).toHaveBeenCalledTimes(4);
+
+    tag = 'v0.1.0-beta.10';
+    vi.advanceTimersByTime(60_000);
+    const refreshed = await Promise.all(Array.from({ length: 8 }, () => service.latest()));
+    expect(refreshed.every((release) => release?.tag === tag && release.body === `# ${tag}`)).toBe(true);
+    expect(request).toHaveBeenCalledTimes(7);
+  });
+
+  it('retains the last known release when a later automatic check cannot reach GitHub', async () => {
+    vi.useFakeTimers();
+    let offline = false;
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (offline) throw new Error('network unavailable');
+      if (url.endsWith('/releases.atom')) return new Response(FEED);
+      if (url.endsWith(`/${TAG}.md`)) return new Response('# Release notes');
+      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') return new Response(null);
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+    const previous = await service.latest();
+    offline = true;
+    vi.advanceTimersByTime(60_000);
+    const results = await Promise.all(Array.from({ length: 8 }, () => service.latest()));
+    expect(results.every((release) => release === previous)).toBe(true);
+    expect(request).toHaveBeenCalledTimes(4);
   });
 });

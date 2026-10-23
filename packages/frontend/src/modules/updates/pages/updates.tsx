@@ -141,13 +141,33 @@ function LocalUpdates() {
   const [reviewPackagePlan, setReviewPackagePlan] = useState<HostPackagePlan | null>(null);
   const lastRefreshedCoreJob = useRef<string | null>(null);
   const lastRefreshedPackageJob = useRef<string | null>(null);
-  const apps = useQuery(getInstalledAppsOptions());
-  const build = useQuery({ queryKey: ['orbis-installed-build'], queryFn: ({ signal }) => loadInstalledBuild(signal), staleTime: 30 * 60 * 1000 });
+  const apps = useQuery({
+    ...getInstalledAppsOptions(),
+    enabled: visible,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const build = useQuery({
+    queryKey: ['orbis-installed-build'],
+    queryFn: ({ signal }) => loadInstalledBuild(signal),
+    enabled: visible,
+    staleTime: 60_000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
   const releases = useQuery({
     queryKey: ['orbis-github-releases'],
     queryFn: ({ signal }) => loadOrbisReleases(signal),
-    staleTime: 30 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    enabled: visible,
+    staleTime: 60_000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
   const available =
     apps.data?.installed.filter(
@@ -166,7 +186,10 @@ function LocalUpdates() {
     queryFn: ({ signal }) => hostRequest<HostPackageInventory>('packages', undefined, signal),
     enabled: visible && user?.operator === true,
     staleTime: 60_000,
-    refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     retry: false,
   });
   const packageChangelog = useQuery({
@@ -453,9 +476,6 @@ function LocalUpdates() {
                   <strong>{systemPackages.data.packageCount ?? 0} available package updates</strong>
                   <span>{systemPackages.data.operatingSystem || 'Host operating system'}</span>
                 </div>
-                <button type="button" disabled={systemPackages.isFetching} onClick={() => void systemPackages.refetch()}>
-                  {systemPackages.isFetching ? 'Reading…' : 'Reload package list'}
-                </button>
               </div>
               <p className="desktop-host-package-times">
                 {systemPackages.data.checkedAt ? `Checked ${new Date(systemPackages.data.checkedAt).toLocaleString()}. ` : ''}
@@ -646,7 +666,7 @@ function LocalUpdates() {
               ) : (
                 <p>No package updates in the local cache.</p>
               )}
-              <p className="desktop-update-note">Uses the local APT cache. Reloading this list does not refresh repositories or install packages.</p>
+              <p className="desktop-update-note">Available updates come from the server’s package lists.</p>
             </>
           ) : null}
         </section>
