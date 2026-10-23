@@ -52,7 +52,7 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
             ? [{ transform: `translate3d(${distance}px, 0, 0)` }, { transform: 'translate3d(0, 0, 0)' }]
             : [{ transform: `translateX(${distance}px)` }, { transform: 'none' }],
           {
-            duration: opening ? 760 : sectionMotionTiming.content,
+            duration: opening ? 720 : sectionMotionTiming.content,
             delay,
             easing: opening ? 'cubic-bezier(.2, .7, .2, 1)' : sectionMotionEasing,
             fill: 'backwards',

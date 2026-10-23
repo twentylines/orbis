@@ -200,8 +200,8 @@ export function DockGlass() {
       let path = rounded(main);
       for (const inner of dock.querySelectorAll<HTMLElement>('.desktop-dock-companion-content')) {
         const box = read(inner);
-        path += rounded(box) + (box.left < main.left ? bridge(box, main) : bridge(main, box));
         const side = inner.parentElement?.dataset.side;
+        path += rounded(box) + (side === 'left' ? bridge(box, main) : '');
         const covered = side === 'right' ? Math.max(0, main.right - box.left) : Math.max(0, box.right - main.left);
         const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-trigger');
         if (controls) {
