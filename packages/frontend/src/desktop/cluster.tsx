@@ -1,3 +1,4 @@
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router';
@@ -7,7 +8,6 @@ import { useDesktopPreferences } from './preferences';
 import type { Telemetry } from './telemetry';
 import { useAppContext } from '@/context/app-context';
 import { useConnectionStore } from '@/stores/connection-store';
-import { useReducedMotion } from 'framer-motion';
 import { RackDeck } from './rack-deck';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import './cluster.css';

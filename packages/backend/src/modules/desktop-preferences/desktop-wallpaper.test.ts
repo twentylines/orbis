@@ -59,7 +59,7 @@ describe('private desktop wallpaper HTTP and storage', () => {
       next();
     }) as NestMiddleware['use']);
     app.useGlobalPipes(new ArkValidationPipe());
-    await app.init();
+    await app.listen(0, '127.0.0.1');
   });
 
   afterEach(async () => {

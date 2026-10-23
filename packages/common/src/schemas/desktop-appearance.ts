@@ -15,7 +15,7 @@ export const desktopAppearanceSchema = type({
   'wallpaperDim?': '0 <= number.integer <= 70',
   'wallpaperBlur?': '0 <= number.integer <= 24',
   'surfaceOpacity?': '90 <= number.integer <= 100 | null',
-  'chromeOpacity?': '85 <= number.integer <= 100 | null',
+  'chromeOpacity?': '80 <= number.integer <= 100 | null',
   'glassBlur?': '0 <= number.integer <= 40 | null',
   'glassTint?': '0 <= number.integer <= 30 | null',
   'textScale?': '85 <= number.integer <= 150',

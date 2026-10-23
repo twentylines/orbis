@@ -26,7 +26,7 @@
   background: var(--desktop-surface);
   color: var(--desktop-ink);
   box-shadow: 0 30px 90px rgba(4, 19, 16, 0.32);
-  backdrop-filter: blur(28px);
+  backdrop-filter: var(--orbis-glass-filter, blur(28px));
 }
 .desktop-search-content {
   display: grid;

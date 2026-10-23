@@ -1,5 +1,5 @@
 # Appearance
 
-Current source running with real Orbis services on a disposable Linux server. These unedited browser captures show account wallpaper uploads, image controls and the existing colour presets at 1440 × 1920.
+Orbis running on Linux. These unedited browser captures show custom accents, glass controls, motion and transparency preferences, and account wallpapers at 1440 × 2732.
 
 [Light](desktop-light.png) · [Dark](desktop-dark.png)

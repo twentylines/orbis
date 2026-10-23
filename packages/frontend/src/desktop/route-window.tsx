@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '@/desktop/motion-setting';
 import {
   Suspense,
   lazy,
@@ -198,7 +199,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
     const element = frame.current;
     const target = dockBounds(id);
     motion.current?.cancel();
-    if (element && target && typeof element.animate === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (element && target && typeof element.animate === 'function' && !prefersReducedMotion()) {
       const from = element.getBoundingClientRect();
       setHiding(true);
       const animation = element.animate(
@@ -237,7 +238,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
       titlebar.current?.focus({ preventScroll: true });
       const from = dockBounds(id);
       const to = frame.current.getBoundingClientRect();
-      if (from && typeof frame.current.animate === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (from && typeof frame.current.animate === 'function' && !prefersReducedMotion()) {
         motion.current = frame.current.animate(
           [
             {

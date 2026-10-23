@@ -106,7 +106,7 @@ html:has(.desktop) {
   text-overflow: ellipsis;
   padding-left: 10px;
   border-left: 1px solid rgba(255, 255, 255, 0.22);
-  color: rgba(244, 249, 244, 0.7);
+  color: var(--orbis-chrome-muted, rgba(244, 249, 244, 0.7));
   font-size: 13px;
   font-weight: 600;
 }
@@ -211,10 +211,10 @@ html:has(.desktop) {
 }
 .desktop-search-trigger span {
   flex: 1;
-  color: rgba(244, 249, 244, 0.75);
+  color: var(--orbis-chrome-muted, rgba(244, 249, 244, 0.75));
 }
 .desktop-search-trigger kbd {
-  color: rgba(244, 249, 244, 0.66);
+  color: var(--orbis-chrome-muted, rgba(244, 249, 244, 0.66));
   background: transparent;
   font: 12px inherit;
   white-space: nowrap;
@@ -233,7 +233,7 @@ html:has(.desktop) {
   padding: 8px 12px;
   border-radius: 9px;
   background: var(--desktop-chrome);
-  color: rgba(244, 249, 244, 0.76);
+  color: var(--orbis-chrome-muted, rgba(244, 249, 244, 0.76));
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
@@ -241,7 +241,7 @@ html:has(.desktop) {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: rgba(244, 249, 244, 0.77);
+  color: var(--orbis-chrome-muted, rgba(244, 249, 244, 0.77));
   font-size: 13px;
   line-height: 20px;
   white-space: nowrap;
@@ -300,8 +300,8 @@ html:has(.desktop) {
   box-shadow:
     0 30px 70px rgba(12, 35, 32, 0.19),
     inset 0 1px var(--desktop-highlight);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
+  -webkit-backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
   animation: orbis-window-enter 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
   container-type: inline-size;
 }
@@ -763,7 +763,7 @@ html:has(.desktop) {
   gap: 3px;
   padding: 6px 12px;
   border-radius: 14px;
-  color: rgba(245, 248, 242, 0.76);
+  color: var(--orbis-chrome-muted, rgba(245, 248, 242, 0.76));
   text-decoration: none;
   transition:
     min-width 600ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -822,6 +822,9 @@ html:has(.desktop) {
 }
 .desktop .desktop-dock-item.is-active {
   color: #fff7ec;
+}
+.desktop .desktop-dock-item.is-active:hover {
+  background: transparent;
 }
 .desktop-dock-selection {
   position: absolute;

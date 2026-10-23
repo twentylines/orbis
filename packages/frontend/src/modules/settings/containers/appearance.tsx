@@ -8,6 +8,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { IconDeviceDesktop, IconMoonStars, IconSunHigh } from '@tabler/icons-react';
 import { WallpaperSettings } from './wallpaper-settings';
+import { MaterialSettings } from './material-settings';
 import './appearance.css';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
@@ -173,6 +174,7 @@ export const Appearance = () => {
           </button>
         </div>
       </section>
+      <MaterialSettings key={wallpaperSettingsRevision} />
       <WallpaperSettings key={wallpaperSettingsRevision} />
       <section className="appearance-section" aria-labelledby="appearance-density">
         <div>

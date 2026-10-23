@@ -1,6 +1,7 @@
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import { useEffect, useRef, type FocusEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion, useReducedMotion, useIsPresent } from 'framer-motion';
+import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
 import toast, { resolveValue, useToaster, type Toast } from 'react-hot-toast';
 import { IconCheck, IconExclamationMark, IconInfoCircle, IconLoader2, IconX } from '@tabler/icons-react';
 import { useDesktopPreferences } from '@/desktop/preferences';

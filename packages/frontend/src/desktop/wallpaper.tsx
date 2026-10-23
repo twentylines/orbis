@@ -1,5 +1,5 @@
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import { useUserContext } from '@/context/user-context';
-import { useReducedMotion } from 'framer-motion';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useDesktopPreferences } from './preferences';
 import './wallpaper.css';
@@ -76,8 +76,8 @@ export function DesktopWallpaper() {
         imageStyle={{
           objectFit: value.wallpaperFit,
           objectPosition: `${value.wallpaperX}% ${value.wallpaperY}%`,
-          filter: `blur(${value.wallpaperBlur}px)`,
-          transform: value.wallpaperBlur ? 'scale(1.08)' : undefined,
+          filter: value.lowEffects ? undefined : `blur(${value.wallpaperBlur}px)`,
+          transform: value.wallpaperBlur && !value.lowEffects ? 'scale(1.08)' : undefined,
         }}
         onError={customSource && customSource !== failedSource ? () => setFailedSource(customSource) : undefined}
       />

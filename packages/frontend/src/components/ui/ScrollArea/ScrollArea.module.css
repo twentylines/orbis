@@ -2,6 +2,11 @@
   height: 100%;
   width: 100%;
   border-radius: inherit;
+  scroll-padding: 10px;
+}
+
+.viewport :is(input, button, select, textarea, a, [tabindex]) {
+  scroll-margin: 10px;
 }
 
 /* Radix uses an inner table for measurement; fixed layout keeps forms within the viewport. */

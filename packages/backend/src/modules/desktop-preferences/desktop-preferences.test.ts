@@ -39,7 +39,7 @@ describe('desktop preferences', () => {
       next();
     }) as NestMiddleware['use']);
     app.useGlobalPipes(new ArkValidationPipe());
-    await app.init();
+    await app.listen(0, '127.0.0.1');
   });
 
   afterAll(async () => {
@@ -258,5 +258,41 @@ describe('desktop preferences', () => {
       .set('Authorization', 'Bearer test')
       .send({ ...DEFAULT_DESKTOP_PREFERENCES, windows })
       .expect(400);
+  });
+  it('round-trips bounded accent, material and effect settings without accepting invalid overrides', async () => {
+    const value = {
+      ...DEFAULT_DESKTOP_PREFERENCES,
+      appearance: {
+        ...DEFAULT_DESKTOP_PREFERENCES.appearance,
+        accent: '#ffff00',
+        surfaceOpacity: 90,
+        chromeOpacity: 80,
+        glassBlur: 40,
+        glassTint: 30,
+        motion: 'reduced',
+        transparency: 'solid',
+        lowEffects: true,
+      },
+    };
+    const put = (appearance: unknown) =>
+      request(app.getHttpServer())
+        .put('/desktop-preferences')
+        .set('Authorization', 'Bearer other')
+        .send({ ...value, appearance });
+    await put(value.appearance).expect(200);
+    await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer other').expect(200, value);
+    for (const invalid of [
+      { accent: 'red' },
+      { chromeOpacity: 79 },
+      { surfaceOpacity: 89 },
+      { glassBlur: 41 },
+      { glassTint: 31 },
+      { lowEffects: 'true' },
+      { motion: 'full' },
+      { transparency: 'transparent' },
+    ]) {
+      await put({ ...value.appearance, ...invalid }).expect(400);
+    }
+    await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer other').expect(200, value);
   });
 });

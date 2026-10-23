@@ -7,6 +7,7 @@ export function AppearanceRange({
   max,
   unit = '%',
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: number;
@@ -14,6 +15,7 @@ export function AppearanceRange({
   max: number;
   unit?: string;
   onChange: (value: number) => void;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
@@ -32,6 +34,7 @@ export function AppearanceRange({
         max={max}
         step={1}
         value={value}
+        disabled={disabled}
         aria-valuetext={`${value}${unit}`}
         onChange={(event) => onChange(Number(event.target.value))}
       />

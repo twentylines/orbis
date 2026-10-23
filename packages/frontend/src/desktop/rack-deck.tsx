@@ -1,5 +1,6 @@
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
+import { motion, useMotionValue, useSpring } from 'framer-motion';
 import { IconCheck, IconLayersLinked, IconServer } from '@tabler/icons-react';
 import type { ClusterServer, ServerReading } from './cluster';
 

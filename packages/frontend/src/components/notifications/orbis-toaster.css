@@ -41,8 +41,8 @@ body:not(:has(.desktop)) .orbis-notifications {
   box-shadow:
     0 12px 32px rgba(5, 22, 17, 0.18),
     inset 0 1px var(--desktop-highlight);
-  backdrop-filter: blur(22px) saturate(1.15);
-  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+  backdrop-filter: var(--orbis-glass-filter, blur(22px) saturate(1.15));
+  -webkit-backdrop-filter: var(--orbis-glass-filter, blur(22px) saturate(1.15));
   pointer-events: auto;
   --notice-color: var(--desktop-accent);
 }

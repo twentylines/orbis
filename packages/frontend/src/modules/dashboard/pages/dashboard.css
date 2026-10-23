@@ -91,18 +91,18 @@
   align-items: center;
   gap: 8px;
   padding: 11px 14px;
-  background: #183e36;
-  color: #fff;
+  background: var(--orbis-action, #183e36);
+  color: var(--orbis-action-ink, #fff);
   border-color: transparent;
   box-shadow: 0 8px 25px rgba(15, 43, 37, 0.1);
-  backdrop-filter: blur(12px);
+  backdrop-filter: var(--orbis-glass-filter, blur(12px));
   transition:
     transform 0.2s ease,
     background 0.2s ease,
     box-shadow 0.2s ease;
 }
 .workspace-edit-toggle:hover {
-  background: #1e3d30;
+  background: var(--orbis-action-hover, #1e3d30);
   box-shadow: 0 16px 34px rgba(22, 50, 39, 0.28);
 }
 .workspace-edit-toggle:active {
@@ -111,12 +111,12 @@
 .workspace-edit-toggle:hover,
 .workspace-editor button:not([role="switch"]):hover:not(:disabled),
 .workspace-all-hidden button:hover {
-  border-color: #6d8b75;
+  border-color: var(--orbis-accent, #6d8b75);
 }
 .workspace-edit-toggle:focus-visible,
 .workspace-editor button:not([role="switch"]):focus-visible,
 .workspace-all-hidden button:focus-visible {
-  outline: 3px solid #a46b42;
+  outline: 3px solid var(--orbis-focus, #a46b42);
   outline-offset: 2px;
 }
 .workspace-editor button:not([role="switch"]):disabled {
@@ -209,7 +209,7 @@
   text-align: left;
 }
 .workspace-pin-list button[aria-pressed="true"] {
-  border-color: #6d8b75;
+  border-color: var(--orbis-accent, #6d8b75);
   background: rgba(103, 143, 110, 0.14);
 }
 .workspace-pin-list button span:not(.app-logo) {
@@ -239,8 +239,8 @@
   border: 1px solid transparent;
   padding: 11px 14px;
   border-radius: 12px;
-  color: #fff;
-  background: #183e36;
+  color: var(--orbis-action-ink, #fff);
+  background: var(--orbis-action, #183e36);
   text-decoration: none;
   font-weight: 650;
   box-shadow: 0 8px 25px rgba(15, 43, 37, 0.1);
@@ -251,9 +251,9 @@
 }
 .desktop .workspace-add:hover {
   color: #fff;
-  background: #1e3d30;
+  background: var(--orbis-action-hover, #1e3d30);
   text-decoration: none;
-  border-color: #6d8b75;
+  border-color: var(--orbis-accent, #6d8b75);
   box-shadow: 0 16px 34px rgba(22, 50, 39, 0.28);
 }
 .desktop .workspace-add:active {
@@ -316,8 +316,8 @@
   box-shadow:
     0 24px 58px rgba(12, 38, 34, 0.17),
     inset 0 1px var(--desktop-highlight);
-  backdrop-filter: blur(20px) saturate(1.22);
-  -webkit-backdrop-filter: blur(20px) saturate(1.22);
+  backdrop-filter: var(--orbis-glass-filter, blur(20px) saturate(1.22));
+  -webkit-backdrop-filter: var(--orbis-glass-filter, blur(20px) saturate(1.22));
 }
 .workspace-panel-kicker {
   display: block;

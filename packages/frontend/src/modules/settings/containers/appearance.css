@@ -331,7 +331,11 @@
   min-width: 0;
   min-height: 40px;
   margin: 6px 0 0;
-  accent-color: var(--desktop-action);
+  accent-color: var(--desktop-accent);
+  color-scheme: light;
+}
+.desktop[data-desktop-mode="dark"] .appearance-range input {
+  color-scheme: dark;
 }
 .appearance-range input:focus-visible {
   outline: 3px solid var(--desktop-focus);
@@ -375,4 +379,75 @@
   .appearance-wallpapers {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.appearance-material-controls {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  align-content: start;
+}
+.appearance-accent-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+.appearance-accent-controls input {
+  min-height: 42px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+}
+.appearance-accent-controls input[type="color"] {
+  width: 48px;
+  height: 42px;
+  padding: 6px;
+  flex: none;
+}
+.appearance-accent-controls .appearance-colour-value {
+  min-width: 0;
+  width: 10ch;
+  max-width: 100%;
+  padding: 8px 12px;
+  font-size: 1rem;
+  font-family: ui-monospace, monospace;
+}
+.appearance-accent-controls input:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.appearance-range input:disabled {
+  opacity: 0.6;
+}
+.appearance-low-effects {
+  align-self: start;
+  padding-top: 2px;
+}
+
+fieldset.appearance-choice {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.appearance .appearance-low-effects .switch-root {
+  width: 2.5rem;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0;
+  border-radius: 999px;
+  background-image: var(--tblr-form-switch-bg);
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-size: 1.5rem 1.5rem;
+  background-position: left center;
+}
+.appearance .appearance-low-effects .switch-root[data-state="checked"] {
+  background-position: right center;
+}
+.appearance-low-effects .orbis-switch {
+  min-height: 44px;
+  margin: 0;
 }

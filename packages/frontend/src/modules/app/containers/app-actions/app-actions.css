@@ -34,10 +34,15 @@
 }
 .app-actions .btn-success,
 .app-actions .app-launch-button {
-  color: var(--desktop-chrome-ink);
-  background: #27584a;
-  border-color: #27584a;
+  color: var(--desktop-action-ink);
+  background: var(--desktop-action);
+  border-color: var(--desktop-action);
 }
 .app-actions .action-button:hover {
   border-color: var(--desktop-accent);
+}
+.app-actions :is(.btn-success, .app-launch-button):hover {
+  color: var(--desktop-action-ink);
+  background: color-mix(in srgb, var(--desktop-action) 88%, black);
+  border-color: var(--desktop-action);
 }

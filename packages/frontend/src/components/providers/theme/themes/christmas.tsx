@@ -1,3 +1,4 @@
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import type { LetItGo } from 'let-it-go';
 import { type PropsWithChildren, useEffect, useRef } from 'react';
 import { useDesktopPreferences } from '@/desktop/preferences';
@@ -7,17 +8,17 @@ export const ChristmasTheme = (props: PropsWithChildren) => {
   const root = useRef<HTMLDivElement>(null);
   const { preferences, resolvedMode } = useDesktopPreferences();
   const preset = preferences.preset;
+  const reducedMotion = useReducedMotion();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Palette changes update the computed canvas colour.
   useEffect(() => {
     const element = root.current;
     if (!element) return;
-    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let disposed = false;
     let snow: LetItGo | undefined;
     const sync = () => {
       if (disposed) return;
-      if (motion.matches || document.hidden) {
+      if (reducedMotion || document.hidden) {
         snow?.clear();
         snow = undefined;
         return;
@@ -25,7 +26,7 @@ export const ChristmasTheme = (props: PropsWithChildren) => {
       if (snow) return;
       void import('let-it-go')
         .then(({ LetItGo: Snow }) => {
-          if (disposed || motion.matches || document.hidden || snow) return;
+          if (disposed || reducedMotion || document.hidden || snow) return;
           snow = new Snow({
             root: element,
             number: 50,
@@ -35,16 +36,14 @@ export const ChristmasTheme = (props: PropsWithChildren) => {
         })
         .catch((error: unknown) => console.warn('Seasonal animation could not start', error));
     };
-    motion.addEventListener('change', sync);
     document.addEventListener('visibilitychange', sync);
     sync();
     return () => {
       disposed = true;
-      motion.removeEventListener('change', sync);
       document.removeEventListener('visibilitychange', sync);
       snow?.clear();
     };
-  }, [preset, resolvedMode]);
+  }, [preset, resolvedMode, reducedMotion]);
 
   return (
     <>

@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '@/desktop/motion-setting';
 import * as Dialog from '@radix-ui/react-dialog';
 import { IconExternalLink, IconMinus, IconSettings, IconX } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
@@ -499,5 +500,5 @@ function normalizeAddress(value?: string) {
 }
 
 function reducedMotion() {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return prefersReducedMotion();
 }

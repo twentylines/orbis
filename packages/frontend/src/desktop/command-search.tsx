@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { getInstalledAppsOptions, searchAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
@@ -14,7 +15,7 @@ const appPath = (urn: string, catalogue = false) => {
   const [appId = '', storeId = ''] = urn.split(':');
   return `/${catalogue ? 'app-store' : 'apps'}/${encodeURIComponent(storeId)}/${encodeURIComponent(appId)}`;
 };
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const reducedMotion = () => prefersReducedMotion();
 
 export function CommandSearch() {
   const [open, setOpen] = useState(false);

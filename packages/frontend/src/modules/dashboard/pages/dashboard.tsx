@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { getInstalledAppsOptions, getLinksOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { defaultDesktopPreferences, useDesktopPreferences, type WidgetId, type WorkspacePreferences } from '@/desktop/preferences';
@@ -83,7 +84,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       heading.focus({ preventScroll: true });
       heading.scrollIntoView({
         block: 'start',
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
       });
       setPinPickerRequested(false);
     });

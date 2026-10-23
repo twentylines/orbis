@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigation } from 'react-router';
 import { desktopNavigation } from './navigation';
@@ -17,12 +18,7 @@ export function useSectionMotion() {
     const to = sectionIndex(next);
     document.documentElement.style.setProperty('--orbis-slide-direction', to >= from ? '1' : '-1');
     if (navigation.location) return;
-    if (
-      previous.current !== location.pathname &&
-      from !== to &&
-      !document.startViewTransition &&
-      !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
+    if (previous.current !== location.pathname && from !== to && !document.startViewTransition && !prefersReducedMotion()) {
       fallback.current?.cancel();
       fallback.current = document.querySelector('.desktop-view')?.animate(
         [

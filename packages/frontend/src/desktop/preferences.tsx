@@ -1,4 +1,6 @@
-import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { applyAppearanceRuntime } from './appearance-runtime';
+import { MotionPreferences } from './motion-preferences';
+import { useLayoutEffect, createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { useUserContext } from '@/context/user-context';
 import { StartupSurface } from '@/components/startup/startup-surface';
 import toast from 'react-hot-toast';
@@ -156,6 +158,27 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const revision = useRef(0);
   const acknowledgedRevision = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.dataset.desktopPreset = preferences.preset;
+    root.dataset.desktopMode = resolvedMode;
+    root.dataset.desktopWallpaper = preferences.wallpaper;
+    root.dataset.orbisAppearanceReady = 'true';
+    const apply = () => applyAppearanceRuntime(preferences.appearance, resolvedMode);
+    apply();
+    const queries = ['(prefers-reduced-motion: reduce)', '(prefers-reduced-transparency: reduce)'].flatMap((query) => {
+      try {
+        return [window.matchMedia(query)];
+      } catch {
+        return [];
+      }
+    });
+    for (const query of queries) query.addEventListener('change', apply);
+    return () => {
+      for (const query of queries) query.removeEventListener('change', apply);
+    };
+  }, [preferences.appearance, preferences.preset, preferences.wallpaper, resolvedMode]);
 
   useEffect(() => {
     if (isLoggedIn && !initialLoadComplete) return;
@@ -364,7 +387,9 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         completeOnboarding,
       }}
     >
-      {isLoggedIn && !initialLoadComplete ? <StartupSurface appearance={preferences} /> : children}
+      <MotionPreferences reduced={preferences.appearance.motion === 'reduced' || preferences.appearance.lowEffects}>
+        {isLoggedIn && !initialLoadComplete ? <StartupSurface appearance={preferences} /> : children}
+      </MotionPreferences>
     </Context.Provider>
   );
 };

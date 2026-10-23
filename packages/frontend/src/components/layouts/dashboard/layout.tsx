@@ -1,3 +1,4 @@
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import { logoutMutation } from '@/api-client/@tanstack/react-query.gen';
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
@@ -15,7 +16,7 @@ import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
 import { IconApps, IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, useMutation } from '@tanstack/react-query';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useLayoutEffect, useRef, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches } from 'react-router';
 import './layout.css';

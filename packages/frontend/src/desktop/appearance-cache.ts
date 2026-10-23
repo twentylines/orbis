@@ -1,3 +1,5 @@
+import { applyAppearanceRuntime } from './appearance-runtime';
+
 const appearanceOptions = {
   presets: ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'],
   modes: ['light', 'dark', 'system'],
@@ -58,4 +60,16 @@ export const appearanceBootstrap = `(()=>{
   root.dataset.desktopPreset=preset;
   root.dataset.desktopMode=mode;
   root.dataset.desktopWallpaper=options.wallpapers.includes(stored.wallpaper)?stored.wallpaper:'sandstone';
+  const apply=()=>{
+    if(root.dataset.orbisAppearanceReady==='true'){
+      if(typeof document.removeEventListener==='function')document.removeEventListener('load',apply,true);
+      return;
+    }
+    if(typeof getComputedStyle!=='function')return;
+    (${applyAppearanceRuntime.toString()})(stored.appearance,mode);
+    if(root.dataset.orbisEffects&&typeof document.removeEventListener==='function')document.removeEventListener('load',apply,true);
+  };
+  if(typeof requestAnimationFrame==='function')requestAnimationFrame(apply);
+  if(typeof document.addEventListener==='function')document.addEventListener('load',apply,true);
+  if(typeof document.addEventListener==='function')document.addEventListener('DOMContentLoaded',apply,{once:true});
 })();`;
