@@ -451,8 +451,8 @@ function LocalUpdates() {
           <div className="desktop-updates-card-head">
             <IconServerCog size={22} aria-hidden="true" />
             <div>
-              <h2 id="host-updates-title">Host operating system</h2>
-              <p>Packages, distribution changelogs, and reboot status</p>
+              <h2 id="host-updates-title">System updates</h2>
+              <p>Install operating system updates and follow the live terminal output.</p>
             </div>
           </div>
           {user?.operator !== true ? <p>Host package details require an operator account.</p> : null}
@@ -479,6 +479,7 @@ function LocalUpdates() {
                   <strong>{systemPackages.data.packageCount ?? 0} available package updates</strong>
                   <span>{systemPackages.data.operatingSystem || 'Host operating system'}</span>
                 </div>
+                {systemPackages.data.rebootRequired ? <span className="desktop-host-reboot">Restart required</span> : null}
               </div>
               <p className="desktop-host-package-times">
                 {systemPackages.data.checkedAt ? `Checked ${new Date(systemPackages.data.checkedAt).toLocaleString()}. ` : ''}
@@ -490,58 +491,69 @@ function LocalUpdates() {
               {systemPackages.data.truncated ? <output>Showing the first 1,000 packages. Check the host for the complete list.</output> : null}
               {(systemPackages.data.packageCount ?? 0) > 0 ? (
                 <>
-                  <label className="desktop-host-package-search">
-                    <span>Name or repository</span>
-                    <input
-                      type="search"
-                      value={packageSearch}
-                      onChange={(event) => {
-                        setPackageSearch(event.target.value);
-                        setShowAllPackages(false);
-                      }}
-                    />
-                  </label>
-                  <div className="desktop-host-package-selection">
-                    <strong>{selectedPackages.length} selected for review</strong>
-                    <div>
-                      <button
-                        type="button"
-                        disabled={
-                          matchingPackages.length === 0 ||
-                          (!matchingSelection && matchingSelectionExceedsLimit) ||
-                          packageJob.isPending ||
-                          packageJob.isError ||
-                          packageJobBusy ||
-                          packageJobNeedsInspection
-                        }
-                        onClick={() => {
-                          const names = matchingPackages.map((item) => item.name);
-                          setSelectedPackages(
-                            matchingSelection
-                              ? selectedPackages.filter((name) => !names.includes(name))
-                              : [...new Set([...selectedPackages, ...names])],
-                          );
-                          setReviewPackagePlan(null);
+                  <div className="desktop-host-package-toolbar">
+                    <label className="desktop-host-package-search">
+                      <span>Find packages</span>
+                      <input
+                        type="search"
+                        placeholder="Name or repository"
+                        value={packageSearch}
+                        onChange={(event) => {
+                          setPackageSearch(event.target.value);
+                          setShowAllPackages(false);
                         }}
-                      >
-                        {matchingSelection ? 'Clear matching' : `Select matching (${matchingPackages.length})`}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={
-                          selectedPackages.length === 0 ||
-                          planPackages.isPending ||
-                          packageJob.isPending ||
-                          packageJob.isError ||
-                          packageJobBusy ||
-                          packageJobNeedsInspection ||
-                          jobBusy ||
-                          job?.state === 'interrupted'
-                        }
-                        onClick={() => planPackages.mutate(selectedPackages)}
-                      >
-                        {planPackages.isPending ? 'Checking APT transaction…' : 'Update selected'}
-                      </button>
+                      />
+                    </label>
+                    <div className="desktop-host-package-selection">
+                      <strong>
+                        {selectedPackages.length} of {systemPackages.data.packageCount ?? 0} selected
+                      </strong>
+                      <div>
+                        <button
+                          type="button"
+                          disabled={
+                            matchingPackages.length === 0 ||
+                            (!matchingSelection && matchingSelectionExceedsLimit) ||
+                            packageJob.isPending ||
+                            packageJob.isError ||
+                            packageJobBusy ||
+                            packageJobNeedsInspection
+                          }
+                          onClick={() => {
+                            const names = matchingPackages.map((item) => item.name);
+                            setSelectedPackages(
+                              matchingSelection
+                                ? selectedPackages.filter((name) => !names.includes(name))
+                                : [...new Set([...selectedPackages, ...names])],
+                            );
+                            setReviewPackagePlan(null);
+                          }}
+                        >
+                          {matchingSelection
+                            ? packageSearch
+                              ? 'Clear matching'
+                              : 'Clear selection'
+                            : packageSearch
+                              ? 'Select matching'
+                              : 'Select all'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            selectedPackages.length === 0 ||
+                            planPackages.isPending ||
+                            packageJob.isPending ||
+                            packageJob.isError ||
+                            packageJobBusy ||
+                            packageJobNeedsInspection ||
+                            jobBusy ||
+                            job?.state === 'interrupted'
+                          }
+                          onClick={() => planPackages.mutate(selectedPackages)}
+                        >
+                          {planPackages.isPending ? 'Checking updates…' : 'Update selected'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                   {planPackages.isError ? <p role="alert">{planPackages.error.message}</p> : null}

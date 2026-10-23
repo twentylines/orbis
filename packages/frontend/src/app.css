@@ -67,42 +67,84 @@ body:has(.orbis-startup),
   position: relative;
   display: grid;
   place-items: center;
-  width: 96px;
-  height: 96px;
-}
-.orbis-startup-emblem::before {
-  content: "";
-  position: absolute;
-  inset: 10px 0;
-  border: 1px solid color-mix(in srgb, var(--desktop-accent) 22%, transparent);
-  border-radius: 50%;
-  transform: rotate(-32deg) scaleY(0.6);
-  animation: orbis-startup-orbit 2.8s ease-in-out infinite alternate;
+  width: 176px;
+  height: 136px;
 }
 .orbis-startup-emblem .orbis-logo {
-  animation: orbis-startup-pulse 1.8s ease-in-out infinite alternate;
+  position: relative;
+  z-index: 1;
+  animation: orbis-startup-float 2.8s ease-in-out infinite alternate;
 }
-@keyframes orbis-startup-orbit {
+.orbis-startup-panels {
+  position: absolute;
+  inset: 0;
+}
+.orbis-startup-panels span {
+  position: absolute;
+  width: 58px;
+  height: 40px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--desktop-accent) 14%, var(--desktop-surface));
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--desktop-accent) 12%, transparent);
+  animation: orbis-startup-panels 2.8s ease-in-out infinite alternate;
+}
+.orbis-startup-panels span::before,
+.orbis-startup-panels span::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  height: 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--desktop-accent) 45%, transparent);
+}
+.orbis-startup-panels span::before {
+  top: 13px;
+  width: 28px;
+}
+.orbis-startup-panels span::after {
+  top: 23px;
+  width: 18px;
+  opacity: 0.5;
+}
+.orbis-startup-panels span:nth-child(1) {
+  left: 3px;
+  top: 13px;
+  --panel-x: 8px;
+  --panel-y: 9px;
+  rotate: -14deg;
+}
+.orbis-startup-panels span:nth-child(2) {
+  right: 2px;
+  top: 31px;
+  --panel-x: -6px;
+  --panel-y: -12px;
+  rotate: 12deg;
+  animation-delay: -1.4s;
+}
+.orbis-startup-panels span:nth-child(3) {
+  left: 40px;
+  bottom: 1px;
+  --panel-x: 14px;
+  --panel-y: -6px;
+  rotate: -7deg;
+  animation-delay: -0.7s;
+}
+@keyframes orbis-startup-panels {
+  to {
+    transform: translate(var(--panel-x), var(--panel-y)) rotate(6deg);
+  }
+}
+@keyframes orbis-startup-float {
   from {
-    opacity: 0.35;
-    transform: rotate(-32deg) scaleY(0.6) scale(0.9);
+    transform: translateY(-3px);
   }
   to {
-    opacity: 0.8;
-    transform: rotate(-32deg) scaleY(0.6) scale(1.06);
-  }
-}
-@keyframes orbis-startup-pulse {
-  from {
-    opacity: 0.65;
-  }
-  to {
-    opacity: 1;
+    transform: translateY(3px);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .orbis-startup-emblem .orbis-logo,
-  .orbis-startup-emblem::before {
+  .orbis-startup-panels span {
     animation: none;
   }
 }
@@ -562,24 +604,6 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   animation-direction: alternate-reverse;
   animation-duration: 16s;
 }
-.orbis-startup-satellite {
-  position: absolute;
-  inset: -12px;
-  border: 1px solid color-mix(in srgb, var(--desktop-accent) 15%, transparent);
-  border-radius: 50%;
-  animation: orbis-startup-revolve 8s linear infinite;
-}
-.orbis-startup-satellite::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--desktop-accent);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--desktop-accent) 50%, transparent);
-}
 .orbis-startup-progress {
   width: min(240px, 70vw);
   height: 4px;
@@ -594,7 +618,20 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, transparent, var(--desktop-accent) 45%, color-mix(in srgb, var(--desktop-accent) 40%, white));
-  animation: orbis-startup-flow 1.5s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  animation: orbis-startup-flow 1.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+.orbis-startup[data-completing] .orbis-startup-progress > span {
+  width: 100%;
+  transform-origin: left;
+  animation: orbis-startup-complete 200ms ease-out both;
+}
+@keyframes orbis-startup-complete {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 .orbis-startup-detail {
   max-width: 36ch;
@@ -614,10 +651,10 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 }
 .orbis-startup[data-revealing="true"] {
   pointer-events: none;
-  animation: orbis-startup-reveal 360ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: orbis-startup-reveal 420ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 .orbis-startup[data-revealing="true"] .orbis-startup-content {
-  animation: orbis-startup-brand-exit 360ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: orbis-startup-brand-exit 420ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 .orbis-update-surface {
   animation: orbis-session-cover 260ms ease both;
@@ -628,11 +665,6 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   }
   to {
     transform: translateX(420%);
-  }
-}
-@keyframes orbis-startup-revolve {
-  to {
-    transform: rotate(360deg);
   }
 }
 @keyframes orbis-startup-drift {
@@ -658,7 +690,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 }
 @media (prefers-reduced-motion: reduce) {
   .orbis-startup-scene span,
-  .orbis-startup-satellite,
+  .orbis-startup-panels span,
   .orbis-startup-progress > span,
   .orbis-startup[data-revealing="true"],
   .orbis-startup[data-revealing="true"] .orbis-startup-content,

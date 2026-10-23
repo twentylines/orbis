@@ -23,6 +23,7 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
     const entered = new WeakSet<HTMLElement>();
     const animations: Animation[] = [];
     const animate = () => {
+      if (document.querySelector('[data-initial-startup]:not([data-revealing])')) return;
       const view = root.querySelector<HTMLElement>('.desktop-view-home');
       if (!view) return;
       view.dataset.homeEntry = key;
@@ -47,7 +48,9 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
     const observer = new MutationObserver(animate);
     observer.observe(root, { childList: true, subtree: true });
     animate();
+    window.addEventListener('orbis-startup-reveal', animate);
     return () => {
+      window.removeEventListener('orbis-startup-reveal', animate);
       observer.disconnect();
       for (const animation of animations) animation.cancel();
       const view = root.querySelector<HTMLElement>('.desktop-view-home');

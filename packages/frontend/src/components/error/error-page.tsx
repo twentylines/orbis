@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { readCachedDesktopPreferences } from '@/desktop/preferences';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
 import type { PropsWithChildren } from 'react';
+import { useStartupReady } from '../startup/startup-boundary';
 
 type ErrorPageProps = {
   onReset: () => void;
@@ -11,6 +12,7 @@ type ErrorPageProps = {
 };
 
 export const FallbackSurface = ({ children }: PropsWithChildren) => {
+  useStartupReady(true);
   const preferences = readCachedDesktopPreferences();
   const resolvedMode = useResolvedColourMode(preferences.mode);
   return (

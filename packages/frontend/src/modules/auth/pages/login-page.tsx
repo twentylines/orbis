@@ -1,11 +1,9 @@
-import { StartupSurface } from '@/components/startup/startup-surface';
 import { useSignInBoot } from '@/components/startup/use-sign-in-boot';
 import { userContext } from '@/api-client';
 import { loginMutation, verifyTotpMutation } from '@/api-client/@tanstack/react-query.gen';
 import { useUserContext } from '@/context/user-context';
 import type { TranslatableError } from '@/types/error.types';
 import { useMutation } from '@tanstack/react-query';
-import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
@@ -164,10 +162,5 @@ export default () => {
       loginType={loginType}
     />
   );
-  return (
-    <>
-      {form}
-      {boot.visible ? createPortal(<StartupSurface signingIn />, document.body) : null}
-    </>
-  );
+  return <>{form}</>;
 };

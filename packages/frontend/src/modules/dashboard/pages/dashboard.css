@@ -1225,19 +1225,6 @@
 .workspace-operations .workspace-section-heading {
   margin-bottom: 14px;
 }
-.workspace-grid[data-more-apps="true"] :is(.workspace-operations, .workspace-attention) {
-  min-height: 0;
-  padding: 18px 22px;
-}
-.workspace-grid[data-more-apps="true"] :is(.workspace-operations, .workspace-attention) h2 {
-  font-size: 1.25rem;
-}
-.workspace-grid[data-more-apps="true"] .workspace-operations .workspace-section-heading {
-  margin-bottom: 8px;
-}
-.workspace-grid[data-more-apps="true"] .workspace-recent-tasks a {
-  padding-block: 8px;
-}
 .workspace-operations-empty {
   color: var(--desktop-muted);
   max-width: 44ch;
@@ -1248,6 +1235,17 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.workspace-recent-tasks,
+.workspace-attention-apps {
+  max-height: min(30rem, 42dvh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scroll-padding-block: 4px;
+}
+.workspace-recent-tasks a:focus-visible,
+.workspace-attention-apps a:focus-visible {
+  outline-offset: -3px;
 }
 .workspace-recent-tasks li + li {
   border-top: 1px solid var(--desktop-line);
@@ -1577,10 +1575,7 @@
   .workspace-attention {
     padding: var(--orbis-compact-panel-space);
   }
-  .workspace-grid[data-more-apps="true"] :is(.workspace-operations, .workspace-attention) {
-    padding: 14px var(--orbis-compact-panel-space);
-  }
-  .workspace-grid[data-more-apps="true"] :is(.workspace-operations, .workspace-attention) h2 {
+  :is(.workspace-operations, .workspace-attention) h2 {
     font-size: var(--orbis-compact-section);
   }
   .workspace-drive-stack {

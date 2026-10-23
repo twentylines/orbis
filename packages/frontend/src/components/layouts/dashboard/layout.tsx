@@ -23,6 +23,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { Button } from '@/components/ui/Button';
 import { DockActivity } from '@/desktop/desktop-activity';
 import { DockGlass } from '@/desktop/dock-companion';
+import { useNavigationWarmup } from '@/desktop/navigation-warmup';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
 import { IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
@@ -53,6 +54,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const desktop = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const dock = useRef<HTMLElement>(null);
+  const warmNavigation = useNavigationWarmup();
   useLayoutEffect(() => {
     if (requiresOnboarding) return;
     const element = dock.current;
@@ -216,7 +218,13 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                     <Link
                       key={path}
                       to={path}
-                      onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
+                      prefetch="intent"
+                      onPointerEnter={() => warmNavigation(path)}
+                      onTouchStart={() => warmNavigation(path)}
+                      onFocus={(event) => {
+                        warmNavigation(path);
+                        event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+                      }}
                       className={`desktop-dock-item ${dockSection?.path === path ? 'is-active' : ''}`}
                       aria-label={label}
                       aria-current={current?.path === path ? 'page' : undefined}

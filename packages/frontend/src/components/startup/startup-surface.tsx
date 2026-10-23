@@ -1,24 +1,30 @@
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
-import { useLayoutEffect, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode, type Ref } from 'react';
 import { readCachedAppearance, type CachedAppearance } from '@/desktop/appearance-cache';
 import { isLoggingOff } from '@/desktop/session-motion';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
 
 export function StartupSurface({
+  ref,
   appearance,
   loggingOff = false,
   signingIn = false,
   status,
   overlay = false,
   revealing = false,
+  completing = false,
+  initial = false,
   children,
 }: {
+  ref?: Ref<HTMLDivElement>;
   appearance?: CachedAppearance;
   loggingOff?: boolean;
   signingIn?: boolean;
   status?: { title: string; message: string };
   overlay?: boolean;
   revealing?: boolean;
+  completing?: boolean;
+  initial?: boolean;
   children?: ReactNode;
 }) {
   const [cached, setCached] = useState<CachedAppearance | null>(null);
@@ -31,9 +37,12 @@ export function StartupSurface({
   const mode = useResolvedColourMode(current?.mode ?? 'light');
   return (
     <div
+      ref={ref}
       className={`orbis-startup${current ? ' orbis-theme' : ''}${loggingOff ? ' orbis-logout-surface' : signingIn ? ' orbis-login-surface' : status ? ' orbis-update-surface' : ''}${overlay ? ' orbis-startup-overlay' : ''}`}
       data-session-state={loggingOff || resumingLogout ? 'logging-out' : signingIn ? 'signing-in' : status ? 'updating' : 'loading'}
       data-revealing={revealing || undefined}
+      data-completing={completing || undefined}
+      data-initial-startup={initial || undefined}
       aria-live="polite"
       aria-busy="true"
       data-desktop-mode={current ? mode : undefined}
@@ -46,7 +55,11 @@ export function StartupSurface({
       </div>
       <div className="orbis-startup-content">
         <div className="orbis-startup-emblem">
-          <span className="orbis-startup-satellite" aria-hidden="true" />
+          <div className="orbis-startup-panels" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
           <OrbisLogo size={64} />
         </div>
         <span className="orbis-startup-name">Orbis</span>

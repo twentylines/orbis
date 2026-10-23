@@ -3,7 +3,6 @@ import { MutationCache, QueryClient, QueryClientProvider, QueryErrorResetBoundar
 import { type PropsWithChildren, Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ErrorPage } from '../error/error-page';
-import { StartupSurface } from '../startup/startup-surface';
 import { I18nProvider } from './i18n/i18n-provider';
 import { SentryProvider } from './sentry/sentry-provider';
 import { AutoThemeProvider } from './theme/auto-theme-provider';
@@ -39,7 +38,7 @@ export const Providers = ({ children }: PropsWithChildren) => {
       <QueryErrorResetBoundary>
         {({ reset }) => (
           <ErrorBoundary fallbackRender={({ error, resetErrorBoundary }) => <ErrorPage error={error} onReset={resetErrorBoundary} />} onReset={reset}>
-            <Suspense fallback={<StartupSurface />}>
+            <Suspense fallback={null}>
               <UserContextProvider>
                 <SentryProvider>
                   <DesktopPreferencesProvider>

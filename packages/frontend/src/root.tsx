@@ -8,10 +8,11 @@ import stylesheet from './app.css?url';
 import { Providers } from './components/providers/providers';
 import { FallbackSurface } from './components/error/error-page';
 import { ConfirmationDialog } from './desktop/confirmation';
-import { StartupSurface } from './components/startup/startup-surface';
+import { StartupBoundary, useStartupReady } from './components/startup/startup-boundary';
 import { appearanceBootstrap } from './desktop/appearance-cache';
 import { sessionExitBootstrap } from './desktop/session-motion';
 import { coreUpdateIsPending } from './desktop/host-update-watch';
+import { claimPreloadRetry } from './components/startup/preload-retry';
 
 export const links: Route.LinksFunction = () => [
   { rel: 'stylesheet', href: stylesheet },
@@ -39,7 +40,7 @@ export async function clientLoader({ request }: Route.ActionArgs) {
 }
 
 export function HydrateFallback() {
-  return <StartupSurface />;
+  return null;
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -49,7 +50,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         event.preventDefault();
         return;
       }
-      window.location.reload();
+      try {
+        if (claimPreloadRetry(window.sessionStorage, Date.now())) {
+          event.preventDefault();
+          window.location.reload();
+        }
+      } catch {
+        // Keep the error boundary available when this browser blocks session storage.
+      }
     };
     window.addEventListener('vite:preloadError', handlePreloadError);
 
@@ -74,7 +82,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <main id="root" tabIndex={-1}>
-          {children}
+          <StartupBoundary>{children}</StartupBoundary>
           <ScrollRestoration />
           <Scripts />
         </main>
@@ -94,6 +102,7 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  useStartupReady(true);
   let message = 'Unable to load this page';
   let details = 'Reload the page to try again.';
   let stack: string | undefined;

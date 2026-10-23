@@ -3,7 +3,8 @@ import { transitionAppearance } from './theme-motion';
 import { MotionPreferences } from './motion-preferences';
 import { useLayoutEffect, createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { useUserContext } from '@/context/user-context';
-import { StartupSurface } from '@/components/startup/startup-surface';
+import { useStartupReady } from '@/components/startup/startup-boundary';
+import { useLocation } from 'react-router';
 import toast from 'react-hot-toast';
 import {
   desktopWindowsSchema,
@@ -17,7 +18,6 @@ import {
 import { useResolvedColourMode, readSystemColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
 import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, preferenceChangeEvent } from './appearance-cache';
 import { validHomePins } from './workspace-apps';
-import { prefersReducedMotion } from './motion-setting';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
@@ -143,6 +143,7 @@ const LOAD_NOTICE = 'desktop-preferences-load';
 
 export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const { isLoggedIn } = useUserContext();
+  const { pathname } = useLocation();
   const [cache] = useState(readPreferenceCache);
   const [preferences, setPreferences] = useState(cache.preferences);
   const [wallpaperRevision, setWallpaperRevision] = useState(0);
@@ -151,7 +152,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const booting = isLoggedIn && (!initialLoadComplete || workspaceLoading);
-  const [bootShown, setBootShown] = useState(isLoggedIn);
+  useStartupReady(!booting && !(isLoggedIn && ['/login', '/register', '/reset-password'].includes(pathname)));
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [serverReady, setServerReady] = useState(false);
@@ -163,15 +164,6 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const revision = useRef(0);
   const acknowledgedRevision = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
-
-  useEffect(() => {
-    if (booting) {
-      setBootShown(true);
-      return;
-    }
-    const timer = window.setTimeout(() => setBootShown(false), prefersReducedMotion() ? 0 : 360);
-    return () => window.clearTimeout(timer);
-  }, [booting]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -468,7 +460,6 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     >
       <MotionPreferences reduced={preferences.appearance.motion === 'reduced' || preferences.appearance.lowEffects}>
         {isLoggedIn && !initialLoadComplete ? null : children}
-        {booting || bootShown ? <StartupSurface appearance={preferences} overlay revealing={!booting} /> : null}
       </MotionPreferences>
     </Context.Provider>
   );

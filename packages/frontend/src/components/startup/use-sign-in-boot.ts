@@ -1,45 +1,38 @@
-import { animateAuthExit, animateStartupExit } from '@/desktop/session-motion';
+import { animateAuthExit } from '@/desktop/session-motion';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { useEffect, useRef, useState } from 'react';
+import { useStartupSession } from './startup-boundary';
 
 export function useSignInBoot() {
   const [signingIn, setSigningIn] = useState(false);
   const [visible, setVisible] = useState(false);
   const timer = useRef<number | undefined>(undefined);
   const shown = useRef(false);
-  const shownAt = useRef(0);
   const active = useRef(true);
   const exit = useRef<ReturnType<typeof animateAuthExit> | null>(null);
-  const startupExit = useRef<ReturnType<typeof animateStartupExit> | null>(null);
+  const session = useStartupSession();
   useEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
       window.clearTimeout(timer.current);
       exit.current?.cancel();
-      startupExit.current?.cancel();
+      if (shown.current) void session.finish();
     };
-  }, []);
+  }, [session]);
   const begin = () => {
     window.clearTimeout(timer.current);
     setSigningIn(true);
     timer.current = window.setTimeout(() => {
       shown.current = true;
-      shownAt.current = performance.now();
       setVisible(true);
+      session.begin();
       exit.current = animateAuthExit(prefersReducedMotion());
     }, 300);
   };
   const finish = async (restoreForm = false) => {
     window.clearTimeout(timer.current);
-    if (shown.current) {
-      const entryRemaining = Math.max(0, 440 - (performance.now() - shownAt.current));
-      if (entryRemaining && !prefersReducedMotion()) await new Promise((resolve) => window.setTimeout(resolve, entryRemaining));
-      if (!active.current) return;
-      startupExit.current = animateStartupExit(document.querySelector('.orbis-login-surface'), prefersReducedMotion());
-      await startupExit.current.finished;
-      startupExit.current = null;
-    }
+    if (shown.current) await session.finish();
     if (!active.current) return;
     if (restoreForm) {
       exit.current?.cancel();

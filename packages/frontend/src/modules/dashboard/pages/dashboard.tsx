@@ -392,12 +392,12 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
               diskTotal={disk?.sizeBytes ?? null}
               diskLabel={diskLabel}
             />
-            <Link to="/monitor" className="workspace-uptime">
+            <div className="workspace-uptime">
               <span>
                 <IconClock size={18} aria-hidden="true" /> Uptime
               </span>
               <strong>{system.data ? formatUptime(system.data.cpu.uptimeSeconds) : '—'}</strong>
-            </Link>
+            </div>
             <section className="workspace-network" aria-label={network?.label ?? 'Network'}>
               <span className="workspace-network-heading">
                 <IconArrowsDownUp size={17} aria-hidden="true" /> {network?.label ?? 'Network'}
@@ -443,7 +443,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
           <p>Loading operations…</p>
         ) : tasks.data?.tasks.length ? (
           <ol className="workspace-recent-tasks">
-            {tasks.data.tasks.slice(0, visibleInstalled.length > 3 ? 2 : 4).map((task) => {
+            {tasks.data.tasks.slice(0, 6).map((task) => {
               const name = installed.find(({ info }) => info.urn === task.appUrn)?.info.name ?? task.displayName ?? task.appUrn.split(':')[0];
               const title = `${taskLabels[task.action]} ${name}`;
               const time = new Date(task.updatedAt).toLocaleTimeString();
@@ -488,7 +488,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
         {attention > 0 ? (
           <>
             <ul className="workspace-attention-apps">
-              {attentionApps.slice(0, visibleInstalled.length > 3 ? 2 : 4).map(({ info, app }) => (
+              {attentionApps.slice(0, 6).map(({ info, app }) => (
                 <li key={info.urn}>
                   <Link to={`/apps/${encodeURIComponent(info.urn.split(':')[1] ?? '')}/${encodeURIComponent(info.id)}`}>
                     <span title={info.name}>{info.name}</span>
@@ -744,7 +744,6 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
 
       <div
         className="workspace-grid"
-        data-more-apps={visibleInstalled.length > 3}
         data-default-columns={defaultColumns}
         data-status-visible={!workspace.hidden.includes('activity')}
         data-main-visible={['applications', 'storage', 'attention'].some((id) => !workspace.hidden.includes(id as WidgetId))}

@@ -31,8 +31,8 @@ export function DockCompanion({
     if (!present || !outer || !inner) return;
     const margin = side === 'right' ? 'marginLeft' : 'marginRight';
     const move = () => {
-      const width = inner.getBoundingClientRect().width;
-      const current = outer.getBoundingClientRect().width;
+      const width = Number.parseFloat(getComputedStyle(inner).width);
+      const current = Number.parseFloat(getComputedStyle(outer).width);
       const inset = getComputedStyle(outer)[margin];
       const transform =
         initialized.current && current > 0.5 ? getComputedStyle(inner).transform : side === 'right' ? `translateX(${-width}px)` : 'none';
@@ -127,16 +127,20 @@ export function DockGlass() {
     const draw = () => {
       frame = 0;
       const origin = dock.getBoundingClientRect();
+      const style = getComputedStyle(dock);
+      const scaleX = origin.width / Number.parseFloat(style.width) || 1;
+      const scaleY = origin.height / Number.parseFloat(style.height) || 1;
+      const local = (value: number, scale: number) => Math.round((value / scale) * 1000) / 1000;
       const read = (node: Element): Box => {
         const r = node.getBoundingClientRect();
         const shape = node.querySelector('.orbis-app-tray, .desktop-activity-trigger') ?? node;
         return {
-          left: r.left - origin.left,
-          right: r.right - origin.left,
-          top: r.top - origin.top,
-          bottom: r.bottom - origin.top,
-          width: r.width,
-          height: r.height,
+          left: local(r.left - origin.left, scaleX),
+          right: local(r.right - origin.left, scaleX),
+          top: local(r.top - origin.top, scaleY),
+          bottom: local(r.bottom - origin.top, scaleY),
+          width: local(r.width, scaleX),
+          height: local(r.height, scaleY),
           radius: Number.parseFloat(getComputedStyle(shape).borderTopLeftRadius) || 0,
         };
       };
@@ -150,9 +154,15 @@ export function DockGlass() {
         const side = inner.parentElement?.dataset.side;
         const covered = side === 'right' ? Math.max(0, main.right - box.left) : Math.max(0, box.right - main.left);
         const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-trigger');
-        if (controls) controls.style.clipPath = covered > 0 ? (side === 'right' ? `inset(0 0 0 ${covered}px)` : `inset(0 ${covered}px 0 0)`) : 'none';
+        if (controls) {
+          const clip = covered > 0.01 ? (side === 'right' ? `inset(0 0 0 ${covered}px)` : `inset(0 ${covered}px 0 0)`) : 'none';
+          if (controls.style.clipPath !== clip) controls.style.clipPath = clip;
+        }
       }
-      element.style.clipPath = `path('${path}')`;
+      if (element.dataset.shape !== path) {
+        element.style.clipPath = `path('${path}')`;
+        element.dataset.shape = path;
+      }
       if (dock.querySelector('[data-pill-motion]')) schedule();
     };
     const schedule = () => {
