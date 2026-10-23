@@ -525,7 +525,7 @@
   }
 }
 .workspace-app-scroll[data-scroll="true"]:focus-visible,
-.workspace-app-scroll[data-scroll="true"] .workspace-app:focus-visible {
+.workspace-app-scroll .workspace-app:focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: -3px;
 }
