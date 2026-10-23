@@ -2,7 +2,7 @@
 
 Orbis is a Runtipi fork for managing self-hosted apps, Docker resources and server updates from a browser. It uses Runtipi v4.10.1's app ecosystem and data layout.
 
-Orbis is currently in beta. Migration and recovery of a real homelab have not been validated.
+Orbis is currently in beta. 
 
 [Releases and changelogs](https://github.com/twentylines/orbis/releases) · [Installation and migration](DEPLOYMENT.md) · [Server clusters](CLUSTERS.md) · [Licence](LICENSE)
 
