@@ -46,8 +46,7 @@
   background: var(--desktop-negative);
 }
 .desktop-update-terminal > pre {
-  min-height: 160px;
-  max-height: 340px;
+  height: clamp(220px, 46dvh, 680px);
   margin: 0;
   padding: 18px;
   overflow: auto;

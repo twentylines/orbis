@@ -34,7 +34,7 @@ This fetches the newest published release, including betas. See [installation re
 
 [First-run setup](screenshots/navigation/onboarding-light.png) · [Appearance, light](screenshots/appearance/desktop-light.png) · [Appearance, dark](screenshots/appearance/desktop-dark.png)
 
-Monitor and app details show the beta78 source build on a disposable Linux host with a real installed app. Workspace and phone Apps are from beta77; other views show earlier beta builds. See the [gallery](screenshots/navigation/README.md).
+Workspace, Monitor, app details and minimized views show the beta79 source build on a disposable Linux host with a real installed app. Other views show earlier beta builds. See the [gallery](screenshots/navigation/README.md).
 
 [Earlier beta62 gallery](screenshots/live-beta62/README.md) · [Backup views](screenshots/backups/desktop.png)
 

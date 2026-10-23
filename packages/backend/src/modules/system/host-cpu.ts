@@ -1,6 +1,13 @@
 type CpuCounter = { total: number; idle: number };
 export type CpuSnapshot = Map<string, CpuCounter>;
 
+export function reportedCpuClockGHz(input: string | null): number | null {
+  if (!input) return null;
+  const samples = [...input.matchAll(/^cpu MHz\s*:\s*(\d+(?:\.\d+)?)\s*$/gm)].map((match) => Number(match[1]));
+  if (!samples.length || samples.some((mhz) => !Number.isFinite(mhz) || mhz <= 0 || mhz > 100_000)) return null;
+  return samples.reduce((sum, mhz) => sum + mhz, 0) / samples.length / 1000;
+}
+
 export function parseHostCpuStat(input: string): CpuSnapshot {
   const counters: CpuSnapshot = new Map();
   for (const line of input.split('\n')) {

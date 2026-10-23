@@ -55,7 +55,7 @@
   border-radius: 9px;
   padding: 8px 14px;
   color: var(--desktop-ink);
-  background: rgba(128, 145, 130, 0.1);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
   font-weight: 600;
 }
 .appearance button:hover {
@@ -87,16 +87,14 @@
   padding: 18px;
   text-align: left;
   border-radius: 17px;
-  box-shadow:
-    0 13px 28px rgba(12, 37, 32, 0.13),
-    inset 0 1px rgba(255, 255, 255, 0.28);
+  box-shadow: none;
   transition:
     transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.22s ease;
 }
 .appearance .appearance-mode:hover {
-  transform: translateY(-4px) rotate(-1deg);
-  box-shadow: 0 19px 36px rgba(12, 37, 32, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.1);
 }
 .appearance-mode svg {
   flex: none;
@@ -114,12 +112,12 @@
   font-weight: 450;
 }
 .appearance .appearance-mode-light {
-  color: #233830;
-  background: radial-gradient(circle at 22% 15%, rgba(255, 255, 255, 0.96), transparent 42%), linear-gradient(140deg, #f7e5bd, #b9cab8);
+  color: #25262b;
+  background: linear-gradient(140deg, #ffffff, color-mix(in srgb, var(--desktop-preset-tint) 18%, #ffffff));
 }
 .appearance .appearance-mode-dark {
-  color: #edf5ed;
-  background: radial-gradient(circle at 78% 14%, rgba(126, 194, 183, 0.48), transparent 43%), linear-gradient(140deg, #314c49, #0d1c21);
+  color: #f1f1f3;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--desktop-preset-tint) 25%, #17181b), #0b0c0e);
 }
 .appearance .appearance-mode-system {
   color: var(--desktop-ink);
@@ -143,7 +141,7 @@
     box-shadow 0.24s ease;
 }
 .appearance .appearance-preset:hover {
-  transform: translateY(-4px) rotate(-0.6deg);
+  transform: translateY(-2px);
   box-shadow: 0 16px 30px rgba(24, 49, 40, 0.15);
 }
 .appearance-preset strong {
@@ -155,56 +153,64 @@
   font-weight: 400;
 }
 .appearance-swatch {
-  display: block;
-  position: relative;
+  --swatch-tint: #597b73;
+  --swatch-light: #f8faf6;
+  --swatch-dark: #172320;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   overflow: hidden;
   height: 57px;
   border-radius: 6px;
   margin-bottom: 5px;
-  background: linear-gradient(135deg, #e4e8dc, #aaad96 70%, #d0b99d);
 }
-.appearance-swatch::before {
+.appearance-swatch > span {
+  position: relative;
+  background: var(--swatch-light);
+}
+.appearance-swatch > .appearance-swatch-dark {
+  background: var(--swatch-dark);
+}
+.appearance-swatch > span::before {
   content: "";
   position: absolute;
-  top: 7px;
-  left: 9px;
-  right: 9px;
-  height: 8px;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  height: 7px;
   border-radius: 3px;
-  background: rgba(20, 41, 36, 0.77);
-  box-shadow: 0 1px 4px rgba(11, 35, 32, 0.18);
+  background: var(--swatch-tint);
 }
-.appearance-swatch::after {
+.appearance-swatch > span::after {
   content: "";
   position: absolute;
-  left: 25px;
-  top: 22px;
-  width: 47%;
-  height: 29px;
-  border-radius: 5px 5px 0 0;
-  background: rgba(251, 253, 246, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 8px 6px 13px rgba(34, 45, 36, 0.23);
-  transform: perspective(150px) rotateX(8deg) rotateY(-10deg);
-}
-.appearance-preset-graphite .appearance-swatch::after {
-  background: rgba(22, 37, 37, 0.9);
-  border-color: rgba(236, 244, 232, 0.26);
+  inset: 22px 8px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--swatch-tint) 18%, transparent);
 }
 .appearance-preset-graphite .appearance-swatch {
-  background: linear-gradient(135deg, #374640, #1d2927 70%, #697770);
+  --swatch-tint: #777a82;
+  --swatch-light: #ffffff;
+  --swatch-dark: #17181b;
 }
 .appearance-preset-forest .appearance-swatch {
-  background: linear-gradient(135deg, #d6e3d2, #83a181 70%, #b8c7a9);
+  --swatch-tint: #608069;
+  --swatch-light: #f4f8ef;
+  --swatch-dark: #182319;
 }
 .appearance-preset-stone .appearance-swatch {
-  background: linear-gradient(135deg, #f0e2ce, #b6a48d 70%, #dbc5a9);
+  --swatch-tint: #a68c74;
+  --swatch-light: #faf5ed;
+  --swatch-dark: #261f1a;
 }
 .appearance-preset-ocean .appearance-swatch {
-  background: linear-gradient(135deg, #d8e9e8, #86aeb4 70%, #6b9396);
+  --swatch-tint: #5a8b99;
+  --swatch-light: #f4fafb;
+  --swatch-dark: #15202a;
 }
 .appearance-preset-blush .appearance-swatch {
-  background: linear-gradient(135deg, #f4dfdb, #cfa9a9 70%, #ae878b);
+  --swatch-tint: #ae7e8a;
+  --swatch-light: #fdf7fa;
+  --swatch-dark: #271a23;
 }
 .appearance-wallpapers {
   display: grid;

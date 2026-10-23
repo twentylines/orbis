@@ -17,10 +17,11 @@ const schema = type({
 interface IProps {
   onSubmit: (values: FormValues) => void;
   loading: boolean;
+  showProgress?: boolean;
   loginType: string;
 }
 
-export const LoginForm: React.FC<IProps> = ({ loading, onSubmit, loginType }) => {
+export const LoginForm: React.FC<IProps> = ({ loading, showProgress = false, onSubmit, loginType }) => {
   const { t } = useTranslation();
   const {
     register,
@@ -61,8 +62,8 @@ export const LoginForm: React.FC<IProps> = ({ loading, onSubmit, loginType }) =>
           autoComplete="current-password"
         />
         <div className="form-footer desktop-login-actions">
-          <Button disabled={isDisabled} loading={loading} type="submit" intent="primary" className="w-100">
-            {t('AUTH_LOGIN_SUBMIT')}
+          <Button disabled={isDisabled || loading} aria-busy={loading || undefined} type="submit" intent="primary" className="w-100">
+            {showProgress ? 'Signing in…' : t('AUTH_LOGIN_SUBMIT')}
           </Button>
           <div className="form-text desktop-login-recovery">
             <Link to="/reset-password">{t('AUTH_FORM_FORGOT')}</Link>

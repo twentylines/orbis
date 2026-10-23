@@ -10,6 +10,8 @@ import { useAppContext } from '@/context/app-context';
 import { useConnectionStore } from '@/stores/connection-store';
 import { RackDeck } from './rack-deck';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
+import { useHostUpdateWatch } from './host-update-watch';
+import { coreWatchIsActive } from './core-update-state';
 import './cluster.css';
 
 export type ClusterServer = { id: string; name: string; url: string; role: 'admin' | 'member'; local: boolean };
@@ -111,6 +113,7 @@ export function ClusterConnection() {
   const { selectedServer } = useCluster();
   const { userSettings } = useAppContext();
   const hubStatus = useConnectionStore((state) => state.status);
+  const { watch, core } = useHostUpdateWatch();
   const remote = selectedServer && !selectedServer.local ? selectedServer : null;
   const reading = useQuery({
     queryKey: ['cluster-server', remote?.id ?? 'none', 'telemetry'],
@@ -131,16 +134,34 @@ export function ClusterConnection() {
       address = '';
     }
   }
-  const label = status === 'connected' ? address || 'Address unavailable' : status === 'connecting' ? 'Connecting' : 'Reconnecting';
+  const updating = !remote && coreWatchIsActive(watch);
+  const updateOffline =
+    updating && (hubStatus !== 'connected' || (core?.available === true && (core.coreState !== 'running' || core.coreHealth !== 'healthy')));
+  const connectionState = updating ? (updateOffline ? 'update-offline' : 'updating') : status;
+  const label = updating
+    ? updateOffline
+      ? 'Updating · offline'
+      : 'Updating Orbis'
+    : status === 'connected'
+      ? address || 'Address unavailable'
+      : status === 'connecting'
+        ? 'Connecting'
+        : 'Reconnecting';
   return (
     <output
       className="desktop-connection"
-      data-connection-kind={status === 'connected' && address ? 'address' : 'status'}
-      data-connection-state={status}
-      aria-label={status === 'connected' && address ? `Connected to ${remote?.name ?? 'admin server'} at ${address}` : label}
-      title={label}
+      data-connection-kind={!updating && status === 'connected' && address ? 'address' : 'status'}
+      data-connection-state={connectionState}
+      aria-label={
+        updating
+          ? `${label}. ${watch?.message ?? ''}`
+          : status === 'connected' && address
+            ? `Connected to ${remote?.name ?? 'admin server'} at ${address}`
+            : label
+      }
+      title={updating ? watch?.message : label}
     >
-      <span className={`desktop-connection-dot is-${status}`} aria-hidden="true" />
+      <span className={`desktop-connection-dot is-${connectionState}`} aria-hidden="true" />
       <span className="desktop-connection-label">{label}</span>
     </output>
   );

@@ -1,8 +1,11 @@
+import { StartupSurface } from '@/components/startup/startup-surface';
+import { useSignInBoot } from '@/components/startup/use-sign-in-boot';
 import { userContext } from '@/api-client';
 import { loginMutation, verifyTotpMutation } from '@/api-client/@tanstack/react-query.gen';
 import { useUserContext } from '@/context/user-context';
 import type { TranslatableError } from '@/types/error.types';
 import { useMutation } from '@tanstack/react-query';
+import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
@@ -58,6 +61,7 @@ export async function clientLoader() {
 
 export default () => {
   const { isLoggedIn, isConfigured, refreshUserContext, setUserContext } = useUserContext();
+  const boot = useSignInBoot();
   const [totpSessionId, setTotpSessionId] = useState<string | null>(null);
 
   const [searchParams] = useSearchParams();
@@ -70,7 +74,7 @@ export default () => {
   const loginType = capitalize(app ?? '') || t('AUTH_LOGIN_TYPE_ACCOUNT');
 
   useEffect(() => {
-    if (!isLoggedIn || !redirect_url || !isSafeRedirect(redirect_url)) {
+    if (boot.signingIn || !isLoggedIn || !redirect_url || !isSafeRedirect(redirect_url)) {
       return;
     }
 
@@ -91,47 +95,52 @@ export default () => {
     return () => {
       cancelled = true;
     };
-  }, [isLoggedIn, navigate, redirect_url]);
+  }, [boot.signingIn, isLoggedIn, navigate, redirect_url]);
 
+  const completeSignIn = async (redirectUrl?: string) => {
+    if (!boot.isActive()) return;
+    setUserContext({ isLoggedIn: true });
+    void refreshUserContext();
+    await boot.finish();
+    if (!boot.isActive()) return;
+    if (redirect_url && isSafeRedirect(redirect_url)) {
+      try {
+        window.location.href = redirectUrl ?? (await createForwardAuthSession(redirect_url));
+      } catch {
+        void navigate('/dashboard', { replace: true });
+      }
+    } else void navigate('/dashboard', { replace: true });
+  };
+  const failedSignIn = async (error: TranslatableError) => {
+    if (!boot.isActive()) return;
+    await boot.finish(true);
+    if (!boot.isActive()) return;
+    toast.error(t(error.message, error.intlParams), { id: 'orbis-sign-in-error' });
+  };
+  const beginSignIn = () => {
+    toast.dismiss('orbis-sign-in-error');
+    boot.begin();
+  };
   const login = useMutation({
     ...loginMutation(),
+    onMutate: beginSignIn,
     onSuccess: async (data) => {
       if (data?.success && data.totpSessionId) {
+        await boot.finish(true);
+        if (!boot.isActive()) return;
         setTotpSessionId(data.totpSessionId);
-      } else {
-        setUserContext({ isLoggedIn: true });
-        refreshUserContext();
-
-        if (redirect_url && isSafeRedirect(redirect_url) && data.redirectUrl) {
-          window.location.href = data.redirectUrl;
-          return;
-        }
-        navigate('/dashboard');
-      }
+      } else await completeSignIn(data?.redirectUrl);
     },
-    onError: (e: TranslatableError) => {
-      toast.error(t(e.message, e.intlParams));
-    },
+    onError: failedSignIn,
   });
-
   const verifyTotp = useMutation({
     ...verifyTotpMutation(),
-    onError: (e: TranslatableError) => {
-      toast.error(t(e.message, e.intlParams));
-    },
-    onSuccess: (data) => {
-      setUserContext({ isLoggedIn: true });
-      refreshUserContext();
-
-      if (redirect_url && isSafeRedirect(redirect_url) && data.redirectUrl) {
-        window.location.href = data.redirectUrl;
-        return;
-      }
-      navigate('/dashboard');
-    },
+    onMutate: beginSignIn,
+    onError: failedSignIn,
+    onSuccess: async (data) => completeSignIn(data.redirectUrl),
   });
 
-  if (isLoggedIn) {
+  if (isLoggedIn && !boot.signingIn) {
     if (redirect_url && isSafeRedirect(redirect_url)) {
       return null;
     }
@@ -142,20 +151,23 @@ export default () => {
     return <Navigate to="/register" />;
   }
 
-  if (totpSessionId) {
-    return (
-      <TotpForm
-        loading={verifyTotp.isPending}
-        onSubmit={(totpCode) => verifyTotp.mutate({ body: { redirectUrl: redirect_url ?? undefined, totpCode, totpSessionId } })}
-      />
-    );
-  }
-
-  return (
+  const form = totpSessionId ? (
+    <TotpForm
+      loading={verifyTotp.isPending}
+      onSubmit={(totpCode) => verifyTotp.mutate({ body: { redirectUrl: redirect_url ?? undefined, totpCode, totpSessionId } })}
+    />
+  ) : (
     <LoginForm
       onSubmit={(values) => login.mutate({ body: { password: values.password, redirectUrl: redirect_url ?? undefined, username: values.email } })}
       loading={login.isPending}
+      showProgress={boot.visible}
       loginType={loginType}
     />
+  );
+  return (
+    <>
+      {form}
+      {boot.visible ? createPortal(<StartupSurface signingIn />, document.body) : null}
+    </>
   );
 };

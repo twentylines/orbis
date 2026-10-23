@@ -1,0 +1,39 @@
+.refresh-app-stores {
+  flex: 0 0 auto;
+  min-height: 44px;
+  gap: 9px;
+  padding: 10px 15px;
+  white-space: normal;
+}
+.refresh-app-stores svg {
+  flex: none;
+}
+.refresh-app-stores[data-progress] svg {
+  animation: store-refresh-progress 1.2s linear infinite;
+}
+.app-stores-settings-heading,
+.app-stores-settings-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.app-stores-settings-heading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.app-stores-settings-title h2 {
+  margin: 0;
+}
+@keyframes store-refresh-progress {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .refresh-app-stores[data-progress] svg {
+    animation: none;
+  }
+}

@@ -1,7 +1,6 @@
 import { LanguageSelector } from '@/components/language-selector/language-selector';
-import { useUserContext } from '@/context/user-context';
 import type { Locale } from '@/lib/i18n/locales';
-import { getLogo } from '@/lib/theme/theme';
+import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { DesktopWallpaper } from '@/desktop/wallpaper';
 import i18next from 'i18next';
@@ -24,7 +23,6 @@ function revealAuthFocus(target: EventTarget) {
 export const AuthLayout = ({ children, busy = false }: PropsWithChildren<{ busy?: boolean }>) => {
   const locale = i18next.language;
 
-  const { allowAutoThemes } = useUserContext();
   const { preferences, resolvedMode, update } = useDesktopPreferences();
   return (
     <div
@@ -49,16 +47,7 @@ export const AuthLayout = ({ children, busy = false }: PropsWithChildren<{ busy?
       </div>
       <div className="container container-tight desktop-auth-container">
         <div className="text-center desktop-auth-identity">
-          <img
-            alt="Orbis logo"
-            src={getLogo(allowAutoThemes)}
-            height={64}
-            width={64}
-            style={{
-              maxWidth: '100%',
-              height: 'auto',
-            }}
-          />
+          <OrbisLogo size={64} />
           <p className="desktop-auth-product">Orbis</p>
           <h1>{preferences.serverName}</h1>
         </div>

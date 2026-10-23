@@ -7,6 +7,7 @@ import { Markdown } from '@/components/markdown/markdown';
 import { useAppContext } from '@/context/app-context';
 import { clusterRequest, useCluster, type ClusterServer } from './cluster';
 import { useWindowVisible } from './window-visibility';
+import { rememberAcceptedCoreUpdate, prepareDesktopForCoreUpdate } from './host-update-watch';
 import './cluster-updates.css';
 
 type AppUpdates = {
@@ -122,7 +123,9 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
         }
         try {
           const plan = await command<Plan>(entry.server.id, 'plan-orbis', { tag: entry.data.release?.tag });
-          await command(entry.server.id, 'apply-orbis', { planId: plan.planId });
+          if (entry.server.local) await prepareDesktopForCoreUpdate();
+          const accepted = await command<{ jobId: string }>(entry.server.id, 'apply-orbis', { planId: plan.planId });
+          if (entry.server.local) rememberAcceptedCoreUpdate(accepted.jobId, plan.targetTag);
           setOutcomes((current) => [
             ...current,
             { server: entry.server.name, message: 'Orbis update started. Follow its status below.', failed: false },

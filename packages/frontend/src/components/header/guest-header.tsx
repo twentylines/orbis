@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { IconBrandGithub, IconCertificate, IconHeart, IconLogin, IconMoon, IconSun } from '@tabler/icons-react';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +10,7 @@ export const GuestHeader = () => {
   return (
     <header className="desktop-system-bar desktop-guest-bar">
       <Link to="/dashboard" className="desktop-brand" aria-label="Orbis shared apps">
-        <img src="/icons/orbis.svg" width={28} height={28} alt="" />
+        <OrbisLogo />
         <span>Orbis</span>
       </Link>
       <div className="desktop-system-actions">

@@ -11,6 +11,7 @@ import { ConfirmationDialog } from './desktop/confirmation';
 import { StartupSurface } from './components/startup/startup-surface';
 import { appearanceBootstrap } from './desktop/appearance-cache';
 import { sessionExitBootstrap } from './desktop/session-motion';
+import { coreUpdateIsPending } from './desktop/host-update-watch';
 
 export const links: Route.LinksFunction = () => [
   { rel: 'stylesheet', href: stylesheet },
@@ -43,7 +44,11 @@ export function HydrateFallback() {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    const handlePreloadError = () => {
+    const handlePreloadError = (event: Event) => {
+      if (coreUpdateIsPending()) {
+        event.preventDefault();
+        return;
+      }
       window.location.reload();
     };
     window.addEventListener('vite:preloadError', handlePreloadError);

@@ -2,8 +2,9 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
-import { appDockerHealth, useContainerTelemetry } from '@/desktop/containers';
-import { IconArrowUpRight, IconBrandDocker, IconChevronRight } from '@tabler/icons-react';
+import { useContainerTelemetry } from '@/desktop/containers';
+import { appDockerHealth } from '@/desktop/container-health';
+import { IconBrandDocker, IconChevronRight } from '@tabler/icons-react';
 import { ContainerResourceFocus } from './container-resource-focus';
 import './container-resources.css';
 import '../docker-health/docker-health.css';
@@ -25,7 +26,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
   const ordered = (telemetry.data?.containers ?? [])
     .filter((item) => !appUrn || item.appUrn === appUrn)
     .sort((left, right) => (right[sort] ?? -1) - (left[sort] ?? -1) || left.name.localeCompare(right.name));
-  const visible = compact ? ordered.filter((item) => item.state === 'running').slice(0, 3) : ordered;
+  const visible = compact ? ordered.filter((item) => item.state === 'running').slice(0, 4) : ordered;
   const maximum = Math.max(1, ...visible.map((item) => item[sort] ?? 0));
   const unavailable = telemetry.isError || telemetry.data?.available === false;
 
@@ -40,21 +41,15 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
           <IconBrandDocker size={20} aria-hidden="true" />
           Usage
         </h2>
-        {compact ? (
-          <Link to="/monitor#containers" aria-label="Expand Docker resource usage">
-            <IconArrowUpRight size={18} aria-hidden="true" />
-          </Link>
-        ) : null}
       </div>
       <fieldset className="container-resources-sort">
-        <legend className="visually-hidden">Rank containers by</legend>
+        <legend>Sort by</legend>
         <button type="button" aria-pressed={sort === 'cpuPercent'} onClick={() => setSort('cpuPercent')}>
           CPU
         </button>
         <button type="button" aria-pressed={sort === 'memoryBytes'} onClick={() => setSort('memoryBytes')}>
           Memory
         </button>
-        <span>Highest first</span>
       </fieldset>
       {compact ? null : (
         <p className="container-resources-note">
@@ -94,7 +89,11 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
                   <strong title={label}>{label}</strong>
                   {label !== item.name ? <small title={item.name}>{item.name}</small> : null}
                   {compact ? null : (
-                    <span className="docker-health" data-health={health.state}>
+                    <span
+                      className="docker-health"
+                      data-health={health.state}
+                      title={item.health === 'not-configured' ? 'No Docker healthcheck is configured' : `Docker: ${health.label}`}
+                    >
                       <i aria-hidden="true" />
                       <span>{health.label}</span>
                     </span>
@@ -123,6 +122,10 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
                       <div>
                         <dt>State</dt>
                         <dd>{item.state}</dd>
+                      </div>
+                      <div>
+                        <dt>Healthcheck</dt>
+                        <dd>{item.health === 'not-configured' ? 'Not configured' : health.label}</dd>
                       </div>
                       <div>
                         <dt>Memory limit</dt>

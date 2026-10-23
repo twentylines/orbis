@@ -50,7 +50,8 @@
   min-width: 0;
   padding: 26px var(--desktop-window-gutter) 30px;
 }
-.desktop-route-page .desktop-window-content > .card {
+.desktop-route-page .desktop-window-content > .card,
+.desktop-route-page .desktop-route-children > .card {
   background: transparent;
   border: 0;
   box-shadow: none;

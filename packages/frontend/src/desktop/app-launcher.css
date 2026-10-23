@@ -143,9 +143,10 @@
   display: flex;
   align-items: center;
   min-width: 0;
+  --app-tray-inset: 7px;
   width: max-content;
   max-width: 680px;
-  padding: 7px;
+  padding: var(--app-tray-inset);
   margin: 0;
   border: 1px solid transparent;
   border-radius: 20px;
@@ -237,4 +238,75 @@
   .orbis-app-launcher {
     animation: none;
   }
+}
+
+.app-launcher-flight-mark {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.orbis-app-launcher[data-minimizing="true"],
+.orbis-app-launcher[data-launch-motion="restoring"] {
+  min-width: 0;
+  max-height: none;
+  background: var(--desktop-chrome);
+  animation: none;
+}
+.orbis-app-launcher[data-minimizing="true"] > :is(.app-launcher-bar, .app-launcher-body) {
+  opacity: 0;
+  transition: opacity 80ms ease;
+}
+.orbis-app-launcher[data-minimizing="true"] .app-launcher-flight-mark {
+  opacity: 1;
+  transition: opacity 120ms 100ms ease;
+}
+.orbis-app-launcher[data-launch-motion="restoring"] > :is(.app-launcher-bar, .app-launcher-body) {
+  animation: app-launcher-content 580ms ease both;
+}
+.orbis-app-launcher[data-launch-motion="restoring"] .app-launcher-flight-mark {
+  animation: app-launcher-flight 580ms ease both;
+}
+.desktop-dock[data-tray-motion="splitting"] .app-tray-list {
+  animation: app-tray-content 580ms ease both;
+}
+@keyframes app-launcher-content {
+  0%,
+  40% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes app-launcher-flight {
+  0%,
+  20% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes app-tray-content {
+  0%,
+  25% {
+    opacity: 0;
+  }
+  65%,
+  100% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-dock[data-tray-motion="splitting"] .app-tray-list {
+    animation: none;
+  }
+}
+
+.app-tray-restore[data-flying="true"] .app-logo {
+  visibility: hidden;
 }

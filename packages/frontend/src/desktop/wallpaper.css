@@ -24,8 +24,8 @@
   position: absolute;
   inset: 0;
 }
-.orbis-theme[data-desktop-mode="dark"] > .desktop-wallpaper-layer .desktop-wallpaper-shade {
-  background: linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72));
+.orbis-theme > .desktop-wallpaper-layer .desktop-wallpaper-shade {
+  background: var(--desktop-wallpaper-shade);
 }
 .desktop-wallpaper-dim {
   background: rgb(0 0 0 / var(--wallpaper-dim, 0));
@@ -48,6 +48,10 @@
 }
 .desktop:has(> .desktop-wallpaper-layer[data-protect="true"]) .workspace-apps {
   overflow: visible;
+}
+.desktop:has(> .desktop-wallpaper-layer[data-protect="true"]) .workspace-apps .workspace-section-heading::before {
+  inset: 0;
+  border-radius: 16px;
 }
 .desktop:has(> .desktop-wallpaper-layer[data-protect="true"]) .workspace-apps::after {
   display: none;

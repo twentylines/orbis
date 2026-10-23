@@ -114,13 +114,13 @@ export function HostDeviceHistoryView() {
   const fields =
     selected?.kind === 'disk'
       ? ([
-          ['inbound', 'Read', 'bytesPerSecond', '#9fc0ad'],
-          ['outbound', 'Write', 'bytesPerSecond', '#d1a172'],
-          ['busy', 'Active time', 'percent', '#92b9cb'],
+          ['inbound', 'Read', 'bytesPerSecond', 'color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-positive))'],
+          ['outbound', 'Write', 'bytesPerSecond', 'var(--desktop-accent)'],
+          ['busy', 'Active time', 'percent', 'color-mix(in srgb, var(--desktop-accent) 70%, var(--desktop-ink))'],
         ] as const)
       : ([
-          ['inbound', 'Download', 'bytesPerSecond', '#9fc0ad'],
-          ['outbound', 'Upload', 'bytesPerSecond', '#d1a172'],
+          ['inbound', 'Download', 'bytesPerSecond', 'color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-positive))'],
+          ['outbound', 'Upload', 'bytesPerSecond', 'var(--desktop-accent)'],
         ] as const);
 
   return (

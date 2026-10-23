@@ -1,0 +1,110 @@
+.store-split-layout,
+.store-catalogue-pane,
+.store-app-preview {
+  min-width: 0;
+}
+.store-app-preview {
+  position: relative;
+  isolation: isolate;
+}
+.store-preview-surface {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.store-preview-content {
+  min-width: 0;
+}
+.store-preview-close {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: 0 0 16px auto;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  color: var(--desktop-ink);
+  background: var(--desktop-surface);
+}
+.store-split-desktop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0fr);
+  gap: 0;
+  height: max(260px, calc(100dvh - var(--orbis-bar-bottom, 88px) - var(--orbis-dock-height, 78px) - 190px));
+  transition:
+    grid-template-columns 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    gap 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.store-split-desktop[data-preview-open="true"] {
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr);
+  gap: 20px;
+}
+.store-split-desktop .store-catalogue-pane {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  container-type: inline-size;
+  padding: 2px 12px 14px 2px;
+}
+.store-split-desktop .store-app-preview {
+  overflow: hidden;
+  border-radius: 22px;
+}
+.store-split-desktop .store-preview-surface {
+  background: var(--desktop-surface);
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  opacity: 0;
+  transition: opacity 120ms 300ms ease;
+}
+.store-split-desktop[data-preview-open="true"] .store-preview-surface {
+  opacity: 1;
+  transition-delay: 0ms;
+}
+.store-split-desktop .store-preview-content {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  container-type: inline-size;
+  padding: 20px;
+}
+.store-split-desktop .store-app-preview .app-workspace-back {
+  display: none;
+}
+.store-split-desktop .store-app-preview .app-workspace-hero {
+  padding-top: 2px;
+}
+.store-catalogue-pane .app-tile[aria-expanded="true"] {
+  border-color: var(--desktop-accent);
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
+}
+@container (max-width: 720px) {
+  .store-catalogue-pane .action-bar-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .store-catalogue-pane .action-bar-section {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .store-catalogue-pane .action-bar-right {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .store-catalogue-pane .desktop-catalogue-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .store-split-desktop,
+  .store-preview-surface {
+    transition: none;
+  }
+}

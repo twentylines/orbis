@@ -17,9 +17,11 @@ export default [
 
     // App store routes
     ...prefix('app-store', [
-      index('./modules/app/pages/app-store-page.tsx', { id: 'app-store' }),
-      route(':storeId', './modules/app/pages/app-store-page.tsx', { id: 'app-store-id' }),
-      route(':storeId/:appId', './modules/app/pages/app-details-page.tsx', { id: 'app-details-store' }),
+      layout('./modules/app/pages/app-store-layout.tsx', [
+        index('./modules/app/pages/app-store-index.tsx', { id: 'app-store' }),
+        route(':storeId', './modules/app/pages/app-store-index.tsx', { id: 'app-store-id' }),
+        route(':storeId/:appId', './modules/app/pages/app-details-page.tsx', { id: 'app-details-store' }),
+      ]),
       route(':storeId/:appId/update', './modules/app/pages/app-update-page.tsx', { id: 'app-store-app-update' }),
     ]),
 

@@ -1,13 +1,13 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
-import { sectionSurfaceFrames, visibleSectionBounds } from './section-motion-geometry';
+import { sectionDirection, sectionSurfaceFrames, visibleSectionBounds } from './section-motion-geometry';
 
 describe('live section surface geometry', () => {
   test('a long Monitor page starts shrinking from its visible height', () => {
     const previous = visibleSectionBounds({ left: 24, top: 112, width: 1392, height: 9563 }, 1100);
     const next = visibleSectionBounds({ left: 24, top: 112, width: 1392, height: 480 }, 1100);
     expect(sectionSurfaceFrames(previous, next)).toEqual([
-      { width: '1392px', height: '988px', transform: 'translate(0px, 0px)' },
+      { width: '1392px', height: '988px', transform: 'translateX(0px)' },
       { width: '1392px', height: '480px', transform: 'none' },
     ]);
   });
@@ -24,7 +24,24 @@ describe('live section surface geometry', () => {
     expect(sectionSurfaceFrames({ left: 20, top: 112, width: 1300, height: 620 }, { left: 40, top: 112, width: 1260, height: 480 })[0]).toEqual({
       width: '1300px',
       height: '620px',
-      transform: 'translate(-20px, 0px)',
+      transform: 'translateX(-20px)',
     });
+  });
+});
+
+describe('history section direction', () => {
+  test('Back follows history even when the target section appears later in the dock', () => {
+    expect(sectionDirection(0, 5, 'POP', 4, 3)).toBe(-1);
+  });
+  test('Forward follows history even when the target section appears earlier in the dock', () => {
+    expect(sectionDirection(5, 0, 'POP', 3, 4)).toBe(1);
+  });
+  test('normal navigation follows section order', () => {
+    expect(sectionDirection(5, 0, 'PUSH', 3, 4)).toBe(-1);
+  });
+  test('a history scroll restoration never shifts the surface vertical anchor', () => {
+    expect(sectionSurfaceFrames({ left: 24, top: 0, width: 900, height: 900 }, { left: 24, top: 112, width: 900, height: 480 })[0]?.transform).toBe(
+      'translateX(0px)',
+    );
   });
 });

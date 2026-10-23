@@ -3,7 +3,7 @@ import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
 import si from 'systeminformation';
-import { cpuUsage, parseHostCpuStat, type CpuSnapshot } from './host-cpu';
+import { cpuUsage, parseHostCpuStat, reportedCpuClockGHz, type CpuSnapshot } from './host-cpu';
 
 @Injectable()
 export class SystemService {
@@ -70,12 +70,13 @@ export class SystemService {
   }
 
   private async readTelemetry() {
-    const [cpuStatResult, uptimeResult, diskResult, networkResult, memoryResult] = await Promise.allSettled([
+    const [cpuStatResult, uptimeResult, diskResult, networkResult, memoryResult, cpuInfoResult] = await Promise.allSettled([
       this.filesystem.readTextFile('/host/proc/stat'),
       this.filesystem.readTextFile('/host/proc/uptime'),
       si.fsSize(),
       si.networkStats(),
       this.filesystem.readTextFile('/host/proc/meminfo'),
+      this.filesystem.readTextFile('/host/proc/cpuinfo'),
     ]);
 
     const hostCounters = cpuStatResult.status === 'fulfilled' && cpuStatResult.value ? parseHostCpuStat(cpuStatResult.value) : null;
@@ -94,6 +95,7 @@ export class SystemService {
     const memoryAvailable = memory('MemAvailable');
     const swapTotal = memory('SwapTotal');
     const swapFree = memory('SwapFree');
+    const clock = reportedCpuClockGHz(cpuInfoResult.status === 'fulfilled' ? cpuInfoResult.value : null);
     const safe = (value: number | undefined | null) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null);
 
     return {
@@ -103,6 +105,7 @@ export class SystemService {
         totalPercent: safe(hostCpu?.totalPercent ?? runtimeCpu?.currentLoad),
         perCorePercent: hostCpu?.perCorePercent ?? runtimeCpu?.cpus.map((core) => safe(core.load)) ?? [],
         uptimeSeconds: safe(uptime ?? si.time().uptime),
+        ...(clock === null ? {} : { reportedClockGHz: clock }),
       },
       memory: {
         scope: 'host-proc',

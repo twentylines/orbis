@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { appDestinations, type AppDestinationData } from './app-destinations';
 import { useAppLauncher } from './app-launcher';
-import { appDockerHealth } from './containers';
+import { appDockerHealth } from './container-health';
 import { clusterRequest, ServerRack, useCluster, type ClusterServer, type ServerReading } from './cluster';
 import { useDesktopPreferences } from './preferences';
 import type { Telemetry } from './telemetry';

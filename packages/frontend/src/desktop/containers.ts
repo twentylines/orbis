@@ -1,4 +1,4 @@
-import type { ContainerReading, ContainerTelemetry } from '@runtipi/common/schemas';
+import type { ContainerTelemetry } from '@runtipi/common/schemas';
 import { useQuery } from '@tanstack/react-query';
 import { useWindowVisible } from './window-visibility';
 import { useServerPath } from './cluster-data';
@@ -20,15 +20,3 @@ export const useContainerTelemetry = () => {
     refetchIntervalInBackground: false,
   });
 };
-
-export function appDockerHealth(containers: ContainerReading[]) {
-  if (!containers.length) return { state: 'unknown', label: 'No container' };
-  if (containers.some((item) => item.health === 'unhealthy' || item.state === 'dead')) return { state: 'unhealthy', label: 'Unhealthy' };
-  if (containers.some((item) => item.health === 'starting' || item.state === 'restarting')) return { state: 'starting', label: 'Starting' };
-  const running = containers.filter((item) => item.state === 'running');
-  if (!running.length) return { state: 'stopped', label: 'Stopped' };
-  if (running.length !== containers.length) return { state: 'partial', label: 'Partly stopped' };
-  if (running.every((item) => item.health === 'healthy')) return { state: 'healthy', label: 'Healthy' };
-  if (running.some((item) => item.health === 'unknown')) return { state: 'unknown', label: 'Health unknown' };
-  return { state: 'running', label: 'No healthcheck' };
-}

@@ -1,0 +1,164 @@
+.desktop-activity {
+  display: none;
+}
+@media (min-width: 1100px) and (min-height: 640px) {
+  .desktop-activity {
+    position: relative;
+    display: block;
+    flex: none;
+    min-width: 0;
+    align-self: stretch;
+    color: var(--desktop-chrome-ink);
+  }
+}
+.desktop-activity-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: clamp(150px, calc(210px * var(--orbis-text-scale, 1)), 315px);
+  height: 100%;
+  min-height: 68px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 24px;
+  color: var(--desktop-chrome-ink);
+  background: var(--desktop-chrome);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
+}
+.desktop-activity-trigger:focus-visible,
+.desktop-activity-heading button:focus-visible,
+.desktop-activity-links a:focus-visible,
+.desktop-activity-list:focus-visible {
+  outline: 3px solid var(--desktop-chrome-ink);
+  outline-offset: -5px;
+}
+.desktop-activity-trigger > svg {
+  flex: none;
+}
+.desktop-activity-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+}
+.desktop-activity-icon .app-logo {
+  border-radius: 8px;
+  box-shadow: none;
+  filter: none;
+}
+.desktop-activity-summary,
+.desktop-activity-list li > span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.desktop-activity-summary strong,
+.desktop-activity-summary small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desktop-activity-summary strong,
+.desktop-activity-list strong {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+.desktop-activity-summary small,
+.desktop-activity-list small {
+  color: var(--orbis-chrome-muted, var(--desktop-chrome-ink));
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+.desktop-activity-flyover {
+  position: absolute;
+  z-index: 55;
+  left: 0;
+  bottom: calc(100% + 12px);
+  overflow: hidden;
+  max-width: calc(100vw - 32px);
+  background: var(--desktop-chrome);
+  color: var(--desktop-chrome-ink);
+  border: 1px solid transparent;
+  outline: none;
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  box-shadow: 0 16px 42px rgb(0 0 0 / 0.2);
+}
+.desktop-activity-panel {
+  width: min(400px, calc(100vw - 32px));
+  padding: 18px;
+}
+.desktop-activity-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.desktop-activity-heading h2 {
+  margin: 0;
+  color: inherit;
+  font-size: 1rem;
+}
+.desktop-activity-heading button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-chrome-ink) 10%, transparent);
+  color: inherit;
+}
+.desktop-activity-description {
+  margin: 4px 0 14px;
+  color: var(--orbis-chrome-muted, var(--desktop-chrome-ink));
+  font-size: 0.75rem;
+}
+.desktop-activity-list {
+  display: grid;
+  gap: 14px;
+  max-height: min(360px, calc(100dvh - var(--orbis-bar-bottom, 90px) - var(--orbis-dock-height, 78px) - 250px));
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  list-style: none;
+  scrollbar-gutter: stable;
+}
+.desktop-activity-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.desktop-activity-list strong,
+.desktop-activity-list small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.desktop-activity-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--desktop-chrome-ink) 15%, transparent);
+}
+.desktop-activity-links a {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.desktop-connection-dot.is-updating,
+.desktop-connection-dot.is-update-offline {
+  background: var(--desktop-logo-orbit);
+}

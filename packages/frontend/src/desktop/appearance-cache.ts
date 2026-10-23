@@ -1,4 +1,5 @@
 import { applyAppearanceRuntime } from './appearance-runtime';
+import { resolveColourMode } from './colour-mode';
 
 const appearanceOptions = {
   presets: ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'],
@@ -13,6 +14,7 @@ export type CachedAppearance = {
 };
 
 export const preferenceStorageKey = 'server-desktop-preferences-v1';
+export const preferenceCacheLimit = 256 * 1024;
 
 export function appearanceFromStored(value: unknown): CachedAppearance {
   const stored = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -35,7 +37,7 @@ export function appearanceFromStored(value: unknown): CachedAppearance {
 export function readCachedAppearance(): CachedAppearance {
   try {
     const raw = window.localStorage.getItem(preferenceStorageKey);
-    return appearanceFromStored(raw && raw.length <= 16 * 1024 ? JSON.parse(raw) : null);
+    return appearanceFromStored(raw && raw.length <= preferenceCacheLimit ? JSON.parse(raw) : null);
   } catch {
     return appearanceFromStored(null);
   }
@@ -47,15 +49,16 @@ export const appearanceBootstrap = `(()=>{
   let stored={};
   try {
     const raw=localStorage.getItem(${JSON.stringify(preferenceStorageKey)});
-    const value=raw&&raw.length<=16384?JSON.parse(raw):null;
+    const value=raw&&raw.length<=${preferenceCacheLimit}?JSON.parse(raw):null;
     if(value&&typeof value==='object'&&!Array.isArray(value))stored=value;
   } catch {}
   const preset=options.presets.includes(stored.preset)?stored.preset:'frost';
-  let mode=options.modes.includes(stored.mode)?stored.mode:preset==='graphite'?'dark':'light';
-  if(mode==='system') {
-    try { mode=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'; }
-    catch { mode='light'; }
+  const requested=options.modes.includes(stored.mode)?stored.mode:preset==='graphite'?'dark':'light';
+  let systemDark=false;
+  if(requested==='system') {
+    try { systemDark=matchMedia('(prefers-color-scheme: dark)').matches; } catch {}
   }
+  const mode=(${resolveColourMode.toString()})(requested,systemDark);
   const root=document.documentElement;
   root.dataset.desktopPreset=preset;
   root.dataset.desktopMode=mode;

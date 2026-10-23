@@ -1,0 +1,101 @@
+.system-gauges-group {
+  min-width: 0;
+}
+.system-gauges {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.system-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--desktop-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+.system-gauge:hover {
+  color: var(--desktop-ink);
+  text-decoration: none;
+}
+.system-dial {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: min(100%, 7.5rem);
+  padding-top: 0.1rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  color: var(--desktop-ink);
+  background: conic-gradient(from -90deg, var(--desktop-accent) var(--dial-progress), var(--desktop-line) 0);
+}
+.system-dial::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: inherit;
+  background: var(--desktop-surface);
+}
+.system-dial > * {
+  position: relative;
+}
+.system-dial svg {
+  color: var(--desktop-status-muted);
+}
+.system-dial strong {
+  font-size: clamp(0.875rem, 1.5vw, 1.3125rem);
+  line-height: 1;
+  translate: -0.05em 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+}
+.system-capacities {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.system-capacities > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  min-width: 0;
+}
+.system-capacities dt {
+  color: var(--desktop-muted);
+  font-weight: 500;
+}
+.system-capacities dd {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  column-gap: 0.3em;
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.system-capacities dd > span {
+  white-space: nowrap;
+}
+.system-gauge:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+@media (max-width: 380px) {
+  .system-gauges {
+    gap: 8px;
+  }
+  .system-dial::before {
+    inset: 5px;
+  }
+}

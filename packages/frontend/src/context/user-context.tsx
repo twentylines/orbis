@@ -14,17 +14,8 @@ export const UserContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const queryClient = useQueryClient();
 
   const queryKey = userContextQueryKey();
-  const {
-    data: userContext,
-    error,
-    isFetching,
-  } = useSuspenseQuery({
-    ...userContextOptions(),
-  });
-
-  if (error && !isFetching) {
-    throw error;
-  }
+  // Keep the existing session view during a transient restart; Suspense still handles initial failures.
+  const { data: userContext } = useSuspenseQuery({ ...userContextOptions() });
 
   const refreshUserContext = async () => {
     await queryClient.invalidateQueries({ queryKey });

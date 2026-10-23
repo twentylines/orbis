@@ -37,7 +37,7 @@
   padding: 5px;
   border: 1px solid var(--desktop-line);
   border-radius: 13px;
-  background: rgba(121, 149, 130, 0.07);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 7%, transparent);
 }
 .monitor-history-ranges button {
   min-height: 38px;
@@ -48,9 +48,6 @@
   color: var(--desktop-muted);
   font-size: 0.75rem;
   font-weight: 650;
-  transition:
-    background 160ms ease,
-    color 160ms ease;
 }
 .monitor-history-ranges button[aria-pressed="true"] {
   background: var(--desktop-surface);
@@ -334,11 +331,11 @@
   height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #9ac9aa;
+  background: var(--desktop-positive);
   box-shadow: 0 0 0 4px rgba(154, 201, 170, 0.12);
 }
 .desktop-live-dot-stale {
-  background: #d1a172;
+  background: var(--desktop-accent);
   box-shadow: 0 0 0 4px rgba(209, 161, 114, 0.13);
 }
 .desktop-network-charts {
@@ -570,4 +567,38 @@
   .desktop-host-machine-bay > i span {
     transition: none;
   }
+}
+
+.desktop-host-overview-copy .system-gauges-group {
+  max-width: 32rem;
+  margin-top: 20px;
+}
+.desktop-host-overview .system-dial {
+  width: min(100%, 5.5rem);
+}
+.desktop-host-overview-uptime {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  max-width: 32rem;
+  margin: 14px 0 0;
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+}
+.desktop-host-overview-uptime strong {
+  color: var(--desktop-ink);
+  font-variant-numeric: tabular-nums;
+}
+.desktop-telemetry-lead .desktop-memory-total {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25em;
+  font-size: clamp(1.125rem, 2vw, 2rem);
+  line-height: 1.4;
+}
+.desktop-memory-total > span {
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
 }

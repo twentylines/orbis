@@ -1,35 +1,37 @@
-/* Live surfaces stay interactive and keep their backdrop filters while moving. */
+/* The surface enters before its live content; browser history owns document scroll. */
 .desktop-route-surface {
   will-change: height, width;
 }
-.desktop-route-loading,
-.desktop-navigation-pending {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+.desktop-view-home :is(.workspace-heading, .workspace-widget, .workspace-app, .workspace-editor) {
+  animation: none;
 }
 .desktop-route-loading {
+  display: grid;
+  align-content: center;
+  gap: 18px;
   min-height: 160px;
   width: 100%;
-  justify-content: center;
   padding: 28px;
   color: var(--desktop-muted);
+  font-size: 0.875rem;
 }
-.desktop-navigation-pending {
-  min-width: 0;
-  max-width: 100%;
+.desktop-route-loading-lines {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 420px);
 }
-.desktop-loading-spinner {
-  width: 16px;
-  height: 16px;
-  flex: none;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: orbis-navigation-spin 800ms linear infinite;
+.desktop-route-loading-lines span {
+  display: block;
+  height: 14px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--desktop-ink) 9%, transparent);
+  animation: orbis-route-placeholder 1.6s ease-in-out infinite alternate;
 }
-.desktop-dock-item[aria-busy="true"] .desktop-dock-icon > svg {
-  opacity: 0.35;
+.desktop-route-loading-lines span:nth-child(2) {
+  width: 82%;
+}
+.desktop-route-loading-lines span:nth-child(3) {
+  width: 60%;
 }
 .desktop-dock-icon {
   position: relative;
@@ -40,20 +42,16 @@
   height: 22px;
   flex: none;
 }
-.desktop-dock-icon .desktop-loading-spinner {
-  position: absolute;
-  inset: 3px;
-  z-index: 2;
-}
-@keyframes orbis-navigation-spin {
+@keyframes orbis-route-placeholder {
+  from {
+    opacity: 0.45;
+  }
   to {
-    transform: rotate(360deg);
+    opacity: 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .desktop-loading-spinner {
+  .desktop-route-loading-lines span {
     animation: none;
-    border-style: dotted;
-    border-right-color: currentColor;
   }
 }

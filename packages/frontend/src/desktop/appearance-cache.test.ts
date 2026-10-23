@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
 import { runInNewContext } from 'node:vm';
-import { appearanceBootstrap, appearanceFromStored, preferenceStorageKey } from './appearance-cache';
+import { appearanceBootstrap, appearanceFromStored, preferenceStorageKey, preferenceCacheLimit } from './appearance-cache';
 
 function firstPaint(raw: string | null, { dark = false, blockedStorage = false, blockedMedia = false } = {}) {
   const dataset: Record<string, string> = {};
@@ -42,6 +42,57 @@ describe('appearance before hydration', () => {
     expect(firstPaint(JSON.stringify({ mode: 'system' }), { dark }).desktopMode).toBe(dark ? 'dark' : 'light');
   });
 
+  test.each(['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'] as const)('System and manual modes resolve the same %s palette', (preset) => {
+    for (const dark of [false, true]) {
+      const shared = { preset, wallpaper: 'canopy' };
+      expect(firstPaint(JSON.stringify({ ...shared, mode: 'system' }), { dark })).toEqual(
+        firstPaint(JSON.stringify({ ...shared, mode: dark ? 'dark' : 'light' }), { dark: !dark }),
+      );
+    }
+  });
+
+  test('keeps first-paint appearance when a large pinned order is cached', () => {
+    const saved = {
+      preset: 'ocean',
+      mode: 'system',
+      wallpaper: 'tidal',
+      workspace: { pinnedApps: Array.from({ length: 512 }, (_, index) => `app-${index}-${'a'.repeat(150)}:store`) },
+      appearance: { textScale: 150 },
+    };
+    const raw = JSON.stringify(saved);
+    expect(raw.length).toBeGreaterThan(16 * 1024);
+    expect(raw.length).toBeLessThan(preferenceCacheLimit);
+    expect(firstPaint(raw, { dark: true })).toEqual({ desktopPreset: 'ocean', desktopMode: 'dark', desktopWallpaper: 'tidal' });
+  });
+
+  test('applies enlarged text before hydration with a large pinned order', () => {
+    const properties = new Map<string, string>();
+    const dataset: Record<string, string> = {};
+    const raw = JSON.stringify({
+      preset: 'graphite',
+      mode: 'system',
+      appearance: { textScale: 150 },
+      workspace: { pinnedApps: Array.from({ length: 512 }, (_, index) => `app-${index}-${'a'.repeat(150)}:store`) },
+    });
+    runInNewContext(appearanceBootstrap, {
+      document: {
+        documentElement: {
+          dataset,
+          style: {
+            setProperty: (name: string, value: string) => properties.set(name, value),
+            removeProperty: (name: string) => properties.delete(name),
+          },
+        },
+      },
+      localStorage: { getItem: () => raw },
+      matchMedia: () => ({ matches: true }),
+      getComputedStyle: () => ({ getPropertyValue: () => '' }),
+      requestAnimationFrame: (callback: () => void) => callback(),
+    });
+    expect(dataset.desktopMode).toBe('dark');
+    expect(properties.get('--orbis-text-scale')).toBe('1.5');
+  });
+
   test('uses Light when the OS preference is unavailable', () => {
     expect(firstPaint(JSON.stringify({ mode: 'system' }), { blockedMedia: true }).desktopMode).toBe('light');
   });
@@ -57,7 +108,7 @@ describe('appearance before hydration', () => {
     '[]',
     'null',
     JSON.stringify({ preset: '</script><script>throw 1</script>', mode: 'inherit', wallpaper: 'url(unsafe)' }),
-    ' '.repeat(16385),
+    ' '.repeat(preferenceCacheLimit + 1),
   ])('ignores absent, corrupt, untrusted or oversized appearance data: case %#', (raw) => {
     expect(firstPaint(raw)).toEqual({ desktopPreset: 'frost', desktopMode: 'light', desktopWallpaper: 'sandstone' });
   });

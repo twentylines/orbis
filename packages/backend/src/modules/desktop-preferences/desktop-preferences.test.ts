@@ -208,6 +208,31 @@ describe('desktop preferences', () => {
     expect(malformed.status).toBe(400);
   });
 
+  it('saves and reorders large pin lists without truncating legacy or unavailable identities', async () => {
+    const pins = Array.from({ length: 512 }, (_, index) => `app-${index}:store`);
+    const workspace = { ...DEFAULT_DESKTOP_PREFERENCES.workspace, pinnedApps: pins };
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace })
+      .expect(200);
+    const reordered = [...pins.slice(1), pins[0]];
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace: { ...workspace, pinnedApps: reordered } })
+      .expect(200);
+    const fetched = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+    expect(fetched.body.workspace.pinnedApps).toEqual(reordered);
+    const stored = JSON.parse(await fs.readFile(path.join(directory, 'state', 'desktop', '7.json'), 'utf8'));
+    expect(stored.workspace.pinnedApps).toEqual(reordered);
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, workspace: { ...workspace, pinnedApps: [...pins, 'overflow:store'] } })
+      .expect(400);
+  });
+
   it('round-trips independent window placements and supplies defaults for legacy accounts', async () => {
     const windows = {
       settings: { mode: 'floating', bounds: { x: 60, y: 120, width: 900, height: 600 } },

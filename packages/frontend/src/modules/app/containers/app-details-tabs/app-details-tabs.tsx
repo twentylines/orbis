@@ -13,7 +13,8 @@ import { Suspense, lazy } from 'react';
 import React from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { useLocation, useSearchParams } from 'react-router';
+import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
 import { Markdown } from '@/components/markdown/markdown';
 import { appDescriptionText } from '../../helpers/app-description';
 import { ContainerResources } from '@/components/container-resources/container-resources';
@@ -51,6 +52,7 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
   const metaTabId = isUserApp ? 'notes' : 'description';
 
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const installed = Boolean(app && app.status !== 'missing');
   const allowedTabs = installed
     ? [metaTabId, 'info', 'backups', 'logs', 'user-config', 'resources', 'operations']
@@ -79,7 +81,12 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
         next.set('tab', newTab);
         return next;
       },
-      { preventScrollReset: true },
+      {
+        preventScrollReset: true,
+        state: location.pathname.startsWith('/app-store/')
+          ? nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, true)
+          : location.state,
+      },
     );
   };
 

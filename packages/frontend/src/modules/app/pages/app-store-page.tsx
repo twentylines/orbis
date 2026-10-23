@@ -1,4 +1,5 @@
 import { getEnabledAppStoresOptions, searchAppsInfiniteOptions } from '@/api-client/@tanstack/react-query.gen';
+import { RefreshAppStoresButton } from '@/components/refresh-app-stores/refresh-app-stores';
 import { EmptyPage } from '@/components/empty-page/empty-page';
 import { useInfiniteScroll } from '@/lib/hooks/use-infinite-scroll';
 import { useAppStoreState } from '@/stores/app-store';
@@ -13,21 +14,12 @@ import { CategorySelector } from '@/components/category-selector/category-select
 import { ActionBar } from '@/components/action-bar/action-bar';
 import { useCluster } from '@/desktop/cluster';
 import { ClusterStore } from '@/desktop/cluster-views';
+import { DelayedRouteLoading } from '@/desktop/route-loading';
+import { useLocation } from 'react-router';
+import { nextStorePreviewHistory, type StorePreviewHistory } from './store-preview-navigation';
 
 export const AppStorePageSuspense = () => {
-  return (
-    <div>
-      <span className="visually-hidden">Loading app catalogue</span>
-      <div className="desktop-catalogue-skeleton" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
-    </div>
-  );
+  return <DelayedRouteLoading label="Loading app catalogue…" />;
 };
 
 export default () => {
@@ -37,7 +29,8 @@ export default () => {
 };
 
 function LocalStore() {
-  const params = useParams<{ storeId: string }>();
+  const params = useParams<{ storeId: string; appId: string }>();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const selectedStore = searchParams.get('store') ?? undefined;
@@ -66,14 +59,18 @@ function LocalStore() {
 
   const onSelectStore = useCallback(
     (value?: string) => {
+      const options = {
+        preventScrollReset: true,
+        state: params.appId ? nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, true) : undefined,
+      };
       if (value) {
-        setSearchParams({ store: value });
+        setSearchParams({ store: value }, options);
       } else {
-        setSearchParams({});
+        setSearchParams({}, options);
       }
       setStoreId(value);
     },
-    [setSearchParams, setStoreId],
+    [location.search, location.state, params.appId, setSearchParams, setStoreId],
   );
 
   const { data, hasNextPage, isFetchingNextPage, isFetching, fetchNextPage } = useInfiniteQuery({
@@ -91,59 +88,43 @@ function LocalStore() {
     isFetching: isFetchingNextPage || isFetching,
   });
 
-  if (params.storeId) {
+  if (params.storeId && !params.appId) {
     return <Navigate to={`/app-store?store=${params.storeId}`} />;
   }
 
-  if (isLoading) {
-    return <AppStorePageSuspense />;
-  }
-
-  if (!apps?.length) {
-    return (
-      <>
-        <ActionBar sticky>
-          <ActionBar.Left>
-            <Input value={search} onChange={onSearch} placeholder={t('APP_STORE_SEARCH_PLACEHOLDER')} />
-          </ActionBar.Left>
-          <ActionBar.Center>
-            {appStores.appStores.length > 1 ? (
-              <StoreSelector initialValue={selectedStore} stores={appStores.appStores} onSelect={onSelectStore} />
-            ) : null}
-          </ActionBar.Center>
-          <ActionBar.Right>
-            <CategorySelector initialValue={category} onSelect={setCategory} />
-          </ActionBar.Right>
-        </ActionBar>
-        <EmptyPage title="APP_STORE_NO_RESULTS" subtitle="APP_STORE_NO_RESULTS_SUBTITLE" />
-      </>
-    );
-  }
+  const toolbar = (
+    <ActionBar sticky>
+      <ActionBar.Left>
+        <Input value={search} onChange={onSearch} placeholder={t('APP_STORE_SEARCH_PLACEHOLDER')} />
+      </ActionBar.Left>
+      <ActionBar.Center>
+        {appStores.appStores.length > 1 ? <StoreSelector initialValue={selectedStore} stores={appStores.appStores} onSelect={onSelectStore} /> : null}
+      </ActionBar.Center>
+      <ActionBar.Right>
+        <CategorySelector initialValue={category} onSelect={setCategory} />
+        <RefreshAppStoresButton />
+      </ActionBar.Right>
+    </ActionBar>
+  );
 
   return (
     <>
-      <ActionBar sticky>
-        <ActionBar.Left>
-          <Input value={search} onChange={onSearch} placeholder={t('APP_STORE_SEARCH_PLACEHOLDER')} />
-        </ActionBar.Left>
-        <ActionBar.Center>
-          {appStores.appStores.length > 1 ? (
-            <StoreSelector initialValue={selectedStore} stores={appStores.appStores} onSelect={onSelectStore} />
-          ) : null}
-        </ActionBar.Center>
-        <ActionBar.Right>
-          <CategorySelector initialValue={category} onSelect={setCategory} />
-        </ActionBar.Right>
-      </ActionBar>
-      <div className="desktop-catalogue">
-        <div className="desktop-catalogue-grid">
-          {apps.map((app, index) => (
-            <div ref={index === apps.length - 1 ? lastElementRef : null} key={app.urn} className="desktop-catalogue-item">
-              <StoreTile app={app} isLoading={isLoading} />
-            </div>
-          ))}
+      {toolbar}
+      {isLoading ? (
+        <AppStorePageSuspense />
+      ) : apps.length ? (
+        <div className="desktop-catalogue">
+          <div className="desktop-catalogue-grid">
+            {apps.map((app, index) => (
+              <div ref={index === apps.length - 1 ? lastElementRef : null} key={app.urn} className="desktop-catalogue-item">
+                <StoreTile app={app} isLoading={isLoading} />
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <EmptyPage title="APP_STORE_NO_RESULTS" subtitle="APP_STORE_NO_RESULTS_SUBTITLE" />
+      )}
     </>
   );
 }

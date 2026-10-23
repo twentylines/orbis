@@ -62,14 +62,13 @@ export function HostProcessesView() {
         </span>
       </header>
       <fieldset className="container-resources-sort host-processes-sort">
-        <legend className="visually-hidden">Rank host processes by</legend>
+        <legend>Sort by</legend>
         <button type="button" aria-pressed={sort === 'cpuPercent'} onClick={() => setSort('cpuPercent')}>
           CPU
         </button>
         <button type="button" aria-pressed={sort === 'memoryBytes'} onClick={() => setSort('memoryBytes')}>
           Memory
         </button>
-        <span>Highest first</span>
       </fieldset>
       {query.isPending ? <output>Loading host processes…</output> : null}
       {query.isError || data?.available === false ? (

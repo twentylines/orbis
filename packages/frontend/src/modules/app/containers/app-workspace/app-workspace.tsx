@@ -1,3 +1,5 @@
+import { useStorePreview } from '../../pages/store-preview-context';
+import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { DockerHealth } from '@/components/docker-health/docker-health';
 import { useAppContext } from '@/context/app-context';
@@ -19,6 +21,7 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
   const { userSettings } = useAppContext();
   const { t } = useTranslation();
   const location = useLocation();
+  const preview = useStorePreview();
   const [, setParams] = useSearchParams();
   const containers = useContainerTelemetry();
   const tasks = useTasks();
@@ -29,7 +32,20 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
 
   return (
     <div className="app-workspace" data-testid="app-details">
-      <Link className="app-workspace-back" to={fromStore ? `/app-store/${encodeURIComponent(storeId ?? '')}` : '/apps'}>
+      <Link
+        className="app-workspace-back"
+        to={fromStore ? (preview?.closePath ?? `/app-store/${encodeURIComponent(storeId ?? '')}`) : '/apps'}
+        onClick={
+          preview && fromStore
+            ? (event) => {
+                if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+                  event.preventDefault();
+                  preview.close();
+                }
+              }
+            : undefined
+        }
+      >
         <IconArrowLeft size={16} aria-hidden="true" />
         {fromStore ? t('HEADER_APP_STORE') : t('HEADER_APPS')}
       </Link>
@@ -86,7 +102,10 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
                 next.set('tab', 'operations');
                 return next;
               },
-              { preventScrollReset: true },
+              {
+                preventScrollReset: true,
+                state: fromStore ? nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, true) : location.state,
+              },
             )
           }
         >

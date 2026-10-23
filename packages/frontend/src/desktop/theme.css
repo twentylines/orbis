@@ -1,13 +1,15 @@
 /* Shared tokens also reach dialogs and menus rendered into body portals. */
-.orbis-theme,
-body:has(.orbis-theme),
-html:has(.orbis-startup) {
+:root {
   --desktop-surface: var(--orbis-surface, var(--desktop-base-surface));
   --desktop-chrome: var(--orbis-chrome, var(--desktop-base-chrome));
   --desktop-muted: var(--orbis-muted, var(--desktop-base-muted));
   --desktop-accent: var(--orbis-accent, var(--desktop-base-accent));
   --desktop-action: var(--orbis-action, var(--desktop-base-action));
   --desktop-action-ink: var(--orbis-action-ink, var(--desktop-base-action-ink));
+  --desktop-action-hover: var(--orbis-action-hover, color-mix(in srgb, var(--desktop-action) 88%, black));
+  --desktop-action-active: color-mix(in srgb, var(--desktop-action) 78%, black);
+  --desktop-action-rgb: var(--orbis-action-rgb, var(--desktop-base-action-rgb));
+  --desktop-logo-orbit: color-mix(in srgb, var(--desktop-action) 25%, white);
   --desktop-positive: var(--orbis-positive, var(--desktop-base-positive));
   --desktop-negative: var(--orbis-negative, var(--desktop-base-negative));
   --desktop-warning: var(--orbis-warning, var(--desktop-base-warning));
@@ -17,7 +19,7 @@ html:has(.orbis-startup) {
   --desktop-glass-filter: var(--orbis-glass-filter, var(--desktop-base-glass-filter));
   --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
   --desktop-ink: #192c29;
-  --desktop-base-muted: #536b65;
+  --desktop-base-muted: #485f59;
   --desktop-base-surface: rgba(248, 250, 246, 0.92);
   --desktop-preset-tint: #597b73;
   --desktop-status-muted: color-mix(in srgb, var(--desktop-muted) 60%, var(--desktop-ink));
@@ -32,33 +34,37 @@ html:has(.orbis-startup) {
   --desktop-code-negative: color-mix(in srgb, var(--desktop-negative) 75%, var(--desktop-ink));
   --desktop-code-warning: color-mix(in srgb, var(--desktop-warning) 75%, var(--desktop-ink));
   --desktop-code-info: color-mix(in srgb, var(--desktop-info) 75%, var(--desktop-ink));
-  --desktop-log-background: color-mix(in srgb, var(--desktop-preset-tint) 6%, #071311);
-  --desktop-log-ink: #dce8e0;
-  --desktop-chrome-opaque: color-mix(in srgb, var(--desktop-preset-tint) 25%, #102322);
+  --desktop-log-background: color-mix(in srgb, var(--desktop-preset-tint) 6%, var(--desktop-base-panel-dark));
+  --desktop-log-ink: var(--desktop-chrome-ink);
+  --desktop-chrome-opaque: rgb(var(--desktop-base-chrome-rgb));
+  --desktop-wallpaper-base: color-mix(in srgb, var(--desktop-preset-tint) 35%, var(--desktop-surface));
+  --desktop-wallpaper-shade: transparent;
   --desktop-status-background: linear-gradient(
     125deg,
     color-mix(in srgb, var(--desktop-preset-tint) 8%, var(--desktop-surface)),
     color-mix(in srgb, var(--desktop-preset-tint) 20%, var(--desktop-surface))
   );
   --desktop-base-chrome: rgba(17, 38, 36, 0.82);
+  --desktop-base-chrome-rgb: 17, 38, 36;
   --desktop-chrome-ink: #f5f8f2;
   --desktop-base-panel-dark: rgba(14, 35, 34, 0.92);
   --desktop-line: rgba(29, 65, 55, 0.16);
   --desktop-edge: rgba(33, 64, 54, 0.2);
   --desktop-highlight: rgba(255, 255, 255, 0.18);
   --desktop-inset: 24px;
-  --desktop-base-accent: #914725;
+  --desktop-base-accent: #365b52;
   --desktop-base-positive: #236c4d;
   --desktop-base-negative: #aa4235;
   --desktop-base-warning: #82551e;
   --desktop-base-info: #366780;
-  --desktop-base-action: #27584a;
+  --desktop-base-action: #365b52;
+  --desktop-base-action-rgb: 54, 91, 82;
   --desktop-base-action-ink: #fff8ee;
   --desktop-warning-fill: #82551e;
   --desktop-warning-ink: #fff8e5;
   --desktop-danger-fill: #9f392f;
   --desktop-danger-ink: #fff8ee;
-  --desktop-base-focus: #b75c3e;
+  --desktop-base-focus: var(--desktop-base-accent);
   --tblr-body-color: var(--desktop-ink);
   --tblr-secondary: var(--desktop-muted);
   --tblr-secondary-color: var(--desktop-muted);
@@ -66,12 +72,12 @@ html:has(.orbis-startup) {
   --tblr-border-active-color: var(--desktop-accent);
   --tblr-bg-surface: var(--desktop-surface);
   --tblr-bg-forms: var(--desktop-surface);
-  --tblr-bg-surface-secondary: rgba(115, 146, 127, 0.06);
-  --tblr-bg-surface-tertiary: rgba(115, 146, 127, 0.1);
+  --tblr-bg-surface-secondary: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
+  --tblr-bg-surface-tertiary: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
   --tblr-primary: var(--desktop-action);
-  --tblr-primary-rgb: var(--orbis-action-rgb, 39, 88, 74);
-  --tblr-success: #27584a;
-  --tblr-success-darken: #306b59;
+  --tblr-primary-rgb: var(--desktop-action-rgb);
+  --tblr-success: var(--desktop-positive);
+  --tblr-success-darken: color-mix(in srgb, var(--desktop-positive) 85%, black);
   --tblr-shadow-input: none;
   --link-color: var(--desktop-accent);
   --tblr-link-color: var(--desktop-accent);
@@ -121,9 +127,9 @@ body:has(.orbis-theme) .form-select {
 body:has(.orbis-theme) :is(.btn-outline-primary, .btn-ghost-primary) {
   --tblr-btn-color: var(--desktop-ink);
   --tblr-btn-hover-color: var(--desktop-ink);
-  --tblr-btn-hover-bg: rgba(115, 146, 127, 0.16);
+  --tblr-btn-hover-bg: color-mix(in srgb, var(--desktop-preset-tint) 16%, transparent);
   --tblr-btn-active-color: var(--desktop-ink);
-  --tblr-btn-active-bg: rgba(115, 146, 127, 0.2);
+  --tblr-btn-active-bg: color-mix(in srgb, var(--desktop-preset-tint) 20%, transparent);
   --tblr-btn-disabled-color: var(--desktop-muted);
 }
 body:has(.orbis-theme) .btn-outline-primary {
@@ -146,79 +152,97 @@ html[data-desktop-wallpaper="canopy"]:has(.orbis-startup) {
   --desktop-wallpaper: url("/wallpapers/canopy.svg");
 }
 
-.orbis-theme[data-desktop-preset="graphite"],
-body:has(.orbis-theme[data-desktop-preset="graphite"]),
-html[data-desktop-preset="graphite"]:has(.orbis-startup) {
-  --desktop-preset-tint: #667176;
-  --desktop-ink: #edf2ef;
-  --desktop-base-muted: #aebbb3;
-  --desktop-base-surface: rgba(24, 38, 37, 0.94);
-  --desktop-base-chrome: rgba(10, 22, 22, 0.9);
-  --desktop-chrome-ink: #f2f4ef;
-  --desktop-base-panel-dark: rgba(10, 23, 23, 0.95);
-  --desktop-line: rgba(222, 233, 225, 0.17);
-  --desktop-base-accent: #d6a17e;
-  --workspace-heading-ink: #edf2ef;
-  --workspace-heading-shadow: rgba(5, 18, 17, 0.18);
-  color-scheme: dark;
+html[data-desktop-preset="frost"] {
+  --desktop-preset-tint: #597b73;
+  --desktop-ink: #192c29;
+  --desktop-base-muted: #485f59;
+  --desktop-base-surface: rgba(248, 250, 246, 0.96);
+  --desktop-base-chrome: rgba(17, 38, 36, 0.88);
+  --desktop-base-chrome-rgb: 17, 38, 36;
+  --desktop-base-panel-dark: rgba(14, 35, 34, 0.94);
+  --desktop-line: rgba(29, 65, 55, 0.16);
+  --desktop-base-accent: #365b52;
+  --desktop-base-action: #365b52;
+  --desktop-base-action-rgb: 54, 91, 82;
+  --workspace-heading-ink: var(--desktop-ink);
 }
 
-.orbis-theme[data-desktop-preset="forest"],
-body:has(.orbis-theme[data-desktop-preset="forest"]),
-html[data-desktop-preset="forest"]:has(.orbis-startup) {
+html[data-desktop-preset="graphite"] {
+  --desktop-preset-tint: #777a82;
+  --desktop-ink: #25262b;
+  --desktop-base-muted: #5b5e67;
+  --desktop-base-surface: rgba(255, 255, 255, 0.97);
+  --desktop-base-chrome: rgba(28, 29, 33, 0.9);
+  --desktop-base-chrome-rgb: 28, 29, 33;
+  --desktop-base-panel-dark: rgba(24, 25, 29, 0.95);
+  --desktop-line: rgba(45, 47, 54, 0.16);
+  --desktop-base-accent: #4c5159;
+  --desktop-base-action: #42474f;
+  --desktop-base-action-rgb: 66, 71, 79;
+  --workspace-heading-ink: var(--desktop-ink);
+}
+
+html[data-desktop-preset="forest"] {
   --desktop-preset-tint: #608069;
   --desktop-ink: #142b23;
-  --desktop-base-muted: #4b6559;
+  --desktop-base-muted: #455d51;
   --desktop-base-surface: rgba(244, 248, 239, 0.97);
-  --desktop-base-chrome: rgba(22, 50, 37, 0.88);
-  --desktop-base-panel-dark: rgba(17, 49, 35, 0.93);
+  --desktop-base-chrome: rgba(22, 50, 37, 0.9);
+  --desktop-base-chrome-rgb: 22, 50, 37;
+  --desktop-base-panel-dark: rgba(17, 49, 35, 0.95);
   --desktop-line: rgba(22, 66, 43, 0.18);
-  --desktop-base-accent: #8d482b;
+  --desktop-base-accent: #3a6244;
+  --desktop-base-action: #3a6244;
+  --desktop-base-action-rgb: 58, 98, 68;
+  --workspace-heading-ink: var(--desktop-ink);
 }
 
-.orbis-theme[data-desktop-preset="stone"],
-body:has(.orbis-theme[data-desktop-preset="stone"]),
-html[data-desktop-preset="stone"]:has(.orbis-startup) {
+html[data-desktop-preset="stone"] {
   --desktop-preset-tint: #a68c74;
   --desktop-ink: #302924;
-  --desktop-base-muted: #71685e;
+  --desktop-base-muted: #645a50;
   --desktop-base-surface: rgba(250, 245, 237, 0.97);
-  --desktop-base-chrome: rgba(55, 43, 34, 0.88);
-  --desktop-base-panel-dark: rgba(47, 38, 31, 0.93);
+  --desktop-base-chrome: rgba(55, 43, 34, 0.9);
+  --desktop-base-chrome-rgb: 55, 43, 34;
+  --desktop-base-panel-dark: rgba(47, 38, 31, 0.95);
   --desktop-line: rgba(77, 59, 45, 0.17);
-  --desktop-base-accent: #8e482c;
+  --desktop-base-accent: #795338;
+  --desktop-base-action: #795338;
+  --desktop-base-action-rgb: 121, 83, 56;
+  --workspace-heading-ink: var(--desktop-ink);
 }
 
-.orbis-theme[data-desktop-preset="ocean"],
-body:has(.orbis-theme[data-desktop-preset="ocean"]),
-html[data-desktop-preset="ocean"]:has(.orbis-startup) {
+html[data-desktop-preset="ocean"] {
   --desktop-preset-tint: #5a8b99;
   --desktop-ink: #172b32;
-  --desktop-base-muted: #4d6972;
-  --desktop-base-surface: rgba(244, 250, 249, 0.97);
-  --desktop-base-chrome: rgba(18, 48, 55, 0.89);
-  --desktop-base-panel-dark: rgba(15, 45, 52, 0.94);
+  --desktop-base-muted: #435f68;
+  --desktop-base-surface: rgba(244, 250, 251, 0.97);
+  --desktop-base-chrome: rgba(18, 43, 55, 0.9);
+  --desktop-base-chrome-rgb: 18, 43, 55;
+  --desktop-base-panel-dark: rgba(15, 40, 52, 0.95);
   --desktop-line: rgba(29, 75, 83, 0.17);
-  --desktop-base-accent: #8f442d;
+  --desktop-base-accent: #32647c;
+  --desktop-base-action: #32647c;
+  --desktop-base-action-rgb: 50, 100, 124;
+  --workspace-heading-ink: var(--desktop-ink);
 }
 
-.orbis-theme[data-desktop-preset="blush"],
-body:has(.orbis-theme[data-desktop-preset="blush"]),
-html[data-desktop-preset="blush"]:has(.orbis-startup) {
+html[data-desktop-preset="blush"] {
   --desktop-preset-tint: #ae7e8a;
-  --desktop-ink: #352828;
-  --desktop-base-muted: #705f62;
-  --desktop-base-surface: rgba(253, 248, 246, 0.97);
-  --desktop-base-chrome: rgba(56, 36, 41, 0.89);
-  --desktop-base-panel-dark: rgba(49, 33, 38, 0.94);
-  --desktop-line: rgba(89, 52, 55, 0.17);
-  --desktop-base-accent: #8f3f3b;
+  --desktop-ink: #35282e;
+  --desktop-base-muted: #69565f;
+  --desktop-base-surface: rgba(253, 247, 250, 0.97);
+  --desktop-base-chrome: rgba(56, 32, 44, 0.9);
+  --desktop-base-chrome-rgb: 56, 32, 44;
+  --desktop-base-panel-dark: rgba(49, 28, 38, 0.95);
+  --desktop-line: rgba(89, 52, 68, 0.17);
+  --desktop-base-accent: #8a4564;
+  --desktop-base-action: #8a4564;
+  --desktop-base-action-rgb: 138, 69, 100;
+  --workspace-heading-ink: var(--desktop-ink);
 }
 
-.orbis-theme[data-desktop-mode="dark"],
-body:has(.orbis-theme[data-desktop-mode="dark"]),
-html[data-desktop-mode="dark"]:has(.orbis-startup) {
-  --desktop-base-accent: #e2b28d;
+html[data-desktop-mode="dark"] {
   --desktop-base-positive: #8fd1af;
   --desktop-base-negative: #efa99a;
   --desktop-base-warning: #e8c180;
@@ -227,40 +251,107 @@ html[data-desktop-mode="dark"]:has(.orbis-startup) {
   --desktop-warning-ink: #272219;
   --desktop-danger-fill: #d99b90;
   --desktop-danger-ink: #291c19;
-  --desktop-ink: #edf2ef;
-  --desktop-base-muted: #b5c8bf;
-  --desktop-base-surface: rgba(20, 36, 35, 0.95);
-  --desktop-base-chrome: rgba(9, 23, 23, 0.92);
-  --desktop-chrome-ink: #f2f4ef;
-  --desktop-base-panel-dark: rgba(7, 19, 19, 0.96);
-  --desktop-line: rgba(224, 239, 228, 0.18);
-  --desktop-edge: rgba(190, 221, 205, 0.14);
-  --desktop-highlight: rgba(196, 228, 212, 0.06);
-  --workspace-heading-ink: #edf2ef;
-  --workspace-heading-shadow: rgba(5, 18, 17, 0.18);
+  --desktop-edge: color-mix(in srgb, var(--desktop-preset-tint) 28%, transparent);
+  --desktop-highlight: transparent;
+  --workspace-heading-shadow: rgb(0 0 0 / 0.18);
+  --desktop-wallpaper-shade: linear-gradient(145deg, rgba(var(--desktop-base-chrome-rgb), 0.43), rgba(var(--desktop-base-chrome-rgb), 0.72));
   color-scheme: dark;
 }
 
-.orbis-theme[data-desktop-mode="light"][data-desktop-preset="graphite"],
-body:has(.orbis-theme[data-desktop-mode="light"][data-desktop-preset="graphite"]),
-html[data-desktop-mode="light"][data-desktop-preset="graphite"]:has(.orbis-startup) {
-  --desktop-base-accent: #914725;
-  --desktop-ink: #20312c;
-  --desktop-base-muted: #50655b;
-  --desktop-base-surface: rgba(243, 248, 244, 0.94);
-  --desktop-base-chrome: rgba(25, 46, 43, 0.87);
-  --desktop-chrome-ink: #f2f4ef;
-  --desktop-base-panel-dark: rgba(17, 36, 34, 0.94);
-  --desktop-line: rgba(45, 74, 57, 0.19);
-  --workspace-heading-ink: #20312c;
-  --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
-  color-scheme: light;
+html[data-desktop-preset="frost"][data-desktop-mode="dark"] {
+  --desktop-preset-tint: #82aa9b;
+  --desktop-ink: #edf2ef;
+  --desktop-base-muted: #b8c9c0;
+  --desktop-base-surface: rgba(23, 35, 32, 0.97);
+  --desktop-base-chrome: rgba(11, 24, 21, 0.92);
+  --desktop-base-chrome-rgb: 11, 24, 21;
+  --desktop-base-panel-dark: rgba(10, 24, 20, 0.96);
+  --desktop-line: rgba(216, 235, 224, 0.16);
+  --desktop-base-accent: #b8d5ca;
+  --desktop-base-action: #3d6d5e;
+  --desktop-base-action-rgb: 61, 109, 94;
+  --workspace-heading-ink: var(--desktop-ink);
+}
+
+html[data-desktop-preset="graphite"][data-desktop-mode="dark"] {
+  --desktop-preset-tint: #777a82;
+  --desktop-ink: #f1f1f3;
+  --desktop-base-muted: #c0c1c8;
+  --desktop-base-surface: rgba(23, 24, 27, 0.97);
+  --desktop-base-chrome: rgba(11, 12, 14, 0.94);
+  --desktop-base-chrome-rgb: 11, 12, 14;
+  --desktop-base-panel-dark: rgba(12, 13, 15, 0.97);
+  --desktop-line: rgba(225, 226, 233, 0.16);
+  --desktop-base-accent: #c7c9d0;
+  --desktop-base-action: #505660;
+  --desktop-base-action-rgb: 80, 86, 96;
+  --workspace-heading-ink: var(--desktop-ink);
+}
+
+html[data-desktop-preset="forest"][data-desktop-mode="dark"] {
+  --desktop-preset-tint: #78977a;
+  --desktop-ink: #edf3e8;
+  --desktop-base-muted: #bbccba;
+  --desktop-base-surface: rgba(24, 35, 25, 0.97);
+  --desktop-base-chrome: rgba(12, 25, 15, 0.93);
+  --desktop-base-chrome-rgb: 12, 25, 15;
+  --desktop-base-panel-dark: rgba(12, 24, 14, 0.97);
+  --desktop-line: rgba(222, 237, 216, 0.16);
+  --desktop-base-accent: #b8d2ac;
+  --desktop-base-action: #456c40;
+  --desktop-base-action-rgb: 69, 108, 64;
+  --workspace-heading-ink: var(--desktop-ink);
+}
+
+html[data-desktop-preset="stone"][data-desktop-mode="dark"] {
+  --desktop-preset-tint: #a68c74;
+  --desktop-ink: #f2ede6;
+  --desktop-base-muted: #c9bfb3;
+  --desktop-base-surface: rgba(38, 31, 26, 0.97);
+  --desktop-base-chrome: rgba(27, 21, 17, 0.93);
+  --desktop-base-chrome-rgb: 27, 21, 17;
+  --desktop-base-panel-dark: rgba(25, 20, 16, 0.97);
+  --desktop-line: rgba(237, 225, 210, 0.17);
+  --desktop-base-accent: #dcc3a7;
+  --desktop-base-action: #79583b;
+  --desktop-base-action-rgb: 121, 88, 59;
+  --workspace-heading-ink: var(--desktop-ink);
+}
+
+html[data-desktop-preset="ocean"][data-desktop-mode="dark"] {
+  --desktop-preset-tint: #6796af;
+  --desktop-ink: #e9f1f7;
+  --desktop-base-muted: #b5cad8;
+  --desktop-base-surface: rgba(21, 32, 42, 0.97);
+  --desktop-base-chrome: rgba(10, 22, 32, 0.93);
+  --desktop-base-chrome-rgb: 10, 22, 32;
+  --desktop-base-panel-dark: rgba(10, 21, 31, 0.97);
+  --desktop-line: rgba(219, 235, 245, 0.16);
+  --desktop-base-accent: #acd0e6;
+  --desktop-base-action: #356881;
+  --desktop-base-action-rgb: 53, 104, 129;
+  --workspace-heading-ink: var(--desktop-ink);
+}
+
+html[data-desktop-preset="blush"][data-desktop-mode="dark"] {
+  --desktop-preset-tint: #ae7e96;
+  --desktop-ink: #f6ebf1;
+  --desktop-base-muted: #d1bbc8;
+  --desktop-base-surface: rgba(39, 26, 35, 0.97);
+  --desktop-base-chrome: rgba(27, 15, 23, 0.93);
+  --desktop-base-chrome-rgb: 27, 15, 23;
+  --desktop-base-panel-dark: rgba(25, 14, 22, 0.97);
+  --desktop-line: rgba(243, 220, 233, 0.16);
+  --desktop-base-accent: #e2b4ce;
+  --desktop-base-action: #86516e;
+  --desktop-base-action-rgb: 134, 81, 110;
+  --workspace-heading-ink: var(--desktop-ink);
 }
 
 body:has(.orbis-theme) .modal-content,
 body:has(.orbis-theme) .orbis-dropdown-menu {
   --tblr-bg-surface: var(--desktop-surface);
-  --tblr-bg-surface-secondary: rgba(115, 146, 127, 0.06);
+  --tblr-bg-surface-secondary: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
   --tblr-body-color: var(--desktop-ink);
   --tblr-secondary-color: var(--desktop-muted);
   --tblr-border-color: var(--desktop-line);
@@ -288,7 +379,7 @@ body:has(.orbis-theme) .dropdown-item {
   border-radius: 6px;
 }
 body:has(.orbis-theme) .dropdown-item:is(:hover, :focus, [data-highlighted]) {
-  background: rgba(125, 145, 121, 0.18);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 18%, transparent);
   color: var(--desktop-ink);
 }
 body:has(.orbis-theme) .modal-content .form-control,
@@ -379,9 +470,15 @@ body:has(.orbis-theme) :is(.btn-primary, .btn-success) {
   --tblr-btn-bg: var(--desktop-action);
   --tblr-btn-border-color: var(--desktop-action);
   --tblr-btn-color: var(--desktop-action-ink);
-  --tblr-btn-hover-bg: color-mix(in srgb, var(--desktop-action) 88%, black);
+  --tblr-btn-hover-bg: var(--desktop-action-hover);
   --tblr-btn-hover-border-color: var(--desktop-action);
   --tblr-btn-hover-color: var(--desktop-action-ink);
+  --tblr-btn-active-bg: var(--desktop-action-active);
+  --tblr-btn-active-border-color: var(--desktop-action-active);
+  --tblr-btn-active-color: var(--desktop-action-ink);
+  --tblr-btn-disabled-bg: var(--desktop-action);
+  --tblr-btn-disabled-border-color: var(--desktop-action);
+  --tblr-btn-disabled-color: var(--desktop-action-ink);
 }
 body:has(.orbis-theme) .btn-warning {
   --tblr-btn-bg: var(--desktop-warning-fill);
@@ -528,4 +625,12 @@ body:has(.orbis-theme) .form-text a:hover {
   font-weight: 600;
   line-height: 1.4;
   vertical-align: middle;
+}
+
+/* Palette changes share one paint, while geometry and interaction motion remain available. */
+:root[data-orbis-colour-switch] *,
+:root[data-orbis-colour-switch] *::before,
+:root[data-orbis-colour-switch] *::after {
+  /* biome-ignore lint/complexity/noImportantStyles: Palette changes must override component colour transitions for two frames. */
+  transition-property: transform, translate, scale, rotate, opacity, box-shadow, width, height, border-radius, clip-path, gap !important;
 }

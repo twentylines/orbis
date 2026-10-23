@@ -4,6 +4,7 @@ import { IconAlertCircle, IconBrandAppstore } from '@tabler/icons-react';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { AppStoresTable } from '../components/app-stores-table/app-stores-table';
+import { RefreshAppStoresButton } from '@/components/refresh-app-stores/refresh-app-stores';
 
 export const AppStoresContainer = () => {
   const { t } = useTranslation();
@@ -14,9 +15,12 @@ export const AppStoresContainer = () => {
 
   return (
     <div className="card-body">
-      <div className="d-flex align-items-center mb-3">
-        <IconBrandAppstore className="me-2" />
-        <h2 className="mb-0">{t('SETTINGS_APPSTORES_TITLE')}</h2>
+      <div className="app-stores-settings-heading">
+        <div className="app-stores-settings-title">
+          <IconBrandAppstore aria-hidden="true" />
+          <h2>{t('SETTINGS_APPSTORES_TITLE')}</h2>
+        </div>
+        <RefreshAppStoresButton />
       </div>
       <Alert variant="warning">
         <AlertIcon>

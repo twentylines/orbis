@@ -9,12 +9,13 @@ import { useEffect, useRef, useState } from 'react';
 import { IconDeviceDesktop, IconMoonStars, IconSunHigh } from '@tabler/icons-react';
 import { WallpaperSettings } from './wallpaper-settings';
 import { MaterialSettings } from './material-settings';
+import { preferenceCacheLimit } from '@/desktop/appearance-cache';
 import { AppearanceRange } from './appearance-controls';
 import './appearance.css';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
   { value: 'frost', title: 'Frost', description: 'Pale green' },
-  { value: 'graphite', title: 'Graphite', description: 'Dark grey' },
+  { value: 'graphite', title: 'Graphite', description: 'Neutral grey' },
   { value: 'forest', title: 'Forest', description: 'Sage green' },
   { value: 'stone', title: 'Warm stone', description: 'Beige' },
   { value: 'ocean', title: 'Ocean', description: 'Blue green' },
@@ -31,7 +32,7 @@ export const Appearance = () => {
   useEffect(() => setName(preferences.serverName), [preferences.serverName]);
 
   const changePreset = (preset: DesktopPreferences['preset']) => {
-    update({ preset, mode: preferences.mode === 'system' ? 'system' : preset === 'graphite' ? 'dark' : 'light' });
+    update({ preset });
     setMessage(`${presets.find((item) => item.value === preset)?.title} applied.`);
   };
 
@@ -59,7 +60,7 @@ export const Appearance = () => {
 
   const importSettings = async (file?: File) => {
     if (!file) return;
-    if (file.size > 16 * 1024) {
+    if (file.size > preferenceCacheLimit) {
       setMessage('The settings file is too large.');
       return;
     }
@@ -116,7 +117,7 @@ export const Appearance = () => {
       <section className="appearance-section" aria-labelledby="appearance-preset">
         <div>
           <h2 id="appearance-preset">Colour preset</h2>
-          <p>Applies to windows, menus, and notifications.</p>
+          <p>Applies to buttons, the logo, panels, menus and notifications. Each preset has light and dark colours.</p>
         </div>
         <div className="appearance-presets">
           {presets.map(({ value, title, description }) => (
@@ -127,7 +128,10 @@ export const Appearance = () => {
               aria-pressed={preferences.preset === value}
               onClick={() => changePreset(value)}
             >
-              <span className="appearance-swatch" aria-hidden="true" />
+              <span className="appearance-swatch" aria-hidden="true">
+                <span className="appearance-swatch-light" />
+                <span className="appearance-swatch-dark" />
+              </span>
               <strong>{title}</strong>
               <small>{description}</small>
             </button>

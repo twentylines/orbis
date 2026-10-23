@@ -46,10 +46,6 @@
 .host-processes .host-processes-sort {
   gap: 10px;
 }
-.host-processes .host-processes-sort > span {
-  color: var(--process-muted);
-  font-size: 0.875em;
-}
 .host-processes-notice {
   display: flex;
   flex-wrap: wrap;

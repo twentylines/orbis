@@ -24,5 +24,5 @@ export default () => {
 
   const { info, app, metadata } = getApp.data;
 
-  return <AppWorkspace info={info} app={app} metadata={metadata} />;
+  return <AppWorkspace key={info.urn} info={info} app={app} metadata={metadata} />;
 };

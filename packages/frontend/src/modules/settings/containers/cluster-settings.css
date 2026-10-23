@@ -130,19 +130,36 @@
   border-radius: 13px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 8%, var(--desktop-surface));
 }
-.cluster-invitation > span {
+.cluster-invitation > span,
+.cluster-invitation > label {
   font-size: 0.8125rem;
   color: var(--desktop-muted);
 }
-.cluster-invitation output {
+.cluster-invitation textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
   max-width: 100%;
-  padding: 4px 0;
+  padding: 10px 12px;
+  resize: none;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  word-break: break-all;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
   font-family: ui-monospace, monospace;
-  font-size: 1.375rem;
+  font-size: 1rem;
   line-height: 1.6;
-  font-weight: 650;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.cluster-copy-message {
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
 }
 .cluster-settings-servers {
   display: flex;

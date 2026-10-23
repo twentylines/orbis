@@ -7,7 +7,6 @@ import { useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
 import { Appearance } from '../containers/appearance';
 import { ClusterSettings } from '../containers/cluster-settings';
-import { GeneralActionsContainer } from '../containers/general-actions';
 
 const UserSettingsContainer = lazy(() => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer })));
 const SecurityContainer = lazy(() => import('../containers/security').then((module) => ({ default: module.SecurityContainer })));
@@ -18,7 +17,7 @@ export default () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get('tab');
   const { userSettings, user } = useAppContext();
-  const currentTab = tab && ['actions', 'appearance', 'settings', 'security', 'cluster', 'appstores', 'logs'].includes(tab) ? tab : 'actions';
+  const currentTab = tab && ['appearance', 'settings', 'security', 'cluster', 'appstores', 'logs'].includes(tab) ? tab : 'appearance';
 
   const handleTabChange = (newTab: string) => {
     setSearchParams(
@@ -35,7 +34,6 @@ export default () => {
     <div className="desktop-settings">
       <Tabs value={currentTab} onValueChange={handleTabChange}>
         <TabsList>
-          <TabsTrigger value="actions">{t('SETTINGS_ACTIONS_TAB_TITLE')}</TabsTrigger>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="settings">{t('SETTINGS_GENERAL_TAB_TITLE')}</TabsTrigger>
           <TabsTrigger value="security">{t('SETTINGS_SECURITY_TAB_TITLE')}</TabsTrigger>
@@ -54,9 +52,6 @@ export default () => {
             </DropdownMenuContent>
           </DropdownMenu>
         </TabsList>
-        <TabsContent value="actions">
-          <GeneralActionsContainer />
-        </TabsContent>
         <TabsContent value="appearance">
           <Appearance />
         </TabsContent>

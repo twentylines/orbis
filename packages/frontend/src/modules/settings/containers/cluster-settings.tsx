@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { IconCopy, IconPlus, IconServer } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { clusterRequest, useCluster } from '@/desktop/cluster';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { useAppContext } from '@/context/app-context';
+import { copyText } from '@/lib/clipboard';
 import './cluster-settings.css';
 
 type Invitation = { code: string; expiresAt: string };
@@ -19,6 +20,8 @@ export function ClusterSettings() {
   const [serverName, setServerName] = useState('');
   const [allowInsecureLan, setAllowInsecureLan] = useState(false);
   const [invitation, setInvitation] = useState<Invitation | null>(null);
+  const [copyMessage, setCopyMessage] = useState('');
+  const invitationField = useRef<HTMLTextAreaElement>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [failed, setFailed] = useState(false);
@@ -78,8 +81,36 @@ export function ClusterSettings() {
       const next = await clusterRequest<Invitation>('/invite', 'POST');
       setNow(Date.now());
       setInvitation(next);
+      setCopyMessage('');
     }, 'Pairing code created. Enter it on the admin server.');
   const expiresIn = invitation ? Math.max(0, Math.ceil((new Date(invitation.expiresAt).getTime() - now) / 1000)) : 0;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Invitation text and text scaling change measured height without changing the textarea ref.
+  useLayoutEffect(() => {
+    const field = invitationField.current;
+    if (!field) return;
+    const resize = () => {
+      field.style.height = 'auto';
+      field.style.height = `${field.scrollHeight + 2}px`;
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    if (field.parentElement) observer.observe(field.parentElement);
+    window.addEventListener('resize', resize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', resize);
+    };
+  }, [invitation, preferences.appearance.textScale, expiresIn > 0]);
+  const copyInvitation = async () => {
+    if (!invitation || expiresIn <= 0) return;
+    const copied = await copyText(invitation.code);
+    if (invitationField.current?.value !== invitation.code) return;
+    setCopyMessage(copied ? 'Pairing code copied.' : 'Copy was blocked. The code is selected; copy it using your browser or keyboard.');
+    if (!copied) {
+      invitationField.current?.focus({ preventScroll: true });
+      invitationField.current?.select();
+    }
+  };
   const canManage = cluster.data?.role === 'admin';
   const member = cluster.data?.role === 'member';
   const serverToRemove = cluster.data?.servers.find((server) => server.id === removeId);
@@ -219,25 +250,32 @@ export function ClusterSettings() {
             </Button>
             {invitation ? (
               <div className="cluster-invitation">
-                <span>Pairing code</span>
-                <output aria-label="Pairing code">{expiresIn > 0 ? invitation.code : 'Expired'}</output>
-                <span>
+                <label htmlFor="cluster-invitation-code">Pairing code</label>
+                <textarea
+                  id="cluster-invitation-code"
+                  ref={invitationField}
+                  readOnly
+                  rows={1}
+                  value={expiresIn > 0 ? invitation.code : 'Expired'}
+                  onFocus={(event) => event.currentTarget.select()}
+                  aria-describedby="cluster-invitation-expiry"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <span id="cluster-invitation-expiry">
                   {expiresIn > 0
                     ? `Expires in ${Math.floor(expiresIn / 60)}:${String(expiresIn % 60).padStart(2, '0')}`
                     : 'Create a new code to continue.'}
                 </span>
-                <Button
-                  variant="outline"
-                  disabled={expiresIn <= 0}
-                  onClick={() =>
-                    void run(async () => {
-                      await navigator.clipboard.writeText(invitation.code);
-                    }, 'Pairing code copied.')
-                  }
-                >
+                <Button variant="outline" disabled={expiresIn <= 0} onClick={() => void copyInvitation()}>
                   <IconCopy size={17} aria-hidden="true" />
                   Copy code
                 </Button>
+                {copyMessage && expiresIn > 0 ? (
+                  <output className="cluster-copy-message" aria-live="polite">
+                    {copyMessage}
+                  </output>
+                ) : null}
               </div>
             ) : null}
           </div>

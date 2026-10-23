@@ -13,8 +13,9 @@ import {
   type DesktopWindowId,
   type DesktopWindowState,
 } from '@runtipi/common/schemas';
-import { useResolvedColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
-import { appearanceFromStored, preferenceStorageKey } from './appearance-cache';
+import { useResolvedColourMode, readSystemColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
+import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit } from './appearance-cache';
+import { validHomePins } from './workspace-apps';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
@@ -63,11 +64,7 @@ export const isWorkspacePreferences = (value: unknown): value is StoredWorkspace
     isWidgetList(workspace.hidden) &&
     isWidgetList(workspace.wide) &&
     (workspace.showAllApps === undefined || typeof workspace.showAllApps === 'boolean') &&
-    (workspace.pinnedApps === undefined ||
-      (Array.isArray(workspace.pinnedApps) &&
-        workspace.pinnedApps.length <= 12 &&
-        new Set(workspace.pinnedApps).size === workspace.pinnedApps.length &&
-        workspace.pinnedApps.every((urn) => typeof urn === 'string' && urn.length > 2 && urn.length <= 180 && /^[^:]+:[^:]+$/.test(urn))))
+    (workspace.pinnedApps === undefined || validHomePins(workspace.pinnedApps))
   );
 };
 
@@ -110,7 +107,7 @@ function readPreferenceCache() {
   if (typeof window === 'undefined') return { preferences: defaultDesktopPreferences, available: true };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    const value: unknown = raw && raw.length <= 16 * 1024 ? JSON.parse(raw) : null;
+    const value: unknown = raw && raw.length <= preferenceCacheLimit ? JSON.parse(raw) : null;
     return {
       preferences: isPreferences(value) ? normalisePreferences(value) : { ...defaultDesktopPreferences, ...appearanceFromStored(value) },
       available: true,
@@ -161,11 +158,12 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
 
   useLayoutEffect(() => {
     const root = document.documentElement;
+    const effectiveMode = preferences.mode === 'system' ? readSystemColourMode() : resolvedMode;
     root.dataset.desktopPreset = preferences.preset;
-    root.dataset.desktopMode = resolvedMode;
+    root.dataset.desktopMode = effectiveMode;
     root.dataset.desktopWallpaper = preferences.wallpaper;
     root.dataset.orbisAppearanceReady = 'true';
-    const apply = () => applyAppearanceRuntime(preferences.appearance, resolvedMode);
+    const apply = () => applyAppearanceRuntime(preferences.appearance, effectiveMode);
     apply();
     const queries = ['(prefers-reduced-motion: reduce)', '(prefers-reduced-transparency: reduce)'].flatMap((query) => {
       try {
@@ -178,7 +176,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     return () => {
       for (const query of queries) query.removeEventListener('change', apply);
     };
-  }, [preferences.appearance, preferences.preset, preferences.wallpaper, resolvedMode]);
+  }, [preferences.appearance, preferences.preset, preferences.wallpaper, preferences.mode, resolvedMode]);
 
   useEffect(() => {
     if (isLoggedIn && !initialLoadComplete) return;

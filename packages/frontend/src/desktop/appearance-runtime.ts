@@ -3,7 +3,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   type Rgba = [number, number, number, number];
   const root = document.documentElement;
   const options = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-  const source = getComputedStyle(document.querySelector('.orbis-theme') ?? root);
+  const source = getComputedStyle(root);
   const numeric = (key: string, min: number, max: number) => {
     const value = options[key];
     return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max ? value : null;
@@ -75,8 +75,25 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     'panel-dark',
     'glass-filter',
   ];
-  const set = (name: string, value: string) => root.style.setProperty(`--orbis-${name}`, value);
-  for (const name of properties) root.style.removeProperty(`--orbis-${name}`);
+  const next = new Map<string, string>();
+  const set = (name: string, value: string) => next.set(name, value);
+  const commit = () => {
+    if (typeof requestAnimationFrame === 'function') {
+      const revision = String(Number(root.dataset.orbisColourSwitch ?? '0') + 1);
+      root.dataset.orbisColourSwitch = revision;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (root.dataset.orbisColourSwitch === revision) delete root.dataset.orbisColourSwitch;
+        }),
+      );
+    }
+    // Read the complete base palette before replacing overrides in one synchronous pass.
+    for (const name of properties) {
+      const value = next.get(name);
+      if (value === undefined) root.style.removeProperty(`--orbis-${name}`);
+      else root.style.setProperty(`--orbis-${name}`, value);
+    }
+  };
 
   const low = options.lowEffects === true;
   const media = (query: string) => {
@@ -134,7 +151,10 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   set('chrome-muted', css(readable(mix(chromeInk, originalChrome, 0.25), chromeBackgrounds(tintedChrome), true)));
   set('chrome-focus', css(readable(accent ?? base('focus'), chromeBackgrounds(tintedChrome), true, 3.1)));
   root.dataset.orbisColourCustom = materialChanged || accent ? 'true' : 'false';
-  if (!materialChanged && !accent) return;
+  if (!materialChanged && !accent) {
+    commit();
+    return;
+  }
   const behind = [tintedSurface, mix(tintedSurface, preset, 0.08), mix(tintedSurface, preset, 0.2)].flatMap(backgrounds);
   const dark = mode === 'dark';
   const foreground = readable(accent ?? base('accent'), behind, dark);
@@ -152,4 +172,5 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     set('action-hover', css(mix(action, black, 0.12)));
     set('action-rgb', action.slice(0, 3).join(', '));
   }
+  commit();
 }

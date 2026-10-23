@@ -1,3 +1,7 @@
+.log-terminal-shell {
+  width: 100%;
+  min-width: 0;
+}
 .log-terminal-controls {
   display: flex;
   flex-wrap: wrap;
@@ -46,18 +50,28 @@
 }
 
 .log-terminal {
-  height: 300px;
+  height: clamp(280px, 58dvh, 640px);
+  min-width: 0;
   overflow: auto;
   padding: 16px;
   border: 1px solid var(--desktop-line);
   border-radius: 12px;
   background: var(--desktop-log-background);
   color: var(--desktop-log-ink);
-  color-scheme: dark;
+  color-scheme: inherit;
   font-size: 0.8125rem;
   line-height: 1.7;
 }
+.log-terminal:focus-visible {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: -5px;
+}
+@media (min-width: 1100px) and (min-height: 640px) {
+  .log-terminal {
+    height: clamp(360px, calc(100dvh - 28rem), 1000px);
+  }
+}
 
 .wrap-lines {
-  text-wrap: wrap;
+  white-space: pre-wrap;
 }

@@ -70,6 +70,18 @@
   color: var(--desktop-muted);
   opacity: 1;
 }
+body:has(.orbis-theme) .desktop-search-surface .desktop-search-input input:is(:focus, :focus-visible) {
+  outline: none;
+  box-shadow: none;
+  caret-color: var(--desktop-accent);
+}
+.desktop-search-input:focus-within {
+  border-bottom-color: var(--desktop-accent);
+  box-shadow: inset 0 -1px 0 var(--desktop-accent);
+}
+.desktop-search-input:focus-within > svg {
+  color: var(--desktop-accent);
+}
 .desktop-search-input input::-webkit-search-cancel-button {
   display: none;
 }

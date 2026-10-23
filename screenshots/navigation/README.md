@@ -1,6 +1,6 @@
 # Navigation, server clusters and app launchers
 
-Monitor and desktop/phone app details were captured on 23 October 2026 from the beta78 source build on a disposable Linux host with IT-Tools installed. Workspace and phone Apps were captured earlier that day from the beta77 source build. These are unedited browser screenshots using actual app and monitoring responses.
+Workspace, Monitor, desktop/phone app details and light/dark minimized views were captured on 23 October 2026 from the beta79 source build on a disposable Linux host with IT-Tools installed. These are unedited browser screenshots using actual app and monitoring responses. Phone Apps is from the beta77 source build, captured earlier that day.
 
 The other captures are from 22 October 2026. Login views use the locally built frontend with an actual Orbis beta66 backend on a disposable Linux machine. The setup view uses a beta64 backend. The remaining captures use sample apps and two Orbis instances on another disposable test machine. Each instance has a running demo app; five additional sample app records have no containers.
 

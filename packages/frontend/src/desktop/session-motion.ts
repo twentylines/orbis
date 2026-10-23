@@ -61,3 +61,37 @@ export function animateSessionExit(desktop: HTMLElement | null, reduced: boolean
     },
   };
 }
+
+export function animateAuthExit(reduced: boolean) {
+  const element = document.querySelector<HTMLElement>('.desktop-auth-container');
+  const animation =
+    element && !reduced
+      ? element.animate(
+          [
+            { opacity: 1, transform: 'none' },
+            { opacity: 0, transform: 'translateY(18px) scale(.985)' },
+          ],
+          { duration: 320, easing: 'cubic-bezier(.4, 0, .6, 1)', fill: 'forwards' },
+        )
+      : null;
+  return { cancel: () => animation?.cancel() };
+}
+
+export function animateStartupExit(element: HTMLElement | null, reduced: boolean) {
+  const animations: Animation[] = [];
+  if (element && !reduced) {
+    const content = element.querySelector<HTMLElement>('.orbis-startup-content');
+    if (content)
+      animations.push(
+        content.animate(
+          [
+            { opacity: 1, transform: 'none' },
+            { opacity: 0, transform: 'translateY(-12px) scale(.97)' },
+          ],
+          { duration: 240, easing: 'cubic-bezier(.4, 0, .6, 1)', fill: 'forwards' },
+        ),
+      );
+    animations.push(element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' }));
+  }
+  return { finished: Promise.allSettled(animations.map((animation) => animation.finished)) };
+}

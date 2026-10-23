@@ -13,6 +13,7 @@ import { useCluster } from '@/desktop/cluster';
 import { ClusterUpdates } from '@/desktop/cluster-updates';
 import { UpdateAllButton } from '@/modules/app/components/update-all-button/update-all-button';
 import { UpdateTerminal } from './update-terminal';
+import { rememberAcceptedCoreUpdate, prepareDesktopForCoreUpdate } from '@/desktop/host-update-watch';
 
 type Release = { tag: string; publishedAt: string | null; body: string; url: string; imageManifestUrl: string | null };
 type Build = { version: string; commit: string | null; imageDigest: string | null; runtipiCompatibility: string | null };
@@ -202,9 +203,11 @@ function LocalUpdates() {
       setCoreRequestStage('checking');
       const checked = await hostRequest<HostPlan>('plan', { tag });
       if (checked.targetTag !== tag) throw new Error('The checked release changed. Refresh before updating.');
+      await prepareDesktopForCoreUpdate();
       setCoreRequestStage('starting');
       return hostRequest<{ jobId: string; state: string }>('apply', { planId: checked.planId });
     },
+    onSuccess: (result, tag) => rememberAcceptedCoreUpdate(result.jobId, tag),
     onSettled: () => {
       setCoreRequestStage(null);
       void host.refetch();

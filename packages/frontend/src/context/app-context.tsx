@@ -23,17 +23,8 @@ export const AppContextProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [queryClient]);
 
   const queryKey = appContextQueryKey();
-  const {
-    data: appContext,
-    error,
-    isFetching,
-  } = useSuspenseQuery({
-    ...appContextOptions(),
-  });
-
-  if (error && !isFetching) {
-    throw error;
-  }
+  // Suspense handles an initial failure; cached context keeps the desktop usable during a server restart.
+  const { data: appContext } = useSuspenseQuery({ ...appContextOptions() });
 
   const refreshAppContext = async () => {
     await queryClient.invalidateQueries({ queryKey });

@@ -8,13 +8,16 @@ import { formatUptime } from '@/desktop/uptime';
 import './monitor.css';
 import { ContainerResources } from '@/components/container-resources/container-resources';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { HostDevices } from '../components/host-devices';
+import { HostDevices, useHostReadings } from '../components/host-devices';
 import { HostProcessesView } from '../components/host-processes';
 import { HostDeviceHistoryView } from '../components/host-device-history';
 import { HostSensorsView } from '../components/host-sensors';
 import { ServerRack, useCluster } from '@/desktop/cluster';
 import { useServerPath } from '@/desktop/cluster-data';
 import { ClusterOverview } from '@/desktop/cluster-views';
+
+import { SystemGauges } from '../components/system-gauges';
+import { usagePercent } from '../components/system-readings';
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return 'Unavailable';
@@ -56,6 +59,10 @@ function ServerMonitor() {
     refetchIntervalInBackground: false,
   });
   const sample = telemetry.data;
+  const host = useHostReadings();
+  const currentHost = host.data?.available && !host.data.stale && !host.isError ? host.data : null;
+  const hostDisk = currentHost?.filesystems.find((disk) => disk.mount === '/');
+  const disk = hostDisk ?? sample?.filesystems.find((disk) => disk.mount === '/') ?? sample?.filesystems[0];
   const usedMemory =
     sample?.memory.totalBytes !== null &&
     sample?.memory.availableBytes !== null &&
@@ -63,6 +70,7 @@ function ServerMonitor() {
     sample?.memory.availableBytes !== undefined
       ? sample.memory.totalBytes - sample.memory.availableBytes
       : null;
+  const memoryPercent = usagePercent(usedMemory, sample?.memory.totalBytes ?? null);
   const usedSwap =
     sample?.memory.swapTotalBytes !== null &&
     sample?.memory.swapFreeBytes !== null &&
@@ -70,7 +78,6 @@ function ServerMonitor() {
     sample?.memory.swapFreeBytes !== undefined
       ? sample.memory.swapTotalBytes - sample.memory.swapFreeBytes
       : null;
-  const memoryPercent = usedMemory !== null && sample?.memory.totalBytes ? (usedMemory / sample.memory.totalBytes) * 100 : null;
 
   return (
     <div className="desktop-monitor">
@@ -94,20 +101,18 @@ function ServerMonitor() {
       <section className="desktop-host-overview" aria-labelledby="desktop-host-overview-title">
         <div className="desktop-host-overview-copy" key={selectedId}>
           <h2 id="desktop-host-overview-title">System status</h2>
-          <div className="desktop-host-overview-readings">
-            <div>
-              <span>{sample?.cpu.scope === 'host-proc' ? 'Host CPU' : 'Core CPU'}</span>
-              <strong>{percent(sample?.cpu.totalPercent ?? null)}</strong>
-            </div>
-            <div>
-              <span>Host memory</span>
-              <strong>{percent(memoryPercent)}</strong>
-            </div>
-            <div>
-              <span>Uptime</span>
-              <strong>{formatUptime(sample?.cpu.uptimeSeconds)}</strong>
-            </div>
-          </div>
+          <SystemGauges
+            cpu={sample?.cpu.totalPercent ?? null}
+            clockGHz={sample?.cpu.reportedClockGHz}
+            memoryUsed={usedMemory}
+            memoryTotal={sample?.memory.totalBytes ?? null}
+            diskUsed={disk?.usedBytes ?? null}
+            diskTotal={disk?.sizeBytes ?? null}
+            diskLabel={hostDisk ? 'Storage' : 'Core storage'}
+          />
+          <p className="desktop-host-overview-uptime">
+            Uptime <strong>{formatUptime(sample?.cpu.uptimeSeconds)}</strong>
+          </p>
         </div>
         <ServerRack cpu={sample?.cpu.totalPercent ?? null} memory={memoryPercent} online={telemetry.isPending ? undefined : !telemetry.isError} />
       </section>
@@ -175,9 +180,9 @@ function ServerMonitor() {
               <h2 id="telemetry-cpu-title">CPU</h2>
               <div className="desktop-telemetry-lead">
                 <strong>{percent(sample.cpu.totalPercent)}</strong>
-                <span>{sample.cpu.scope === 'host-proc' ? 'Host load' : 'Core container load'}</span>
+                <span>{sample.cpu.scope === 'host-proc' ? 'Utilisation' : 'Core container load'}</span>
               </div>
-              <MetricChart history={history.data} field="cpu" label="CPU utilisation" color="#d1a172" loading={history.isPending} />
+              <MetricChart history={history.data} field="cpu" label="CPU utilisation" color="var(--desktop-accent)" loading={history.isPending} />
               {sample.cpu.perCorePercent.length ? (
                 <div className="desktop-core-grid">
                   {sample.cpu.perCorePercent.map((core, index) => (
@@ -196,12 +201,21 @@ function ServerMonitor() {
               )}
             </section>
             <section className="desktop-telemetry-memory" aria-labelledby="telemetry-memory-title">
-              <h2 id="telemetry-memory-title">Host memory</h2>
+              <h2 id="telemetry-memory-title">Memory</h2>
               <div className="desktop-telemetry-lead">
-                <strong>{bytes(usedMemory)}</strong>
-                <span>used of {bytes(sample.memory.totalBytes)}</span>
+                <strong className="desktop-memory-total">
+                  <span>{bytes(usedMemory)}</span>
+                  <span aria-hidden="true"> / </span>
+                  <span>{bytes(sample.memory.totalBytes)}</span>
+                </strong>
               </div>
-              <MetricChart history={history.data} field="memory" label="Host memory used" color="#9fc0ad" loading={history.isPending} />
+              <MetricChart
+                history={history.data}
+                field="memory"
+                label="Memory used"
+                color="color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-positive))"
+                loading={history.isPending}
+              />
               <div className="workspace-meter">
                 <span
                   style={{ width: width(usedMemory !== null && sample.memory.totalBytes ? (usedMemory / sample.memory.totalBytes) * 100 : null) }}
@@ -249,11 +263,23 @@ function ServerMonitor() {
               <div className="desktop-network-charts">
                 <div>
                   <h3>↓ Download</h3>
-                  <MetricChart history={history.data} field="download" label="Core network download" color="#9fc0ad" loading={history.isPending} />
+                  <MetricChart
+                    history={history.data}
+                    field="download"
+                    label="Core network download"
+                    color="color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-positive))"
+                    loading={history.isPending}
+                  />
                 </div>
                 <div>
                   <h3>↑ Upload</h3>
-                  <MetricChart history={history.data} field="upload" label="Core network upload" color="#d1a172" loading={history.isPending} />
+                  <MetricChart
+                    history={history.data}
+                    field="upload"
+                    label="Core network upload"
+                    color="var(--desktop-accent)"
+                    loading={history.isPending}
+                  />
                 </div>
               </div>
               {sample.network.length ? (

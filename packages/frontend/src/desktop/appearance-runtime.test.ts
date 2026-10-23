@@ -1,6 +1,7 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
 import { runInNewContext } from 'node:vm';
+import { readFileSync } from 'node:fs';
 import { applyAppearanceRuntime } from './appearance-runtime';
 
 const palette = {
@@ -28,7 +29,30 @@ const darkPalette = {
   warning: '#e8c180',
   info: '#9cc3d3',
 };
-function apply(options: unknown, { dark = false, solidSystem = false, motionSystem = false, blockedMedia = false, paletteReady = true } = {}) {
+const themeCss = readFileSync(new URL('./theme.css', import.meta.url), 'utf8');
+const declarations = (selector: string): Record<string, string> => {
+  const start = themeCss.indexOf(`${selector} {`);
+  if (start < 0) throw new Error(`Missing palette: ${selector}`);
+  const block = themeCss.slice(start, themeCss.indexOf('}', start));
+  return Object.fromEntries([...block.matchAll(/(--[a-z-]+):\s*([^;]+);/g)].map((match) => [match[1], match[2]?.trim() ?? '']));
+};
+const actualPalette = (preset: string, dark: boolean) => {
+  const tokens: Record<string, string> = {
+    ...declarations(':root'),
+    ...declarations(`html[data-desktop-preset="${preset}"]`),
+    ...(dark ? declarations('html[data-desktop-mode="dark"]') : {}),
+    ...(dark ? declarations(`html[data-desktop-preset="${preset}"][data-desktop-mode="dark"]`) : {}),
+  };
+  for (const [name, value] of Object.entries(tokens)) {
+    const reference = value.match(/^var\((--[a-z-]+)\)$/)?.[1];
+    if (reference) tokens[name] = tokens[reference] ?? '';
+  }
+  return tokens;
+};
+function apply(
+  options: unknown,
+  { dark = false, solidSystem = false, motionSystem = false, blockedMedia = false, paletteReady = true, tokens = {} as Record<string, string> } = {},
+) {
   const properties = new Map<string, string>([['--orbis-accent', 'stale']]);
   const root = {
     dataset: {} as Record<string, string>,
@@ -38,13 +62,14 @@ function apply(options: unknown, { dark = false, solidSystem = false, motionSyst
     document: { documentElement: root, querySelector: () => root },
     getComputedStyle: () => ({
       getPropertyValue: (name: string) =>
-        name === '--desktop-chrome-ink'
+        tokens[name] ??
+        (name === '--desktop-chrome-ink'
           ? '#f5f8f2'
           : name === '--desktop-preset-tint'
             ? '#597b73'
             : paletteReady
               ? ((dark ? darkPalette : palette)[name.replace('--desktop-base-', '') as keyof typeof palette] ?? '')
-              : '',
+              : ''),
     }),
     matchMedia: (query: string) => {
       if (blockedMedia) throw new Error('Unavailable');
@@ -131,6 +156,41 @@ describe('saved appearance applied before hydration and to live materials', () =
               combinations += 1;
             }
     expect(combinations).toBe(128);
+  });
+  test('all 12 shipped palettes retain readable default controls and status labels', () => {
+    for (const preset of ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush']) {
+      for (const dark of [false, true]) {
+        const tokens = actualPalette(preset, dark);
+        const surface = rgb(tokens['--desktop-base-surface'] ?? '');
+        const tint = rgb(tokens['--desktop-preset-tint'] ?? '');
+        for (const backdrop of [0, 255]) {
+          for (const amount of [0, 0.08, 0.2]) {
+            const behind = composite(surface, backdrop).map((channel, index) => channel * (1 - amount) + (tint[index] ?? 0) * amount);
+            for (const name of ['--desktop-ink', '--desktop-base-muted', '--desktop-base-accent']) {
+              expect(contrast(rgb(tokens[name] ?? ''), behind)).toBeGreaterThanOrEqual(4.5);
+            }
+          }
+        }
+        expect(contrast(rgb(tokens['--desktop-base-action'] ?? ''), rgb(tokens['--desktop-base-action-ink'] ?? ''))).toBeGreaterThanOrEqual(4.5);
+        const custom = apply({ accent: '#00ffff', surfaceOpacity: 90, glassTint: 30 }, { dark, tokens });
+        for (const backdrop of [0, 255]) {
+          for (const name of ['accent', 'muted', 'positive', 'negative', 'warning', 'info']) {
+            expect(
+              contrast(rgb(custom.properties.get(`--orbis-${name}`) ?? ''), composite(rgb(custom.properties.get('--orbis-surface') ?? ''), backdrop)),
+            ).toBeGreaterThanOrEqual(4.5);
+          }
+        }
+      }
+    }
+  });
+  test('Graphite remains neutral white in Light and neutral charcoal in Dark', () => {
+    for (const dark of [false, true]) {
+      const tokens = actualPalette('graphite', dark);
+      const surface = rgb(tokens['--desktop-base-surface'] ?? '').slice(0, 3);
+      expect(Math.max(...surface) - Math.min(...surface)).toBeLessThanOrEqual(5);
+      if (dark) expect(Math.max(...surface)).toBeLessThanOrEqual(30);
+      else expect(Math.min(...surface)).toBeGreaterThanOrEqual(250);
+    }
   });
   test('low effects forces opaque materials and disables the blur filter', () => {
     const result = apply({ lowEffects: true, glassBlur: 40, surfaceOpacity: 90, chromeOpacity: 80 });

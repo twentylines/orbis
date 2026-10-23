@@ -1,0 +1,12 @@
+.orbis-logo {
+  display: block;
+  flex: none;
+  width: var(--orbis-logo-size);
+  height: var(--orbis-logo-size);
+  aspect-ratio: 1;
+  overflow: visible;
+}
+
+.desktop-auth-identity > .orbis-logo {
+  margin-inline: auto;
+}

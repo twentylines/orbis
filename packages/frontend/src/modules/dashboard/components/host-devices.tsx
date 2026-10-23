@@ -82,16 +82,20 @@ function MountPath({ mount }: { mount: string }) {
   );
 }
 
-export function HostDevices() {
+export function useHostReadings() {
   const visible = useWindowVisible();
   const path = useServerPath()('/api/system/host-telemetry');
-  const query = useQuery({
+  return useQuery({
     queryKey: ['host-telemetry', path],
     queryFn: ({ signal }) => loadHostDevices(signal, path),
     enabled: visible,
     refetchInterval: (query) => (query.state.data?.available === false && query.state.data.reason === 'Collecting host readings.' ? 2000 : 10_000),
     refetchIntervalInBackground: false,
   });
+}
+
+export function HostDevices() {
+  const query = useHostReadings();
   const data = query.data;
   const ready = data?.available ? data : null;
   const stale = query.isError || ready?.stale;

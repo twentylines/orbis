@@ -22,6 +22,8 @@ type LaunchRequest = {
   manageUrl?: string;
   status?: string;
 };
+const dockFocusTarget = () =>
+  document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]') ?? document.querySelector<HTMLElement>('.desktop-dock-item');
 const AppLauncherContext = createContext<(request: LaunchRequest) => boolean>(() => false);
 const AppTrayContext = createContext<ReactNode>(null);
 export const useAppLauncher = () => useContext(AppLauncherContext);
@@ -37,21 +39,28 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const [trayVisible, setTrayVisible] = useState(false);
   const [panel, setPanel] = useState<HTMLDivElement | null>(null);
   const tray = useRef<HTMLElement>(null);
+  const panelElement = useRef<HTMLDivElement | null>(null);
+  const capturePanel = useCallback((element: HTMLDivElement | null) => {
+    panelElement.current = element;
+    setPanel(element);
+  }, []);
   const panelMotion = useRef<Animation | null>(null);
   const trayMotion = useRef<Animation | null>(null);
   const motionId = useRef(0);
   const trayWidth = useRef(0);
   const restoreOrigin = useRef<DOMRect | null>(null);
+  const minimizeOrigin = useRef<DOMRect | null>(null);
   const focusMinimized = useRef<string | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const captureTray = useCallback((element: HTMLElement | null) => {
     if (!element && tray.current?.contains(document.activeElement)) {
-      document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]')?.focus({ preventScroll: true });
+      dockFocusTarget()?.focus({ preventScroll: true });
     }
     tray.current = element;
   }, []);
   const cancelMotion = useCallback(() => {
     motionId.current++;
+    if (panelElement.current) delete panelElement.current.dataset.launchMotion;
     panelMotion.current?.cancel();
     panelMotion.current = null;
     setMinimizing(false);
@@ -119,14 +128,21 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       const inset = Number.parseFloat(getComputedStyle(dock).getPropertyValue('--desktop-inset')) || 24;
       const gap = spacing(list, 'column-gap');
       const padding =
-        spacing(element, 'padding-left', 'padding-right', 'border-left-width', 'border-right-width') + spacing(list, 'padding-left', 'padding-right');
+        2 * (Number.parseFloat(getComputedStyle(element).getPropertyValue('--app-tray-inset')) || 7) +
+        2 +
+        spacing(list, 'padding-left', 'padding-right');
       const links = [...primary.querySelectorAll<HTMLElement>('.desktop-dock-item')];
       const iconWidth = Number.parseFloat(getComputedStyle(dock).getPropertyValue('--orbis-dock-icon-width')) || 52;
       const contractedWidth =
         links.length * iconWidth +
         spacing(primary, 'column-gap') * (links.length - 1) +
         spacing(primary, 'padding-left', 'padding-right', 'border-left-width', 'border-right-width');
-      const navigation = (minimized.length > 3 ? contractedWidth : primary.offsetWidth) + spacing(dock, 'column-gap');
+      const companions = [...dock.children].filter(
+        (child) => child !== primary && child !== element && child instanceof HTMLElement && getComputedStyle(child).display !== 'none',
+      );
+      const companionWidth = companions.reduce((total, child) => total + child.getBoundingClientRect().width, 0);
+      const navigation =
+        (minimized.length > 3 ? contractedWidth : primary.offsetWidth) + companionWidth + spacing(dock, 'column-gap') * (1 + companions.length);
       const available =
         document.documentElement.clientWidth -
         inset * 2 -
@@ -135,14 +151,23 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
         padding -
         spacing(element, 'margin-left');
       const slots = Math.max(1, Math.floor((available + gap) / (item.offsetWidth + gap)));
-      element.style.maxWidth = `${Math.min(slots, minimized.length) * (item.offsetWidth + gap) - gap + padding}px`;
+      const width = `${Math.min(slots, minimized.length) * (item.offsetWidth + gap) - gap + padding}px`;
+      element.style.width = width;
+      element.style.maxWidth = width;
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(primary);
+    for (const child of dock.children) if (child !== element) observer.observe(child);
+    const changes = new MutationObserver(() => {
+      for (const child of dock.children) if (child !== element) observer.observe(child);
+      measure();
+    });
+    changes.observe(dock, { childList: true });
     window.addEventListener('resize', measure);
     return () => {
       observer.disconnect();
+      changes.disconnect();
       window.removeEventListener('resize', measure);
     };
   }, [desktop, trayVisible, minimized.length]);
@@ -153,7 +178,8 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     if (!target) return;
     target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
     target.focus({ preventScroll: true });
-    const from = panel.getBoundingClientRect();
+    const from = minimizeOrigin.current ?? panel.getBoundingClientRect();
+    minimizeOrigin.current = null;
     const to = target.getBoundingClientRect();
     const id = ++motionId.current;
     const finish = () => {
@@ -166,20 +192,54 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       finish();
       return;
     }
-    const animation = panel.animate(
-      [
-        { transform: 'none', opacity: 1, borderRadius: '22px' },
-        {
-          transform: `translate(${to.x - from.x}px, ${to.y - from.y}px) scale(${to.width / from.width}, ${to.height / from.height})`,
-          opacity: 0,
-          borderRadius: '40px',
-        },
-      ],
-      { duration: 420, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' },
-    );
-    panelMotion.current = animation;
-    void animation.finished.then(finish, () => undefined);
-    return () => animation.cancel();
+    const deadline = performance.now() + 580;
+    let animation: Animation | null = null;
+    let resizeFrame = 0;
+    const travel = (start: DOMRect, end: DOMRect) => {
+      animation?.cancel();
+      animation = panel.animate(
+        [
+          {
+            left: `${start.x}px`,
+            top: `${start.y}px`,
+            width: `${start.width}px`,
+            height: `${start.height}px`,
+            borderRadius: '22px',
+            transform: 'none',
+          },
+          {
+            left: `${end.x - 3}px`,
+            top: `${end.y - 3}px`,
+            width: `${end.width + 6}px`,
+            height: `${end.height + 6}px`,
+            borderRadius: '18px',
+            offset: 0.78,
+          },
+          { left: `${end.x}px`, top: `${end.y}px`, width: `${end.width}px`, height: `${end.height}px`, borderRadius: '14px', transform: 'none' },
+        ],
+        { duration: Math.max(180, deadline - performance.now()), easing: 'cubic-bezier(.32, .08, .16, 1)', fill: 'forwards' },
+      );
+      panelMotion.current = animation;
+      void animation.finished.then(finish, () => undefined);
+    };
+    const retarget = () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        const button = trayButton(selected.urn);
+        if (!panel.isConnected || !button) return;
+        const end = button.getBoundingClientRect();
+        const shell = tray.current;
+        const remainingGrowth = shell ? (Number.parseFloat(shell.style.width) || shell.offsetWidth) - shell.getBoundingClientRect().width : 0;
+        travel(panel.getBoundingClientRect(), new DOMRect(end.x - remainingGrowth / 2, end.y, end.width, end.height));
+      });
+    };
+    travel(from, to);
+    window.addEventListener('resize', retarget);
+    return () => {
+      cancelAnimationFrame(resizeFrame);
+      window.removeEventListener('resize', retarget);
+      animation?.cancel();
+    };
   }, [minimizing, selected, panel, trayVisible, desktop, trayButton]);
 
   useLayoutEffect(() => {
@@ -187,21 +247,60 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     if (!origin || !selected || !panel || !desktop || minimizing) return;
     restoreOrigin.current = null;
     if (reducedMotion()) return;
-    const target = panel.getBoundingClientRect();
     panel.style.animation = 'none';
-    const animation = panel.animate(
-      [
-        {
-          transform: `translate(${origin.x - target.x}px, ${origin.y - target.y}px) scale(${origin.width / target.width}, ${origin.height / target.height})`,
-          opacity: 0,
+    const target = panel.getBoundingClientRect();
+    const naturalHeight =
+      (panel.querySelector<HTMLElement>('.app-launcher-bar')?.offsetHeight ?? 0) +
+      (panel.querySelector<HTMLElement>('.app-launcher-body')?.scrollHeight ?? target.height);
+    panel.dataset.launchMotion = 'restoring';
+    const deadline = performance.now() + 580;
+    let animation: Animation | null = null;
+    let resizeFrame = 0;
+    const travel = (start: DOMRect, end: DOMRect) => {
+      animation?.cancel();
+      animation = panel.animate(
+        [
+          {
+            left: `${start.x}px`,
+            top: `${start.y}px`,
+            width: `${start.width}px`,
+            height: `${start.height}px`,
+            borderRadius: '14px',
+            transform: 'none',
+          },
+          { left: `${end.x}px`, top: `${end.y - 3}px`, width: `${end.width}px`, height: `${end.height + 3}px`, borderRadius: '22px', offset: 0.82 },
+          { left: `${end.x}px`, top: `${end.y}px`, width: `${end.width}px`, height: `${end.height}px`, borderRadius: '22px', transform: 'none' },
+        ],
+        { duration: Math.max(180, deadline - performance.now()), easing: 'cubic-bezier(.2, .76, .22, 1)' },
+      );
+      panelMotion.current = animation;
+      void animation.finished.then(
+        () => {
+          if (panel.isConnected) delete panel.dataset.launchMotion;
         },
-        { transform: 'translateY(-3px) scale(1.015)', opacity: 1, offset: 0.76 },
-        { transform: 'none', opacity: 1 },
-      ],
-      { duration: 520, easing: 'cubic-bezier(.22, 1, .36, 1)' },
-    );
-    panelMotion.current = animation;
-    return () => animation.cancel();
+        () => undefined,
+      );
+    };
+    const retarget = () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        if (!panel.isConnected) return;
+        const style = getComputedStyle(panel);
+        const right = Number.parseFloat(style.right) || 24;
+        const barBottom = Number.parseFloat(document.documentElement.style.getPropertyValue('--orbis-bar-bottom')) || 88;
+        const dockHeight = Number.parseFloat(document.documentElement.style.getPropertyValue('--orbis-dock-height')) || 78;
+        const height = Math.min(naturalHeight, window.innerHeight - barBottom - dockHeight - 64);
+        travel(panel.getBoundingClientRect(), new DOMRect(window.innerWidth - right - target.width, barBottom + 20, target.width, height));
+      });
+    };
+    travel(origin, target);
+    window.addEventListener('resize', retarget);
+    return () => {
+      cancelAnimationFrame(resizeFrame);
+      window.removeEventListener('resize', retarget);
+      animation?.cancel();
+      delete panel.dataset.launchMotion;
+    };
   }, [selected, panel, desktop, minimizing]);
 
   useLayoutEffect(() => {
@@ -223,10 +322,10 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       }
       const animation = element.animate(
         [
-          { width: `${previous || width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px', opacity: 1, transform: 'none' },
-          { width: '0px', paddingInline: '0px', borderWidth: '0px', marginLeft: '-12px', opacity: 0, transform: 'scaleY(.84)' },
+          { width: `${previous || width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px' },
+          { width: '0px', paddingInline: '0px', borderWidth: '0px', marginLeft: '-12px' },
         ],
-        { duration: 460, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'forwards' },
+        { duration: 480, easing: 'cubic-bezier(.32, .08, .2, 1)', fill: 'forwards' },
       );
       if (dock) dock.dataset.trayMotion = 'joining';
       trayMotion.current = animation;
@@ -252,13 +351,10 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
           paddingInline: previous ? '7px' : '0px',
           borderWidth: previous ? '1px' : '0px',
           marginLeft: previous ? '0px' : '-12px',
-          opacity: previous ? 1 : 0,
-          transform: 'scaleY(.9)',
         },
-        { width: `${width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px', opacity: 1, transform: 'scaleY(1.035)', offset: 0.72 },
-        { width: `${width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px', opacity: 1, transform: 'none' },
+        { width: `${width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px' },
       ],
-      { duration: 620, easing: 'cubic-bezier(.22, 1, .36, 1)' },
+      { duration: 580, easing: 'cubic-bezier(.22, .8, .22, 1)' },
     );
     if (dock && !previous) dock.dataset.trayMotion = 'splitting';
     trayMotion.current = animation;
@@ -276,6 +372,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
 
   const minimize = () => {
     if (!selected || minimizing) return;
+    minimizeOrigin.current = panel?.getBoundingClientRect() ?? null;
     cancelMotion();
     focusMinimized.current = selected.urn;
     setMinimized((current) => (current.some((item) => item.urn === selected.urn) ? current : [...current, selected]));
@@ -289,11 +386,20 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       return;
     }
     const style = getComputedStyle(panel);
-    const start = { transform: style.transform, opacity: style.opacity };
+    const box = panel.getBoundingClientRect();
+    const start = {
+      left: `${box.x}px`,
+      top: `${box.y}px`,
+      width: `${box.width}px`,
+      height: `${box.height}px`,
+      transform: 'none',
+      opacity: style.opacity,
+    };
+    panel.style.animation = 'none';
     cancelMotion();
     setClosing(true);
     const id = ++motionId.current;
-    const animation = panel.animate([start, { transform: 'translateY(12px) scale(.96)', opacity: 0 }], {
+    const animation = panel.animate([start, { ...start, top: `${box.y + 12}px`, opacity: 0 }], {
       duration: 240,
       easing: 'cubic-bezier(.4, 0, .8, 1)',
       fill: 'forwards',
@@ -346,6 +452,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
             <Button
               className="app-tray-restore"
               data-minimized-app={request.urn}
+              data-flying={(minimizing && selected?.urn === request.urn) || undefined}
               aria-label={`Restore ${request.name}`}
               title={request.name}
               onClick={() => restore(request)}
@@ -360,7 +467,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
               onClick={() => {
                 const index = minimized.findIndex((item) => item.urn === request.urn);
                 const next = minimized[index + 1] ?? minimized[index - 1];
-                const target = next ? trayButton(next.urn) : document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]');
+                const target = next ? trayButton(next.urn) : dockFocusTarget();
                 if (selected?.urn === request.urn && minimizing) {
                   cancelMotion();
                   focusMinimized.current = null;
@@ -392,7 +499,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
         >
           <Dialog.Portal>
             <Dialog.Content
-              ref={setPanel}
+              ref={capturePanel}
               className="orbis-app-launcher"
               data-minimizing={minimizing}
               data-closing={closing}
@@ -401,13 +508,14 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
               onCloseAutoFocus={(event) => {
                 event.preventDefault();
                 const minimizedTarget = focusMinimized.current ? trayButton(focusMinimized.current) : null;
-                const target =
-                  minimizedTarget ??
-                  (opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]'));
+                const target = minimizedTarget ?? (opener.current?.isConnected ? opener.current : dockFocusTarget());
                 target?.focus({ preventScroll: true });
                 focusMinimized.current = null;
               }}
             >
+              <span className="app-launcher-flight-mark" aria-hidden="true">
+                <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={28} />
+              </span>
               <header className="app-launcher-bar">
                 <span title={selected?.serverName || userSettings.internalIp || window.location.hostname}>
                   {selected?.serverName || userSettings.internalIp || window.location.hostname}

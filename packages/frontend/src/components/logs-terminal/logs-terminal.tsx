@@ -36,7 +36,7 @@ export const LogsTerminal = (props: Props) => {
   };
 
   return (
-    <div>
+    <div className="log-terminal-shell">
       <div className="log-terminal-controls">
         <label className="form-check form-switch log-terminal-toggle" htmlFor={`${id}-follow`}>
           <input id={`${id}-follow`} className="form-check-input" type="checkbox" checked={follow} onChange={() => setFollow(!follow)} />
@@ -72,6 +72,11 @@ export const LogsTerminal = (props: Props) => {
           'wrap-lines': wrapLines,
         })}
         ref={ref}
+        role="log"
+        aria-label="Live log output"
+        aria-live="off"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: The log has its own scroll region and supports native keyboard scrolling.
+        tabIndex={0}
         // biome-ignore lint/security/noDangerouslySetInnerHtml: safe to use because the content is sanitized
         dangerouslySetInnerHTML={{ __html: logs.map((log) => DOMPurify.sanitize(log.text)).join('<br />') }}
       />

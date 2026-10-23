@@ -5,18 +5,31 @@ import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { Skeleton } from '@/components/ui/Skeleton/Skeleton';
 import type { AppInfoSimple } from '@/types/app.types';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { useStorePreview } from '../../pages/store-preview-context';
+import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
+import { Link, useLocation } from 'react-router';
 import { colorSchemeForCategory } from '../../helpers/table-helpers';
 
 export const StoreTile: React.FC<{ app: AppInfoSimple; isLoading: boolean }> = ({ app, isLoading }) => {
   const { t } = useTranslation();
+  const location = useLocation();
+  const preview = useStorePreview();
 
   const isNew = (app.created_at ?? 0) + 14 * 24 * 60 * 60 * 1000 > Date.now();
 
   const [appId, storeId] = app.urn.split(':');
 
   return (
-    <Link aria-label={app.name} className="app-tile" to={`/app-store/${storeId}/${appId}`}>
+    <Link
+      aria-label={app.name}
+      className="app-tile"
+      to={`/app-store/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}${location.search}`}
+      state={nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, location.pathname.startsWith('/app-store/'))}
+      preventScrollReset
+      data-store-app={app.urn}
+      aria-controls={preview?.split ? 'store-app-preview' : undefined}
+      aria-expanded={preview?.split ? preview.selectedUrn === app.urn : undefined}
+    >
       <div key={app.id} className="d-flex overflow-hidden align-items-center catalogue-tile">
         <Skeleton loading={isLoading}>
           <AppLogo className="logo" urn={app.urn} placeholder={isLoading} />

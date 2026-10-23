@@ -15,34 +15,10 @@ html:has(.desktop) {
   position: relative;
   isolation: isolate;
   color: var(--desktop-ink);
-  background: #9baea7 var(--desktop-wallpaper) center top / cover;
+  background: var(--desktop-wallpaper-base) var(--desktop-wallpaper) center top / cover;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.desktop[data-desktop-preset="graphite"] {
-  background-color: #283732;
-  background-image: linear-gradient(rgba(15, 26, 22, 0.34), rgba(15, 26, 22, 0.5)), var(--desktop-wallpaper);
-}
-.desktop[data-desktop-preset="forest"] {
-  background-color: #a8c0a4;
-}
-.desktop[data-desktop-preset="stone"] {
-  background-color: #d7c7ae;
-}
-.desktop[data-desktop-preset="ocean"] {
-  background-color: #adc7c8;
-}
-.desktop[data-desktop-preset="blush"] {
-  background-color: #d7bab6;
-}
-.desktop[data-desktop-mode="dark"] {
-  background-color: #142522;
-  background-image: linear-gradient(145deg, rgba(6, 18, 17, 0.43), rgba(6, 18, 17, 0.72)), var(--desktop-wallpaper);
-}
-.desktop[data-desktop-mode="light"][data-desktop-preset="graphite"] {
-  background-color: #bdc8bc;
-  background-image: var(--desktop-wallpaper);
-}
 .desktop :where(a:not(.btn)) {
   color: inherit;
 }
@@ -91,7 +67,7 @@ html:has(.desktop) {
   white-space: nowrap;
   flex: 0 0 auto;
 }
-.desktop-brand img {
+.desktop-brand :is(img, .orbis-logo) {
   border-radius: 8px;
   flex: none;
 }
@@ -117,6 +93,12 @@ html:has(.desktop) {
   padding: 8px 13px;
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.09);
+}
+.desktop-current-label {
+  display: block;
+}
+.desktop-current-label[data-descenders="true"] {
+  translate: 0 -0.08em;
 }
 .desktop-system-actions {
   margin-left: auto;
@@ -523,11 +505,12 @@ html:has(.desktop) {
   color: var(--desktop-muted);
 }
 .desktop-view-app .btn-primary {
-  --tblr-btn-bg: #27584a;
-  --tblr-btn-border-color: #27584a;
-  --tblr-btn-hover-bg: #306b59;
-  --tblr-btn-hover-border-color: #306b59;
-  --tblr-btn-active-bg: #204839;
+  --tblr-btn-color: var(--desktop-action-ink);
+  --tblr-btn-bg: var(--desktop-action);
+  --tblr-btn-border-color: var(--desktop-action);
+  --tblr-btn-hover-bg: var(--desktop-action-hover);
+  --tblr-btn-hover-border-color: var(--desktop-action-hover);
+  --tblr-btn-active-bg: var(--desktop-action-active);
 }
 .desktop-view-app .batch-action-desktop-button,
 .desktop-view-app .btn-secondary {
@@ -712,44 +695,30 @@ html:has(.desktop) {
 .desktop-dock[data-tray-motion] .desktop-dock-main::after {
   content: "";
   position: absolute;
-  z-index: -1;
-  left: calc(100% - 12px);
-  top: calc(50% - 12px);
-  width: 36px;
-  height: 24px;
-  border-radius: 50%;
+  left: calc(100% - 1px);
+  top: 50%;
+  width: 14px;
+  height: 42px;
+  translate: 0 -50%;
   background: var(--desktop-chrome);
-  filter: blur(3px);
   pointer-events: none;
-  animation: orbis-dock-fission 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  clip-path: polygon(0 0, 25% 25%, 50% 35%, 75% 25%, 100% 0, 100% 100%, 75% 75%, 50% 65%, 25% 75%, 0 100%);
+  animation: orbis-dock-fission 580ms cubic-bezier(0.22, 0.8, 0.22, 1) both;
 }
 .desktop-dock[data-tray-motion="joining"] .desktop-dock-main::after {
-  animation: orbis-dock-fusion 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@keyframes orbis-dock-fusion {
-  0% {
-    opacity: 0;
-    transform: scaleX(0.1) scaleY(0.6);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scaleX(1.35) scaleY(0.8);
-  }
-  100% {
-    opacity: 0;
-    transform: scaleX(0.4) scaleY(1.2);
-  }
+  animation: orbis-dock-fission 480ms cubic-bezier(0.32, 0.08, 0.2, 1) reverse both;
 }
 @keyframes orbis-dock-fission {
   0%,
-  18% {
-    opacity: 0.85;
-    transform: scaleX(1.5);
+  15% {
+    height: 52px;
   }
-  75%,
+  55% {
+    height: 18px;
+  }
+  85%,
   100% {
-    opacity: 0;
-    transform: scaleX(0.1);
+    height: 0;
   }
 }
 .desktop .desktop-dock-item {
@@ -1240,4 +1209,28 @@ html:has(.desktop) {
   .desktop-guest-main {
     margin-top: 28px;
   }
+}
+
+.desktop-route-content {
+  position: relative;
+  min-width: 0;
+}
+.desktop-route-content[data-pending="true"] > .desktop-route-children {
+  opacity: 0;
+  pointer-events: none;
+}
+.desktop-route-wait {
+  position: absolute;
+  inset: 0;
+  min-height: 160px;
+}
+.desktop-section-unavailable {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 24px;
+  color: var(--desktop-muted);
+}
+.desktop-section-unavailable p {
+  margin: 0;
 }
