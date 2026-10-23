@@ -32,6 +32,7 @@ import { TasksService } from '@/modules/tasks/tasks.service';
 import { Test } from '@nestjs/testing';
 import { fromPartial } from '@total-typescript/shoehorn';
 import { eq } from 'drizzle-orm';
+import type Dockerode from 'dockerode';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import waitFor from 'wait-for-expect';
@@ -121,6 +122,8 @@ describe('App lifecycle', () => {
   const configurationService = mock<ConfigurationService>();
   let databaseService = mock<DatabaseService>();
   const dockerService = mock<DockerService>();
+  const docker = mock<Dockerode>();
+  const containerStates = new Map<string, { running: boolean; resumed: number }>();
   const loggerService = mock<LoggerService>();
   const archiveService = mock<ArchiveService>();
   const reposHelpers = mock<ReposHelpers>();
@@ -166,6 +169,41 @@ describe('App lifecycle', () => {
 
   beforeEach(async () => {
     await cleanTestData(db);
+    containerStates.clear();
+    dockerService.composeApp.mockImplementation(async (urn, command) => {
+      const project = urn.replace(':', '_');
+      if (command.startsWith('up ')) {
+        containerStates.set(project, { running: true, resumed: containerStates.get(project)?.resumed ?? 0 });
+      } else if (command === 'stop' || command.startsWith('down ')) {
+        const state = containerStates.get(project);
+        if (state) state.running = false;
+      }
+      return { success: true, stdout: '', stderr: '' };
+    });
+    docker.listContainers.mockImplementation(async (options) => {
+      const filters = options?.filters;
+      const project =
+        typeof filters === 'object'
+          ? filters.label?.find((label: string) => label.startsWith('com.docker.compose.project='))?.split('=')[1]
+          : undefined;
+      return [...containerStates]
+        .filter(([name]) => !project || name === project)
+        .map(([name, state]) => fromPartial<Dockerode.ContainerInfo>({ Id: name, State: state.running ? 'running' : 'exited' }));
+    });
+    docker.getContainer.mockImplementation((id) => {
+      const state = containerStates.get(id);
+      if (!state) throw new Error('Unknown fixture container');
+      const container = mock<Dockerode.Container>({ id });
+      container.inspect.mockImplementation(async () => fromPartial({ State: { Running: state.running, Paused: false, Restarting: false } }));
+      container.start.mockImplementation(async () => {
+        state.running = true;
+        state.resumed++;
+      });
+      return container;
+    });
+    docker.pruneContainers.mockRejectedValue(null);
+    docker.pruneNetworks.mockRejectedValue(null);
+    docker.listNetworks.mockResolvedValue([]);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -218,11 +256,7 @@ describe('App lifecycle', () => {
         },
         {
           provide: DOCKERODE,
-          useValue: {
-            pruneContainers: vi.fn().mockRejectedValue(null),
-            pruneNetworks: vi.fn().mockRejectedValue(null),
-            listNetworks: vi.fn().mockResolvedValue([]),
-          },
+          useValue: docker,
         },
         {
           provide: AppEventsQueue,
@@ -421,9 +455,10 @@ describe('App lifecycle', () => {
 
       await waitFor(async () => {
         const app = await appsRepository.getAppByUrn(appInfo.urn);
-        expect(app?.status).toBe('stopped');
+        expect(app?.status).toBe('running');
         expect(app?.version).toBe(1);
       });
+      expect(containerStates.get(appInfo.urn.replace(':', '_'))).toEqual({ running: true, resumed: 1 });
       expect((await appFilesManager.getInstalledAppInfo(appInfo.urn))?.tipi_version).toBe(1);
       expect(await fs.promises.readFile(path.join(appDataDir, 'data', 'preserved.txt'), 'utf8')).toBe('original data');
       expect(await fs.promises.readdir(`${DATA_DIR}/backups/test/${appInfo.id}`)).toEqual([]);
