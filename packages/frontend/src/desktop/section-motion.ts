@@ -55,6 +55,14 @@ export function useSectionMotion() {
     const cache = () => {
       if (!animations.current.some((animation) => animation.playState === 'running')) settled.current = read();
     };
+    let cacheFrame = 0;
+    const scheduleCache = () => {
+      if (!cacheFrame)
+        cacheFrame = requestAnimationFrame(() => {
+          cacheFrame = 0;
+          cache();
+        });
+    };
     const click = (event: MouseEvent) => {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const anchor = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null;
@@ -62,12 +70,12 @@ export function useSectionMotion() {
       const url = new URL(anchor.href, window.location.href);
       if (url.origin === window.location.origin && sectionIndex(url.pathname) !== sectionIndex(previous.current.path)) capture.current?.();
     };
-    const observer = new ResizeObserver(cache);
+    const observer = new ResizeObserver(scheduleCache);
     const main = document.querySelector('#desktop-content');
     if (main) observer.observe(main);
     document.addEventListener('click', click, true);
-    window.addEventListener('scroll', cache, { passive: true });
-    window.addEventListener('resize', cache);
+    window.addEventListener('scroll', scheduleCache, { passive: true });
+    window.addEventListener('resize', scheduleCache);
     cache();
     return () => {
       generation.current++;
@@ -75,10 +83,11 @@ export function useSectionMotion() {
       for (const animation of animations.current) animation.cancel();
       animations.current = [];
       capture.current = null;
+      cancelAnimationFrame(cacheFrame);
       observer.disconnect();
       document.removeEventListener('click', click, true);
-      window.removeEventListener('scroll', cache);
-      window.removeEventListener('resize', cache);
+      window.removeEventListener('scroll', scheduleCache);
+      window.removeEventListener('resize', scheduleCache);
     };
   }, []);
 

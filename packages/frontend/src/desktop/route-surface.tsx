@@ -83,7 +83,10 @@ export function RouteSurface({
       if (moving) return;
       const visible = (height: number) =>
         visibleSectionBounds({ left: 0, top: view.getBoundingClientRect().top, width: 0, height }, innerHeight).height;
-      animateTo(visible(previous.height), visible(height));
+      const from = visible(previous.height);
+      const to = visible(height);
+      // A zero-distance reveal would still clip a tall page to the viewport height.
+      if (Math.abs(from - to) >= 1) animateTo(from, to);
     };
     let resizeFrame = 0;
     const observer = new ResizeObserver(() => {

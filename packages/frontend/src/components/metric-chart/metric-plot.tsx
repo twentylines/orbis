@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import type { MetricSummary } from '@runtipi/common/schemas';
 import './metric-chart.css';
 
@@ -16,6 +16,8 @@ export type MetricPlotUnit = 'percent' | 'bytesPerSecond';
 const emptyPoints: MetricPlotPoint[] = [];
 const chartWidth = 600;
 const chartHeight = 140;
+const nearestPoint = (times: number[], time: number) =>
+  times.reduce((nearest, at, index) => (Math.abs(at - time) < Math.abs((times[nearest] ?? 0) - time) ? index : nearest), 0);
 export const formatPlotValue = (value: number | null, unit: MetricPlotUnit) => {
   if (value === null) return 'Unavailable';
   if (unit === 'percent') return `${value.toFixed(1)}%`;
@@ -46,42 +48,52 @@ export function MetricPlot({
   const [selectedTime, setSelectedTime] = useState<number | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const points = history?.points ?? emptyPoints;
-  const from = history ? Date.parse(history.from) : 0;
-  const to = history ? Date.parse(history.to) : 1;
-  const max = unit === 'percent' ? 100 : Math.max(1024, ...points.map((point) => point.value.peak ?? 0)) * 1.1;
-  const x = (point: MetricPlotPoint) => Math.max(0, Math.min(chartWidth, ((Date.parse(point.at) - from) / Math.max(1, to - from)) * chartWidth));
-  const y = (value: number) => chartHeight - 8 - (Math.min(max, Math.max(0, value)) / max) * (chartHeight - 16);
-  const selectedIndex =
-    selectedTime === null
-      ? Math.max(0, points.length - 1)
-      : points.reduce(
-          (nearest, point, index) =>
-            Math.abs(Date.parse(point.at) - selectedTime) < Math.abs(Date.parse(points[nearest]?.at ?? '') - selectedTime) ? index : nearest,
-          0,
-        );
+  const { from, to, max, times, x, y, segments, axisTimes } = useMemo(() => {
+    const from = history ? Date.parse(history.from) : 0;
+    const to = history ? Date.parse(history.to) : 1;
+    const max = unit === 'percent' ? 100 : Math.max(1024, ...points.map((point) => point.value.peak ?? 0)) * 1.1;
+    const times = points.map((point) => Date.parse(point.at));
+    const x = (at: number) => Math.max(0, Math.min(chartWidth, ((at - from) / Math.max(1, to - from)) * chartWidth));
+    const y = (value: number) => chartHeight - 8 - (Math.min(max, Math.max(0, value)) / max) * (chartHeight - 16);
+    const lines: string[][] = [];
+    let previous: MetricPlotPoint | undefined;
+    for (const [index, point] of points.entries()) {
+      const value = point.value.average;
+      const gap = previous && ((times[index] ?? 0) - Date.parse(previous.until) > 25000 || previous.identity !== point.identity);
+      if (value === null || point.identity === null) {
+        previous = undefined;
+        continue;
+      }
+      if (!previous || gap) lines.push([]);
+      lines.at(-1)?.push(`${x(times[index] ?? 0).toFixed(1)},${y(value).toFixed(1)}`);
+      previous = point;
+    }
+    const segments = lines.map((line) => {
+      const first = line[0] ?? '';
+      const last = line.at(-1) ?? '';
+      return {
+        first,
+        length: line.length,
+        points: line.join(' '),
+        fill: `M ${first.split(',')[0]},${chartHeight} L ${line.join(' L ')} L ${last.split(',')[0]},${chartHeight} Z`,
+      };
+    });
+    const axisTimes = [from, from + (to - from) / 2, to].map((time) =>
+      history
+        ? new Date(time).toLocaleString(
+            undefined,
+            to - from > 86400000 ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' },
+          )
+        : '—',
+    );
+    return { from, to, max, times, x, y, segments, axisTimes };
+  }, [history, points, unit]);
+  const selectedIndex = selectedTime === null ? Math.max(0, points.length - 1) : nearestPoint(times, selectedTime);
   const selected = points[selectedIndex];
   const summary = selected?.value;
-  const segments: string[][] = [];
-  let previous: MetricPlotPoint | undefined;
-  for (const point of points) {
-    const value = point.value.average;
-    const gap = previous && (Date.parse(point.at) - Date.parse(previous.until) > 25000 || previous.identity !== point.identity);
-    if (value === null || point.identity === null) {
-      previous = undefined;
-      continue;
-    }
-    if (!previous || gap) segments.push([]);
-    segments.at(-1)?.push(`${x(point).toFixed(1)},${y(value).toFixed(1)}`);
-    previous = point;
-  }
   const sampleText = selected
     ? `${new Date(selected.at).toLocaleString()}, ${selected.source ?? label} ${formatPlotValue(selected.value.average, unit)}, ${selected.value.samples > 1 ? `peak ${formatPlotValue(selected.value.peak, unit)}, ` : ''}${selected.value.samples} sample${selected.value.samples === 1 ? '' : 's'}`
     : 'No recorded samples';
-  const axisTime = (time: number) =>
-    new Date(time).toLocaleString(
-      undefined,
-      to - from > 86400000 ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' },
-    );
 
   return (
     <div className="metric-chart" data-metric={metricKey ?? unit}>
@@ -101,7 +113,7 @@ export function MetricPlot({
           const box = svg.current?.getBoundingClientRect();
           if (!box || !points.length) return;
           const time = from + Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)) * (to - from);
-          setSelectedTime(time);
+          setSelectedTime(times[nearestPoint(times, time)] ?? null);
           setInspecting(true);
         }}
         onPointerLeave={(event) => {
@@ -116,7 +128,7 @@ export function MetricPlot({
               : event.key === 'End'
                 ? points.length - 1
                 : Math.max(0, Math.min(points.length - 1, selectedIndex + (event.key === 'ArrowLeft' ? -1 : 1)));
-          setSelectedTime(Date.parse(points[next]?.at ?? ''));
+          setSelectedTime(times[next] ?? null);
           setInspecting(true);
         }}
       >
@@ -136,26 +148,22 @@ export function MetricPlot({
             <line key={line} className="metric-chart-gridline" x1="0" x2={chartWidth} y1={line} y2={line} />
           ))}
           {segments.map((segment) => {
-            const first = segment[0];
-            const last = segment.at(-1);
-            if (!first || !last) return null;
+            const { first } = segment;
+            if (!first) return null;
             const key = `${metricKey ?? label}-${first}`;
             if (segment.length === 1) return <circle key={key} cx={first.split(',')[0]} cy={first.split(',')[1]} r="3" fill={color} />;
             return (
               <g key={key} data-history-segment="true">
-                <path
-                  d={`M ${first.split(',')[0]},${chartHeight} L ${segment.join(' L ')} L ${last.split(',')[0]},${chartHeight} Z`}
-                  fill={`url(#${id})`}
-                />
-                <polyline points={segment.join(' ')} stroke={color} fill="none" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                <path d={segment.fill} fill={`url(#${id})`} />
+                <polyline points={segment.points} stroke={color} fill="none" strokeWidth="2" vectorEffect="non-scaling-stroke" />
               </g>
             );
           })}
           {inspecting && selected ? (
             <g>
-              <line className="metric-chart-cursor" x1={x(selected)} x2={x(selected)} y1="0" y2={chartHeight} />
+              <line className="metric-chart-cursor" x1={x(times[selectedIndex] ?? 0)} x2={x(times[selectedIndex] ?? 0)} y1="0" y2={chartHeight} />
               {summary?.average !== null && summary?.average !== undefined ? (
-                <circle cx={x(selected)} cy={y(summary.average)} r="4" fill={color} />
+                <circle cx={x(times[selectedIndex] ?? 0)} cy={y(summary.average)} r="4" fill={color} />
               ) : null}
             </g>
           ) : null}
@@ -168,9 +176,9 @@ export function MetricPlot({
           </span>
         ) : null}
         <div className="metric-chart-times" aria-hidden="true">
-          <span>{history ? axisTime(from) : '—'}</span>
-          <span>{history ? axisTime(from + (to - from) / 2) : '—'}</span>
-          <span>{history ? axisTime(to) : '—'}</span>
+          <span>{axisTimes[0]}</span>
+          <span>{axisTimes[1]}</span>
+          <span>{axisTimes[2]}</span>
         </div>
       </div>
       {inspecting && selected && summary ? (
