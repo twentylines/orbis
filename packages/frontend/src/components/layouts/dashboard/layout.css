@@ -596,14 +596,14 @@ html:has(.desktop) {
 .desktop-view-app .batch-action-desktop-button,
 .desktop-view-app .btn-secondary {
   color: var(--desktop-ink);
-  background: rgba(125, 145, 121, 0.1);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
   border-color: var(--desktop-line);
   border-radius: 10px;
   box-shadow: none;
 }
 .desktop-view-app .batch-action-desktop-button:hover,
 .desktop-view-app .btn-secondary:hover {
-  background: rgba(125, 145, 121, 0.2);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 20%, transparent);
   border-color: var(--desktop-accent);
 }
 .desktop-batch-controls {

@@ -72,23 +72,6 @@
   --desktop-danger-fill: #9f392f;
   --desktop-danger-ink: #fff8ee;
   --desktop-base-focus: var(--desktop-base-accent);
-  --tblr-body-color: var(--desktop-ink);
-  --tblr-secondary: var(--desktop-muted);
-  --tblr-secondary-color: var(--desktop-muted);
-  --tblr-border-color: var(--desktop-line);
-  --tblr-border-active-color: var(--desktop-accent);
-  --tblr-bg-surface: var(--desktop-surface);
-  --tblr-bg-forms: var(--desktop-surface);
-  --tblr-bg-surface-secondary: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
-  --tblr-bg-surface-tertiary: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
-  --tblr-primary: var(--desktop-action);
-  --tblr-primary-rgb: var(--desktop-action-rgb);
-  --tblr-success: var(--desktop-positive);
-  --tblr-success-darken: color-mix(in srgb, var(--desktop-positive) 85%, black);
-  --tblr-shadow-input: none;
-  --link-color: var(--desktop-accent);
-  --tblr-link-color: var(--desktop-accent);
-  --tblr-link-hover-color: var(--desktop-accent);
   --workspace-heading-ink: #132e2b;
   --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
   color-scheme: light;
@@ -652,4 +635,26 @@ body:has(.orbis-theme) .form-text a:hover {
     transform, translate, scale, rotate, opacity, box-shadow, width, height, min-width, max-width, min-height, max-height, padding, margin, flex-basis,
     /* biome-ignore lint/complexity/noImportantStyles: Palette changes must override component colour transitions during the shared palette transition. */
     border-radius, clip-path, gap !important;
+}
+
+/* Tabler body presets otherwise shadow the palette inherited from :root. */
+:root,
+:root[data-desktop-mode] body:has(.orbis-theme) {
+  --tblr-body-color: var(--desktop-ink);
+  --tblr-secondary: var(--desktop-muted);
+  --tblr-secondary-color: var(--desktop-muted);
+  --tblr-border-color: var(--desktop-line);
+  --tblr-border-active-color: var(--desktop-accent);
+  --tblr-bg-surface: var(--desktop-surface);
+  --tblr-bg-forms: var(--desktop-surface);
+  --tblr-bg-surface-secondary: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
+  --tblr-bg-surface-tertiary: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
+  --tblr-primary: var(--desktop-action);
+  --tblr-primary-rgb: var(--desktop-action-rgb);
+  --tblr-success: var(--desktop-positive);
+  --tblr-success-darken: color-mix(in srgb, var(--desktop-positive) 85%, black);
+  --tblr-shadow-input: none;
+  --link-color: var(--desktop-accent);
+  --tblr-link-color: var(--desktop-accent);
+  --tblr-link-hover-color: var(--desktop-accent);
 }

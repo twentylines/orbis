@@ -4,8 +4,8 @@
   --tblr-secondary-color: var(--desktop-muted);
   --tblr-border-color: var(--desktop-line);
   --tblr-bg-surface: var(--desktop-surface);
-  --tblr-bg-surface-secondary: rgba(115, 146, 127, 0.06);
-  --tblr-bg-surface-tertiary: rgba(115, 146, 127, 0.1);
+  --tblr-bg-surface-secondary: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
+  --tblr-bg-surface-tertiary: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
   --tblr-card-bg: var(--desktop-surface);
 }
 .app-workspace [role="tablist"],
