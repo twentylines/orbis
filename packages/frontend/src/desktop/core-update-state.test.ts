@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
-import { advanceCoreUpdate, claimCoreRefresh, coreWatchIsActive, type CoreUpdateStatus } from './core-update-state';
+import { advanceCoreUpdate, claimCoreRefresh, coreWatchIsActive, coreUpdateTitle, type CoreUpdateStatus } from './core-update-state';
 const id = 'd8b4a1ec-f912-4e14-8e20-58d2754a0130';
 const other = '28a2fc8f-a725-42f2-a143-b26fce7b7ad7';
 const targetTag = 'v0.1.0-beta.79';
@@ -81,5 +81,22 @@ describe('observing a single accepted Orbis update', () => {
   });
   test('normal disconnected browsing does not become an update', () => {
     expect(advanceCoreUpdate(null, { type: 'unavailable' })).toBeNull();
+  });
+  test('restart states explain reconnection instead of repeating an obsolete installation message', () => {
+    for (const event of [
+      { type: 'unavailable' } as const,
+      { type: 'status', status: status('running', { available: false, reason: 'Host service unavailable' }) } as const,
+      {
+        type: 'status',
+        status: status('running', { coreState: 'exited', job: { id, state: 'running', targetTag, message: 'Image downloaded' } }),
+      } as const,
+    ]) {
+      const watch = advanceCoreUpdate(accepted(), event);
+      if (!watch) throw new Error('The accepted update must remain visible while restarting.');
+      expect(watch?.phase).toBe('offline');
+      expect(watch?.message).toBe('Orbis is restarting. Reconnecting automatically.');
+      expect(coreUpdateTitle(watch.phase)).toBe('Restarting Orbis');
+      expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
+    }
   });
 });

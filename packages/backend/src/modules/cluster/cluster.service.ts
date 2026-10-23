@@ -20,6 +20,7 @@ import { castAppUrn } from '@/common/helpers/app-helpers';
 import { ClusterStateService, clusterName } from './cluster-state.service';
 import { CLUSTER_PROTOCOL, clusterRequest, signedHeaders } from './cluster-transport';
 import { ClusterInstallService } from './cluster-install.service';
+import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 
 @Injectable()
 export class ClusterService {
@@ -40,6 +41,7 @@ export class ClusterService {
     private readonly dockerApps: DockerAppsService,
     private readonly marketplace: MarketplaceService,
     private readonly installs: ClusterInstallService,
+    private readonly activity: MonitoringActivityService,
   ) {}
 
   async pair(body: Record<string, unknown>) {
@@ -131,7 +133,7 @@ export class ClusterService {
       if (state.admin) state.admin.name = clusterName(body.adminName, state.admin.name);
     });
     if (body.action === 'leave') return this.state.leave();
-    if (body.action === 'read' && typeof body.resource === 'string') return this.localRead(body.resource, this.record(body.params));
+    if (body.action === 'read' && typeof body.resource === 'string') return this.localRead(body.resource, this.record(body.params), true);
     if (body.action === 'command' && typeof body.command === 'string') return this.localCommand(body.command, this.record(body.payload));
     throw new BadRequestException('Unsupported cluster request.');
   }
@@ -147,7 +149,11 @@ export class ClusterService {
     return value as MetricHistoryRange;
   }
 
-  private async localRead(resource: string, params: Record<string, unknown>) {
+  private async localRead(resource: string, params: Record<string, unknown>, peer = false) {
+    const range = resource === 'history' || resource === 'host-history' ? this.range(params.range ?? '1h') : '1h';
+    const selection = resource === 'host-history' ? parseHostHistorySelection(params.device) : null;
+    if (peer && ['telemetry', 'containers', 'history', 'host-telemetry', 'host-processes', 'host-sensors', 'host-history'].includes(resource))
+      this.activity.touchPeer();
     switch (resource) {
       case 'catalogue':
         return this.installs.catalogue(params);
@@ -176,7 +182,7 @@ export class ClusterService {
       case 'docker-apps':
         return this.dockerApps.read();
       case 'history':
-        return this.history.read(this.range(params.range ?? '1h'));
+        return this.history.read(range);
       case 'host-telemetry':
         return this.host.read();
       case 'host-processes':
@@ -184,7 +190,7 @@ export class ClusterService {
       case 'host-sensors':
         return this.sensors.read();
       case 'host-history':
-        return this.hostHistory.read(this.range(params.range ?? '1h'), parseHostHistorySelection(params.device));
+        return this.hostHistory.read(range, selection);
       case 'apps': {
         const settings = this.config.get('userSettings');
         return {

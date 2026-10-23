@@ -12,6 +12,7 @@ describe('host update Unix socket transport', () => {
   let service: HostUpdatesService;
   const originalSocket = process.env.ORBIS_HOST_SOCKET;
   const requests: Array<{ method: string; path: string; body: unknown }> = [];
+  let restartSupported = true;
 
   beforeAll(async () => {
     directory = await mkdtemp(path.join(os.tmpdir(), 'orbis-host-transport-'));
@@ -23,6 +24,21 @@ describe('host update Unix socket transport', () => {
         const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null;
         requests.push({ method: request.method || '', path: request.url || '', body });
         response.setHeader('Content-Type', 'application/json');
+        if (request.url?.startsWith('/v1/restart')) {
+          response.statusCode = restartSupported ? 200 : 404;
+          response.end(
+            JSON.stringify(
+              restartSupported
+                ? request.url === '/v1/restart'
+                  ? { available: true, job: null }
+                  : request.url === '/v1/restart/plan'
+                    ? { planId: '00000000-0000-4000-8000-000000000000', expiresAt: 123, rebootRequired: true }
+                    : { jobId: '00000000-0000-4000-8000-000000000000', state: 'restarting' }
+                : { error: 'not found' },
+            ),
+          );
+          return;
+        }
         response.end(
           JSON.stringify(
             request.url === '/v1/status'
@@ -97,5 +113,35 @@ describe('host update Unix socket transport', () => {
     expect(() => service.packagePlan(['--option'])).toThrow(BadRequestException);
     expect(() => service.packageApply('anything')).toThrow(BadRequestException);
     expect(requests).toHaveLength(count);
+  });
+
+  it('sends only the reviewed restart ID and fixed restart paths to the host', async () => {
+    const planId = '00000000-0000-4000-8000-000000000000';
+    expect(await service.restartStatus()).toEqual({ available: true, job: null });
+    expect(await service.restartPlan()).toEqual({ planId, expiresAt: 123, rebootRequired: true });
+    expect(await service.restartApply(planId)).toEqual({ jobId: planId, state: 'restarting' });
+    expect(requests).toContainEqual({ method: 'GET', path: '/v1/restart', body: null });
+    expect(requests).toContainEqual({ method: 'POST', path: '/v1/restart/plan', body: {} });
+    expect(requests).toContainEqual({ method: 'POST', path: '/v1/restart/apply', body: { planId } });
+    const count = requests.length;
+    expect(() => service.restartApply('restart; shell')).toThrow(BadRequestException);
+    expect(requests).toHaveLength(count);
+  });
+
+  it('explains old helper capability instead of presenting an unusable restart', async () => {
+    restartSupported = false;
+    try {
+      expect(await service.restartStatus()).toEqual({
+        available: false,
+        reason: 'Update the Orbis host service to enable server restarts.',
+        job: null,
+      });
+      await expect(service.restartPlan()).rejects.toThrow('Update the Orbis host service to enable server restarts.');
+      await expect(service.restartApply('00000000-0000-4000-8000-000000000000')).rejects.toThrow(
+        'Update the Orbis host service to enable server restarts.',
+      );
+    } finally {
+      restartSupported = true;
+    }
   });
 });

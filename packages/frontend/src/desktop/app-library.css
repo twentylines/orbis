@@ -14,7 +14,7 @@
   min-width: 0;
   margin: 0;
 }
-.app-library-controls label > span {
+.app-library-controls label > span:first-child {
   font-size: 0.8125rem;
   font-weight: 600;
 }
@@ -30,8 +30,23 @@
   font: inherit;
 }
 .app-library-controls select {
-  padding-right: 30px;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 46px;
   text-overflow: ellipsis;
+}
+.app-library-select {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.app-library-select > svg {
+  position: absolute;
+  inset-inline-end: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--desktop-muted);
 }
 .app-library-controls input::placeholder {
   color: var(--desktop-muted);

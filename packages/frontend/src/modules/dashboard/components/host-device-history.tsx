@@ -252,8 +252,8 @@ export function HostDeviceHistoryView() {
             <details className="host-history-about">
               <summary>About device history</summary>
               <p>
-                Collection continues when this page is closed. History is retained for seven days. Longer ranges show sample averages and peaks; use
-                the pointer or arrow keys to inspect each chart.
+                Readings are recorded while Orbis is in use. Idle periods appear as gaps. History is retained for seven days. Longer ranges show
+                sample averages and peaks; use the pointer or arrow keys to inspect each chart.
               </p>
               <p>
                 Gaps indicate missing readings or a device change. A reboot starts a new series. Disk active time is approximate; layered disks and

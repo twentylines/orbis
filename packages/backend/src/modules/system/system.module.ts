@@ -10,9 +10,10 @@ import { HostTelemetryService } from './host-telemetry.service';
 import { HostProcessesService } from './host-processes.service';
 import { HostSensorsService } from './host-sensors.service';
 import { HostDeviceHistoryService } from './host-device-history.service';
+import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.module';
 
 @Module({
-  imports: [DockerModule, AppsModule],
+  imports: [DockerModule, AppsModule, MonitoringActivityModule],
   controllers: [SystemController],
   providers: [
     SystemService,

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type PropsWithChildren } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from './window-visibility';
 import { installedOrbisBuildOptions } from './orbis-release';
@@ -23,6 +23,13 @@ export type PackageUpdateJob = {
   rebootRequired?: boolean;
 };
 type PackageUpdateStatus = { available: boolean; job: PackageUpdateJob | null };
+export type ServerRestartStatus = {
+  available: boolean;
+  reason?: string;
+  rebootRequired?: boolean;
+  job: { id: string; state: 'restarting' | 'complete' | 'failed'; createdAt: number; finishedAt?: number; message: string } | null;
+};
+export const serverRestartQueryKey = ['orbis-host-restart'] as const;
 type AcceptedUpdate = { id: string; targetTag: string };
 let acceptedUpdate: AcceptedUpdate | null = null;
 let updatePending = false;
@@ -98,12 +105,22 @@ type HostUpdateContextValue = {
   watch: CoreUpdateWatch | null;
   core: CoreUpdateStatus | undefined;
   packageJob: PackageUpdateJob | null;
+  restart: ServerRestartStatus | undefined;
+  restartError: boolean;
   unavailable: boolean;
 };
-const HostUpdateContext = createContext<HostUpdateContextValue>({ watch: null, core: undefined, packageJob: null, unavailable: false });
+const HostUpdateContext = createContext<HostUpdateContextValue>({
+  watch: null,
+  core: undefined,
+  packageJob: null,
+  restart: undefined,
+  restartError: false,
+  unavailable: false,
+});
 
 export function HostUpdateProvider({ children, suspended = false }: PropsWithChildren<{ suspended?: boolean }>) {
   const { user } = useAppContext();
+  const queryClient = useQueryClient();
   const visible = useWindowVisible();
   const accepted = useSyncExternalStore(subscribeAccepted, acceptedSnapshot, emptyAccepted);
   const watchRef = useRef<CoreUpdateWatch | null>(null);
@@ -126,6 +143,19 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
     staleTime: 1500,
     retry: false,
     refetchInterval: (query) => (['queued', 'running'].includes(query.state.data?.job?.state ?? '') ? 1500 : 30_000),
+    refetchIntervalInBackground: false,
+  });
+  const restart = useQuery({
+    queryKey: serverRestartQueryKey,
+    queryFn: async ({ signal }) => {
+      const status = await readHost<ServerRestartStatus>('restart', signal);
+      const previous = queryClient.getQueryData<ServerRestartStatus>(serverRestartQueryKey)?.job;
+      return !status.available && previous?.state === 'restarting' ? { ...status, job: previous } : status;
+    },
+    enabled,
+    staleTime: 3000,
+    retry: false,
+    refetchInterval: (query) => (query.state.data?.job?.state === 'restarting' ? 2000 : 30_000),
     refetchIntervalInBackground: false,
   });
   const build = useQuery({
@@ -154,7 +184,16 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
     }
   }, [accepted, core.data, core.isError, build.data?.version, suspended, user.operator]);
   return (
-    <HostUpdateContext.Provider value={{ watch, core: core.data, packageJob: packages.data?.job ?? null, unavailable: core.isError }}>
+    <HostUpdateContext.Provider
+      value={{
+        watch,
+        core: core.data,
+        packageJob: packages.data?.job ?? null,
+        restart: restart.data,
+        restartError: restart.isError,
+        unavailable: core.isError,
+      }}
+    >
       {children}
     </HostUpdateContext.Provider>
   );

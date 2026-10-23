@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 import unittest
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from unittest import mock
 
@@ -169,6 +170,149 @@ class HostServiceTests(unittest.TestCase):
                 return record
             time.sleep(0.01)
         self.fail("background update did not finish")
+
+    def restart_host(self):
+        stack = ExitStack()
+        stack.enter_context(mock.patch.object(SERVICE.Path, "is_dir", return_value=True))
+        stack.enter_context(mock.patch.object(SERVICE.os, "access", return_value=True))
+        stack.enter_context(mock.patch.object(SERVICE, "boot_id", return_value="00000000-0000-4000-8000-000000000001"))
+        stack.enter_context(mock.patch.object(SERVICE, "package_locks", side_effect=nullcontext))
+        return stack
+
+    def test_restart_review_alone_never_requests_a_reboot(self):
+        with self.restart_host(), mock.patch.object(SERVICE.subprocess, "run") as command:
+            plan = self.service.restart_plan()
+            self.assertGreater(plan["expiresAt"], time.time())
+            self.assertIsNone(self.service.restart_status()["job"])
+            command.assert_not_called()
+
+    def test_restart_uses_one_fixed_command_and_is_completed_only_on_a_new_boot(self):
+        requested = threading.Event()
+        def reboot(*args, **kwargs):
+            requested.set()
+            return mock.Mock(returncode=0)
+        with self.restart_host(), mock.patch.object(SERVICE.subprocess, "run", side_effect=reboot) as command:
+            plan = self.service.restart_plan()
+            result, launch = self.service.restart_apply(plan["planId"])
+            self.assertEqual(result, {"jobId": plan["planId"], "state": "restarting"})
+            command.assert_not_called()
+            launch()
+            self.assertTrue(requested.wait(2))
+            self.assertEqual(command.call_args.args[0], ["/usr/bin/systemctl", "reboot", "--no-block"])
+            self.assertEqual(command.call_count, 1)
+            restarted_helper = SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
+            self.assertEqual(restarted_helper.restart_status()["job"]["state"], "restarting")
+            with self.assertRaisesRegex(ValueError, "server is restarting"):
+                restarted_helper.plan(TARGET["tag"])
+            with self.assertRaisesRegex(ValueError, "server is restarting"):
+                self.service.restart_apply(plan["planId"])
+            with mock.patch.object(SERVICE, "boot_id", return_value="00000000-0000-4000-8000-000000000002"):
+                self.assertEqual(restarted_helper.restart_status()["job"]["state"], "complete")
+
+    def test_restart_refuses_stale_changed_and_used_review_without_running_anything(self):
+        with self.restart_host(), mock.patch.object(SERVICE.subprocess, "run") as command:
+            for mutation in ("expired", "future", "bootId", "root", "dockerContext", "consumedAt"):
+                with self.subTest(mutation=mutation):
+                    planned = self.service.restart_plan()
+                    file = self.state / f"restart-plan-{planned['planId']}.json"
+                    record = SERVICE.read_private(file)
+                    if mutation == "expired":
+                        record["createdAt"] = time.time() - SERVICE.RESTART_PLAN_TTL_SECONDS - 1
+                    elif mutation == "future":
+                        record["createdAt"] = time.time() + 30
+                    else:
+                        record[mutation] = "changed"
+                    SERVICE.write_private(file, record)
+                    with self.assertRaisesRegex(ValueError, "restart plan is missing, changed"):
+                        self.service.restart_apply(planned["planId"])
+            command.assert_not_called()
+            self.assertIsNone(SERVICE.read_private(self.service.restart_job_file))
+
+    def test_restart_blocks_conflicting_jobs_maintenance_and_host_lock(self):
+        with self.restart_host(), mock.patch.object(SERVICE.subprocess, "run") as command:
+            for target, states in ((self.service.job_file, ("running", "recovering", "interrupted")), (self.service.package_job_file, ("queued", "running", "failed", "interrupted"))):
+                for state in states:
+                    with self.subTest(file=target.name, state=state):
+                        SERVICE.write_private(target, {"state": state})
+                        with self.assertRaises(ValueError):
+                            self.service.restart_plan()
+                        target.unlink()
+            SERVICE.write_private(self.service.maintenance_file, {})
+            with self.assertRaisesRegex(ValueError, "maintenance"):
+                self.service.restart_plan()
+            self.service.maintenance_file.unlink()
+            with SERVICE.HOST.host_lock(self.root):
+                with self.assertRaisesRegex(ValueError, "another Orbis host operation"):
+                    self.service.restart_plan()
+            command.assert_not_called()
+
+    def test_pending_restart_blocks_all_new_core_and_package_writes(self):
+        with self.restart_host():
+            planned = self.service.restart_plan()
+            self.service.restart_apply(planned["planId"])
+            for operation in (
+                lambda: self.service.plan(TARGET["tag"]), lambda: self.service.apply(planned["planId"]),
+                lambda: self.service.recover(planned["planId"]), lambda: self.service.package_plan(["base-files"]),
+                lambda: self.service.package_apply(planned["planId"]),
+            ):
+                with self.assertRaisesRegex(ValueError, "server is restarting"):
+                    operation()
+
+    def test_failed_restart_is_reported_and_consumed_review_cannot_be_replayed(self):
+        with self.restart_host(), mock.patch.object(SERVICE.subprocess, "run", return_value=mock.Mock(returncode=1, stderr="SECRET")):
+            planned = self.service.restart_plan()
+            _, launch = self.service.restart_apply(planned["planId"])
+            launch()
+            for _ in range(100):
+                job = self.service.restart_status()["job"]
+                if job["state"] == "failed":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(job["state"], "failed")
+            self.assertNotIn("SECRET", job["message"])
+            with self.assertRaisesRegex(ValueError, "already used"):
+                self.service.restart_apply(planned["planId"])
+
+    def test_uncertain_systemd_request_stays_blocked_instead_of_allowing_an_update(self):
+        with self.restart_host(), mock.patch.object(SERVICE.subprocess, "run", side_effect=SERVICE.subprocess.TimeoutExpired("systemctl", 10)):
+            planned = self.service.restart_plan()
+            _, launch = self.service.restart_apply(planned["planId"])
+            launch()
+            for _ in range(100):
+                job = self.service.restart_status()["job"]
+                if "could not be confirmed" in job["message"]:
+                    break
+                time.sleep(0.01)
+            self.assertEqual(job["state"], "restarting")
+            self.assertIn("could not be confirmed", job["message"])
+            with self.assertRaisesRegex(ValueError, "server is restarting"):
+                self.service.package_plan(["base-files"])
+
+    def test_worker_rechecks_locks_after_the_response_before_requesting_restart(self):
+        with self.restart_host(), mock.patch.object(SERVICE.subprocess, "run") as command:
+            planned = self.service.restart_plan()
+            _, launch = self.service.restart_apply(planned["planId"])
+            with mock.patch.object(SERVICE, "package_locks", side_effect=ValueError("package manager became active")):
+                launch()
+                for _ in range(100):
+                    if self.service.restart_status()["job"]["state"] == "failed":
+                        break
+                    time.sleep(0.01)
+            self.assertEqual(self.service.restart_status()["job"]["state"], "failed")
+            command.assert_not_called()
+
+    def test_non_systemd_host_has_an_explicit_restart_unavailable_reason(self):
+        with mock.patch.object(SERVICE.Path, "is_dir", return_value=False), mock.patch.object(SERVICE.subprocess, "run") as command:
+            self.assertEqual(self.service.restart_status(), {"available": False, "reason": "Server restart requires a systemd host.", "job": None})
+            command.assert_not_called()
+
+    def test_restart_package_lock_probe_uses_only_fixed_paths_and_rejects_active_apt(self):
+        with mock.patch.object(SERVICE.os, "open", return_value=51) as opened, mock.patch.object(SERVICE.os, "close") as closed, mock.patch.object(SERVICE.HOST.fcntl, "lockf", side_effect=BlockingIOError):
+            with self.assertRaisesRegex(ValueError, "package manager is active"):
+                with SERVICE.package_locks():
+                    self.fail("locked package manager was ignored")
+            opened.assert_called_once_with("/var/lib/dpkg/lock-frontend", SERVICE.os.O_RDWR | SERVICE.os.O_NOFOLLOW)
+            closed.assert_called_once_with(51)
 
     def test_plan_binds_target_and_update_uses_the_same_snapshot(self):
         planned = self.service.plan(TARGET["tag"])
@@ -429,6 +573,18 @@ class HostServiceTests(unittest.TestCase):
             self.assertEqual(request("POST", "/v1/packages/apply", {"planId": "fixture"})[0], 202)
         package_plan.assert_called_once_with(["base-files:arm64"])
         package_apply.assert_called_once_with("fixture")
+        launch = mock.Mock()
+        with mock.patch.object(self.service, "restart_status", return_value={"available": True, "job": None}), mock.patch.object(
+            self.service, "restart_plan", return_value={"planId": "fixture", "expiresAt": 123, "rebootRequired": False}
+        ) as restart_plan, mock.patch.object(self.service, "restart_apply", return_value=({"jobId": "fixture", "state": "restarting"}, launch)) as restart_apply:
+            self.assertTrue(request("GET", "/v1/restart")[1]["available"])
+            self.assertEqual(request("POST", "/v1/restart/plan", {"command": "shell"})[0], 409)
+            self.assertEqual(request("POST", "/v1/restart/apply", {"planId": "fixture", "args": ["--force"]})[0], 409)
+            self.assertEqual(request("POST", "/v1/restart/plan", {})[1]["planId"], "fixture")
+            self.assertEqual(request("POST", "/v1/restart/apply", {"planId": "fixture"})[0], 202)
+        restart_plan.assert_called_once_with()
+        restart_apply.assert_called_once_with("fixture")
+        launch.assert_called_once_with()
 
 
 if __name__ == "__main__":

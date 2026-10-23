@@ -107,6 +107,12 @@ def require_installed(root: Path, context: str) -> None:
 
 
 def job_identity() -> tuple[str, str] | None:
+    restart_job = SERVICE.read_private(STATE_DIR / "restart-job.json")
+    if restart_job and restart_job.get("state") == "restarting":
+        if not isinstance(restart_job.get("bootId"), str):
+            raise ValueError("server restart job is invalid")
+        if restart_job["bootId"] == SERVICE.boot_id():
+            raise ValueError("wait for the server restart before upgrading the helper")
     package_job = SERVICE.read_private(STATE_DIR / "package-job.json")
     if package_job and package_job.get("state") in {"queued", "running", "failed", "interrupted"}:
         raise ValueError("resolve the host package transaction before upgrading the helper")

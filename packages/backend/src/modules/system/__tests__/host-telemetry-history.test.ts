@@ -7,6 +7,7 @@ import { mock } from 'vitest-mock-extended';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { HostDeviceHistoryService } from '../host-device-history.service';
+import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { readHostSocket } from '../host-socket';
 import { HostTelemetryService } from '../host-telemetry.service';
 
@@ -83,7 +84,9 @@ describe('host cache timing with autonomous history', () => {
     const config = mock<ConfigurationService>();
     config.get.calledWith('directories').mockReturnValue({ dataDir: directory } as never);
     const telemetry = new HostTelemetryService();
-    history = new HostDeviceHistoryService(telemetry, config, mock<LoggerService>());
+    const activity = new MonitoringActivityService();
+    activity.connect();
+    history = new HostDeviceHistoryService(telemetry, config, mock<LoggerService>(), activity);
 
     await history.onModuleInit();
     await vi.advanceTimersByTimeAsync(130000);

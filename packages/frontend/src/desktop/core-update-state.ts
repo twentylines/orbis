@@ -33,6 +33,10 @@ const releaseTag = /^v\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?$/;
 export const coreJobIsActive = (job?: CoreUpdateJob | null) => ['queued', 'running', 'recovering'].includes(job?.state ?? '');
 export const coreWatchIsActive = (watch: CoreUpdateWatch | null) => Boolean(watch && !watch.refreshIssued && watch.phase !== 'failed');
 export const validCoreUpdate = (id: string, targetTag: string) => jobId.test(id) && releaseTag.test(targetTag);
+export const coreUpdateTitle = (phase: CoreUpdateWatch['phase']) =>
+  phase === 'offline' ? 'Restarting Orbis' : phase === 'checking' || phase === 'ready' ? 'Checking Orbis' : 'Updating Orbis';
+
+const restartingMessage = 'Orbis is restarting. Reconnecting automatically.';
 
 export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpdateEvent): CoreUpdateWatch | null {
   if (event.type === 'accepted') {
@@ -41,9 +45,7 @@ export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpda
     return { id: event.id, targetTag: event.targetTag, phase: 'updating', message: 'Starting the Orbis update.', refreshIssued: false };
   }
   if (event.type === 'unavailable') {
-    return coreWatchIsActive(watch) && watch
-      ? { ...watch, phase: 'offline', message: 'Update status is unavailable. Reconnecting to the server.' }
-      : watch;
+    return coreWatchIsActive(watch) && watch ? { ...watch, phase: 'offline', message: restartingMessage } : watch;
   }
   const { status, buildTag } = event;
   const job = status.job;
@@ -53,13 +55,13 @@ export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpda
     if (next?.id !== job.id) next = advanceCoreUpdate(null, { type: 'accepted', id: job.id, targetTag: job.targetTag });
   }
   if (!next || next.refreshIssued || next.phase === 'failed') return next;
-  if (!status.available) return { ...next, phase: 'offline', message: status.reason || 'Update status is unavailable. Checking again.' };
+  if (!status.available) return { ...next, phase: 'offline', message: restartingMessage };
   if (job?.id !== next.id) return next;
   if (['failed', 'interrupted', 'rolled-back'].includes(job.state)) {
     return { ...next, phase: 'failed', message: job.message || 'The update needs review in Updates.' };
   }
   if (!status.available || status.coreState !== 'running' || status.coreHealth !== 'healthy') {
-    return { ...next, phase: 'offline', message: job.message || 'Orbis is restarting. Waiting for the server.' };
+    return { ...next, phase: 'offline', message: restartingMessage };
   }
   if (job.state === 'complete') {
     const healthyTarget =

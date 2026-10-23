@@ -49,6 +49,9 @@ describe('host update authorization', () => {
     hostUpdates.plan.mockReset();
     hostUpdates.apply.mockReset();
     hostUpdates.recover.mockReset();
+    hostUpdates.restartStatus.mockReset();
+    hostUpdates.restartPlan.mockReset();
+    hostUpdates.restartApply.mockReset();
   });
 
   it('requires a session for status and rejects a cross-origin update request', async () => {
@@ -96,6 +99,47 @@ describe('host update authorization', () => {
     expect((await base.get('/host-updates/packages').set(headers)).body.packageCount).toBe(1);
     expect((await base.get('/host-updates/packages/changelog?name=base-files%3Aarm64').set(headers)).body.available).toBe(true);
     expect(hostUpdates.packageChangelog).toHaveBeenCalledWith('base-files:arm64');
+  });
+
+  it('limits restart review and apply to exact same-origin operator session requests', async () => {
+    const base = request(app.getHttpServer());
+    const planId = '00000000-0000-4000-8000-000000000000';
+    hostUpdates.restartStatus.mockResolvedValue({ available: true, job: null });
+    hostUpdates.restartPlan.mockResolvedValue({ planId, expiresAt: 123, rebootRequired: true });
+    hostUpdates.restartApply.mockResolvedValue({ jobId: planId, state: 'restarting' });
+    for (const authorization of [undefined, 'Bearer guest-session', 'Bearer fixture-cli']) {
+      const headers = authorization ? { Authorization: authorization } : {};
+      const denied = authorization ? 403 : 401;
+      expect((await base.get('/host-updates/restart').set(headers)).status).toBe(denied);
+      expect((await base.post('/host-updates/restart/plan').set(headers).send({})).status).toBe(denied);
+      expect((await base.post('/host-updates/restart/apply').set(headers).send({ planId })).status).toBe(denied);
+    }
+    const headers = { Authorization: 'Bearer fixture-session', Host: 'orbis.example', Origin: 'http://orbis.example' };
+    expect(
+      (
+        await base
+          .post('/host-updates/restart/plan')
+          .set({ ...headers, Origin: 'https://other.example' })
+          .send({})
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await base
+          .post('/host-updates/restart/apply')
+          .set({ ...headers, Origin: 'https://other.example' })
+          .send({ planId })
+      ).status,
+    ).toBe(403);
+    expect((await base.post('/host-updates/restart/plan').set(headers).send({ command: 'reboot' })).status).toBe(400);
+    expect((await base.post('/host-updates/restart/apply').set(headers).send({ planId, force: true })).status).toBe(400);
+    expect(hostUpdates.restartPlan).not.toHaveBeenCalled();
+    expect(hostUpdates.restartApply).not.toHaveBeenCalled();
+    expect((await base.get('/host-updates/restart').set(headers)).body).toEqual({ available: true, job: null });
+    expect((await base.post('/host-updates/restart/plan').set(headers).send({})).status).toBe(200);
+    expect((await base.post('/host-updates/restart/apply').set(headers).send({ planId })).status).toBe(202);
+    expect(hostUpdates.restartPlan).toHaveBeenCalledOnce();
+    expect(hostUpdates.restartApply).toHaveBeenCalledExactlyOnceWith(planId);
   });
 
   it('requires a same-origin operator request for a reviewed package apply', async () => {

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, type CSSProperties, type PropsWithChildren, type ReactNode } from 'react';
 import { revealPageFocus } from './window-viewport';
 import { prefersReducedMotion } from './motion-setting';
-import { sectionMotionTiming } from './section-motion-geometry';
+import { sectionMotionEasing, sectionMotionTiming, visibleSectionBounds } from './section-motion-geometry';
 import { useDesktopPreferences } from './preferences';
 import './route-surface.css';
 
@@ -34,7 +34,7 @@ export function RouteSurface({
       view.dataset.cardRevealing = 'true';
       const animation = view.animate([{ height: `${from}px` }, { height: `${height}px` }], {
         duration,
-        easing: 'cubic-bezier(.22, 1, .36, 1)',
+        easing: sectionMotionEasing,
       });
       animation.id = 'orbis-card-reveal';
       reveal.current = { animation, target: height };
@@ -61,6 +61,7 @@ export function RouteSurface({
       const previous = waiting.current ?? measured.current;
       waiting.current = null;
       measured.current = { key: sizeKey, height };
+      if (view.dataset.sectionPhase === 'card') return;
       const underway = reveal.current;
       if (underway && ['running', 'paused'].includes(underway.animation.playState)) {
         if (Math.abs(underway.target - height) > 1) {
@@ -80,7 +81,9 @@ export function RouteSurface({
             animation.effect.getKeyframes().some((frame) => frame.height),
         );
       if (moving) return;
-      animateTo(previous.height, height);
+      const visible = (height: number) =>
+        visibleSectionBounds({ left: 0, top: view.getBoundingClientRect().top, width: 0, height }, innerHeight).height;
+      animateTo(visible(previous.height), visible(height));
     };
     let resizeFrame = 0;
     const observer = new ResizeObserver(() => {
@@ -91,7 +94,10 @@ export function RouteSurface({
         });
     });
     for (const child of view.children) if (child.classList.contains('desktop-window-content') || child.tagName === 'HEADER') observer.observe(child);
-    measure();
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = 0;
+      measure();
+    });
     return () => {
       observer.disconnect();
       cancelAnimationFrame(resizeFrame);

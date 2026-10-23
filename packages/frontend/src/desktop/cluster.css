@@ -1,11 +1,10 @@
 .cluster-rack,
 .cluster-selector {
-  --cluster-base: #15252c;
-  --cluster-machine: color-mix(in srgb, var(--desktop-preset-tint) 16%, var(--cluster-base));
-  --cluster-side: color-mix(in srgb, var(--desktop-preset-tint) 9%, #0d1a20);
-  --cluster-top: color-mix(in srgb, var(--desktop-preset-tint) 28%, #64777e);
-  --cluster-ink: #f0f6f4;
-  --cluster-muted: #c4d3d0;
+  --cluster-machine: color-mix(in srgb, var(--desktop-preset-tint) 34%, #202127);
+  --cluster-side: color-mix(in srgb, var(--desktop-preset-tint) 18%, #101116);
+  --cluster-top: color-mix(in srgb, var(--desktop-preset-tint) 50%, #69666f);
+  --cluster-ink: #f7f4f7;
+  --cluster-muted: color-mix(in srgb, var(--desktop-preset-tint) 12%, #dedbdf);
 }
 .cluster-rack {
   display: grid;
@@ -314,12 +313,11 @@
   z-index: 2101;
 }
 .cluster-selector {
-  --cluster-base: #e0e9e3;
-  --cluster-machine: color-mix(in srgb, var(--desktop-preset-tint) 24%, #edf2ed);
-  --cluster-side: color-mix(in srgb, var(--desktop-preset-tint) 35%, #9eb4aa);
-  --cluster-top: color-mix(in srgb, var(--desktop-preset-tint) 28%, #dce7dd);
-  --cluster-muted: #425b53;
-  --desktop-chrome-ink: #1c3932;
+  --cluster-machine: color-mix(in srgb, var(--desktop-preset-tint) 24%, #f1eef2);
+  --cluster-side: color-mix(in srgb, var(--desktop-preset-tint) 35%, #aaa6ae);
+  --cluster-top: color-mix(in srgb, var(--desktop-preset-tint) 28%, #dedbe2);
+  --cluster-ink: #231f27;
+  --cluster-muted: #514951;
   position: fixed;
   z-index: 81;
   top: 50%;
@@ -373,9 +371,6 @@
 .cluster-selector :focus-visible {
   outline: 3px solid #e1c49c;
   outline-offset: 4px;
-}
-.cluster-selector .cluster-module {
-  color: var(--desktop-chrome-ink);
 }
 .cluster-selector .cluster-deck-help {
   color: #d4e2dc;

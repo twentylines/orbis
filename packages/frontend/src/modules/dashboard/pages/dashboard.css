@@ -1340,6 +1340,13 @@
 .workspace-auxiliary > .workspace-widget {
   display: flex;
 }
+.workspace-auxiliary > .workspace-widget > section {
+  max-height: var(--workspace-auxiliary-max-height, none);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--desktop-line) transparent;
+  scroll-padding-block: 12px;
+}
 :is(.workspace-custom-row, .workspace-auxiliary) > .workspace-widget > section {
   flex: 1;
   min-width: 0;

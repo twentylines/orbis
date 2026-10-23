@@ -9,6 +9,7 @@ const MAX_RESPONSE_BYTES = 64 * 1024;
 
 export type HostUpdateStatus = {
   available: boolean;
+  capabilities?: string[];
   enrolled?: boolean;
   currentTag?: string | null;
   currentDigest?: string | null;
@@ -90,6 +91,21 @@ export type HostPackageJobStatus = {
   };
 };
 
+export type HostRestartStatus = {
+  available: boolean;
+  reason?: string;
+  rebootRequired?: boolean;
+  job: null | {
+    id: string;
+    state: 'restarting' | 'complete' | 'failed';
+    createdAt: number;
+    finishedAt?: number;
+    message: string;
+  };
+};
+
+export type HostRestartPlan = { planId: string; expiresAt: number; rebootRequired: boolean };
+
 @Injectable()
 export class HostUpdatesService {
   private readonly socketPath = process.env.ORBIS_HOST_SOCKET;
@@ -111,6 +127,9 @@ export class HostUpdatesService {
       | '/v1/packages/job'
       | '/v1/packages/plan'
       | '/v1/packages/apply'
+      | '/v1/restart'
+      | '/v1/restart/plan'
+      | '/v1/restart/apply'
       | `/v1/packages/changelog?name=${string}`,
     body?: object,
   ): Promise<T> {
@@ -160,6 +179,9 @@ export class HostUpdatesService {
       throw new ServiceUnavailableException('The Orbis host service is unavailable.');
     });
     if (response.status < 200 || response.status >= 300) {
+      if (response.status === 404 && endpoint.startsWith('/v1/restart')) {
+        throw new ServiceUnavailableException('Update the Orbis host service to enable server restarts.');
+      }
       const message =
         typeof response.data === 'object' && response.data !== null && 'error' in response.data && typeof response.data.error === 'string'
           ? response.data.error
@@ -183,6 +205,29 @@ export class HostUpdatesService {
 
   packages(): Promise<HostPackageInventory> {
     return this.call<HostPackageInventory>('/v1/packages');
+  }
+
+  async restartStatus(): Promise<HostRestartStatus> {
+    try {
+      return await this.call<HostRestartStatus>('/v1/restart');
+    } catch (error) {
+      return {
+        available: false,
+        reason: error instanceof HttpException ? error.message : 'Server restart status is unavailable.',
+        job: null,
+      };
+    }
+  }
+
+  restartPlan(): Promise<HostRestartPlan> {
+    return this.call<HostRestartPlan>('/v1/restart/plan', {});
+  }
+
+  restartApply(planId: unknown): Promise<{ jobId: string; state: 'restarting' }> {
+    if (typeof planId !== 'string' || !PLAN_ID.test(planId)) {
+      throw new BadRequestException('Review the server restart before confirming.');
+    }
+    return this.call('/v1/restart/apply', { planId });
   }
 
   packageChangelog(name: unknown): Promise<HostPackageChangelog> {

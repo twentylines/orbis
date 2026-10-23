@@ -18,6 +18,29 @@ export class HostUpdatesController {
     return this.hostUpdates.packages();
   }
 
+  @Get('restart')
+  restartStatus() {
+    return this.hostUpdates.restartStatus();
+  }
+
+  @Post('restart/plan')
+  @HttpCode(200)
+  restartPlan(@Body() body: Record<string, unknown>) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 0) {
+      throw new BadRequestException('Review a server restart without additional options.');
+    }
+    return this.hostUpdates.restartPlan();
+  }
+
+  @Post('restart/apply')
+  @HttpCode(202)
+  restartApply(@Body() body: Record<string, unknown>) {
+    if (!body || typeof body !== 'object' || Object.keys(body).length !== 1 || !('planId' in body)) {
+      throw new BadRequestException('Confirm one reviewed server restart.');
+    }
+    return this.hostUpdates.restartApply(body.planId);
+  }
+
   @Get('packages/changelog')
   packageChangelog(@Query('name') name: string) {
     return this.hostUpdates.packageChangelog(name);

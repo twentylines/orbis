@@ -4,18 +4,20 @@ import { type CallHandler, type ExecutionContext, type INestApplication, type Ne
 import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ArkValidationPipe } from 'nestjs-arktype';
-import { EMPTY, of } from 'rxjs';
+import { EMPTY, of, Subject } from 'rxjs';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { LoggerService } from '../logger/logger.service';
 import { SSEController } from './sse.controller';
 import { SSEService } from './sse.service';
+import { MonitoringActivityService } from '../monitoring/monitoring-activity.service';
 
 describe('SSEController log query validation', () => {
   let app: INestApplication;
   const service = mock<SSEService>();
   const preferences = mock<DesktopPreferencesService>();
+  const activity = new MonitoringActivityService();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -28,6 +30,7 @@ describe('SSEController log query validation', () => {
         { provide: LoggerService, useValue: mock<LoggerService>() },
         { provide: SSEService, useValue: service },
         { provide: DesktopPreferencesService, useValue: preferences },
+        { provide: MonitoringActivityService, useValue: activity },
       ],
     }).compile();
 
@@ -63,6 +66,23 @@ describe('SSEController log query validation', () => {
     expect(response.text).toContain('data: {"changed":true}');
     expect(response.text).toContain('"event":"status_change"');
     expect(response.text).not.toContain('userId');
+  });
+
+  it('counts subscribed authenticated app streams and releases demand on unsubscribe', () => {
+    const changes: boolean[] = [];
+    const stop = activity.subscribe((active) => changes.push(active));
+    service.getTopicObservable.mockReturnValue(new Subject());
+    const controller = new SSEController(service, preferences, activity);
+    const stream = controller.appEvents({ user: { id: 1 } } as never);
+    expect(changes).toEqual([false]);
+    const first = stream.subscribe();
+    const second = stream.subscribe();
+    expect(changes).toEqual([false, true]);
+    first.unsubscribe();
+    expect(changes).toEqual([false, true]);
+    second.unsubscribe();
+    expect(changes).toEqual([false, true, false]);
+    stop();
   });
 
   it.each(['/sse/app', '/sse/app-logs?appUrn=media:test', '/sse/runtipi-logs'])('requires authentication before accessing %s', async (path) => {

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
+import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { HostTelemetryService } from '../host-telemetry.service';
 import { HostDeviceHistoryService } from '../host-device-history.service';
 
@@ -83,11 +84,12 @@ describe('autonomous private host device history service', () => {
   const logger = mock<LoggerService>();
   let directory: string;
   let service: HostDeviceHistoryService;
+  let activity: MonitoringActivityService;
   let services: Set<HostDeviceHistoryService>;
   let releases: (() => void)[];
   const file = () => path.join(directory, 'state', 'orbis-host-history', 'devices-v1.jsonl');
   const create = () => {
-    const result = new HostDeviceHistoryService(host, config, logger);
+    const result = new HostDeviceHistoryService(host, config, logger, activity);
     services.add(result);
     return result;
   };
@@ -113,28 +115,36 @@ describe('autonomous private host device history service', () => {
     directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-host-history-service-'));
     config.get.calledWith('directories').mockReturnValue({ dataDir: directory } as never);
     services = new Set();
+    activity = new MonitoringActivityService();
     releases = [];
     service = create();
   });
   afterEach(async () => {
     for (const release of releases) release();
     for (const instance of services) await instance.onModuleDestroy();
+    activity.onModuleDestroy();
     vi.restoreAllMocks();
     await fs.rm(directory, { recursive: true, force: true });
     vi.useRealTimers();
   });
 
-  it('collects from one server timer without browser readers and stops cleanly', async () => {
+  it('collects only with connected clients and stops cleanly after they leave', async () => {
     host.read.mockImplementation(async () => reading());
     await service.onModuleInit();
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(host.read).not.toHaveBeenCalled();
+    const disconnect = activity.connect();
     await service.collect();
     await vi.advanceTimersByTimeAsync(30000);
     expect(host.read).toHaveBeenCalledTimes(4);
     const history = await service.read('5m', selected);
     expect(history.points).toHaveLength(4);
     expect(history.collectorAvailable).toBe(true);
-    expect(history.points.map((point) => point.at)).toEqual([2, 12, 22, 32].map((seconds) => new Date(origin + seconds * 1000).toISOString()));
+    expect(history.points.map((point) => point.at)).toEqual([32, 42, 52, 62].map((seconds) => new Date(origin + seconds * 1000).toISOString()));
     await Promise.all(Array.from({ length: 20 }, () => service.read('1h', selected)));
+    expect(host.read).toHaveBeenCalledTimes(4);
+    disconnect();
+    await vi.advanceTimersByTimeAsync(20000);
     expect(host.read).toHaveBeenCalledTimes(4);
     await close();
     await vi.advanceTimersByTimeAsync(20000);
@@ -161,6 +171,17 @@ describe('autonomous private host device history service', () => {
     expect((await service.read('1h', selected)).points[0]?.samples).toBe(1);
     await collect(22);
     expect((await service.read('5m', selected)).points).toHaveLength(2);
+  });
+
+  it('checkpoints the current device readings on disconnect without another host sample', async () => {
+    host.read.mockImplementation(async () => reading());
+    await service.onModuleInit();
+    const disconnect = activity.connect();
+    await service.collect();
+    disconnect();
+    await until(async () => (await fs.stat(file()).catch(() => null))?.size !== undefined);
+    expect((await create().read('5m', selected)).points).toMatchObject([{ samples: 1 }]);
+    expect(host.read).toHaveBeenCalledOnce();
   });
 
   it('does not turn stale, old, future, unavailable or rejected samples into fresh points', async () => {

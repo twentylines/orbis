@@ -53,7 +53,7 @@ export function AppearanceRange({
     <div
       className="appearance-range"
       data-dragging={dragging || undefined}
-      style={{ '--range-fill': `${((draft - min) / (max - min)) * 100}%` } as CSSProperties}
+      style={{ '--range-position': (draft - min) / (max - min) } as CSSProperties}
     >
       <div>
         <label htmlFor={id}>{label}</label>
@@ -62,36 +62,42 @@ export function AppearanceRange({
           {unit}
         </output>
       </div>
-      <input
-        id={id}
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={draft}
-        disabled={disabled}
-        aria-valuetext={`${draft}${unit}`}
-        onPointerDown={() => setDragging(true)}
-        onPointerUp={commit}
-        onPointerCancel={commit}
-        onLostPointerCapture={commit}
-        onKeyUp={commit}
-        onBlur={commit}
-        onChange={(event) => {
-          const next = Number(event.target.value);
-          current.current = next;
-          setDraft(next);
-          if (!onPreview) {
-            onChange(next);
-            return;
-          }
-          if (!frame.current)
-            frame.current = requestAnimationFrame(() => {
-              frame.current = 0;
-              onPreview(current.current);
-            });
-        }}
-      />
+      <span className="appearance-range-slider">
+        <span className="appearance-range-track" aria-hidden="true">
+          <span className="appearance-range-fill" />
+        </span>
+        <span className="appearance-range-thumb" aria-hidden="true" />
+        <input
+          id={id}
+          type="range"
+          min={min}
+          max={max}
+          step={1}
+          value={draft}
+          disabled={disabled}
+          aria-valuetext={`${draft}${unit}`}
+          onPointerDown={() => setDragging(true)}
+          onPointerUp={commit}
+          onPointerCancel={commit}
+          onLostPointerCapture={commit}
+          onKeyUp={commit}
+          onBlur={commit}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            current.current = next;
+            setDraft(next);
+            if (!onPreview) {
+              onChange(next);
+              return;
+            }
+            if (!frame.current)
+              frame.current = requestAnimationFrame(() => {
+                frame.current = 0;
+                onPreview(current.current);
+              });
+          }}
+        />
+      </span>
     </div>
   );
 }

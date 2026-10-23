@@ -167,12 +167,16 @@
 .monitor-summary-stat .workspace-meter {
   margin-top: auto;
 }
-.monitor-summary-network .monitor-summary-value {
+.monitor-summary-network .monitor-summary-rate {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
   font-size: clamp(1.125rem, 1.7vw, 1.625rem);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  line-height: 1.25;
 }
 .monitor-summary-network .monitor-summary-interface {
   margin-top: auto;

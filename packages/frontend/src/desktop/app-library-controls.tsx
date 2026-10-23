@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import type { LibraryFilters, LibrarySort } from './app-library';
+import { IconChevronDown } from '@tabler/icons-react';
 import './app-library.css';
 
 export function useLibraryFilters() {
@@ -44,25 +45,31 @@ export function AppLibraryControls({
       </label>
       <label>
         <span>Category</span>
-        <select value={filters.category} onChange={(event) => change('category', event.target.value)}>
-          <option value="">All categories</option>
-          {[...new Set([...categories, 'uncategorized', ...(filters.category ? [filters.category] : [])])].sort().map((category) => (
-            <option key={category} value={category}>
-              {category === 'uncategorized'
-                ? 'Uncategorized'
-                : t(`APP_CATEGORY_${category.toUpperCase()}`, { defaultValue: category.replaceAll('-', ' ') })}
-            </option>
-          ))}
-        </select>
+        <span className="app-library-select">
+          <select value={filters.category} onChange={(event) => change('category', event.target.value)}>
+            <option value="">All categories</option>
+            {[...new Set([...categories, 'uncategorized', ...(filters.category ? [filters.category] : [])])].sort().map((category) => (
+              <option key={category} value={category}>
+                {category === 'uncategorized'
+                  ? 'Uncategorized'
+                  : t(`APP_CATEGORY_${category.toUpperCase()}`, { defaultValue: category.replaceAll('-', ' ') })}
+              </option>
+            ))}
+          </select>
+          <IconChevronDown size={18} aria-hidden="true" />
+        </span>
       </label>
       <label>
         <span>Sort by</span>
-        <select value={filters.sort} onChange={(event) => change('sort', event.target.value as LibrarySort)}>
-          <option value="az">A–Z</option>
-          <option value="za">Z–A</option>
-          <option value="opened">Last opened</option>
-          <option value="installed">Newest first</option>
-        </select>
+        <span className="app-library-select">
+          <select value={filters.sort} onChange={(event) => change('sort', event.target.value as LibrarySort)}>
+            <option value="az">A–Z</option>
+            <option value="za">Z–A</option>
+            <option value="opened">Last opened</option>
+            <option value="installed">Newest first</option>
+          </select>
+          <IconChevronDown size={18} aria-hidden="true" />
+        </span>
       </label>
     </search>
   );

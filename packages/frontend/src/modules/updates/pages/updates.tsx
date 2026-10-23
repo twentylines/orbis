@@ -5,7 +5,7 @@ import { Markdown } from '@/components/markdown/markdown';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
 import { IconArrowRight, IconBrandGithub, IconPackage, IconServerCog } from '@tabler/icons-react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -14,7 +14,14 @@ import { useCluster } from '@/desktop/cluster';
 import { ClusterUpdates } from '@/desktop/cluster-updates';
 import { UpdateAllButton } from '@/modules/app/components/update-all-button/update-all-button';
 import { UpdateTerminal } from './update-terminal';
-import { rememberAcceptedCoreUpdate, prepareDesktopForCoreUpdate } from '@/desktop/host-update-watch';
+import {
+  rememberAcceptedCoreUpdate,
+  prepareDesktopForCoreUpdate,
+  useHostUpdateWatch,
+  serverRestartQueryKey,
+  type ServerRestartStatus,
+} from '@/desktop/host-update-watch';
+import { coreWatchIsActive } from '@/desktop/core-update-state';
 import { installedOrbisBuildOptions, orbisReleasesOptions, newerOrbisRelease } from '@/desktop/orbis-release';
 
 type HostJob = { id: string; state: string; targetTag: string; startedAt: number; finishedAt?: number; message?: string; phase?: string | null };
@@ -122,6 +129,34 @@ function LocalUpdates() {
   const lastEntry = useRef(entry);
   const visible = useWindowVisible();
   const { user } = useAppContext();
+  const { watch, restart, restartError } = useHostUpdateWatch();
+  const queryClient = useQueryClient();
+  const restarting = coreWatchIsActive(watch) && watch?.phase === 'offline';
+  const [restartPlan, setRestartPlan] = useState<{ planId: string; expiresAt: number; rebootRequired: boolean } | null>(null);
+  const reviewRestart = useMutation({
+    mutationFn: () => hostRequest<NonNullable<typeof restartPlan>>('restart/plan', {}),
+    onSuccess: setRestartPlan,
+  });
+  const applyRestart = useMutation({
+    mutationFn: (planId: string) => hostRequest<{ jobId: string; state: 'restarting' }>('restart/apply', { planId }),
+    onSuccess: (result) => {
+      setRestartPlan(null);
+      queryClient.setQueryData<ServerRestartStatus>(serverRestartQueryKey, {
+        available: true,
+        job: {
+          id: result.jobId,
+          state: 'restarting',
+          createdAt: Date.now() / 1000,
+          message: 'The server is restarting. Reconnecting automatically.',
+        },
+      });
+      void queryClient.invalidateQueries({ queryKey: serverRestartQueryKey });
+    },
+    onError: () => {
+      setRestartPlan(null);
+      void queryClient.invalidateQueries({ queryKey: serverRestartQueryKey });
+    },
+  });
   const [coreRequestStage, setCoreRequestStage] = useState<'checking' | 'starting' | null>(null);
   const [packageSearch, setPackageSearch] = useState('');
   const [showAllPackages, setShowAllPackages] = useState(false);
@@ -384,10 +419,14 @@ function LocalUpdates() {
           {user?.operator !== true ? <p className="desktop-update-note">Core updates require an operator account.</p> : null}
           {user?.operator === true && host.isPending ? <p className="desktop-update-note">Checking the local host service…</p> : null}
           {host.isError ? (
-            <output className="desktop-update-note">The server may be restarting. Checking the host service again shortly.</output>
+            <output className="desktop-update-note">
+              {restarting ? watch.message : 'The host service could not be reached. Checking again shortly.'}
+            </output>
           ) : null}
           {host.data && !host.data.available ? (
-            <p className="desktop-update-note">{host.data.reason || 'Host service disconnected. Connect it before updating Orbis.'}</p>
+            <p className="desktop-update-note">
+              {restarting ? watch.message : host.data.reason || 'Host service disconnected. Connect it before updating Orbis.'}
+            </p>
           ) : null}
           {host.data?.available && !host.data.enrolled ? (
             <p className="desktop-update-note">This installation is not enrolled for host updates.</p>
@@ -437,7 +476,59 @@ function LocalUpdates() {
               <h2 id="host-updates-title">System updates</h2>
               <p>Install operating system updates and follow the live terminal output.</p>
             </div>
+            {user.operator ? (
+              <button
+                type="button"
+                className="desktop-update-action"
+                disabled={
+                  !restart?.available ||
+                  restartError ||
+                  reviewRestart.isPending ||
+                  applyRestart.isPending ||
+                  restart.job?.state === 'restarting' ||
+                  packageJobBusy ||
+                  jobBusy ||
+                  coreWatchIsActive(watch)
+                }
+                onClick={() => reviewRestart.mutate()}
+              >
+                {reviewRestart.isPending ? 'Reviewing restart…' : 'Restart server'}
+              </button>
+            ) : null}
           </div>
+          {user.operator && restart?.available === false ? <p className="desktop-update-note">{restart.reason}</p> : null}
+          {restartError ? <p role="alert">Restart status could not be checked. Reconnecting to the server.</p> : null}
+          {restart?.job?.state === 'failed' ? <p role="alert">{restart.job.message}</p> : null}
+          {reviewRestart.isError || applyRestart.isError ? <p role="alert">{reviewRestart.error?.message || applyRestart.error?.message}</p> : null}
+          <Dialog
+            open={Boolean(restartPlan)}
+            onOpenChange={(open) => {
+              if (!open && !applyRestart.isPending) setRestartPlan(null);
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Restart this server?</DialogTitle>
+                <DialogDescription>
+                  Applications will stop while the server restarts. Orbis reconnects automatically when it is ready.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="desktop-update-plan-actions">
+                <button type="button" disabled={applyRestart.isPending} onClick={() => setRestartPlan(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={applyRestart.isPending || !restartPlan}
+                  onClick={() => {
+                    if (restartPlan) applyRestart.mutate(restartPlan.planId);
+                  }}
+                >
+                  {applyRestart.isPending ? 'Restarting…' : 'Restart server'}
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           {user?.operator !== true ? <p>Host package details require an operator account.</p> : null}
           {user?.operator === true && systemPackages.isPending ? <p>Reading the host package cache…</p> : null}
           {systemPackages.isError ? <p role="alert">Host package details are unavailable. The installed host helper may need an upgrade.</p> : null}

@@ -34,9 +34,10 @@ describe('history section direction', () => {
   test('normal navigation follows section order', () => {
     expect(sectionDirection(5, 0, 'PUSH', 3, 4)).toBe(-1);
   });
-  test('the card reaches the full content height, including content below the viewport', () => {
-    expect(sectionSurfaceFrames({ left: 24, top: 112, width: 900, height: 480 }, { left: 24, top: 112, width: 900, height: 2400 })[1]).toEqual({
-      height: '2400px',
+  test('a tall page grows through its visible area before returning to natural document height', () => {
+    const target = visibleSectionBounds({ left: 24, top: 112, width: 900, height: 9600 }, 1100);
+    expect(sectionSurfaceFrames({ left: 24, top: 112, width: 900, height: 480 }, target)[1]).toEqual({
+      height: '988px',
     });
   });
 });

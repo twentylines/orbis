@@ -1,5 +1,5 @@
 import type { TaskRecord } from '@runtipi/common/schemas';
-import { coreWatchIsActive, type CoreUpdateWatch } from './core-update-state';
+import { coreUpdateTitle, coreWatchIsActive, type CoreUpdateWatch } from './core-update-state';
 
 export type PackageActivityJob = { id: string; state: string; operationCount?: number; message?: string };
 export type DesktopActivityItem = {
@@ -56,8 +56,8 @@ export function desktopActivity(
     const appCount = new Set(group.map((task) => task.appUrn)).size;
     const queued = group.every((task) => task.status === 'queued');
     summary = {
-      title: appCount === 1 ? `${verbs[latest.action]} ${name(latest)}` : `${verbs[latest.action]} ${appCount} apps`,
-      detail: queued ? 'Queued' : group.length === 1 ? 'In progress' : `${group.length} operations`,
+      title: `${verbs[latest.action]}${queued ? ' · Queued' : ''}`,
+      detail: appCount === 1 ? name(latest) : `${appCount} apps${group.length > appCount ? ` · ${group.length} operations` : ''}`,
       appUrn: appCount === 1 ? latest.appUrn : undefined,
       kind: 'app',
       count: items.length,
@@ -76,7 +76,7 @@ export function desktopActivity(
     summary = { title, detail: packageJob.state === 'queued' ? 'Queued' : 'Installing system updates', kind: 'packages', count: items.length };
   }
   if (watch && coreWatchIsActive(watch)) {
-    const title = watch.phase === 'offline' ? 'Orbis is restarting' : watch.phase === 'checking' ? 'Checking Orbis' : 'Updating Orbis';
+    const title = coreUpdateTitle(watch.phase);
     items.unshift({ id: watch.id, kind: 'core', title, detail: watch.message, state: watch.phase });
     summary = { title, detail: watch.message, kind: 'core', count: items.length };
   }

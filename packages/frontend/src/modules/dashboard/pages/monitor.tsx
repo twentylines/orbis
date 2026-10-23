@@ -179,13 +179,13 @@ function ServerMonitor() {
                 <IconNetwork size={18} aria-hidden="true" />
                 {network?.label ?? 'Network'}
               </dt>
-              <dd className="monitor-summary-value">
+              <dd className="monitor-summary-rate">
                 <IconArrowDown size={16} aria-hidden="true" />
                 <span className="visually-hidden">Download </span>
                 {rate(network?.rxBytesPerSecond)}
               </dd>
-              <dd className="monitor-summary-detail">
-                <IconArrowUp size={14} aria-hidden="true" />
+              <dd className="monitor-summary-rate">
+                <IconArrowUp size={16} aria-hidden="true" />
                 <span className="visually-hidden">Upload </span>
                 {rate(network?.txBytesPerSecond)}
               </dd>
@@ -220,7 +220,7 @@ function ServerMonitor() {
         <div className="monitor-rack-panel">
           <span className="monitor-rack-label">
             <IconActivity size={15} aria-hidden="true" />
-            Server hardware
+            Server selector
           </span>
           <ServerRack cpu={sample?.cpu.totalPercent ?? null} memory={memoryPercent} online={telemetry.isPending ? undefined : !telemetry.isError} />
         </div>
@@ -259,8 +259,8 @@ function ServerMonitor() {
             <details className="monitor-history-info">
               <summary>Recorded on this server</summary>
               <p>
-                Ten-second collection continues when this view is closed. Minute summaries are saved for seven days; longer ranges show sample
-                averages and peaks. Gaps mean no reading was recorded.
+                Readings are collected every ten seconds while Orbis is in use. Minute summaries are saved for seven days; longer ranges show sample
+                averages and peaks. Idle periods appear as gaps.
               </p>
               {history.data?.persistedThrough ? (
                 <p>Saved through {new Date(history.data.persistedThrough).toLocaleString()}.</p>

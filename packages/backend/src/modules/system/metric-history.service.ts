@@ -5,6 +5,7 @@ import { Injectable, type OnModuleInit, type OnModuleDestroy } from '@nestjs/com
 import { metricHistoryRanges, type MetricHistory, type MetricHistoryRange } from '@runtipi/common/schemas';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
+import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { SystemService } from './system.service';
 import { installationHeld } from '@/common/installation-mode';
 import { decodeBucket, encodeBucket, historyPoint, mergeBuckets, metricSample, type MetricBucket } from './metric-history.model';
@@ -19,6 +20,7 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
   private recent: MetricBucket[] = [];
   private restoredPartial?: MetricBucket;
   private timer?: ReturnType<typeof setInterval>;
+  private unsubscribe?: () => void;
   private loading?: Promise<void>;
   private pending?: Promise<void>;
   private writes: Promise<void> = Promise.resolve();
@@ -36,24 +38,38 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
     private readonly system: SystemService,
     private readonly config: ConfigurationService,
     private readonly logger: LoggerService,
+    private readonly activity: MonitoringActivityService,
   ) {}
 
   async onModuleInit() {
     if (installationHeld()) return;
     await this.load();
-    this.timer = setInterval(() => void this.collect(), 10000);
-    this.timer.unref();
-    void this.collect();
+    this.unsubscribe = this.activity.subscribe((active) => {
+      clearInterval(this.timer);
+      this.timer = undefined;
+      if (!active || this.closed) {
+        this.collectorAvailable = false;
+        if (!this.closed) this.checkpoint();
+        return;
+      }
+      this.timer = setInterval(() => void this.collect(), 10000);
+      this.timer.unref();
+      void this.collect();
+    });
   }
 
   async onModuleDestroy() {
     this.closed = true;
+    this.unsubscribe?.();
     clearInterval(this.timer);
-    if (this.currentMinute !== null) {
-      const bucket = this.minutes.get(this.currentMinute);
-      if (bucket && bucket.lastAt > (this.persistedThrough ?? -1)) this.persist(bucket);
-    }
+    this.checkpoint();
     await this.writes;
+  }
+
+  private checkpoint() {
+    if (this.currentMinute === null) return;
+    const bucket = this.minutes.get(this.currentMinute);
+    if (bucket && bucket.lastAt > (this.persistedThrough ?? -1)) this.persist(bucket);
   }
 
   private file() {
@@ -132,7 +148,7 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
   }
 
   collect(): Promise<void> {
-    if (this.closed) return Promise.resolve();
+    if (this.closed || (this.unsubscribe && !this.timer)) return Promise.resolve();
     this.pending ??= this.sample().finally(() => {
       this.pending = undefined;
     });
@@ -141,9 +157,10 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
 
   private async sample() {
     await this.load();
+    if (this.closed || (this.unsubscribe && !this.timer)) return;
     try {
       const sample = metricSample(await this.system.getTelemetry());
-      if (this.closed) return;
+      if (this.closed || (this.unsubscribe && !this.timer)) return;
       if (!sample || sample.lastAt > Date.now() + 1000 || sample.lastAt < Date.now() - 60000) throw new Error('Telemetry sample is not current');
       this.collectorAvailable = true;
       if (this.lastSampleAt !== null && sample.lastAt <= this.lastSampleAt) return;

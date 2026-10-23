@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
+import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { SystemService } from '../system.service';
 import { MetricHistoryService } from '../metric-history.service';
 import { decodeBucket, encodeBucket, metricSample } from '../metric-history.model';
@@ -15,6 +16,7 @@ describe('bounded server metric history', () => {
   const logger = mock<LoggerService>();
   let directory: string;
   let service: MetricHistoryService;
+  let activity: MonitoringActivityService;
   const sample = (cpu: number | null = 20, scope = 'host-proc') => ({
     sampledAt: new Date().toISOString(),
     cpu: { scope, totalPercent: cpu, perCorePercent: [], uptimeSeconds: 100 },
@@ -35,10 +37,12 @@ describe('bounded server metric history', () => {
     system.getTelemetry.mockReset();
     directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-metrics-'));
     config.get.calledWith('directories').mockReturnValue({ dataDir: directory } as never);
-    service = new MetricHistoryService(system, config, logger);
+    activity = new MonitoringActivityService();
+    service = new MetricHistoryService(system, config, logger, activity);
   });
   afterEach(async () => {
     await service.onModuleDestroy();
+    activity.onModuleDestroy();
     await fs.rm(directory, { recursive: true, force: true });
     vi.useRealTimers();
   });
@@ -49,7 +53,7 @@ describe('bounded server metric history', () => {
     await collect('2026-10-15T00:00:22Z', null);
     await collect('2026-10-15T00:01:02Z', 10);
     await service.onModuleDestroy();
-    const reloaded = new MetricHistoryService(system, config, logger);
+    const reloaded = new MetricHistoryService(system, config, logger, activity);
     const history = await reloaded.read('1h');
     expect(history.points).toHaveLength(2);
     expect(history.points[0]).toMatchObject({
@@ -82,7 +86,7 @@ describe('bounded server metric history', () => {
     await collect('2026-10-15T00:00:02Z', 20);
     await collect('2026-10-15T00:00:12Z', 40);
     await service.onModuleDestroy();
-    service = new MetricHistoryService(system, config, logger);
+    service = new MetricHistoryService(system, config, logger, activity);
     await collect('2026-10-15T00:00:32Z', 80);
     const recent = await service.read('5m');
     expect(recent.points).toHaveLength(2);
@@ -117,13 +121,28 @@ describe('bounded server metric history', () => {
     expect((await service.read('5m')).collectorAvailable).toBe(false);
   });
 
-  it('collects on the server timer while no browser is requesting history', async () => {
+  it('starts one timer while browsers are connected and stops after the last browser leaves', async () => {
     system.getTelemetry.mockImplementation(async () => sample());
     await service.onModuleInit();
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(system.getTelemetry).not.toHaveBeenCalled();
+    const first = activity.connect();
+    const second = activity.connect();
     await service.collect();
     await vi.advanceTimersByTimeAsync(20000);
     expect(system.getTelemetry).toHaveBeenCalledTimes(3);
     expect((await service.read('5m')).points).toHaveLength(3);
+    first();
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(system.getTelemetry).toHaveBeenCalledTimes(4);
+    second();
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(system.getTelemetry).toHaveBeenCalledTimes(4);
+    const resume = activity.connect();
+    await service.collect();
+    expect(system.getTelemetry).toHaveBeenCalledTimes(5);
+    expect((await service.read('5m')).points).toHaveLength(5);
+    resume();
   });
 
   it('bounds retention, output and journal growth through compaction', async () => {
@@ -148,6 +167,37 @@ describe('bounded server metric history', () => {
     expect(new Set(retained.map((line) => decodeBucket(JSON.parse(line), Date.now()).bucketAt)).size).toBeLessThanOrEqual(10081);
     expect((await fs.stat(file())).size).toBeLessThan(4 * 1024 * 1024);
     expect(decodeBucket(JSON.parse(retained[0] ?? ''), Date.now()).lastAt).toBeGreaterThanOrEqual(Date.now() - 7 * 86400000);
+  });
+
+  it('expires peer demand without a history read renewing it and preserves the idle gap', async () => {
+    system.getTelemetry.mockImplementation(async () => sample());
+    await service.onModuleInit();
+    activity.touchPeer();
+    await service.collect();
+    await vi.advanceTimersByTimeAsync(45000);
+    expect(system.getTelemetry).toHaveBeenCalledTimes(5);
+    await service.collect();
+    await service.read('5m');
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(system.getTelemetry).toHaveBeenCalledTimes(5);
+    activity.touchPeer();
+    await service.collect();
+    const points = (await service.read('5m')).points;
+    expect(points).toHaveLength(6);
+    expect(Date.parse(points[5]?.at ?? '') - Date.parse(points[4]?.until ?? '')).toBe(35000);
+  });
+
+  it('checkpoints the partial minute when the final client disconnects', async () => {
+    system.getTelemetry.mockImplementation(async () => sample());
+    await service.onModuleInit();
+    const disconnect = activity.connect();
+    await service.collect();
+    disconnect();
+    await vi.waitFor(async () => expect((await fs.stat(file())).size).toBeGreaterThan(0));
+    const restored = new MetricHistoryService(system, config, logger, activity);
+    expect((await restored.read('5m')).points).toMatchObject([{ samples: 1 }]);
+    expect(system.getTelemetry).toHaveBeenCalledOnce();
+    await restored.onModuleDestroy();
   });
 
   it('preserves a corrupt journal and keeps valid earlier samples and new in-memory readings', async () => {

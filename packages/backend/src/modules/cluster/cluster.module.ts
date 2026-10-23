@@ -12,6 +12,7 @@ import { ClusterInstallService } from './cluster-install.service';
 import { ClusterController } from './cluster.controller';
 import { ClusterService } from './cluster.service';
 import { ClusterStateService } from './cluster-state.service';
+import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ClusterStateService } from './cluster-state.service';
     DockerAppsModule,
     MarketplaceModule,
     AppStoreModule,
+    MonitoringActivityModule,
   ],
   controllers: [ClusterController],
   providers: [ClusterService, ClusterStateService, ClusterInstallService, HostUpdatesGuard],

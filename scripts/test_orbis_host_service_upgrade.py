@@ -37,6 +37,15 @@ class OrbisHostServiceUpgradeTests(unittest.TestCase):
             UPGRADE.SERVICE.write_private(package_job, {"id": "one", "state": "complete"})
             self.assertIsNone(UPGRADE.job_identity())
 
+    def test_pending_same_boot_restart_blocks_helper_upgrade(self):
+        with mock.patch.object(UPGRADE, "STATE_DIR", self.base), mock.patch.object(UPGRADE.SERVICE, "boot_id", return_value="boot-one"):
+            restart = self.base / "restart-job.json"
+            UPGRADE.SERVICE.write_private(restart, {"state": "restarting", "bootId": "boot-one"})
+            with self.assertRaisesRegex(ValueError, "server restart"):
+                UPGRADE.job_identity()
+            UPGRADE.SERVICE.write_private(restart, {"state": "restarting", "bootId": "previous-boot"})
+            self.assertIsNone(UPGRADE.job_identity())
+
     def test_unit_must_preserve_the_socket_directory_across_restarts(self):
         unit = (Path(__file__).parent.parent / "packaging/systemd/orbis-host.service").read_text()
         UPGRADE.validate_unit(unit)

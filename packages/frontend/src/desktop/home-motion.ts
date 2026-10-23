@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import { prefersReducedMotion } from './motion-setting';
+import { sectionMotionEasing, sectionMotionTiming } from './section-motion-geometry';
 
 const tileSelector = [
   '.workspace-heading',
@@ -31,7 +32,7 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
       const view = root.querySelector<HTMLElement>('.desktop-view-home');
       if (!view) return;
       view.dataset.homeEntry = key;
-      const tiles = [...view.querySelectorAll<HTMLElement>(opening ? openingSelector : tileSelector)].filter((tile) => !entered.has(tile));
+      const tiles = [...view.querySelectorAll<HTMLElement>(openingSelector)].filter((tile) => !entered.has(tile));
       const distance = opening ? Math.min(72, innerWidth * 0.08) : Math.min(40, innerWidth * 0.055) * entryDirection;
       const now = document.timeline.currentTime;
       if (opening && openingStart === null && typeof now === 'number') openingStart = now;
@@ -41,9 +42,7 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
         const bounds = tile.getBoundingClientRect();
         return {
           tile,
-          delay: opening
-            ? Math.min(120, Math.max(0, (bounds.left - viewBounds.left) / Math.max(1, viewBounds.width)) * 120)
-            : Math.min(96, Math.max(0, bounds.left / innerWidth) * 72 + Math.max(0, bounds.top / innerHeight) * 24),
+          delay: opening ? Math.min(120, Math.max(0, (bounds.left - viewBounds.left) / Math.max(1, viewBounds.width)) * 120) : 0,
         };
       });
       for (const { tile, delay } of positions) {
@@ -51,15 +50,11 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
         const animation = tile.animate(
           opening
             ? [{ transform: `translate3d(${distance}px, 0, 0)` }, { transform: 'translate3d(0, 0, 0)' }]
-            : [
-                { opacity: 0, transform: `translateX(${distance}px)`, offset: 0 },
-                { opacity: 1, offset: 0.3 },
-                { opacity: 1, transform: 'none', offset: 1 },
-              ],
+            : [{ transform: `translateX(${distance}px)` }, { transform: 'none' }],
           {
-            duration: opening ? 760 : 420,
+            duration: opening ? 760 : sectionMotionTiming.content,
             delay,
-            easing: opening ? 'cubic-bezier(.2, .7, .2, 1)' : 'cubic-bezier(.16, 1, .3, 1)',
+            easing: opening ? 'cubic-bezier(.2, .7, .2, 1)' : sectionMotionEasing,
             fill: 'backwards',
           },
         );

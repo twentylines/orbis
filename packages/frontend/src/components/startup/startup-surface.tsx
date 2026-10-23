@@ -54,15 +54,17 @@ export function StartupSurface({
         <span />
       </div>
       <div className="orbis-startup-content">
-        <div className="orbis-startup-emblem">
-          <div className="orbis-startup-panels" aria-hidden="true">
-            <span />
-            <span />
-            <span />
+        <div className="orbis-startup-brand">
+          <div className="orbis-startup-emblem">
+            <div className="orbis-startup-panels" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <OrbisLogo size={64} />
           </div>
-          <OrbisLogo size={64} />
+          <span className="orbis-startup-name">Orbis</span>
         </div>
-        <span className="orbis-startup-name">Orbis</span>
         <output>
           <span className="orbis-startup-message-loading">{status?.title ?? (signingIn ? 'Signing in…' : 'Loading workspace…')}</span>
           <span className="orbis-startup-message-logout">Logging off…</span>
@@ -75,8 +77,14 @@ export function StartupSurface({
         >
           <span />
         </div>
-        {status ? <p className="orbis-startup-detail">{status.message}</p> : null}
-        {children}
+        {status ? (
+          <div className="orbis-startup-status">
+            <p className="orbis-startup-detail">{status.message}</p>
+            <div className="orbis-startup-actions">{children}</div>
+          </div>
+        ) : (
+          children
+        )}
       </div>
     </div>
   );

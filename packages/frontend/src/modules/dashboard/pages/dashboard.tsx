@@ -237,20 +237,29 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     const region = appRegion;
     if (!region || visibleInstalled.length === 0 || workspace.hidden.includes('applications')) return;
     const desktop = window.matchMedia('(min-width: 760px) and (min-height: 640px)');
+    const auxiliary = defaultColumns ? region.closest('.workspace-main-stack')?.querySelector<HTMLElement>('.workspace-auxiliary') : null;
     let frame = 0;
     const measure = () => {
       frame = 0;
       if (!desktop.matches) {
         region.style.removeProperty('--workspace-app-max-height');
+        auxiliary?.style.removeProperty('--workspace-auxiliary-max-height');
         setScrollApps(false);
         return;
       }
       const dock = document.querySelector<HTMLElement>('.desktop-dock');
-      const auxiliary = defaultColumns ? region.closest('.workspace-main-stack')?.querySelector<HTMLElement>('.workspace-auxiliary') : null;
       const dockSpace = editing ? 0 : dock ? dock.getBoundingClientRect().height + (Number.parseFloat(getComputedStyle(dock).bottom) || 0) : 96;
-      const auxiliarySpace = auxiliary && auxiliary.childElementCount > 0 ? auxiliary.getBoundingClientRect().height + 18 : 0;
       const top = region.getBoundingClientRect().top + window.scrollY;
-      const available = Math.max(160, Math.floor(window.innerHeight - top - dockSpace - auxiliarySpace - 24));
+      const budget = Math.max(0, window.innerHeight - top - dockSpace - 24);
+      const list = region.querySelector<HTMLElement>('.workspace-app-list');
+      const firstApp = list?.querySelector<HTMLElement>('.workspace-app');
+      const rowGap = list ? Number.parseFloat(getComputedStyle(list).rowGap) || 0 : 0;
+      const minimumApps = firstApp && list ? Math.min(list.scrollHeight + 8, firstApp.offsetHeight * 3 + rowGap * 2 + 8) : 160;
+      const auxiliaryLimit = Math.max(240, budget - minimumApps - 18);
+      const auxiliaryHeight = auxiliary ? Math.max(0, ...Array.from(auxiliary.children, (widget) => widget.firstElementChild?.scrollHeight ?? 0)) : 0;
+      const auxiliarySpace = auxiliaryHeight > 0 ? Math.min(auxiliaryHeight + 2, auxiliaryLimit) + 18 : 0;
+      const available = Math.max(minimumApps, Math.floor(budget - auxiliarySpace));
+      auxiliary?.style.setProperty('--workspace-auxiliary-max-height', `${Math.floor(auxiliaryLimit)}px`);
       region.style.setProperty('--workspace-app-max-height', `${available}px`);
       setScrollApps(region.scrollHeight > region.clientHeight + 1);
     };
@@ -274,6 +283,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       window.removeEventListener('resize', schedule);
       desktop.removeEventListener('change', schedule);
       cancelAnimationFrame(frame);
+      auxiliary?.style.removeProperty('--workspace-auxiliary-max-height');
     };
   }, [appRegion, editing, visibleInstalled.length, defaultColumns, workspace.hidden]);
 

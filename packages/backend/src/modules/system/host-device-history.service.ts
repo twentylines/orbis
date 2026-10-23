@@ -6,6 +6,7 @@ import { Injectable, type OnModuleInit, type OnModuleDestroy } from '@nestjs/com
 import { metricHistoryRanges, type HostDeviceHistory, type HostHistorySelection, type MetricHistoryRange } from '@runtipi/common/schemas';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
+import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { HostTelemetryService } from './host-telemetry.service';
 import { installationHeld } from '@/common/installation-mode';
 import {
@@ -37,6 +38,7 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
   private recent: HostHistoryBucket[] = [];
   private restoredPartial?: HostHistoryBucket;
   private timer?: ReturnType<typeof setInterval>;
+  private unsubscribe?: () => void;
   private loading?: Promise<void>;
   private pending?: Promise<void>;
   private writer?: Promise<void>;
@@ -58,18 +60,30 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
     private readonly host: HostTelemetryService,
     private readonly config: ConfigurationService,
     private readonly logger: LoggerService,
+    private readonly activity: MonitoringActivityService,
   ) {}
 
   async onModuleInit() {
     if (installationHeld()) return;
     await this.load();
-    this.timer = setInterval(() => void this.collect(), 10000);
-    this.timer.unref();
-    void this.collect();
+    this.unsubscribe = this.activity.subscribe((active) => {
+      clearInterval(this.timer);
+      this.timer = undefined;
+      if (!active || this.closed) {
+        this.collectorAvailable = false;
+        this.reason = 'Monitoring is paused while no client is connected.';
+        if (!this.closed) this.queueCurrent();
+        return;
+      }
+      this.timer = setInterval(() => void this.collect(), 10000);
+      this.timer.unref();
+      void this.collect();
+    });
   }
 
   async onModuleDestroy() {
     this.closed = true;
+    this.unsubscribe?.();
     clearInterval(this.timer);
     await this.pending;
     this.queueCurrent();
@@ -247,7 +261,7 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
   }
 
   collect(): Promise<void> {
-    if (this.closed) return Promise.resolve();
+    if (this.closed || (this.unsubscribe && !this.timer)) return Promise.resolve();
     this.pending ??= this.sample().finally(() => {
       this.pending = undefined;
     });
@@ -256,9 +270,10 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
 
   private async sample() {
     await this.load();
+    if (this.closed || (this.unsubscribe && !this.timer)) return;
     try {
       const data = await this.host.read();
-      if (this.closed) return;
+      if (this.closed || (this.unsubscribe && !this.timer)) return;
       const sample = hostHistorySample(data, Date.now());
       if (!sample) {
         this.collectorAvailable = false;

@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { prefersReducedMotion } from './motion-setting';
 
+const shapeEvent = 'orbis-dock-shape';
+
 export function DockCompanion({
   visible,
   side,
@@ -36,12 +38,16 @@ export function DockCompanion({
       const inset = getComputedStyle(outer)[margin];
       const transform =
         initialized.current && current > 0.5 ? getComputedStyle(inner).transform : side === 'right' ? `translateX(${-width}px)` : 'none';
-      if (initialized.current && visible && Math.abs(width - current) < 0.5 && motions.current.every((a) => a.playState !== 'running')) return;
+      const targetWidth = visible ? width : 0;
+      const targetMargin = visible ? '0px' : '-12px';
+      if (initialized.current && Math.abs(targetWidth - Number.parseFloat(outer.style.width)) < 0.5 && outer.style[margin] === targetMargin) return;
+      if (!initialized.current) {
+        const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-trigger');
+        if (controls) controls.style.clipPath = side === 'right' ? `inset(0 0 0 ${width}px)` : `inset(0 ${width}px 0 0)`;
+      }
       initialized.current = true;
       const run = ++generation.current;
       for (const animation of motions.current) animation.cancel();
-      const targetWidth = visible ? width : 0;
-      const targetMargin = visible ? '0px' : '-12px';
       const targetTransform = !visible && side === 'right' ? `translateX(${-width}px)` : 'none';
       outer.style.width = `${targetWidth}px`;
       outer.style[margin] = targetMargin;
@@ -49,6 +55,7 @@ export function DockCompanion({
       const finish = () => {
         if (generation.current !== run) return;
         delete outer.dataset.pillMotion;
+        outer.closest('.desktop-dock')?.dispatchEvent(new Event(shapeEvent));
         if (!visible) {
           initialized.current = false;
           setPresent(false);
@@ -59,7 +66,7 @@ export function DockCompanion({
         return;
       }
       outer.dataset.pillMotion = visible ? 'splitting' : 'joining';
-      const options = { duration: visible ? 580 : 520, easing: 'cubic-bezier(.22, 1, .36, 1)' };
+      const options = { duration: 620, easing: 'cubic-bezier(.32, 0, .18, 1)' };
       const sizing = outer.animate(
         [
           { width: `${current}px`, [margin]: inset },
@@ -71,6 +78,9 @@ export function DockCompanion({
       sizing.id = 'orbis-dock-pill-size';
       travel.id = 'orbis-dock-pill-travel';
       motions.current = [sizing, travel];
+      const started = document.timeline.currentTime;
+      if (started !== null) for (const animation of motions.current) animation.startTime = started;
+      outer.closest('.desktop-dock')?.dispatchEvent(new Event(shapeEvent));
       void Promise.all(motions.current.map((animation) => animation.finished)).then(finish, () => undefined);
     };
     move();
@@ -178,6 +188,11 @@ export function DockGlass() {
     const schedule = () => {
       if (!frame && !disposed) frame = requestAnimationFrame(draw);
     };
+    const redraw = () => {
+      cancelAnimationFrame(frame);
+      draw();
+    };
+    dock.addEventListener(shapeEvent, redraw);
     const sizes = new ResizeObserver(schedule);
     const observe = () => {
       sizes.disconnect();
@@ -194,6 +209,7 @@ export function DockGlass() {
       cancelAnimationFrame(frame);
       sizes.disconnect();
       changes.disconnect();
+      dock.removeEventListener(shapeEvent, redraw);
     };
   }, []);
   return <div ref={glass} className="desktop-dock-glass" aria-hidden="true" />;

@@ -18,7 +18,8 @@ import { RouteSurface } from '@/desktop/route-surface';
 import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { AppLauncherProvider, MinimizedApps } from '@/desktop/app-launcher';
 import { HostUpdateProvider, useHostUpdateWatch } from '@/desktop/host-update-watch';
-import { coreWatchIsActive } from '@/desktop/core-update-state';
+import { coreWatchIsActive, coreUpdateTitle } from '@/desktop/core-update-state';
+import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Button } from '@/components/ui/Button';
 import { DockActivity } from '@/desktop/desktop-activity';
@@ -262,14 +263,44 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
 };
 
 function RestartUpdateCover() {
-  const { watch, packageJob, unavailable } = useHostUpdateWatch();
+  const { watch, packageJob, unavailable, restart } = useHostUpdateWatch();
   const { preferences } = useDesktopPreferences();
   const [dismissed, setDismissed] = useState<string | null>(null);
+  const [restartId, setRestartId] = useState<string | null>(null);
+  const restartActive = restart?.job?.state === 'restarting';
+  const pendingRestartId = restartActive ? restart?.job?.id : null;
+  const restartAvailable = restart?.available;
+  useLayoutEffect(() => {
+    if (pendingRestartId) {
+      setRestartId(pendingRestartId);
+      return;
+    }
+    if (!restartId || !restartAvailable) return;
+    const timer = window.setTimeout(() => setRestartId(null), prefersReducedMotion() ? 0 : 420);
+    return () => window.clearTimeout(timer);
+  }, [pendingRestartId, restartAvailable, restartId]);
+  if (restartActive || restartId) {
+    const finished = !restartActive && restart?.available;
+    return (
+      <StartupSurface
+        appearance={preferences}
+        status={{
+          title: finished ? (restart?.job?.state === 'failed' ? 'Restart could not start' : 'Server reconnected') : 'Restarting the server',
+          message: finished
+            ? restart?.job?.message || 'The server is ready.'
+            : 'Applications will return when the server is ready. Reconnecting automatically.',
+        }}
+        completing={finished}
+        revealing={finished}
+        overlay
+      />
+    );
+  }
   if (coreWatchIsActive(watch) && watch) {
     const restarting = watch.phase === 'offline' || watch.phase === 'checking' || watch.phase === 'ready';
     if (!restarting && dismissed === watch.id) return null;
     return (
-      <StartupSurface appearance={preferences} status={{ title: 'Updating Orbis', message: watch.message }} overlay>
+      <StartupSurface appearance={preferences} status={{ title: coreUpdateTitle(watch.phase), message: watch.message }} overlay>
         {restarting ? null : (
           <button type="button" className="orbis-startup-return" onClick={() => setDismissed(watch.id)}>
             Keep using Orbis
@@ -282,7 +313,7 @@ function RestartUpdateCover() {
     return (
       <StartupSurface
         appearance={preferences}
-        status={{ title: 'Updating the system', message: 'The server is restarting. Reconnecting automatically.' }}
+        status={{ title: 'Restarting the server', message: 'The system update is restarting services. Reconnecting automatically.' }}
         overlay
       />
     );

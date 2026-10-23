@@ -5,6 +5,7 @@ import { MetricHistoryService } from '@/modules/system/metric-history.service';
 import { HostDeviceHistoryService } from '@/modules/system/host-device-history.service';
 import { HostTelemetryService } from '@/modules/system/host-telemetry.service';
 import { SystemService } from '@/modules/system/system.service';
+import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
@@ -21,8 +22,10 @@ describe('history during installation', () => {
     const config = mock<ConfigurationService>();
     const logger = mock<LoggerService>();
     const tasks = new TasksService(config, logger);
-    const metrics = new MetricHistoryService(mock<SystemService>(), config, logger);
-    const devices = new HostDeviceHistoryService(mock<HostTelemetryService>(), config, logger);
+    const activity = new MonitoringActivityService();
+    activity.connect();
+    const metrics = new MetricHistoryService(mock<SystemService>(), config, logger, activity);
+    const devices = new HostDeviceHistoryService(mock<HostTelemetryService>(), config, logger, activity);
     await tasks.onModuleInit();
     await metrics.onModuleInit();
     await devices.onModuleInit();

@@ -3,13 +3,20 @@ import { useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigation, useNavigationType } from 'react-router';
 import { desktopNavigation } from './navigation';
 import { useHomeMotion } from './home-motion';
-import { sectionDirection, sectionMotionTiming, sectionSurfaceFrames, visibleSectionBounds, type SectionBounds } from './section-motion-geometry';
+import {
+  sectionDirection,
+  sectionMotionEasing,
+  sectionMotionTiming,
+  sectionSurfaceFrames,
+  visibleSectionBounds,
+  type SectionBounds,
+} from './section-motion-geometry';
 import './section-motion.css';
 
 const sectionIndex = (path: string) => desktopNavigation.findIndex((section) => path === section.path || path.startsWith(`${section.path}/`));
 const routeSelector = '#desktop-content > .desktop-view';
 const surfaceSelector = '.desktop-route-surface';
-const easing = 'cubic-bezier(.22, 1, .36, 1)';
+const easing = sectionMotionEasing;
 const historyIndex = () => (typeof window.history.state?.idx === 'number' ? (window.history.state.idx as number) : undefined);
 
 export function useSectionMotion() {
@@ -98,7 +105,7 @@ export function useSectionMotion() {
     animations.current = [];
     view.dataset.sectionPhase = 'ready';
     const bounds = view.getBoundingClientRect();
-    const to = { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height };
+    const to = visibleSectionBounds(bounds, window.innerHeight);
     settled.current = to;
     const fromSection = sectionIndex(before.path);
     const toSection = sectionIndex(path);
@@ -110,22 +117,27 @@ export function useSectionMotion() {
     animatedSurface.current = surface;
     let resizing: Animation | null = null;
     let targetHeight = to.height;
+    const startedAt = document.timeline.currentTime;
     const content = view.querySelectorAll<HTMLElement>('.desktop-page-heading, .desktop-window-content');
     let resizeFrame = 0;
     const resize = () => {
       if (view.dataset.routePending || view.querySelector('.desktop-route-placeholder')) return;
       const style = getComputedStyle(view);
-      const naturalHeight =
+      const naturalHeight = Math.min(
         [...content].reduce((height, element) => height + element.offsetHeight, 0) +
-        Number.parseFloat(style.borderTopWidth) +
-        Number.parseFloat(style.borderBottomWidth);
+          Number.parseFloat(style.borderTopWidth) +
+          Number.parseFloat(style.borderBottomWidth),
+        Math.max(1, window.innerHeight - to.top),
+      );
       if (Math.abs(naturalHeight - targetHeight) < 1 || view.dataset.sectionPhase !== 'card') return;
       const height = view.getBoundingClientRect().height;
       resizing?.cancel();
       targetHeight = naturalHeight;
+      const elapsed =
+        typeof startedAt === 'number' && typeof document.timeline.currentTime === 'number' ? document.timeline.currentTime - startedAt : 0;
       resizing = add(
         view.animate([{ height: `${height}px` }, { height: `${naturalHeight}px` }], {
-          duration: sectionMotionTiming.content,
+          duration: Math.max(180, sectionMotionTiming.surface - elapsed),
           easing,
         }),
       );
@@ -147,6 +159,7 @@ export function useSectionMotion() {
       observer.disconnect();
       cancelAnimationFrame(resizeFrame);
       view.dataset.sectionPhase = 'ready';
+      delete view.dataset.sectionMotion;
       settled.current = visibleSectionBounds(view.getBoundingClientRect(), window.innerHeight);
     };
     const add = (animation: Animation) => {
@@ -154,12 +167,14 @@ export function useSectionMotion() {
       void animation.finished.then(finish, finish);
       return animation;
     };
-    if (action !== 'POP') resizing = add(view.animate(sectionSurfaceFrames(from ?? to, to), { duration: sectionMotionTiming.surface, easing }));
+    resizing = add(view.animate(sectionSurfaceFrames(from ?? to, to), { duration: sectionMotionTiming.surface, easing }));
+    if (typeof startedAt === 'number') resizing.startTime = startedAt;
     for (const element of content) {
-      add(
+      const animation = add(
         element.animate([{ transform: `translateX(${direction * 18}px)` }, { transform: 'none' }], { duration: sectionMotionTiming.content, easing }),
       );
-      if (action !== 'POP') observer.observe(element);
+      if (typeof startedAt === 'number') animation.startTime = startedAt;
+      observer.observe(element);
     }
     return () => {
       observer.disconnect();

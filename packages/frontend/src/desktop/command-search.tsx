@@ -5,7 +5,16 @@ import { WrapWords } from '@/components/wrap-words/wrap-words';
 import * as Dialog from '@radix-ui/react-dialog';
 import { IconArrowUpRight, IconSearch, IconX } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type CSSProperties,
+} from 'react';
 import { useNavigate } from 'react-router';
 import { desktopSearchSections } from './navigation';
 import './command-search.css';
@@ -22,13 +31,15 @@ export function CommandSearch() {
   const [closing, setClosing] = useState(false);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
+  const [bar, setBar] = useState({ left: 24, top: 24, width: 600, height: 64, available: 600 });
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const animation = useRef<Animation | null>(null);
+  const header = useRef<HTMLDivElement>(null);
+  const dropdown = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
-  const backdropAnimation = useRef<Animation | null>(null);
+  const motions = useRef<Animation[]>([]);
   const pendingPath = useRef<string | null>(null);
   const closingRef = useRef(false);
   const bindPanel = useCallback((element: HTMLDivElement | null) => {
@@ -48,7 +59,29 @@ export function CommandSearch() {
     return () => window.clearTimeout(timer);
   }, [query]);
 
+  const readBar = useCallback(() => {
+    const bounds = trigger.current?.closest('.desktop-system-bar')?.getBoundingClientRect();
+    if (!bounds) return null;
+    const viewport = window.visualViewport;
+    return {
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+      available: Math.max(120, (viewport ? viewport.offsetTop + viewport.height : window.innerHeight) - bounds.bottom - 30),
+    };
+  }, []);
+  const cancelMotions = useCallback(() => {
+    for (const motion of motions.current) motion.cancel();
+    motions.current = [];
+  }, []);
+  const openSearch = useCallback(() => {
+    const next = readBar();
+    if (next) setBar(next);
+    setOpen(true);
+  }, [readBar]);
   const finishClose = useCallback(() => {
+    if (!closingRef.current) return;
     closingRef.current = false;
     setOpen(false);
     setClosing(false);
@@ -65,81 +98,150 @@ export function CommandSearch() {
       closingRef.current = true;
       pendingPath.current = path ?? null;
       setClosing(true);
-      const element = panel.current;
-      const origin = trigger.current?.getBoundingClientRect();
-      if (!element || !origin || reducedMotion()) {
+      const element = header.current;
+      const opener = trigger.current;
+      const origin = opener?.getBoundingClientRect();
+      const bounds = panel.current?.getBoundingClientRect();
+      if (!element || !opener || !origin || !bounds || reducedMotion()) {
         finishClose();
         return;
       }
-      const bounds = { left: element.offsetLeft, top: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight };
-      const currentTransform = getComputedStyle(element).transform;
-      const currentRadius = getComputedStyle(element).borderRadius;
-      animation.current?.cancel();
+      const current = getComputedStyle(element);
+      const pose = {
+        left: current.left,
+        top: current.top,
+        width: current.width,
+        height: current.height,
+        borderRadius: current.borderRadius,
+        backgroundColor: current.backgroundColor,
+        borderColor: current.borderColor,
+        paddingInline: current.paddingInline,
+        columnGap: current.columnGap,
+      };
+      const originStyle = getComputedStyle(opener);
+      const resultPose = dropdown.current ? getComputedStyle(dropdown.current) : null;
+      const resultFrom = resultPose ? { opacity: resultPose.opacity, transform: resultPose.transform } : null;
+      const backdropFrom = backdrop.current ? getComputedStyle(backdrop.current).opacity : '1';
+      cancelMotions();
+      const options = { duration: 420, easing: 'cubic-bezier(.32, 0, .18, 1)', fill: 'forwards' as const };
       const exit = element.animate(
         [
-          { transform: currentTransform, borderRadius: currentRadius },
+          pose,
           {
-            transform: `translate(${origin.left - bounds.left}px, ${origin.top - bounds.top}px) scale(${origin.width / bounds.width}, ${origin.height / bounds.height})`,
-            borderRadius: '16px',
+            left: `${origin.left - bounds.left}px`,
+            top: `${origin.top - bounds.top}px`,
+            width: `${origin.width}px`,
+            height: `${origin.height}px`,
+            borderRadius: originStyle.borderRadius,
+            backgroundColor: originStyle.backgroundColor,
+            borderColor: originStyle.borderColor,
+            paddingInline: originStyle.paddingInline,
+            columnGap: originStyle.columnGap,
           },
         ],
-        { duration: 340, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' },
+        options,
       );
-      animation.current = exit;
-      if (backdrop.current) {
-        const opacity = getComputedStyle(backdrop.current).opacity;
-        backdropAnimation.current?.cancel();
-        backdropAnimation.current = backdrop.current.animate([{ opacity }, { opacity: 0 }], {
-          duration: 340,
-          easing: 'cubic-bezier(.4, 0, .2, 1)',
-          fill: 'forwards',
-        });
+      exit.id = 'orbis-search-bar-close';
+      motions.current = [exit];
+      if (dropdown.current && resultFrom) {
+        motions.current.push(dropdown.current.animate([resultFrom, { opacity: 0, transform: 'translateY(-8px)' }], { ...options, duration: 180 }));
       }
+      if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: backdropFrom }, { opacity: 0 }], options));
+      const started = document.timeline.currentTime;
+      if (started !== null) for (const motion of motions.current) motion.startTime = started;
       void exit.finished.then(finishClose, () => undefined);
     },
-    [finishClose],
+    [cancelMotions, finishClose],
   );
 
   useLayoutEffect(() => {
-    if (!open) return;
-    const element = panelElement;
-    const origin = trigger.current?.getBoundingClientRect();
-    if (!element || !origin || reducedMotion()) return;
-    const bounds = element.getBoundingClientRect();
-    if (backdrop.current) backdropAnimation.current = backdrop.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, fill: 'forwards' });
-    animation.current = element.animate(
-      [
-        {
-          transform: `translate(${origin.left - bounds.left}px, ${origin.top - bounds.top}px) scale(${origin.width / bounds.width}, ${origin.height / bounds.height})`,
-          borderRadius: '16px',
-        },
-        { transform: 'none', borderRadius: '24px' },
-      ],
-      { duration: 440, easing: 'cubic-bezier(.22, 1, .36, 1)' },
-    );
+    if (!open || !panelElement) return;
+    const element = header.current;
+    const opener = trigger.current;
+    const origin = opener?.getBoundingClientRect();
+    const bounds = readBar();
+    if (!element || !opener || !origin || !bounds) return;
+    setBar(bounds);
+    if (!reducedMotion()) {
+      const originStyle = getComputedStyle(opener);
+      const targetStyle = getComputedStyle(element);
+      const targetPadding = targetStyle.paddingInline;
+      const targetGap = targetStyle.columnGap;
+      const enter = element.animate(
+        [
+          {
+            left: `${origin.left - bounds.left}px`,
+            top: `${origin.top - bounds.top}px`,
+            width: `${origin.width}px`,
+            height: `${origin.height}px`,
+            borderRadius: originStyle.borderRadius,
+            backgroundColor: originStyle.backgroundColor,
+            borderColor: originStyle.borderColor,
+            paddingInline: originStyle.paddingInline,
+            columnGap: originStyle.columnGap,
+          },
+          {
+            left: '0px',
+            top: '0px',
+            width: `${bounds.width}px`,
+            height: `${bounds.height}px`,
+            borderRadius: '18px',
+            backgroundColor: 'transparent',
+            borderColor: 'transparent',
+            paddingInline: targetPadding,
+            columnGap: targetGap,
+          },
+        ],
+        { duration: 520, easing: 'cubic-bezier(.32, 0, .18, 1)' },
+      );
+      enter.id = 'orbis-search-bar-open';
+      motions.current = [enter];
+      if (dropdown.current) {
+        const results = dropdown.current.animate(
+          [
+            { opacity: 0, transform: 'translateY(-8px)' },
+            { opacity: 1, transform: 'none' },
+          ],
+          {
+            duration: 380,
+            delay: 100,
+            easing: 'cubic-bezier(.32, 0, .18, 1)',
+            fill: 'backwards',
+          },
+        );
+        results.id = 'orbis-search-results-open';
+        motions.current.push(results);
+      }
+      if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300 }));
+      const started = document.timeline.currentTime;
+      if (started !== null) for (const motion of motions.current) motion.startTime = started;
+    }
     const resize = () => {
-      animation.current?.cancel();
-      backdropAnimation.current?.cancel();
+      cancelMotions();
+      const next = readBar();
+      if (next) setBar(next);
       if (closingRef.current) finishClose();
     };
     window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('resize', resize);
     return () => {
-      animation.current?.cancel();
+      cancelMotions();
       window.removeEventListener('resize', resize);
+      window.visualViewport?.removeEventListener('resize', resize);
     };
-  }, [open, finishClose, panelElement]);
+  }, [open, panelElement, readBar, cancelMotions, finishClose]);
 
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         if (open) close();
-        else setOpen(true);
+        else openSearch();
       }
     };
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
-  }, [open, close]);
+  }, [open, close, openSearch]);
 
   const needle = query.toLocaleLowerCase();
   const terms = needle.split(/\s+/).filter(Boolean);
@@ -191,7 +293,7 @@ export function CommandSearch() {
     <Dialog.Root
       open={open}
       onOpenChange={(next) => {
-        if (next) setOpen(true);
+        if (next) openSearch();
         else close();
       }}
     >
@@ -204,10 +306,19 @@ export function CommandSearch() {
       </Dialog.Trigger>
       {open ? (
         <Dialog.Portal>
-          <Dialog.Overlay ref={backdrop} className="desktop-search-backdrop" data-closing={closing} />
+          <Dialog.Overlay ref={backdrop} className="desktop-search-backdrop" style={{ top: bar.top + bar.height }} data-closing={closing} />
           <Dialog.Content
             ref={bindPanel}
             className="desktop-search-surface"
+            style={
+              {
+                left: bar.left,
+                top: bar.top,
+                width: bar.width,
+                '--desktop-search-bar-height': `${bar.height}px`,
+                '--desktop-search-available': `${bar.available}px`,
+              } as CSSProperties
+            }
             data-closing={closing}
             aria-describedby={undefined}
             onOpenAutoFocus={(event) => {
@@ -230,11 +341,11 @@ export function CommandSearch() {
           >
             <Dialog.Title className="visually-hidden">Search Orbis</Dialog.Title>
             <div className="desktop-search-content">
-              <div className="desktop-search-input">
-                <IconSearch size={24} aria-hidden="true" />
+              <div ref={header} className="desktop-search-input">
+                <IconSearch size={20} aria-hidden="true" />
                 <input
                   ref={input}
-                  value={search}
+                  value={closing ? '' : search}
                   type="search"
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search"
@@ -255,65 +366,67 @@ export function CommandSearch() {
                   <IconX size={22} aria-hidden="true" />
                 </button>
               </div>
-              <div id="desktop-search-results" className="desktop-search-results" aria-busy={loadingStore || installed.isPending}>
-                {groups
-                  .filter((group) => group.items.length)
-                  .map(({ name, items }) => (
-                    <section className="desktop-search-group" key={name} aria-label={name}>
-                      <h3>
-                        {name}
-                        <span>{items.length}</span>
-                      </h3>
-                      <div className="desktop-search-grid">
-                        {items.map((result) => (
-                          <button
-                            data-search-result
-                            type="button"
-                            key={result.id}
-                            aria-label={`${result.label}${result.detail ? `, ${result.detail}` : ''}`}
-                            onKeyDown={handleResultKeyDown}
-                            onClick={() => close(result.path)}
-                          >
-                            <span className="desktop-search-result-icon">{result.icon}</span>
-                            <span className="desktop-search-result-text">
-                              <strong title={result.label}>
-                                <WrapWords text={result.label} />
-                              </strong>
-                              {result.detail ? <small>{result.detail}</small> : null}
-                            </span>
-                            <IconArrowUpRight size={18} aria-hidden="true" />
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                <div className="desktop-search-feedback" aria-live="polite">
-                  {installed.isError ? (
-                    <p>
-                      Installed apps could not be loaded.{' '}
-                      <button type="button" onClick={() => void installed.refetch()}>
-                        Try again
-                      </button>
-                    </p>
-                  ) : null}
-                  {loadingStore ? <p>Searching the App Store…</p> : null}
-                  {query && debounced === query && catalogue.isError ? (
-                    <p>
-                      The App Store could not be searched.{' '}
-                      <button type="button" onClick={() => void catalogue.refetch()}>
-                        Try again
-                      </button>
-                    </p>
-                  ) : null}
-                  {!firstResult && !loadingStore && !installed.isPending && !installed.isError && (!query || !catalogue.isError) ? (
-                    <p>No matches for “{query}”. Try an app name or a section such as Updates.</p>
-                  ) : null}
+              <div ref={dropdown} className="desktop-search-dropdown">
+                <div id="desktop-search-results" className="desktop-search-results" aria-busy={loadingStore || installed.isPending}>
+                  {groups
+                    .filter((group) => group.items.length)
+                    .map(({ name, items }) => (
+                      <section className="desktop-search-group" key={name} aria-label={name}>
+                        <h3>
+                          {name}
+                          <span>{items.length}</span>
+                        </h3>
+                        <div className="desktop-search-grid">
+                          {items.map((result) => (
+                            <button
+                              data-search-result
+                              type="button"
+                              key={result.id}
+                              aria-label={`${result.label}${result.detail ? `, ${result.detail}` : ''}`}
+                              onKeyDown={handleResultKeyDown}
+                              onClick={() => close(result.path)}
+                            >
+                              <span className="desktop-search-result-icon">{result.icon}</span>
+                              <span className="desktop-search-result-text">
+                                <strong title={result.label}>
+                                  <WrapWords text={result.label} />
+                                </strong>
+                                {result.detail ? <small>{result.detail}</small> : null}
+                              </span>
+                              <IconArrowUpRight size={18} aria-hidden="true" />
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  <div className="desktop-search-feedback" aria-live="polite">
+                    {installed.isError ? (
+                      <p>
+                        Installed apps could not be loaded.{' '}
+                        <button type="button" onClick={() => void installed.refetch()}>
+                          Try again
+                        </button>
+                      </p>
+                    ) : null}
+                    {loadingStore ? <p>Searching the App Store…</p> : null}
+                    {query && debounced === query && catalogue.isError ? (
+                      <p>
+                        The App Store could not be searched.{' '}
+                        <button type="button" onClick={() => void catalogue.refetch()}>
+                          Try again
+                        </button>
+                      </p>
+                    ) : null}
+                    {!firstResult && !loadingStore && !installed.isPending && !installed.isError && (!query || !catalogue.isError) ? (
+                      <p>No matches for “{query}”. Try an app name or a section such as Updates.</p>
+                    ) : null}
+                  </div>
                 </div>
+                <footer className="desktop-search-footer">
+                  <span>↑ ↓ to move · Enter to open</span>
+                  <span>Esc to close</span>
+                </footer>
               </div>
-              <footer className="desktop-search-footer">
-                <span>↑ ↓ to move · Enter to open</span>
-                <span>Esc to close</span>
-              </footer>
             </div>
           </Dialog.Content>
         </Dialog.Portal>

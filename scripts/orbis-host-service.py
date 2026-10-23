@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Expose bounded host readings and reviewed core/package updates over a Unix socket.
+"""Expose bounded host readings, reviewed updates, and explicit restarts over a Unix socket.
 
 Run this service outside the Orbis container. Socket file permissions are the
 transport boundary; the web API must separately authenticate its user.
@@ -20,6 +20,7 @@ import tempfile
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, urlsplit
@@ -44,6 +45,32 @@ CHECK = UPDATE.CHECK
 PLAN_TTL_SECONDS = 15 * 60
 BODY_LIMIT = 64 * 1024
 PACKAGE_OUTPUT_BYTES = 8192
+RESTART_PLAN_TTL_SECONDS = 120
+
+
+def boot_id() -> str:
+    value = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip()
+    return str(uuid.UUID(value))
+
+
+@contextmanager
+def package_locks():
+    descriptors = []
+    try:
+        for name in ("/var/lib/dpkg/lock-frontend", "/var/lib/dpkg/lock", "/var/lib/apt/lists/lock", "/var/cache/apt/archives/lock"):
+            try:
+                descriptor = os.open(name, os.O_RDWR | os.O_NOFOLLOW)
+            except FileNotFoundError:
+                continue
+            descriptors.append(descriptor)
+            try:
+                HOST.fcntl.lockf(descriptor, HOST.fcntl.LOCK_EX | HOST.fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise ValueError("a host package manager is active; wait before restarting") from error
+        yield
+    finally:
+        for descriptor in descriptors:
+            os.close(descriptor)
 
 
 def terminal_tail(path: Path) -> dict:
@@ -200,11 +227,130 @@ class HostService:
         self.busy = False
         self.job_file = self.state_dir / "job.json"
         self.package_job_file = self.state_dir / "package-job.json"
+        self.restart_job_file = self.state_dir / "restart-job.json"
         self.maintenance_file = self.state_dir / "helper-maintenance.json"
         previous = read_private(self.job_file)
         if previous and previous.get("state") in {"running", "recovering"}:
             previous["state"] = "interrupted"
             write_private(self.job_file, previous)
+
+    def restart_status(self) -> dict:
+        if not Path("/run/systemd/system").is_dir() or not os.access("/usr/bin/systemctl", os.X_OK):
+            return {"available": False, "reason": "Server restart requires a systemd host.", "job": None}
+        current_boot = boot_id()
+        job = read_private(self.restart_job_file)
+        if job:
+            if (
+                job.get("schema") != "orbis.restart-job.v1"
+                or job.get("root") != str(self.root)
+                or job.get("dockerContext") != self.context
+                or job.get("state") not in {"restarting", "complete", "failed"}
+                or not isinstance(job.get("id"), str)
+                or not isinstance(job.get("bootId"), str)
+                or not isinstance(job.get("createdAt"), (int, float))
+            ):
+                raise ValueError("server restart job is invalid")
+            uuid.UUID(job["id"])
+            uuid.UUID(job["bootId"])
+            if job["state"] == "restarting" and job["bootId"] != current_boot:
+                job.update(state="complete", finishedAt=time.time(), message="The server restarted and Orbis is reconnecting.")
+                write_private(self.restart_job_file, job)
+        return {
+            "available": True,
+            "rebootRequired": Path("/run/reboot-required").is_file(),
+            "job": {key: job.get(key) for key in ("id", "state", "createdAt", "finishedAt", "message")} if job else None,
+        }
+
+    def require_restart_clear(self) -> None:
+        if not self.restart_job_file.exists() and not self.restart_job_file.is_symlink():
+            return
+        current = self.restart_status()
+        if not current["available"]:
+            raise ValueError(current["reason"])
+        if (current.get("job") or {}).get("state") == "restarting":
+            raise ValueError("the server is restarting; wait for it to reconnect")
+
+    def require_restart_ready(self) -> None:
+        self.require_restart_clear()
+        self.require_healthy_core()
+        self.require_package_clear()
+        if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
+            raise ValueError("host helper maintenance is in progress")
+        if self.busy:
+            raise ValueError("another host update is in progress")
+        core_job = read_private(self.job_file)
+        if core_job and core_job.get("state") in {"running", "recovering", "interrupted"}:
+            raise ValueError("resolve the Orbis core update before restarting the server")
+        state = self.restart_status()
+        if not state["available"]:
+            raise ValueError(state["reason"])
+
+    def restart_plan(self) -> dict:
+        with self.lock, HOST.host_lock(self.root), package_locks():
+            self.require_restart_ready()
+            identifier = str(uuid.uuid4())
+            created = time.time()
+            record = {
+                "schema": "orbis.restart-plan.v1", "id": identifier,
+                "root": str(self.root), "dockerContext": self.context,
+                "bootId": boot_id(), "createdAt": created,
+            }
+            write_private(self.state_dir / f"restart-plan-{identifier}.json", record)
+            return {"planId": identifier, "expiresAt": created + RESTART_PLAN_TTL_SECONDS, "rebootRequired": Path("/run/reboot-required").is_file()}
+
+    def restart_apply(self, plan_id: str) -> tuple[dict, Callable[[], None]]:
+        try:
+            uuid.UUID(plan_id)
+        except (TypeError, ValueError) as error:
+            raise ValueError("restart plan ID is invalid") from error
+        with self.lock, HOST.host_lock(self.root), package_locks():
+            self.require_restart_ready()
+            file = self.state_dir / f"restart-plan-{plan_id}.json"
+            plan = read_private(file)
+            if (
+                not plan or plan.get("schema") != "orbis.restart-plan.v1" or plan.get("id") != plan_id
+                or plan.get("root") != str(self.root) or plan.get("dockerContext") != self.context
+                or plan.get("bootId") != boot_id() or "consumedAt" in plan
+                or not isinstance(plan.get("createdAt"), (int, float))
+                or not 0 <= time.time() - plan["createdAt"] <= RESTART_PLAN_TTL_SECONDS
+            ):
+                raise ValueError("restart plan is missing, changed, expired, or already used; review a new restart")
+            plan["consumedAt"] = time.time()
+            write_private(file, plan)
+            job = {
+                "schema": "orbis.restart-job.v1", "id": plan_id, "root": str(self.root),
+                "dockerContext": self.context, "bootId": plan["bootId"], "state": "restarting",
+                "createdAt": time.time(), "message": "The server is restarting. Orbis will reconnect when it returns.",
+            }
+            write_private(self.restart_job_file, job)
+
+        def run() -> None:
+            try:
+                with self.lock, HOST.host_lock(self.root), package_locks():
+                    # Recheck after flushing the HTTP response, before requesting shutdown.
+                    current = read_private(self.restart_job_file)
+                    if not current or current.get("id") != plan_id or current.get("state") != "restarting" or current.get("bootId") != boot_id():
+                        raise ValueError("server restart job changed")
+                    self.require_package_clear()
+                    self.require_healthy_core()
+                    if self.maintenance_file.exists() or self.maintenance_file.is_symlink() or self.busy:
+                        raise ValueError("another host operation is in progress")
+                    core_job = read_private(self.job_file)
+                    if core_job and core_job.get("state") in {"running", "recovering", "interrupted"}:
+                        raise ValueError("an Orbis core update is in progress")
+                    result = subprocess.run(["/usr/bin/systemctl", "reboot", "--no-block"], capture_output=True, text=True, timeout=10, check=False)
+                    if result.returncode:
+                        raise RuntimeError("systemd rejected the restart")
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+                current = read_private(self.restart_job_file)
+                if current and current.get("id") == plan_id and current.get("state") == "restarting":
+                    if isinstance(error, subprocess.TimeoutExpired):
+                        job["message"] = "The restart request could not be confirmed. Wait for the server to reconnect before starting another host operation."
+                    else:
+                        job.update(state="failed", finishedAt=time.time(), message="The server restart could not be requested. Review host operations before retrying.")
+                    write_private(self.restart_job_file, job)
+
+        return {"jobId": plan_id, "state": "restarting"}, lambda: threading.Thread(target=run, daemon=True).start()
 
     def require_package_clear(self) -> None:
         job = read_private(self.package_job_file)
@@ -269,6 +415,7 @@ class HostService:
 
     def package_plan(self, names: list[str]) -> dict:
         with self.lock:
+            self.require_restart_clear()
             self.require_healthy_core()
             if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
                 raise ValueError("host helper maintenance is in progress")
@@ -294,6 +441,7 @@ class HostService:
 
     def package_apply(self, plan_id: str) -> dict:
         with self.lock:
+            self.require_restart_clear()
             self.require_healthy_core()
             if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
                 raise ValueError("host helper maintenance is in progress")
@@ -397,6 +545,7 @@ class HostService:
                 write_private(self.job_file, job)
         return {
             "available": True,
+            "capabilities": ["restart.v1"],
             "enrolled": enrolled,
             "currentTag": saved.get("tag") if saved else None,
             "currentDigest": saved.get("digest") if saved else None,
@@ -410,6 +559,7 @@ class HostService:
 
     def plan(self, tag: str) -> dict:
         with self.lock:
+            self.require_restart_clear()
             self.require_package_clear()
             if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
                 raise ValueError("host helper maintenance is in progress")
@@ -459,6 +609,7 @@ class HostService:
 
     def apply(self, plan_id: str) -> tuple[dict, Callable[[], None]]:
         with self.lock:
+            self.require_restart_clear()
             self.require_package_clear()
             if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
                 raise ValueError("host helper maintenance is in progress")
@@ -520,6 +671,7 @@ class HostService:
 
     def recover(self, job_id: str) -> tuple[dict, Callable[[], None]]:
         with self.lock:
+            self.require_restart_clear()
             self.require_package_clear()
             if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
                 raise ValueError("host helper maintenance is in progress")
@@ -606,6 +758,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except (OSError, ValueError, RuntimeError):
                 self.send_json(503, {"error": "host status is unavailable"})
             return
+        if self.path == "/v1/restart":
+            try:
+                self.send_json(200, self.server.service.restart_status())
+            except (OSError, ValueError, RuntimeError):
+                self.send_json(503, {"error": "server restart status is unavailable"})
+            return
         if self.path == "/v1/packages":
             try:
                 self.send_json(200, PACKAGES.inventory())
@@ -635,7 +793,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
-        if self.path not in {"/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply"}:
+        if self.path not in {"/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply", "/v1/restart/plan", "/v1/restart/apply"}:
             self.send_json(404, {"error": "not found"})
             return
         try:
@@ -664,10 +822,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if set(data) != {"names"} or not isinstance(data["names"], list):
                     raise ValueError("request must contain a package name list")
                 self.send_json(200, self.server.service.package_plan(data["names"]))
-            else:
+            elif self.path == "/v1/packages/apply":
                 if set(data) != {"planId"} or not isinstance(data["planId"], str):
                     raise ValueError("request must contain one package plan ID")
                 self.send_json(202, self.server.service.package_apply(data["planId"]))
+            elif self.path == "/v1/restart/plan":
+                if data:
+                    raise ValueError("restart review does not accept options")
+                self.send_json(200, self.server.service.restart_plan())
+            else:
+                if set(data) != {"planId"} or not isinstance(data["planId"], str):
+                    raise ValueError("request must contain one reviewed restart plan ID")
+                result, launch = self.server.service.restart_apply(data["planId"])
+                try:
+                    self.send_json(202, result)
+                finally:
+                    launch()
         except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
             self.send_json(409, {"error": str(error) if isinstance(error, ValueError) else "host operation could not start"})
 
