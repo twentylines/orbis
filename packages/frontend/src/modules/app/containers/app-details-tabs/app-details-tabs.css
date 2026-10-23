@@ -24,7 +24,7 @@
   border-radius: 10px;
   background: transparent;
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 650;
   transition:
     background 0.18s ease,
@@ -83,7 +83,7 @@
   .app-detail-tabs .markdown h1,
   .app-detail-tabs .markdown h2,
   .app-detail-tabs .markdown h3 {
-    font-size: var(--orbis-compact-page-title, 20px);
+    font-size: var(--orbis-compact-page-title, 1.25rem);
     line-height: 1.4;
   }
 }
@@ -111,13 +111,13 @@
 }
 .app-panel-empty h3 {
   color: var(--desktop-ink);
-  font-size: var(--orbis-compact-section, 19px);
+  font-size: var(--orbis-compact-section, 1.1875rem);
   margin-bottom: 12px;
 }
 .app-panel-caption {
   margin: 20px 0 0;
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .app-operations > header {
   display: flex;
@@ -129,7 +129,7 @@
 }
 .app-operations h3 {
   margin: 0;
-  font-size: var(--orbis-compact-section, 22px);
+  font-size: var(--orbis-compact-section, 1.375rem);
   letter-spacing: -0.03em;
 }
 .app-operations > header a {
@@ -157,10 +157,10 @@
 }
 .app-operations time {
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .app-operations summary > span {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 650;
 }
 .app-operations dl {
@@ -171,13 +171,13 @@
 }
 .app-operations dt {
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 .app-operations dd {
   overflow-wrap: anywhere;
   margin: 5px 0 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .app-operations dl > div:last-child {
   grid-column: 1 / -1;

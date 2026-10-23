@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { IconDeviceDesktop, IconMoonStars, IconSunHigh } from '@tabler/icons-react';
 import { WallpaperSettings } from './wallpaper-settings';
 import { MaterialSettings } from './material-settings';
+import { AppearanceRange } from './appearance-controls';
 import './appearance.css';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
@@ -21,7 +22,7 @@ const presets: { value: DesktopPreferences['preset']; title: string; description
 ];
 
 export const Appearance = () => {
-  const { preferences, cacheAvailable, update, reset, syncState } = useDesktopPreferences();
+  const { preferences, cacheAvailable, update, reset, syncState, updateAppearance } = useDesktopPreferences();
   const [name, setName] = useState(preferences.serverName);
   const [message, setMessage] = useState('');
   const [wallpaperSettingsRevision, setWallpaperSettingsRevision] = useState(0);
@@ -172,6 +173,26 @@ export const Appearance = () => {
               <strong>Follow system</strong>
             </span>
           </button>
+        </div>
+      </section>
+      <section className="appearance-section" aria-labelledby="appearance-text">
+        <div>
+          <h2 id="appearance-text">Text size</h2>
+          <p>Change text throughout Orbis. Browser zoom still applies.</p>
+        </div>
+        <div className="appearance-material-controls">
+          <AppearanceRange
+            label="Interface text"
+            min={85}
+            max={150}
+            value={preferences.appearance.textScale}
+            onChange={(textScale) => updateAppearance({ textScale })}
+          />
+          <div className="appearance-actions">
+            <button type="button" onClick={() => updateAppearance({ textScale: 100 })}>
+              Reset text size
+            </button>
+          </div>
         </div>
       </section>
       <MaterialSettings key={wallpaperSettingsRevision} />

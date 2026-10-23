@@ -8,7 +8,7 @@
   background: linear-gradient(130deg, rgba(104, 149, 119, 0.18), rgba(196, 160, 114, 0.1));
 }
 .task-summary h2 {
-  font-size: var(--orbis-compact-page-title, 25px);
+  font-size: var(--orbis-compact-page-title, 1.5625rem);
   margin: 0 0 7px;
   letter-spacing: -0.04em;
 }
@@ -36,7 +36,7 @@
 .task-retention {
   margin-left: auto;
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   max-width: 17ch;
 }
 .task-toolbar {
@@ -48,7 +48,7 @@
   margin: 26px 0 18px;
 }
 .task-toolbar > span {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--desktop-muted);
 }
 .task-toolbar > fieldset {
@@ -113,18 +113,18 @@
   overflow-wrap: anywhere;
 }
 .task-identity strong {
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 .task-identity strong span {
   font-weight: 500;
 }
 .task-identity small {
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   margin-top: 4px;
 }
 .task-state {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 .task-disclosure {
@@ -151,12 +151,12 @@
 }
 .task-details dt {
   color: var(--desktop-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 500;
 }
 .task-details dd {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
 .task-details dl > div:last-child {
@@ -176,7 +176,7 @@
 }
 .task-empty h2 {
   margin: 16px 0 8px;
-  font-size: 20px;
+  font-size: 1.25rem;
   color: var(--desktop-ink);
 }
 .task-empty p {

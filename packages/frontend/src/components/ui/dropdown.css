@@ -7,7 +7,7 @@
   border: 1px solid var(--tblr-border-color);
   border-radius: 10px;
   box-shadow: 0 12px 32px rgba(8, 24, 18, 0.18);
-  font-size: 14px;
+  font-size: 0.875rem;
   max-width: min(360px, calc(100vw - 32px));
 }
 .orbis-dropdown-menu .dropdown-item {

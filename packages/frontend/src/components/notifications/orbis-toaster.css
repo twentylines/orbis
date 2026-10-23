@@ -65,7 +65,7 @@ body:not(:has(.desktop)) .orbis-notifications {
   min-width: 0;
   max-height: calc(100dvh - var(--notice-top) - 152px);
   overflow-y: auto;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
   font-weight: 520;
   overflow-wrap: anywhere;

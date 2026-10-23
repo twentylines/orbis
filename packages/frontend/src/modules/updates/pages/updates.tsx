@@ -1,3 +1,4 @@
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Markdown } from '@/components/markdown/markdown';
@@ -296,7 +297,12 @@ function LocalUpdates() {
             {build.isError ? 'Installed Orbis build metadata is unavailable.' : null}
             {build.data ? (
               <>
-                <strong>Installed: {build.data.version}</strong>
+                <strong>
+                  Installed:{' '}
+                  <span title={build.data.version}>
+                    <WrapWords text={build.data.version} />
+                  </span>
+                </strong>
                 {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
                 {build.data.imageDigest ? (
                   <div className="desktop-update-image">
@@ -531,18 +537,20 @@ function LocalUpdates() {
                               setReviewPackagePlan(null);
                             }}
                           />
-                          <strong>
+                          <strong title={item.name}>
                             {[...item.name.matchAll(/[^:-]*[:-]|[^:-]+$/g)].map((part) => (
                               <Fragment key={part.index}>
-                                {part[0]}
+                                <WrapWords text={part[0]} />
                                 <wbr />
                               </Fragment>
                             ))}
                           </strong>
                           {item.security ? <span>Security</span> : null}
                         </label>
-                        <p>
-                          {item.installedVersion} <span aria-hidden="true">→</span> {item.candidateVersion}
+                        <p className="desktop-host-package-versions">
+                          <code title={item.installedVersion}>{item.installedVersion}</code>
+                          <span aria-hidden="true">→</span>
+                          <code title={item.candidateVersion}>{item.candidateVersion}</code>
                         </p>
                         <small>{packageSources(item.sources)}</small>
                         <div className="desktop-host-package-foot">
@@ -552,7 +560,7 @@ function LocalUpdates() {
                             aria-pressed={selectedPackage === item.name}
                             onClick={() => setSelectedPackage(selectedPackage === item.name ? null : item.name)}
                           >
-                            {selectedPackage === item.name ? 'Close changelog' : 'Read changelog'}
+                            {selectedPackage === item.name ? 'Hide changes' : 'View changes'}
                           </button>
                         </div>
                       </li>

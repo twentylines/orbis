@@ -2,7 +2,7 @@ import { IconActivity, IconApps, IconBrandAppstore, IconDeviceDesktopAnalytics, 
 
 export const desktopNavigation = [
   { path: '/dashboard', label: 'Workspace', dockLabel: 'Home', Icon: IconHome, keywords: 'home dashboard' },
-  { path: '/apps', label: 'Applications', dockLabel: 'Apps', Icon: IconApps, keywords: 'installed docker containers' },
+  { path: '/apps', label: 'Apps', dockLabel: 'Apps', Icon: IconApps, keywords: 'applications installed docker containers' },
   { path: '/app-store', label: 'App Store', dockLabel: 'Store', Icon: IconBrandAppstore, keywords: 'install catalogue marketplace' },
   { path: '/monitor', label: 'Monitor', Icon: IconDeviceDesktopAnalytics, keywords: 'status system cpu memory storage resources processes usage' },
   { path: '/updates', label: 'Updates', Icon: IconRefresh, keywords: 'orbis server system changelog release upgrade' },

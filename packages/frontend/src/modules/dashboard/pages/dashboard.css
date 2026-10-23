@@ -20,7 +20,7 @@
 }
 .workspace-eyebrow {
   margin: 0 0 11px;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 780;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -31,7 +31,7 @@
   color: #8d5840;
 }
 .workspace-heading h1 {
-  font-size: var(--orbis-compact-title, clamp(44px, 5.8vw, 72px));
+  font-size: var(--orbis-compact-title, clamp(2.75rem, calc(5.8vw * var(--orbis-text-scale, 1)), 4.5rem));
   line-height: 1.15;
   font-weight: 720;
   letter-spacing: -0.068em;
@@ -44,7 +44,7 @@
 }
 .workspace-subline {
   margin: 14px 0 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 630;
   color: var(--workspace-heading-ink);
 }
@@ -143,13 +143,13 @@
 }
 .workspace-editor-heading h2 {
   margin: 0 0 3px;
-  font-size: 19px;
+  font-size: 1.1875rem;
 }
 .workspace-editor-heading p,
 .workspace-editor-sync {
   margin: 0;
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .workspace-editor-list {
   display: grid;
@@ -185,12 +185,12 @@
 }
 .workspace-pin-editor h3 {
   margin: 0 0 3px;
-  font-size: 16px;
+  font-size: 1rem;
 }
 .workspace-pin-editor p {
   margin: 0 0 14px;
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .workspace-pin-list {
   display: grid;
@@ -323,7 +323,7 @@
   display: block;
   margin-bottom: 20px;
   color: var(--desktop-accent);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -380,7 +380,7 @@
 }
 .workspace-section-heading h2,
 .workspace-attention h2 {
-  font-size: var(--orbis-compact-section, 24px);
+  font-size: var(--orbis-compact-section, 1.5rem);
   line-height: 1.25;
   margin: 0 0 4px;
   letter-spacing: -0.045em;
@@ -389,7 +389,7 @@
 .workspace-section-heading p,
 .workspace-attention p {
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin: 0;
 }
 .workspace-section-heading > a {
@@ -398,7 +398,7 @@
   gap: 5px;
   text-decoration: none;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 650;
 }
 .workspace-app-list {
@@ -420,7 +420,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 650;
   white-space: nowrap;
 }
@@ -515,7 +515,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--workspace-heading-ink);
   text-shadow: 0 1px 9px var(--workspace-heading-shadow);
 }
@@ -523,7 +523,7 @@
   min-height: 1.35em;
   line-height: 1.35;
   white-space: normal;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--workspace-heading-ink);
   text-shadow: 0 1px 9px var(--workspace-heading-shadow);
   text-transform: capitalize;
@@ -584,7 +584,7 @@
 .workspace-empty strong {
   margin-top: 16px;
   color: var(--desktop-ink);
-  font-size: 19px;
+  font-size: 1.1875rem;
 }
 .workspace-empty p {
   max-width: 36ch;
@@ -613,14 +613,14 @@
 }
 .workspace-links h3 {
   flex-basis: 100%;
-  font-size: 14px;
+  font-size: 0.875rem;
   margin: 0;
 }
 .workspace-links a {
   display: block;
   min-width: 0;
   max-width: 100%;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
   text-decoration: none;
 }
@@ -708,7 +708,7 @@
   padding: 12px 16px;
   border-radius: 14px;
   background: color-mix(in srgb, var(--desktop-accent) 8%, transparent);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.5;
 }
 .workspace-uptime > span {
@@ -734,7 +734,7 @@
   gap: 10px;
   min-width: 0;
   color: var(--desktop-ink);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 620;
   text-decoration: none;
   text-align: center;
@@ -808,7 +808,7 @@
   color: var(--desktop-status-muted);
 }
 .workspace-dial strong {
-  font-size: clamp(17px, 2vw, 23px);
+  font-size: clamp(1.0625rem, calc(2vw * var(--orbis-text-scale, 1)), 1.4375rem);
   font-weight: 710;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.025em;
@@ -837,14 +837,14 @@
   align-items: center;
   gap: 8px;
   grid-column: 1 / -1;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 660;
   color: var(--desktop-status-muted);
 }
 .workspace-network-rate {
   min-width: 0;
   white-space: normal;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
 .workspace-network-rate b {
@@ -908,7 +908,7 @@
 }
 .workspace-storage > strong {
   display: block;
-  font-size: var(--orbis-compact-reading, clamp(36px, 4vw, 52px));
+  font-size: var(--orbis-compact-reading, clamp(2.25rem, calc(4vw * var(--orbis-text-scale, 1)), 3.25rem));
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
   position: relative;
@@ -917,7 +917,7 @@
 .workspace-storage > small {
   display: block;
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin-top: 2px;
   line-height: 1.45;
 }
@@ -1059,7 +1059,7 @@
   max-width: 42ch;
 }
 .workspace-attention a {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .workspace-apps .workspace-panel-kicker,
 .workspace-apps .workspace-section-heading {
@@ -1089,7 +1089,7 @@
   flex: 1 1 auto;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 650;
 }
 .workspace-status-storage > strong {
@@ -1099,7 +1099,7 @@
   align-items: baseline;
   justify-content: end;
   column-gap: 4px;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.025em;
 }
@@ -1107,12 +1107,12 @@
   white-space: nowrap;
 }
 .workspace-status-storage strong small {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--desktop-status-muted);
   font-weight: 500;
 }
 .workspace-status-storage > small {
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--desktop-status-muted);
 }
 .workspace-status-storage .workspace-meter {
@@ -1144,7 +1144,7 @@
   padding: 18px 22px;
 }
 .workspace-grid[data-more-apps="true"] :is(.workspace-operations, .workspace-attention) h2 {
-  font-size: 20px;
+  font-size: 1.25rem;
 }
 .workspace-grid[data-more-apps="true"] .workspace-operations .workspace-section-heading {
   margin-bottom: 8px;
@@ -1184,7 +1184,7 @@
   display: block;
 }
 .workspace-recent-tasks strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
   overflow-wrap: normal;
 }
 .workspace-recent-app-name {
@@ -1197,11 +1197,11 @@
 }
 .workspace-recent-tasks small {
   color: var(--desktop-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   margin-top: 3px;
 }
 .workspace-recent-tasks b {
-  font-size: 11px;
+  font-size: 0.6875rem;
   white-space: nowrap;
   font-weight: 600;
 }
@@ -1242,7 +1242,7 @@
   padding: 24px 28px;
 }
 :where(.workspace-grid[data-default-layout="true"]) .workspace-attention h2 {
-  font-size: 21px;
+  font-size: 1.3125rem;
 }
 @media (min-width: 900px) {
   .workspace-grid[data-default-layout="true"][data-more-apps="true"] {
@@ -1389,7 +1389,7 @@
     letter-spacing: -0.05em;
   }
   .workspace-heading h1[data-long-name="true"] {
-    font-size: min(var(--orbis-compact-title), clamp(18px, 5.5vw, 28px));
+    font-size: min(var(--orbis-compact-title), clamp(1.125rem, calc(5.5vw * var(--orbis-text-scale, 1)), 1.75rem));
     letter-spacing: -0.035em;
   }
   .workspace-actions {
@@ -1400,11 +1400,11 @@
   }
   .workspace-edit-toggle {
     padding: 11px 10px;
-    font-size: 12px;
+    font-size: 0.75rem;
   }
   .desktop .workspace-add {
     padding: 11px 10px;
-    font-size: 12px;
+    font-size: 0.75rem;
   }
   .workspace-widget .workspace-app-list {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5em), 1fr));

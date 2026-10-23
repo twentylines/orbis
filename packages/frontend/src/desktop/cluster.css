@@ -354,7 +354,7 @@
 .cluster-selector-heading h2 {
   margin: 0;
   color: inherit;
-  font-size: clamp(1.5rem, 3vw, 2.125rem);
+  font-size: clamp(1.5rem, calc(3vw * var(--orbis-text-scale, 1)), 2.125rem);
   line-height: 1.35;
   font-weight: 500;
   overflow-wrap: anywhere;
@@ -472,7 +472,7 @@
     grid-row: 2;
   }
   .cluster-selector-heading h2 {
-    font-size: clamp(1.25rem, 5vw, 1.75rem);
+    font-size: clamp(1.25rem, calc(5vw * var(--orbis-text-scale, 1)), 1.75rem);
   }
   .cluster-selector-close {
     grid-column: 2;

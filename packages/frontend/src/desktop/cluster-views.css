@@ -20,7 +20,7 @@
 }
 .cluster-overview-copy h2 {
   margin: 0;
-  font-size: clamp(26px, 3vw, 40px);
+  font-size: clamp(1.625rem, calc(3vw * var(--orbis-text-scale, 1)), 2.5rem);
   line-height: 1.2;
   letter-spacing: -0.035em;
   overflow-wrap: anywhere;
@@ -162,7 +162,7 @@
 }
 .cluster-apps-heading h2 {
   margin: 0;
-  font-size: var(--orbis-compact-section, 24px);
+  font-size: var(--orbis-compact-section, 1.5rem);
   line-height: 1.35;
 }
 .cluster-apps-heading p {

@@ -38,12 +38,12 @@
 }
 .desktop-updates-card h2 {
   margin: 0 0 4px;
-  font-size: min(19px, var(--orbis-compact-section, 19px));
+  font-size: min(1.1875rem, var(--orbis-compact-section, 1.1875rem));
 }
 .desktop-updates-card-head p {
   margin: 0;
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .desktop-updates-host {
   grid-column: 1 / -1;
@@ -65,12 +65,12 @@
   display: block;
 }
 .desktop-host-package-summary strong {
-  font-size: 17px;
+  font-size: 1.0625rem;
 }
 .desktop-host-package-summary span,
 .desktop-host-package-times {
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 .desktop-host-package-summary button,
@@ -109,7 +109,7 @@
   width: min(100%, 370px);
   margin: 0 0 15px;
   color: var(--desktop-ink);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 650;
 }
 .desktop-host-package-search input {
@@ -134,7 +134,7 @@
   margin: 0 0 15px;
 }
 .desktop-host-package-selection strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .desktop-host-package-selection button {
   min-height: 42px;
@@ -198,22 +198,44 @@
   accent-color: var(--desktop-accent);
   flex: 0 0 auto;
 }
-.desktop-host-package-title span {
+.desktop-host-package-title > span {
   padding: 3px 7px;
   border-radius: 6px;
   background: rgba(159, 90, 42, 0.13);
   color: var(--desktop-ink);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
 }
 .desktop-host-package p {
   margin: 0;
   line-height: 1.45;
 }
+p.desktop-host-package-versions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: baseline;
+}
+.desktop-host-package-versions code {
+  grid-column: 2;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font-size: 0.8125rem;
+}
+.desktop-host-package-versions > span {
+  grid-column: 1;
+  grid-row: 2;
+}
 .desktop-host-package small,
 .desktop-host-package-foot span {
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 .desktop-host-package-foot {
@@ -243,7 +265,7 @@
 }
 .desktop-host-changelog p {
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 .desktop-host-changelog-body {
@@ -258,7 +280,7 @@
   background: rgba(125, 145, 121, 0.06);
   color: var(--desktop-ink);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.55;
   overflow: auto;
   resize: vertical;
@@ -297,7 +319,7 @@
   background: rgba(125, 145, 121, 0.06);
   color: var(--desktop-ink);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.5;
   resize: vertical;
 }
@@ -336,7 +358,7 @@
 }
 .desktop-update-app small {
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   margin-top: 3px;
 }
 .desktop-update-link,
@@ -354,7 +376,7 @@
   border-radius: 10px;
   background: rgba(209, 161, 114, 0.1);
   color: var(--desktop-ink);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 .desktop-update-build strong,
@@ -396,11 +418,11 @@
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
-  font-size: var(--orbis-compact-section, 21px);
+  font-size: var(--orbis-compact-section, 1.3125rem);
 }
 .desktop-update-release-title time {
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .desktop-update-release summary {
   cursor: pointer;
@@ -426,7 +448,7 @@
 .desktop-update-note {
   display: block;
   margin: 19px 0 0;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .desktop-update-action,
 .desktop-update-job button,
@@ -523,7 +545,7 @@
     display: grid;
     grid-template-columns: 18px minmax(0, 1fr);
     align-items: start;
-    font-size: 13px;
+    font-size: 0.8125rem;
     line-height: 1.45;
   }
   .desktop-host-package-title input {
@@ -532,7 +554,7 @@
   .desktop-host-package-title strong {
     font-size: inherit;
   }
-  .desktop-host-package-title span {
+  .desktop-host-package-title > span {
     grid-column: 2;
     justify-self: start;
   }

@@ -16,7 +16,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: var(--orbis-compact-section, 22px);
+  font-size: var(--orbis-compact-section, 1.375rem);
   margin: 0;
   letter-spacing: -0.035em;
 }
@@ -41,7 +41,7 @@
   min-height: 36px;
   background: transparent;
   color: inherit;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 650;
 }
 .container-resources-sort button[aria-pressed="true"] {
@@ -49,12 +49,12 @@
 }
 .container-resources-sort > span {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--desktop-muted);
 }
 .container-resources-note {
   max-width: 80ch;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.6;
   color: var(--desktop-muted);
 }
@@ -83,11 +83,11 @@
   gap: 4px;
 }
 .container-resource-name strong {
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .container-resource-name small {
   color: var(--desktop-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .container-resource-name > strong,
 .container-resource-name > small {
@@ -112,10 +112,10 @@
 }
 .container-resource-values small {
   color: var(--desktop-muted);
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 .container-resource-values b {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 650;
 }
 .container-resource-bar {
@@ -134,7 +134,7 @@
 }
 .container-resource-details {
   flex-basis: 100%;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--desktop-muted);
 }
 .container-resource-details summary {
@@ -172,7 +172,7 @@
   margin-top: 15px;
 }
 .container-resource-details dt {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 500;
 }
 .container-resource-details dd {
@@ -197,7 +197,7 @@
   color: var(--desktop-ink);
 }
 .is-compact .container-resources-heading h2 {
-  font-size: 14px;
+  font-size: 0.875rem;
   letter-spacing: 0;
 }
 .desktop .container-resources.is-compact a {
@@ -221,10 +221,10 @@
   min-width: 0;
 }
 .is-compact .container-resource-values b {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .is-compact .container-resource-name strong {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .is-compact .container-resource-name small,
 .is-compact .container-resource-values small,

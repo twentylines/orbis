@@ -68,7 +68,9 @@ export function ClusterCatalogue({ server }: { server: ClusterServer }) {
                 <strong>
                   <WrapWords text={app.name} />
                 </strong>
-                <span>{app.short_desc}</span>
+                <span>
+                  <WrapWords text={app.short_desc} />
+                </span>
               </span>
             </button>
           ))}

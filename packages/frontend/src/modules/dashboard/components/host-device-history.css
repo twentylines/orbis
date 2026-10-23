@@ -16,7 +16,7 @@
 }
 .host-device-history .host-history-heading h2 {
   margin: 0;
-  font-size: var(--orbis-compact-section, 22px);
+  font-size: var(--orbis-compact-section, 1.375rem);
   line-height: 1.5;
   letter-spacing: -0.035em;
 }

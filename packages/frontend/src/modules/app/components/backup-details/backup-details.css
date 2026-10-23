@@ -8,7 +8,7 @@
   border: 0;
   background: transparent;
   color: var(--desktop-ink);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.65;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -26,7 +26,7 @@
   align-items: baseline;
   gap: 8px 20px;
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.6;
 }
 .backup-metadata time {

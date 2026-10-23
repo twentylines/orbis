@@ -3,6 +3,10 @@
 @import "@tabler/core/dist/css/tabler-themes.min.css";
 @import "./desktop/theme.css";
 
+:root {
+  font-size: calc(100% * var(--orbis-text-scale, 1));
+}
+
 #root {
   min-height: 100svh;
   height: auto;
@@ -121,7 +125,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   margin-bottom: 24px;
 }
 .desktop-auth-identity h1 {
-  font-size: var(--orbis-compact-page-title, 24px);
+  font-size: var(--orbis-compact-page-title, 1.5rem);
   letter-spacing: -0.035em;
   margin: 10px 0 0;
   color: var(--desktop-ink);
@@ -129,7 +133,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 .desktop-auth-product {
   margin: 10px 0 0;
   color: var(--desktop-ink);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 750;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -371,7 +375,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 }
 .orbis-error-copy h1 {
   margin: 0 0 8px;
-  font-size: var(--orbis-compact-page-title, 22px);
+  font-size: var(--orbis-compact-page-title, 1.375rem);
   line-height: 1.25;
   letter-spacing: -0.025em;
   overflow-wrap: anywhere;
@@ -379,7 +383,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 .orbis-error-copy p {
   margin: 0;
   color: var(--desktop-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 .orbis-error-actions {
@@ -397,7 +401,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   grid-column: 1 / -1;
   padding-top: 14px;
   border-top: 1px solid var(--desktop-line);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .orbis-error-details summary {
   cursor: pointer;

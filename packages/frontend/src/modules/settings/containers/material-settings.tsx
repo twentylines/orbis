@@ -142,7 +142,7 @@ export function MaterialSettings() {
       </section>
       <section className="appearance-section" aria-labelledby="appearance-transparency">
         <div>
-          <h2 id="appearance-transparency">Transparency</h2>
+          <h2 id="appearance-transparency">Surfaces</h2>
           <p>Use solid surfaces when you prefer less background detail.</p>
         </div>
         <fieldset className="appearance-choice" aria-label="Transparency preference">

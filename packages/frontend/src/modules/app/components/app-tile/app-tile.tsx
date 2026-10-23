@@ -39,7 +39,9 @@ export const AppTile: React.FC<{
             </span>
             {!docker || !['running', 'stopped'].includes(status) ? <AppStatus lite status={status} /> : null}
           </div>
-          <div className="text-muted">{info.short_desc}</div>
+          <div className="text-muted">
+            <WrapWords text={info.short_desc} />
+          </div>
           {docker ? <DockerHealth appUrn={info.urn} telemetry={docker.data} stale={docker.stale} /> : null}
           <span className="app-tile-notice" aria-hidden={notice ? undefined : true}>
             {notice ? (

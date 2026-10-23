@@ -451,7 +451,7 @@ body:has(.orbis-theme) .react-tooltip {
   padding: 10px 14px;
   border: 1px solid var(--desktop-edge);
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.5;
   box-shadow: 0 12px 30px rgba(5, 22, 17, 0.24);
 }

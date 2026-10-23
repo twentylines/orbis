@@ -28,7 +28,7 @@ const darkPalette = {
   warning: '#e8c180',
   info: '#9cc3d3',
 };
-function apply(options: unknown, { dark = false, solidSystem = false, motionSystem = false, blockedMedia = false } = {}) {
+function apply(options: unknown, { dark = false, solidSystem = false, motionSystem = false, blockedMedia = false, paletteReady = true } = {}) {
   const properties = new Map<string, string>([['--orbis-accent', 'stale']]);
   const root = {
     dataset: {} as Record<string, string>,
@@ -42,7 +42,9 @@ function apply(options: unknown, { dark = false, solidSystem = false, motionSyst
           ? '#f5f8f2'
           : name === '--desktop-preset-tint'
             ? '#597b73'
-            : ((dark ? darkPalette : palette)[name.replace('--desktop-base-', '') as keyof typeof palette] ?? ''),
+            : paletteReady
+              ? ((dark ? darkPalette : palette)[name.replace('--desktop-base-', '') as keyof typeof palette] ?? '')
+              : '',
     }),
     matchMedia: (query: string) => {
       if (blockedMedia) throw new Error('Unavailable');
@@ -83,6 +85,17 @@ describe('saved appearance applied before hydration and to live materials', () =
       lowEffects: 'yes',
     });
     expect([...result.properties.keys()].sort()).toEqual(['--orbis-chrome-focus', '--orbis-chrome-muted']);
+  });
+  test('applies saved text sizing before stylesheet readiness and clears it at the default', () => {
+    for (const textScale of [85, 125, 150]) {
+      const result = apply({ textScale }, { paletteReady: false });
+      expect(result.properties.get('--orbis-text-scale')).toBe(String(textScale / 100));
+      expect(result.dataset.orbisEffects).toBeUndefined();
+    }
+    expect(apply({ textScale: 100 }).properties.has('--orbis-text-scale')).toBe(false);
+  });
+  test.each([84, 151, 100.5, '150', 'calc(2)', null])('ignores invalid cached text size: %p', (textScale) => {
+    expect(apply({ textScale }).properties.has('--orbis-text-scale')).toBe(false);
   });
   test('keeps primary glyphs, links and small labels readable at 128 colour/material extremes', () => {
     let combinations = 0;

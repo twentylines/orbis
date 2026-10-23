@@ -18,7 +18,7 @@
   min-width: min-content;
   max-width: 100%;
   margin: 0;
-  font-size: 22px;
+  font-size: 1.375rem;
   line-height: 1.35;
   overflow-wrap: normal;
 }
@@ -44,7 +44,7 @@
     padding-block: 18px;
   }
   .desktop .desktop-route-page .desktop-page-heading h1 {
-    font-size: 20px;
+    font-size: 1.25rem;
   }
   .desktop-route-page .desktop-window-content {
     padding-block: 20px 24px;

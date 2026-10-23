@@ -34,7 +34,7 @@ This fetches the newest published release, including betas. See [installation re
 
 [First-run setup](screenshots/navigation/onboarding-light.png) · [Appearance, light](screenshots/appearance/desktop-light.png) · [Appearance, dark](screenshots/appearance/desktop-dark.png)
 
-Current source build with sample apps and two Orbis instances on one disposable test machine. See the [gallery](screenshots/navigation/README.md).
+Monitor, Workspace and phone Apps show the current source build on a disposable Linux host with a real installed app. Other views show earlier beta builds; see the [gallery](screenshots/navigation/README.md).
 
 [Earlier beta62 gallery](screenshots/live-beta62/README.md) · [Backup views](screenshots/backups/desktop.png)
 

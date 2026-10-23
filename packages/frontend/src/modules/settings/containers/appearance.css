@@ -5,7 +5,7 @@
   display: block;
   color: var(--desktop-muted);
   margin: 0 0 12px;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .appearance-section {
   min-width: 0;
@@ -19,17 +19,17 @@
   min-width: 0;
 }
 .appearance-section h2 {
-  font-size: var(--orbis-compact-section, 18px);
+  font-size: var(--orbis-compact-section, 1.125rem);
   margin: 0 0 6px;
 }
 .appearance-section p {
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   max-width: 34ch;
 }
 .appearance-name label {
   display: block;
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin-bottom: 7px;
   font-weight: 600;
 }
@@ -107,10 +107,10 @@
   gap: 3px;
 }
 .appearance-mode strong {
-  font-size: 16px;
+  font-size: 1rem;
 }
 .appearance-mode small {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 450;
 }
 .appearance .appearance-mode-light {
@@ -147,11 +147,11 @@
   box-shadow: 0 16px 30px rgba(24, 49, 40, 0.15);
 }
 .appearance-preset strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .appearance-preset small {
   color: var(--desktop-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 400;
 }
 .appearance-swatch {
@@ -248,7 +248,7 @@
   display: block;
   min-height: 24px;
   color: var(--desktop-accent);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .appearance-wallpaper-settings {
   display: grid;
@@ -383,12 +383,14 @@
 
 .appearance-material-controls {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   min-width: 0;
   align-content: start;
 }
 .appearance-accent-controls {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   gap: 9px;

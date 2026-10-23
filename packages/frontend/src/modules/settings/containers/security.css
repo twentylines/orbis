@@ -12,7 +12,7 @@
   flex: 1 1 12em;
   min-width: 0;
   margin: 0;
-  font-size: clamp(16px, 2.4vw, 20px);
+  font-size: clamp(1rem, calc(2.4vw * var(--orbis-text-scale, 1)), 1.25rem);
   line-height: 1.35;
 }
 .settings-security-heading > svg {

@@ -38,7 +38,7 @@
   color: var(--desktop-chrome-ink);
   background: var(--desktop-chrome);
   border-bottom: 1px solid var(--desktop-line);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .orbis-app-launcher .app-launcher-close {
   width: 40px;
@@ -81,14 +81,14 @@
 .app-launcher-identity h2 {
   margin: 0 0 6px;
   color: var(--desktop-ink);
-  font-size: 22px;
+  font-size: 1.375rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 .app-launcher-status {
   color: var(--desktop-muted);
   text-transform: capitalize;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .app-launcher-description {
   margin: 0;
@@ -126,7 +126,7 @@
   grid-column: 1;
   color: var(--desktop-muted);
   overflow-wrap: anywhere;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .app-launcher-addresses svg {
   grid-column: 2;

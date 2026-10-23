@@ -4,11 +4,14 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   const root = document.documentElement;
   const options = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
   const source = getComputedStyle(document.querySelector('.orbis-theme') ?? root);
-  if (!source.getPropertyValue('--desktop-base-surface').trim()) return;
   const numeric = (key: string, min: number, max: number) => {
     const value = options[key];
     return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max ? value : null;
   };
+  const textScale = numeric('textScale', 85, 150) ?? 100;
+  if (textScale === 100) root.style.removeProperty('--orbis-text-scale');
+  else root.style.setProperty('--orbis-text-scale', String(textScale / 100));
+  if (!source.getPropertyValue('--desktop-base-surface').trim()) return;
   const colour = (value: string): Rgba => {
     if (/^#[a-f0-9]{6}$/i.test(value))
       return [Number.parseInt(value.slice(1, 3), 16), Number.parseInt(value.slice(3, 5), 16), Number.parseInt(value.slice(5, 7), 16), 1];

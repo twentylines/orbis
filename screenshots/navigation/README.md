@@ -1,10 +1,12 @@
 # Navigation, server clusters and app launchers
 
-Captures from 22 October 2026. Login views use the locally built frontend with an actual Orbis beta66 backend on a disposable Linux machine. The setup view uses a beta64 backend. The remaining captures use sample apps and two Orbis instances on another disposable test machine. Each instance has a running demo app; five additional sample app records have no containers.
+Monitor, Workspace and phone Apps were refreshed on 23 October 2026 from the current source build on a disposable Linux host with IT-Tools installed.
+
+The other captures are from 22 October 2026. Login views use the locally built frontend with an actual Orbis beta66 backend on a disposable Linux machine. The setup view uses a beta64 backend. The remaining captures use sample apps and two Orbis instances on another disposable test machine. Each instance has a running demo app; five additional sample app records have no containers.
 
 This gallery shows page navigation, direct selection through the animated 3D server cases, merged apps and updates, desktop launchers, the split dock and phone app management. Minimized apps share the navigation dock's bottom row, and navigation contracts to icons after the fourth minimized app. Phones use ordinary pages. The instances share a Docker daemon, so detected containers can appear under both servers. These captures do not demonstrate a physical multi-host deployment or a real homelab migration.
 
-The workspace, server selector and split-dock captures include the latest interface changes. The selector uses floating cards over background blur. Home shows used and total RAM alongside its percentage. First-run setup appears for an existing account before its first Orbis workspace visit.
+The selector uses floating cards over background blur. Home shows used and total RAM alongside its percentage. First-run setup appears for an existing account before its first Orbis workspace visit.
 
 - [Workspace](workspace.png)
 - [First-run setup](onboarding-light.png)

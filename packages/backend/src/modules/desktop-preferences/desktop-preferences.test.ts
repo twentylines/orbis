@@ -259,12 +259,13 @@ describe('desktop preferences', () => {
       .send({ ...DEFAULT_DESKTOP_PREFERENCES, windows })
       .expect(400);
   });
-  it('round-trips bounded accent, material and effect settings without accepting invalid overrides', async () => {
+  it('round-trips bounded accent, material, text and effect settings without accepting invalid overrides', async () => {
     const value = {
       ...DEFAULT_DESKTOP_PREFERENCES,
       appearance: {
         ...DEFAULT_DESKTOP_PREFERENCES.appearance,
         accent: '#ffff00',
+        textScale: 150,
         surfaceOpacity: 90,
         chromeOpacity: 80,
         glassBlur: 40,
@@ -283,6 +284,10 @@ describe('desktop preferences', () => {
     await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer other').expect(200, value);
     for (const invalid of [
       { accent: 'red' },
+      { textScale: 84 },
+      { textScale: 151 },
+      { textScale: 125.5 },
+      { textScale: '150' },
       { chromeOpacity: 79 },
       { surfaceOpacity: 89 },
       { glassBlur: 41 },

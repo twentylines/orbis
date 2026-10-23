@@ -33,7 +33,11 @@ export const StoreTile: React.FC<{ app: AppInfoSimple; isLoading: boolean }> = (
             {isNew ? <div className="text-white badge me-1 bg-green">{t('APP_NEW')}</div> : null}
           </div>
           <p className="text-muted mb-2">
-            <Skeleton loading={isLoading}>{app.short_desc}</Skeleton>
+            <Skeleton loading={isLoading}>
+              <span>
+                <WrapWords text={app.short_desc} />
+              </span>
+            </Skeleton>
           </p>
           {app.categories?.map((category) => (
             <Skeleton loading={isLoading} key={`${app.id}-${category}`}>

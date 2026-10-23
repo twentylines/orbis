@@ -78,7 +78,7 @@
   "CUSTOM_APP_ERROR_NAME_ALREADY_IN_USE": "App name {{name}} is already in use by another app",
   "CUSTOM_APP_ERROR_CREATION_FAILED": "Failed to create custom app {{name}}, see logs for more details",
   "CUSTOM_APP_ADD_TITLE": "Add Custom App",
-  "CUSTOM_APP_ADD_SUBTITLE": "Create your own app configuration",
+  "CUSTOM_APP_ADD_SUBTITLE": "Use a Compose file",
   "CUSTOM_APP_CREATE_TITLE": "Create Custom App",
   "CUSTOM_APP_CREATE_SUBTITLE": "Configure your custom application using Docker Compose",
   "CUSTOM_APP_NAME_LABEL": "App Name",

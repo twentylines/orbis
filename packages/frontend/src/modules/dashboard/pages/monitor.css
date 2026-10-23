@@ -19,7 +19,7 @@
   display: block;
   margin-bottom: 12px;
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
 .monitor-history-toolbar {
@@ -46,7 +46,7 @@
   border-radius: 8px;
   background: transparent;
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 650;
   transition:
     background 160ms ease,
@@ -61,14 +61,14 @@
   max-width: 450px;
   padding: 10px 0;
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.6;
 }
 .monitor-history-resolution {
   align-self: center;
   margin-right: auto;
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .desktop-telemetry-disks,
 .desktop-telemetry-network {
@@ -126,14 +126,14 @@
   display: block;
   margin-bottom: 17px;
   color: var(--host-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.12em;
 }
 .desktop-host-overview h2 {
   max-width: 560px;
   margin: 0;
-  font-size: min(var(--orbis-compact-title, 40px), clamp(28px, 3vw, 40px));
+  font-size: min(var(--orbis-compact-title, 2.5rem), clamp(1.75rem, calc(3vw * var(--orbis-text-scale, 1)), 2.5rem));
   line-height: 1.1;
   letter-spacing: -0.045em;
 }
@@ -141,7 +141,7 @@
   max-width: 480px;
   margin: 16px 0 27px;
   color: var(--host-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 .desktop-host-overview-readings {
@@ -162,11 +162,11 @@
 }
 .desktop-host-overview-readings span {
   color: var(--host-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .desktop-host-overview-readings strong {
   margin-top: 4px;
-  font-size: 22px;
+  font-size: 1.375rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.035em;
 }
@@ -248,7 +248,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   letter-spacing: 0.11em;
 }
@@ -260,7 +260,7 @@
   border: 1px solid color-mix(in srgb, var(--desktop-accent) 70%, var(--desktop-chrome-ink));
   border-radius: 50%;
   color: color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-chrome-ink));
-  font-size: 13px;
+  font-size: 0.8125rem;
   letter-spacing: 0;
 }
 .desktop-host-machine-led {
@@ -281,7 +281,7 @@
   border: 1px solid color-mix(in srgb, var(--desktop-chrome-ink) 14%, transparent);
   border-radius: 4px;
   background: var(--machine-side);
-  font-size: 10px;
+  font-size: 0.625rem;
   letter-spacing: 0.09em;
 }
 .desktop-host-machine-bay b {
@@ -305,7 +305,7 @@
   justify-content: space-between;
   margin-top: auto;
   color: var(--machine-muted);
-  font-size: 9px;
+  font-size: 0.5625rem;
 }
 @keyframes desktop-machine-enter {
   from {
@@ -323,11 +323,11 @@
   gap: 9px;
   margin: 0 0 16px;
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .desktop-monitor-live-status strong {
   color: var(--desktop-ink);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .desktop-live-dot {
   width: 7px;
@@ -349,7 +349,7 @@
 }
 .desktop-network-charts h3 {
   color: var(--desktop-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   margin: 0 0 10px;
 }
@@ -387,7 +387,7 @@
   background: rgba(125, 145, 121, 0.06);
 }
 .desktop-telemetry-grid h2 {
-  font-size: var(--orbis-compact-section, 18px);
+  font-size: var(--orbis-compact-section, 1.125rem);
   margin: 0 0 var(--orbis-compact-section-gap, 24px);
 }
 .desktop-telemetry-grid p {
@@ -401,14 +401,14 @@
   margin-bottom: 19px;
 }
 .desktop-telemetry-lead strong {
-  font-size: min(var(--orbis-compact-reading, 38px), clamp(27px, 3vw, 38px));
+  font-size: min(var(--orbis-compact-reading, 2.375rem), clamp(1.6875rem, calc(3vw * var(--orbis-text-scale, 1)), 2.375rem));
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
 }
 .desktop-telemetry-lead span,
 .desktop-telemetry-foot {
   color: var(--desktop-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .desktop-telemetry-lead span {
   flex: 0 0 auto;
@@ -428,7 +428,7 @@
 .desktop-core-grid span,
 .desktop-core-grid strong {
   display: block;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .desktop-core-grid strong {
   font-variant-numeric: tabular-nums;
@@ -442,11 +442,12 @@
 }
 .desktop-telemetry-pair {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
   padding: 9px 0;
   border-top: 1px solid var(--desktop-line);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .desktop-telemetry-pair span {
   color: var(--desktop-muted);
@@ -459,6 +460,7 @@
 }
 .desktop-telemetry-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 .desktop-disk,
@@ -477,16 +479,16 @@
 .desktop-network > strong {
   display: block;
   overflow-wrap: anywhere;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .desktop-disk small,
 .desktop-network small {
   display: block;
   color: var(--desktop-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .desktop-disk > span {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -522,7 +524,7 @@
     gap: 10px;
   }
   .desktop-host-overview-readings strong {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
   .desktop-host-machine {
     --machine-scale: 0.86;

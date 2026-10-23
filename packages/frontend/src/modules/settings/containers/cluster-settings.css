@@ -31,7 +31,7 @@
   min-width: 0;
 }
 .cluster-settings-section h2 {
-  font-size: var(--orbis-compact-section, 18px);
+  font-size: var(--orbis-compact-section, 1.125rem);
   margin: 0 0 8px;
 }
 .cluster-settings-section p {
