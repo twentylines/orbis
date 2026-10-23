@@ -1,5 +1,5 @@
 import { useServerPath } from '@/desktop/cluster-data';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import { metricHistoryRanges, type HostDeviceHistory, type HostHistorySelection, type MetricHistoryRange } from '@runtipi/common/schemas';
@@ -9,6 +9,8 @@ import { useWindowVisible } from '@/desktop/window-visibility';
 import './host-device-history.css';
 
 const keyOf = (device: HostHistorySelection) => `${device.kind}:${device.name}`;
+const historyQueryKey = (basePath: string, range: MetricHistoryRange, device: string | null) =>
+  ['host-device-history', basePath, range, device] as const;
 const kindLabel = (kind: HostHistorySelection['kind']) => (kind === 'network' ? 'Network' : 'Disk');
 const ranges = [
   ['5m', '5 min'],
@@ -33,9 +35,10 @@ export function HostDeviceHistoryView() {
     !/^(network|disk):\.{1,2}$/.test(requested)
       ? requested
       : null;
-  const path = serverPath(`/api/system/host-history?range=${range}${device ? `&device=${encodeURIComponent(device)}` : ''}`);
+  const basePath = serverPath('/api/system/host-history');
+  const path = `${basePath}?range=${range}${device ? `&device=${encodeURIComponent(device)}` : ''}`;
   const query = useQuery<HostDeviceHistory>({
-    queryKey: ['host-device-history', range, device, path],
+    queryKey: historyQueryKey(basePath, range, device),
     queryFn: async ({ signal }) => {
       const response = await fetch(path, {
         credentials: 'include',
@@ -45,7 +48,7 @@ export function HostDeviceHistoryView() {
       return response.json();
     },
     enabled: visible,
-    placeholderData: keepPreviousData,
+    placeholderData: (previousData, previousQuery) => (previousQuery?.queryKey[1] === basePath ? previousData : undefined),
     staleTime: 9000,
     refetchInterval: range === '5m' ? 10000 : 30000,
     refetchIntervalInBackground: false,
@@ -62,12 +65,12 @@ export function HostDeviceHistoryView() {
   useEffect(() => {
     if (device || !data?.selected) return;
     const resolved = keyOf(data.selected);
-    queryClient.setQueryData(['host-device-history', range, resolved], data);
+    queryClient.setQueryData(historyQueryKey(basePath, range, resolved), data, { updatedAt: query.dataUpdatedAt });
     const next = new URLSearchParams(searchParams);
     next.set('hostDevice', resolved);
     next.set('range', range);
     setSearchParams(next, { replace: true, preventScrollReset: true, state: null });
-  }, [device, data, range, queryClient, searchParams, setSearchParams]);
+  }, [basePath, device, data, range, query.dataUpdatedAt, queryClient, searchParams, setSearchParams]);
   const plots = useMemo(() => {
     if (!data) return null;
     const plot = (field: 'inbound' | 'outbound' | 'busy'): MetricPlotHistory => ({
