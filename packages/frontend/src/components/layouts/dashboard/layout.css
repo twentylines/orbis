@@ -335,9 +335,27 @@ html:has(.desktop) {
   text-overflow: clip;
 }
 .desktop-connection-dot.is-connected {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+}
+.desktop-connection-dot.is-connected::before,
+.desktop-connection-dot.is-connected::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.desktop-connection-dot.is-connected::before {
+  inset: -8px;
+  background: rgb(93, 184, 128);
+  opacity: 0;
+  animation: orbis-connection-pulse 3s ease-out infinite;
+}
+.desktop-connection-dot.is-connected::after {
+  inset: 0;
+  z-index: 1;
   background: #42815b;
-  box-shadow: 0 0 0 0 rgba(93, 184, 128, 0.45);
-  animation: orbis-signal 3s ease-out infinite;
 }
 .desktop-connection-dot.is-reconnecting {
   background: #b46f50;
@@ -943,6 +961,23 @@ html:has(.desktop) {
   }
   to {
     transform: translate(-50%, 0) scale(1);
+  }
+}
+/* Preserve the original 7px, 17px and 23px pulse diameters. */
+@keyframes orbis-connection-pulse {
+  0%,
+  75%,
+  100% {
+    transform: scale(0.3043478261);
+    opacity: 0;
+  }
+  12% {
+    transform: scale(0.7391304348);
+    opacity: 0.25;
+  }
+  24% {
+    transform: scale(1);
+    opacity: 0;
   }
 }
 @keyframes orbis-signal {
