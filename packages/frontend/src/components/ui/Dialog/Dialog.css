@@ -30,6 +30,11 @@
   min-height: 72px;
   padding-right: 76px;
 }
+.orbis-dialog-header .modal-title {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: normal;
+}
 .modal-content .orbis-dialog-close {
   position: absolute;
   top: 12px;

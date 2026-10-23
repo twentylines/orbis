@@ -1,0 +1,13 @@
+.orbis-markdown-table {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-block: 4px;
+}
+.orbis-markdown-table:focus-visible {
+  outline: 3px solid var(--desktop-focus, #99c2ff);
+  outline-offset: 2px;
+}
+.orbis-markdown-table :is(th, td) {
+  overflow-wrap: normal;
+  word-break: normal;
+}

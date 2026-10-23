@@ -1130,6 +1130,9 @@ html:has(.desktop) {
     min-width: 36px;
     height: 36px;
   }
+  .desktop-brand {
+    margin-inline-end: auto;
+  }
   .desktop-system-actions {
     display: contents;
   }
@@ -1155,6 +1158,9 @@ html:has(.desktop) {
   }
 }
 @media (max-width: 380px) {
+  .desktop-system-bar {
+    column-gap: 4px;
+  }
   .desktop {
     --desktop-inset: 16px;
     --orbis-compact-panel-space: 12px;

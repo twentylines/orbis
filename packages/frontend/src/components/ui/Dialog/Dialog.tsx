@@ -6,6 +6,7 @@ import type * as React from 'react';
 import { useRef } from 'react';
 import { IconX } from '@tabler/icons-react';
 import { Button } from '../Button';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
 import './Dialog.css';
 
 export type Sizes = 'sm' | 'md' | 'lg' | 'xl';
@@ -102,8 +103,10 @@ const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 );
 DialogFooter.displayName = 'DialogFooter';
 
-const DialogTitle = ({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) => (
-  <DialogPrimitive.Title className={clsx('modal-title', className)} {...props} />
+const DialogTitle = ({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) => (
+  <DialogPrimitive.Title className={clsx('modal-title', className)} title={typeof children === 'string' ? children : undefined} {...props}>
+    {typeof children === 'string' ? <WrapWords text={children} /> : children}
+  </DialogPrimitive.Title>
 );
 
 const DialogDescription = ({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Description>) => (
