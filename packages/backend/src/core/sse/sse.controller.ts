@@ -1,9 +1,10 @@
 import { castAppUrn } from '@/common/helpers/app-helpers';
 import { AuthGuard } from '@/modules/auth/auth.guard';
-import { BadRequestException, type CanActivate, Controller, type MessageEvent, Query, Sse, UseGuards } from '@nestjs/common';
+import { DesktopPreferencesService } from '@/modules/desktop-preferences/desktop-preferences.service';
+import { BadRequestException, type CanActivate, Controller, type MessageEvent, Query, Req, Sse, UseGuards } from '@nestjs/common';
 import { type } from 'arktype';
 import type { Request } from 'express';
-import { Observable } from 'rxjs';
+import { map, merge, Observable } from 'rxjs';
 import { StreamAppLogsQueryDto, StreamRuntipiLogsQueryDto, streamAppQuerySchema, streamRuntipiQuerySchema } from './dto/sse.dto';
 import { SSEService } from './sse.service';
 
@@ -19,13 +20,16 @@ const validateLogQuery = (validate: (query: unknown) => unknown): CanActivate =>
 @UseGuards(AuthGuard)
 @Controller('sse')
 export class SSEController {
-  constructor(private readonly sseService: SSEService) {}
+  constructor(
+    private readonly sseService: SSEService,
+    private readonly preferences: DesktopPreferencesService,
+  ) {}
 
   @Sse('app')
-  appEvents(): Observable<MessageEvent> {
+  appEvents(@Req() request: Request): Observable<MessageEvent> {
     const observable = this.sseService.getTopicObservable('app');
-
-    return observable;
+    if (!request.user?.id) return observable;
+    return merge(observable, this.preferences.changesFor(request.user.id).pipe(map((event) => ({ ...event, type: 'desktop-preferences' }))));
   }
 
   @Sse('app-logs')

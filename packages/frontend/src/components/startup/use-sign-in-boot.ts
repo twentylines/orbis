@@ -10,12 +10,14 @@ export function useSignInBoot() {
   const shownAt = useRef(0);
   const active = useRef(true);
   const exit = useRef<ReturnType<typeof animateAuthExit> | null>(null);
+  const startupExit = useRef<ReturnType<typeof animateStartupExit> | null>(null);
   useEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
       window.clearTimeout(timer.current);
       exit.current?.cancel();
+      startupExit.current?.cancel();
     };
   }, []);
   const begin = () => {
@@ -34,8 +36,11 @@ export function useSignInBoot() {
       const entryRemaining = Math.max(0, 440 - (performance.now() - shownAt.current));
       if (entryRemaining && !prefersReducedMotion()) await new Promise((resolve) => window.setTimeout(resolve, entryRemaining));
       if (!active.current) return;
-      await animateStartupExit(document.querySelector('.orbis-login-surface'), prefersReducedMotion()).finished;
+      startupExit.current = animateStartupExit(document.querySelector('.orbis-login-surface'), prefersReducedMotion());
+      await startupExit.current.finished;
+      startupExit.current = null;
     }
+    if (!active.current) return;
     if (restoreForm) {
       exit.current?.cancel();
       exit.current = null;

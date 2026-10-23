@@ -22,35 +22,23 @@ import { coreWatchIsActive } from '@/desktop/core-update-state';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Button } from '@/components/ui/Button';
 import { DockActivity } from '@/desktop/desktop-activity';
+import { DockGlass } from '@/desktop/dock-companion';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
-import { IconApps, IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
+import { IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, QueryErrorResetBoundary } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Suspense, useEffect, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches, useNavigation } from 'react-router';
 import './layout.css';
 
-export const DashboardLayoutSuspense = ({ children }: PropsWithChildren) => {
-  const { preferences, resolvedMode } = useDesktopPreferences();
-  return (
-    <div
-      className="desktop desktop-loading orbis-theme"
-      data-desktop-mode={resolvedMode}
-      data-desktop-preset={preferences.preset}
-      data-desktop-wallpaper={preferences.wallpaper}
-    >
-      <DesktopWallpaper />
-      <div className="desktop-system-bar">
-        <span className="desktop-brand">
-          <OrbisLogo size={28} /> Orbis
-        </span>
-      </div>
-      <main className="desktop-main">
-        <div className="desktop-view desktop-view-loading">{children}</div>
-      </main>
-    </div>
-  );
+export const DashboardLayoutSuspense = () => {
+  const { setWorkspaceLoading } = useDesktopPreferences();
+  useLayoutEffect(() => {
+    setWorkspaceLoading(true);
+    return () => setWorkspaceLoading(false);
+  }, [setWorkspaceLoading]);
+  return null;
 };
 
 export const DashboardLayout = ({ children }: PropsWithChildren) => {
@@ -125,10 +113,10 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   if (requiresOnboarding) return <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />;
 
   const current = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
-  const isTool = current && current.path !== '/dashboard';
   const pendingPath = routeNavigation.location?.pathname;
   const pendingSection = pendingPath ? navigation.find((item) => pendingPath === item.path || pendingPath.startsWith(`${item.path}/`)) : undefined;
   const dockSection = pendingSection ?? current;
+  const isTool = dockSection && dockSection.path !== '/dashboard';
   const sectionLabel = dockSection?.label ?? 'Application';
   const routeContent = <DesktopRouteContent label={sectionLabel}>{children}</DesktopRouteContent>;
   return (
@@ -201,10 +189,12 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             >
               {isTool ? (
                 <RouteSurface
-                  label={current?.label ?? 'Application'}
-                  icon={current ? <current.Icon size={19} stroke={1.8} /> : <IconApps size={19} />}
+                  section={pendingPath ?? location.pathname}
+                  pending={Boolean(pendingSection && pendingPath !== location.pathname)}
+                  label={dockSection.label}
+                  icon={<dockSection.Icon size={19} stroke={1.8} />}
                 >
-                  {!hasPageHeading && location.pathname.split('/').filter(Boolean).length > 1 ? (
+                  {!pendingSection && !hasPageHeading && location.pathname.split('/').filter(Boolean).length > 1 ? (
                     <div className="desktop-route-title">
                       <PageTitle apps={apps} />
                     </div>
@@ -217,6 +207,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             </main>
 
             <nav ref={dock} className="desktop-dock" aria-label="Main navigation">
+              <DockGlass />
               <DockActivity />
               <div className="desktop-dock-main">
                 {navigation
@@ -252,6 +243,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               <MinimizedApps />
             </nav>
             {loggingOff ? <StartupSurface loggingOff /> : null}
+            {loggingOff ? null : <RestartUpdateCover />}
           </div>
         </AppLauncherProvider>
       </ClusterProvider>
@@ -259,20 +251,40 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   );
 };
 
+function RestartUpdateCover() {
+  const { watch, packageJob, unavailable } = useHostUpdateWatch();
+  const { preferences } = useDesktopPreferences();
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  if (coreWatchIsActive(watch) && watch) {
+    const restarting = watch.phase === 'offline' || watch.phase === 'checking' || watch.phase === 'ready';
+    if (!restarting && dismissed === watch.id) return null;
+    return (
+      <StartupSurface appearance={preferences} status={{ title: 'Updating Orbis', message: watch.message }} overlay>
+        {restarting ? null : (
+          <button type="button" className="orbis-startup-return" onClick={() => setDismissed(watch.id)}>
+            Keep using Orbis
+          </button>
+        )}
+      </StartupSurface>
+    );
+  }
+  if (unavailable && packageJob && ['queued', 'running'].includes(packageJob.state)) {
+    return (
+      <StartupSurface
+        appearance={preferences}
+        status={{ title: 'Updating the system', message: 'The server is restarting. Reconnecting automatically.' }}
+        overlay
+      />
+    );
+  }
+  return null;
+}
+
 function DesktopRouteContent({ children, label }: PropsWithChildren<{ label: string }>) {
   const location = useLocation();
   const navigation = useNavigation();
   const { watch } = useHostUpdateWatch();
-  const [slow, setSlow] = useState(false);
-  const pending = navigation.state !== 'idle';
-  useEffect(() => {
-    if (!pending) {
-      setSlow(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setSlow(true), 300);
-    return () => window.clearTimeout(timer);
-  }, [pending]);
+  const pending = Boolean(navigation.location && navigation.location.pathname !== location.pathname);
   return (
     <QueryErrorResetBoundary>
       {({ reset }) => (
@@ -290,13 +302,21 @@ function DesktopRouteContent({ children, label }: PropsWithChildren<{ label: str
             </output>
           )}
         >
-          <div className="desktop-route-content" data-pending={(pending && slow) || undefined}>
-            <div className="desktop-route-children" inert={(pending && slow) || undefined} aria-hidden={(pending && slow) || undefined}>
-              <Suspense fallback={<DelayedRouteLoading label={`Loading ${label.toLowerCase()}…`} />}>{children}</Suspense>
+          <div className="desktop-route-content" data-pending={pending || undefined}>
+            <div className="desktop-route-children" inert={pending || undefined} aria-hidden={pending || undefined}>
+              <Suspense
+                fallback={
+                  <div className="desktop-route-placeholder">
+                    <DelayedRouteLoading label={`Loading ${label.toLowerCase()}…`} />
+                  </div>
+                }
+              >
+                {children}
+              </Suspense>
             </div>
-            {pending && slow ? (
-              <div className="desktop-route-wait">
-                <DelayedRouteLoading delay={0} label={`Loading ${label.toLowerCase()}…`} />
+            {pending ? (
+              <div className="desktop-route-wait desktop-route-placeholder">
+                <DelayedRouteLoading label={`Loading ${label.toLowerCase()}…`} />
               </div>
             ) : null}
           </div>

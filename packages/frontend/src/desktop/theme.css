@@ -38,7 +38,13 @@
   --desktop-log-ink: var(--desktop-chrome-ink);
   --desktop-chrome-opaque: rgb(var(--desktop-base-chrome-rgb));
   --desktop-wallpaper-base: color-mix(in srgb, var(--desktop-preset-tint) 35%, var(--desktop-surface));
-  --desktop-wallpaper-shade: transparent;
+  --desktop-wallpaper-shade-start-alpha: 0;
+  --desktop-wallpaper-shade-end-alpha: 0;
+  --desktop-wallpaper-shade: linear-gradient(
+    145deg,
+    rgba(var(--desktop-base-chrome-rgb), var(--desktop-wallpaper-shade-start-alpha)),
+    rgba(var(--desktop-base-chrome-rgb), var(--desktop-wallpaper-shade-end-alpha))
+  );
   --desktop-status-background: linear-gradient(
     125deg,
     color-mix(in srgb, var(--desktop-preset-tint) 8%, var(--desktop-surface)),
@@ -254,7 +260,8 @@ html[data-desktop-mode="dark"] {
   --desktop-edge: color-mix(in srgb, var(--desktop-preset-tint) 28%, transparent);
   --desktop-highlight: transparent;
   --workspace-heading-shadow: rgb(0 0 0 / 0.18);
-  --desktop-wallpaper-shade: linear-gradient(145deg, rgba(var(--desktop-base-chrome-rgb), 0.43), rgba(var(--desktop-base-chrome-rgb), 0.72));
+  --desktop-wallpaper-shade-start-alpha: 0.43;
+  --desktop-wallpaper-shade-end-alpha: 0.72;
   color-scheme: dark;
 }
 
@@ -630,7 +637,12 @@ body:has(.orbis-theme) .form-text a:hover {
 /* Palette changes share one paint, while geometry and interaction motion remain available. */
 :root[data-orbis-colour-switch] *,
 :root[data-orbis-colour-switch] *::before,
-:root[data-orbis-colour-switch] *::after {
-  /* biome-ignore lint/complexity/noImportantStyles: Palette changes must override component colour transitions for two frames. */
-  transition-property: transform, translate, scale, rotate, opacity, box-shadow, width, height, border-radius, clip-path, gap !important;
+:root[data-orbis-colour-switch] *::after,
+:root[data-orbis-palette-motion] *,
+:root[data-orbis-palette-motion] *::before,
+:root[data-orbis-palette-motion] *::after {
+  transition-property:
+    transform, translate, scale, rotate, opacity, box-shadow, width, height, min-width, max-width, min-height, max-height, padding, margin, flex-basis,
+    /* biome-ignore lint/complexity/noImportantStyles: Palette changes must override component colour transitions during the shared palette transition. */
+    border-radius, clip-path, gap !important;
 }

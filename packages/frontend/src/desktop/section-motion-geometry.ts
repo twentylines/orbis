@@ -1,6 +1,6 @@
 export type SectionBounds = { left: number; top: number; width: number; height: number };
 
-export const sectionMotionTiming = { surface: 420, cardEntry: 160, content: 240, historyEntry: 120 } as const;
+export const sectionMotionTiming = { surface: 360, cardEntry: 0, content: 320, historyEntry: 0 } as const;
 
 export function visibleSectionBounds(bounds: SectionBounds, viewportHeight: number): SectionBounds {
   const top = Math.max(0, bounds.top);
@@ -9,10 +9,7 @@ export function visibleSectionBounds(bounds: SectionBounds, viewportHeight: numb
 }
 
 export function sectionSurfaceFrames(from: SectionBounds, to: SectionBounds) {
-  return [
-    { width: `${from.width}px`, height: `${from.height}px`, transform: `translateX(${from.left - to.left}px)` },
-    { width: `${to.width}px`, height: `${to.height}px`, transform: 'none' },
-  ];
+  return [{ height: `${from.height}px` }, { height: `${to.height}px` }];
 }
 
 export function sectionDirection(from: number, to: number, action: string, previousIndex?: number, nextIndex?: number) {

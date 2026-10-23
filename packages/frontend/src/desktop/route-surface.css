@@ -11,6 +11,12 @@
 .desktop .desktop-view-app.desktop-route-window.desktop-route-page[data-window-navigation="page"] {
   box-shadow: none;
 }
+.desktop .desktop-route-page:is([data-route-pending], :has(.desktop-route-placeholder)) {
+  min-height: var(--orbis-route-reserve);
+}
+.desktop-route-placeholder {
+  min-height: max(160px, calc(var(--orbis-route-reserve, 400px) - 150px));
+}
 .desktop-route-surface {
   position: absolute;
   top: 0;

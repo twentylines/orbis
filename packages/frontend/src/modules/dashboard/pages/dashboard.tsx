@@ -398,7 +398,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
               </span>
               <strong>{system.data ? formatUptime(system.data.cpu.uptimeSeconds) : '—'}</strong>
             </Link>
-            <Link to={network?.scope === 'host' ? '/monitor#host-network-title' : '/monitor#telemetry-network-title'} className="workspace-network">
+            <section className="workspace-network" aria-label={network?.label ?? 'Network'}>
               <span className="workspace-network-heading">
                 <IconArrowsDownUp size={17} aria-hidden="true" /> {network?.label ?? 'Network'}
               </span>
@@ -410,23 +410,17 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                   ) : null}
                 </strong>
               ) : null}
-              <span className="workspace-network-rate">
-                <b>↓</b> {rate(network?.rxBytesPerSecond ?? null)}
-              </span>
-              <span className="workspace-network-rate">
-                <b>↑</b> {rate(network?.txBytesPerSecond ?? null)}
-              </span>
-              {network ? (
-                <small className="workspace-network-total">
-                  <span>
-                    Received <bdi>{statusBytes(network.receivedBytes)}</bdi>
-                  </span>
-                  <span>
-                    Sent <bdi>{statusBytes(network.transmittedBytes)}</bdi>
-                  </span>
-                </small>
-              ) : null}
-            </Link>
+              <div className="workspace-network-direction">
+                <small>Download</small>
+                <strong className="workspace-network-rate">{rate(network?.rxBytesPerSecond ?? null)}</strong>
+                {network ? <small>{statusBytes(network.receivedBytes)} received</small> : null}
+              </div>
+              <div className="workspace-network-direction">
+                <small>Upload</small>
+                <strong className="workspace-network-rate">{rate(network?.txBytesPerSecond ?? null)}</strong>
+                {network ? <small>{statusBytes(network.transmittedBytes)} sent</small> : null}
+              </div>
+            </section>
           </div>
         )}
         <ContainerResources compact />

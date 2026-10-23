@@ -1,9 +1,10 @@
 import { AuthGuard } from '@/modules/auth/auth.guard';
+import { DesktopPreferencesService } from '@/modules/desktop-preferences/desktop-preferences.service';
 import { type CallHandler, type ExecutionContext, type INestApplication, type NestMiddleware } from '@nestjs/common';
 import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ArkValidationPipe } from 'nestjs-arktype';
-import { of } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { mock } from 'vitest-mock-extended';
@@ -14,6 +15,7 @@ import { SSEService } from './sse.service';
 describe('SSEController log query validation', () => {
   let app: INestApplication;
   const service = mock<SSEService>();
+  const preferences = mock<DesktopPreferencesService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -25,6 +27,7 @@ describe('SSEController log query validation', () => {
         { provide: APP_INTERCEPTOR, useValue: { intercept: (_context: ExecutionContext, next: CallHandler) => next.handle() } },
         { provide: LoggerService, useValue: mock<LoggerService>() },
         { provide: SSEService, useValue: service },
+        { provide: DesktopPreferencesService, useValue: preferences },
       ],
     }).compile();
 
@@ -41,6 +44,8 @@ describe('SSEController log query validation', () => {
   });
 
   beforeEach(() => {
+    preferences.changesFor.mockReset();
+    preferences.changesFor.mockReturnValue(EMPTY);
     service.getLogStreamObservable.mockReset();
     service.getLogStreamObservable.mockResolvedValue(of({ data: { lines: ['fixture log'] } }));
     service.getTopicObservable.mockReset();
@@ -48,6 +53,17 @@ describe('SSEController log query validation', () => {
   });
 
   const get = (path: string) => request(app.getHttpServer()).get(path).set('Authorization', 'Bearer test').timeout(3000);
+
+  it('delivers account notices as named events on the existing app stream', async () => {
+    preferences.changesFor.mockReturnValue(of({ data: { changed: true } }));
+    const response = await get('/sse/app');
+    expect(response.status).toBe(200);
+    expect(preferences.changesFor).toHaveBeenCalledExactlyOnceWith(1);
+    expect(response.text).toContain('event: desktop-preferences');
+    expect(response.text).toContain('data: {"changed":true}');
+    expect(response.text).toContain('"event":"status_change"');
+    expect(response.text).not.toContain('userId');
+  });
 
   it.each(['/sse/app', '/sse/app-logs?appUrn=media:test', '/sse/runtipi-logs'])('requires authentication before accessing %s', async (path) => {
     const response = await request(app.getHttpServer()).get(path).timeout(3000);

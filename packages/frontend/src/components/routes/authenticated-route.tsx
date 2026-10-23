@@ -31,13 +31,7 @@ export default () => {
             fallbackRender={({ error, resetErrorBoundary }) => <ErrorPage error={error} onReset={resetErrorBoundary} />}
             onReset={reset}
           >
-            <Suspense
-              fallback={
-                <DashboardLayoutSuspense>
-                  <output>Loading your workspace…</output>
-                </DashboardLayoutSuspense>
-              }
-            >
+            <Suspense fallback={<DashboardLayoutSuspense />}>
               <AppContextProvider>
                 <SSEProvider>
                   <Suspense fallback={<DashboardLayout />}>

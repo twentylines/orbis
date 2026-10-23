@@ -1,6 +1,6 @@
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Link } from 'react-router';
+import { useMutation, useQueries, useQueryClient, type Query } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { Markdown } from '@/components/markdown/markdown';
@@ -32,6 +32,8 @@ const read = <T,>(id: string, resource: string) => clusterRequest<T>(`${serverPa
 const command = <T,>(id: string, action: string, payload?: object) => clusterRequest<T>(`${serverPath(id)}/command`, 'POST', { action, payload });
 
 export function ClusterUpdates({ local = false }: { local?: boolean }) {
+  const entry = useLocation().key;
+  const lastEntry = useRef(entry);
   const cluster = useCluster();
   const visible = useWindowVisible();
   const { user } = useAppContext();
@@ -54,12 +56,17 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
       },
       enabled: visible,
       refetchOnMount: 'always',
-      refetchOnWindowFocus: 'always',
-      refetchInterval: 15_000,
+      refetchOnWindowFocus: false,
+      refetchInterval: (query: Query<Inventory>) => (['running', 'recovering'].includes(query.state.data?.status?.job?.state ?? '') ? 4000 : false),
       refetchIntervalInBackground: false,
       retry: false,
     })),
   });
+  useEffect(() => {
+    if (lastEntry.current === entry) return;
+    lastEntry.current = entry;
+    void queryClient.refetchQueries({ queryKey: ['cluster-updates'], type: 'active' });
+  }, [entry, queryClient]);
   const [confirmApps, setConfirmApps] = useState(false);
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   const ready = servers.flatMap((server, index) => {

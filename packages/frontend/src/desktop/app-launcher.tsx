@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/Button';
 import { useAppContext } from '@/context/app-context';
 import { useDesktopWindows } from './window-viewport';
 import { appDestinations } from './app-destinations';
+import { DockCompanion } from './dock-companion';
+import { dockFlightTargetLeft } from './dock-motion-geometry';
 import './app-launcher.css';
 
 type LaunchRequest = {
@@ -45,9 +47,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     setPanel(element);
   }, []);
   const panelMotion = useRef<Animation | null>(null);
-  const trayMotion = useRef<Animation | null>(null);
   const motionId = useRef(0);
-  const trayWidth = useRef(0);
   const restoreOrigin = useRef<DOMRect | null>(null);
   const minimizeOrigin = useRef<DOMRect | null>(null);
   const focusMinimized = useRef<string | null>(null);
@@ -57,6 +57,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       dockFocusTarget()?.focus({ preventScroll: true });
     }
     tray.current = element;
+    setTrayVisible(Boolean(element));
   }, []);
   const cancelMotion = useCallback(() => {
     motionId.current++;
@@ -96,7 +97,6 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   useEffect(
     () => () => {
       panelMotion.current?.cancel();
-      trayMotion.current?.cancel();
     },
     [],
   );
@@ -137,8 +137,9 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
         links.length * iconWidth +
         spacing(primary, 'column-gap') * (links.length - 1) +
         spacing(primary, 'padding-left', 'padding-right', 'border-left-width', 'border-right-width');
+      const wrapper = element.closest('.desktop-dock-companion');
       const companions = [...dock.children].filter(
-        (child) => child !== primary && child !== element && child instanceof HTMLElement && getComputedStyle(child).display !== 'none',
+        (child) => child !== wrapper && child.matches('.desktop-dock-companion') && getComputedStyle(child).display !== 'none',
       );
       const companionWidth = companions.reduce((total, child) => total + child.getBoundingClientRect().width, 0);
       const navigation =
@@ -180,7 +181,48 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     target.focus({ preventScroll: true });
     const from = minimizeOrigin.current ?? panel.getBoundingClientRect();
     minimizeOrigin.current = null;
-    const to = target.getBoundingClientRect();
+    const dock = tray.current?.closest<HTMLElement>('.desktop-dock');
+    const primary = dock?.querySelector<HTMLElement>('.desktop-dock-main');
+    const wrapper = tray.current?.closest<HTMLElement>('.desktop-dock-companion');
+    const destination = (button: HTMLElement) => {
+      const box = button.getBoundingClientRect();
+      const inner = wrapper?.firstElementChild;
+      if (!dock || !primary || !wrapper || !inner) return box;
+      const gap = Number.parseFloat(getComputedStyle(dock).columnGap) || 12;
+      const leftSpace = [...dock.querySelectorAll<HTMLElement>(':scope > .desktop-dock-companion[data-side="left"]')].reduce((sum, element) => {
+        const declared = Number.parseFloat(element.style.width);
+        return (
+          sum + Math.max(0, (Number.isFinite(declared) ? declared : element.offsetWidth) + (Number.parseFloat(element.style.marginRight) || 0) + gap)
+        );
+      }, 0);
+      const style = getComputedStyle(primary);
+      const links = primary.querySelectorAll('.desktop-dock-item').length;
+      const inset = (['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'] as const).reduce(
+        (sum, property) => sum + (Number.parseFloat(style[property]) || 0),
+        0,
+      );
+      const mainWidth =
+        dock.dataset.minimizedCompact === 'true'
+          ? links * (Number.parseFloat(getComputedStyle(dock).getPropertyValue('--orbis-dock-icon-width')) || 52) +
+            (links - 1) * (Number.parseFloat(style.columnGap) || 0) +
+            inset
+          : primary.getBoundingClientRect().width;
+      const dockBox = dock.getBoundingClientRect();
+      return new DOMRect(
+        dockFlightTargetLeft({
+          center: dockBox.x + dockBox.width / 2,
+          mainWidth,
+          leftSpace,
+          trayWidth: Number.parseFloat(wrapper.style.width) || inner.getBoundingClientRect().width,
+          gap,
+          offset: box.x - inner.getBoundingClientRect().x,
+        }),
+        box.y,
+        box.width,
+        box.height,
+      );
+    };
+    const to = destination(target);
     const id = ++motionId.current;
     const finish = () => {
       if (id !== motionId.current) return;
@@ -194,9 +236,11 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     }
     const deadline = performance.now() + 580;
     let animation: Animation | null = null;
+    let lastEnd: DOMRect | null = null;
     let resizeFrame = 0;
     const travel = (start: DOMRect, end: DOMRect) => {
       animation?.cancel();
+      lastEnd = end;
       animation = panel.animate(
         [
           {
@@ -217,8 +261,9 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
           },
           { left: `${end.x}px`, top: `${end.y}px`, width: `${end.width}px`, height: `${end.height}px`, borderRadius: '14px', transform: 'none' },
         ],
-        { duration: Math.max(180, deadline - performance.now()), easing: 'cubic-bezier(.32, .08, .16, 1)', fill: 'forwards' },
+        { duration: Math.max(100, deadline - performance.now()), easing: 'cubic-bezier(.32, .08, .16, 1)', fill: 'forwards' },
       );
+      animation.id = 'orbis-app-minimize';
       panelMotion.current = animation;
       void animation.finished.then(finish, () => undefined);
     };
@@ -227,17 +272,24 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       resizeFrame = requestAnimationFrame(() => {
         const button = trayButton(selected.urn);
         if (!panel.isConnected || !button) return;
-        const end = button.getBoundingClientRect();
-        const shell = tray.current;
-        const remainingGrowth = shell ? (Number.parseFloat(shell.style.width) || shell.offsetWidth) - shell.getBoundingClientRect().width : 0;
-        travel(panel.getBoundingClientRect(), new DOMRect(end.x - remainingGrowth / 2, end.y, end.width, end.height));
+        const end = destination(button);
+        if (
+          lastEnd &&
+          Math.abs(end.x - lastEnd.x) + Math.abs(end.y - lastEnd.y) + Math.abs(end.width - lastEnd.width) + Math.abs(end.height - lastEnd.height) <
+            0.75
+        )
+          return;
+        travel(panel.getBoundingClientRect(), end);
       });
     };
     travel(from, to);
+    const observer = new ResizeObserver(retarget);
+    for (const element of [dock, primary, wrapper, tray.current]) if (element) observer.observe(element);
     window.addEventListener('resize', retarget);
     return () => {
       cancelAnimationFrame(resizeFrame);
       window.removeEventListener('resize', retarget);
+      observer.disconnect();
       animation?.cancel();
     };
   }, [minimizing, selected, panel, trayVisible, desktop, trayButton]);
@@ -302,73 +354,6 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       delete panel.dataset.launchMotion;
     };
   }, [selected, panel, desktop, minimizing]);
-
-  useLayoutEffect(() => {
-    if (desktop && minimized.length && !trayVisible) {
-      setTrayVisible(true);
-      return;
-    }
-    const element = tray.current;
-    if (!desktop || !element || !trayVisible) return;
-    const dock = element.closest<HTMLElement>('.desktop-dock');
-    const previous = trayMotion.current?.playState === 'running' ? element.getBoundingClientRect().width : trayWidth.current;
-    trayMotion.current?.cancel();
-    const width = Number.parseFloat(element.style.maxWidth) || element.getBoundingClientRect().width;
-    if (!minimized.length) {
-      if (reducedMotion()) {
-        setTrayVisible(false);
-        trayWidth.current = 0;
-        return;
-      }
-      const animation = element.animate(
-        [
-          { width: `${previous || width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px' },
-          { width: '0px', paddingInline: '0px', borderWidth: '0px', marginLeft: '-12px' },
-        ],
-        { duration: 480, easing: 'cubic-bezier(.32, .08, .2, 1)', fill: 'forwards' },
-      );
-      if (dock) dock.dataset.trayMotion = 'joining';
-      trayMotion.current = animation;
-      void animation.finished.then(
-        () => {
-          setTrayVisible(false);
-          trayWidth.current = 0;
-          if (dock) delete dock.dataset.trayMotion;
-        },
-        () => undefined,
-      );
-      return () => {
-        animation.cancel();
-        if (dock) delete dock.dataset.trayMotion;
-      };
-    }
-    trayWidth.current = width;
-    if (reducedMotion()) return;
-    const animation = element.animate(
-      [
-        {
-          width: `${previous || 0}px`,
-          paddingInline: previous ? '7px' : '0px',
-          borderWidth: previous ? '1px' : '0px',
-          marginLeft: previous ? '0px' : '-12px',
-        },
-        { width: `${width}px`, paddingInline: '7px', borderWidth: '1px', marginLeft: '0px' },
-      ],
-      { duration: 580, easing: 'cubic-bezier(.22, .8, .22, 1)' },
-    );
-    if (dock && !previous) dock.dataset.trayMotion = 'splitting';
-    trayMotion.current = animation;
-    void animation.finished.then(
-      () => {
-        if (dock) delete dock.dataset.trayMotion;
-      },
-      () => undefined,
-    );
-    return () => {
-      animation.cancel();
-      if (dock) delete dock.dataset.trayMotion;
-    };
-  }, [desktop, minimized, trayVisible]);
 
   const minimize = () => {
     if (!selected || minimizing) return;
@@ -437,54 +422,49 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const managePath = `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}`;
   const status = selected?.manageUrl ? selected.status : data?.app?.status;
 
-  const minimizedApps = desktop ? (
-    <fieldset
-      ref={captureTray}
-      className="orbis-app-tray"
-      hidden={!trayVisible}
-      aria-label="Minimized apps"
-      title="Minimized apps — scroll horizontally for more"
-      aria-hidden={minimized.length === 0}
-    >
-      <ul className="app-tray-list">
-        {minimized.map((request) => (
-          <li key={request.urn} className="app-tray-item">
-            <Button
-              className="app-tray-restore"
-              data-minimized-app={request.urn}
-              data-flying={(minimizing && selected?.urn === request.urn) || undefined}
-              aria-label={`Restore ${request.name}`}
-              title={request.name}
-              onClick={() => restore(request)}
-              onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
-            >
-              <AppLogo urn={request.urn} url={request.logoUrl} size={28} />
-            </Button>
-            <Button
-              className="app-tray-close"
-              size="icon"
-              aria-label={`Close ${request.name} launcher`}
-              onClick={() => {
-                const index = minimized.findIndex((item) => item.urn === request.urn);
-                const next = minimized[index + 1] ?? minimized[index - 1];
-                const target = next ? trayButton(next.urn) : dockFocusTarget();
-                if (selected?.urn === request.urn && minimizing) {
-                  cancelMotion();
-                  focusMinimized.current = null;
-                  opener.current = target ?? null;
-                  setSelected(null);
-                }
-                setMinimized((current) => current.filter((item) => item.urn !== request.urn));
-                target?.focus({ preventScroll: true });
-              }}
-            >
-              <IconX size={16} aria-hidden="true" />
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </fieldset>
-  ) : null;
+  const minimizedApps = (
+    <DockCompanion visible={desktop && minimized.length > 0} side="right" retainOnExit>
+      <fieldset ref={captureTray} className="orbis-app-tray" aria-label="Minimized apps" title="Minimized apps — scroll horizontally for more">
+        <ul className="app-tray-list">
+          {minimized.map((request) => (
+            <li key={request.urn} className="app-tray-item">
+              <Button
+                className="app-tray-restore"
+                data-minimized-app={request.urn}
+                data-flying={(minimizing && selected?.urn === request.urn) || undefined}
+                aria-label={`Restore ${request.name}`}
+                title={request.name}
+                onClick={() => restore(request)}
+                onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
+              >
+                <AppLogo urn={request.urn} url={request.logoUrl} size={28} />
+              </Button>
+              <Button
+                className="app-tray-close"
+                size="icon"
+                aria-label={`Close ${request.name} launcher`}
+                onClick={() => {
+                  const index = minimized.findIndex((item) => item.urn === request.urn);
+                  const next = minimized[index + 1] ?? minimized[index - 1];
+                  const target = next ? trayButton(next.urn) : dockFocusTarget();
+                  if (selected?.urn === request.urn && minimizing) {
+                    cancelMotion();
+                    focusMinimized.current = null;
+                    opener.current = target ?? null;
+                    setSelected(null);
+                  }
+                  setMinimized((current) => current.filter((item) => item.urn !== request.urn));
+                  target?.focus({ preventScroll: true });
+                }}
+              >
+                <IconX size={16} aria-hidden="true" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </fieldset>
+    </DockCompanion>
+  );
 
   return (
     <AppLauncherContext.Provider value={openApp}>

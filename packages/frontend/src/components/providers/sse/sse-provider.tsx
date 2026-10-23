@@ -7,6 +7,9 @@ import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router';
 import { useConnectionStore } from '@/stores/connection-store';
+import { preferenceChangeEvent } from '@/desktop/appearance-cache';
+
+const announcePreferences = () => window.dispatchEvent(new Event(preferenceChangeEvent));
 
 export const SSEProvider = ({ children }: PropsWithChildren) => {
   const { t } = useTranslation();
@@ -17,7 +20,11 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
 
   useSSE({
     topic: 'app',
-    onOpen: () => setConnectionStatus('connected'),
+    onOpen: () => {
+      setConnectionStatus('connected');
+      announcePreferences();
+    },
+    onPreferencesChanged: announcePreferences,
     onError: () => setConnectionStatus('reconnecting'),
     onEvent: ({ event, appUrn, error }) => {
       if (error) {

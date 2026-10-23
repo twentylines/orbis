@@ -93,5 +93,10 @@ export function animateStartupExit(element: HTMLElement | null, reduced: boolean
       );
     animations.push(element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' }));
   }
-  return { finished: Promise.allSettled(animations.map((animation) => animation.finished)) };
+  return {
+    finished: Promise.allSettled(animations.map((animation) => animation.finished)),
+    cancel: () => {
+      for (const animation of animations) animation.cancel();
+    },
+  };
 }

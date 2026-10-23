@@ -692,34 +692,46 @@ html:has(.desktop) {
   backdrop-filter: var(--desktop-glass-filter);
   -webkit-backdrop-filter: var(--desktop-glass-filter);
 }
-.desktop-dock[data-tray-motion] .desktop-dock-main::after {
-  content: "";
+.desktop-dock-glass {
   position: absolute;
-  left: calc(100% - 1px);
-  top: 50%;
-  width: 14px;
-  height: 42px;
-  translate: 0 -50%;
-  background: var(--desktop-chrome);
+  inset: 0;
+  z-index: -1;
   pointer-events: none;
-  clip-path: polygon(0 0, 25% 25%, 50% 35%, 75% 25%, 100% 0, 100% 100%, 75% 75%, 50% 65%, 25% 75%, 0 100%);
-  animation: orbis-dock-fission 580ms cubic-bezier(0.22, 0.8, 0.22, 1) both;
+  background: var(--desktop-chrome);
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
 }
-.desktop-dock[data-tray-motion="joining"] .desktop-dock-main::after {
-  animation: orbis-dock-fission 480ms cubic-bezier(0.32, 0.08, 0.2, 1) reverse both;
+.desktop-dock-companion {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-self: stretch;
+  width: 0;
+  min-width: 0;
+  margin: 0;
 }
-@keyframes orbis-dock-fission {
-  0%,
-  15% {
-    height: 52px;
+.desktop-dock-companion[data-side="left"] {
+  margin-right: -12px;
+}
+.desktop-dock-companion[data-side="right"] {
+  margin-left: -12px;
+}
+.desktop-dock-companion-content {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  width: max-content;
+}
+@media (max-width: 1099px), (max-height: 639px) {
+  .desktop-dock-companion {
+    display: none;
   }
-  55% {
-    height: 18px;
-  }
-  85%,
-  100% {
-    height: 0;
-  }
+}
+.desktop-dock :is(.desktop-dock-main, .orbis-app-tray, .desktop-activity-trigger) {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .desktop .desktop-dock-item {
   position: relative;
@@ -751,7 +763,7 @@ html:has(.desktop) {
   font-size: 0.6875rem;
 }
 .desktop-dock-label {
-  max-width: 100%;
+  max-width: 12em;
   font-size: 0.6875rem;
   font-weight: 600;
   line-height: 1.18;
@@ -1216,7 +1228,9 @@ html:has(.desktop) {
   min-width: 0;
 }
 .desktop-route-content[data-pending="true"] > .desktop-route-children {
-  opacity: 0;
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
   pointer-events: none;
 }
 .desktop-route-wait {

@@ -27,6 +27,8 @@ export function CommandSearch() {
   const panel = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const animation = useRef<Animation | null>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
+  const backdropAnimation = useRef<Animation | null>(null);
   const pendingPath = useRef<string | null>(null);
   const closingRef = useRef(false);
   const bindPanel = useCallback((element: HTMLDivElement | null) => {
@@ -47,8 +49,6 @@ export function CommandSearch() {
   }, [query]);
 
   const finishClose = useCallback(() => {
-    animation.current?.cancel();
-    animation.current = null;
     closingRef.current = false;
     setOpen(false);
     setClosing(false);
@@ -86,6 +86,15 @@ export function CommandSearch() {
         { duration: 340, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' },
       );
       animation.current = exit;
+      if (backdrop.current) {
+        const opacity = getComputedStyle(backdrop.current).opacity;
+        backdropAnimation.current?.cancel();
+        backdropAnimation.current = backdrop.current.animate([{ opacity }, { opacity: 0 }], {
+          duration: 340,
+          easing: 'cubic-bezier(.4, 0, .2, 1)',
+          fill: 'forwards',
+        });
+      }
       void exit.finished.then(finishClose, () => undefined);
     },
     [finishClose],
@@ -97,6 +106,7 @@ export function CommandSearch() {
     const origin = trigger.current?.getBoundingClientRect();
     if (!element || !origin || reducedMotion()) return;
     const bounds = element.getBoundingClientRect();
+    if (backdrop.current) backdropAnimation.current = backdrop.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, fill: 'forwards' });
     animation.current = element.animate(
       [
         {
@@ -109,6 +119,7 @@ export function CommandSearch() {
     );
     const resize = () => {
       animation.current?.cancel();
+      backdropAnimation.current?.cancel();
       if (closingRef.current) finishClose();
     };
     window.addEventListener('resize', resize);
@@ -193,7 +204,7 @@ export function CommandSearch() {
       </Dialog.Trigger>
       {open ? (
         <Dialog.Portal>
-          <Dialog.Overlay className="desktop-search-backdrop" data-closing={closing} />
+          <Dialog.Overlay ref={backdrop} className="desktop-search-backdrop" data-closing={closing} />
           <Dialog.Content
             ref={bindPanel}
             className="desktop-search-surface"

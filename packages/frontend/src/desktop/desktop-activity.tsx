@@ -11,6 +11,7 @@ import { useHostUpdateWatch } from './host-update-watch';
 import { useTasks } from './tasks';
 import { useDesktopWindows } from './window-viewport';
 import { desktopActivity, type DesktopActivityItem } from './desktop-activity-state';
+import { DockCompanion } from './dock-companion';
 import './desktop-activity.css';
 
 function focusDock() {
@@ -39,6 +40,9 @@ export function DockActivity() {
   const focusWithin = useRef(false);
   const [shape, setShape] = useState({ width: 360, height: 280, triggerWidth: 210, triggerHeight: 68 });
   const hasActivity = Boolean(activity) && desktop;
+  const lastActivity = useRef(activity);
+  if (activity) lastActivity.current = activity;
+  const displayed = activity ?? lastActivity.current;
   useEffect(() => {
     if (hasActivity) return;
     setOpen(false);
@@ -71,16 +75,11 @@ export function DockActivity() {
   }, [open]);
   const transition = reduced ? { duration: 0 } : { type: 'spring' as const, stiffness: 330, damping: 34, mass: 0.8 };
   return (
-    <AnimatePresence>
-      {hasActivity && activity ? (
-        <motion.div
+    <DockCompanion visible={hasActivity} side="left">
+      {displayed ? (
+        <div
           className="desktop-activity"
           key="desktop-activity"
-          layout="position"
-          initial={{ width: 0, marginRight: -12 }}
-          animate={{ width: 'auto', marginRight: 0 }}
-          exit={{ width: 0, marginRight: -12 }}
-          transition={transition}
           onFocusCapture={() => {
             focusWithin.current = true;
           }}
@@ -100,26 +99,22 @@ export function DockActivity() {
             modal={false}
           >
             <Dialog.Trigger asChild>
-              <motion.button
+              <button
                 ref={trigger}
                 type="button"
                 className="desktop-activity-trigger"
-                initial={{ clipPath: 'inset(0 0 0 100% round 24px)' }}
-                animate={{ clipPath: 'inset(0 0 0 0 round 24px)' }}
-                exit={{ clipPath: 'inset(0 0 0 100% round 24px)' }}
-                transition={transition}
-                aria-label={`${activity.title}. Open activity details.`}
-                title={activity.title}
+                aria-label={`${displayed.title}. Open activity details.`}
+                title={displayed.title}
               >
                 <span className="desktop-activity-icon">
-                  <ActivityIcon kind={activity.kind} appUrn={activity.appUrn} />
+                  <ActivityIcon kind={displayed.kind} appUrn={displayed.appUrn} />
                 </span>
                 <span className="desktop-activity-summary">
-                  <strong>{activity.kind === 'packages' ? 'System updates' : activity.title}</strong>
-                  <small>{activity.detail}</small>
+                  <strong>{displayed.kind === 'packages' ? 'System updates' : displayed.title}</strong>
+                  <small>{displayed.detail}</small>
                 </span>
                 <IconChevronUp size={16} aria-hidden="true" />
-              </motion.button>
+              </button>
             </Dialog.Trigger>
             <AnimatePresence>
               {open ? (
@@ -157,10 +152,10 @@ export function DockActivity() {
                         </Dialog.Close>
                       </div>
                       <Dialog.Description className="desktop-activity-description">
-                        {activity.count} ongoing operation{activity.count === 1 ? '' : 's'}
+                        {displayed.count} ongoing operation{displayed.count === 1 ? '' : 's'}
                       </Dialog.Description>
                       <ul className="desktop-activity-list" tabIndex={0} aria-label="Ongoing operations">
-                        {activity.items.slice(0, 50).map((item) => (
+                        {displayed.items.slice(0, 50).map((item) => (
                           <li key={`${item.kind}-${item.id}`}>
                             <span className="desktop-activity-icon">
                               <ActivityIcon kind={item.kind} appUrn={item.appUrn} />
@@ -176,7 +171,7 @@ export function DockActivity() {
                         <Link to="/tasks" onClick={() => setOpen(false)}>
                           Task centre
                         </Link>
-                        {activity.items.some((item) => item.kind !== 'app') ? (
+                        {displayed.items.some((item) => item.kind !== 'app') ? (
                           <Link to="/updates" onClick={() => setOpen(false)}>
                             Updates
                           </Link>
@@ -188,8 +183,8 @@ export function DockActivity() {
               ) : null}
             </AnimatePresence>
           </Dialog.Root>
-        </motion.div>
+        </div>
       ) : null}
-    </AnimatePresence>
+    </DockCompanion>
   );
 }

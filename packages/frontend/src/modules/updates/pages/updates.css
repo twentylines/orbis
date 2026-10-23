@@ -582,3 +582,41 @@ p.desktop-host-package-versions {
     justify-self: start;
   }
 }
+
+.desktop-updates-card-head .desktop-update-action {
+  align-self: center;
+  margin: 0;
+  min-height: 44px;
+  padding: 10px 18px;
+  background: var(--desktop-action);
+  color: var(--desktop-action-ink);
+}
+.modal-content .desktop-host-package-plan {
+  margin: 0;
+  padding: 0 24px 24px;
+  border: 0;
+  background: transparent;
+}
+.desktop-update-plan-actions button:first-child {
+  background: transparent;
+  color: var(--desktop-ink);
+  border-color: var(--desktop-line);
+}
+.desktop-package-review .orbis-dialog-header {
+  display: block;
+  padding: 24px 76px 20px 24px;
+}
+.desktop-package-review .orbis-dialog-header .modal-title {
+  display: block;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+.desktop-package-review .orbis-dialog-header .modal-body {
+  padding: 8px 0 0;
+  color: var(--desktop-muted);
+}
+.modal-content.desktop-package-review .desktop-host-package-plan textarea:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: -3px;
+}

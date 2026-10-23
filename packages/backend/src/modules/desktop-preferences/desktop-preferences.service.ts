@@ -1,5 +1,6 @@
 import { ConfigurationService } from '@/core/config/configuration.service';
-import { Injectable } from '@nestjs/common';
+import { Injectable, type MessageEvent } from '@nestjs/common';
+import { filter, map, Subject } from 'rxjs';
 import { type } from 'arktype';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -27,7 +28,15 @@ export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonN
 
 @Injectable()
 export class DesktopPreferencesService {
+  private readonly changes = new Subject<number>();
   constructor(private readonly config: ConfigurationService) {}
+
+  changesFor(userId: number) {
+    return this.changes.pipe(
+      filter((changedUser) => changedUser === userId),
+      map((): MessageEvent => ({ data: { changed: true } })),
+    );
+  }
 
   private onboardingFile(userId: number) {
     const { dataDir } = this.config.get('directories');
@@ -84,6 +93,7 @@ export class DesktopPreferencesService {
       appearance: normaliseDesktopAppearance(preferences.appearance),
     };
     await this.writeState(file, value);
+    this.changes.next(userId);
     return value;
   }
 

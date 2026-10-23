@@ -54,6 +54,35 @@ describe('desktop preferences', () => {
     expect((await request(app.getHttpServer()).post('/desktop-preferences/onboarding')).status).toBe(401);
   });
 
+  it('announces saved preferences only to clients belonging to that account', async () => {
+    const service = app.get(DesktopPreferencesService);
+    const first: unknown[] = [];
+    const second: unknown[] = [];
+    const one = service.changesFor(7).subscribe((event) => first.push(event.data));
+    const two = service.changesFor(8).subscribe((event) => second.push(event.data));
+    try {
+      await request(app.getHttpServer())
+        .put('/desktop-preferences')
+        .set('Authorization', 'Bearer test')
+        .send({ ...DEFAULT_DESKTOP_PREFERENCES, mode: 'dark' })
+        .expect(200);
+      expect(first).toEqual([{ changed: true }]);
+      expect(second).toEqual([]);
+      await request(app.getHttpServer())
+        .put('/desktop-preferences')
+        .set('Authorization', 'Bearer other')
+        .send({ ...DEFAULT_DESKTOP_PREFERENCES, mode: 'light' })
+        .expect(200);
+      expect(first).toHaveLength(1);
+      expect(second).toEqual([{ changed: true }]);
+      const saved = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+      expect(saved.body.mode).toBe('dark');
+    } finally {
+      one.unsubscribe();
+      two.unsubscribe();
+    }
+  });
+
   it('keeps first-run setup separate from inherited accounts and appearance settings', async () => {
     const status = () => request(app.getHttpServer()).get('/desktop-preferences/onboarding').set('Authorization', 'Bearer test');
     expect((await status()).body).toEqual({ complete: false });

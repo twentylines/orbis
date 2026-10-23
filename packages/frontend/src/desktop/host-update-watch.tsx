@@ -97,8 +97,9 @@ type HostUpdateContextValue = {
   watch: CoreUpdateWatch | null;
   core: CoreUpdateStatus | undefined;
   packageJob: PackageUpdateJob | null;
+  unavailable: boolean;
 };
-const HostUpdateContext = createContext<HostUpdateContextValue>({ watch: null, core: undefined, packageJob: null });
+const HostUpdateContext = createContext<HostUpdateContextValue>({ watch: null, core: undefined, packageJob: null, unavailable: false });
 
 export function HostUpdateProvider({ children, suspended = false }: PropsWithChildren<{ suspended?: boolean }>) {
   const { user } = useAppContext();
@@ -160,7 +161,9 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
     }
   }, [accepted, core.data, core.isError, build.data?.version, suspended, user.operator]);
   return (
-    <HostUpdateContext.Provider value={{ watch, core: core.data, packageJob: packages.data?.job ?? null }}>{children}</HostUpdateContext.Provider>
+    <HostUpdateContext.Provider value={{ watch, core: core.data, packageJob: packages.data?.job ?? null, unavailable: core.isError }}>
+      {children}
+    </HostUpdateContext.Provider>
   );
 }
 

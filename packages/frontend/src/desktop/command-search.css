@@ -6,11 +6,6 @@
   inset: 0;
   z-index: 100;
   background: rgba(6, 19, 17, 0.36);
-  animation: orbis-search-backdrop 300ms ease both;
-}
-.desktop-search-backdrop[data-closing="true"] {
-  opacity: 0;
-  transition: opacity 340ms ease;
 }
 .desktop-search-surface {
   position: fixed;

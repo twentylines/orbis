@@ -1,75 +1,57 @@
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { prefersReducedMotion } from './motion-setting';
-import { sectionMotionTiming } from './section-motion-geometry';
 
-const backgroundSelector = '.workspace-heading, .workspace-widget > section, .workspace-editor, .workspace-all-hidden, .cluster-home > *';
-const contentSelector =
-  '.workspace-heading > div, .workspace-widget > section > *, .workspace-editor > *, .workspace-all-hidden > *, .cluster-home > * > *';
-const easing = 'cubic-bezier(.22, 1, .36, 1)';
+const tileSelector = [
+  '.workspace-heading',
+  '.workspace-widget:not(.workspace-widget-applications) > section',
+  '.workspace-apps > .workspace-section-heading',
+  '.workspace-app',
+  '.workspace-apps .workspace-message',
+  '.workspace-editor',
+  '.workspace-all-hidden',
+  '.cluster-home > *',
+].join(', ');
 
-export function useHomeMotion(key: string, active: boolean, entry: number) {
+export function useHomeMotion(key: string, active: boolean, direction: number) {
+  const entrance = useRef({ key, direction });
+  if (entrance.current.key !== key) entrance.current = { key, direction };
+  const entryDirection = entrance.current.direction;
   useLayoutEffect(() => {
     if (!active || prefersReducedMotion()) return;
-    const view = document.querySelector<HTMLElement>('#desktop-content > .desktop-view-home');
-    if (!view) return;
-    view.dataset.homeEntry = key;
-    const backgrounds = new WeakMap<HTMLElement, number>();
-    const contents = new WeakMap<HTMLElement, Animation>();
-    const tiles = new WeakSet<HTMLElement>();
+    const root = document.querySelector('#desktop-content');
+    if (!root) return;
+    const entered = new WeakSet<HTMLElement>();
     const animations: Animation[] = [];
     const animate = () => {
-      const now = performance.now();
-      for (const element of view.querySelectorAll<HTMLElement>(backgroundSelector)) {
-        if (backgrounds.has(element)) continue;
-        backgrounds.set(element, now);
-        animations.push(
-          element.animate(
-            [
-              { opacity: 0.6, transform: 'translateY(10px)' },
-              { opacity: 1, transform: 'none' },
-            ],
-            { duration: entry, easing },
-          ),
-        );
-      }
-      for (const element of view.querySelectorAll<HTMLElement>(contentSelector)) {
-        if (contents.has(element)) continue;
-        const background = element.parentElement?.closest<HTMLElement>(backgroundSelector);
-        const delay = Math.max(0, entry - (now - (background ? (backgrounds.get(background) ?? now) : now)));
-        const animation = element.animate(
+      const view = root.querySelector<HTMLElement>('.desktop-view-home');
+      if (!view) return;
+      view.dataset.homeEntry = key;
+      for (const tile of view.querySelectorAll<HTMLElement>(tileSelector)) {
+        if (entered.has(tile)) continue;
+        entered.add(tile);
+        const bounds = tile.getBoundingClientRect();
+        const delay = Math.min(96, Math.max(0, bounds.left / innerWidth) * 72 + Math.max(0, bounds.top / innerHeight) * 24);
+        const distance = Math.min(40, innerWidth * 0.055) * entryDirection;
+        const animation = tile.animate(
           [
-            { opacity: 0, transform: 'translateY(12px)' },
-            { opacity: 1, transform: 'none' },
+            { opacity: 0, transform: `translateX(${distance}px)`, offset: 0 },
+            { opacity: 1, offset: 0.3 },
+            { opacity: 1, transform: 'none', offset: 1 },
           ],
-          { duration: sectionMotionTiming.content, delay, easing, fill: 'backwards' },
+          { duration: 420, delay, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' },
         );
-        contents.set(element, animation);
+        animation.id = 'orbis-home-tile';
         animations.push(animation);
-      }
-      for (const tile of view.querySelectorAll<HTMLElement>('.workspace-app')) {
-        if (tiles.has(tile)) continue;
-        tiles.add(tile);
-        const group = tile.parentElement?.closest<HTMLElement>(contentSelector);
-        const entrance = group ? contents.get(group) : null;
-        if (entrance && entrance.playState !== 'finished' && entrance.playState !== 'idle') continue;
-        animations.push(
-          tile.animate(
-            [
-              { opacity: 0, transform: 'translateY(10px)' },
-              { opacity: 1, transform: 'none' },
-            ],
-            { duration: sectionMotionTiming.content, easing },
-          ),
-        );
       }
     };
     const observer = new MutationObserver(animate);
-    observer.observe(view, { childList: true, subtree: true });
+    observer.observe(root, { childList: true, subtree: true });
     animate();
     return () => {
       observer.disconnect();
       for (const animation of animations) animation.cancel();
-      if (view.dataset.homeEntry === key) delete view.dataset.homeEntry;
+      const view = root.querySelector<HTMLElement>('.desktop-view-home');
+      if (view?.dataset.homeEntry === key) delete view.dataset.homeEntry;
     };
-  }, [active, entry, key]);
+  }, [active, entryDirection, key]);
 }

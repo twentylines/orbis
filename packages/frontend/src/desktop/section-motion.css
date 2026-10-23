@@ -1,6 +1,5 @@
-/* The surface enters before its live content; browser history owns document scroll. */
-.desktop-route-surface {
-  will-change: height, width;
+.desktop .desktop-route-page:is([data-section-phase="card"], [data-card-revealing]) {
+  overflow: clip;
 }
 .desktop-view-home :is(.workspace-heading, .workspace-widget, .workspace-app, .workspace-editor) {
   animation: none;

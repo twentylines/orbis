@@ -1,4 +1,5 @@
 import { applyAppearanceRuntime } from './appearance-runtime';
+import { transitionAppearance } from './theme-motion';
 import { MotionPreferences } from './motion-preferences';
 import { useLayoutEffect, createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { useUserContext } from '@/context/user-context';
@@ -14,8 +15,9 @@ import {
   type DesktopWindowState,
 } from '@runtipi/common/schemas';
 import { useResolvedColourMode, readSystemColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
-import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit } from './appearance-cache';
+import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, preferenceChangeEvent } from './appearance-cache';
 import { validHomePins } from './workspace-apps';
+import { prefersReducedMotion } from './motion-setting';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
@@ -134,6 +136,7 @@ type PreferenceContext = {
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
   requiresOnboarding: boolean;
   completeOnboarding: (serverName: string) => Promise<void>;
+  setWorkspaceLoading: (loading: boolean) => void;
 };
 const Context = createContext<PreferenceContext | null>(null);
 const LOAD_NOTICE = 'desktop-preferences-load';
@@ -146,25 +149,42 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const resolvedMode = useResolvedColourMode(preferences.mode);
   const [cacheAvailable, setCacheAvailable] = useState(cache.available);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const booting = isLoggedIn && (!initialLoadComplete || workspaceLoading);
+  const [bootShown, setBootShown] = useState(isLoggedIn);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [serverReady, setServerReady] = useState(false);
   const [requiresOnboarding, setRequiresOnboarding] = useState(true);
   const completingSetup = useRef(false);
   const [syncState, setSyncState] = useState<PreferenceContext['syncState']>('local');
+  const appearancePainted = useRef(false);
+  const remoteRefresh = useRef<(() => void) | null>(null);
   const revision = useRef(0);
   const acknowledgedRevision = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
+  useEffect(() => {
+    if (booting) {
+      setBootShown(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setBootShown(false), prefersReducedMotion() ? 0 : 360);
+    return () => window.clearTimeout(timer);
+  }, [booting]);
+
   useLayoutEffect(() => {
     const root = document.documentElement;
     const effectiveMode = preferences.mode === 'system' ? readSystemColourMode() : resolvedMode;
-    root.dataset.desktopPreset = preferences.preset;
-    root.dataset.desktopMode = effectiveMode;
-    root.dataset.desktopWallpaper = preferences.wallpaper;
-    root.dataset.orbisAppearanceReady = 'true';
-    const apply = () => applyAppearanceRuntime(preferences.appearance, effectiveMode);
-    apply();
+    const apply = () => {
+      root.dataset.desktopPreset = preferences.preset;
+      root.dataset.desktopMode = effectiveMode;
+      root.dataset.desktopWallpaper = preferences.wallpaper;
+      root.dataset.orbisAppearanceReady = 'true';
+      applyAppearanceRuntime(preferences.appearance, effectiveMode);
+    };
+    transitionAppearance(apply, appearancePainted.current);
+    appearancePainted.current = true;
     const queries = ['(prefers-reduced-motion: reduce)', '(prefers-reduced-transparency: reduce)'].flatMap((query) => {
       try {
         return [window.matchMedia(query)];
@@ -245,6 +265,65 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   }, [isLoggedIn, loadAttempt]);
 
   useEffect(() => {
+    if (!isLoggedIn || !serverReady) return;
+    let disposed = false;
+    let reading = false;
+    let waiting = false;
+    const controller = new AbortController();
+    const refresh = async () => {
+      if (disposed) return;
+      if (reading || revision.current !== acknowledgedRevision.current) {
+        waiting = true;
+        return;
+      }
+      reading = true;
+      waiting = false;
+      const currentRevision = revision.current;
+      try {
+        const response = await fetch('/api/desktop-preferences', {
+          credentials: 'include',
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
+        });
+        if (!response.ok) return;
+        const value: unknown = await response.json();
+        if (!disposed && isPreferences(value) && revision.current === currentRevision && acknowledgedRevision.current === currentRevision) {
+          const next = normalisePreferences(value);
+          setPreferences((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
+        }
+      } catch {
+        // The saved browser appearance remains available while the server reconnects.
+      } finally {
+        reading = false;
+        if (waiting && revision.current === acknowledgedRevision.current) void refresh();
+      }
+    };
+    const changed = () => void refresh();
+    const focus = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    window.addEventListener('focus', focus);
+    window.addEventListener(preferenceChangeEvent, changed);
+    remoteRefresh.current = refresh;
+    return () => {
+      disposed = true;
+      controller.abort();
+      window.removeEventListener('focus', focus);
+      window.removeEventListener(preferenceChangeEvent, changed);
+      if (remoteRefresh.current === refresh) remoteRefresh.current = null;
+    };
+  }, [isLoggedIn, serverReady]);
+
+  useEffect(() => {
+    if (isLoggedIn) return;
+    const stored = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY) return;
+      setPreferences(readCachedDesktopPreferences());
+    };
+    window.addEventListener('storage', stored);
+    return () => window.removeEventListener('storage', stored);
+  }, [isLoggedIn]);
+
+  useEffect(() => {
     if (loadError) {
       toast.error(
         <>
@@ -290,6 +369,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
           if (!response.ok) throw new Error('Preference save failed');
           acknowledgedRevision.current = saveRevision;
           if (!superseded && revision.current === saveRevision) setSyncState('saved');
+          remoteRefresh.current?.();
         } catch {
           if (!superseded && revision.current === saveRevision) setSyncState('error');
         }
@@ -383,10 +463,12 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         syncState,
         requiresOnboarding,
         completeOnboarding,
+        setWorkspaceLoading,
       }}
     >
       <MotionPreferences reduced={preferences.appearance.motion === 'reduced' || preferences.appearance.lowEffects}>
-        {isLoggedIn && !initialLoadComplete ? <StartupSurface appearance={preferences} /> : children}
+        {isLoggedIn && !initialLoadComplete ? null : children}
+        {booting || bootShown ? <StartupSurface appearance={preferences} overlay revealing={!booting} /> : null}
       </MotionPreferences>
     </Context.Provider>
   );

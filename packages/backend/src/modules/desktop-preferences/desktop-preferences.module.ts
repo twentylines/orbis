@@ -8,5 +8,6 @@ import { DesktopWallpaperService } from './desktop-wallpaper.service';
   imports: [ConfigurationModule],
   controllers: [DesktopPreferencesController],
   providers: [DesktopPreferencesService, DesktopWallpaperService],
+  exports: [DesktopPreferencesService],
 })
 export class DesktopPreferencesModule {}

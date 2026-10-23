@@ -7,16 +7,17 @@ type Props<T> = {
   onEvent: (event: Extract<SSE, { topic: T }>['data']) => void;
   onError?: (error: Event) => void;
   onOpen?: () => void;
+  onPreferencesChanged?: () => void;
   params?: URLSearchParams;
 };
 
-export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, params }: Props<T>) => {
-  const handlers = useRef({ onEvent, onError, onOpen });
+export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, onPreferencesChanged, params }: Props<T>) => {
+  const handlers = useRef({ onEvent, onError, onOpen, onPreferencesChanged });
   const [status, setStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
   const query = params?.toString() ?? '';
   useEffect(() => {
-    handlers.current = { onEvent, onError, onOpen };
-  }, [onEvent, onError, onOpen]);
+    handlers.current = { onEvent, onError, onOpen, onPreferencesChanged };
+  }, [onEvent, onError, onOpen, onPreferencesChanged]);
 
   const visible = useWindowVisible();
   useEffect(() => {
@@ -59,6 +60,9 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, param
         setStatus('connected');
         handlers.current.onOpen?.();
       };
+      source.addEventListener('desktop-preferences', () => {
+        if (!disposed && source === stream) handlers.current.onPreferencesChanged?.();
+      });
       source.onerror = (error) => {
         if (disposed || source !== stream) return;
         handlers.current.onError?.(error);
@@ -80,14 +84,22 @@ export const useSSE = <T extends Topic>({ topic, onEvent, onError, onOpen, param
       }
     };
     connect();
+    const suspend = () => {
+      clearRetry();
+      closeStream();
+    };
     window.addEventListener('focus', reconnect);
     window.addEventListener('online', reconnect);
+    window.addEventListener('pagehide', suspend);
+    window.addEventListener('pageshow', reconnect);
     return () => {
       disposed = true;
       clearRetry();
       closeStream();
       window.removeEventListener('focus', reconnect);
       window.removeEventListener('online', reconnect);
+      window.removeEventListener('pagehide', suspend);
+      window.removeEventListener('pageshow', reconnect);
     };
   }, [topic, query, visible]);
   return status;

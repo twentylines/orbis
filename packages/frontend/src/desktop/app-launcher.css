@@ -269,9 +269,6 @@
 .orbis-app-launcher[data-launch-motion="restoring"] .app-launcher-flight-mark {
   animation: app-launcher-flight 580ms ease both;
 }
-.desktop-dock[data-tray-motion="splitting"] .app-tray-list {
-  animation: app-tray-content 580ms ease both;
-}
 @keyframes app-launcher-content {
   0%,
   40% {
@@ -291,22 +288,6 @@
     opacity: 0;
   }
 }
-@keyframes app-tray-content {
-  0%,
-  25% {
-    opacity: 0;
-  }
-  65%,
-  100% {
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .desktop-dock[data-tray-motion="splitting"] .app-tray-list {
-    animation: none;
-  }
-}
-
 .app-tray-restore[data-flying="true"] .app-logo {
   visibility: hidden;
 }

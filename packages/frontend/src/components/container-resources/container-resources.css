@@ -200,7 +200,6 @@
   margin: 0;
   padding: 20px 0 0;
   border: 0;
-  border-top: 1px solid var(--desktop-line);
   border-radius: 0;
   background: transparent;
   color: var(--desktop-ink);

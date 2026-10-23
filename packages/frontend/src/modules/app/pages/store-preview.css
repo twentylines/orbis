@@ -1,3 +1,19 @@
+.store-catalogue-pane .action-bar-content {
+  padding: 12px;
+  gap: 12px;
+}
+.store-catalogue-pane .action-bar-right {
+  gap: 12px;
+}
+.store-catalogue-pane .action-bar-center:empty {
+  display: none;
+}
+.store-catalogue-pane .refresh-app-stores {
+  color: var(--desktop-ink);
+  background: var(--desktop-surface);
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+}
 .store-split-layout,
 .store-catalogue-pane,
 .store-app-preview {
@@ -100,6 +116,16 @@
   }
   .store-catalogue-pane .desktop-catalogue-grid {
     grid-template-columns: 1fr;
+  }
+}
+@container (max-width: 640px) {
+  .store-catalogue-pane .action-bar-right {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .store-catalogue-pane .action-bar-right > * {
+    width: 100%;
+    flex: auto;
   }
 }
 @media (prefers-reduced-motion: reduce) {

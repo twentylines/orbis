@@ -478,6 +478,7 @@
 }
 .workspace-app-list {
   display: grid;
+  grid-auto-rows: 1fr;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
   gap: 12px;
 }
@@ -893,12 +894,6 @@
   border-radius: 15px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 6%, var(--desktop-surface));
   color: var(--desktop-ink);
-  text-decoration: none;
-  transition: transform 0.2s ease;
-}
-.workspace-network:hover {
-  transform: translateY(-3px);
-  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
 }
 .workspace-network-heading {
   display: inline-flex;
@@ -908,6 +903,17 @@
   font-size: 0.75rem;
   font-weight: 660;
   color: var(--desktop-status-muted);
+}
+.workspace-network-direction {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+}
+.workspace-network-direction small {
+  color: var(--desktop-muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
 }
 .workspace-network-rate {
   min-width: 0;
@@ -919,8 +925,18 @@
   color: var(--desktop-accent);
 }
 @container (max-width: 18rem) {
-  .workspace-network-rate {
+  .workspace-network-direction {
     grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+  }
+  .workspace-network-direction > small:first-child {
+    flex: 1;
+  }
+  .workspace-network-direction > small:last-child {
+    width: 100%;
   }
 }
 .workspace-meter {
@@ -1295,11 +1311,12 @@
 .workspace-custom-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
+  align-items: stretch;
   gap: 18px;
   min-width: 0;
 }
 .workspace-custom-row > .workspace-widget {
+  display: flex;
   grid-column: auto;
 }
 .workspace-custom-row > .workspace-widget:only-child {
@@ -1318,8 +1335,15 @@
 .workspace-auxiliary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-  align-items: start;
+  align-items: stretch;
   gap: 18px;
+  min-width: 0;
+}
+.workspace-auxiliary > .workspace-widget {
+  display: flex;
+}
+:is(.workspace-custom-row, .workspace-auxiliary) > .workspace-widget > section {
+  flex: 1;
   min-width: 0;
 }
 .workspace-auxiliary:empty {

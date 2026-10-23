@@ -2,12 +2,13 @@ import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Markdown } from '@/components/markdown/markdown';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
 import { IconArrowRight, IconBrandGithub, IconPackage, IconServerCog } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import './updates.css';
 import { useCluster } from '@/desktop/cluster';
 import { ClusterUpdates } from '@/desktop/cluster-updates';
@@ -131,6 +132,8 @@ export default function Updates() {
 }
 
 function LocalUpdates() {
+  const entry = useLocation().key;
+  const lastEntry = useRef(entry);
   const visible = useWindowVisible();
   const { user } = useAppContext();
   const [coreRequestStage, setCoreRequestStage] = useState<'checking' | 'starting' | null>(null);
@@ -145,9 +148,7 @@ function LocalUpdates() {
     ...getInstalledAppsOptions(),
     enabled: visible,
     refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
-    refetchInterval: 15_000,
-    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
   const build = useQuery({
     queryKey: ['orbis-installed-build'],
@@ -155,9 +156,7 @@ function LocalUpdates() {
     enabled: visible,
     staleTime: 60_000,
     refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
   const releases = useQuery({
     queryKey: ['orbis-github-releases'],
@@ -165,9 +164,7 @@ function LocalUpdates() {
     enabled: visible,
     staleTime: 60_000,
     refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
   const available =
     apps.data?.installed.filter(
@@ -187,9 +184,7 @@ function LocalUpdates() {
     enabled: visible && user?.operator === true,
     staleTime: 60_000,
     refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
     retry: false,
   });
   const packageChangelog = useQuery({
@@ -201,6 +196,14 @@ function LocalUpdates() {
     refetchOnWindowFocus: false,
     retry: false,
   });
+  useEffect(() => {
+    if (lastEntry.current === entry) return;
+    lastEntry.current = entry;
+    void apps.refetch();
+    void build.refetch();
+    void releases.refetch();
+    if (user?.operator === true) void systemPackages.refetch();
+  }, [entry, apps.refetch, build.refetch, releases.refetch, systemPackages.refetch, user?.operator]);
   const packageJob = useQuery({
     queryKey: ['orbis-host-package-job'],
     queryFn: ({ signal }) => hostRequest<HostPackageJobStatus>('packages/job', undefined, signal),
@@ -338,6 +341,11 @@ function LocalUpdates() {
               <h2 id="orbis-updates-title">Orbis</h2>
               <p>Release notes from the Orbis GitHub repository</p>
             </div>
+            {canPlan && latest ? (
+              <button className="desktop-update-action" type="button" disabled={updateCore.isPending} onClick={() => updateCore.mutate(latest.tag)}>
+                {updateCore.isPending ? 'Updating…' : 'Update'}
+              </button>
+            ) : null}
           </div>
           <div className="desktop-update-build">
             {build.isPending ? 'Reading installed Orbis build…' : null}
@@ -419,11 +427,6 @@ function LocalUpdates() {
                 </button>
               ) : null}
             </output>
-          ) : null}
-          {canPlan && latest ? (
-            <button className="desktop-update-action" type="button" disabled={updateCore.isPending} onClick={() => updateCore.mutate(latest.tag)}>
-              {updateCore.isPending ? 'Updating…' : 'Update'}
-            </button>
           ) : null}
           {coreRequestStage ? (
             <output className="desktop-update-note" aria-live="polite">
@@ -537,10 +540,60 @@ function LocalUpdates() {
                         }
                         onClick={() => planPackages.mutate(selectedPackages)}
                       >
-                        {planPackages.isPending ? 'Checking APT transaction…' : 'Review selected updates'}
+                        {planPackages.isPending ? 'Checking APT transaction…' : 'Update selected'}
                       </button>
                     </div>
                   </div>
+                  {planPackages.isError ? <p role="alert">{planPackages.error.message}</p> : null}
+                  {applyPackages.isError ? <p role="alert">{applyPackages.error.message}. Check the host package job before trying again.</p> : null}
+                  <Dialog
+                    open={Boolean(reviewPackagePlan)}
+                    onOpenChange={(open) => {
+                      if (!open && !applyPackages.isPending) setReviewPackagePlan(null);
+                    }}
+                  >
+                    <DialogContent size="lg" className="desktop-package-review">
+                      <DialogHeader>
+                        <DialogTitle>Update system packages</DialogTitle>
+                        <DialogDescription>
+                          {reviewPackagePlan?.selected.length ?? 0} selected updates · {reviewPackagePlan?.operations.length ?? 0} package changes
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="desktop-host-package-plan">
+                        <textarea
+                          readOnly
+                          spellCheck={false}
+                          aria-label="Planned package changes"
+                          value={
+                            reviewPackagePlan?.operations
+                              .map(
+                                (operation) =>
+                                  `${operation.action === 'install' ? 'Install' : 'Upgrade'} ${operation.name}: ${operation.installedVersion ? `${operation.installedVersion} → ` : ''}${operation.candidateVersion}`,
+                              )
+                              .join('\n') ?? ''
+                          }
+                        />
+                        <p>
+                          Services may restart during installation. The host will not reboot automatically. Package changes have no automatic
+                          rollback.
+                        </p>
+                      </div>
+                      <DialogFooter className="desktop-update-plan-actions">
+                        <button type="button" disabled={applyPackages.isPending} onClick={() => setReviewPackagePlan(null)}>
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={applyPackages.isPending || !reviewPackagePlan}
+                          onClick={() => {
+                            if (reviewPackagePlan) applyPackages.mutate(reviewPackagePlan.planId);
+                          }}
+                        >
+                          {applyPackages.isPending ? 'Starting update…' : 'Install updates'}
+                        </button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                   <ul className="desktop-host-package-list" aria-label="Available host package updates">
                     {visiblePackages.map((item) => (
                       <li className="desktop-host-package" key={item.name}>
@@ -598,40 +651,6 @@ function LocalUpdates() {
                       Show all {matchingPackages.length} matching packages
                     </button>
                   ) : null}
-                  {reviewPackagePlan ? (
-                    <section className="desktop-host-package-plan" aria-label="Review host package update">
-                      <strong>Review host package update</strong>
-                      <p>
-                        {reviewPackagePlan.selected.length} selected · {reviewPackagePlan.operations.length} package changes. APT may install required
-                        dependencies; every planned change is listed below.
-                      </p>
-                      <textarea
-                        readOnly
-                        spellCheck={false}
-                        aria-label="Planned package changes"
-                        value={reviewPackagePlan.operations
-                          .map(
-                            (operation) =>
-                              `${operation.action === 'install' ? 'Install' : 'Upgrade'} ${operation.name}: ${operation.installedVersion ? `${operation.installedVersion} → ` : ''}${operation.candidateVersion}`,
-                          )
-                          .join('\n')}
-                      />
-                      <p>
-                        Services may restart during installation. Orbis will not reboot the host. APT package changes have no automatic rollback; keep
-                        an independent host backup.
-                      </p>
-                      <div className="desktop-update-plan-actions">
-                        <button type="button" disabled={applyPackages.isPending} onClick={() => applyPackages.mutate(reviewPackagePlan.planId)}>
-                          {applyPackages.isPending ? 'Starting host update…' : 'Install reviewed packages'}
-                        </button>
-                        <button type="button" disabled={applyPackages.isPending} onClick={() => setReviewPackagePlan(null)}>
-                          Cancel
-                        </button>
-                      </div>
-                    </section>
-                  ) : null}
-                  {planPackages.isError ? <p role="alert">{planPackages.error.message}</p> : null}
-                  {applyPackages.isError ? <p role="alert">{applyPackages.error.message}. Check the host package job before trying again.</p> : null}
                   {selectedPackage ? (
                     <section className="desktop-host-changelog" aria-label={`${selectedPackage} changelog`}>
                       <div>

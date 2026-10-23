@@ -6,10 +6,7 @@ describe('live section surface geometry', () => {
   test('a long Monitor page starts shrinking from its visible height', () => {
     const previous = visibleSectionBounds({ left: 24, top: 112, width: 1392, height: 9563 }, 1100);
     const next = visibleSectionBounds({ left: 24, top: 112, width: 1392, height: 480 }, 1100);
-    expect(sectionSurfaceFrames(previous, next)).toEqual([
-      { width: '1392px', height: '988px', transform: 'translateX(0px)' },
-      { width: '1392px', height: '480px', transform: 'none' },
-    ]);
+    expect(sectionSurfaceFrames(previous, next)).toEqual([{ height: '988px' }, { height: '480px' }]);
   });
 
   test('short content preserves its actual height', () => {
@@ -22,9 +19,7 @@ describe('live section surface geometry', () => {
 
   test('an interrupted surface moves from its current geometry without scaling text', () => {
     expect(sectionSurfaceFrames({ left: 20, top: 112, width: 1300, height: 620 }, { left: 40, top: 112, width: 1260, height: 480 })[0]).toEqual({
-      width: '1300px',
       height: '620px',
-      transform: 'translateX(-20px)',
     });
   });
 });
@@ -39,9 +34,9 @@ describe('history section direction', () => {
   test('normal navigation follows section order', () => {
     expect(sectionDirection(5, 0, 'PUSH', 3, 4)).toBe(-1);
   });
-  test('a history scroll restoration never shifts the surface vertical anchor', () => {
-    expect(sectionSurfaceFrames({ left: 24, top: 0, width: 900, height: 900 }, { left: 24, top: 112, width: 900, height: 480 })[0]?.transform).toBe(
-      'translateX(0px)',
-    );
+  test('the card reaches the full content height, including content below the viewport', () => {
+    expect(sectionSurfaceFrames({ left: 24, top: 112, width: 900, height: 480 }, { left: 24, top: 112, width: 900, height: 2400 })[1]).toEqual({
+      height: '2400px',
+    });
   });
 });

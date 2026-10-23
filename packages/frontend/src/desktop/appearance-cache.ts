@@ -14,6 +14,7 @@ export type CachedAppearance = {
 };
 
 export const preferenceStorageKey = 'server-desktop-preferences-v1';
+export const preferenceChangeEvent = 'orbis-desktop-preferences-changed';
 export const preferenceCacheLimit = 256 * 1024;
 
 export function appearanceFromStored(value: unknown): CachedAppearance {
