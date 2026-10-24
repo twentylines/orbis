@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { redirect, useNavigate, useParams } from 'react-router';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { convertLegacyToYaml, convertYamlToLegacy } from '@runtipi/common/schemas';
+import { convertLegacyToYaml, convertYamlToLegacy } from '@runtipi/common/schemas/utils/convert-legacy-schema';
 import * as yaml from 'yaml';
 import { getEditableAppConfig } from '@/api-client';
 import { updateEditableAppConfigMutation } from '@/api-client/@tanstack/react-query.gen';

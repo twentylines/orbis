@@ -1,4 +1,4 @@
-import { taskHistorySchema, type TaskRecord } from '@runtipi/common/schemas';
+import { taskHistorySchema, type TaskRecord } from '@runtipi/common/schemas/task-history';
 import { type } from 'arktype';
 import { useQuery } from '@tanstack/react-query';
 import { useWindowVisible } from './window-visibility';

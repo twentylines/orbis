@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { appLaunchSchema, defaultAppLaunch } from '@runtipi/common/schemas';
+import { appLaunchSchema, defaultAppLaunch } from '@runtipi/common/schemas/app-launch';
 import { appAddress, appOpeningMode, initialAppBounds, primaryAppAddress } from './app-opening';
 
 describe('actual app opening', () => {

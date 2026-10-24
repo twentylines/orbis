@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
-import { metricHistoryRanges, type HostSensors, type MetricHistoryRange } from '@runtipi/common/schemas';
+import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas/metric-history';
+import type { HostSensors } from '@runtipi/common/schemas/host-sensors';
 import { IconActivity, IconArrowDown, IconArrowUp, IconCpu, IconDatabase, IconDeviceDesktopAnalytics, IconNetwork } from '@tabler/icons-react';
 import { useMetricHistory } from '@/desktop/metric-history';
 import { MetricChart } from '@/components/metric-chart/metric-chart';

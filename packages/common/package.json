@@ -9,6 +9,11 @@
     "README.md"
   ],
   "exports": {
+    "./schemas/*": {
+      "types": "./dist/schemas/*.d.ts",
+      "import": "./dist/schemas/*.js",
+      "default": "./dist/schemas/*.js"
+    },
     "./schemas": {
       "import": "./dist/schemas/index.js",
       "types": "./dist/schemas/index.d.ts",
@@ -22,6 +27,9 @@
   },
   "typesVersions": {
     "*": {
+      "schemas/*": [
+        "dist/schemas/*.d.ts"
+      ],
       "schemas": [
         "dist/schemas/index.d.ts"
       ],

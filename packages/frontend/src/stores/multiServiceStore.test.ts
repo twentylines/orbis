@@ -1,4 +1,4 @@
-import { convertLegacyToYaml } from '@runtipi/common/schemas';
+import { convertLegacyToYaml } from '@runtipi/common/schemas/utils/convert-legacy-schema';
 import { parse, stringify } from 'yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveConfirmation } from '@/desktop/confirmation';

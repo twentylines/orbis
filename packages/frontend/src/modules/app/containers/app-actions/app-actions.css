@@ -31,7 +31,7 @@
   padding: 0;
   border-radius: 10px;
   border-color: var(--desktop-line);
-  background: rgba(115, 146, 127, 0.12);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent);
   color: var(--desktop-ink);
   box-shadow: none;
 }
@@ -39,7 +39,7 @@
   min-height: var(--app-action-size);
   border-radius: 10px;
   color: var(--desktop-ink);
-  background: rgba(115, 146, 127, 0.12);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent);
   border-color: var(--desktop-line);
   box-shadow: none;
 }

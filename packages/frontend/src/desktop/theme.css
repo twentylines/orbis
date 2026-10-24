@@ -651,6 +651,9 @@ body:has(.orbis-theme) .form-text a:hover {
   --tblr-bg-surface-tertiary: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
   --tblr-primary: var(--desktop-action);
   --tblr-primary-rgb: var(--desktop-action-rgb);
+  --tblr-primary-fg: var(--desktop-action-ink);
+  --tblr-primary-darken: var(--desktop-action-hover);
+  --tblr-primary-lt: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
   --tblr-success: var(--desktop-positive);
   --tblr-success-darken: color-mix(in srgb, var(--desktop-positive) 85%, black);
   --tblr-shadow-input: none;

@@ -6,18 +6,9 @@ import { useUserContext } from '@/context/user-context';
 import { useStartupReady } from '@/components/startup/startup-boundary';
 import { useLocation } from 'react-router';
 import toast from 'react-hot-toast';
-import {
-  desktopWindowsSchema,
-  appLaunchSchema,
-  defaultAppLaunch,
-  type AppLaunchPreferences,
-  desktopAppearanceSchema,
-  normaliseDesktopAppearance,
-  type DesktopAppearance,
-  type DesktopWindows,
-  type DesktopWindowId,
-  type DesktopWindowState,
-} from '@runtipi/common/schemas';
+import { desktopWindowsSchema, type DesktopWindows, type DesktopWindowId, type DesktopWindowState } from '@runtipi/common/schemas/desktop-windows';
+import { appLaunchSchema, defaultAppLaunch, type AppLaunchPreferences } from '@runtipi/common/schemas/app-launch';
+import { desktopAppearanceSchema, normaliseDesktopAppearance, type DesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
 import { useResolvedColourMode, readSystemColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
 import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, preferenceChangeEvent } from './appearance-cache';
 import { validHomePins } from './workspace-apps';

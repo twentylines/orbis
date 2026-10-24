@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { AppDetails, AppInfo, AppMetadata } from '@/types/app.types';
 import { extractAppUrn } from '@/utils/app-helpers';
 import type { AppUrn } from '@runtipi/common/types';
-import { CURRENT_SCHEMA_VERSION } from '@runtipi/common/schemas';
+import { CURRENT_SCHEMA_VERSION } from '@runtipi/common/schemas/dynamic-compose';
 import { IconAlertCircle, IconAlertTriangle, IconExternalLink } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { Suspense, lazy } from 'react';
@@ -201,9 +201,9 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
       <TabsContent value="info">
         <DataGrid>
           <DataGridItem title={t('APP_DETAILS_SOURCE_CODE')}>
-            <a target="_blank" rel="noreferrer" className="text-blue-500 text-xs" href={info.source}>
-              {t('APP_DETAILS_LINK')}
-              <IconExternalLink size={15} className="ms-1 mb-1" />
+            <a target="_blank" rel="noreferrer" className="app-detail-link" href={info.source}>
+              <span>{t('APP_DETAILS_LINK')}</span>
+              <IconExternalLink size={15} aria-hidden="true" />
             </a>
           </DataGridItem>
           <DataGridItem title={t('APP_DETAILS_AUTHOR')}>{info.author}</DataGridItem>
@@ -229,9 +229,9 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
           )}
           {info.website && (
             <DataGridItem title={t('APP_DETAILS_WEBSITE')}>
-              <a target="_blank" rel="noreferrer" className="text-blue-500 text-xs" href={info.website}>
-                {info.website}
-                <IconExternalLink size={15} className="ms-1 mb-1" />
+              <a target="_blank" rel="noreferrer" className="app-detail-link" href={info.website}>
+                <span>{info.website}</span>
+                <IconExternalLink size={15} aria-hidden="true" />
               </a>
             </DataGridItem>
           )}

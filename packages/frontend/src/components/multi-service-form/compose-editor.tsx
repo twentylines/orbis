@@ -1,4 +1,6 @@
-import { dynamicComposeSchemaYaml, convertLegacyToYaml, convertYamlToLegacy, dynamicComposeSchemaArk } from '@runtipi/common/schemas';
+import { dynamicComposeSchemaYaml } from '@runtipi/common/schemas/compose-yaml';
+import { convertLegacyToYaml, convertYamlToLegacy } from '@runtipi/common/schemas/utils/convert-legacy-schema';
+import { dynamicComposeSchemaArk } from '@runtipi/common/schemas/dynamic-compose-ark';
 import { useEffect, useState, useCallback } from 'react';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
 import { CodeEditor } from '@/components/code-editor/code-editor';

@@ -32,7 +32,7 @@
 }
 .app-detail-tabs > [role="tablist"] [role="tab"][data-state="active"] {
   color: var(--desktop-ink);
-  background: rgba(115, 146, 127, 0.16);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 16%, transparent);
   border-color: var(--desktop-line);
 }
 .app-detail-tabs > [role="tablist"] [role="tab"]:disabled {
@@ -75,7 +75,7 @@
   overflow-wrap: anywhere;
 }
 .app-detail-tabs .badge {
-  background: rgba(115, 146, 127, 0.16);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 16%, transparent);
   color: var(--desktop-ink);
 }
 
@@ -215,4 +215,18 @@
     grid-column: 1 / -1;
     grid-row: 2;
   }
+}
+.app-detail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  color: var(--desktop-accent);
+}
+.app-detail-link > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app-detail-link > svg {
+  flex: none;
 }

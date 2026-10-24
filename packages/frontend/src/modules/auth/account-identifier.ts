@@ -1,4 +1,4 @@
-import { isNewBareUsername } from '@runtipi/common/schemas';
+import { isNewBareUsername } from '@runtipi/common/schemas/account-identifier';
 import { type } from 'arktype';
 
 const email = type('string.email');

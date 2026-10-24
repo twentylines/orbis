@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { type } from 'arktype';
-import { dynamicComposeSchemaArk, type serviceSchemaArk, convertYamlToLegacy } from '@runtipi/common/schemas';
+import { dynamicComposeSchemaArk, type serviceSchemaArk } from '@runtipi/common/schemas/dynamic-compose-ark';
+import { convertYamlToLegacy } from '@runtipi/common/schemas/utils/convert-legacy-schema';
 import toast from 'react-hot-toast';
 import { deepClean } from '@/utils/objects';
 import { confirmDiscard } from '@/desktop/confirmation';

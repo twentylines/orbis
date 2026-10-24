@@ -82,7 +82,7 @@
   margin: 0 0 26px;
   border: 1px solid var(--desktop-line);
   border-radius: 16px;
-  background: rgba(115, 146, 127, 0.08);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 8%, transparent);
 }
 .app-workspace-facts dt {
   color: var(--desktop-muted);
@@ -120,7 +120,7 @@
   border: 1px solid var(--desktop-line);
   border-radius: 12px;
   color: var(--desktop-ink);
-  background: rgba(115, 146, 127, 0.12);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent);
   font: inherit;
   text-align: left;
 }

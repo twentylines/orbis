@@ -1,7 +1,7 @@
 import './services-form.css';
 import { Button } from '@/components/ui/Button';
 import { arktypeResolver } from '@hookform/resolvers/arktype';
-import { dynamicComposeSchemaArk } from '@runtipi/common/schemas';
+import { dynamicComposeSchemaArk } from '@runtipi/common/schemas/dynamic-compose-ark';
 import { IconArrowsDownUp, IconCloudDataConnection, IconPlus, IconServer, IconSettings, IconVariable, IconX } from '@tabler/icons-react';
 import { useForm } from 'react-hook-form';
 import { ComposeEditor } from './compose-editor';
