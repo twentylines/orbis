@@ -81,7 +81,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
         { opacity: 0, transform: `translateX(${split ? 18 : 12}px)` },
         { opacity: 1, transform: 'none' },
       ],
-      { delay: split && opening ? 160 : 80, duration: 240, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards' },
+      { delay: split && opening ? 140 : 70, duration: 210, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards' },
     );
     motion.current = animation;
     return () => animation.cancel();

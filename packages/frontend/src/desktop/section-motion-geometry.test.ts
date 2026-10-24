@@ -1,12 +1,13 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
-import { sectionDirection, sectionSurfaceFrames, visibleSectionBounds } from './section-motion-geometry';
+import { sectionDirection, visibleSectionBounds } from './section-motion-geometry';
 
 describe('live section surface geometry', () => {
-  test('a long Monitor page starts shrinking from its visible height', () => {
+  test('caps long pages while retaining the height of short pages', () => {
     const previous = visibleSectionBounds({ left: 24, top: 112, width: 1392, height: 9563 }, 1100);
     const next = visibleSectionBounds({ left: 24, top: 112, width: 1392, height: 480 }, 1100);
-    expect(sectionSurfaceFrames(previous, next)).toEqual([{ height: '988px' }, { height: '480px' }]);
+    expect(previous.height).toBe(988);
+    expect(next.height).toBe(480);
   });
 
   test('short content preserves its actual height', () => {
@@ -15,12 +16,6 @@ describe('live section surface geometry', () => {
 
   test('a section scrolled above the viewport never uses more than the viewport', () => {
     expect(visibleSectionBounds({ left: 16, top: -120, width: 288, height: 1200 }, 640)).toEqual({ left: 16, top: 0, width: 288, height: 640 });
-  });
-
-  test('an interrupted surface moves from its current geometry without scaling text', () => {
-    expect(sectionSurfaceFrames({ left: 20, top: 112, width: 1300, height: 620 }, { left: 40, top: 112, width: 1260, height: 480 })[0]).toEqual({
-      height: '620px',
-    });
   });
 });
 
@@ -34,10 +29,8 @@ describe('history section direction', () => {
   test('normal navigation follows section order', () => {
     expect(sectionDirection(5, 0, 'PUSH', 3, 4)).toBe(-1);
   });
-  test('a tall page grows through its visible area before returning to natural document height', () => {
+  test('caps the visible area of a tall page', () => {
     const target = visibleSectionBounds({ left: 24, top: 112, width: 900, height: 9600 }, 1100);
-    expect(sectionSurfaceFrames({ left: 24, top: 112, width: 900, height: 480 }, target)[1]).toEqual({
-      height: '988px',
-    });
+    expect(target.height).toBe(988);
   });
 });

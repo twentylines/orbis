@@ -76,8 +76,8 @@ export function StartupSurface({
           <div className="orbis-startup-emblem">
             <div className="orbis-startup-orbits" aria-hidden="true">
               <svg className="orbis-startup-trails" viewBox="0 0 240 200" fill="none" aria-hidden="true" focusable="false">
-                <path d="M24 141C-8 105 165 24 211 53C247 77 107 178 55 162" />
-                <path d="M51 43C84 24 215 112 200 146C184 177 29 83 51 43Z" />
+                <ellipse cx="120" cy="100" rx="110" ry="36" transform="rotate(-32 120 100)" />
+                <ellipse cx="120" cy="100" rx="90" ry="32" transform="rotate(36 120 100)" />
               </svg>
               <span />
               <span />

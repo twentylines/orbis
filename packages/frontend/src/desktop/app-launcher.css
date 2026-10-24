@@ -205,10 +205,10 @@
   transition: opacity 120ms 100ms ease;
 }
 .orbis-app-launcher[data-launch-motion="restoring"] > :is(.app-launcher-bar, .app-launcher-body, .app-launcher-footer, .app-window-resize) {
-  animation: app-launcher-content 580ms ease both;
+  animation: app-launcher-content 500ms ease both;
 }
 .orbis-app-launcher[data-launch-motion="restoring"] .app-launcher-flight-mark {
-  animation: app-launcher-flight 580ms ease both;
+  animation: app-launcher-flight 500ms ease both;
 }
 @keyframes app-launcher-content {
   0%,

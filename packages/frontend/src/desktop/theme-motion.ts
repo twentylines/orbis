@@ -73,7 +73,7 @@ export function transitionAppearance(apply: () => void, animate: boolean) {
     return;
   }
   root.dataset.orbisPaletteMotion = 'true';
-  const animation = root.animate([before, after], { duration: 280, easing: 'cubic-bezier(.2, 0, .2, 1)' });
+  const animation = root.animate([before, after], { duration: 240, easing: 'cubic-bezier(.2, 0, .2, 1)' });
   animation.id = 'orbis-palette';
   motion = animation;
   void animation.finished.then(

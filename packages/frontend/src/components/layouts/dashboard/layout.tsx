@@ -126,8 +126,8 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const pendingPath = routeNavigation.location?.pathname;
   const pendingSection = pendingPath ? navigation.find((item) => pendingPath === item.path || pendingPath.startsWith(`${item.path}/`)) : undefined;
   const dockSection = pendingSection ?? current;
-  const isTool = dockSection && dockSection.path !== '/dashboard';
-  const sectionLabel = dockSection?.label ?? 'Application';
+  const isTool = current && current.path !== '/dashboard';
+  const sectionLabel = current?.label ?? 'Application';
   const routeContent = <DesktopRouteContent label={sectionLabel}>{children}</DesktopRouteContent>;
   return (
     <HostUpdateProvider suspended={loggingOff}>
@@ -201,12 +201,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               }}
             >
               {isTool ? (
-                <RouteSurface
-                  section={pendingPath ?? location.pathname}
-                  pending={Boolean(pendingSection && pendingPath !== location.pathname)}
-                  label={dockSection.label}
-                  icon={<dockSection.Icon size={19} stroke={1.8} />}
-                >
+                <RouteSurface section={location.pathname} label={current.label} icon={<current.Icon size={19} stroke={1.8} />}>
                   {!pendingSection && !hasPageHeading && location.pathname.split('/').filter(Boolean).length > 1 ? (
                     <div className="desktop-route-title">
                       <PageTitle apps={apps} />
@@ -324,9 +319,7 @@ function RestartUpdateCover() {
 
 function DesktopRouteContent({ children, label }: PropsWithChildren<{ label: string }>) {
   const location = useLocation();
-  const navigation = useNavigation();
   const { watch } = useHostUpdateWatch();
-  const pending = Boolean(navigation.location && navigation.location.pathname !== location.pathname);
   return (
     <QueryErrorResetBoundary>
       {({ reset }) => (
@@ -344,8 +337,8 @@ function DesktopRouteContent({ children, label }: PropsWithChildren<{ label: str
             </output>
           )}
         >
-          <div className="desktop-route-content" data-pending={pending || undefined}>
-            <div className="desktop-route-children" inert={pending || undefined} aria-hidden={pending || undefined}>
+          <div className="desktop-route-content">
+            <div className="desktop-route-children">
               <Suspense
                 fallback={
                   <div className="desktop-route-placeholder">
@@ -356,11 +349,6 @@ function DesktopRouteContent({ children, label }: PropsWithChildren<{ label: str
                 {children}
               </Suspense>
             </div>
-            {pending ? (
-              <div className="desktop-route-wait desktop-route-placeholder">
-                <DelayedRouteLoading label={`Loading ${label.toLowerCase()}…`} />
-              </div>
-            ) : null}
           </div>
         </ErrorBoundary>
       )}

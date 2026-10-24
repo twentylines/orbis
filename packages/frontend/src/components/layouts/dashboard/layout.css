@@ -472,7 +472,7 @@ html:has(.desktop) {
 }
 .desktop-view-app .action-bar {
   border: 1px solid var(--desktop-line);
-  background: rgba(125, 145, 121, 0.08);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 8%, transparent);
   border-radius: 12px;
   margin-bottom: 20px;
 }
@@ -481,14 +481,14 @@ html:has(.desktop) {
 .desktop-view-app .button-tile .card {
   border: 1px solid var(--desktop-line);
   border-radius: 14px;
-  background: rgba(125, 145, 121, 0.06);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
   box-shadow: none;
 }
 .desktop-view-app .card-link:hover,
 .desktop-view-app .app-tile:hover,
 .desktop-view-app .button-tile:hover .card {
   border-color: var(--desktop-accent);
-  background: rgba(125, 145, 121, 0.12);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent);
 }
 .desktop-view-app .app-tile {
   display: block;
@@ -583,7 +583,7 @@ html:has(.desktop) {
 }
 .desktop-settings .trigger[data-state="active"] {
   color: var(--desktop-ink);
-  background: rgba(125, 145, 121, 0.16);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 16%, transparent);
   border: 0;
 }
 .desktop-settings > .card > [role="tabpanel"] > .card-body {
@@ -679,7 +679,7 @@ html:has(.desktop) {
 .desktop-catalogue-skeleton span {
   min-height: 105px;
   border-radius: 14px;
-  background: rgba(125, 145, 121, 0.12);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent);
 }
 .desktop-installed-grid {
   display: grid;
@@ -1355,17 +1355,6 @@ html:has(.desktop) {
 .desktop-route-content {
   position: relative;
   min-width: 0;
-}
-.desktop-route-content[data-pending="true"] > .desktop-route-children {
-  position: absolute;
-  inset: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-.desktop-route-wait {
-  position: absolute;
-  inset: 0;
-  min-height: 160px;
 }
 .desktop-section-unavailable {
   display: grid;

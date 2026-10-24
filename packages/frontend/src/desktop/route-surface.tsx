@@ -7,16 +7,10 @@ import './route-surface.css';
 
 const sizes = new Map<string, number>();
 
-export function RouteSurface({
-  label,
-  icon,
-  section,
-  pending,
-  children,
-}: PropsWithChildren<{ label: string; icon: ReactNode; section: string; pending: boolean }>) {
+export function RouteSurface({ label, icon, section, children }: PropsWithChildren<{ label: string; icon: ReactNode; section: string }>) {
   const surface = useRef<HTMLElement>(null);
   const focusFrame = useRef<number | null>(null);
-  const waiting = useRef<{ key: string; height: number } | null>(null);
+  const deferred = useRef(false);
   const measured = useRef<{ key: string; height: number } | null>(null);
   const reveal = useRef<{ animation: Animation; target: number } | null>(null);
   const { preferences } = useDesktopPreferences();
@@ -25,10 +19,6 @@ export function RouteSurface({
   useLayoutEffect(() => {
     const view = surface.current;
     if (!view) return;
-    if (pending) {
-      waiting.current = { key: sizeKey, height: reserve };
-      return;
-    }
     const animateTo = (from: number, height: number, duration = sectionMotionTiming.surface as number) => {
       reveal.current?.animation.cancel();
       view.dataset.cardRevealing = 'true';
@@ -49,7 +39,7 @@ export function RouteSurface({
     };
     const measure = () => {
       if (view.querySelector('.desktop-route-placeholder')) {
-        waiting.current = { key: sizeKey, height: view.getBoundingClientRect().height };
+        deferred.current = true;
         return;
       }
       const content = view.querySelector<HTMLElement>('.desktop-window-content');
@@ -58,9 +48,12 @@ export function RouteSurface({
       const height = Math.ceil(content.offsetHeight + heading.offsetHeight + 2);
       sizes.set(sizeKey, height);
       if (sizes.size > 64) sizes.delete(sizes.keys().next().value as string);
-      const previous = waiting.current ?? measured.current;
-      waiting.current = null;
+      const previous = measured.current;
       measured.current = { key: sizeKey, height };
+      if (deferred.current) {
+        deferred.current = false;
+        return;
+      }
       if (view.dataset.sectionPhase === 'card') return;
       const underway = reveal.current;
       if (underway && ['running', 'paused'].includes(underway.animation.playState)) {
@@ -108,7 +101,7 @@ export function RouteSurface({
       reveal.current = null;
       delete view.dataset.cardRevealing;
     };
-  }, [pending, reserve, sizeKey]);
+  }, [sizeKey]);
   useLayoutEffect(
     () => () => {
       if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
@@ -121,7 +114,7 @@ export function RouteSurface({
       ref={surface}
       className="desktop-view desktop-view-app desktop-route-window desktop-route-page"
       data-window-navigation="page"
-      data-route-pending={pending || undefined}
+      data-route-section={section.split('/')[1]}
       style={{ '--orbis-route-reserve': `${reserve}px` } as CSSProperties}
       aria-label={label}
     >

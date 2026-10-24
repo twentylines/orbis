@@ -123,7 +123,7 @@ body:has(.orbis-startup),
   stroke: color-mix(in srgb, var(--desktop-accent) 32%, transparent);
   stroke-width: 1.25;
 }
-.orbis-startup-trails path + path {
+.orbis-startup-trails ellipse + ellipse {
   opacity: 0.48;
 }
 .orbis-startup-orbits span {

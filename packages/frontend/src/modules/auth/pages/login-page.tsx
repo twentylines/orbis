@@ -142,9 +142,9 @@ export default () => {
   const acceptSignIn = async (data: { success: boolean; totpSessionId?: string; redirectUrl?: string }) => {
     if (!data.success) throw new Error('Sign-in was not verified.');
     if (data.totpSessionId) {
+      setTotpSessionId(data.totpSessionId);
       await boot.finish(true);
       if (!boot.isActive()) return;
-      setTotpSessionId(data.totpSessionId);
     } else await completeSignIn(data.redirectUrl);
   };
   const beginPasskey = async () => {

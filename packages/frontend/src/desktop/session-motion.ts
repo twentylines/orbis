@@ -64,17 +64,19 @@ export function animateSessionExit(desktop: HTMLElement | null, reduced: boolean
 
 export function animateAuthExit(reduced: boolean) {
   const element = document.querySelector<HTMLElement>('.desktop-auth-container');
+  const current = element ? getComputedStyle(element) : null;
   const animation =
     element && !reduced
       ? element.animate(
           [
-            { opacity: 1, transform: 'none' },
-            { opacity: 0, transform: 'translateY(12px)' },
+            { opacity: current?.opacity ?? '1', transform: current?.transform ?? 'none' },
+            { opacity: 0, transform: 'translateY(-16px) scale(.985)' },
           ],
-          { duration: 320, easing: 'cubic-bezier(.4, 0, .6, 1)', fill: 'forwards' },
+          { duration: 360, easing: 'cubic-bezier(.22, .7, .24, 1)', fill: 'forwards' },
         )
       : null;
-  return { cancel: () => animation?.cancel() };
+  if (animation) animation.id = 'orbis-auth-exit';
+  return { finished: animation?.finished.catch(() => undefined) ?? Promise.resolve(), cancel: () => animation?.cancel() };
 }
 
 export function animateStartupExit(element: HTMLElement | null, reduced: boolean) {

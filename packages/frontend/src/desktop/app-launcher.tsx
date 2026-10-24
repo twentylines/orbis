@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/Button';
 import { useAppContext } from '@/context/app-context';
 import { useDesktopWindows } from './window-viewport';
 import { DockCompanion } from './dock-companion';
+import { sectionMotionTiming } from './section-motion-geometry';
 import { dockFlightTargetLeft } from './dock-motion-geometry';
 import './app-launcher.css';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
@@ -330,7 +331,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       finish();
       return;
     }
-    const deadline = performance.now() + 580;
+    const deadline = performance.now() + sectionMotionTiming.surface;
     let animation: Animation | null = null;
     let lastEnd: DOMRect | null = null;
     let resizeFrame = 0;
@@ -398,7 +399,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     panel.style.animation = 'none';
     const target = panel.getBoundingClientRect();
     panel.dataset.launchMotion = 'restoring';
-    const deadline = performance.now() + 580;
+    const deadline = performance.now() + sectionMotionTiming.surface;
     let animation: Animation | null = null;
     let resizeFrame = 0;
     const travel = (start: DOMRect, end: DOMRect) => {
@@ -454,7 +455,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
         { opacity: 1, transform: 'none' },
       ],
       {
-        duration: 520,
+        duration: 460,
         easing: 'cubic-bezier(.16, 1, .3, 1)',
       },
     );

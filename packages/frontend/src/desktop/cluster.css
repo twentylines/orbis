@@ -331,7 +331,7 @@
   background: transparent;
   color: #f0f5f1;
   transform: translate(-50%, -50%);
-  animation: cluster-selector-in 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: cluster-selector-in 540ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .cluster-selector-heading {
   display: grid;

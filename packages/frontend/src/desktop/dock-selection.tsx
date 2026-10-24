@@ -3,7 +3,21 @@ import { prefersReducedMotion } from './motion-setting';
 import { sectionMotionEasing, sectionMotionTiming } from './section-motion-geometry';
 
 type Pose = { left: number; top: number; width: number; height: number };
-const frameFor = (pose: Pose) => ({ left: `${pose.left}px`, top: `${pose.top}px`, width: `${pose.width}px`, height: `${pose.height}px` });
+const framesFor = (from: Pose, to: Pose) => {
+  const frames: [Keyframe, Keyframe] = [
+    { transform: `translate3d(${from.left - to.left}px, ${from.top - to.top}px, 0)` },
+    { transform: 'translate3d(0, 0, 0)' },
+  ];
+  if (from.width !== to.width) {
+    frames[0].width = `${from.width}px`;
+    frames[1].width = `${to.width}px`;
+  }
+  if (from.height !== to.height) {
+    frames[0].height = `${from.height}px`;
+    frames[1].height = `${to.height}px`;
+  }
+  return frames;
+};
 const samePose = (a: Pose | null, b: Pose) => a && (Object.keys(b) as (keyof Pose)[]).every((key) => Math.abs(a[key] - b[key]) < 0.1);
 const boundPose = (pose: Pose, width: number, height: number): Pose => {
   const size = { width: Math.min(pose.width, width), height: Math.min(pose.height, height) };
@@ -25,7 +39,6 @@ export function DockSelection({ path, reduced }: { path?: string; reduced: boole
     let target: Pose | null = null;
     let motion: Animation | null = null;
     let origin: Pose | null = null;
-    let frame = 0;
     const update = (animate: boolean) => {
       const selected = main.querySelector<HTMLElement>('.desktop-dock-item.is-active');
       clip.hidden = !selected;
@@ -60,30 +73,26 @@ export function DockSelection({ path, reduced }: { path?: string; reduced: boole
           width,
           height,
         );
-        motion.effect.setKeyframes([frameFor(resizedOrigin), frameFor(next)]);
+        motion.effect.setKeyframes(framesFor(resizedOrigin, next));
         return;
       }
       motion?.cancel();
       origin = null;
       if (!animate || !from || instant || samePose(from, next)) return;
       origin = { left: from.left / width, top: from.top / height, width: from.width / width, height: from.height / height };
-      motion = element.animate([frameFor(from), frameFor(next)], { duration: sectionMotionTiming.surface, easing: sectionMotionEasing });
+      motion = element.animate(framesFor(from, next), { duration: sectionMotionTiming.surface, easing: sectionMotionEasing });
       motion.id = 'orbis-dock-selection';
     };
     measure.current = update;
     update(false);
-    const sizes = new ResizeObserver(() => {
-      if (frame) return;
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        update(false);
-      });
-    });
+    const updateSizes = () => update(false);
+    const sizes = new ResizeObserver(updateSizes);
     sizes.observe(main);
     for (const link of main.querySelectorAll('.desktop-dock-item')) sizes.observe(link);
+    window.addEventListener('resize', updateSizes);
     return () => {
       measure.current = () => undefined;
-      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateSizes);
       motion?.cancel();
       sizes.disconnect();
     };

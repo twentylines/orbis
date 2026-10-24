@@ -11,7 +11,7 @@
 .desktop .desktop-view-app.desktop-route-window.desktop-route-page[data-window-navigation="page"] {
   box-shadow: none;
 }
-.desktop .desktop-route-page:is([data-route-pending], :has(.desktop-route-placeholder)) {
+.desktop .desktop-route-page:has(.desktop-route-placeholder) {
   min-height: var(--orbis-route-reserve);
 }
 .desktop-route-placeholder {
@@ -61,6 +61,33 @@
   background: transparent;
   border: 0;
   box-shadow: none;
+}
+@media (min-width: 1100px) and (min-height: 640px) {
+  .desktop-main:has(> .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"])) {
+    min-height: 0;
+    padding-bottom: calc(var(--orbis-dock-height, 78px) + 44px);
+  }
+  .desktop .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"]) {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - var(--orbis-bar-bottom, 88px) - var(--orbis-dock-height, 78px) - 68px);
+    min-height: 0;
+  }
+  .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"]) .desktop-page-heading {
+    flex: none;
+  }
+  .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"])
+    :is(.desktop-window-content, .desktop-route-content, .desktop-route-children) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .desktop-route-page:is([data-route-section="apps"], [data-route-section="app-store"]) :is(.store-split-desktop, .desktop-route-placeholder) {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
 }
 @media (max-width: 760px) {
   .desktop .desktop-route-page {
