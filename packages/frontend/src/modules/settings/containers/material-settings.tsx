@@ -1,7 +1,7 @@
 import { Switch } from '@/components/ui/Switch';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { useReducedTransparency } from '@/desktop/motion-preferences';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppearanceRange } from './appearance-controls';
 import { applyAppearanceRuntime } from '@/desktop/appearance-runtime';
 import type { DesktopAppearance } from '@runtipi/common/schemas';
@@ -23,7 +23,7 @@ export function MaterialSettings() {
   const [message, setMessage] = useState('');
   const [defaults, setDefaults] = useState({ surface: 92, chrome: 82 });
   // biome-ignore lint/correctness/useExhaustiveDependencies: Palette and mode change the inherited CSS defaults.
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!section.current) return;
     const style = getComputedStyle(section.current);
     const alpha = (token: string, fallback: number) => {
