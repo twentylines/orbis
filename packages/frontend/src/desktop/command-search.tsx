@@ -123,7 +123,7 @@ export function CommandSearch() {
       const resultFrom = resultPose ? { opacity: resultPose.opacity, transform: resultPose.transform } : null;
       const backdropFrom = backdrop.current ? getComputedStyle(backdrop.current).opacity : '1';
       cancelMotions();
-      const options = { duration: 400, easing: 'cubic-bezier(.32, 0, .18, 1)', fill: 'forwards' as const };
+      const options = { duration: 420, easing: 'cubic-bezier(.32, 0, .18, 1)', fill: 'forwards' as const };
       const exit = element.animate(
         [
           pose,
@@ -192,7 +192,7 @@ export function CommandSearch() {
             columnGap: targetGap,
           },
         ],
-        { duration: 480, easing: 'cubic-bezier(.32, 0, .18, 1)' },
+        { duration: 520, easing: 'cubic-bezier(.32, 0, .18, 1)' },
       );
       enter.id = 'orbis-search-bar-open';
       motions.current = [enter];
@@ -203,7 +203,7 @@ export function CommandSearch() {
             { opacity: 1, transform: 'none' },
           ],
           {
-            duration: 360,
+            duration: 380,
             delay: 100,
             easing: 'cubic-bezier(.32, 0, .18, 1)',
             fill: 'backwards',

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import { prefersReducedMotion } from './motion-setting';
-import { sectionMotionEasing, sectionMotionTiming } from './section-motion-geometry';
+import { sectionMotionEasing } from './section-motion-geometry';
 
 const tileSelector = [
   '.workspace-heading',
@@ -52,7 +52,7 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
             ? [{ transform: `translate3d(${distance}px, 0, 0)` }, { transform: 'translate3d(0, 0, 0)' }]
             : [{ transform: `translateX(${distance}px)` }, { transform: 'none' }],
           {
-            duration: opening ? 720 : sectionMotionTiming.content,
+            duration: opening ? 760 : 620,
             delay,
             easing: opening ? 'cubic-bezier(.2, .7, .2, 1)' : sectionMotionEasing,
             fill: 'backwards',

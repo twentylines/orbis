@@ -1,6 +1,7 @@
 export type SectionBounds = { left: number; top: number; width: number; height: number };
 
 export const sectionMotionTiming = { surface: 580, cardEntry: 0, content: 580, historyEntry: 0 } as const;
+export const dockMotionDuration = 620;
 export const sectionMotionEasing = 'cubic-bezier(.32, .08, .24, 1)';
 
 export function visibleSectionBounds(bounds: SectionBounds, viewportHeight: number): SectionBounds {

@@ -13,7 +13,7 @@ import { useTasks } from './tasks';
 import { useDesktopWindows } from './window-viewport';
 import { desktopActivity, type DesktopActivityItem } from './desktop-activity-state';
 import { DockCompanion } from './dock-companion';
-import { sectionMotionTiming } from './section-motion-geometry';
+import { dockMotionDuration } from './section-motion-geometry';
 import './desktop-activity.css';
 
 function focusDock() {
@@ -80,7 +80,7 @@ export function DockActivity() {
       window.removeEventListener('resize', measure);
     };
   }, [open]);
-  const transition = { duration: reduced ? 0 : sectionMotionTiming.surface / 1000, ease: [0.32, 0.08, 0.24, 1] as [number, number, number, number] };
+  const transition = { duration: reduced ? 0 : dockMotionDuration / 1000, ease: [0.32, 0.08, 0.24, 1] as [number, number, number, number] };
   return (
     <DockCompanion visible={hasActivity} side="left">
       {displayed ? (

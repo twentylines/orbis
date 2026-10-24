@@ -1,5 +1,5 @@
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
-import { useLayoutEffect, useState, type ReactNode, type Ref } from 'react';
+import { useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import { readCachedAppearance, type CachedAppearance } from '@/desktop/appearance-cache';
 import { isLoggingOff } from '@/desktop/session-motion';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
@@ -27,6 +27,23 @@ export function StartupSurface({
   initial?: boolean;
   children?: ReactNode;
 }) {
+  const surface = useRef<HTMLDivElement>(null);
+  useImperativeHandle(ref, () => surface.current as HTMLDivElement, []);
+  useLayoutEffect(() => {
+    const element = surface.current;
+    if (!element) return;
+    let previous = -1;
+    const align = () => {
+      const gutter = Math.max(0, element.offsetWidth - element.clientWidth);
+      if (gutter === previous) return;
+      previous = gutter;
+      element.style.setProperty('--orbis-startup-scrollbar', `${gutter}px`);
+    };
+    align();
+    const observer = new ResizeObserver(align);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const [cached, setCached] = useState<CachedAppearance | null>(null);
   const [resumingLogout, setResumingLogout] = useState(false);
   useLayoutEffect(() => {
@@ -37,7 +54,7 @@ export function StartupSurface({
   const mode = useResolvedColourMode(current?.mode ?? 'light');
   return (
     <div
-      ref={ref}
+      ref={surface}
       className={`orbis-startup${current ? ' orbis-theme' : ''}${loggingOff ? ' orbis-logout-surface' : signingIn ? ' orbis-login-surface' : status ? ' orbis-update-surface' : ''}${overlay ? ' orbis-startup-overlay' : ''}`}
       data-session-state={loggingOff || resumingLogout ? 'logging-out' : signingIn ? 'signing-in' : status ? 'updating' : 'loading'}
       data-revealing={revealing || undefined}
@@ -56,12 +73,18 @@ export function StartupSurface({
       <div className="orbis-startup-content">
         <div className="orbis-startup-brand">
           <div className="orbis-startup-emblem">
-            <div className="orbis-startup-panels" aria-hidden="true">
+            <div className="orbis-startup-orbits" aria-hidden="true">
+              <svg className="orbis-startup-trails" viewBox="0 0 240 200" fill="none" aria-hidden="true" focusable="false">
+                <path d="M24 141C-8 105 165 24 211 53C247 77 107 178 55 162" />
+                <path d="M51 43C84 24 215 112 200 146C184 177 29 83 51 43Z" />
+              </svg>
               <span />
               <span />
               <span />
             </div>
-            <OrbisLogo size={64} />
+            <span className="orbis-startup-logo">
+              <OrbisLogo size={88} />
+            </span>
           </div>
           <span className="orbis-startup-name">Orbis</span>
         </div>
@@ -74,6 +97,7 @@ export function StartupSurface({
           role="progressbar"
           aria-label={status?.title ?? (loggingOff || resumingLogout ? 'Logging off' : signingIn ? 'Signing in' : 'Loading Orbis')}
           aria-valuetext={status?.message}
+          aria-valuenow={completing ? 100 : undefined}
         >
           <span />
         </div>

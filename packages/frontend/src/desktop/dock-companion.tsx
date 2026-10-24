@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { prefersReducedMotion } from './motion-setting';
-import { sectionMotionEasing, sectionMotionTiming } from './section-motion-geometry';
+import { dockMotionDuration, sectionMotionEasing } from './section-motion-geometry';
 
 const shapeEvent = 'orbis-dock-shape';
 
@@ -90,7 +90,7 @@ export function DockCompanion({
         return;
       }
       outer.dataset.pillMotion = visible ? 'splitting' : 'joining';
-      const options = { duration: sectionMotionTiming.surface, easing: sectionMotionEasing };
+      const options = { duration: dockMotionDuration, easing: sectionMotionEasing };
       const sizing = outer.animate(
         [
           { width: `${current}px`, height: `${currentHeight}px`, [margin]: inset },
