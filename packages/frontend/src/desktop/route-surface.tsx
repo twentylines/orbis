@@ -136,6 +136,7 @@ export function RouteSurface({
         className="desktop-window-content"
         onFocusCapture={(event) => {
           const target = event.target;
+          if (!target.matches(':focus-visible')) return;
           if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
           focusFrame.current = requestAnimationFrame(() => {
             focusFrame.current = null;

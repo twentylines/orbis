@@ -29,6 +29,7 @@ html:has(.desktop) {
 .desktop button:focus-visible,
 .desktop a:focus-visible,
 .desktop input:focus-visible,
+.desktop textarea:focus-visible,
 .desktop select:focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: 3px;

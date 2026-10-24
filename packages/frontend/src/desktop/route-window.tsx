@@ -374,7 +374,7 @@ export function RouteWindow({ id, label, icon, children, controlsRef }: Props) {
             ? undefined
             : (event) => {
                 const target = event.target;
-                if (!(target instanceof HTMLElement) || !event.currentTarget.contains(target)) return;
+                if (!(target instanceof HTMLElement) || !event.currentTarget.contains(target) || !target.matches(':focus-visible')) return;
                 if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
                 focusFrame.current = requestAnimationFrame(() => {
                   focusFrame.current = null;

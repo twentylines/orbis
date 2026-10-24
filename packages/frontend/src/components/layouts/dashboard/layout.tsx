@@ -190,7 +190,9 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               className="desktop-main"
               id="desktop-content"
               aria-busy={routeNavigation.state !== 'idle'}
-              onFocusCapture={(event) => revealPageFocus(event.target)}
+              onFocusCapture={(event) => {
+                if (event.target.matches(':focus-visible')) revealPageFocus(event.target);
+              }}
             >
               {isTool ? (
                 <RouteSurface
