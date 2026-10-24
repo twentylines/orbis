@@ -13,6 +13,7 @@ import { appearanceBootstrap } from './desktop/appearance-cache';
 import { sessionExitBootstrap } from './desktop/session-motion';
 import { coreUpdateIsPending } from './desktop/host-update-watch';
 import { claimPreloadRetry } from './components/startup/preload-retry';
+import { startupViewportBootstrap } from './components/startup/startup-surface';
 
 export const links: Route.LinksFunction = () => [
   { rel: 'preload', href: '/fonts/source-sans-3-variable.woff2', as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
@@ -82,6 +83,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code measures the viewport gutter before the loading scene is painted. */}
+        <script data-orbis-startup-viewport dangerouslySetInnerHTML={{ __html: startupViewportBootstrap }} />
         <main id="root" tabIndex={-1}>
           <StartupBoundary>{children}</StartupBoundary>
           <ScrollRestoration />

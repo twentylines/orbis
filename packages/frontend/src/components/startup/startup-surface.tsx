@@ -5,6 +5,10 @@ import { readCachedAppearance, type CachedAppearance } from '@/desktop/appearanc
 import { isLoggingOff } from '@/desktop/session-motion';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
 
+const viewportGutterProperty = '--orbis-startup-viewport-gutter';
+export const startupViewportBootstrap = `requestAnimationFrame(()=>document.documentElement.style.setProperty('${viewportGutterProperty}',Math.max(0,window.innerWidth-document.documentElement.clientWidth)+'px'));
+`;
+
 export function StartupSurface({
   ref,
   appearance,
@@ -33,12 +37,15 @@ export function StartupSurface({
   useLayoutEffect(() => {
     const element = surface.current;
     if (!element) return;
-    let previous = -1;
+    let previous = '';
     const align = () => {
+      const viewportGutter = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
       const gutter = Math.max(0, element.offsetWidth - element.clientWidth);
-      if (gutter === previous) return;
-      previous = gutter;
+      const next = `${gutter}:${viewportGutter}`;
+      if (next === previous) return;
+      previous = next;
       element.style.setProperty('--orbis-startup-scrollbar', `${gutter}px`);
+      element.style.setProperty(viewportGutterProperty, `${viewportGutter}px`);
     };
     align();
     const observer = new ResizeObserver(align);
