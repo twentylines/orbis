@@ -1,18 +1,39 @@
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import * as Dialog from '@radix-ui/react-dialog';
-import { IconExternalLink, IconMinus, IconSettings, IconX } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type PropsWithChildren, type ReactNode } from 'react';
+import {
+  IconArrowsMaximize,
+  IconArrowsMinimize,
+  IconArrowsMove,
+  IconExternalLink,
+  IconMinus,
+  IconResize,
+  IconSettings,
+  IconX,
+} from '@tabler/icons-react';
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PropsWithChildren,
+  type ReactNode,
+} from 'react';
 import { Link } from 'react-router';
-import { getAppOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Button } from '@/components/ui/Button';
 import { useAppContext } from '@/context/app-context';
 import { useDesktopWindows } from './window-viewport';
-import { appDestinations } from './app-destinations';
 import { DockCompanion } from './dock-companion';
 import { dockFlightTargetLeft } from './dock-motion-geometry';
 import './app-launcher.css';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
+import { useDesktopPreferences } from './preferences';
+import { appAddress, appOpeningMode } from './app-opening';
+import { useAppWindowGeometry } from './app-window-geometry';
 import { readOpenedApps, rememberOpenedApp, type OpenedApps } from './app-library';
 
 type LaunchRequest = {
@@ -25,6 +46,7 @@ type LaunchRequest = {
   manageUrl?: string;
   status?: string;
   recentKey?: string;
+  categories?: string[];
 };
 const dockFocusTarget = () =>
   document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"]') ?? document.querySelector<HTMLElement>('.desktop-dock-item');
@@ -37,7 +59,8 @@ export const MinimizedApps = () => useContext(AppTrayContext);
 
 export function AppLauncherProvider({ children }: PropsWithChildren) {
   const desktop = useDesktopWindows();
-  const { userSettings, user } = useAppContext();
+  const { preferences, update } = useDesktopPreferences();
+  const { user } = useAppContext();
   const recentStorageKey = `orbis-opened-apps-v1:${user.id}`;
   const [opened, setOpened] = useState<OpenedApps>(() => {
     try {
@@ -53,6 +76,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       /* Opening apps still works when storage is blocked. */
     }
   }, [opened, recentStorageKey]);
+  const [windows, setWindows] = useState<LaunchRequest[]>([]);
   const [selected, setSelected] = useState<LaunchRequest | null>(null);
   const [minimized, setMinimized] = useState<LaunchRequest[]>([]);
   const [minimizing, setMinimizing] = useState(false);
@@ -70,6 +94,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const restoreOrigin = useRef<DOMRect | null>(null);
   const minimizeOrigin = useRef<DOMRect | null>(null);
   const focusMinimized = useRef<string | null>(null);
+  const keyboardWindow = useRef(false);
   const opener = useRef<HTMLElement | null>(null);
   const captureTray = useCallback((element: HTMLElement | null) => {
     if (!element && tray.current?.contains(document.activeElement)) {
@@ -88,32 +113,74 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   }, []);
   const openApp = useCallback(
     (request: LaunchRequest) => {
+      const url = appAddress(request.preferredUrl ?? request.launchUrl);
+      if (!url) return false;
       setOpened((previous) => rememberOpenedApp(previous, request.recentKey ?? request.urn, Date.now()));
-      if (!desktop) return false;
+      if (appOpeningMode(preferences.appLaunch, request.urn, url, window.location.origin, desktop) === 'tab') {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        setWindows((current) => current.filter((item) => item.urn !== request.urn));
+        setMinimized((current) => current.filter((item) => item.urn !== request.urn));
+        if (selected?.urn === request.urn) {
+          cancelMotion();
+          setSelected(null);
+        }
+        return true;
+      }
       cancelMotion();
       restoreOrigin.current = null;
       focusMinimized.current = null;
       opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      setMinimized((current) => current.filter((item) => item.urn !== request.urn));
-      setSelected(request);
+      const existing = windows.find((item) => item.urn === request.urn);
+      const next = existing ?? { ...request, launchUrl: url };
+      setMinimized((current) => {
+        const remaining = current.filter((item) => item.urn !== request.urn);
+        return selected && selected.urn !== request.urn && !remaining.some((item) => item.urn === selected.urn)
+          ? [...remaining, selected]
+          : remaining;
+      });
+      setWindows((current) => (current.some((item) => item.urn === request.urn) ? current : [...current, next]));
+      setSelected(next);
       return true;
     },
-    [desktop, cancelMotion],
+    [desktop, cancelMotion, preferences.appLaunch, windows, selected],
   );
-  const details = useQuery({
-    ...getAppOptions({ path: { urn: selected?.urn ?? '' } }),
-    enabled: selected !== null && !selected.manageUrl && desktop,
-    refetchInterval: selected && !selected.manageUrl && desktop ? 15000 : false,
-    refetchIntervalInBackground: false,
-    retry: false,
-  });
+  const geometry = useAppWindowGeometry(
+    selected?.urn,
+    selected ? preferences.appLaunch.apps[selected.urn]?.bounds : undefined,
+    selected?.categories,
+    (bounds) => {
+      if (!selected) return;
+      update({
+        appLaunch: {
+          ...preferences.appLaunch,
+          apps: { ...preferences.appLaunch.apps, [selected.urn]: { ...preferences.appLaunch.apps[selected.urn], bounds } },
+        },
+      });
+    },
+  );
+  const windowBounds = useRef(geometry.bounds);
+  useLayoutEffect(() => {
+    windowBounds.current = geometry.bounds;
+  }, [geometry.bounds]);
+  const removeWindow = (urn: string) => {
+    setWindows((current) => current.filter((item) => item.urn !== urn));
+    setMinimized((current) => current.filter((item) => item.urn !== urn));
+    if (selected?.urn === urn)
+      requestAnimationFrame(() => {
+        const target = opener.current?.isConnected ? opener.current : dockFocusTarget();
+        target?.focus({ preventScroll: true });
+      });
+  };
   useEffect(() => {
     if (!desktop) {
+      if (panelElement.current?.contains(document.activeElement) || tray.current?.contains(document.activeElement))
+        dockFocusTarget()?.focus({ preventScroll: true });
       cancelMotion();
       restoreOrigin.current = null;
+      if (selected) setMinimized((current) => (current.some((item) => item.urn === selected.urn) ? current : [...current, selected]));
       setSelected(null);
     }
-  }, [desktop, cancelMotion]);
+  }, [desktop, cancelMotion, selected]);
   useEffect(
     () => () => {
       panelMotion.current?.cancel();
@@ -330,9 +397,6 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     if (reducedMotion()) return;
     panel.style.animation = 'none';
     const target = panel.getBoundingClientRect();
-    const naturalHeight =
-      (panel.querySelector<HTMLElement>('.app-launcher-bar')?.offsetHeight ?? 0) +
-      (panel.querySelector<HTMLElement>('.app-launcher-body')?.scrollHeight ?? target.height);
     panel.dataset.launchMotion = 'restoring';
     const deadline = performance.now() + 580;
     let animation: Animation | null = null;
@@ -366,12 +430,8 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       cancelAnimationFrame(resizeFrame);
       resizeFrame = requestAnimationFrame(() => {
         if (!panel.isConnected) return;
-        const style = getComputedStyle(panel);
-        const right = Number.parseFloat(style.right) || 24;
-        const barBottom = Number.parseFloat(document.documentElement.style.getPropertyValue('--orbis-bar-bottom')) || 88;
-        const dockHeight = Number.parseFloat(document.documentElement.style.getPropertyValue('--orbis-dock-height')) || 78;
-        const height = Math.min(naturalHeight, window.innerHeight - barBottom - dockHeight - 64);
-        travel(panel.getBoundingClientRect(), new DOMRect(window.innerWidth - right - target.width, barBottom + 20, target.width, height));
+        const bounds = windowBounds.current;
+        travel(panel.getBoundingClientRect(), new DOMRect(bounds.x, bounds.y, bounds.width, bounds.height));
       });
     };
     travel(origin, target);
@@ -383,6 +443,32 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       delete panel.dataset.launchMotion;
     };
   }, [selected, panel, desktop, minimizing]);
+
+  useLayoutEffect(() => {
+    if (!selected || !panel || !desktop) return;
+    panel.querySelector<HTMLElement>('[aria-label="App window options"]')?.focus({ preventScroll: true });
+    if (panel.dataset.launchMotion === 'restoring' || reducedMotion()) return;
+    const animation = panel.animate(
+      [
+        { opacity: 0.75, transform: 'translateY(12px)' },
+        { opacity: 1, transform: 'none' },
+      ],
+      {
+        duration: 520,
+        easing: 'cubic-bezier(.16, 1, .3, 1)',
+      },
+    );
+    animation.id = 'orbis-app-open';
+    panelMotion.current = animation;
+    void animation.finished.then(
+      () => {
+        if (panelMotion.current === animation) panelMotion.current = null;
+        animation.cancel();
+      },
+      () => undefined,
+    );
+    return () => animation.cancel();
+  }, [selected, panel, desktop]);
 
   const minimize = () => {
     if (!selected || minimizing) return;
@@ -396,6 +482,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     if (!selected || minimizing || closing) return;
     if (!panel || reducedMotion()) {
       cancelMotion();
+      removeWindow(selected.urn);
       setSelected(null);
       return;
     }
@@ -422,8 +509,11 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     void animation.finished.then(
       () => {
         if (motionId.current !== id) return;
+        panel.hidden = true;
+        animation.cancel();
         panelMotion.current = null;
         setClosing(false);
+        removeWindow(selected.urn);
         setSelected(null);
       },
       () => undefined,
@@ -434,22 +524,30 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     restoreOrigin.current = trayButton(request.urn)?.getBoundingClientRect() ?? null;
     focusMinimized.current = null;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setMinimized((current) => current.filter((item) => item.urn !== request.urn));
+    setMinimized((current) => {
+      const remaining = current.filter((item) => item.urn !== request.urn);
+      return selected && selected.urn !== request.urn && !remaining.some((item) => item.urn === selected.urn) ? [...remaining, selected] : remaining;
+    });
     setSelected(request);
   };
 
-  const data = selected?.manageUrl ? undefined : details.data;
-  const destinations = selected?.manageUrl
-    ? selected.launchUrl
-      ? [{ label: selected.serverName || 'Server address', url: selected.launchUrl }]
-      : []
-    : data
-      ? appDestinations(data, userSettings, window.location.hostname)
-      : [];
-  const primary = destinations.find((destination) => destination.url === normalizeAddress(selected?.preferredUrl)) ?? destinations[0];
   const [appId, storeId] = selected?.urn.split(':') ?? [];
-  const managePath = `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}`;
-  const status = selected?.manageUrl ? selected.status : data?.app?.status;
+  const managePath = selected?.manageUrl ?? `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}`;
+  const openInTab = () => {
+    if (!selected?.launchUrl) return;
+    window.open(selected.launchUrl, '_blank', 'noopener,noreferrer');
+    cancelMotion();
+    removeWindow(selected.urn);
+    setSelected(null);
+  };
+  const changeOpening = (mode?: 'window' | 'tab') => {
+    if (!selected) return;
+    const apps = { ...preferences.appLaunch.apps };
+    const next = { ...apps[selected.urn], mode };
+    if (!mode) delete next.mode;
+    apps[selected.urn] = next;
+    update({ appLaunch: { ...preferences.appLaunch, apps } });
+  };
 
   const minimizedApps = (
     <DockCompanion visible={desktop && minimized.length > 0} side="right" retainOnExit>
@@ -471,7 +569,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
               <Button
                 className="app-tray-close"
                 size="icon"
-                aria-label={`Close ${request.name} launcher`}
+                aria-label={`Close ${request.name}`}
                 onClick={() => {
                   const index = minimized.findIndex((item) => item.urn === request.urn);
                   const next = minimized[index + 1] ?? minimized[index - 1];
@@ -482,7 +580,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                     opener.current = target ?? null;
                     setSelected(null);
                   }
-                  setMinimized((current) => current.filter((item) => item.urn !== request.urn));
+                  removeWindow(request.urn);
                   target?.focus({ preventScroll: true });
                 }}
               >
@@ -507,102 +605,177 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
               if (!open) closeLauncher();
             }}
           >
-            <Dialog.Portal>
-              <Dialog.Content
-                ref={capturePanel}
-                className="orbis-app-launcher"
-                data-minimizing={minimizing}
-                data-closing={closing}
-                inert={minimizing || closing || undefined}
-                onInteractOutside={(event) => event.preventDefault()}
-                onCloseAutoFocus={(event) => {
-                  event.preventDefault();
-                  const minimizedTarget = focusMinimized.current ? trayButton(focusMinimized.current) : null;
-                  const target = minimizedTarget ?? (opener.current?.isConnected ? opener.current : dockFocusTarget());
-                  target?.focus({ preventScroll: true });
-                  focusMinimized.current = null;
-                }}
-              >
-                <span className="app-launcher-flight-mark" aria-hidden="true">
-                  <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={28} />
-                </span>
-                <header className="app-launcher-bar">
-                  <span title={selected?.serverName || userSettings.internalIp || window.location.hostname}>
-                    {selected?.serverName || userSettings.internalIp || window.location.hostname}
+            {windows.length > 0 ? (
+              <Dialog.Portal forceMount>
+                <Dialog.Content
+                  forceMount
+                  ref={capturePanel}
+                  hidden={!selected || !desktop}
+                  aria-describedby="app-window-embedding-help"
+                  style={{ left: geometry.bounds.x, top: geometry.bounds.y, width: geometry.bounds.width, height: geometry.bounds.height }}
+                  data-gesturing={geometry.gestureKind || undefined}
+                  className="orbis-app-launcher"
+                  data-minimizing={minimizing}
+                  data-closing={closing}
+                  inert={minimizing || closing || undefined}
+                  onInteractOutside={(event) => event.preventDefault()}
+                  onCloseAutoFocus={(event) => {
+                    event.preventDefault();
+                    const minimizedTarget = focusMinimized.current ? trayButton(focusMinimized.current) : null;
+                    const target = minimizedTarget ?? (opener.current?.isConnected ? opener.current : dockFocusTarget());
+                    target?.focus({ preventScroll: true });
+                    focusMinimized.current = null;
+                  }}
+                >
+                  <span className="app-launcher-flight-mark" aria-hidden="true">
+                    <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={28} />
                   </span>
-                  <div className="app-launcher-controls">
-                    <Button
-                      className="app-launcher-close"
-                      size="icon"
-                      aria-label="Minimize app launcher"
-                      disabled={minimizing || closing}
-                      onClick={minimize}
-                    >
-                      <IconMinus size={19} aria-hidden="true" />
-                    </Button>
-                    <Dialog.Close asChild>
-                      <Button className="app-launcher-close" size="icon" aria-label="Close app launcher" disabled={minimizing || closing}>
-                        <IconX size={19} aria-hidden="true" />
+                  <div
+                    role="toolbar"
+                    aria-label="App window controls"
+                    className="app-launcher-bar"
+                    tabIndex={-1}
+                    onKeyDown={geometry.keyboard}
+                    onDoubleClick={(event) => {
+                      if (!(event.target as HTMLElement).closest('button,a,select')) geometry.maximize();
+                    }}
+                    {...geometry.move}
+                    onPointerDown={(event) => {
+                      cancelMotion();
+                      geometry.move.onPointerDown(event);
+                    }}
+                  >
+                    <div className="app-launcher-heading">
+                      <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={28} />
+                      <div>
+                        <Dialog.Title title={selected?.name}>{selected?.name ?? 'App window'}</Dialog.Title>
+                        <span title={selected?.serverName || preferences.serverName}>{selected?.serverName || preferences.serverName}</span>
+                      </div>
+                    </div>
+                    <div className="app-launcher-controls">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button className="app-launcher-close" size="icon" aria-label="App window options">
+                            <IconSettings size={18} aria-hidden="true" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          onCloseAutoFocus={(event) => {
+                            if (!keyboardWindow.current) return;
+                            event.preventDefault();
+                            keyboardWindow.current = false;
+                            panel?.querySelector<HTMLElement>('.app-launcher-bar')?.focus({ preventScroll: true });
+                          }}
+                        >
+                          <DropdownMenuLabel>Open this app</DropdownMenuLabel>
+                          <DropdownMenuItem onSelect={() => changeOpening()} aria-label="Use default opening preference">
+                            Use account default{preferences.appLaunch.apps[selected?.urn ?? '']?.mode ? '' : ' ✓'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => changeOpening('window')}>
+                            In Orbis{preferences.appLaunch.apps[selected?.urn ?? '']?.mode === 'window' ? ' ✓' : ''}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => changeOpening('tab')}>
+                            In a new tab{preferences.appLaunch.apps[selected?.urn ?? '']?.mode === 'tab' ? ' ✓' : ''}
+                          </DropdownMenuItem>
+                          <DropdownMenuLabel>Window</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              keyboardWindow.current = true;
+                              geometry.beginKeyboard('move');
+                            }}
+                          >
+                            <IconArrowsMove size={18} aria-hidden="true" />
+                            Move with keyboard
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              keyboardWindow.current = true;
+                              geometry.beginKeyboard('resize');
+                            }}
+                          >
+                            <IconResize size={18} aria-hidden="true" />
+                            Resize with keyboard
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            {selected?.manageUrl ? (
+                              <a href={managePath} target="_blank" rel="noopener noreferrer">
+                                Manage app
+                              </a>
+                            ) : (
+                              <Link to={managePath} onClick={minimize}>
+                                Manage app
+                              </Link>
+                            )}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button
+                        className="app-launcher-close"
+                        size="icon"
+                        aria-label="Open app in new tab"
+                        title="Open in new tab and close this window"
+                        onClick={openInTab}
+                      >
+                        <IconExternalLink size={19} aria-hidden="true" />
                       </Button>
-                    </Dialog.Close>
-                  </div>
-                </header>
-                <div className="app-launcher-body">
-                  <div className="app-launcher-identity">
-                    <AppLogo urn={selected?.urn} url={selected?.logoUrl} size={64} />
-                    <div>
-                      <Dialog.Title>{data?.info.name ?? selected?.name}</Dialog.Title>
-                      <span className="app-launcher-status">
-                        {status ? status.replaceAll('_', ' ') : details.isError ? 'Unavailable' : 'Loading app…'}
-                      </span>
+                      <Button
+                        className="app-launcher-close"
+                        size="icon"
+                        aria-label={geometry.maximized ? 'Restore app window size' : 'Maximize app window'}
+                        onClick={geometry.maximize}
+                      >
+                        {geometry.maximized ? (
+                          <IconArrowsMinimize size={19} aria-hidden="true" />
+                        ) : (
+                          <IconArrowsMaximize size={19} aria-hidden="true" />
+                        )}
+                      </Button>
+                      <Button
+                        className="app-launcher-close"
+                        size="icon"
+                        aria-label="Minimize app window"
+                        disabled={minimizing || closing}
+                        onClick={minimize}
+                      >
+                        <IconMinus size={19} aria-hidden="true" />
+                      </Button>
+                      <Dialog.Close asChild>
+                        <Button className="app-launcher-close" size="icon" aria-label="Close app window" disabled={minimizing || closing}>
+                          <IconX size={19} aria-hidden="true" />
+                        </Button>
+                      </Dialog.Close>
                     </div>
                   </div>
-                  <Dialog.Description className="app-launcher-description">
-                    {!selected?.manageUrl && details.isError
-                      ? 'App details could not be loaded. Try again or open its settings.'
-                      : data?.info.no_gui
-                        ? 'This app runs without a web interface.'
-                        : status && status !== 'running'
-                          ? 'Open app settings to start or manage this app.'
-                          : 'Open the app on its server.'}
-                  </Dialog.Description>
-                  {primary ? (
-                    <Button asChild intent="primary">
-                      <a href={primary.url} target="_blank" rel="noopener noreferrer">
-                        <IconExternalLink size={18} aria-hidden="true" />
-                        Open app
-                      </a>
-                    </Button>
-                  ) : null}
-                  {destinations.length > 0 ? (
-                    <ul className="app-launcher-addresses" aria-label="App addresses">
-                      {destinations.map(({ label, url }) => (
-                        <li key={url}>
-                          <a href={url} target="_blank" rel="noopener noreferrer">
-                            <span>{label}</span>
-                            <span title={url}>{url}</span>
-                            <IconExternalLink size={16} aria-hidden="true" />
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {!selected?.manageUrl && details.isError ? <Button onClick={() => void details.refetch()}>Retry</Button> : null}
-                  <Button asChild variant="outline">
-                    {selected?.manageUrl ? (
-                      <a href={selected.manageUrl} target="_blank" rel="noopener noreferrer">
-                        <IconSettings size={18} aria-hidden="true" /> App settings
-                      </a>
-                    ) : (
-                      <Link to={managePath} onClick={() => setSelected(null)}>
-                        <IconSettings size={18} aria-hidden="true" />
-                        App settings
-                      </Link>
-                    )}
-                  </Button>
-                </div>
-              </Dialog.Content>
-            </Dialog.Portal>
+                  <div className="app-launcher-body">
+                    {windows.map((request) => (
+                      <AppFrame key={request.urn} request={request} hidden={request.urn !== selected?.urn} />
+                    ))}
+                  </div>
+                  <footer className="app-launcher-footer">
+                    <Dialog.Description id="app-window-embedding-help">Apps that block embedding or sign-in need a new tab.</Dialog.Description>
+                    {geometry.gestureKind ? <output>Arrow keys adjust · Enter saves · Escape cancels</output> : null}
+                    <button type="button" onClick={openInTab}>
+                      Open in new tab <IconExternalLink size={15} aria-hidden="true" />
+                    </button>
+                  </footer>
+                  <button
+                    type="button"
+                    className="app-window-resize"
+                    aria-label="Resize app window"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !geometry.gestureKind) {
+                        event.preventDefault();
+                        geometry.beginKeyboard('resize');
+                      } else geometry.keyboard(event);
+                    }}
+                    {...geometry.resize}
+                  >
+                    <IconResize size={17} aria-hidden="true" />
+                  </button>
+                </Dialog.Content>
+              </Dialog.Portal>
+            ) : null}
           </Dialog.Root>
         </AppTrayContext.Provider>
       </AppLauncherContext.Provider>
@@ -610,13 +783,19 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   );
 }
 
-function normalizeAddress(value?: string) {
-  try {
-    return value ? new URL(value).href : undefined;
-  } catch {
-    return undefined;
-  }
-}
+const AppFrame = memo(function AppFrame({ request, hidden }: { request: LaunchRequest; hidden: boolean }) {
+  return (
+    <iframe
+      className="app-window-frame"
+      title={`${request.name} app`}
+      src={request.launchUrl}
+      hidden={hidden}
+      referrerPolicy="no-referrer"
+      allow="fullscreen; clipboard-read; clipboard-write; camera; microphone; geolocation; display-capture"
+      sandbox="allow-forms allow-scripts allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation"
+    />
+  );
+});
 
 function reducedMotion() {
   return prefersReducedMotion();

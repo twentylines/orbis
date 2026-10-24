@@ -4,6 +4,7 @@ import { ChangePasswordForm } from '../components/change-password-form/change-pa
 import { ChangeUsernameForm } from '../components/change-username-form/change-username-form';
 import { OtpForm } from '../components/otp-form/otp-form';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
+import { PasskeySettings } from '../components/passkey-settings/passkey-settings';
 import './security.css';
 
 export const SecurityContainer = (props: { totpEnabled: boolean; username?: string }) => {
@@ -14,12 +15,13 @@ export const SecurityContainer = (props: { totpEnabled: boolean; username?: stri
     <div className="card-body settings-security">
       <div className="settings-security-heading">
         <IconUser aria-hidden="true" />
-        <h2 title={t('SETTINGS_SECURITY_CHANGE_USERNAME_TITLE')}>
-          <WrapWords text={t('SETTINGS_SECURITY_CHANGE_USERNAME_TITLE')} />
-        </h2>
+        <h2>Username or email</h2>
       </div>
-      <p className="text-muted">{t('SETTINGS_SECURITY_CHANGE_USERNAME_SUBTITLE')}</p>
+      <p className="text-muted">
+        Choose the identifier you use to sign in. An email address is optional; password recovery is managed on the server.
+      </p>
       <ChangeUsernameForm username={username} />
+      <PasskeySettings totpEnabled={totpEnabled} />
       <div className="settings-security-heading">
         <IconKey aria-hidden="true" />
         <h2 title={t('SETTINGS_SECURITY_CHANGE_PASSWORD_TITLE')}>

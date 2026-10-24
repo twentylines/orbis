@@ -73,10 +73,19 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
         : localId;
   const selectedServer = cluster.data?.servers.find((server) => server.id === selectedId);
   useLayoutEffect(() => {
-    if (localId && selectedId !== localId && (location.pathname.startsWith('/apps/') || location.pathname.startsWith('/app-store/'))) {
+    const previewId = /^\/apps\/servers\/([^/]+)\/[^/]+\/[^/]+\/?$/.exec(location.pathname)?.[1];
+    const previewServer = cluster.data?.servers.find((server) => encodeURIComponent(server.id) === previewId);
+    if (previewServer && selectedId !== 'all' && selectedId !== previewServer.id) {
+      setSelection(previewServer.id);
+    } else if (
+      !previewServer &&
+      localId &&
+      selectedId !== localId &&
+      (location.pathname.startsWith('/apps/') || location.pathname.startsWith('/app-store/'))
+    ) {
       setSelection(localId);
     }
-  }, [localId, selectedId, location.pathname]);
+  }, [cluster.data?.servers, localId, selectedId, location.pathname]);
   const select = (id: string) => {
     if ((id === 'all' && (cluster.data?.servers.length ?? 0) > 1) || cluster.data?.servers.some((server) => server.id === id)) {
       const opener = document.activeElement;
@@ -143,8 +152,8 @@ export function ClusterConnection() {
     ? 'Restarting server'
     : updating
       ? updateOffline
-        ? coreUpdateTitle('offline')
-        : 'Updating Orbis'
+        ? coreUpdateTitle('offline', watch?.operation)
+        : coreUpdateTitle('updating', watch?.operation)
       : status === 'connected'
         ? address || 'Address unavailable'
         : status === 'connecting'

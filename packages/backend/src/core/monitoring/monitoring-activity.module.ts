@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MonitoringActivityService } from './monitoring-activity.service';
+import { BrowserPresenceController } from './browser-presence.controller';
 
-@Module({ providers: [MonitoringActivityService], exports: [MonitoringActivityService] })
+@Module({ controllers: [BrowserPresenceController], providers: [MonitoringActivityService], exports: [MonitoringActivityService] })
 export class MonitoringActivityModule {}

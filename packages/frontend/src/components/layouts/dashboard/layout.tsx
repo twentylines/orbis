@@ -6,7 +6,6 @@ import { useReducedMotion } from '@/desktop/motion-preferences';
 import { logout } from '@/api-client';
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
-import { Welcome } from '@/components/welcome/welcome';
 import { PageTitle } from '@/components/page-title/page-title';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { DesktopWallpaper } from '@/desktop/wallpaper';
@@ -31,9 +30,11 @@ import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
 import { IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
 import { useIsMutating, QueryErrorResetBoundary } from '@tanstack/react-query';
-import { Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { lazy, Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches, useNavigation } from 'react-router';
 import './layout.css';
+
+const Welcome = lazy(() => import('@/components/welcome/welcome').then((module) => ({ default: module.Welcome })));
 
 export const DashboardLayoutSuspense = () => {
   const { setWorkspaceLoading } = useDesktopPreferences();
@@ -88,9 +89,9 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     };
   }, [requiresOnboarding]);
   const hasPageHeading = matches.some((match) =>
-    ['app-details', 'app-details-store', 'custom-app', 'app-update', 'app-store-app-update'].includes(match.id),
+    ['app-details', 'app-details-store', 'custom-app', 'cluster-app-preview', 'app-update', 'app-store-app-update'].includes(match.id),
   );
-  useSectionMotion();
+  useSectionMotion(!requiresOnboarding);
   const busy = useIsMutating();
   const tasks = useTasks();
   const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
@@ -114,7 +115,12 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     }
   };
 
-  if (requiresOnboarding) return <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />;
+  if (requiresOnboarding)
+    return (
+      <Suspense fallback={<DashboardLayoutSuspense />}>
+        <Welcome allowErrorMonitoring={userSettings.allowErrorMonitoring} />
+      </Suspense>
+    );
 
   const current = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
   const pendingPath = routeNavigation.location?.pathname;
@@ -160,6 +166,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                   <IconActivity size={20} aria-hidden="true" />
                   {activeTasks > 0 ? <span>{activeTasks}</span> : null}
                 </Link>
+                <OrbisUpdateNotice />
                 <button
                   type="button"
                   className="desktop-mode-toggle"
@@ -171,7 +178,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                   {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
                 </button>
                 <CommandSearch />
-                <OrbisUpdateNotice />
                 <ClusterConnection />
                 <ClusterSwitcher />
                 <button
@@ -295,7 +301,7 @@ function RestartUpdateCover() {
     const restarting = watch.phase === 'offline' || watch.phase === 'checking' || watch.phase === 'ready';
     if (!restarting && dismissed === watch.id) return null;
     return (
-      <StartupSurface appearance={preferences} status={{ title: coreUpdateTitle(watch.phase), message: watch.message }} overlay>
+      <StartupSurface appearance={preferences} status={{ title: coreUpdateTitle(watch.phase, watch.operation), message: watch.message }} overlay>
         {restarting ? null : (
           <button type="button" className="orbis-startup-return" onClick={() => setDismissed(watch.id)}>
             Keep using Orbis

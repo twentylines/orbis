@@ -9,6 +9,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useConnectionStore } from '@/stores/connection-store';
 import { preferenceChangeEvent } from '@/desktop/appearance-cache';
 import { appEventAffectsQuery } from '@/desktop/app-event-cache';
+import { useBrowserPresence } from '@/desktop/browser-presence';
 
 const announcePreferences = () => window.dispatchEvent(new Event(preferenceChangeEvent));
 
@@ -43,7 +44,7 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
   };
   useEffect(() => () => clearTimeout(pending.current.timer), []);
 
-  useSSE({
+  const streamStatus = useSSE({
     topic: 'app',
     onOpen: () => {
       setConnectionStatus('connected');
@@ -128,5 +129,6 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
     },
   });
 
+  useBrowserPresence(streamStatus !== 'connected');
   return children;
 };

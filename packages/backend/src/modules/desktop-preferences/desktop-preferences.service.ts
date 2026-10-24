@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { desktopPreferencesSchema } from './desktop-preferences.dto';
-import { normaliseDesktopAppearance } from '@runtipi/common/schemas';
+import { defaultAppLaunch, normaliseDesktopAppearance } from '@runtipi/common/schemas';
 
 export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonNullable<DesktopPreferences['workspace']> } = {
@@ -15,7 +15,10 @@ export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonN
   mode: 'light',
   density: 'comfortable',
   wallpaper: 'sandstone',
+  wallpaperMode: 'theme',
+  wallpaperPreset: null,
   windows: {},
+  appLaunch: defaultAppLaunch,
   appearance: normaliseDesktopAppearance(),
   workspace: {
     order: ['applications', 'activity', 'storage', 'attention'],
@@ -73,6 +76,9 @@ export class DesktopPreferencesService {
         : {
             ...DEFAULT_DESKTOP_PREFERENCES,
             ...result,
+            wallpaperMode:
+              result.wallpaperMode ??
+              ((result.wallpaper && result.wallpaper !== 'sandstone') || result.appearance?.wallpaperImage ? 'custom' : 'theme'),
             mode: result.mode ?? (result.preset === 'graphite' ? 'dark' : 'light'),
             workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...result.workspace },
             appearance: normaliseDesktopAppearance(result.appearance),
@@ -88,6 +94,9 @@ export class DesktopPreferencesService {
     const value = {
       ...DEFAULT_DESKTOP_PREFERENCES,
       ...preferences,
+      wallpaperMode:
+        preferences.wallpaperMode ??
+        ((preferences.wallpaper && preferences.wallpaper !== 'sandstone') || preferences.appearance?.wallpaperImage ? 'custom' : 'theme'),
       mode: preferences.mode ?? (preferences.preset === 'graphite' ? 'dark' : 'light'),
       workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...preferences.workspace },
       appearance: normaliseDesktopAppearance(preferences.appearance),

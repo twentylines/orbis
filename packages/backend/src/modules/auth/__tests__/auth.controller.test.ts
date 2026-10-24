@@ -11,6 +11,7 @@ import { mock } from 'vitest-mock-extended';
 import { AuthController } from '../auth.controller';
 import { AuthGuard } from '../auth.guard';
 import { AuthService } from '../auth.service';
+import { PasskeyService } from '../passkey.service';
 
 const cliUser = {
   id: 1,
@@ -32,6 +33,7 @@ describe('AuthController reset-password security', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
+        { provide: PasskeyService, useValue: mock<PasskeyService>() },
         AuthGuard,
         {
           provide: AuthService,

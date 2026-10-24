@@ -13,6 +13,8 @@ import validator from 'validator';
 import type { LoginBody, RegisterBody } from './dto/auth.dto';
 import { SessionManager } from './session.manager';
 import { TotpAuthenticator } from './utils/totp-authenticator';
+import { normalizeNewUsername } from './username';
+import { PasskeyStore } from './passkey.store';
 
 const TOTP_SESSION_EXPIRATION = 60 * 5;
 const MAX_TOTP_ATTEMPTS = 5;
@@ -29,6 +31,7 @@ export class AuthService {
     private cache: CacheService,
     private filesystem: FilesystemService,
     private passwordService: PasswordService,
+    private passkeys: PasskeyStore,
   ) {}
 
   public getCookieDomain(domain?: string) {
@@ -66,9 +69,14 @@ export class AuthService {
       throw new TranslatableError('AUTH_ERROR_INVALID_CREDENTIALS', {}, HttpStatus.BAD_REQUEST);
     }
 
+    return this.beginVerifiedLogin(user);
+  };
+
+  public beginVerifiedLogin = async (user: NonNullable<Awaited<ReturnType<UserRepository['getUserById']>>>) => {
     if (user.totpEnabled) {
       const totpSessionId = crypto.randomUUID();
       this.cache.set(totpSessionId, user.id.toString(), TOTP_SESSION_EXPIRATION);
+      this.cache.set(`totp-by-user:${user.id}:${totpSessionId}`, totpSessionId, TOTP_SESSION_EXPIRATION);
       return { totpSessionId };
     }
 
@@ -114,6 +122,7 @@ export class AuthService {
       if (attempts >= MAX_TOTP_ATTEMPTS) {
         this.cache.del(attemptKey);
         this.cache.del(totpSessionId);
+        this.cache.del(`totp-by-user:${user.id}:${totpSessionId}`);
         throw new TranslatableError('AUTH_ERROR_TOTP_TOO_MANY_ATTEMPTS', {}, HttpStatus.TOO_MANY_REQUESTS);
       }
 
@@ -121,10 +130,11 @@ export class AuthService {
       throw new TranslatableError('AUTH_ERROR_TOTP_INVALID_CODE', {}, HttpStatus.BAD_REQUEST);
     }
 
-    const sessionId = await this.sessionManager.createSession(user.id);
-
+    if (this.cache.get(totpSessionId) !== userId) throw new TranslatableError('AUTH_ERROR_TOTP_SESSION_NOT_FOUND', {}, HttpStatus.BAD_REQUEST);
+    this.cache.del(`totp-by-user:${user.id}:${totpSessionId}`);
     this.cache.del(attemptKey);
     this.cache.del(totpSessionId);
+    const sessionId = await this.sessionManager.createSession(user.id);
 
     return {
       sessionId,
@@ -138,24 +148,24 @@ export class AuthService {
    */
   public register = async (input: RegisterBody) => {
     const { password, username } = input;
-    const email = username.trim().toLowerCase();
+    const identifier = normalizeNewUsername(username);
 
     if (!username || !password) {
       throw new TranslatableError('AUTH_ERROR_MISSING_EMAIL_OR_PASSWORD', {}, HttpStatus.BAD_REQUEST);
     }
 
-    if (username.length < 3 || !validator.isEmail(email)) {
+    if (!identifier) {
       throw new TranslatableError('AUTH_ERROR_INVALID_USERNAME', {}, HttpStatus.BAD_REQUEST);
     }
 
-    const user = await this.userRepository.getUserByUsername(email);
+    const user = await this.userRepository.getUserByUsername(identifier);
 
     if (user) {
       throw new TranslatableError('AUTH_ERROR_USER_ALREADY_EXISTS', {}, HttpStatus.BAD_REQUEST);
     }
 
     const hash = await this.passwordService.hash(password);
-    const newUser = await this.userRepository.createFirstOperator({ username: email, password: hash });
+    const newUser = await this.userRepository.createFirstOperator({ username: identifier, password: hash });
 
     if (!newUser) {
       throw new TranslatableError('AUTH_ERROR_ADMIN_ALREADY_EXISTS', {}, HttpStatus.FORBIDDEN);
@@ -197,19 +207,19 @@ export class AuthService {
       throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
     }
 
-    const email = newUsername.trim().toLowerCase();
+    const identifier = normalizeNewUsername(newUsername);
 
-    if (!validator.isEmail(email)) {
+    if (!identifier) {
       throw new TranslatableError('AUTH_ERROR_INVALID_USERNAME');
     }
 
-    const existingUser = await this.userRepository.getUserByUsername(email);
+    const existingUser = await this.userRepository.getUserByUsername(identifier);
 
     if (existingUser) {
       throw new TranslatableError('AUTH_ERROR_USER_ALREADY_EXISTS');
     }
 
-    await this.userRepository.updateUser(user.id, { username: email });
+    await this.userRepository.updateUser(user.id, { username: identifier });
     await this.sessionManager.destroyAllSessionsByUserId(user.id);
 
     return true;
@@ -319,6 +329,7 @@ export class AuthService {
   };
 
   public disableTotp = async (params: { userId: number; password: string }) => {
+    if (this.config.get('demoMode')) throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
     const { userId, password } = params;
 
     const user = await this.userRepository.getUserById(userId);
@@ -336,6 +347,7 @@ export class AuthService {
       throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD');
     }
 
+    await this.passkeys.clearTotpAfterPasskey(userId);
     await this.userRepository.updateUser(userId, { totpEnabled: false, totpSecret: null });
 
     return true;
@@ -372,6 +384,7 @@ export class AuthService {
       }
 
       const hash = await this.passwordService.hash(newPassword);
+      await this.passkeys.removeAll(user.id);
       await this.userRepository.updateUser(user.id, { password: hash, totpEnabled: false, totpSecret: null });
       try {
         await this.sessionManager.destroyAllSessionsByUserId(user.id);
@@ -390,6 +403,23 @@ export class AuthService {
       this.operatorResetInProgress = false;
     }
   };
+
+  public verifySensitiveAction = async (userId: number, password: string, totpCode?: string) => {
+    this.assertSecurityChangeAllowed();
+    const user = await this.userRepository.getUserById(userId);
+    if (!user || !(await this.passwordService.verify(password, user.password)))
+      throw new TranslatableError('AUTH_ERROR_INVALID_PASSWORD', {}, HttpStatus.BAD_REQUEST);
+    if (user.totpEnabled) {
+      if (!totpCode || !user.totpSecret || !user.salt || !TotpAuthenticator.check(totpCode, this.encryption.decrypt(user.totpSecret, user.salt)))
+        throw new TranslatableError('AUTH_ERROR_TOTP_INVALID_CODE', {}, HttpStatus.BAD_REQUEST);
+    }
+    return user;
+  };
+
+  public assertSecurityChangeAllowed() {
+    if (this.config.get('demoMode')) throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');
+    if (this.operatorResetInProgress) throw new TranslatableError('AUTH_ERROR_RESET_IN_PROGRESS', {}, HttpStatus.CONFLICT);
+  }
 
   /*
    * Check if there is a pending password change request for the given email

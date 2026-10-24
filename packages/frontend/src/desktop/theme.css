@@ -658,3 +658,35 @@ body:has(.orbis-theme) .form-text a:hover {
   --tblr-link-color: var(--desktop-accent);
   --tblr-link-hover-color: var(--desktop-accent);
 }
+
+/* The startup surface and the mounted wallpaper share the same palette choice. */
+html[data-desktop-wallpaper="theme-frost"],
+.orbis-theme[data-desktop-wallpaper="theme-frost"],
+body:has(.orbis-theme[data-desktop-wallpaper="theme-frost"]) {
+  --desktop-wallpaper: url("/wallpapers/frost.webp");
+}
+html[data-desktop-wallpaper="theme-graphite"],
+.orbis-theme[data-desktop-wallpaper="theme-graphite"],
+body:has(.orbis-theme[data-desktop-wallpaper="theme-graphite"]) {
+  --desktop-wallpaper: url("/wallpapers/graphite.webp");
+}
+html[data-desktop-wallpaper="theme-forest"],
+.orbis-theme[data-desktop-wallpaper="theme-forest"],
+body:has(.orbis-theme[data-desktop-wallpaper="theme-forest"]) {
+  --desktop-wallpaper: url("/wallpapers/forest.webp");
+}
+html[data-desktop-wallpaper="theme-stone"],
+.orbis-theme[data-desktop-wallpaper="theme-stone"],
+body:has(.orbis-theme[data-desktop-wallpaper="theme-stone"]) {
+  --desktop-wallpaper: url("/wallpapers/orbis-horizon.webp");
+}
+html[data-desktop-wallpaper="theme-ocean"],
+.orbis-theme[data-desktop-wallpaper="theme-ocean"],
+body:has(.orbis-theme[data-desktop-wallpaper="theme-ocean"]) {
+  --desktop-wallpaper: url("/wallpapers/ocean.webp");
+}
+html[data-desktop-wallpaper="theme-blush"],
+.orbis-theme[data-desktop-wallpaper="theme-blush"],
+body:has(.orbis-theme[data-desktop-wallpaper="theme-blush"]) {
+  --desktop-wallpaper: url("/wallpapers/blush.webp");
+}

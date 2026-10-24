@@ -76,7 +76,7 @@ export function desktopActivity(
     summary = { title, detail: packageJob.state === 'queued' ? 'Queued' : 'Installing system updates', kind: 'packages', count: items.length };
   }
   if (watch && coreWatchIsActive(watch)) {
-    const title = coreUpdateTitle(watch.phase);
+    const title = coreUpdateTitle(watch.phase, watch.operation);
     items.unshift({ id: watch.id, kind: 'core', title, detail: watch.message, state: watch.phase });
     summary = { title, detail: watch.message, kind: 'core', count: items.length };
   }

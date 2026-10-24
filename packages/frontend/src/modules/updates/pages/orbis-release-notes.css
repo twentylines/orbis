@@ -1,0 +1,138 @@
+.desktop-release-history {
+  min-width: 0;
+  margin-block: 20px;
+  container-type: inline-size;
+}
+.desktop-release-history h3 {
+  margin: 0 0 12px;
+  font-size: 1.1875rem;
+  line-height: 1.4;
+}
+.desktop-release-history > .desktop-release-history-intro,
+.desktop-release-history > .desktop-release-history-status,
+.desktop-release-history > output {
+  display: block;
+  margin: 0 0 14px;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.desktop-release-history-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.desktop-release-note {
+  min-width: 0;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-surface);
+}
+.desktop-release-note > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 14px 16px;
+  color: var(--desktop-ink);
+  font-weight: 650;
+  line-height: 1.45;
+  list-style: none;
+  cursor: pointer;
+}
+.desktop-release-note > summary::-webkit-details-marker {
+  display: none;
+}
+.desktop-release-note > summary > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desktop-release-note > summary > time {
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.desktop-release-note > summary > svg {
+  transition: transform 180ms ease;
+}
+.desktop-release-note[open] > summary > svg {
+  transform: rotate(180deg);
+}
+.desktop-release-note > summary:focus-visible {
+  border-radius: 11px;
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.desktop-release-note-content {
+  min-width: 0;
+  padding: 0 16px 16px;
+}
+.desktop-release-note-content > p {
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.55;
+}
+@container (max-width: 360px) {
+  .desktop-release-note > summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+  }
+  .desktop-release-note > summary > svg {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .desktop-release-note > summary > time {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-release-note > summary > svg {
+    transition: none;
+  }
+}
+
+.desktop-release-note-content > .desktop-release-context {
+  margin: 0 0 14px;
+  font-size: 0.8125rem;
+}
+.desktop-release-revisions {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 18px;
+}
+.desktop-release-revisions > h4 {
+  margin: 0 0 2px;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.desktop-release-revisions > .desktop-release-note {
+  border: 0;
+  border-top: 1px solid var(--desktop-line);
+  border-radius: 0;
+  background: transparent;
+}
+.desktop-release-revisions > .desktop-release-note > summary {
+  padding-inline: 0;
+}
+.desktop-release-revisions > .desktop-release-note > .desktop-release-note-content {
+  padding-inline: 0;
+}
+
+.desktop-release-note .desktop-update-markdown {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.desktop-release-note .desktop-update-markdown > :last-child {
+  margin-bottom: 0;
+}

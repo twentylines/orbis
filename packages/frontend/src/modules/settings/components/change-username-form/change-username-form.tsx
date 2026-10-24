@@ -11,6 +11,7 @@ import { useId } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { newAccountIdentifier, accountIdentifierHint } from '@/modules/auth/account-identifier';
 
 type Props = {
   username?: string;
@@ -21,7 +22,7 @@ export const ChangeUsernameForm = ({ username }: Props) => {
   const { t } = useTranslation();
 
   const schema = type({
-    newUsername: type('string.email').configure({ message: t('SETTINGS_SECURITY_CHANGE_USERNAME_FORM_INVALID_USERNAME') }),
+    newUsername: newAccountIdentifier,
     password: type('string').atLeastLength(1),
   });
 
@@ -31,8 +32,7 @@ export const ChangeUsernameForm = ({ username }: Props) => {
   const changeUsername = useMutation({
     ...changeUsernameMutation(),
     onSuccess: () => {
-      toast.success(t('SETTINGS_SECURITY_CHANGE_USERNAME_SUCCESS'));
-      changeUsernameDisclosure.close();
+      window.location.replace('/login');
     },
     onError: (e: TranslatableError) => {
       toast.error(t(e.message, e.intlParams));
@@ -44,31 +44,34 @@ export const ChangeUsernameForm = ({ username }: Props) => {
   });
 
   const onSubmit = (body: FormValues) => {
-    changeUsername.mutate({ body });
+    changeUsername.mutate({ body: { ...body, newUsername: body.newUsername.trim() } });
   };
 
   return (
     <div className="mb-4">
-      <Input disabled type="email" value={username} label={t('AUTH_FORM_EMAIL')} autoComplete="username" />
+      <Input disabled type="text" value={username} label="Username or email" autoComplete="username" />
       <Button className="mt-3" onClick={() => changeUsernameDisclosure.open()}>
-        {t('SETTINGS_SECURITY_CHANGE_USERNAME_TITLE')}
+        Change username or email
       </Button>
       <Dialog open={changeUsernameDisclosure.isOpen} onOpenChange={changeUsernameDisclosure.toggle}>
         <DialogContent size="sm">
           <DialogHeader>
-            <DialogTitle>{t('SETTINGS_SECURITY_CHANGE_USERNAME_FORM_PASSWORD')}</DialogTitle>
+            <DialogTitle>Change username or email</DialogTitle>
           </DialogHeader>
           <DialogDescription className="d-flex flex-column">
             <form onSubmit={handleSubmit(onSubmit)} className="w-100" id={formId}>
-              <p className="text-muted">{t('SETTINGS_SECURITY_CHANGE_USERNAME_FORM_PASSWORD_NEEDED_HINT')}</p>
+              <p className="text-muted">Confirm your password to change your sign-in identifier. This signs out every account session.</p>
               <Input
                 error={formState.errors.newUsername?.message}
                 disabled={changeUsername.isPending}
-                type="email"
-                label={t('SETTINGS_SECURITY_CHANGE_USERNAME_FORM_NEW_USERNAME')}
+                type="text"
+                label="New username or email"
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
                 {...register('newUsername')}
               />
+              <p className="form-text">{accountIdentifierHint}</p>
               <Input
                 className="mt-3"
                 error={formState.errors.password?.message}

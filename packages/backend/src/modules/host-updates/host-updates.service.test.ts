@@ -11,6 +11,7 @@ describe('host update Unix socket transport', () => {
   let server: http.Server;
   let service: HostUpdatesService;
   const originalSocket = process.env.ORBIS_HOST_SOCKET;
+  const originalVersion = process.env.ORBIS_VERSION;
   const requests: Array<{ method: string; path: string; body: unknown }> = [];
   let restartSupported = true;
 
@@ -53,27 +54,57 @@ describe('host update Unix socket transport', () => {
                       ? { jobId: '00000000-0000-4000-8000-000000000000', state: 'queued' }
                       : request.url?.startsWith('/v1/packages/changelog?')
                         ? { name: 'base-files:arm64', available: true, body: 'Ubuntu changelog' }
-                        : { planId: 'fixture-plan' },
+                        : { planId: '00000000-0000-4000-8000-000000000000' },
           ),
         );
       });
     });
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
     process.env.ORBIS_HOST_SOCKET = socketPath;
+    process.env.ORBIS_VERSION = 'v0.1.0-beta.7';
     service = new HostUpdatesService();
   });
 
   afterAll(async () => {
     process.env.ORBIS_HOST_SOCKET = originalSocket;
+    if (originalVersion === undefined) delete process.env.ORBIS_VERSION;
+    else process.env.ORBIS_VERSION = originalVersion;
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });
   });
 
   it('sends fixed status and plan requests through the local socket', async () => {
     expect(await service.status()).toMatchObject({ available: true, enrolled: true });
-    expect(await service.plan('v0.1.0-beta.8')).toMatchObject({ planId: 'fixture-plan' });
+    expect(await service.plan('v0.1.0-beta.8')).toMatchObject({ planId: '00000000-0000-4000-8000-000000000000' });
     expect(requests).toContainEqual({ method: 'GET', path: '/v1/status', body: null });
     expect(requests).toContainEqual({ method: 'POST', path: '/v1/plan', body: { tag: 'v0.1.0-beta.8' } });
+  });
+
+  it('prevents generic apply from bypassing downgrade revalidation, including after a core restart', async () => {
+    const id = '00000000-0000-4000-8000-000000000000';
+    await service.plan('v0.1.0-beta.90', true);
+    const count = requests.length;
+    expect(() => service.apply(id)).toThrow('new update or downgrade review');
+    expect(() => new HostUpdatesService().apply(id)).toThrow('new update or downgrade review');
+    expect(requests).toHaveLength(count);
+    await service.apply(id, true);
+    expect(requests.at(-1)).toEqual({ method: 'POST', path: '/v1/apply', body: { planId: id } });
+    expect(() => service.apply(id, true)).toThrow('new update or downgrade review');
+  });
+
+  it('rejects ordinary downgrade plans and unverifiable installed versions before contacting the host', () => {
+    const count = requests.length;
+    try {
+      for (const version of ['', 'development', 'not-a-version']) {
+        process.env.ORBIS_VERSION = version;
+        expect(() => service.plan('v0.1.0-beta.8')).toThrow('could not be verified');
+      }
+      process.env.ORBIS_VERSION = 'v0.1.0-beta.7';
+      for (const target of ['v0.1.0-beta.7', 'v0.1.0-beta.6']) expect(() => service.plan(target)).toThrow('downgrade review');
+      expect(requests).toHaveLength(count);
+    } finally {
+      process.env.ORBIS_VERSION = 'v0.1.0-beta.7';
+    }
   });
 
   it('rejects untrusted tags before contacting the host service', async () => {

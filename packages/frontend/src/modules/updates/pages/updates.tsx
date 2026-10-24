@@ -1,7 +1,7 @@
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
-import { Markdown } from '@/components/markdown/markdown';
+import { OrbisReleaseNotes } from './orbis-release-notes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
 import { IconArrowRight, IconBrandGithub, IconPackage, IconServerCog } from '@tabler/icons-react';
@@ -14,6 +14,7 @@ import { useCluster } from '@/desktop/cluster';
 import { ClusterUpdates } from '@/desktop/cluster-updates';
 import { UpdateAllButton } from '@/modules/app/components/update-all-button/update-all-button';
 import { UpdateTerminal } from './update-terminal';
+import { OrbisDowngrade } from './orbis-downgrade';
 import {
   rememberAcceptedCoreUpdate,
   prepareDesktopForCoreUpdate,
@@ -109,7 +110,9 @@ async function hostRequest<T>(path: string, body?: object, signal?: AbortSignal)
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.any([
       ...(signal ? [signal] : []),
-      AbortSignal.timeout(path === 'plan' ? 100_000 : path === 'packages/plan' || path === 'packages/apply' ? 70_000 : 20_000),
+      AbortSignal.timeout(
+        path === 'plan' || path.startsWith('downgrade/') ? 110_000 : path === 'packages/plan' || path === 'packages/apply' ? 70_000 : 20_000,
+      ),
     ]),
   });
   const result: unknown = await response.json();
@@ -401,23 +404,27 @@ function LocalUpdates() {
                 <time>{latest.publishedAt ? new Date(latest.publishedAt).toLocaleDateString() : 'Date unavailable'}</time>
               </div>
               {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
-              <section className="desktop-release-changelog" aria-labelledby="orbis-changelog-title">
-                <h3 id="orbis-changelog-title">Changelog</h3>
-                {latest.body ? (
-                  <Markdown
-                    content={latest.body.trimStart().replace(/^#\s+Orbis[^\n]*\r?\n(?:\r?\n)*/i, '')}
-                    className="desktop-update-markdown"
-                    tabIndex={0}
-                    label={`${latest.tag} changelog`}
-                  />
-                ) : (
-                  <p>No changelog provided.</p>
-                )}
-              </section>
+              <OrbisReleaseNotes latest={latest} installed={build.data?.version} />
               <a href={latest.url} target="_blank" rel="noreferrer">
                 View release on GitHub <IconArrowRight size={16} aria-hidden="true" />
               </a>
             </div>
+          ) : null}
+          {user?.operator === true && build.data ? (
+            <OrbisDowngrade
+              installed={build.data.version}
+              enabled={Boolean(
+                host.data?.available &&
+                  host.data.enrolled &&
+                  host.data.imageMatches &&
+                  host.data.coreState === 'running' &&
+                  host.data.coreHealth === 'healthy' &&
+                  !jobBusy &&
+                  job?.state !== 'interrupted' &&
+                  !updateCore.isPending,
+              )}
+              request={hostRequest}
+            />
           ) : null}
           {user?.operator !== true ? <p className="desktop-update-note">Core updates require an operator account.</p> : null}
           {user?.operator === true && host.isPending ? <p className="desktop-update-note">Checking the local host service…</p> : null}

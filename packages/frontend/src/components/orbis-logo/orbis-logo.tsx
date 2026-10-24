@@ -1,7 +1,9 @@
 import type { CSSProperties } from 'react';
 import './orbis-logo.css';
 
-export function OrbisLogo({ size = 28, className = '' }: { size?: number; className?: string }) {
+export function OrbisLogo({ size = 28, className = '', plain = false }: { size?: number; className?: string; plain?: boolean }) {
+  const ink = plain ? 'var(--desktop-ink)' : 'var(--desktop-action-ink)';
+  const orbit = plain ? 'var(--desktop-accent)' : 'var(--desktop-logo-orbit)';
   return (
     <svg
       className={`orbis-logo ${className}`.trim()}
@@ -12,11 +14,11 @@ export function OrbisLogo({ size = 28, className = '' }: { size?: number; classN
       aria-hidden="true"
       focusable="false"
     >
-      <rect x="2" y="2" width="60" height="60" rx="17" fill="var(--desktop-action)" />
-      <circle cx="32" cy="32" r="17" fill="none" stroke="var(--desktop-action-ink)" strokeWidth="2.4" />
-      <ellipse cx="32" cy="32" rx="26" ry="9.5" fill="none" stroke="var(--desktop-logo-orbit)" strokeWidth="2.5" transform="rotate(-32 32 32)" />
-      <circle cx="32" cy="32" r="5" fill="var(--desktop-action-ink)" />
-      <circle cx="52" cy="18" r="3" fill="var(--desktop-logo-orbit)" />
+      {!plain && <rect x="2" y="2" width="60" height="60" rx="17" fill="var(--desktop-action)" />}
+      <circle cx="32" cy="32" r="17" fill="none" stroke={ink} strokeWidth="2.4" />
+      <ellipse cx="32" cy="32" rx="26" ry="9.5" fill="none" stroke={orbit} strokeWidth="2.5" transform="rotate(-32 32 32)" />
+      <circle cx="32" cy="32" r="5" fill={ink} />
+      <circle cx="52" cy="18" r="3" fill={orbit} />
     </svg>
   );
 }

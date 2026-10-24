@@ -1,5 +1,6 @@
 import { applyAppearanceRuntime } from './appearance-runtime';
 import { resolveColourMode } from './colour-mode';
+import { resolveWallpaperKey, type ThemePreset } from './wallpaper-presets';
 
 const appearanceOptions = {
   presets: ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'],
@@ -11,27 +12,37 @@ export type CachedAppearance = {
   preset: (typeof appearanceOptions.presets)[number];
   mode: (typeof appearanceOptions.modes)[number];
   wallpaper: (typeof appearanceOptions.wallpapers)[number];
+  wallpaperMode: 'theme' | 'custom';
+  wallpaperPreset: ThemePreset | null;
 };
 
 export const preferenceStorageKey = 'server-desktop-preferences-v1';
 export const preferenceChangeEvent = 'orbis-desktop-preferences-changed';
 export const preferenceCacheLimit = 256 * 1024;
 
-export function appearanceFromStored(value: unknown): CachedAppearance {
+export function appearanceFromStored(value: unknown, options = appearanceOptions): CachedAppearance {
   const stored = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-  const preset = appearanceOptions.presets.includes(stored.preset as CachedAppearance['preset'])
-    ? (stored.preset as CachedAppearance['preset'])
-    : 'frost';
+  const preset = options.presets.includes(stored.preset as CachedAppearance['preset']) ? (stored.preset as CachedAppearance['preset']) : 'frost';
+  const wallpaper = options.wallpapers.includes(stored.wallpaper as CachedAppearance['wallpaper'])
+    ? (stored.wallpaper as CachedAppearance['wallpaper'])
+    : 'sandstone';
+  const image =
+    stored.appearance && typeof stored.appearance === 'object' && 'wallpaperImage' in stored.appearance && stored.appearance.wallpaperImage;
   return {
     preset,
-    mode: appearanceOptions.modes.includes(stored.mode as CachedAppearance['mode'])
+    mode: options.modes.includes(stored.mode as CachedAppearance['mode'])
       ? (stored.mode as CachedAppearance['mode'])
       : preset === 'graphite'
         ? 'dark'
         : 'light',
-    wallpaper: appearanceOptions.wallpapers.includes(stored.wallpaper as CachedAppearance['wallpaper'])
-      ? (stored.wallpaper as CachedAppearance['wallpaper'])
-      : 'sandstone',
+    wallpaper,
+    wallpaperMode:
+      stored.wallpaperMode === 'theme' || stored.wallpaperMode === 'custom'
+        ? stored.wallpaperMode
+        : wallpaper !== 'sandstone' || (typeof image === 'string' && /^[a-f0-9]{64}$/.test(image))
+          ? 'custom'
+          : 'theme',
+    wallpaperPreset: options.presets.includes(stored.wallpaperPreset as ThemePreset) ? (stored.wallpaperPreset as ThemePreset) : null,
   };
 }
 
@@ -46,7 +57,8 @@ export function readCachedAppearance(): CachedAppearance {
 
 // Static code and a shared allowlist keep the first paint independent of the app bundle.
 export const appearanceBootstrap = `(()=>{
-  const options=${JSON.stringify(appearanceOptions)};
+  const appearanceOptions=${JSON.stringify(appearanceOptions)};
+  const options=appearanceOptions;
   let stored={};
   try {
     const raw=localStorage.getItem(${JSON.stringify(preferenceStorageKey)});
@@ -63,7 +75,8 @@ export const appearanceBootstrap = `(()=>{
   const root=document.documentElement;
   root.dataset.desktopPreset=preset;
   root.dataset.desktopMode=mode;
-  root.dataset.desktopWallpaper=options.wallpapers.includes(stored.wallpaper)?stored.wallpaper:'sandstone';
+  const cached=(${appearanceFromStored.toString()})(stored,options);
+  root.dataset.desktopWallpaper=(${resolveWallpaperKey.toString()})(cached);
   const apply=()=>{
     if(root.dataset.orbisAppearanceReady==='true'){
       if(typeof document.removeEventListener==='function')document.removeEventListener('load',apply,true);

@@ -556,16 +556,16 @@
     box-shadow 0.22s ease;
   animation: orbis-app-enter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.workspace-app:nth-child(2) {
+.workspace-app-entry:nth-child(2) > .workspace-app {
   animation-delay: 0.06s;
 }
-.workspace-app:nth-child(3) {
+.workspace-app-entry:nth-child(3) > .workspace-app {
   animation-delay: 0.12s;
 }
-.workspace-app:nth-child(4) {
+.workspace-app-entry:nth-child(4) > .workspace-app {
   animation-delay: 0.18s;
 }
-.workspace-app:nth-child(5) {
+.workspace-app-entry:nth-child(5) > .workspace-app {
   animation-delay: 0.24s;
 }
 .workspace-app:hover {
@@ -1647,4 +1647,28 @@
 }
 .workspace-app-chooser .workspace-pin-list {
   margin-top: 12px;
+}
+
+.workspace-app-entry {
+  position: relative;
+  min-width: 0;
+}
+.workspace-app-entry > .workspace-app {
+  height: 100%;
+  padding-right: 46px;
+}
+.workspace-app-manage {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: var(--desktop-muted);
+}
+.workspace-app-manage:hover {
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-ink) 8%, transparent);
 }

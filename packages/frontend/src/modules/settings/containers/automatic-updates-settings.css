@@ -1,0 +1,106 @@
+.automatic-updates-settings {
+  min-width: 0;
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--desktop-line);
+}
+.automatic-updates-settings h2 {
+  margin: 0 0 10px;
+  font-size: 1.1875rem;
+  line-height: 1.4;
+}
+.automatic-updates-settings p,
+.automatic-updates-settings output {
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.55;
+}
+.automatic-updates-settings header {
+  max-width: 720px;
+  margin-bottom: 24px;
+}
+.automatic-updates-settings form {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.automatic-updates-modes {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.automatic-updates-modes legend {
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+.automatic-updates-modes label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  margin: 0;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.automatic-updates-modes input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--desktop-accent);
+}
+.automatic-updates-time {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+  gap: 20px;
+  min-width: 0;
+}
+.automatic-updates-time label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.automatic-updates-time input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  color: var(--desktop-ink);
+  background: var(--desktop-surface);
+  font: inherit;
+  font-weight: 400;
+}
+.automatic-updates-save {
+  justify-self: start;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--desktop-action-ink);
+  background: var(--desktop-action);
+  font: inherit;
+  font-weight: 650;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.automatic-updates-settings :disabled {
+  cursor: not-allowed;
+}
+.automatic-updates-save:disabled {
+  opacity: 0.6;
+}
+@media (max-width: 640px) {
+  .automatic-updates-time {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

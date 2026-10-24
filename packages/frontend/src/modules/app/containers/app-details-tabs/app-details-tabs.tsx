@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useSearchParams } from 'react-router';
 import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
+import { useStorePreview } from '../../pages/store-preview-context';
 import { Markdown } from '@/components/markdown/markdown';
 import { appDescriptionText } from '../../helpers/app-description';
 import { ContainerResources } from '@/components/container-resources/container-resources';
@@ -53,6 +54,7 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
 
   const [params, setParams] = useSearchParams();
   const location = useLocation();
+  const preview = useStorePreview();
   const installed = Boolean(app && app.status !== 'missing');
   const allowedTabs = installed
     ? [metaTabId, 'info', 'backups', 'logs', 'user-config', 'resources', 'operations']
@@ -83,9 +85,11 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
       },
       {
         preventScrollReset: true,
-        state: location.pathname.startsWith('/app-store/')
-          ? nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, true)
-          : location.state,
+        state:
+          preview?.nextHistory() ??
+          (location.pathname.startsWith('/app-store/')
+            ? nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, true)
+            : location.state),
       },
     );
   };

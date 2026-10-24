@@ -27,6 +27,10 @@ export class SessionManager {
     return crypto.randomBytes(16).toString('hex');
   }
 
+  public isSessionForUser(sessionId: string, userId: number) {
+    return this.cache.get(`session:${sessionId}`) === String(userId);
+  }
+
   /**
    * Delete a session by its ID.
    * @param sessionId - The ID of the session to delete.
@@ -47,6 +51,11 @@ export class SessionManager {
    * @param {number} userId - The user ID
    */
   public destroyAllSessionsByUserId = async (userId: number) => {
+    const pendingTotp = await this.cache.getByPrefix(`totp-by-user:${userId}:`);
+    for (const grant of pendingTotp) {
+      if (grant.val) this.cache.del(grant.val);
+      this.cache.del(grant.key);
+    }
     const sessions = await this.cache.getByPrefix(`session:${userId}:`);
 
     await Promise.all(

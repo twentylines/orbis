@@ -19,7 +19,7 @@ const surfaceSelector = '.desktop-route-surface';
 const easing = sectionMotionEasing;
 const historyIndex = () => (typeof window.history.state?.idx === 'number' ? (window.history.state.idx as number) : undefined);
 
-export function useSectionMotion() {
+export function useSectionMotion(ready = true) {
   const location = useLocation();
   const navigation = useNavigation();
   const navigationType = useNavigationType();
@@ -30,7 +30,7 @@ export function useSectionMotion() {
   const action = navigationType;
   useHomeMotion(
     location.key,
-    location.pathname === '/dashboard',
+    ready && location.pathname === '/dashboard',
     sectionDirection(sectionIndex(committed.current.path), sectionIndex(location.pathname), navigationType, committed.current.index, historyIndex()),
   );
   const settled = useRef<SectionBounds | null>(null);
@@ -42,6 +42,7 @@ export function useSectionMotion() {
   const cleanupMotion = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
+    if (!ready) return;
     previous.current.index = historyIndex();
     const read = () => {
       const view = document.querySelector<HTMLElement>(routeSelector);
@@ -89,14 +90,16 @@ export function useSectionMotion() {
       window.removeEventListener('scroll', scheduleCache);
       window.removeEventListener('resize', scheduleCache);
     };
-  }, []);
+  }, [ready]);
 
   useLayoutEffect(() => {
+    if (!ready) return;
     if (navigation.location && navigation.location.pathname !== previous.current.path && navigationType !== 'POP' && !origin.current)
       origin.current = settled.current;
-  }, [navigation.location, navigationType]);
+  }, [navigation.location, navigationType, ready]);
 
   useLayoutEffect(() => {
+    if (!ready) return;
     if (previous.current.key === key) return;
     const before = previous.current;
     const nextIndex = historyIndex();
@@ -194,11 +197,11 @@ export function useSectionMotion() {
       observer.disconnect();
       cancelAnimationFrame(resizeFrame);
     };
-  }, [key, path, action]);
+  }, [key, path, action, ready]);
 
   useLayoutEffect(() => {
-    if (navigation.location || previous.current.key !== location.key) return;
+    if (!ready || navigation.location || previous.current.key !== location.key) return;
     previous.current.index = historyIndex();
     committed.current = { path: location.pathname, index: historyIndex() };
-  }, [location.key, location.pathname, navigation.location]);
+  }, [location.key, location.pathname, navigation.location, ready]);
 }

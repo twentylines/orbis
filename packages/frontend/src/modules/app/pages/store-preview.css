@@ -33,6 +33,24 @@
 .store-preview-content {
   min-width: 0;
 }
+.store-preview-error {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-block: 20px;
+}
+.store-preview-error p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.store-preview-error button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  color: var(--desktop-ink);
+  background: var(--desktop-surface);
+}
 .store-preview-close {
   position: sticky;
   top: 0;
@@ -100,6 +118,17 @@
 .store-catalogue-pane .app-tile[aria-expanded="true"] {
   border-color: var(--desktop-accent);
   background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
+}
+.store-catalogue-pane .app-link[aria-expanded="true"] .app-tile {
+  border-color: var(--desktop-accent);
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
+}
+.store-catalogue-pane .cluster-app-card[data-preview-selected="true"] {
+  border-color: var(--desktop-accent);
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
+}
+.installed-app-split .desktop-installed-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
 }
 @container (max-width: 720px) {
   .store-catalogue-pane .action-bar-content {

@@ -2,11 +2,33 @@ import { AuthGuard } from '@/modules/auth/auth.guard';
 import { BadRequestException, Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
 import { HostUpdatesGuard } from './host-updates.guard';
 import { HostUpdatesService } from './host-updates.service';
+import { OrbisDowngradeService } from './orbis-downgrade.service';
 
 @UseGuards(AuthGuard, HostUpdatesGuard)
 @Controller('host-updates')
 export class HostUpdatesController {
-  constructor(private readonly hostUpdates: HostUpdatesService) {}
+  constructor(
+    private readonly hostUpdates: HostUpdatesService,
+    private readonly downgrades: OrbisDowngradeService,
+  ) {}
+
+  @Post('downgrade/plan')
+  @HttpCode(200)
+  downgradePlan(@Body() body: Record<string, unknown>) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1 || !('tag' in body)) {
+      throw new BadRequestException('Choose one older Orbis release.');
+    }
+    return this.downgrades.plan(body.tag);
+  }
+
+  @Post('downgrade/apply')
+  @HttpCode(202)
+  downgradeApply(@Body() body: Record<string, unknown>) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1 || !('planId' in body)) {
+      throw new BadRequestException('Confirm one reviewed downgrade.');
+    }
+    return this.downgrades.apply(body.planId);
+  }
 
   @Get('status')
   status() {

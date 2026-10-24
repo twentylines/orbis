@@ -1,6 +1,6 @@
 import { type } from 'arktype';
 import { createArkDto } from 'nestjs-arktype';
-import { desktopAppearanceSchema, desktopWindowsSchema } from '@runtipi/common/schemas';
+import { appLaunchSchema, desktopAppearanceSchema, desktopWindowsSchema } from '@runtipi/common/schemas';
 
 const widgetId = type.enumerated('applications', 'activity', 'storage', 'attention');
 const widgetList = widgetId.array().narrow((items) => items.length <= 4 && new Set(items).size === items.length);
@@ -22,8 +22,11 @@ export const desktopPreferencesSchema = type({
   'mode?': type.enumerated('light', 'dark', 'system'),
   density: type.enumerated('comfortable', 'compact'),
   'wallpaper?': type.enumerated('sandstone', 'tidal', 'canopy'),
+  'wallpaperMode?': type.enumerated('theme', 'custom'),
+  'wallpaperPreset?': type.enumerated('frost', 'graphite', 'forest', 'stone', 'ocean', 'blush', null),
   'workspace?': workspace,
   'windows?': desktopWindowsSchema,
+  'appLaunch?': appLaunchSchema,
   'appearance?': desktopAppearanceSchema,
 }).onUndeclaredKey('delete');
 

@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { useQueries } from '@tanstack/react-query';
 import { IconArrowRight, IconBrandDocker, IconExternalLink, IconRefresh, IconServer } from '@tabler/icons-react';
 import type { ContainerTelemetry, DockerApps } from '@runtipi/common/schemas';
@@ -21,6 +21,8 @@ import { formatUptime } from './uptime';
 import { useWindowVisible } from './window-visibility';
 import './cluster-views.css';
 import { ClusterCatalogue } from './cluster-catalogue';
+import { useStorePreview } from '@/modules/app/pages/store-preview-context';
+import { appsReturnPath } from '@/modules/app/pages/store-preview-navigation';
 
 export type ClusterManagedApp = AppDestinationData & {
   app: NonNullable<AppDestinationData['app']> & Pick<NonNullable<GetAppDto['app']>, 'id' | 'version' | 'ignoredVersion' | 'createdAt'>;
@@ -43,7 +45,7 @@ const memoryPercent = (sample?: Telemetry) => {
     : null;
 };
 const statusLabel = (value: string) => `${value[0]?.toUpperCase() ?? ''}${value.slice(1).replaceAll('_', ' ')}`;
-const serverPath = (server: ClusterServer, path: string) => {
+export const serverPath = (server: ClusterServer, path: string) => {
   if (server.local) return path;
   try {
     const url = new URL(server.url);
@@ -189,6 +191,8 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
   const { cluster, servers } = useScopedServers();
   const { preferences } = useDesktopPreferences();
   const openApp = useAppLauncher();
+  const preview = useStorePreview();
+  const location = useLocation();
   const { filters, change } = useLibraryFilters();
   const opened = useOpenedApps();
   const apps = useServerReadings<ServerApps>(servers, 'apps', 30000);
@@ -228,7 +232,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
     if (
       manageUrl &&
       openApp({
-        urn: `${server.id}/${entry.info.urn}`,
+        urn: server.local ? entry.info.urn : `${server.id}/${entry.info.urn}`,
         name: entry.info.name,
         recentKey: server.local ? entry.info.urn : `${server.id}/${entry.info.urn}`,
         serverName: serverName(server),
@@ -332,22 +336,34 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
             : `/api/cluster/servers/${encodeURIComponent(server.id)}/icon?urn=${encodeURIComponent(entry.info.urn)}`;
           const [appName, store] = entry.info.urn.split(':');
           const manageUrl = serverPath(server, `/apps/${encodeURIComponent(store ?? '')}/${encodeURIComponent(appName ?? '')}`);
+          const infoPath = `/apps/servers/${encodeURIComponent(server.id)}/${encodeURIComponent(store ?? '')}/${encodeURIComponent(appName ?? '')}${appsReturnPath(null, location.search).slice('/apps'.length)}`;
           const launchUrl =
             stale || !entry.info.available ? undefined : appDestinations(entry, inventory?.data?.addresses ?? {}, serverHostname(server))[0]?.url;
           const updateAvailable = entry.app.version < entry.metadata.latestVersion && entry.app.ignoredVersion !== entry.metadata.latestVersion;
           return (
-            <li className="cluster-app-card" key={`${server.id}/${entry.info.urn}`} data-server-id={server.id} data-stale={stale || undefined}>
+            <li
+              className="cluster-app-card"
+              key={`${server.id}/${entry.info.urn}`}
+              data-server-id={server.id}
+              data-stale={stale || undefined}
+              data-preview-selected={(!compact && preview?.selectedUrn === `${server.id}/${entry.info.urn}`) || undefined}
+            >
               <div className="cluster-app-identity">
                 <AppLogo urn={entry.info.urn} url={logoUrl} size={48} />
                 <div>
                   <h3>
                     {manageUrl ? (
                       <Link
-                        to={manageUrl}
+                        to={compact ? manageUrl : infoPath}
                         title={entry.info.name}
-                        target={server.local ? undefined : '_blank'}
-                        rel={server.local ? undefined : 'noopener noreferrer'}
-                        onClick={(event) => launch(event, server, entry, logoUrl, launchUrl)}
+                        target={compact && !server.local ? '_blank' : undefined}
+                        rel={compact && !server.local ? 'noopener noreferrer' : undefined}
+                        onClick={compact ? (event) => launch(event, server, entry, logoUrl, launchUrl) : undefined}
+                        state={compact ? undefined : preview?.nextHistory()}
+                        preventScrollReset={!compact}
+                        data-store-app={compact ? undefined : `${server.id}/${entry.info.urn}`}
+                        aria-controls={!compact && preview?.split ? preview.previewId : undefined}
+                        aria-expanded={!compact && preview?.split ? preview.selectedUrn === `${server.id}/${entry.info.urn}` : undefined}
                       >
                         <WrapWords text={entry.info.name} />
                       </Link>
@@ -403,7 +419,13 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
                 ) : null}
                 {manageUrl ? (
                   <Button asChild>
-                    <Link to={manageUrl} target={server.local ? undefined : '_blank'} rel={server.local ? undefined : 'noopener noreferrer'}>
+                    <Link
+                      to={compact ? manageUrl : infoPath}
+                      state={compact ? undefined : preview?.nextHistory()}
+                      preventScrollReset={!compact}
+                      target={compact && !server.local ? '_blank' : undefined}
+                      rel={compact && !server.local ? 'noopener noreferrer' : undefined}
+                    >
                       Manage
                     </Link>
                   </Button>

@@ -1,6 +1,7 @@
 import { updateAppSettingsMutation } from '@/api-client/@tanstack/react-query.gen';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { ScrollArea } from '@/components/ui/ScrollArea';
+import { useAppContext } from '@/context/app-context';
 import type { AppInfo, AppStatus } from '@/types/app.types';
 import type { TranslatableError } from '@/types/error.types';
 import { useMutation } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { InstallFormButtons } from '../../install-form-buttons/install-form-buttons';
 import { type FormValues, InstallForm } from '../../install-form/install-form';
+import { AppUpdateSchedule } from './app-update-schedule';
 
 interface IProps {
   info: AppInfo;
@@ -21,6 +23,7 @@ interface IProps {
 
 export const UpdateSettingsDialog: React.FC<IProps> = ({ info, config, isOpen, onClose }) => {
   const { t } = useTranslation();
+  const { user } = useAppContext();
   const formId = useId();
 
   const updateConfig = useMutation({
@@ -60,6 +63,7 @@ export const UpdateSettingsDialog: React.FC<IProps> = ({ info, config, isOpen, o
               initialValues={{ ...config }}
               formId={formId}
             />
+            {isOpen && user.operator === true ? <AppUpdateSchedule key={info.urn} urn={info.urn} name={info.name} /> : null}
           </DialogDescription>
         </ScrollArea>
         <DialogFooter>

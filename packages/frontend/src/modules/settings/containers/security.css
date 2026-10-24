@@ -9,7 +9,7 @@
   margin-bottom: 8px;
 }
 .settings-security-heading h2 {
-  flex: 1 1 12em;
+  flex: 1 1 0;
   min-width: 0;
   margin: 0;
   font-size: clamp(1rem, calc(2.4vw * var(--orbis-text-scale, 1)), 1.25rem);
@@ -23,4 +23,105 @@
 }
 .settings-security .form-label {
   line-height: 1.45;
+}
+
+.settings-passkeys {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding-block: 8px 32px;
+}
+.settings-passkeys :is(p, ul) {
+  margin: 0;
+}
+.settings-passkeys > .settings-security-heading {
+  margin-bottom: 0;
+}
+.settings-passkeys > .btn {
+  justify-self: start;
+}
+.settings-passkey-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+}
+.settings-passkey-list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px 24px;
+  padding-block: 20px;
+  border-block: 1px solid var(--desktop-line);
+}
+.settings-passkey-list > li + li {
+  border-top: 0;
+}
+.settings-passkey-list strong {
+  overflow-wrap: anywhere;
+}
+.settings-passkey-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 8px;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.settings-passkey-note,
+.settings-passkey-empty {
+  color: var(--desktop-muted);
+  line-height: 1.6;
+}
+.settings-passkey-policy {
+  display: grid;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--desktop-line);
+}
+.settings-passkey-error {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+.passkey-dialog {
+  display: flex;
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
+}
+.passkey-dialog > :is(.modal-header, .modal-footer) {
+  flex: 0 0 auto;
+}
+.passkey-dialog > .modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding: 12px;
+}
+.settings-passkey-form {
+  display: grid;
+  gap: 20px;
+}
+.settings-passkey-form p {
+  margin: 0;
+  line-height: 1.6;
+}
+.settings-passkey-alert {
+  color: var(--desktop-negative);
+}
+@media (max-width: 600px) {
+  .settings-passkey-list > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-passkey-list > li > .btn {
+    justify-self: start;
+  }
+  .passkey-dialog .modal-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .passkey-dialog .modal-footer > .btn {
+    margin: 0;
+  }
 }

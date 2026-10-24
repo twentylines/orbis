@@ -1,0 +1,31 @@
+.app-update-schedule {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--desktop-line, var(--tblr-border-color));
+}
+.app-update-schedule h3,
+.app-update-schedule p {
+  margin: 0;
+}
+.app-update-schedule h3 {
+  font-size: 1.1875rem;
+}
+.app-update-schedule :is(select, input) {
+  min-width: 0;
+  width: 100%;
+}
+.app-update-time {
+  display: grid;
+  gap: 12px;
+}
+.app-update-schedule-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.app-update-schedule-actions .btn {
+  min-height: 44px;
+}

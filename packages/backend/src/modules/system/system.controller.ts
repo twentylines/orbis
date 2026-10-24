@@ -102,6 +102,18 @@ export class SystemController {
     return this.orbisReleases.latest();
   }
 
+  @UseGuards(AuthGuard)
+  @Get('/orbis-releases')
+  publishedOrbisReleases() {
+    return this.orbisReleases.listPublished();
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/orbis-release-history')
+  orbisReleaseHistory(@Query('installed') installed: unknown, @Query('target') target: unknown) {
+    return this.orbisReleases.history(installed, target);
+  }
+
   @Get('/certificate')
   async downloadLocalCertificate(@Res() res: Response) {
     const cert = await this.systemService.getLocalCertificate();

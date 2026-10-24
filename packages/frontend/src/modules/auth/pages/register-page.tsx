@@ -48,7 +48,7 @@ export default () => {
 
   return (
     <RegisterForm
-      onSubmit={(values) => register.mutate({ body: { password: values.password, username: values.email } })}
+      onSubmit={(values) => register.mutate({ body: { password: values.password, username: values.username.trim() } })}
       loading={register.isPending}
     />
   );

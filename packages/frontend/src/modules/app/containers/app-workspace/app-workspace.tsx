@@ -34,9 +34,9 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
     <div className="app-workspace" data-testid="app-details">
       <Link
         className="app-workspace-back"
-        to={fromStore ? (preview?.closePath ?? `/app-store/${encodeURIComponent(storeId ?? '')}`) : '/apps'}
+        to={preview?.closePath ?? (fromStore ? `/app-store/${encodeURIComponent(storeId ?? '')}` : '/apps')}
         onClick={
-          preview && fromStore
+          preview
             ? (event) => {
                 if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
                   event.preventDefault();
@@ -104,7 +104,9 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
               },
               {
                 preventScrollReset: true,
-                state: fromStore ? nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, true) : location.state,
+                state:
+                  preview?.nextHistory() ??
+                  (fromStore ? nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, true) : location.state),
               },
             )
           }

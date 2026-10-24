@@ -1,6 +1,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import { BadRequestException, HttpException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { gt, valid } from 'semver';
 
 const TAG = /^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$/;
 const PLAN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -109,6 +110,7 @@ export type HostRestartPlan = { planId: string; expiresAt: number; rebootRequire
 @Injectable()
 export class HostUpdatesService {
   private readonly socketPath = process.env.ORBIS_HOST_SOCKET;
+  private readonly plans = new Map<string, { downgrade: boolean; expiresAt: number }>();
 
   private requireSocket(): string {
     if (!this.socketPath || !path.isAbsolute(this.socketPath) || this.socketPath.includes('\0')) {
@@ -261,17 +263,39 @@ export class HostUpdatesService {
     return this.call<{ jobId: string; state: string }>('/v1/packages/apply', { planId });
   }
 
-  plan(tag: unknown): Promise<HostUpdatePlan> {
+  plan(tag: unknown, reviewedDowngrade = false): Promise<HostUpdatePlan> {
     if (typeof tag !== 'string' || !TAG.test(tag) || tag.length > 80) {
       throw new BadRequestException('Choose a valid Orbis release tag.');
     }
-    return this.call<HostUpdatePlan>('/v1/plan', { tag });
+    const installed = process.env.ORBIS_VERSION;
+    if (!reviewedDowngrade) {
+      if (!installed || !valid(installed)) {
+        throw new BadRequestException('The installed Orbis version could not be verified. No update was started.');
+      }
+      if (!valid(tag) || !gt(tag, installed)) {
+        throw new BadRequestException('Use the downgrade review to install an earlier Orbis release.');
+      }
+    }
+    return this.call<HostUpdatePlan>('/v1/plan', { tag }).then((plan) => {
+      if (typeof plan.planId !== 'string' || !PLAN_ID.test(plan.planId)) {
+        throw new ServiceUnavailableException('The Orbis host service returned an invalid update plan.');
+      }
+      for (const [id, previous] of this.plans) if (previous.expiresAt < Date.now()) this.plans.delete(id);
+      if (this.plans.size >= 32) this.plans.delete(this.plans.keys().next().value as string);
+      this.plans.set(plan.planId, { downgrade: reviewedDowngrade, expiresAt: Date.now() + 15 * 60_000 });
+      return plan;
+    });
   }
 
-  apply(planId: unknown): Promise<{ jobId: string; state: string }> {
+  apply(planId: unknown, reviewedDowngrade = false): Promise<{ jobId: string; state: string }> {
     if (typeof planId !== 'string' || !PLAN_ID.test(planId)) {
       throw new BadRequestException('Create a new update plan first.');
     }
+    const plan = this.plans.get(planId);
+    if (!plan || plan.expiresAt < Date.now() || plan.downgrade !== reviewedDowngrade) {
+      throw new BadRequestException('Create a new update or downgrade review before continuing.');
+    }
+    this.plans.delete(planId);
     return this.call('/v1/apply', { planId });
   }
 

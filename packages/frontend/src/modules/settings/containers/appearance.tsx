@@ -10,6 +10,7 @@ import { IconDeviceDesktop, IconMoonStars, IconSunHigh } from '@tabler/icons-rea
 import { WallpaperSettings } from './wallpaper-settings';
 import { MaterialSettings } from './material-settings';
 import { preferenceCacheLimit } from '@/desktop/appearance-cache';
+import { AppOpeningSettings } from '@/desktop/app-opening-settings';
 import { AppearanceRange } from './appearance-controls';
 import './appearance.css';
 
@@ -201,6 +202,7 @@ export const Appearance = () => {
       </section>
       <MaterialSettings key={wallpaperSettingsRevision} />
       <WallpaperSettings key={wallpaperSettingsRevision} />
+      <AppOpeningSettings />
       <section className="appearance-section" aria-labelledby="appearance-density">
         <div>
           <h2 id="appearance-density">Density</h2>

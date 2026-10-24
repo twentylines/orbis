@@ -2,9 +2,9 @@ import { useReducedMotion } from '@/desktop/motion-preferences';
 import { useUserContext } from '@/context/user-context';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useDesktopPreferences } from './preferences';
+import { resolveWallpaperKey, wallpaperSources } from './wallpaper-presets';
 import './wallpaper.css';
 
-const bundled = { sandstone: '/wallpapers/orbis-horizon.webp', tidal: '/wallpapers/tidal.svg', canopy: '/wallpapers/canopy.svg' };
 export const wallpaperUrl = (hash: string, revision = 0) => `/api/desktop-preferences/wallpaper?version=${hash}&refresh=${revision}`;
 
 function WallpaperImages({
@@ -55,13 +55,13 @@ export function DesktopWallpaper() {
   const { isLoggedIn } = useUserContext();
   const systemReducedMotion = useReducedMotion();
   const value = preferences.appearance;
-  const hash = isLoggedIn ? value.wallpaperImage : null;
+  const hash = isLoggedIn && preferences.wallpaperMode === 'custom' ? value.wallpaperImage : null;
   const customSource = hash ? wallpaperUrl(hash, wallpaperRevision) : null;
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const protectedText = Boolean(
     hash || value.wallpaperFit !== 'cover' || value.wallpaperX !== 50 || value.wallpaperY !== 0 || value.wallpaperDim || value.wallpaperBlur,
   );
-  const source = customSource && customSource !== failedSource ? customSource : bundled[preferences.wallpaper];
+  const source = customSource && customSource !== failedSource ? customSource : wallpaperSources[resolveWallpaperKey(preferences)];
   return (
     <div
       className="desktop-wallpaper-layer"

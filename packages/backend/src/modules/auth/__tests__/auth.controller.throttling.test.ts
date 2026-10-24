@@ -12,6 +12,7 @@ import { mock } from 'vitest-mock-extended';
 import { AuthController } from '../auth.controller';
 import { AuthGuard } from '../auth.guard';
 import { AuthService } from '../auth.service';
+import { PasskeyService } from '../passkey.service';
 
 it('throttles repeated login attempts before they reach the controller', async () => {
   let app: INestApplication | undefined;
@@ -26,6 +27,7 @@ it('throttles repeated login attempts before they reach the controller', async (
     imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }])],
     controllers: [AuthController],
     providers: [
+      { provide: PasskeyService, useValue: mock<PasskeyService>() },
       AuthGuard,
       {
         provide: APP_GUARD,
@@ -83,6 +85,7 @@ it('does not throttle repeated traefik auth checks', async () => {
     imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }])],
     controllers: [AuthController],
     providers: [
+      { provide: PasskeyService, useValue: mock<PasskeyService>() },
       AuthGuard,
       {
         provide: APP_GUARD,

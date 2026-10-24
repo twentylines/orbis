@@ -1,3 +1,6 @@
+import { appLaunchSchema, defaultAppLaunch, type AppLaunchPreferences, type AppOpeningMode } from './app-launch.js';
+import { isNewBareUsername, reservedUsernames } from './account-identifier.js';
+export { isNewBareUsername, reservedUsernames };
 import { dynamicComposeSchema, serviceSchema, MIN_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION } from './dynamic-compose.js';
 import { parseComposeJson, convertLegacyToYaml, convertYamlToLegacy } from './utils/convert-legacy-schema.js';
 import type { DependsOn, DynamicCompose, Service, ServiceInput } from './dynamic-compose.js';
@@ -42,6 +45,10 @@ import {
 import { desktopAppearanceSchema, defaultDesktopAppearance, normaliseDesktopAppearance, type DesktopAppearance } from './desktop-appearance.js';
 
 export {
+  appLaunchSchema,
+  defaultAppLaunch,
+  type AppLaunchPreferences,
+  type AppOpeningMode,
   desktopWindowIds,
   desktopWindowSchema,
   desktopWindowsSchema,

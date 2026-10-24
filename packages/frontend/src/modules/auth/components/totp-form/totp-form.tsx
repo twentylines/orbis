@@ -15,7 +15,7 @@ export const TotpForm = (props: Props) => {
 
   return (
     <>
-      <h2 className="h2 text-center mb-4">{t('AUTH_TOTP_TITLE')}</h2>
+      <h2 className="desktop-auth-heading">{t('AUTH_TOTP_TITLE')}</h2>
       <form
         onSubmit={(e) => {
           setTotpCode('');

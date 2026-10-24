@@ -6,13 +6,14 @@ import type React from 'react';
 import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+import { newAccountIdentifier } from '../account-identifier';
 
 interface IProps {
   onSubmit: (values: FormValues) => void;
   loading: boolean;
 }
 
-type FormValues = { email: string; password: string; passwordConfirm: string };
+type FormValues = { username: string; password: string; passwordConfirm: string };
 
 export const RegisterForm: React.FC<IProps> = ({ onSubmit, loading }) => {
   const { t } = useTranslation();
@@ -20,7 +21,7 @@ export const RegisterForm: React.FC<IProps> = ({ onSubmit, loading }) => {
   const schema = useMemo(
     () =>
       type({
-        email: 'string.email',
+        username: newAccountIdentifier,
         password: type('string')
           .atLeastLength(8)
           .configure({ message: t('AUTH_ERROR_INVALID_PASSWORD_LENGTH') }),
@@ -43,14 +44,16 @@ export const RegisterForm: React.FC<IProps> = ({ onSubmit, loading }) => {
 
   return (
     <>
-      <h2 className="h2 text-center mb-4">{t('AUTH_REGISTER_TITLE')}</h2>
+      <h2 className="desktop-auth-heading">{t('AUTH_REGISTER_TITLE')}</h2>
       <form onSubmit={handleSubmit(onSubmit)}>
         <Input
-          {...register('email')}
-          label={t('AUTH_FORM_EMAIL')}
-          error={errors.email?.message}
+          {...register('username')}
+          label="Username or email"
+          error={errors.username?.message}
           disabled={loading}
-          type="email"
+          type="text"
+          autoCapitalize="none"
+          autoCorrect="off"
           className="mb-3"
           autoComplete="username"
         />
@@ -72,6 +75,9 @@ export const RegisterForm: React.FC<IProps> = ({ onSubmit, loading }) => {
           className="mb-3"
           autoComplete="new-password"
         />
+        <p className="desktop-auth-help">
+          Email is optional. Choose a username or use your email address as the account identifier. Password recovery requires access to the server.
+        </p>
         <div className="form-footer">
           <Button loading={loading} type="submit" intent="primary" className="w-100">
             {t('AUTH_REGISTER_SUBMIT')}

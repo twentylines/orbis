@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { getInstalledAppsOptions, getLinksOptions } from '@/api-client/@tanstack/react-query.gen';
 import { EmptyPage } from '@/components/empty-page/empty-page';
 import type { CustomLink } from '@/types/app.types';
@@ -17,12 +17,14 @@ import clsx from 'clsx';
 import { RestartAllButton, StartAllButton, StopAllButton } from '../components/batch-actions-dialog/batch-actions-dialog';
 import { useContainerTelemetry } from '@/desktop/containers';
 import { DockerAppsSection } from '../components/docker-apps/docker-apps';
-import { useAppLauncher, useOpenedApps } from '@/desktop/app-launcher';
+import { useOpenedApps } from '@/desktop/app-launcher';
 import { selectLibraryApps } from '@/desktop/app-library';
 import { AppLibraryControls, useLibraryFilters } from '@/desktop/app-library-controls';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { useCluster } from '@/desktop/cluster';
 import { ClusterApps } from '@/desktop/cluster-views';
+import { useStorePreview } from './store-preview-context';
+import { appsReturnPath } from './store-preview-navigation';
 
 export default () => {
   const cluster = useCluster();
@@ -34,7 +36,8 @@ function LocalApps() {
   const { filters, change } = useLibraryFilters();
   const opened = useOpenedApps();
   const visible = useWindowVisible();
-  const openApp = useAppLauncher();
+  const location = useLocation();
+  const preview = useStorePreview();
   const containers = useContainerTelemetry();
   const { data: apps } = useSuspenseQuery({
     ...getInstalledAppsOptions(),
@@ -81,11 +84,13 @@ function LocalApps() {
     return (
       <Link
         key={app.id}
-        to={`/apps/${storeId}/${appName}`}
+        to={`/apps/${storeId === '_user' ? '' : `${encodeURIComponent(storeId ?? '')}/`}${encodeURIComponent(appName ?? '')}${appsReturnPath(null, location.search).slice('/apps'.length)}`}
+        state={preview?.nextHistory()}
+        preventScrollReset
+        data-store-app={info.urn}
+        aria-controls={preview?.split ? preview.previewId : undefined}
+        aria-expanded={preview?.split ? preview.selectedUrn === info.urn : undefined}
         className="col-sm-6 col-lg-4 app-link p-2 pt-0 pb-0 mb-0"
-        onClick={(event) => {
-          if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0 && openApp(info)) event.preventDefault();
-        }}
       >
         <AppTile
           key={info.urn}

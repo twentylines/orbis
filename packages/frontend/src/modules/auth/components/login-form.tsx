@@ -6,11 +6,12 @@ import type React from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
+import { IconFingerprint } from '@tabler/icons-react';
 
-type FormValues = { email: string; password: string };
+type FormValues = { username: string; password: string };
 
 const schema = type({
-  email: 'string.email',
+  username: type('string').narrow((value) => value.trim().length > 0),
   password: 'string',
 });
 
@@ -19,9 +20,22 @@ interface IProps {
   loading: boolean;
   showProgress?: boolean;
   loginType: string;
+  onPasskey: () => void;
+  warmPasskey: () => void;
+  passkeyAvailable: boolean;
+  passkeyReason?: string;
 }
 
-export const LoginForm: React.FC<IProps> = ({ loading, showProgress = false, onSubmit, loginType }) => {
+export const LoginForm: React.FC<IProps> = ({
+  loading,
+  showProgress = false,
+  onSubmit,
+  loginType,
+  onPasskey,
+  warmPasskey,
+  passkeyAvailable,
+  passkeyReason,
+}) => {
   const { t } = useTranslation();
   const {
     register,
@@ -32,22 +46,24 @@ export const LoginForm: React.FC<IProps> = ({ loading, showProgress = false, onS
     resolver: arktypeResolver(schema),
   });
 
-  const watchEmail = watch('email');
+  const watchUsername = watch('username');
   const watchPassword = watch('password');
 
-  const isDisabled = !watchEmail || !watchPassword;
+  const isDisabled = !watchUsername?.trim() || !watchPassword;
 
   return (
     <>
-      <h2 className="h2 text-center mb-4">{t('AUTH_LOGIN_TITLE', { type: loginType })}</h2>
+      <h2 className="desktop-auth-heading">{t('AUTH_LOGIN_TITLE', { type: loginType })}</h2>
       <form onSubmit={handleSubmit(onSubmit)}>
         <Input
-          {...register('email')}
-          name="email"
-          label={t('AUTH_FORM_EMAIL')}
-          error={errors.email?.message}
+          {...register('username')}
+          name="username"
+          label="Username or email"
+          error={errors.username?.message}
           disabled={loading}
-          type="email"
+          type="text"
+          autoCapitalize="none"
+          autoCorrect="off"
           className="mb-3"
           autoComplete="username"
         />
@@ -65,6 +81,20 @@ export const LoginForm: React.FC<IProps> = ({ loading, showProgress = false, onS
           <Button disabled={isDisabled || loading} aria-busy={loading || undefined} type="submit" intent="primary" className="w-100">
             {showProgress ? 'Signing in…' : t('AUTH_LOGIN_SUBMIT')}
           </Button>
+          <div className="desktop-login-passkey">
+            <Button
+              type="button"
+              disabled={loading || !passkeyAvailable}
+              onClick={onPasskey}
+              onPointerEnter={warmPasskey}
+              onFocus={warmPasskey}
+              className="w-100"
+            >
+              <IconFingerprint size={20} aria-hidden="true" />
+              Sign in with a passkey
+            </Button>
+            {passkeyReason && <p className="desktop-auth-help">{passkeyReason}</p>}
+          </div>
           <div className="form-text desktop-login-recovery">
             <Link to="/reset-password">{t('AUTH_FORM_FORGOT')}</Link>
           </div>

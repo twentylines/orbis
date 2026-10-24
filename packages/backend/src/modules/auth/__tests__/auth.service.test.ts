@@ -59,6 +59,34 @@ describe('AuthService', () => {
     expect(authService).toBeDefined();
   });
 
+  it('preserves reserved legacy account login while rejecting the same identifier for new registration or changes', async () => {
+    userRepository.getUserByUsername.mockResolvedValue({ ...totpUser, username: 'admin', totpEnabled: false });
+    passwordService.verify.mockResolvedValue(true);
+    sessionManager.createSession.mockResolvedValue('550e8400-e29b-41d4-a716-446655440010');
+    expect(await authService.login({ username: 'admin', password: 'password' })).toEqual({ sessionId: '550e8400-e29b-41d4-a716-446655440010' });
+    await expect(authService.register({ username: 'admin', password: 'password' })).rejects.toMatchObject({ message: 'AUTH_ERROR_INVALID_USERNAME' });
+    userRepository.getUserById.mockResolvedValue(totpUser);
+    await expect(authService.changeUsername({ userId: 1, newUsername: 'ROOT', password: 'password' })).rejects.toMatchObject({
+      message: 'AUTH_ERROR_INVALID_USERNAME',
+    });
+    expect(userRepository.createFirstOperator).not.toHaveBeenCalled();
+    expect(userRepository.updateUser).not.toHaveBeenCalled();
+  });
+
+  it('creates and changes a normalized bare username using the existing Runtipi account column', async () => {
+    userRepository.getUserByUsername.mockResolvedValue(undefined);
+    userRepository.createFirstOperator.mockResolvedValue({ ...totpUser, username: 'sai.home' });
+    passwordService.hash.mockResolvedValue('hash');
+    sessionManager.createSession.mockResolvedValue('550e8400-e29b-41d4-a716-446655440011');
+    await authService.register({ username: ' Sai.Home ', password: 'password' });
+    expect(userRepository.createFirstOperator).toHaveBeenCalledWith({ username: 'sai.home', password: 'hash' });
+    userRepository.getUserById.mockResolvedValue(totpUser);
+    passwordService.verify.mockResolvedValue(true);
+    await authService.changeUsername({ userId: 1, newUsername: 'Sai-New', password: 'password' });
+    expect(userRepository.updateUser).toHaveBeenCalledWith(1, { username: 'sai-new' });
+    expect(sessionManager.destroyAllSessionsByUserId).toHaveBeenCalledWith(1);
+  });
+
   it('labels new authenticator enrollments Orbis and keeps an existing encryption salt', async () => {
     userRepository.getUserById.mockResolvedValue({ ...totpUser, totpEnabled: false });
     passwordService.verify.mockResolvedValue(true);

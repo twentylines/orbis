@@ -1,15 +1,19 @@
-import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 
 export default function ResetPasswordPage() {
-  const { t } = useTranslation();
-
   return (
     <>
-      <h2 className="h2 text-center mb-4">{t('AUTH_RESET_PASSWORD_TITLE')}</h2>
-      <p className="text-secondary mb-4">{t('AUTH_RESET_PASSWORD_INSTRUCTIONS')}</p>
-      <pre>
+      <h2 className="desktop-auth-heading">Reset your password</h2>
+      <p className="desktop-auth-help">
+        Orbis does not send password-reset emails. Ask the server administrator to run the recovery command on the server, then sign in with your new
+        password.
+      </p>
+      <pre className="my-4">
         <code>./runtipi-cli reset-password</code>
       </pre>
+      <Link to="/login" className="btn w-100">
+        Back to sign in
+      </Link>
     </>
   );
 }

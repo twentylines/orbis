@@ -1,3 +1,4 @@
+import { resolveWallpaperKey } from '@/desktop/wallpaper-presets';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import { readCachedAppearance, type CachedAppearance } from '@/desktop/appearance-cache';
@@ -64,7 +65,7 @@ export function StartupSurface({
       aria-busy="true"
       data-desktop-mode={current ? mode : undefined}
       data-desktop-preset={current?.preset}
-      data-desktop-wallpaper={current?.wallpaper}
+      data-desktop-wallpaper={current ? resolveWallpaperKey(current) : undefined}
     >
       <div className="orbis-startup-scene" aria-hidden="true">
         <span />

@@ -8,6 +8,9 @@ import { useLocation } from 'react-router';
 import toast from 'react-hot-toast';
 import {
   desktopWindowsSchema,
+  appLaunchSchema,
+  defaultAppLaunch,
+  type AppLaunchPreferences,
   desktopAppearanceSchema,
   normaliseDesktopAppearance,
   type DesktopAppearance,
@@ -18,6 +21,7 @@ import {
 import { useResolvedColourMode, readSystemColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
 import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, preferenceChangeEvent } from './appearance-cache';
 import { validHomePins } from './workspace-apps';
+import { resolveWallpaperKey, type ThemePreset } from './wallpaper-presets';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
@@ -29,8 +33,11 @@ export type DesktopPreferences = {
   mode: ColourMode;
   density: 'comfortable' | 'compact';
   wallpaper: 'sandstone' | 'tidal' | 'canopy';
+  wallpaperMode: 'theme' | 'custom';
+  wallpaperPreset: ThemePreset | null;
   workspace: WorkspacePreferences;
   windows: DesktopWindows;
+  appLaunch: AppLaunchPreferences;
   appearance: DesktopAppearance;
 };
 
@@ -40,7 +47,10 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   mode: 'light',
   density: 'comfortable',
   wallpaper: 'sandstone',
+  wallpaperMode: 'theme',
+  wallpaperPreset: null,
   windows: {},
+  appLaunch: defaultAppLaunch,
   appearance: normaliseDesktopAppearance(),
   workspace: { order: [...widgetIds], hidden: [], wide: ['applications'], pinnedApps: [], showAllApps: false },
 };
@@ -48,8 +58,11 @@ const STORAGE_KEY = preferenceStorageKey;
 
 type StoredWorkspacePreferences = Omit<WorkspacePreferences, 'pinnedApps' | 'showAllApps'> &
   Partial<Pick<WorkspacePreferences, 'pinnedApps' | 'showAllApps'>>;
-type StoredDesktopPreferences = Omit<DesktopPreferences, 'mode' | 'wallpaper' | 'workspace' | 'windows' | 'appearance'> &
-  Partial<Pick<DesktopPreferences, 'mode' | 'wallpaper' | 'windows'>> & {
+type StoredDesktopPreferences = Omit<
+  DesktopPreferences,
+  'mode' | 'wallpaper' | 'workspace' | 'windows' | 'appearance' | 'appLaunch' | 'wallpaperMode' | 'wallpaperPreset'
+> &
+  Partial<Pick<DesktopPreferences, 'mode' | 'wallpaper' | 'windows' | 'appLaunch' | 'wallpaperMode' | 'wallpaperPreset'>> & {
     workspace?: StoredWorkspacePreferences;
     appearance?: typeof desktopAppearanceSchema.infer;
   };
@@ -81,8 +94,13 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
     (candidate.mode === undefined || ['light', 'dark', 'system'].includes(String(candidate.mode))) &&
     ['comfortable', 'compact'].includes(String(candidate.density)) &&
     (candidate.wallpaper === undefined || ['sandstone', 'tidal', 'canopy'].includes(String(candidate.wallpaper))) &&
+    (candidate.wallpaperMode === undefined || ['theme', 'custom'].includes(String(candidate.wallpaperMode))) &&
+    (candidate.wallpaperPreset === undefined ||
+      candidate.wallpaperPreset === null ||
+      ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'].includes(String(candidate.wallpaperPreset))) &&
     (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace)) &&
     (candidate.windows === undefined || desktopWindowsSchema.allows(candidate.windows)) &&
+    (candidate.appLaunch === undefined || appLaunchSchema.allows(candidate.appLaunch)) &&
     (candidate.appearance === undefined || desktopAppearanceSchema.allows(candidate.appearance))
   );
 };
@@ -93,7 +111,11 @@ export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPr
   preset: value.preset,
   density: value.density,
   wallpaper: value.wallpaper ?? defaultDesktopPreferences.wallpaper,
+  wallpaperMode:
+    value.wallpaperMode ?? ((value.wallpaper && value.wallpaper !== 'sandstone') || value.appearance?.wallpaperImage ? 'custom' : 'theme'),
+  wallpaperPreset: value.wallpaperPreset ?? null,
   windows: value.windows ?? {},
+  appLaunch: value.appLaunch ?? defaultAppLaunch,
   appearance: normaliseDesktopAppearance(value.appearance),
   mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'light'),
   workspace: {
@@ -135,7 +157,8 @@ type PreferenceContext = {
   reset: () => void;
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
   requiresOnboarding: boolean;
-  completeOnboarding: (serverName: string) => Promise<void>;
+  completeOnboarding: (serverName: string, draft?: DesktopPreferences) => Promise<void>;
+  setPreview: (value: DesktopPreferences | null) => void;
   setWorkspaceLoading: (loading: boolean) => void;
 };
 const Context = createContext<PreferenceContext | null>(null);
@@ -146,8 +169,11 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const { pathname } = useLocation();
   const [cache] = useState(readPreferenceCache);
   const [preferences, setPreferences] = useState(cache.preferences);
+  const [preview, setPreview] = useState<DesktopPreferences | null>(null);
+  const displayed = preview ?? preferences;
+  const displayedWallpaper = resolveWallpaperKey(displayed);
   const [wallpaperRevision, setWallpaperRevision] = useState(0);
-  const resolvedMode = useResolvedColourMode(preferences.mode);
+  const resolvedMode = useResolvedColourMode(displayed.mode);
   const [cacheAvailable, setCacheAvailable] = useState(cache.available);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
@@ -167,13 +193,13 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
 
   useLayoutEffect(() => {
     const root = document.documentElement;
-    const effectiveMode = preferences.mode === 'system' ? readSystemColourMode() : resolvedMode;
+    const effectiveMode = displayed.mode === 'system' ? readSystemColourMode() : resolvedMode;
     const apply = () => {
-      root.dataset.desktopPreset = preferences.preset;
+      root.dataset.desktopPreset = displayed.preset;
       root.dataset.desktopMode = effectiveMode;
-      root.dataset.desktopWallpaper = preferences.wallpaper;
+      root.dataset.desktopWallpaper = displayedWallpaper;
       root.dataset.orbisAppearanceReady = 'true';
-      applyAppearanceRuntime(preferences.appearance, effectiveMode);
+      applyAppearanceRuntime(displayed.appearance, effectiveMode);
     };
     transitionAppearance(apply, appearancePainted.current);
     appearancePainted.current = true;
@@ -188,7 +214,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     return () => {
       for (const query of queries) query.removeEventListener('change', apply);
     };
-  }, [preferences.appearance, preferences.preset, preferences.wallpaper, preferences.mode, resolvedMode]);
+  }, [displayed.appearance, displayed.preset, displayedWallpaper, displayed.mode, resolvedMode]);
 
   useEffect(() => {
     if (isLoggedIn && !initialLoadComplete) return;
@@ -355,6 +381,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
             method: 'PUT',
             credentials: 'include',
             keepalive: true,
+            signal: AbortSignal.timeout(20_000),
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(preferences),
           });
@@ -407,8 +434,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     setPreferences((previous) => ({ ...previous, windows: { ...previous.windows, [id]: value } }));
   };
 
-  const completeOnboarding = async (serverName: string) => {
-    const next = { ...preferences, serverName: serverName.trim() };
+  const completeOnboarding = async (serverName: string, draft = preferences) => {
+    const next = { ...draft, serverName: serverName.trim() };
     if (!isLoggedIn || !serverReady || !isPreferences(next) || completingSetup.current) throw new Error('Setup cannot be saved yet. Try again.');
     completingSetup.current = true;
     const saveRevision = ++revision.current;
@@ -417,14 +444,20 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       const saved = await fetch('/api/desktop-preferences', {
         method: 'PUT',
         credentials: 'include',
+        signal: AbortSignal.timeout(20_000),
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(next),
       });
       if (!saved.ok) throw new Error('Server settings could not be saved. Try again.');
-      const completed = await fetch('/api/desktop-preferences/onboarding', { method: 'POST', credentials: 'include' });
+      const completed = await fetch('/api/desktop-preferences/onboarding', {
+        method: 'POST',
+        credentials: 'include',
+        signal: AbortSignal.timeout(20_000),
+      });
       if (!completed.ok || (await completed.json()).complete !== true) throw new Error('Setup could not be completed. Try again.');
       acknowledgedRevision.current = saveRevision;
       setPreferences(next);
+      setPreview(null);
       setRequiresOnboarding(false);
       setSyncState('saved');
     };
@@ -455,10 +488,11 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         syncState,
         requiresOnboarding,
         completeOnboarding,
+        setPreview,
         setWorkspaceLoading,
       }}
     >
-      <MotionPreferences reduced={preferences.appearance.motion === 'reduced' || preferences.appearance.lowEffects}>
+      <MotionPreferences reduced={displayed.appearance.motion === 'reduced' || displayed.appearance.lowEffects}>
         {isLoggedIn && !initialLoadComplete ? null : children}
       </MotionPreferences>
     </Context.Provider>
@@ -470,3 +504,27 @@ export const useDesktopPreferences = () => {
   if (!context) throw new Error('DesktopPreferencesProvider is missing');
   return context;
 };
+
+export function DesktopPreferencesPreview({
+  value,
+  onChange,
+  children,
+}: PropsWithChildren<{ value: DesktopPreferences; onChange: (value: DesktopPreferences) => void }>) {
+  const parent = useDesktopPreferences();
+  const resolvedMode = useResolvedColourMode(value.mode);
+  useLayoutEffect(() => parent.setPreview(value), [parent.setPreview, value]);
+  useLayoutEffect(() => () => parent.setPreview(null), [parent.setPreview]);
+  return (
+    <Context.Provider
+      value={{
+        ...parent,
+        preferences: value,
+        resolvedMode,
+        update: (patch) => onChange({ ...value, ...patch }),
+        updateAppearance: (patch) => onChange({ ...value, appearance: { ...value.appearance, ...patch } }),
+      }}
+    >
+      {children}
+    </Context.Provider>
+  );
+}

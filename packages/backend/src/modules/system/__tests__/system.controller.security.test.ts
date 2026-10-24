@@ -201,4 +201,23 @@ describe('SystemController certificate security', () => {
     expect(allowed.status).toBe(200);
     expect(allowed.body.tag).toBe('v0.1.0-beta.8');
   });
+  it('requires authentication for the published catalogue and included changelogs', async () => {
+    orbisReleases.listPublished.mockReset();
+    orbisReleases.history.mockReset();
+    expect((await request(app.getHttpServer()).get('/system/orbis-releases')).status).toBe(401);
+    expect((await request(app.getHttpServer()).get('/system/orbis-release-history?installed=v0.1.0-beta.87&target=v0.1.0-beta.90')).status).toBe(401);
+    expect(orbisReleases.listPublished).not.toHaveBeenCalled();
+    expect(orbisReleases.history).not.toHaveBeenCalled();
+    orbisReleases.listPublished.mockResolvedValue({ releases: [], complete: true });
+    orbisReleases.history.mockResolvedValue({ releases: [], complete: true, truncated: false });
+    expect((await request(app.getHttpServer()).get('/system/orbis-releases').set('Authorization', 'Bearer cli-token')).status).toBe(200);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/system/orbis-release-history?installed=v0.1.0-beta.87&target=v0.1.0-beta.90')
+          .set('Authorization', 'Bearer cli-token')
+      ).status,
+    ).toBe(200);
+    expect(orbisReleases.history).toHaveBeenCalledWith('v0.1.0-beta.87', 'v0.1.0-beta.90');
+  });
 });

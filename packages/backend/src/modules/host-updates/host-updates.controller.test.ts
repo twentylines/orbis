@@ -8,16 +8,24 @@ import { AuthGuard } from '../auth/auth.guard';
 import { HostUpdatesController } from './host-updates.controller';
 import { HostUpdatesService } from './host-updates.service';
 import { HostUpdatesGuard } from './host-updates.guard';
+import { OrbisDowngradeService } from './orbis-downgrade.service';
 
 describe('host update authorization', () => {
   let app: INestApplication;
   const hostUpdates = mock<HostUpdatesService>();
+  const downgrades = mock<OrbisDowngradeService>();
   const logger = mock<LoggerService>();
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       controllers: [HostUpdatesController],
-      providers: [AuthGuard, HostUpdatesGuard, { provide: HostUpdatesService, useValue: hostUpdates }, { provide: LoggerService, useValue: logger }],
+      providers: [
+        AuthGuard,
+        HostUpdatesGuard,
+        { provide: HostUpdatesService, useValue: hostUpdates },
+        { provide: OrbisDowngradeService, useValue: downgrades },
+        { provide: LoggerService, useValue: logger },
+      ],
     }).compile();
     app = module.createNestApplication();
     app.use(((req, _res, next) => {
@@ -52,6 +60,63 @@ describe('host update authorization', () => {
     hostUpdates.restartStatus.mockReset();
     hostUpdates.restartPlan.mockReset();
     hostUpdates.restartApply.mockReset();
+    downgrades.plan.mockReset();
+    downgrades.apply.mockReset();
+  });
+
+  it('requires an operator session and same origin for downgrade review and apply', async () => {
+    for (const action of ['plan', 'apply']) {
+      const route = `/host-updates/downgrade/${action}`;
+      const body = action === 'plan' ? { tag: 'v0.1.0-beta.90' } : { planId: 'reviewed-plan' };
+      expect((await request(app.getHttpServer()).post(route).send(body)).status).toBe(401);
+      for (const authorization of ['guest-session', 'fixture-cli']) {
+        expect((await request(app.getHttpServer()).post(route).set('Authorization', `Bearer ${authorization}`).send(body)).status).toBe(403);
+      }
+      expect(
+        (
+          await request(app.getHttpServer())
+            .post(route)
+            .set('Authorization', 'Bearer fixture-session')
+            .set('Host', 'orbis.example')
+            .set('Origin', 'https://other.example')
+            .send(body)
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await request(app.getHttpServer())
+            .post(route)
+            .set('Authorization', 'Bearer fixture-session')
+            .set('Host', 'orbis.example')
+            .set('Origin', 'http://orbis.example')
+            .send({ ...body, command: 'unsafe' })
+        ).status,
+      ).toBe(400);
+    }
+    expect(downgrades.plan).not.toHaveBeenCalled();
+    expect(downgrades.apply).not.toHaveBeenCalled();
+    downgrades.plan.mockResolvedValue({ planId: 'reviewed-plan' } as never);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/host-updates/downgrade/plan')
+          .set('Authorization', 'Bearer fixture-session')
+          .set('Host', 'orbis.example')
+          .set('Origin', 'http://orbis.example')
+          .send({ tag: 'v0.1.0-beta.90' })
+      ).status,
+    ).toBe(200);
+    downgrades.apply.mockResolvedValue({ jobId: 'reviewed-plan', state: 'running' });
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/host-updates/downgrade/apply')
+          .set('Authorization', 'Bearer fixture-session')
+          .set('Host', 'orbis.example')
+          .set('Origin', 'http://orbis.example')
+          .send({ planId: 'reviewed-plan' })
+      ).status,
+    ).toBe(202);
   });
 
   it('requires a session for status and rejects a cross-origin update request', async () => {

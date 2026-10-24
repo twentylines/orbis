@@ -7,6 +7,9 @@ import { useContainerTelemetry } from '@/desktop/containers';
 import { DockerHealth } from '@/components/docker-health/docker-health';
 import { ContainerResources } from '@/components/container-resources/container-resources';
 import { useAppLauncher } from '@/desktop/app-launcher';
+import { appDestinations } from '@/desktop/app-destinations';
+import { primaryAppAddress } from '@/desktop/app-opening';
+import { useAppContext } from '@/context/app-context';
 import { Switch } from '@/components/ui/Switch';
 import { useTasks, taskIsActive, taskLabels, taskStates } from '@/desktop/tasks';
 import {
@@ -22,6 +25,7 @@ import {
   IconArrowDown,
   IconX,
   IconAlertCircle,
+  IconSettings,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
@@ -100,6 +104,7 @@ function ReorderTools({
 
 function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const openApp = useAppLauncher();
+  const { userSettings } = useAppContext();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) heading.current?.focus({ preventScroll: true });
@@ -347,26 +352,48 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             <div className="workspace-app-list">
               {visibleInstalled.map(({ app, info, metadata }) => {
                 const [appId, storeId] = info.urn.split(':');
+                const launchUrl = primaryAppAddress(
+                  appDestinations({ app, info, metadata }, userSettings, window.location.hostname),
+                  window.location.origin,
+                );
                 const appUpdate = Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion;
                 return (
-                  <Link
-                    key={info.urn}
-                    draggable={false}
-                    to={`/apps/${storeId}/${appId}`}
-                    className="workspace-app"
-                    onClick={(event) => {
-                      if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0 && openApp(info))
-                        event.preventDefault();
-                    }}
-                    aria-label={`${info.name}, ${app.status}${appUpdate ? ', update available' : ''}${workspace.pinnedApps.includes(info.urn) ? ', pinned' : ''}`}
-                  >
-                    <AppLogo urn={info.urn} size={54} alt="" />
-                    <span className="workspace-app-copy">
-                      <strong title={info.name}>{info.name}</strong>
-                      {appUpdate ? <small>Update available</small> : null}
-                      <DockerHealth appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
-                    </span>
-                  </Link>
+                  <div className="workspace-app-entry" key={info.urn}>
+                    <Link
+                      draggable={false}
+                      to={launchUrl ?? `/apps/${storeId}/${appId}`}
+                      target={launchUrl ? '_blank' : undefined}
+                      rel={launchUrl ? 'noopener noreferrer' : undefined}
+                      className="workspace-app"
+                      onClick={(event) => {
+                        if (
+                          !event.metaKey &&
+                          !event.ctrlKey &&
+                          !event.shiftKey &&
+                          !event.altKey &&
+                          event.button === 0 &&
+                          openApp({ ...info, launchUrl })
+                        )
+                          event.preventDefault();
+                      }}
+                      aria-label={`${info.name}, ${app.status}${appUpdate ? ', update available' : ''}${workspace.pinnedApps.includes(info.urn) ? ', pinned' : ''}`}
+                    >
+                      <AppLogo urn={info.urn} size={54} alt="" />
+                      <span className="workspace-app-copy">
+                        <strong title={info.name}>{info.name}</strong>
+                        {appUpdate ? <small>Update available</small> : null}
+                        <DockerHealth appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
+                      </span>
+                    </Link>
+                    <Link
+                      className="workspace-app-manage"
+                      to={`/apps/${storeId}/${appId}`}
+                      aria-label={`Manage ${info.name}`}
+                      title={`Manage ${info.name}`}
+                    >
+                      <IconSettings size={17} aria-hidden="true" />
+                    </Link>
+                  </div>
                 );
               })}
             </div>

@@ -50,8 +50,9 @@ const DialogContent = ({
   onOpenAutoFocus,
   onCloseAutoFocus,
   onInteractOutside,
+  closeDisabled = false,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & ModalProps) => {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & ModalProps & { closeDisabled?: boolean }) => {
   const opener = useRef<HTMLElement | null>(null);
   const focusFallback = useRef<HTMLElement | null>(null);
   return (
@@ -84,7 +85,7 @@ const DialogContent = ({
       >
         {children}
         <DialogPrimitive.Close asChild>
-          <Button className="orbis-dialog-close" size="icon" aria-label="Close dialog" data-testid="modal-close-button">
+          <Button disabled={closeDisabled} className="orbis-dialog-close" size="icon" aria-label="Close dialog" data-testid="modal-close-button">
             <IconX size={20} aria-hidden="true" />
           </Button>
         </DialogPrimitive.Close>

@@ -69,7 +69,7 @@ export function animateAuthExit(reduced: boolean) {
       ? element.animate(
           [
             { opacity: 1, transform: 'none' },
-            { opacity: 0, transform: 'translateY(18px) scale(.985)' },
+            { opacity: 0, transform: 'translateY(12px)' },
           ],
           { duration: 320, easing: 'cubic-bezier(.4, 0, .6, 1)', fill: 'forwards' },
         )

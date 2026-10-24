@@ -68,4 +68,31 @@ describe('visible browser monitoring demand', () => {
     expect(changes).toEqual([false, true, false]);
     expect(vi.getTimerCount()).toBe(0);
   });
+  it('uses one renewable browser lease and starts the quiet period only after it expires', async () => {
+    expect(activity.isIdleFor(600_000)).toBe(false);
+    activity.touchBrowser();
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    activity.touchBrowser();
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(74_999);
+    expect(activity.isIdleFor(0)).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(activity.isIdleFor(600_000)).toBe(false);
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(activity.isIdleFor(600_000)).toBe(true);
+    expect(changes).toEqual([false, true, false]);
+  });
+
+  it('cannot become idle while another browser or peer is still connected', async () => {
+    const disconnect = activity.connect();
+    activity.touchBrowser();
+    await vi.advanceTimersByTimeAsync(900_000);
+    expect(activity.isIdleFor(600_000)).toBe(false);
+    disconnect();
+    await vi.advanceTimersByTimeAsync(599_999);
+    expect(activity.isIdleFor(600_000)).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(activity.isIdleFor(600_000)).toBe(true);
+  });
 });

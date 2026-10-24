@@ -3,13 +3,21 @@ import { userContext } from '@/api-client';
 import { loginMutation, verifyTotpMutation } from '@/api-client/@tanstack/react-query.gen';
 import { useUserContext } from '@/context/user-context';
 import type { TranslatableError } from '@/types/error.types';
-import { useMutation } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { Navigate, redirect, useNavigate, useSearchParams } from 'react-router';
 import { LoginForm } from '../components/login-form';
 import { TotpForm } from '../components/totp-form/totp-form';
+import {
+  browserPasskeyReason,
+  passkeyAvailabilityOptions,
+  signInWithPasskey,
+  passkeyErrorMessage,
+  warmPasskeyClient,
+  cancelPasskeyCeremony,
+} from '../passkeys/passkey-api';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const isSafeRedirect = (url: string) => {
@@ -61,6 +69,17 @@ export default () => {
   const { isLoggedIn, isConfigured, refreshUserContext, setUserContext } = useUserContext();
   const boot = useSignInBoot();
   const [totpSessionId, setTotpSessionId] = useState<string | null>(null);
+  const [passkeyPending, setPasskeyPending] = useState(false);
+  const [passkeyError, setPasskeyError] = useState('');
+  const passkeyActive = useRef(false);
+  const [browserReason] = useState(browserPasskeyReason);
+  const passkeyAvailability = useQuery({ ...passkeyAvailabilityOptions(), enabled: !browserReason });
+  useEffect(
+    () => () => {
+      if (passkeyActive.current) cancelPasskeyCeremony();
+    },
+    [],
+  );
 
   const [searchParams] = useSearchParams();
   const redirect_url = searchParams.get('redirect_url');
@@ -117,18 +136,39 @@ export default () => {
   };
   const beginSignIn = () => {
     toast.dismiss('orbis-sign-in-error');
+    setPasskeyError('');
     boot.begin();
+  };
+  const acceptSignIn = async (data: { success: boolean; totpSessionId?: string; redirectUrl?: string }) => {
+    if (!data.success) throw new Error('Sign-in was not verified.');
+    if (data.totpSessionId) {
+      await boot.finish(true);
+      if (!boot.isActive()) return;
+      setTotpSessionId(data.totpSessionId);
+    } else await completeSignIn(data.redirectUrl);
+  };
+  const beginPasskey = async () => {
+    if (passkeyActive.current || passkeyPending || !passkeyAvailability.data?.available || browserReason) return;
+    passkeyActive.current = true;
+    setPasskeyPending(true);
+    setPasskeyError('');
+    beginSignIn();
+    try {
+      await acceptSignIn(await signInWithPasskey(boot.isActive, redirect_url ?? undefined));
+    } catch (error) {
+      if (boot.isActive()) {
+        await boot.finish(true);
+        if (boot.isActive()) setPasskeyError(passkeyErrorMessage(error));
+      }
+    } finally {
+      passkeyActive.current = false;
+      if (boot.isActive()) setPasskeyPending(false);
+    }
   };
   const login = useMutation({
     ...loginMutation(),
     onMutate: beginSignIn,
-    onSuccess: async (data) => {
-      if (data?.success && data.totpSessionId) {
-        await boot.finish(true);
-        if (!boot.isActive()) return;
-        setTotpSessionId(data.totpSessionId);
-      } else await completeSignIn(data?.redirectUrl);
-    },
+    onSuccess: acceptSignIn,
     onError: failedSignIn,
   });
   const verifyTotp = useMutation({
@@ -156,11 +196,30 @@ export default () => {
     />
   ) : (
     <LoginForm
-      onSubmit={(values) => login.mutate({ body: { password: values.password, redirectUrl: redirect_url ?? undefined, username: values.email } })}
-      loading={login.isPending}
+      onSubmit={(values) =>
+        login.mutate({ body: { password: values.password, redirectUrl: redirect_url ?? undefined, username: values.username.trim() } })
+      }
+      loading={login.isPending || passkeyPending}
       showProgress={boot.visible}
       loginType={loginType}
+      onPasskey={() => void beginPasskey()}
+      warmPasskey={warmPasskeyClient}
+      passkeyAvailable={Boolean(!browserReason && passkeyAvailability.data?.available)}
+      passkeyReason={
+        browserReason ??
+        passkeyAvailability.data?.reason ??
+        (passkeyAvailability.isError ? 'Passkey sign-in is unavailable. You can still use your password.' : undefined)
+      }
     />
   );
-  return <>{form}</>;
+  return (
+    <>
+      {form}
+      {passkeyError && (
+        <p className="desktop-auth-error" role="alert">
+          {passkeyError}
+        </p>
+      )}
+    </>
+  );
 };

@@ -26,8 +26,23 @@ function firstPaint(raw: string | null, { dark = false, blockedStorage = false, 
 describe('appearance before hydration', () => {
   test.each(['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'] as const)('retains the saved %s palette while loading', (preset) => {
     const saved = { preset, mode: 'dark', wallpaper: 'canopy' } as const;
-    expect(appearanceFromStored(saved)).toEqual(saved);
+    expect(appearanceFromStored(saved)).toEqual({ ...saved, wallpaperMode: 'custom', wallpaperPreset: null });
     expect(firstPaint(JSON.stringify(saved))).toEqual({ desktopPreset: preset, desktopMode: 'dark', desktopWallpaper: 'canopy' });
+  });
+
+  test.each(['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'] as const)('uses the %s landscape before hydration', (preset) => {
+    expect(firstPaint(JSON.stringify({ preset, wallpaper: 'sandstone' })).desktopWallpaper).toBe(`theme-${preset}`);
+    expect(firstPaint(JSON.stringify({ preset, wallpaper: 'sandstone', wallpaperMode: 'custom', wallpaperPreset: 'ocean' })).desktopWallpaper).toBe(
+      'theme-ocean',
+    );
+  });
+
+  test('keeps an explicitly selected legacy landscape and uploaded image fallback', () => {
+    expect(firstPaint(JSON.stringify({ preset: 'blush', wallpaper: 'sandstone', wallpaperMode: 'custom' })).desktopWallpaper).toBe('sandstone');
+    expect(firstPaint(JSON.stringify({ preset: 'blush', wallpaper: 'tidal' })).desktopWallpaper).toBe('tidal');
+    expect(
+      firstPaint(JSON.stringify({ preset: 'blush', wallpaper: 'sandstone', appearance: { wallpaperImage: 'a'.repeat(64) } })).desktopWallpaper,
+    ).toBe('sandstone');
   });
 
   test('honours saved Light over an OS Dark preference', () => {
@@ -110,16 +125,22 @@ describe('appearance before hydration', () => {
     JSON.stringify({ preset: '</script><script>throw 1</script>', mode: 'inherit', wallpaper: 'url(unsafe)' }),
     ' '.repeat(preferenceCacheLimit + 1),
   ])('ignores absent, corrupt, untrusted or oversized appearance data: case %#', (raw) => {
-    expect(firstPaint(raw)).toEqual({ desktopPreset: 'frost', desktopMode: 'light', desktopWallpaper: 'sandstone' });
+    expect(firstPaint(raw)).toEqual({ desktopPreset: 'frost', desktopMode: 'light', desktopWallpaper: 'theme-frost' });
   });
 
   test('remains usable when local storage is denied', () => {
-    expect(firstPaint(null, { blockedStorage: true })).toEqual({ desktopPreset: 'frost', desktopMode: 'light', desktopWallpaper: 'sandstone' });
+    expect(firstPaint(null, { blockedStorage: true })).toEqual({ desktopPreset: 'frost', desktopMode: 'light', desktopWallpaper: 'theme-frost' });
   });
 
   test('keeps valid appearance fields when an unrelated cached preference is invalid', () => {
     const saved = { preset: 'ocean', mode: 'dark', wallpaper: 'tidal', serverName: 42, pinnedApps: null };
-    expect(appearanceFromStored(saved)).toEqual({ preset: 'ocean', mode: 'dark', wallpaper: 'tidal' });
+    expect(appearanceFromStored(saved)).toEqual({
+      preset: 'ocean',
+      mode: 'dark',
+      wallpaper: 'tidal',
+      wallpaperMode: 'custom',
+      wallpaperPreset: null,
+    });
     expect(firstPaint(JSON.stringify(saved))).toEqual({ desktopPreset: 'ocean', desktopMode: 'dark', desktopWallpaper: 'tidal' });
   });
 });

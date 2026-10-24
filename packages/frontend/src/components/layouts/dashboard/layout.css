@@ -228,22 +228,23 @@ html:has(.desktop) {
 }
 @media (max-width: 600px) {
   .desktop-system-bar .desktop-system-actions > .desktop-update-notice {
-    order: 3;
-    flex: 1 0 100%;
-    min-width: 0;
-    height: auto;
-    min-height: 36px;
-    padding: 6px 10px;
-    font-size: 0.625rem;
-    white-space: normal;
+    order: 2;
+    flex: 0 0 36px;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0;
   }
   .desktop-update-notice span {
-    min-width: 0;
-    text-align: center;
-    overflow-wrap: anywhere;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .desktop-update-notice svg {
-    display: none;
+    display: block;
   }
 }
 
@@ -873,6 +874,11 @@ html:has(.desktop) {
     opacity 240ms 180ms ease,
     max-width 600ms cubic-bezier(0.22, 1, 0.36, 1),
     max-height 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (min-width: 481px) {
+  .desktop-dock:not([data-minimized-compact="true"]) .desktop-dock-content {
+    translate: 0 -0.04em;
+  }
 }
 /* Align label ink when the word has no descending letters. */
 .desktop-dock-item:is([href="/dashboard"], [href="/app-store"], [href="/monitor"]) .desktop-dock-label {

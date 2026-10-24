@@ -12,14 +12,14 @@
   flex-wrap: wrap;
   gap: 20px;
 }
-.cluster-updates :is(h2, h3, h4, p) {
+.cluster-updates :where(h2, h3, h4, p) {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.cluster-updates :is(h2, h3, h4) {
+.cluster-updates :where(h2, h3, h4) {
   line-height: 1.3;
 }
-.cluster-updates p {
+.cluster-updates :where(p) {
   color: var(--desktop-muted);
   margin-top: 8px;
   line-height: 1.6;
@@ -45,32 +45,12 @@
   margin-top: 8px;
   line-height: 1.6;
 }
-.cluster-update-server ul {
+.cluster-update-server > ul {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 24px;
   padding-left: 20px;
   margin: 16px 0 0;
-}
-.cluster-release-changelog {
-  margin-top: 18px;
-  padding: 18px;
-  border: 1px solid var(--desktop-line);
-  border-radius: 12px;
-  background: var(--desktop-surface);
-}
-.cluster-release-changelog h5 {
-  margin: 0 0 14px;
-  font-size: 1.1875rem;
-  line-height: 1.4;
-}
-.cluster-update-server summary {
-  padding-block: 10px;
-  cursor: pointer;
-}
-.cluster-update-notes {
-  margin-block: 16px;
-  line-height: 1.7;
 }
 .cluster-update-outcomes {
   display: grid;

@@ -7,11 +7,11 @@ import { shouldRevalidateToolRoute } from '@/desktop/window-navigation';
 
 export const shouldRevalidate = shouldRevalidateToolRoute;
 
-export async function clientLoader({ params }: Route.ClientLoaderArgs) {
+export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
   const { storeId } = params;
 
   if (storeId === '_user') {
-    return redirect(`/apps/${params.appId}`);
+    return redirect(`/apps/${encodeURIComponent(params.appId ?? '')}${new URL(request.url).search}`);
   }
 }
 

@@ -4,11 +4,12 @@ import { TranslatableError } from '@/common/error/translatable-error';
 import { CacheService } from '@/core/cache/cache.service';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
-import { Body, Controller, Get, Patch, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Put, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
+import { PasskeyService, PASSKEY_COOKIE, PASSKEY_TTL } from './passkey.service';
 import {
   ChangePasswordBody,
   ChangeUsernameBody,
@@ -49,6 +50,7 @@ export class AuthController {
     private readonly logger: LoggerService,
     private readonly config: ConfigurationService,
     private readonly cache: CacheService,
+    private readonly passkeys: PasskeyService,
   ) {}
 
   private getRequestHost(req: Request) {
@@ -118,14 +120,14 @@ export class AuthController {
     });
   }
 
-  private async setSessionCookie(res: Response, sessionId: string, req: Request) {
+  private async setSessionCookie(res: Response, sessionId: string, req: Request, requireSecure = false) {
     const host = this.getRequestHost(req);
     const proto = req.headers['x-forwarded-proto'] as string | undefined;
-    const secure = proto === 'https';
+    const secure = requireSecure || proto === 'https' || req.headers.origin?.startsWith('https://') === true;
 
     this.logger.debug('Setting session cookie', { host, proto, secure });
 
-    if (this.config.get('userSettings').experimental.insecureCookie) {
+    if (this.config.get('userSettings').experimental.insecureCookie && !requireSecure) {
       this.logger.warn('WARNING: Using insecure cookies. This is not recommended for production environments.');
       res.cookie(SESSION_COOKIE_NAME, sessionId, { httpOnly: true, secure: false, sameSite: false, maxAge: SESSION_COOKIE_MAX_AGE });
     } else {
@@ -209,17 +211,105 @@ export class AuthController {
   @Throttle({ default: { ttl: AUTH_THROTTLE_TTL, limit: AUTH_THROTTLE_LIMIT } })
   @ApiResponse({ type: LoginDto })
   async login(@Body() body: LoginBody, @Res({ passthrough: true }) res: Response, @Req() req: Request) {
-    const { sessionId, totpSessionId } = await this.authService.login(body);
+    return this.finishLogin(await this.authService.login(body), res, req, body.redirectUrl);
+  }
 
+  private async finishLogin(
+    { sessionId, totpSessionId }: Awaited<ReturnType<AuthService['login']>>,
+    res: Response,
+    req: Request,
+    target?: string,
+    requireSecure = false,
+  ) {
     if (totpSessionId) {
       return { success: true, totpSessionId };
     }
 
-    await this.setSessionCookie(res, sessionId, req);
+    await this.setSessionCookie(res, sessionId, req, requireSecure);
 
-    const redirectUrl = body.redirectUrl ? (this.createForwardAuthRedirectUrl(sessionId, req, body.redirectUrl) ?? undefined) : undefined;
+    const redirectUrl = target ? (this.createForwardAuthRedirectUrl(sessionId, req, target) ?? undefined) : undefined;
 
     return LoginDto.parse(redirectUrl ? { success: true, redirectUrl } : { success: true }, { reportOnly: true });
+  }
+
+  @Get('/passkeys/availability')
+  passkeyAvailability(@Req() req: Request) {
+    return this.passkeys.availability(req);
+  }
+
+  @Get('/passkeys')
+  @UseGuards(AuthGuard)
+  listPasskeys(@Req() req: Request) {
+    return this.passkeys.list(req);
+  }
+
+  @Get('/passkeys/policy')
+  @UseGuards(AuthGuard)
+  readPasskeyPolicy(@Req() req: Request) {
+    return this.passkeys.readPolicy(req);
+  }
+
+  @Put('/passkeys/policy')
+  @UseGuards(AuthGuard)
+  @Throttle({ default: { ttl: AUTH_THROTTLE_TTL, limit: 10 } })
+  updatePasskeyPolicy(@Req() req: Request, @Body() body: unknown) {
+    return this.passkeys.updatePolicy(req, body);
+  }
+
+  @Post('/passkeys/register/options')
+  @UseGuards(AuthGuard)
+  @Throttle({ default: { ttl: AUTH_THROTTLE_TTL, limit: 10 } })
+  registerPasskeyOptions(@Req() req: Request, @Body() body: unknown) {
+    return this.passkeys.registrationOptions(req, body);
+  }
+
+  @Post('/passkeys/register/verify')
+  @UseGuards(AuthGuard)
+  @Throttle({ default: { ttl: AUTH_THROTTLE_TTL, limit: 10 } })
+  registerPasskeyVerify(@Req() req: Request, @Body() body: unknown) {
+    return this.passkeys.verifyRegistration(req, body);
+  }
+
+  @Post('/passkeys/remove')
+  @UseGuards(AuthGuard)
+  @Throttle({ default: { ttl: AUTH_THROTTLE_TTL, limit: 10 } })
+  async removePasskey(@Req() req: Request, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    const result = await this.passkeys.remove(req, body);
+    res.clearCookie(SESSION_COOKIE_NAME);
+    res.clearCookie(FORWARD_AUTH_COOKIE_NAME);
+    return result;
+  }
+
+  @Post('/passkeys/login/options')
+  @Throttle({ default: { ttl: AUTH_THROTTLE_TTL, limit: AUTH_THROTTLE_LIMIT } })
+  async passkeyLoginOptions(@Req() req: Request, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    const { id, options } = await this.passkeys.loginOptions(req, body);
+    res.cookie(PASSKEY_COOKIE, id, {
+      httpOnly: true,
+      secure: req.headers.origin?.startsWith('https://') === true,
+      sameSite: 'strict',
+      path: '/api/auth/passkeys',
+      maxAge: PASSKEY_TTL,
+    });
+    return { options };
+  }
+
+  @Post('/passkeys/login/verify')
+  @Throttle({ default: { ttl: AUTH_THROTTLE_TTL, limit: AUTH_THROTTLE_LIMIT } })
+  async passkeyLoginVerify(@Req() req: Request, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    try {
+      const result = await this.passkeys.verifyLogin(req, body);
+      const redirectUrl = (body as { redirectUrl?: unknown }).redirectUrl;
+      return this.finishLogin(
+        result,
+        res,
+        req,
+        typeof redirectUrl === 'string' ? redirectUrl : undefined,
+        req.headers.origin?.startsWith('https://') === true,
+      );
+    } finally {
+      res.clearCookie(PASSKEY_COOKIE, { path: '/api/auth/passkeys' });
+    }
   }
 
   @Post('/verify-totp')

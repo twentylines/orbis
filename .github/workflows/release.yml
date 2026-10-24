@@ -70,6 +70,7 @@ jobs:
             --arg tag "$RELEASE_TAG" \
             --arg commit "$RELEASE_SHA" \
             --arg digest "$IMAGE_DIGEST" \
+            --arg migrationFingerprint "$(python3 scripts/orbis-migration-fingerprint.py)" \
             -f scripts/release-manifest.jq \
             > release-manifest.json
           cp "releases/${RELEASE_TAG}.md" release-notes.md

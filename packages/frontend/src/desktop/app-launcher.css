@@ -2,19 +2,18 @@
   position: fixed;
   z-index: 45;
   top: calc(var(--orbis-bar-bottom, 90px) + 20px);
-  right: var(--desktop-inset, 24px);
+  right: auto;
   display: flex;
   flex-direction: column;
-  width: min(440px, calc(100vw - 48px));
-  max-height: calc(100dvh - var(--orbis-bar-bottom, 90px) - var(--orbis-dock-height, 78px) - 64px);
+  min-width: 0;
+  max-width: calc(100vw - 32px);
   color: var(--desktop-ink);
   background: transparent;
   border: 0;
   border-radius: 22px;
   box-shadow: 0 28px 80px rgba(4, 15, 15, 0.3);
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
-  animation: app-launcher-enter 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: var(--desktop-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-chrome-filter);
   overflow: hidden;
   transform-origin: top left;
 }
@@ -34,7 +33,9 @@
   justify-content: space-between;
   gap: 16px;
   flex: none;
-  padding: 12px 16px 12px 24px;
+  padding: 10px 14px;
+  cursor: grab;
+  touch-action: none;
   color: var(--desktop-chrome-ink);
   background: var(--desktop-chrome);
   border-bottom: 1px solid var(--desktop-line);
@@ -60,78 +61,27 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  flex: 1;
   min-height: 0;
-  padding: 26px;
-  overflow: auto;
+  padding: 0;
+  overflow: hidden;
   overscroll-behavior: contain;
   scroll-padding: 8px;
   background: var(--desktop-surface);
 }
-.app-launcher-body > * {
-  flex-shrink: 0;
-}
-.app-launcher-identity {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
-.app-launcher-identity > div {
+.app-window-frame {
+  display: block;
+  flex: 1;
+  width: 100%;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: var(--desktop-surface);
 }
-.app-launcher-identity h2 {
-  margin: 0 0 6px;
-  color: var(--desktop-ink);
-  font-size: 1.375rem;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-.app-launcher-status {
-  color: var(--desktop-muted);
-  text-transform: capitalize;
-  font-size: 0.8125rem;
-}
-.app-launcher-description {
-  margin: 0;
-  color: var(--desktop-muted);
-  line-height: 1.6;
-}
-.app-launcher-body > .btn {
-  margin: 0;
-  min-height: 44px;
-  white-space: normal;
-  gap: 10px;
-}
-.app-launcher-addresses {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.app-launcher-addresses a {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px 12px;
-  padding: 14px;
-  color: var(--desktop-ink);
-  background: var(--desktop-code-background);
-  border: 1px solid var(--desktop-line);
-  border-radius: 12px;
-}
-.app-launcher-addresses a > span:first-child {
-  font-weight: 650;
-}
-.app-launcher-addresses a > span:nth-child(2) {
-  grid-column: 1;
-  color: var(--desktop-muted);
-  overflow-wrap: anywhere;
-  font-size: 0.8125rem;
-}
-.app-launcher-addresses svg {
-  grid-column: 2;
-  grid-row: 1 / 3;
-  align-self: center;
+.orbis-app-launcher[hidden],
+.app-window-frame[hidden] {
+  display: none;
 }
 .orbis-app-launcher :focus-visible {
   outline: 3px solid var(--desktop-focus);
@@ -224,22 +174,6 @@
   outline-offset: -3px;
   box-shadow: none;
 }
-@keyframes app-launcher-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .orbis-app-launcher {
-    animation: none;
-  }
-}
-
 .app-launcher-flight-mark {
   display: grid;
   place-items: center;
@@ -255,7 +189,7 @@
   background: var(--desktop-chrome);
   animation: none;
 }
-.orbis-app-launcher[data-minimizing="true"] > :is(.app-launcher-bar, .app-launcher-body) {
+.orbis-app-launcher[data-minimizing="true"] > :is(.app-launcher-bar, .app-launcher-body, .app-launcher-footer, .app-window-resize) {
   opacity: 0;
   transition: opacity 80ms ease;
 }
@@ -270,7 +204,7 @@
   opacity: 1;
   transition: opacity 120ms 100ms ease;
 }
-.orbis-app-launcher[data-launch-motion="restoring"] > :is(.app-launcher-bar, .app-launcher-body) {
+.orbis-app-launcher[data-launch-motion="restoring"] > :is(.app-launcher-bar, .app-launcher-body, .app-launcher-footer, .app-window-resize) {
   animation: app-launcher-content 580ms ease both;
 }
 .orbis-app-launcher[data-launch-motion="restoring"] .app-launcher-flight-mark {
@@ -297,4 +231,124 @@
 }
 .app-tray-restore[data-flying="true"] .app-logo {
   visibility: hidden;
+}
+
+.app-launcher-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.app-launcher-heading > div {
+  min-width: 0;
+}
+.app-launcher-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-launcher-heading span {
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  opacity: 0.78;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-launcher-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 20px;
+  padding: 10px 38px 10px 16px;
+  background: var(--desktop-chrome);
+  color: var(--desktop-chrome-ink);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.app-launcher-footer p {
+  margin: 0;
+  flex: 1 1 260px;
+}
+.app-launcher-footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+}
+.app-window-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--desktop-chrome-ink);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.orbis-app-launcher[data-gesturing] .app-window-frame {
+  pointer-events: none;
+}
+.orbis-app-launcher[data-gesturing="move"] .app-launcher-bar {
+  cursor: grabbing;
+}
+.app-opening-select {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.app-opening-select select {
+  min-height: 44px;
+  width: 100%;
+}
+.app-opening-overrides {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  margin: 20px 0 0;
+  list-style: none;
+}
+.app-opening-overrides li {
+  min-width: 0;
+}
+.app-opening-overrides .app-opening-select {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+  align-items: center;
+  gap: 16px;
+}
+.app-opening-overrides strong {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .app-opening-overrides .app-opening-select {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+}
+
+.app-opening-details {
+  margin-top: 20px;
+}
+.app-opening-details summary {
+  cursor: pointer;
+  padding-block: 8px;
 }

@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
-import { Markdown } from '@/components/markdown/markdown';
+import { OrbisReleaseNotes } from '@/modules/updates/pages/orbis-release-notes';
+import type { OrbisRelease } from './orbis-release';
 import { useAppContext } from '@/context/app-context';
 import { clusterRequest, useCluster, type ClusterServer } from './cluster';
 import { useWindowVisible } from './window-visibility';
@@ -13,7 +14,7 @@ import './cluster-updates.css';
 type AppUpdates = {
   installed: { app: { version: number; ignoredVersion: number | null }; info: { urn: string; name: string }; metadata: { latestVersion: number } }[];
 };
-type Release = { tag: string; body: string; url: string; imageManifestUrl: string | null };
+type Release = OrbisRelease;
 type Status = {
   available: boolean;
   enrolled?: boolean;
@@ -246,13 +247,16 @@ export function ClusterUpdates({ local = false }: { local?: boolean }) {
               </p>
             )}
             {data.release ? (
-              <section className="cluster-release-changelog" aria-label="Changelog">
-                <h5>Changelog</h5>
-                <Markdown className="cluster-update-notes" content={data.release.body.trimStart().replace(/^#\s+Orbis[^\n]*\r?\n(?:\r?\n)*/i, '')} />
+              <>
+                <OrbisReleaseNotes
+                  key={`${server.id}:${data.build.version}:${data.release.tag}`}
+                  latest={data.release}
+                  installed={data.build.version}
+                />
                 <a href={data.release.url} target="_blank" rel="noopener noreferrer">
                   View release on GitHub
                 </a>
-              </section>
+              </>
             ) : (
               <p>{data.releaseFailed ? 'Release check unavailable. App updates can still be queued.' : 'No published release found.'}</p>
             )}

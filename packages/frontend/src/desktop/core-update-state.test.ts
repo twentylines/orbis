@@ -15,6 +15,25 @@ const status = (state: string, overrides: Partial<CoreUpdateStatus> = {}): CoreU
   ...overrides,
 });
 const accepted = () => advanceCoreUpdate(null, { type: 'accepted', id, targetTag });
+
+describe('reviewed downgrade lifecycle', () => {
+  test('keeps the downgrade identity through restart and refreshes only the healthy target', () => {
+    let watch = advanceCoreUpdate(null, { type: 'accepted', id, targetTag, operation: 'downgrade' });
+    expect(coreUpdateTitle(watch?.phase ?? 'failed', watch?.operation)).toBe('Downgrading Orbis');
+    watch = advanceCoreUpdate(watch, { type: 'unavailable' });
+    expect(coreUpdateTitle(watch?.phase ?? 'failed', watch?.operation)).toBe('Restarting Orbis');
+    expect(watch?.operation).toBe('downgrade');
+    watch = advanceCoreUpdate(watch, { type: 'status', status: status('complete'), buildTag: 'v0.1.0-beta.99' });
+    expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
+    watch = advanceCoreUpdate(watch, { type: 'status', status: status('complete'), buildTag: targetTag });
+    expect(claimCoreRefresh(watch, new Set()).refresh).toBe(true);
+  });
+  test('recognises a downgrade started from another client without arming completed history', () => {
+    const watch = advanceCoreUpdate(null, { type: 'status', status: status('running', { currentTag: 'v0.1.0-beta.99' }) });
+    expect(watch?.operation).toBe('downgrade');
+    expect(advanceCoreUpdate(null, { type: 'status', status: status('complete'), buildTag: targetTag })).toBeNull();
+  });
+});
 describe('observing a single accepted Orbis update', () => {
   test('historical completed jobs never arm a reload', () => {
     const watch = advanceCoreUpdate(null, { type: 'status', status: status('complete'), buildTag: targetTag });

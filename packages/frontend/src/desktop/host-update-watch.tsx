@@ -11,6 +11,7 @@ import {
   validCoreUpdate,
   type CoreUpdateStatus,
   type CoreUpdateWatch,
+  type CoreUpdateOperation,
 } from './core-update-state';
 
 export type PackageUpdateJob = {
@@ -30,7 +31,7 @@ export type ServerRestartStatus = {
   job: { id: string; state: 'restarting' | 'complete' | 'failed'; createdAt: number; finishedAt?: number; message: string } | null;
 };
 export const serverRestartQueryKey = ['orbis-host-restart'] as const;
-type AcceptedUpdate = { id: string; targetTag: string };
+type AcceptedUpdate = { id: string; targetTag: string; operation?: CoreUpdateOperation };
 let acceptedUpdate: AcceptedUpdate | null = null;
 let updatePending = false;
 export const coreUpdateIsPending = () => updatePending;
@@ -39,6 +40,8 @@ export const prepareDesktopForCoreUpdate = () =>
     import('@/modules/dashboard/pages/dashboard'),
     import('@/modules/dashboard/pages/monitor'),
     import('@/modules/app/pages/my-apps-page'),
+    import('@/modules/app/pages/installed-apps-layout'),
+    import('@/modules/app/pages/cluster-app-preview'),
     import('@/modules/app/pages/app-store-layout'),
     import('@/modules/app/pages/app-store-index'),
     import('@/modules/settings/pages/settings-page'),
@@ -58,9 +61,9 @@ const subscribeAccepted = (listener: () => void) => {
 const acceptedSnapshot = () => acceptedUpdate;
 const emptyAccepted = () => null;
 
-export function rememberAcceptedCoreUpdate(id: string, targetTag: string) {
+export function rememberAcceptedCoreUpdate(id: string, targetTag: string, operation: CoreUpdateOperation = 'update') {
   if (!validCoreUpdate(id, targetTag)) return;
-  acceptedUpdate = { id, targetTag };
+  acceptedUpdate = { id, targetTag, operation };
   updatePending = true;
   for (const listener of acceptedListeners) listener();
 }

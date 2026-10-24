@@ -1,9 +1,7 @@
-import { LanguageSelector } from '@/components/language-selector/language-selector';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { useDisclosure } from '@/lib/hooks/use-disclosure';
-import type { Locale } from '@/lib/i18n/locales';
 import { IconAdjustmentsAlt, IconAdjustmentsCode, IconInfoCircle, IconUser } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type React from 'react';
@@ -83,7 +81,6 @@ export type SettingsFormValues = {
 };
 
 interface IProps {
-  currentLocale?: Locale;
   currentBaseTheme?: ThemeBase;
   onSubmit: (values: SettingsFormValues) => void;
   initialValues?: Partial<SettingsFormValues>;
@@ -92,7 +89,7 @@ interface IProps {
 }
 
 export const UserSettingsForm = (props: IProps) => {
-  const { onSubmit, initialValues, loading, currentLocale = 'en-US', submitErrors } = props;
+  const { onSubmit, initialValues, loading, submitErrors } = props;
   const { t } = useTranslation();
   const advancedSettingsDisclosure = useDisclosure();
 
@@ -170,7 +167,6 @@ export const UserSettingsForm = (props: IProps) => {
         <IconUser className="me-2" />
         <h2 className="text-2xl font-bold mb-0">{t('SETTINGS_GENERAL_USER_SETTINGS')}</h2>
       </div>
-      <LanguageSelector showLabel locale={currentLocale} />
       <p>
         <Link to="/settings?tab=appearance">Open appearance settings</Link>
       </p>

@@ -59,17 +59,3 @@
 .desktop:has(> .desktop-wallpaper-layer[data-protect="true"]) :is(.workspace-app, .workspace-empty, .workspace-app-error) {
   background: var(--desktop-surface);
 }
-.desktop-auth:has(> .desktop-wallpaper-layer[data-protect="true"]) .desktop-auth-identity {
-  position: relative;
-  isolation: isolate;
-}
-.desktop-auth:has(> .desktop-wallpaper-layer[data-protect="true"]) .desktop-auth-identity::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: -12px;
-  border-radius: 24px;
-  background: var(--desktop-surface);
-  backdrop-filter: var(--desktop-glass-filter);
-  -webkit-backdrop-filter: var(--desktop-glass-filter);
-}

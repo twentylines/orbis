@@ -135,6 +135,43 @@ describe('desktop preferences', () => {
     expect(changed.body.wallpaper).toBe('tidal');
   });
 
+  it('stores theme-following and manual landscapes without changing the legacy wallpaper contract', async () => {
+    const value = {
+      ...DEFAULT_DESKTOP_PREFERENCES,
+      serverName: 'Hades',
+      preset: 'blush',
+      wallpaper: 'sandstone',
+      wallpaperMode: 'custom',
+      wallpaperPreset: 'ocean',
+    };
+    await request(app.getHttpServer()).put('/desktop-preferences').set('Authorization', 'Bearer test').send(value).expect(200);
+    const saved = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+    expect(saved.body).toMatchObject({
+      wallpaper: 'sandstone',
+      wallpaperMode: 'custom',
+      wallpaperPreset: 'ocean',
+      preset: 'blush',
+      serverName: 'Hades',
+    });
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...value, wallpaper: 'ocean' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...value, wallpaperPreset: 'https://example.com/photo' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ serverName: 'Hades', preset: 'blush', density: 'comfortable', wallpaper: 'tidal' })
+      .expect(200);
+    const legacy = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+    expect(legacy.body.wallpaperMode).toBe('custom');
+  });
+
   it('persists light and dark mode and migrates older Graphite settings', async () => {
     const file = path.join(directory, 'state', 'desktop', '7.json');
     await fs.writeFile(file, JSON.stringify({ serverName: 'Workshop', preset: 'graphite', density: 'compact' }));
@@ -281,6 +318,26 @@ describe('desktop preferences', () => {
     );
     const legacy = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
     expect(legacy.body.windows).toEqual({});
+  });
+
+  it('round-trips app opening choices and sizes per account without storing app URLs', async () => {
+    const appLaunch = { mode: 'window', apps: { 'notes:store': { mode: 'tab', bounds: { x: 24, y: 120, width: 900, height: 600 } } } };
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, appLaunch })
+      .expect(200);
+    const saved = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+    expect(saved.body.appLaunch).toEqual(appLaunch);
+    const other = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer other').expect(200);
+    expect(other.body.appLaunch).toEqual(DEFAULT_DESKTOP_PREFERENCES.appLaunch);
+    for (const apps of [{ 'notes:store': { url: 'https://secret.local' } }, { 'notes:store': { mode: 'popup' } }, { constructor: {} }]) {
+      await request(app.getHttpServer())
+        .put('/desktop-preferences')
+        .set('Authorization', 'Bearer test')
+        .send({ ...DEFAULT_DESKTOP_PREFERENCES, appLaunch: { ...appLaunch, apps } })
+        .expect(400);
+    }
   });
 
   it('stores only declared appearance and workspace fields', async () => {

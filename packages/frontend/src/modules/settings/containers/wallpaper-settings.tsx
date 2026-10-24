@@ -1,4 +1,6 @@
 import { useDesktopPreferences, type DesktopPreferences } from '@/desktop/preferences';
+import { themePresets, presetLabels, presetWallpaperSources } from '@/desktop/wallpaper-presets';
+import { Switch } from '@/components/ui/Switch';
 import { wallpaperUrl } from '@/desktop/wallpaper';
 import { IconPhoto, IconUpload } from '@tabler/icons-react';
 import { imageDimensionsFromData } from 'image-dimensions';
@@ -118,6 +120,7 @@ export function WallpaperSettings() {
         throw new Error('The server returned an invalid wallpaper.');
       setUploaded(info.hash);
       initialImage.current = info.hash;
+      update({ wallpaperMode: 'custom' });
       updateAppearance({ wallpaperImage: info.hash });
       refreshWallpaper();
       setMessage('Wallpaper uploaded.');
@@ -185,17 +188,51 @@ export function WallpaperSettings() {
         <p>Uploaded images are private to your account and appear after sign-in.</p>
       </div>
       <div className="appearance-wallpaper-settings" aria-busy={busy}>
+        <Switch
+          label="Match wallpaper to colour preset"
+          checked={preferences.wallpaperMode === 'theme'}
+          disabled={busy}
+          onCheckedChange={(enabled) =>
+            update({
+              wallpaperMode: enabled ? 'theme' : 'custom',
+              wallpaperPreset: enabled ? preferences.wallpaperPreset : preferences.preset,
+              appearance: { ...value, wallpaperImage: null },
+            })
+          }
+        />
         <div className="appearance-wallpapers">
+          {themePresets.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              className="appearance-wallpaper"
+              disabled={busy}
+              aria-pressed={preferences.wallpaperMode === 'custom' && !value.wallpaperImage && preferences.wallpaperPreset === preset}
+              onClick={() => update({ wallpaperMode: 'custom', wallpaperPreset: preset, appearance: { ...value, wallpaperImage: null } })}
+            >
+              <span className="appearance-wallpaper-preview" aria-hidden="true">
+                <img
+                  src={presetWallpaperSources[preset]}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: 'inherit' }}
+                />
+              </span>
+              <strong>{presetLabels[preset]}</strong>
+            </button>
+          ))}
           {wallpapers.map(({ value: choice, title }) => (
             <button
               key={choice}
               type="button"
               className="appearance-wallpaper"
               disabled={busy}
-              aria-pressed={!value.wallpaperImage && preferences.wallpaper === choice}
+              aria-pressed={
+                preferences.wallpaperMode === 'custom' && !preferences.wallpaperPreset && !value.wallpaperImage && preferences.wallpaper === choice
+              }
               onClick={() => {
-                update({ wallpaper: choice });
-                updateAppearance({ wallpaperImage: null });
+                update({ wallpaper: choice, wallpaperMode: 'custom', wallpaperPreset: null, appearance: { ...value, wallpaperImage: null } });
               }}
             >
               <span className={`appearance-wallpaper-preview appearance-wallpaper-${choice}`} aria-hidden="true" />
@@ -209,7 +246,7 @@ export function WallpaperSettings() {
               disabled={busy}
               aria-pressed={value.wallpaperImage === uploaded}
               onClick={() => {
-                updateAppearance({ wallpaperImage: uploaded });
+                update({ wallpaperMode: 'custom', appearance: { ...value, wallpaperImage: uploaded } });
                 refreshWallpaper();
               }}
             >
