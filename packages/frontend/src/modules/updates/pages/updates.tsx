@@ -156,6 +156,7 @@ function LocalUpdates() {
   const restarting = coreWatchIsActive(watch) && watch?.phase === 'offline';
   const [restartPlan, setRestartPlan] = useState<{ planId: string; expiresAt: number; rebootRequired: boolean } | null>(null);
   const reviewRestart = useMutation({
+    meta: { invalidates: false },
     mutationFn: () => hostRequest<NonNullable<typeof restartPlan>>('restart/plan', {}),
     onSuccess: setRestartPlan,
   });
@@ -264,6 +265,7 @@ function LocalUpdates() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['orbis-host-package-job'] }),
   });
   const planPackages = useMutation({
+    meta: { invalidates: false },
     mutationFn: (names: string[]) => hostRequest<HostPackagePlan>('packages/plan', { names }),
     onSuccess: (result) => setReviewPackagePlan(result),
   });
@@ -277,6 +279,7 @@ function LocalUpdates() {
     },
   });
   const reviewCore = useMutation({
+    meta: { invalidates: false },
     mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? ''],
     gcTime: compatibilityReviewTime,
     mutationFn: async (tag: string) => {

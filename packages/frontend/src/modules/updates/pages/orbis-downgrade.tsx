@@ -61,6 +61,7 @@ export function OrbisDowngrade({ installed, enabled, request }: { installed: str
     .sort((a, b) => rcompare(a.tag, b.tag));
   const selected = choices.some((release) => release.tag === tag) ? tag : (choices[0]?.tag ?? '');
   const plan = useMutation({
+    meta: { invalidates: false },
     mutationKey: ['orbis-compatibility', 'downgrade', user.id, installed],
     gcTime: compatibilityReviewTime,
     mutationFn: async ({ tag: target, force = false }: { tag: string; force?: boolean }) => {

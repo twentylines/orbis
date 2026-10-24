@@ -1,5 +1,6 @@
 import { UserContextProvider } from '@/context/user-context';
-import { MutationCache, QueryClient, QueryClientProvider, QueryErrorResetBoundary } from '@tanstack/react-query';
+import { QueryClientProvider, QueryErrorResetBoundary } from '@tanstack/react-query';
+import { createAppQueryClient } from '@/lib/query-client';
 import { type PropsWithChildren, Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ErrorPage } from '../error/error-page';
@@ -10,16 +11,7 @@ import { ThemeProvider } from './theme/theme-provider';
 import { DebugPanel } from '../debug-panel/debug-panel';
 import { DesktopPreferencesProvider, useDesktopPreferences } from '@/desktop/preferences';
 
-const queryClient = new QueryClient({
-  mutationCache: new MutationCache({
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-    },
-  }),
-  defaultOptions: {
-    queries: { retry: false, refetchOnWindowFocus: false },
-  },
-});
+const queryClient = createAppQueryClient();
 
 const ThemedProviders = ({ children }: PropsWithChildren) => {
   const { resolvedMode } = useDesktopPreferences();

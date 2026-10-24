@@ -14,7 +14,7 @@
   --desktop-negative: var(--orbis-negative, var(--desktop-base-negative));
   --desktop-warning: var(--orbis-warning, var(--desktop-base-warning));
   --desktop-info: var(--orbis-info, var(--desktop-base-info));
-  --desktop-focus: var(--desktop-ink);
+  --desktop-focus: var(--orbis-focus, var(--desktop-accent));
   --desktop-panel-dark: var(--orbis-panel-dark, var(--desktop-base-panel-dark));
   --desktop-glass-filter: var(--orbis-glass-filter, var(--desktop-base-glass-filter));
   --desktop-chrome-filter: var(--orbis-chrome-filter, var(--desktop-glass-filter));

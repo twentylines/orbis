@@ -69,9 +69,27 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     const bar = document.querySelector<HTMLElement>('.desktop-system-bar');
     const barProperty = '--orbis-bar-bottom';
     const previousBar = root.style.getPropertyValue(barProperty);
+    let dockHeight = 0;
+    let barBottom = 0;
+    let viewportWidth = innerWidth;
+    let viewportHeight = innerHeight;
     const measure = () => {
-      if (element.offsetHeight) root.style.setProperty(property, `${element.offsetHeight}px`);
-      if (bar?.offsetHeight) root.style.setProperty(barProperty, `${Math.ceil(Number.parseFloat(getComputedStyle(bar).top) + bar.offsetHeight)}px`);
+      const nextHeight = element.offsetHeight;
+      const nextBottom = bar?.offsetHeight ? Math.ceil(Number.parseFloat(getComputedStyle(bar).top) + bar.offsetHeight) : 0;
+      const heightChanged = nextHeight > 0 && nextHeight !== dockHeight;
+      const bottomChanged = nextBottom > 0 && nextBottom !== barBottom;
+      const viewportChanged = viewportWidth !== innerWidth || viewportHeight !== innerHeight;
+      if (!heightChanged && !bottomChanged && !viewportChanged) return;
+      viewportWidth = innerWidth;
+      viewportHeight = innerHeight;
+      if (heightChanged) {
+        dockHeight = nextHeight;
+        root.style.setProperty(property, `${dockHeight}px`);
+      }
+      if (bottomChanged) {
+        barBottom = nextBottom;
+        root.style.setProperty(barProperty, `${barBottom}px`);
+      }
       const active = document.activeElement;
       if (active instanceof HTMLElement && active.closest('#desktop-content')) revealPageFocus(active);
     };
@@ -93,9 +111,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     ['app-details', 'app-details-store', 'custom-app', 'cluster-app-preview', 'app-update', 'app-store-app-update'].includes(match.id),
   );
   useSectionMotion(!requiresOnboarding);
-  const busy = useIsMutating();
-  const tasks = useTasks();
-  const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
   const handleLogout = async () => {
     if (leaving.current) return;
     leaving.current = true;
@@ -159,15 +174,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               </span>
               <div className="desktop-system-actions">
                 <OrbisUpdateNotice />
-                <Link
-                  to="/tasks"
-                  className="desktop-task-trigger"
-                  aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}`}
-                  title="Task centre"
-                >
-                  <IconActivity size={20} aria-hidden="true" />
-                  {activeTasks > 0 ? <span>{activeTasks}</span> : null}
-                </Link>
+                <DesktopTaskLink />
                 <button
                   type="button"
                   className="desktop-mode-toggle"
@@ -181,15 +188,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                 <CommandSearch />
                 <ClusterConnection />
                 <ClusterSwitcher />
-                <button
-                  type="button"
-                  className="desktop-icon-button"
-                  aria-label="Log out"
-                  disabled={!isLoggedIn || loggingOff || busy > 0}
-                  onClick={() => void handleLogout()}
-                >
-                  <IconLogout size={20} aria-hidden="true" />
-                </button>
+                <DesktopLogoutButton disabled={!isLoggedIn || loggingOff} onClick={() => void handleLogout()} />
               </div>
             </header>
 
@@ -258,6 +257,31 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     </HostUpdateProvider>
   );
 };
+
+function DesktopTaskLink() {
+  const tasks = useTasks();
+  const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
+  return (
+    <Link
+      to="/tasks"
+      className="desktop-task-trigger"
+      aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}`}
+      title="Task centre"
+    >
+      <IconActivity size={20} aria-hidden="true" />
+      {activeTasks > 0 ? <span>{activeTasks}</span> : null}
+    </Link>
+  );
+}
+
+function DesktopLogoutButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  const busy = useIsMutating();
+  return (
+    <button type="button" className="desktop-icon-button" aria-label="Log out" disabled={disabled || busy > 0} onClick={onClick}>
+      <IconLogout size={20} aria-hidden="true" />
+    </button>
+  );
+}
 
 function RestartUpdateCover() {
   const { watch, packageJob, unavailable, restart } = useHostUpdateWatch();
