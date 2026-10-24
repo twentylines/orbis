@@ -387,15 +387,17 @@ class HostService:
                 check=False,
             )
             if result.returncode or result.stdout.strip() not in {"active", "activating"}:
-                refreshed = read_private(self.package_job_file)
-                if refreshed and refreshed.get("id") == identifier and refreshed.get("state") in {"queued", "running"}:
-                    refreshed["state"] = "interrupted"
-                    refreshed["finishedAt"] = time.time()
-                    refreshed["message"] = "The package worker stopped without recording completion. Inspect APT and dpkg locally."
-                    write_private(self.package_job_file, refreshed)
-                    job = refreshed
-                else:
-                    job = refreshed
+                try:
+                    with HOST.host_lock(self.root):
+                        refreshed = read_private(self.package_job_file)
+                        if refreshed and refreshed.get("id") == identifier and refreshed.get("state") in {"queued", "running"}:
+                            refreshed["state"] = "interrupted"
+                            refreshed["finishedAt"] = time.time()
+                            refreshed["message"] = "The package worker stopped without recording completion. Inspect APT and dpkg locally."
+                            write_private(self.package_job_file, refreshed)
+                        job = refreshed
+                except ValueError:
+                    job = read_private(self.package_job_file)
         return {
             "available": True,
             "job": self.public_package_job(job)
@@ -410,23 +412,42 @@ class HostService:
         uuid.UUID(identifier)
         return {
             **{key: job.get(key) for key in ("id", "state", "createdAt", "startedAt", "finishedAt", "message", "exitCode", "rebootRequired", "operationCount")},
+            **({"kind": "refresh"} if job.get("kind") == "refresh" else {}),
             "output": terminal_tail(self.state_dir / f"package-job-{identifier}.log"),
         }
 
+    def require_package_ready(self) -> dict | None:
+        self.require_restart_clear()
+        self.require_healthy_core()
+        if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
+            raise ValueError("host helper maintenance is in progress")
+        if self.busy:
+            raise ValueError("another host update is in progress")
+        core_job = read_private(self.job_file)
+        if core_job and core_job.get("state") in {"running", "recovering", "interrupted"}:
+            raise ValueError("resolve the Orbis core update before changing host packages")
+        package_job = self.package_job_status()["job"]
+        if package_job and package_job.get("state") in {"queued", "running", "failed", "interrupted"}:
+            raise ValueError("resolve the previous host package transaction first")
+        return package_job
+
+    def package_refresh(self) -> dict:
+        with self.lock:
+            self.require_package_ready()
+            PACKAGES.require_ubuntu()
+            identifier = str(uuid.uuid4())
+            created = time.time()
+            write_private(self.state_dir / f"package-plan-{identifier}.json", {
+                "schema": "orbis.package-refresh.v1", "id": identifier, "root": str(self.root), "createdAt": created,
+            })
+            return self.start_package_worker({
+                "schema": "orbis.package-job.v1", "id": identifier, "kind": "refresh", "state": "queued", "createdAt": created,
+                "message": "Refreshing package lists.",
+            })
+
     def package_plan(self, names: list[str]) -> dict:
         with self.lock:
-            self.require_restart_clear()
-            self.require_healthy_core()
-            if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
-                raise ValueError("host helper maintenance is in progress")
-            if self.busy:
-                raise ValueError("another host update is in progress")
-            core_job = read_private(self.job_file)
-            if core_job and core_job.get("state") in {"running", "recovering", "interrupted"}:
-                raise ValueError("resolve the Orbis core update before planning host packages")
-            package_job = self.package_job_status()["job"]
-            if package_job and package_job.get("state") in {"queued", "running", "failed", "interrupted"}:
-                raise ValueError("resolve the previous host package transaction first")
+            self.require_package_ready()
             simulation = PACKAGES.simulate_upgrades(names)
             plan_id = str(uuid.uuid4())
             record = {
@@ -441,18 +462,7 @@ class HostService:
 
     def package_apply(self, plan_id: str) -> dict:
         with self.lock:
-            self.require_restart_clear()
-            self.require_healthy_core()
-            if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
-                raise ValueError("host helper maintenance is in progress")
-            if self.busy:
-                raise ValueError("another host update is in progress")
-            core_job = read_private(self.job_file)
-            if core_job and core_job.get("state") in {"running", "recovering", "interrupted"}:
-                raise ValueError("resolve the Orbis core update before installing host packages")
-            package_job = self.package_job_status()["job"]
-            if package_job and package_job.get("state") in {"queued", "running", "failed", "interrupted"}:
-                raise ValueError("resolve the previous host package transaction first")
+            package_job = self.require_package_ready()
             try:
                 uuid.UUID(plan_id)
             except (TypeError, ValueError) as error:
@@ -481,27 +491,24 @@ class HostService:
                 "createdAt": time.time(),
                 "operationCount": len(plan["operations"]),
             }
-            write_private(self.package_job_file, job)
-            command = [
-                "/usr/bin/systemd-run",
-                f"--unit=orbis-package-{plan_id}",
-                "--collect",
-                "--property=Type=exec",
-                "/usr/bin/python3",
-                str(Path(__file__).with_name("orbis-host-package-worker.py")),
-                plan_id,
-            ]
-            try:
-                result = subprocess.run(command, capture_output=True, text=True, timeout=10, check=False)
-            except (OSError, subprocess.TimeoutExpired):
-                result = None
-            if not result or result.returncode:
-                job["state"] = "failed"
-                job["finishedAt"] = time.time()
-                job["message"] = "The isolated package worker could not start. No APT installation was requested."
-                write_private(self.package_job_file, job)
-                raise RuntimeError("the isolated package worker could not start")
-            return {"jobId": plan_id, "state": "queued"}
+            return self.start_package_worker(job)
+
+    def start_package_worker(self, job: dict) -> dict:
+        identifier = job["id"]
+        write_private(self.package_job_file, job)
+        command = [
+            "/usr/bin/systemd-run", f"--unit=orbis-package-{identifier}", "--collect", "--property=Type=exec",
+            "/usr/bin/python3", str(Path(__file__).with_name("orbis-host-package-worker.py")), identifier,
+        ]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=10, check=False)
+            if result.returncode:
+                raise RuntimeError("systemd worker launch was not confirmed")
+        except (OSError, RuntimeError, subprocess.TimeoutExpired):
+            # A lost launch response does not prove that the worker did not start.
+            # Keep the durable queued record until status observes this exact unit.
+            pass
+        return {"jobId": identifier, "state": "queued"}
 
     def state_matches(self, saved: dict | None) -> bool:
         return enrollment_matches(self.root, self.context, saved)
@@ -545,7 +552,7 @@ class HostService:
                 write_private(self.job_file, job)
         return {
             "available": True,
-            "capabilities": ["restart.v1"],
+            "capabilities": ["restart.v1", "packages.refresh.v1"],
             "enrolled": enrolled,
             "currentTag": saved.get("tag") if saved else None,
             "currentDigest": saved.get("digest") if saved else None,
@@ -793,7 +800,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
-        if self.path not in {"/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply", "/v1/restart/plan", "/v1/restart/apply"}:
+        if self.path not in {"/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply", "/v1/packages/refresh", "/v1/restart/plan", "/v1/restart/apply"}:
             self.send_json(404, {"error": "not found"})
             return
         try:
@@ -818,6 +825,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self.send_json(202, result)
                 finally:
                     launch()
+            elif self.path == "/v1/packages/refresh":
+                if data:
+                    raise ValueError("package list refresh does not accept options")
+                self.send_json(202, self.server.service.package_refresh())
             elif self.path == "/v1/packages/plan":
                 if set(data) != {"names"} or not isinstance(data["names"], list):
                     raise ValueError("request must contain a package name list")

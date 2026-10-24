@@ -4,6 +4,7 @@ import { Switch } from '@/components/ui/Switch';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { automaticUpdateSettingsOptions, saveAutomaticUpdateSettings, type AutomaticUpdateSettings } from '@/desktop/automatic-updates-api';
 import './automatic-updates-settings.css';
+import { SystemUpdatesSettings } from './system-updates-settings';
 
 export function AutomaticUpdatesSettings() {
   const id = useId();
@@ -17,6 +18,7 @@ export function AutomaticUpdatesSettings() {
     mutationFn: saveAutomaticUpdateSettings,
     onSuccess: (result) => {
       client.setQueryData(options.queryKey, result);
+      void client.invalidateQueries({ queryKey: ['orbis-system-update-schedule'] });
       setDraft(null);
       setSaved(true);
     },
@@ -38,7 +40,7 @@ export function AutomaticUpdatesSettings() {
       {status.isError ? (
         <p role="alert">
           Automatic update settings could not be read.{' '}
-          <button type="button" onClick={() => void status.refetch()}>
+          <button type="button" className="btn btn-outline-primary ms-2" onClick={() => void status.refetch()}>
             Try again
           </button>
         </p>
@@ -118,6 +120,7 @@ export function AutomaticUpdatesSettings() {
           </button>
         </form>
       ) : null}
+      <SystemUpdatesSettings />
     </section>
   );
 }

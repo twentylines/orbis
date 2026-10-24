@@ -74,6 +74,37 @@ class HostPackageWorkerTests(unittest.TestCase):
         self.assertEqual(job["exitCode"], 100)
         self.assertIn("dpkg state", job["message"])
 
+    def test_refresh_requires_its_own_plan_and_never_installs_or_reboots(self):
+        WORKER.SERVICE.write_private(self.state / f"package-plan-{self.job_id}.json", {
+            "schema": "orbis.package-refresh.v1", "id": self.job_id, "root": str(self.root), "createdAt": time.time(),
+        })
+        job = WORKER.SERVICE.read_private(self.state / "package-job.json")
+        job["kind"] = "refresh"
+        WORKER.SERVICE.write_private(self.state / "package-job.json", job)
+        with mock.patch.object(WORKER, "STATE_DIR", self.state), mock.patch.object(WORKER.PACKAGES, "require_ubuntu"), mock.patch.object(
+            WORKER.PACKAGES, "simulate_upgrades"
+        ) as simulate, mock.patch.object(WORKER.SERVICE.HOST, "host_lock", return_value=nullcontext()), mock.patch.object(
+            WORKER.subprocess, "run", return_value=SimpleNamespace(returncode=0)
+        ) as apt:
+            WORKER.run(self.job_id)
+        command = apt.call_args.args[0]
+        self.assertEqual(command[0], "/usr/bin/apt-get")
+        self.assertEqual(command[-1], "update")
+        self.assertIn("--error-on=any", command)
+        self.assertEqual(apt.call_args.kwargs["timeout"], 180)
+        self.assertNotIn("install", command)
+        simulate.assert_not_called()
+        self.assertEqual(WORKER.SERVICE.read_private(self.state / "package-job.json")["state"], "complete")
+
+    def test_refresh_kind_cannot_bypass_a_reviewed_install_plan(self):
+        job = WORKER.SERVICE.read_private(self.state / "package-job.json")
+        job["kind"] = "refresh"
+        WORKER.SERVICE.write_private(self.state / "package-job.json", job)
+        with mock.patch.object(WORKER, "STATE_DIR", self.state), mock.patch.object(WORKER.subprocess, "run") as apt:
+            with self.assertRaisesRegex(ValueError, "changed"):
+                WORKER.run(self.job_id)
+        apt.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,12 @@ export class AutomaticUpdatesController {
   @Put() update(@Body() body: unknown) {
     return this.automatic.update(body);
   }
+  @Get('system') readSystem() {
+    return this.automatic.readSystem();
+  }
+  @Put('system') updateSystem(@Body() body: unknown) {
+    return this.automatic.updateSystem(body);
+  }
   @Get('apps/:urn') readApp(@Param('urn') urn: string) {
     return this.automatic.readApp(urn);
   }

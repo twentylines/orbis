@@ -1,7 +1,7 @@
 import type { TaskRecord } from '@runtipi/common/schemas';
 import { coreUpdateTitle, coreWatchIsActive, type CoreUpdateWatch } from './core-update-state';
 
-export type PackageActivityJob = { id: string; state: string; operationCount?: number; message?: string };
+export type PackageActivityJob = { id: string; kind?: 'refresh'; state: string; operationCount?: number; message?: string };
 export type DesktopActivityItem = {
   id: string;
   kind: 'app' | 'core' | 'packages';
@@ -72,7 +72,12 @@ export function desktopActivity(
   }
   if (packageJob && ['queued', 'running'].includes(packageJob.state)) {
     const count = packageJob.operationCount;
-    const title = count ? `Updating ${count} system package${count === 1 ? '' : 's'}` : 'Updating system packages';
+    const refresh = packageJob.kind === 'refresh';
+    const title = refresh
+      ? 'Refreshing package lists'
+      : count
+        ? `Updating ${count} system package${count === 1 ? '' : 's'}`
+        : 'Updating system packages';
     items.unshift({
       id: packageJob.id,
       kind: 'packages',
@@ -80,7 +85,12 @@ export function desktopActivity(
       detail: packageJob.message || (packageJob.state === 'queued' ? 'Queued' : 'In progress'),
       state: packageJob.state,
     });
-    summary = { title, detail: packageJob.state === 'queued' ? 'Queued' : 'Installing system updates', kind: 'packages', count: items.length };
+    summary = {
+      title: `${refresh ? 'Refreshing' : 'Updating'}${packageJob.state === 'queued' ? ' · Queued' : ''}`,
+      detail: refresh ? 'System package lists' : count ? `${count} system package${count === 1 ? '' : 's'}` : 'System packages',
+      kind: 'packages',
+      count: items.length,
+    };
   }
   if (watch && coreWatchIsActive(watch)) {
     const title = coreUpdateTitle(watch.phase, watch.operation);

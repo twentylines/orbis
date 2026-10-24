@@ -16,6 +16,7 @@ import {
 
 export type PackageUpdateJob = {
   id: string;
+  kind?: 'refresh';
   state: 'queued' | 'running' | 'complete' | 'failed' | 'interrupted';
   operationCount?: number;
   startedAt?: number;

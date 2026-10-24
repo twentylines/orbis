@@ -13,7 +13,7 @@ import { LoggerService } from '@/core/logger/logger.service';
 const settings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
 describe('automatic update settings and browser presence authorization', () => {
   let app: INestApplication;
-  const automatic = { read: vi.fn(), update: vi.fn(), readApp: vi.fn(), updateApp: vi.fn() };
+  const automatic = { read: vi.fn(), update: vi.fn(), readApp: vi.fn(), updateApp: vi.fn(), readSystem: vi.fn(), updateSystem: vi.fn() };
   const activity = { touchBrowser: vi.fn() };
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -50,7 +50,7 @@ describe('automatic update settings and browser presence authorization', () => {
   });
   afterAll(async () => app.close());
   it('requires an operator browser session for global and per-app reads', async () => {
-    for (const path of ['/host-updates/automatic', '/host-updates/automatic/apps/adguard%3Atipi']) {
+    for (const path of ['/host-updates/automatic', '/host-updates/automatic/apps/adguard%3Atipi', '/host-updates/automatic/system']) {
       expect((await request(app.getHttpServer()).get(path)).status).toBe(401);
       for (const identity of ['guest', 'cli'])
         expect((await request(app.getHttpServer()).get(path).set('Authorization', `Bearer ${identity}`)).status).toBe(403);
@@ -61,8 +61,8 @@ describe('automatic update settings and browser presence authorization', () => {
     expect((await request(app.getHttpServer()).get('/host-updates/automatic').set('Authorization', 'Bearer operator')).status).toBe(200);
   });
   it('enforces same origin for every schedule mutation, including disabling', async () => {
-    for (const path of ['/host-updates/automatic', '/host-updates/automatic/apps/adguard%3Atipi']) {
-      const body = path.endsWith('automatic') ? settings : { mode: 'disabled' };
+    for (const path of ['/host-updates/automatic', '/host-updates/automatic/apps/adguard%3Atipi', '/host-updates/automatic/system']) {
+      const body = path.endsWith('automatic') ? settings : path.endsWith('system') ? { enabled: false } : { mode: 'disabled' };
       expect((await request(app.getHttpServer()).put(path).send(body)).status).toBe(401);
       for (const identity of ['guest', 'cli'])
         expect(
@@ -88,6 +88,7 @@ describe('automatic update settings and browser presence authorization', () => {
     }
     expect(automatic.update).not.toHaveBeenCalled();
     expect(automatic.updateApp).not.toHaveBeenCalled();
+    expect(automatic.updateSystem).not.toHaveBeenCalled();
     automatic.updateApp.mockResolvedValue({ rule: { mode: 'disabled' }, shared: settings.schedule, available: false });
     expect(
       (

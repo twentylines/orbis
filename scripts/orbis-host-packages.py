@@ -205,6 +205,14 @@ def apt_apply_command(selected: list[dict]) -> list[str]:
     return command
 
 
+def apt_refresh_command() -> list[str]:
+    require_ubuntu()
+    return [
+        "/usr/bin/apt-get", "--error-on=any", "-o", "Acquire::Retries=0",
+        "-o", "Acquire::http::Timeout=30", "-o", "Acquire::https::Timeout=30", "update",
+    ]
+
+
 def parse_simulation(output: str, selected: list[dict]) -> list[dict]:
     operations = []
     for line in output.splitlines():

@@ -89,6 +89,7 @@ type HostPackagePlan = {
 };
 type HostPackageJob = {
   id: string;
+  kind?: 'refresh';
   state: 'queued' | 'running' | 'complete' | 'failed' | 'interrupted';
   createdAt: number;
   startedAt?: number;
@@ -738,7 +739,8 @@ function LocalUpdates() {
           {packageJob.data?.job ? (
             <output className={`desktop-host-package-job ${packageJobBusy ? 'is-busy' : ''}`} aria-live="polite">
               <strong>
-                Host package operation: {packageJob.data.job.state} · {packageJob.data.job.operationCount ?? 0} planned changes
+                {packageJob.data.job.kind === 'refresh' ? 'Package list refresh' : 'Host package operation'}: {packageJob.data.job.state}
+                {packageJob.data.job.kind !== 'refresh' ? ` · ${packageJob.data.job.operationCount ?? 0} planned changes` : ''}
               </strong>
               <span>{packageJob.data.job.message || (packageJobBusy ? 'APT is working on the host. This page can be closed.' : '')}</span>
               {packageJob.data.job.rebootRequired ? <span>The host requests a reboot. Orbis has not rebooted it.</span> : null}

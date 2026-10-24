@@ -1,10 +1,12 @@
 import importlib.util
 import json
 import socket
+import subprocess
 import tempfile
 import threading
 import time
 import unittest
+import uuid
 from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from unittest import mock
@@ -370,6 +372,42 @@ class HostServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "changed"):
                 self.service.package_apply(plan["planId"])
         self.assertIsNone(SERVICE.read_private(self.service.package_job_file))
+
+    def test_refresh_uses_a_distinct_plan_and_the_existing_isolated_worker(self):
+        with mock.patch.object(SERVICE.PACKAGES, "require_ubuntu"), mock.patch.object(
+            SERVICE.subprocess, "run", return_value=mock.Mock(returncode=0)
+        ) as launch:
+            result = self.service.package_refresh()
+        record = SERVICE.read_private(self.state / f"package-plan-{result['jobId']}.json")
+        self.assertEqual(record["schema"], "orbis.package-refresh.v1")
+        self.assertEqual(set(record), {"schema", "id", "root", "createdAt"})
+        self.assertEqual(self.service.package_job_status()["job"]["kind"], "refresh")
+        self.assertEqual(launch.call_args.args[0][-1], result["jobId"])
+        with self.assertRaisesRegex(ValueError, "host package transaction"):
+            self.service.package_refresh()
+
+    def test_lost_worker_launch_response_cannot_overwrite_a_completed_transaction(self):
+        simulation = {"selected": [{"name": "base-files:arm64", "candidateVersion": "2"}], "operations": [{"name": "base-files", "candidateVersion": "2"}]}
+        def completed(command, **kwargs):
+            job = SERVICE.read_private(self.service.package_job_file)
+            job["state"] = "complete"
+            SERVICE.write_private(self.service.package_job_file, job)
+            raise subprocess.TimeoutExpired(command, 10)
+        with mock.patch.object(SERVICE.PACKAGES, "simulate_upgrades", return_value=simulation), mock.patch.object(SERVICE.subprocess, "run", side_effect=completed):
+            plan = self.service.package_plan(["base-files:arm64"])
+            accepted = self.service.package_apply(plan["planId"])
+        self.assertEqual(accepted["jobId"], plan["planId"])
+        self.assertEqual(self.service.package_job_status()["job"]["state"], "complete")
+
+    def test_inactive_unit_observation_cannot_clobber_a_worker_holding_the_transaction_lock(self):
+        identifier = str(uuid.uuid4())
+        job = {"schema": "orbis.package-job.v1", "id": identifier, "state": "running", "createdAt": time.time() - 10}
+        SERVICE.write_private(self.service.package_job_file, job)
+        with SERVICE.HOST.host_lock(self.root), mock.patch.object(SERVICE.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="inactive\n")):
+            self.assertEqual(self.service.package_job_status()["job"]["state"], "running")
+            job["state"] = "complete"
+            SERVICE.write_private(self.service.package_job_file, job)
+        self.assertEqual(self.service.package_job_status()["job"]["state"], "complete")
 
     def test_package_changes_require_a_healthy_enrolled_core(self):
         with mock.patch.object(

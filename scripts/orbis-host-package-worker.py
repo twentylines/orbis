@@ -2,7 +2,7 @@
 """Run one reviewed APT transaction outside the browser and Orbis container.
 
 systemd starts this worker as a separate unit so an Orbis core or host-helper
-restart does not interrupt dpkg. It never refreshes indexes or reboots.
+restart does not interrupt dpkg. Index refreshes use a separate plan; neither operation reboots.
 """
 
 import argparse
@@ -40,9 +40,10 @@ def job_file() -> Path:
 def run(job_id: str) -> None:
     plan = SERVICE.read_private(plan_file(job_id))
     job = SERVICE.read_private(job_file())
+    refresh = bool(plan and plan.get("schema") == "orbis.package-refresh.v1")
     if (
         not plan
-        or plan.get("schema") != "orbis.package-plan.v1"
+        or plan.get("schema") not in {"orbis.package-plan.v1", "orbis.package-refresh.v1"}
         or plan.get("id") != job_id
         or not job
         or job.get("schema") != "orbis.package-job.v1"
@@ -51,9 +52,13 @@ def run(job_id: str) -> None:
         or not isinstance(plan.get("createdAt"), (int, float))
         or time.time() - plan["createdAt"] > SERVICE.PLAN_TTL_SECONDS
         or not isinstance(plan.get("root"), str)
-        or not isinstance(plan.get("selected"), list)
-        or not isinstance(plan.get("operations"), list)
-        or not all(isinstance(item, dict) and isinstance(item.get("name"), str) for item in plan["selected"])
+        or refresh != (job.get("kind") == "refresh")
+        or (refresh and set(plan) != {"schema", "id", "root", "createdAt"})
+        or (not refresh and (
+            not isinstance(plan.get("selected"), list)
+            or not isinstance(plan.get("operations"), list)
+            or not all(isinstance(item, dict) and isinstance(item.get("name"), str) for item in plan["selected"])
+        ))
     ):
         raise ValueError("reviewed package job is missing, changed, or expired")
     root = Path(plan["root"]).resolve(strict=True)
@@ -62,13 +67,16 @@ def run(job_id: str) -> None:
     with SERVICE.HOST.host_lock(root):
         if (STATE_DIR / "helper-maintenance.json").exists():
             raise ValueError("host helper maintenance is in progress")
-        checked = PACKAGES.simulate_upgrades([item["name"] for item in plan["selected"]])
-        if checked != {"selected": plan["selected"], "operations": plan["operations"]}:
-            raise ValueError("APT package candidates changed; prepare a new plan")
+        if refresh:
+            command = PACKAGES.apt_refresh_command()
+        else:
+            checked = PACKAGES.simulate_upgrades([item["name"] for item in plan["selected"]])
+            if checked != {"selected": plan["selected"], "operations": plan["operations"]}:
+                raise ValueError("APT package candidates changed; prepare a new plan")
+            command = PACKAGES.apt_apply_command(checked["selected"])
         job["state"] = "running"
         job["startedAt"] = time.time()
         SERVICE.write_private(job_file(), job)
-        command = PACKAGES.apt_apply_command(checked["selected"])
         environment = {
             "PATH": "/usr/bin:/bin",
             "LANG": "C.UTF-8",
@@ -80,7 +88,10 @@ def run(job_id: str) -> None:
         log_path = STATE_DIR / f"package-job-{job_id}.log"
         descriptor = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(descriptor, "wb") as output:
-            result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT, env=environment, check=False)
+            result = subprocess.run(
+                command, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
+                env=environment, check=False, **({"timeout": 180} if refresh else {}),
+            )
             output.flush()
             os.fsync(output.fileno())
         job["finishedAt"] = time.time()
@@ -91,7 +102,7 @@ def run(job_id: str) -> None:
             job["message"] = "APT stopped with an error. Inspect the host package log and dpkg state before retrying."
         else:
             job["state"] = "complete"
-            job["message"] = "APT installed the reviewed package transaction."
+            job["message"] = "APT refreshed the package lists." if refresh else "APT installed the reviewed package transaction."
         SERVICE.write_private(job_file(), job)
 
 

@@ -20,6 +20,7 @@ export type AppUpdateSchedule = {
   reason?: string;
   lastAttempt?: UpdateAttempt | null;
 };
+export type SystemUpdateSchedule = Omit<AppUpdateSchedule, 'rule'> & { settings: { enabled: boolean }; pauseReason?: string | null };
 
 async function automaticRequest<T>(suffix = '', body?: object, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/host-updates/automatic${suffix}`, {
@@ -49,3 +50,10 @@ export const appUpdateScheduleOptions = (urn: string) =>
 export const saveAutomaticUpdateSettings = (settings: AutomaticUpdateSettings) => automaticRequest<AutomaticUpdateStatus>('', settings);
 export const saveAppUpdateSchedule = (urn: string, rule: AppUpdateRule) =>
   automaticRequest<AppUpdateSchedule>(`/apps/${encodeURIComponent(urn)}`, rule);
+export const systemUpdateScheduleOptions = () =>
+  queryOptions({
+    queryKey: ['orbis-system-update-schedule'],
+    queryFn: ({ signal }) => automaticRequest<SystemUpdateSchedule>('/system', undefined, signal),
+    ...scheduleQuery,
+  });
+export const saveSystemUpdateSchedule = (settings: { enabled: boolean }) => automaticRequest<SystemUpdateSchedule>('/system', settings);

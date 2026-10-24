@@ -21,6 +21,9 @@ import {
   parseAutomaticSettings,
   type AutomaticUpdateAttempt,
   type AutomaticUpdateState,
+  systemUpdateSettingsSchema,
+  systemUpdateStateSchema,
+  type SystemUpdateState,
 } from './automatic-updates.model';
 
 const QUIET_MS = 10 * 60_000;
@@ -37,6 +40,17 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private timer?: ReturnType<typeof setInterval>;
   private stopped = false;
   private storageError: string | null = null;
+  private systemError: string | null = null;
+  private system: SystemUpdateState = {
+    version: 1,
+    revision: 0,
+    enabled: false,
+    phase: null,
+    settingsRevision: null,
+    policyRevision: null,
+    attempt: null,
+    pauseReason: null,
+  };
   private readonly startedAt = Date.now();
 
   constructor(
@@ -78,8 +92,11 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private file() {
     return path.join(this.config.get('directories').dataDir, 'state', 'automatic-updates', 'settings.json');
   }
+  private systemFile() {
+    return path.join(path.dirname(this.file()), 'system.json');
+  }
   private load() {
-    this.loading ??= this.readStored();
+    this.loading ??= Promise.all([this.readStored(), this.readSystemStored()]).then(() => undefined);
     return this.loading;
   }
   private async readStored() {
@@ -120,8 +137,39 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async persist(next: AutomaticUpdateState) {
-    const file = this.file();
+  private async readSystemStored() {
+    try {
+      const stat = await fs.lstat(this.systemFile());
+      if (
+        !stat.isFile() ||
+        stat.isSymbolicLink() ||
+        stat.size > 16 * 1024 ||
+        (stat.mode & 0o077) !== 0 ||
+        (process.getuid && stat.uid !== process.getuid())
+      )
+        throw new Error('Unsafe system update settings');
+      const parsed = systemUpdateStateSchema(JSON.parse(await fs.readFile(this.systemFile(), 'utf8')));
+      if (parsed instanceof type.errors) throw new Error('Invalid system update settings');
+      this.system = parsed;
+      if (parsed.attempt && ['checking', 'planning', 'applying'].includes(parsed.attempt.state)) {
+        await this.changeSystem((next) => {
+          if (!next.attempt) return;
+          next.attempt.state = 'interrupted';
+          next.attempt.message = 'An earlier automatic system update needs review in Updates.';
+          next.enabled = false;
+          next.pauseReason = next.attempt.message;
+          next.revision++;
+        }, false);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      this.systemError = 'System update settings could not be read safely. Automatic system updates are disabled.';
+      this.system.enabled = false;
+      this.logger.warn(this.systemError);
+    }
+  }
+
+  private async persist(next: AutomaticUpdateState | SystemUpdateState, file = this.file()) {
     const directory = path.dirname(file);
     const temporary = `${file}.${randomUUID()}.tmp`;
     await fs.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -147,31 +195,57 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       await fs.rm(temporary, { force: true });
     }
   }
-  private async change(mutate: (next: AutomaticUpdateState) => void, requireLoaded = true) {
+  private async write(save: () => Promise<void>, requireLoaded = true) {
     if (requireLoaded) await this.load();
     const run = this.writes
       .catch(() => undefined)
       .then(async () => {
-        if (this.storageError) throw new ServiceUnavailableException(this.storageError);
-        const next = structuredClone(this.state);
-        mutate(next);
         try {
-          await this.persist(next);
-        } catch {
-          this.storageError = 'Automatic update settings could not be saved safely. Automatic updates are disabled.';
-          this.state.settings.orbis.enabled = false;
-          this.state.rules = {};
+          await save();
+        } finally {
           this.ensureTimer();
-          throw new ServiceUnavailableException(this.storageError);
         }
-        this.state = next;
-        this.ensureTimer();
       });
     this.writes = run;
     return run;
   }
+  private change(mutate: (next: AutomaticUpdateState) => void, requireLoaded = true) {
+    return this.write(async () => {
+      if (this.storageError) throw new ServiceUnavailableException(this.storageError);
+      const next = structuredClone(this.state);
+      mutate(next);
+      try {
+        await this.persist(next);
+      } catch {
+        this.storageError = 'Automatic update settings could not be saved safely. Automatic updates are disabled.';
+        this.state.settings.orbis.enabled = false;
+        this.state.rules = {};
+        this.ensureTimer();
+        throw new ServiceUnavailableException(this.storageError);
+      }
+      this.state = next;
+    }, requireLoaded);
+  }
+  private changeSystem(mutate: (next: SystemUpdateState) => void, requireLoaded = true) {
+    return this.write(async () => {
+      if (this.systemError) throw new ServiceUnavailableException(this.systemError);
+      const next = structuredClone(this.system);
+      mutate(next);
+      try {
+        await this.persist(next, this.systemFile());
+      } catch {
+        this.systemError = 'System update settings could not be saved safely. Automatic system updates are disabled.';
+        this.system.enabled = false;
+        throw new ServiceUnavailableException(this.systemError);
+      }
+      this.system = next;
+    }, requireLoaded);
+  }
   private ensureTimer() {
-    const enabled = this.state.settings.orbis.enabled || Object.values(this.state.rules).some((rule) => rule.mode !== 'disabled');
+    const enabled =
+      this.state.settings.orbis.enabled ||
+      (!this.systemError && (this.system.enabled || this.system.attempt?.state === 'accepted')) ||
+      Object.values(this.state.rules).some((rule) => rule.mode !== 'disabled');
     if (this.stopped || this.storageError || !enabled || this.config.get('demoMode')) {
       clearInterval(this.timer);
       this.timer = undefined;
@@ -213,6 +287,60 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       next.pauseReason = 'Automatic Orbis updates were paused for a downgrade. Enable them again when you are ready.';
       next.revision++;
     });
+    if (!this.systemError && (this.system.enabled || this.system.attempt?.state === 'accepted')) {
+      await this.changeSystem((next) => {
+        next.enabled = false;
+        next.pauseReason = 'Automatic system updates were paused for a downgrade. Enable them again when you are ready.';
+        next.revision++;
+      });
+    }
+  }
+
+  async readSystem() {
+    await this.load();
+    const reason = this.systemError ?? this.storageError;
+    return {
+      settings: { enabled: this.system.enabled },
+      shared: this.state.settings.schedule,
+      available: !reason,
+      ...(reason ? { reason } : {}),
+      pauseReason: this.system.pauseReason,
+      lastAttempt: this.system.attempt,
+    };
+  }
+  async updateSystem(raw: unknown) {
+    const settings = systemUpdateSettingsSchema(raw);
+    if (settings instanceof type.errors) throw new BadRequestException('Choose whether automatic system updates are enabled.');
+    if (this.config.get('demoMode')) throw new BadRequestException('Automatic updates are unavailable in demo mode.');
+    await this.load();
+    if (this.storageError) throw new ServiceUnavailableException(this.storageError);
+    const revision = this.system.revision;
+    const settingsRevision = this.state.revision;
+    if (settings.enabled) {
+      const status = await this.host.status();
+      if (!status.capabilities?.includes('packages.refresh.v1'))
+        throw new BadRequestException('Update the Orbis host service to enable automatic system updates.');
+      if (!this.healthy(status)) throw new BadRequestException('Automatic system updates require a healthy enrolled Orbis server.');
+      const inventory = await this.host.packages();
+      if (!inventory.available || inventory.manager !== 'apt')
+        throw new BadRequestException(inventory.reason ?? 'Automatic system updates currently require Ubuntu 24.04.');
+    }
+    await this.changeSystem((next) => {
+      if (next.revision !== revision || (settings.enabled && this.state.revision !== settingsRevision))
+        throw new BadRequestException('System update settings changed. Reload them before saving again.');
+      if (settings.enabled) {
+        next.pauseReason = null;
+        if (!next.attempt || !['accepted', 'applying', 'planning', 'checking'].includes(next.attempt.state)) {
+          next.attempt = null;
+          next.phase = null;
+          next.settingsRevision = null;
+          next.policyRevision = null;
+        }
+      }
+      next.enabled = settings.enabled;
+      next.revision++;
+    });
+    return this.readSystem();
   }
   private appUrn(raw: unknown) {
     if (typeof raw !== 'string' || raw.length > 180) throw new BadRequestException('Choose an installed app.');
@@ -254,6 +382,166 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       next.revision++;
     });
     return this.readApp(urn);
+  }
+  private systemReady() {
+    return (
+      !this.stopped &&
+      !this.storageError &&
+      !this.systemError &&
+      this.system.enabled &&
+      this.system.policyRevision === this.system.revision &&
+      this.system.settingsRevision === this.state.revision &&
+      installationMode().phase === 'normal'
+    );
+  }
+  private async recordSystem(attempt: AutomaticUpdateAttempt, pause = false) {
+    const identity = this.system.attempt?.at;
+    await this.changeSystem((next) => {
+      if (next.attempt?.at !== identity) return;
+      next.attempt = attempt;
+      if (pause && next.revision === next.policyRevision) {
+        next.enabled = false;
+        next.pauseReason = attempt.message;
+        next.revision++;
+      }
+    });
+  }
+  private async dispatchSystem(phase: 'refresh' | 'install', slot: string, planId?: string) {
+    if (!this.systemReady()) return;
+    const attempt: AutomaticUpdateAttempt = {
+      slot,
+      state: 'applying',
+      at: Date.now(),
+      message: phase === 'refresh' ? 'Refreshing system package lists.' : 'Starting the scheduled system package update.',
+    };
+    await this.changeSystem((next) => {
+      next.phase = phase;
+      next.attempt = attempt;
+    });
+    if (!this.systemReady()) {
+      await this.recordSystem({ ...attempt, state: 'complete', message: 'System update settings changed. No further operation was started.' });
+      return;
+    }
+    try {
+      const result = phase === 'refresh' ? await this.host.packageRefresh() : await this.host.packageApply(planId);
+      if (typeof result.jobId !== 'string' || !/^[0-9a-f-]{36}$/i.test(result.jobId)) throw new Error('Invalid package job identity');
+      if (phase === 'install' && result.jobId !== planId) throw new Error('Package job differs from the reviewed plan');
+      await this.recordSystem({
+        ...attempt,
+        state: 'accepted',
+        jobId: result.jobId,
+        message: phase === 'refresh' ? 'The host is refreshing system package lists.' : 'The host accepted the scheduled system update.',
+      });
+    } catch {
+      await this.recordSystem(
+        { ...attempt, state: 'interrupted', message: 'The system operation could not be confirmed. Review Updates before enabling it again.' },
+        true,
+      );
+    }
+  }
+  private async continueSystem() {
+    const previous = this.system.attempt;
+    if (!previous || previous.state !== 'accepted') return false;
+    if (!previous.jobId || !this.system.phase) {
+      await this.recordSystem({ ...previous, state: 'interrupted', message: 'The system update job could not be verified. Review Updates.' }, true);
+      return true;
+    }
+    let job: Awaited<ReturnType<HostUpdatesService['packageJob']>>['job'];
+    try {
+      job = (await this.host.packageJob()).job;
+    } catch {
+      return true;
+    }
+    if (!job || job.id !== previous.jobId || !['queued', 'running', 'complete'].includes(job.state)) {
+      await this.recordSystem({ ...previous, state: 'interrupted', message: 'The scheduled system job needs review in Updates.' }, true);
+      return true;
+    }
+    if ((job.kind === 'refresh') !== (this.system.phase === 'refresh')) {
+      await this.recordSystem({ ...previous, state: 'interrupted', message: 'The scheduled system job type changed. Review Updates.' }, true);
+      return true;
+    }
+    if (job.state !== 'complete') return true;
+    if (this.system.phase === 'install') {
+      await this.recordSystem({
+        ...previous,
+        state: 'complete',
+        message: job.rebootRequired
+          ? 'System packages updated. Restart the server manually from Updates when ready.'
+          : 'System packages updated successfully.',
+      });
+      return true;
+    }
+    if (!this.systemReady()) {
+      await this.recordSystem({
+        ...previous,
+        state: 'complete',
+        message: 'Package lists refreshed. Changed settings stopped the automatic installation.',
+      });
+      return true;
+    }
+    try {
+      const status = await this.host.status();
+      if (!this.systemReady()) return true;
+      if (!this.healthy(status)) throw new Error('Host not ready');
+      const applications = await this.apps.getApps();
+      if (!this.systemReady() || applications.some((app) => !stableApp.has(app.status))) return true;
+      const inventory = await this.host.packages();
+      if (!this.systemReady()) return true;
+      if (
+        !inventory.available ||
+        inventory.manager !== 'apt' ||
+        inventory.truncated ||
+        !Array.isArray(inventory.packages) ||
+        inventory.packageCount !== inventory.packages.length ||
+        inventory.packages.length > 250
+      )
+        throw new Error('Inventory requires manual review');
+      if (!inventory.packages.length) {
+        await this.recordSystem({ ...previous, state: 'no-update', message: 'System package lists refreshed. No updates are available.' });
+        return true;
+      }
+      const names = inventory.packages.map((item) => item.name);
+      if (
+        new Set(names).size !== names.length ||
+        inventory.packages.some(
+          (item) => !Array.isArray(item.sources) || !item.sources.length || !item.sources.every((source) => source.trusted === true),
+        )
+      )
+        throw new Error('Unverified package source');
+      const plan = await this.host.packagePlan(names);
+      if (!this.systemReady()) return true;
+      if (
+        !Array.isArray(plan.selected) ||
+        !Array.isArray(plan.operations) ||
+        !plan.operations.length ||
+        plan.operations.length > 250 ||
+        plan.selected.length !== names.length ||
+        new Set(plan.selected.map((item) => item.name)).size !== names.length ||
+        plan.operations.some((item) => !['install', 'upgrade'].includes(item.action)) ||
+        plan.selected.some(
+          (item) =>
+            !inventory.packages?.some(
+              (candidate) =>
+                candidate.name === item.name &&
+                candidate.candidateVersion === item.candidateVersion &&
+                candidate.installedVersion === item.installedVersion,
+            ),
+        )
+      )
+        throw new Error('Package plan changed');
+      const current = await this.host.status();
+      if (!this.systemReady()) return true;
+      if (!this.healthy(current)) throw new Error('Host not ready');
+      const currentApps = await this.apps.getApps();
+      if (!this.systemReady() || currentApps.some((app) => !stableApp.has(app.status))) return true;
+      await this.dispatchSystem('install', previous.slot, plan.planId);
+    } catch {
+      await this.recordSystem(
+        { ...previous, state: 'failed', message: 'Automatic system updates are paused. Review package changes in Updates.' },
+        true,
+      );
+    }
+    return true;
   }
   tick() {
     if (!this.pending)
@@ -393,7 +681,11 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       return;
     const state = this.state;
     const now = Date.now();
+    if (await this.continueSystem()) return;
     const slot = dailyUpdateSlot(state.settings.schedule, now, state.settings.orbis.mode === 'idle');
+    const systemSlot = dailyUpdateSlot(state.settings.schedule, now);
+    const systemRevision = this.system.revision;
+    const dueSystem = !this.systemError && this.system.enabled && systemSlot.due && this.system.attempt?.slot !== systemSlot.key;
     const dueCore =
       state.settings.orbis.enabled && slot.due && (state.orbis?.slot !== slot.key || state.orbis.state === 'deferred') && this.quiet(state.revision);
     const dueApps = Object.entries(state.rules).filter(
@@ -407,11 +699,25 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
           return selected.due && state.apps[urn]?.slot !== selected.key;
         })(),
     );
-    if (!dueCore && !dueApps.length) return;
+    if (!dueCore && !dueSystem && !dueApps.length) return;
     const status = await this.host.status();
     if (this.state.revision !== state.revision || this.stopped) return;
     if (dueCore && this.healthy(status) && (await this.apps.getApps()).every((app) => stableApp.has(app.status))) {
       await this.runCore(slot.key, state.revision);
+      return;
+    }
+    if (
+      dueSystem &&
+      this.healthy(status) &&
+      status.capabilities?.includes('packages.refresh.v1') &&
+      (await this.apps.getApps()).every((app) => stableApp.has(app.status))
+    ) {
+      if (this.system.revision !== systemRevision || this.state.revision !== state.revision) return;
+      await this.changeSystem((next) => {
+        next.policyRevision = systemRevision;
+        next.settingsRevision = state.revision;
+      });
+      if (this.systemReady()) await this.dispatchSystem('refresh', systemSlot.key);
       return;
     }
     if ((status.available && (status.coreState !== 'running' || busyHost.has(status.job?.state ?? ''))) || this.state.revision !== state.revision)

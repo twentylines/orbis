@@ -56,7 +56,12 @@ describe('dock activity describes actual active work', () => {
   });
   test('system package operation counts remain separate from app counts', () => {
     const value = desktopActivity([task('a', 'photos:store')], names, null, { id: 'apt', state: 'running', operationCount: 7 });
-    expect(value).toMatchObject({ title: 'Updating 7 system packages', kind: 'packages', count: 2 });
+    expect(value).toMatchObject({ title: 'Updating', detail: '7 system packages', kind: 'packages', count: 2 });
+  });
+  test('package list refresh is distinct from an installation in the tasks pill', () => {
+    const value = desktopActivity([], names, null, { id: 'refresh', kind: 'refresh', state: 'running' });
+    expect(value).toMatchObject({ title: 'Refreshing', detail: 'System package lists', kind: 'packages', count: 1 });
+    expect(value?.items[0]?.title).toBe('Refreshing package lists');
   });
   test('accepted Orbis restart remains visible when ordinary app task reads stop', () => {
     const id = 'd8b4a1ec-f912-4e14-8e20-58d2754a0130';

@@ -136,7 +136,7 @@ export function DockActivity() {
                   <ActivityIcon kind={displayed.kind} appUrn={displayed.appUrn} />
                 </span>
                 <span className="desktop-activity-summary">
-                  <strong>{displayed.kind === 'packages' ? 'System updates' : displayed.title}</strong>
+                  <strong>{displayed.title}</strong>
                   <small>{displayed.detail}</small>
                 </span>
                 <IconChevronUp size={16} aria-hidden="true" />

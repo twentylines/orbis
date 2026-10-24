@@ -80,6 +80,7 @@ export type HostPackageJobStatus = {
   available: boolean;
   job: null | {
     id: string;
+    kind?: 'refresh';
     state: 'queued' | 'running' | 'complete' | 'failed' | 'interrupted';
     createdAt: number;
     startedAt?: number;
@@ -129,6 +130,7 @@ export class HostUpdatesService {
       | '/v1/packages/job'
       | '/v1/packages/plan'
       | '/v1/packages/apply'
+      | '/v1/packages/refresh'
       | '/v1/restart'
       | '/v1/restart/plan'
       | '/v1/restart/apply'
@@ -146,7 +148,7 @@ export class HostUpdatesService {
           timeout:
             endpoint === '/v1/plan'
               ? 90_000
-              : endpoint === '/v1/packages/plan' || endpoint === '/v1/packages/apply'
+              : endpoint === '/v1/packages/plan' || endpoint === '/v1/packages/apply' || endpoint === '/v1/packages/refresh'
                 ? 60_000
                 : endpoint.startsWith('/v1/packages/changelog')
                   ? 25_000
@@ -241,6 +243,10 @@ export class HostUpdatesService {
 
   packageJob(): Promise<HostPackageJobStatus> {
     return this.call<HostPackageJobStatus>('/v1/packages/job');
+  }
+
+  packageRefresh(): Promise<{ jobId: string; state: string }> {
+    return this.call('/v1/packages/refresh', {});
   }
 
   packagePlan(names: unknown): Promise<HostPackagePlan> {

@@ -50,6 +50,19 @@ export const automaticUpdateStateSchema = type({
 }).onUndeclaredKey('reject');
 export type AutomaticUpdateState = typeof automaticUpdateStateSchema.infer;
 
+export const systemUpdateSettingsSchema = type({ enabled: 'boolean' }).onUndeclaredKey('reject');
+export const systemUpdateStateSchema = type({
+  version: '1',
+  revision: 'number.integer >= 0',
+  enabled: 'boolean',
+  phase: "'refresh' | 'install' | null",
+  settingsRevision: 'number.integer >= 0 | null',
+  policyRevision: 'number.integer >= 0 | null',
+  attempt: attempt.or('null'),
+  pauseReason: 'string <= 300 | null',
+}).onUndeclaredKey('reject');
+export type SystemUpdateState = typeof systemUpdateStateSchema.infer;
+
 export function parseAutomaticSettings(raw: unknown): AutomaticUpdateSettings {
   const value = automaticUpdateSettingsSchema(raw);
   if (value instanceof type.errors) throw new BadRequestException('Choose valid automatic update settings, daily time and timezone.');
