@@ -1,5 +1,5 @@
 import { useDesktopPreferences, type DesktopPreferences } from '@/desktop/preferences';
-import { themePresets, presetLabels, presetWallpaperSources } from '@/desktop/wallpaper-presets';
+import { themePresets, presetLabels, presetWallpaperPreviews } from '@/desktop/wallpaper-presets';
 import { Switch } from '@/components/ui/Switch';
 import { wallpaperUrl } from '@/desktop/wallpaper';
 import { IconPhoto, IconUpload } from '@tabler/icons-react';
@@ -212,7 +212,7 @@ export function WallpaperSettings() {
             >
               <span className="appearance-wallpaper-preview" aria-hidden="true">
                 <img
-                  src={presetWallpaperSources[preset]}
+                  src={presetWallpaperPreviews[preset]}
                   alt=""
                   loading="lazy"
                   decoding="async"

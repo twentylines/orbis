@@ -8,11 +8,13 @@ export function DockCompanion({
   visible,
   side,
   retainOnExit = false,
+  duration = dockMotionDuration,
   children,
 }: {
   visible: boolean;
   side: 'left' | 'right';
   retainOnExit?: boolean;
+  duration?: number;
   children: ReactNode;
 }) {
   const [present, setPresent] = useState(visible);
@@ -90,7 +92,7 @@ export function DockCompanion({
         return;
       }
       outer.dataset.pillMotion = visible ? 'splitting' : 'joining';
-      const options = { duration: dockMotionDuration, easing: sectionMotionEasing };
+      const options = { duration, easing: sectionMotionEasing };
       const sizing = outer.animate(
         [
           { width: `${current}px`, height: `${currentHeight}px`, [margin]: inset },
@@ -127,7 +129,7 @@ export function DockCompanion({
       observer.disconnect();
       cancelAnimationFrame(resizeFrame);
     };
-  }, [present, visible, side]);
+  }, [present, visible, side, duration]);
 
   useLayoutEffect(
     () => () => {

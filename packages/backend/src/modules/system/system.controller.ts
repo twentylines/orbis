@@ -13,6 +13,8 @@ import { HostSensorsService } from './host-sensors.service';
 import { HostDeviceHistoryService } from './host-device-history.service';
 import { parseHostHistorySelection } from './host-device-history.model';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
+import { orbisReleaseChannelStatus } from '@runtipi/common/schemas/orbis-release-channel';
+import { requireStableReleaseChannel } from './orbis-release-channel';
 
 @Controller('system')
 export class SystemController {
@@ -97,20 +99,29 @@ export class SystemController {
   }
 
   @UseGuards(AuthGuard)
+  @Get('/orbis-release-channels')
+  orbisReleaseChannels() {
+    return orbisReleaseChannelStatus;
+  }
+
+  @UseGuards(AuthGuard)
   @Get('/orbis-release')
-  latestOrbisRelease() {
+  latestOrbisRelease(@Query('channel') channel: unknown) {
+    requireStableReleaseChannel(channel);
     return this.orbisReleases.latest();
   }
 
   @UseGuards(AuthGuard)
   @Get('/orbis-releases')
-  publishedOrbisReleases() {
+  publishedOrbisReleases(@Query('channel') channel: unknown) {
+    requireStableReleaseChannel(channel);
     return this.orbisReleases.listPublished();
   }
 
   @UseGuards(AuthGuard)
   @Get('/orbis-release-history')
-  orbisReleaseHistory(@Query('installed') installed: unknown, @Query('target') target: unknown) {
+  orbisReleaseHistory(@Query('installed') installed: unknown, @Query('target') target: unknown, @Query('channel') channel: unknown) {
+    requireStableReleaseChannel(channel);
     return this.orbisReleases.history(installed, target);
   }
 

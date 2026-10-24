@@ -17,6 +17,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router';
 import { desktopSearchSections } from './navigation';
+import { commandSearchEvent } from './command-search-event';
 import './command-search.css';
 
 type SearchResult = { id: string; path: string; label: string; detail: string; icon: ReactNode };
@@ -34,6 +35,7 @@ export function CommandSearch() {
   const [bar, setBar] = useState({ left: 24, top: 24, width: 600, height: 64, available: 600 });
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const header = useRef<HTMLDivElement>(null);
@@ -76,6 +78,7 @@ export function CommandSearch() {
     motions.current = [];
   }, []);
   const openSearch = useCallback(() => {
+    if (!closingRef.current && !panel.current) returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const next = readBar();
     if (next) setBar(next);
     setOpen(true);
@@ -232,6 +235,11 @@ export function CommandSearch() {
   }, [open, panelElement, readBar, cancelMotions, finishClose]);
 
   useEffect(() => {
+    window.addEventListener(commandSearchEvent, openSearch);
+    return () => window.removeEventListener(commandSearchEvent, openSearch);
+  }, [openSearch]);
+
+  useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -327,7 +335,10 @@ export function CommandSearch() {
             }}
             onCloseAutoFocus={(event) => {
               event.preventDefault();
-              trigger.current?.focus({ preventScroll: true });
+              const target = returnFocus.current;
+              (target?.isConnected && target !== document.body && !target.closest('[inert], [hidden]') ? target : trigger.current)?.focus({
+                preventScroll: true,
+              });
             }}
             onEscapeKeyDown={(event) => {
               event.preventDefault();

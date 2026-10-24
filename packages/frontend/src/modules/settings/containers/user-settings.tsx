@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { type SettingsFormValues, UserSettingsForm } from '../components/user-settings-form/user-settings-form';
 import { AutomaticUpdatesSettings } from './automatic-updates-settings';
+import { ReleaseChannelSettings } from './release-channel-settings';
 
 type Props = {
   initialValues?: SettingsFormValues;
@@ -50,7 +51,12 @@ export const UserSettingsContainer = ({ initialValues }: Props) => {
   return (
     <div className="card-body">
       <UserSettingsForm initialValues={initialValues} onSubmit={onSubmit} loading={updateSettings.isPending} />
-      {user?.operator === true ? <AutomaticUpdatesSettings /> : null}
+      {user?.operator === true ? (
+        <>
+          <ReleaseChannelSettings />
+          <AutomaticUpdatesSettings />
+        </>
+      ) : null}
     </div>
   );
 };

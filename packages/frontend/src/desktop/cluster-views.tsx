@@ -23,6 +23,9 @@ import './cluster-views.css';
 import { ClusterCatalogue } from './cluster-catalogue';
 import { useStorePreview } from '@/modules/app/pages/store-preview-context';
 import { appsReturnPath } from '@/modules/app/pages/store-preview-navigation';
+import { appOpeningMode } from './app-opening';
+import { useBlockedAppEmbeds } from './app-embedding';
+import { AppTabIndicator } from './app-tab-indicator';
 
 export type ClusterManagedApp = AppDestinationData & {
   app: NonNullable<AppDestinationData['app']> & Pick<NonNullable<GetAppDto['app']>, 'id' | 'version' | 'ignoredVersion' | 'createdAt'>;
@@ -188,6 +191,7 @@ export function ClusterOverview() {
 }
 
 export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
+  const blockedEmbeds = useBlockedAppEmbeds();
   const { cluster, servers } = useScopedServers();
   const { preferences } = useDesktopPreferences();
   const openApp = useAppLauncher();
@@ -341,6 +345,12 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
           const launchUrl =
             stale || !entry.info.available ? undefined : appDestinations(entry, inventory?.data?.addresses ?? {}, serverHostname(server))[0]?.url;
           const updateAvailable = entry.app.version < entry.metadata.latestVersion && entry.app.ignoredVersion !== entry.metadata.latestVersion;
+          const appKey = server.local ? entry.info.urn : `${server.id}/${entry.info.urn}`;
+          const tabOnly = Boolean(
+            launchUrl &&
+              (appOpeningMode(preferences.appLaunch, appKey, launchUrl, window.location.origin, true) === 'tab' ||
+                blockedEmbeds[appKey]?.url === launchUrl),
+          );
           return (
             <li
               className="cluster-app-card"
@@ -355,6 +365,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
                   <h3>
                     {manageUrl ? (
                       <Link
+                        className="cluster-app-name"
                         to={compact ? manageUrl : infoPath}
                         title={entry.info.name}
                         target={compact && !server.local ? '_blank' : undefined}
@@ -369,8 +380,11 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
                         <WrapWords text={entry.info.name} />
                       </Link>
                     ) : (
-                      <WrapWords text={entry.info.name} />
+                      <span className="cluster-app-name">
+                        <WrapWords text={entry.info.name} />
+                      </span>
                     )}
+                    {tabOnly ? <AppTabIndicator /> : null}
                   </h3>
                   <span className="cluster-app-server">
                     <IconServer size={14} aria-hidden="true" />

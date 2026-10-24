@@ -33,6 +33,7 @@ import { useIsMutating, QueryErrorResetBoundary } from '@tanstack/react-query';
 import { lazy, Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches, useNavigation } from 'react-router';
 import './layout.css';
+import '@/desktop/density.css';
 
 const Welcome = lazy(() => import('@/components/welcome/welcome').then((module) => ({ default: module.Welcome })));
 

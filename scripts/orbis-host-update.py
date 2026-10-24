@@ -34,7 +34,7 @@ SNAPSHOT = load_script("orbis-snapshot.py", "orbis_snapshot_for_update")
 CORE_SERVICES = ("runtipi-reverse-proxy", "runtipi", "runtipi-queue", "runtipi-db")
 JOURNAL_SCHEMA = "orbis.update.v1"
 TERMINAL_STAGES = {"complete", "rolled-back", "aborted"}
-FAILURE_STAGES = {"preparing", "pulled", "stopping", "stopped", "snapshotting", "snapshot-ready", "staged"}
+FAILURE_STAGES = {"preparing", "downloading", "pulled", "stopping", "stopped", "snapshotting", "snapshot-ready", "staged"}
 
 
 def failure_details(stage: object, error: Exception) -> dict[str, str]:
@@ -371,6 +371,8 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             record.update(backupScope="controller", checkpoint=planned["checkpoint"])
         write_journal(snapshot, record)
         try:
+            record["stage"] = "downloading"
+            write_journal(snapshot, record)
             docker_checked(context, ["pull", f"{target['image']}@{target['digest']}"], root, "Docker could not pull the verified Orbis image")
             record["stage"] = "pulled"
             write_journal(snapshot, record)
@@ -404,7 +406,7 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             return {"result": "healthy", "releaseTag": target["tag"], "snapshot": str(snapshot), "journal": str(journal_path(snapshot))}
         except Exception as error:
             record.update(failure_details(record["stage"], error))
-            if record["stage"] in {"preparing", "pulled"}:
+            if record["stage"] in {"preparing", "downloading", "pulled"}:
                 record["stage"] = "aborted"
                 write_journal(snapshot, record)
                 raise RuntimeError("update stopped before service downtime") from error
@@ -424,7 +426,7 @@ def recover(root: Path, current: dict[str, str], target: dict[str, str], context
         record = read_journal(snapshot, root, context, current, target)
         if record.get("stage") in TERMINAL_STAGES:
             raise ValueError("update transaction is already complete or recovered")
-        if record.get("stage") in {"preparing", "pulled"}:
+        if record.get("stage") in {"preparing", "downloading", "pulled"}:
             expected = HOST.installation_fingerprint(root, current, context)
             HOST.require_current_state(root, expected)
             core_ownership(root, context)

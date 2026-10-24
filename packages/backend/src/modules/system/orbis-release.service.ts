@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { eq, gt, lte, rcompare, valid } from 'semver';
+import { isStableOrbisReleaseTag } from '@runtipi/common/schemas/orbis-release-channel';
 
 const REPO = 'twentylines/orbis';
-const TAG = /^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$/;
 const CACHE_MS = 60 * 1000;
 const PENDING_RELEASE_CACHE_MS = 30 * 1000;
 const CATALOG_PAGE_SIZE = 100;
@@ -34,7 +34,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function releaseFromMetadata(value: unknown): OrbisRelease | null {
-  if (!isRecord(value) || value.draft === true || typeof value.tag_name !== 'string' || !TAG.test(value.tag_name) || !valid(value.tag_name)) {
+  if (
+    !isRecord(value) ||
+    value.draft === true ||
+    typeof value.tag_name !== 'string' ||
+    !isStableOrbisReleaseTag(value.tag_name) ||
+    !valid(value.tag_name)
+  ) {
     return null;
   }
   const tag = value.tag_name;
@@ -55,7 +61,7 @@ function tagsFromAtom(feed: string): Array<{ tag: string; publishedAt: string | 
   const entries = feed.match(/<entry>[\s\S]*?<\/entry>/g) ?? [];
   for (const entry of entries) {
     const tag = entry.match(/<id>tag:github\.com,2008:Repository\/[0-9]+\/([^<]+)<\/id>/)?.[1];
-    if (!tag || !TAG.test(tag) || tags.some((entry) => entry.tag === tag)) continue;
+    if (!tag || !isStableOrbisReleaseTag(tag) || tags.some((entry) => entry.tag === tag)) continue;
     const publishedAt = entry.match(/<updated>([^<]+)<\/updated>/)?.[1] ?? null;
     tags.push({ tag, publishedAt });
     if (tags.length === 10) break;
@@ -216,6 +222,9 @@ export class OrbisReleaseService {
       gt(installed, target)
     ) {
       throw new BadRequestException('Provide valid installed and target Orbis versions.');
+    }
+    if (!isStableOrbisReleaseTag(`v${valid(target)}`)) {
+      throw new BadRequestException('Nightly is inactive during beta. Choose a Stable release.');
     }
     if (!gt(target, installed)) return { releases: [], complete: true, truncated: false, context: null };
     const catalog = await this.listPublished();

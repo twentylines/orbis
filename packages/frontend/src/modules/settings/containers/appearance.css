@@ -235,13 +235,13 @@
   background-size: cover;
 }
 .appearance-wallpaper-sandstone {
-  background-image: url("/wallpapers/orbis-horizon.webp");
+  background-image: url("/wallpapers/orbis-horizon-preview.webp");
 }
 .appearance-wallpaper-tidal {
-  background-image: url("/wallpapers/tidal.svg");
+  background-image: url("/wallpapers/ocean-preview.webp");
 }
 .appearance-wallpaper-canopy {
-  background-image: url("/wallpapers/canopy.svg");
+  background-image: url("/wallpapers/forest-preview.webp");
 }
 .appearance-choice,
 .appearance-actions {

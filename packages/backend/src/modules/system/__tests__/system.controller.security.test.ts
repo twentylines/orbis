@@ -201,6 +201,39 @@ describe('SystemController certificate security', () => {
     expect(allowed.status).toBe(200);
     expect(allowed.body.tag).toBe('v0.1.0-beta.8');
   });
+
+  it('reports Stable as current and Nightly inactive only to authenticated sessions', async () => {
+    expect((await request(app.getHttpServer()).get('/system/orbis-release-channels')).status).toBe(401);
+    const result = await request(app.getHttpServer()).get('/system/orbis-release-channels').set('Authorization', 'Bearer cli-token');
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      phase: 'beta',
+      current: 'stable',
+      channels: [
+        { id: 'stable', available: true },
+        { id: 'nightly', available: false },
+      ],
+    });
+  });
+
+  it('rejects inactive or malformed channel queries before release discovery', async () => {
+    orbisReleases.latest.mockReset();
+    orbisReleases.listPublished.mockReset();
+    orbisReleases.history.mockReset();
+    for (const endpoint of ['orbis-release', 'orbis-releases', 'orbis-release-history']) {
+      for (const query of ['channel=nightly', 'channel=unknown', 'channel=stable&channel=nightly']) {
+        expect((await request(app.getHttpServer()).get(`/system/${endpoint}?${query}`).set('Authorization', 'Bearer cli-token')).status).toBe(400);
+      }
+    }
+    expect(orbisReleases.latest).not.toHaveBeenCalled();
+    expect(orbisReleases.listPublished).not.toHaveBeenCalled();
+    expect(orbisReleases.history).not.toHaveBeenCalled();
+    orbisReleases.latest.mockResolvedValue(null);
+    expect((await request(app.getHttpServer()).get('/system/orbis-release?channel=stable').set('Authorization', 'Bearer cli-token')).status).toBe(
+      200,
+    );
+    expect(orbisReleases.latest).toHaveBeenCalledOnce();
+  });
   it('requires authentication for the published catalogue and included changelogs', async () => {
     orbisReleases.listPublished.mockReset();
     orbisReleases.history.mockReset();

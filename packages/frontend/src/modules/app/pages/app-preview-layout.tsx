@@ -4,9 +4,9 @@ import { useDesktopWindows } from '@/desktop/window-viewport';
 import { useWindowVisible, WindowVisibilityContext } from '@/desktop/window-visibility';
 import { IconX } from '@tabler/icons-react';
 import { QueryErrorResetBoundary } from '@tanstack/react-query';
-import { Suspense, useCallback, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { Outlet, useLocation, useNavigate } from 'react-router';
+import { useLocation, useNavigate, useOutlet } from 'react-router';
 import { StorePreviewContext } from './store-preview-context';
 import {
   appsPreviewDepth,
@@ -17,6 +17,7 @@ import {
   storeReturnPath,
   type AppPreviewHistory,
 } from './store-preview-navigation';
+import { animatePreviewTiles, capturePreviewTiles, previewPaneMotion, type PreviewSnapshot } from './preview-motion';
 import './store-preview.css';
 
 export function AppPreviewLayout({ source, selected, children }: { source: 'store' | 'installed'; selected: string | null; children: ReactNode }) {
@@ -29,21 +30,60 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   const closePath = installed ? appsReturnPath(state, location.search) : storeReturnPath(state, location.search);
   const previewId = installed ? 'installed-app-preview' : 'store-app-preview';
   const catalogue = useRef<HTMLDivElement>(null);
+  const pane = useRef<HTMLElement>(null);
   const content = useRef<HTMLDivElement>(null);
+  const outlet = useOutlet();
+  const currentOutlet = useRef(outlet);
+  const [retained, setRetained] = useState<ReactNode>(null);
+  const snapshot = useRef<PreviewSnapshot>([]);
+  const paneBounds = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+  const tileMotion = useRef<Animation[]>([]);
+  const capture = useCallback(() => {
+    if (!split || !catalogue.current || !pane.current) return;
+    snapshot.current = capturePreviewTiles(catalogue.current);
+    paneBounds.current = {
+      left: pane.current.offsetLeft,
+      top: pane.current.offsetTop,
+      width: pane.current.offsetWidth,
+      height: pane.current.offsetHeight,
+    };
+  }, [split]);
   const previous = useRef<string | null>(null);
   const scroll = useRef(0);
   const motion = useRef<Animation | null>(null);
 
   const close = useCallback(() => {
+    capture();
     const depth = installed ? appsPreviewDepth(state) : storePreviewDepth(state);
     const index = window.history.state?.idx;
     if (depth > 0 && typeof index === 'number' && index >= depth) void navigate(-depth);
     else void navigate(closePath, { replace: true, preventScrollReset: true });
-  }, [closePath, installed, navigate, state]);
+  }, [capture, closePath, installed, navigate, state]);
   const nextHistory = () =>
     installed
       ? nextAppsPreviewHistory(state, location.search, Boolean(selected))
       : nextStorePreviewHistory(state, location.search, Boolean(selected));
+
+  useEffect(() => {
+    window.addEventListener('popstate', capture);
+    return () => window.removeEventListener('popstate', capture);
+  }, [capture]);
+
+  useLayoutEffect(() => {
+    currentOutlet.current = outlet;
+  });
+
+  useLayoutEffect(() => {
+    if (selected) setRetained(currentOutlet.current);
+  }, [selected]);
+
+  useEffect(
+    () => () => {
+      motion.current?.cancel();
+      for (const animation of tileMotion.current) animation.cancel();
+    },
+    [],
+  );
 
   useLayoutEffect(() => {
     if (split && catalogue.current) catalogue.current.scrollTop = scroll.current;
@@ -52,9 +92,34 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   useLayoutEffect(() => {
     const last = previous.current;
     previous.current = selected;
+    const movingPane =
+      motion.current?.playState === 'running' && motion.current.effect instanceof KeyframeEffect && motion.current.effect.target === pane.current;
+    const visual =
+      movingPane && pane.current
+        ? { opacity: getComputedStyle(pane.current).opacity, transform: getComputedStyle(pane.current).transform }
+        : undefined;
     motion.current?.cancel();
     motion.current = null;
+    for (const animation of tileMotion.current) animation.cancel();
+    tileMotion.current = [];
+    if (split && snapshot.current.length && !prefersReducedMotion()) {
+      const animations = animatePreviewTiles(snapshot.current);
+      tileMotion.current = animations;
+      void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+        for (const animation of animations) animation.cancel();
+        if (tileMotion.current === animations) tileMotion.current = [];
+      });
+    }
+    snapshot.current = [];
     if (!selected) {
+      if (split && last && pane.current && !prefersReducedMotion()) {
+        const animation = previewPaneMotion(pane.current, false, visual);
+        motion.current = animation;
+        void animation.finished.then(
+          () => setRetained(null),
+          () => undefined,
+        );
+      } else setRetained(null);
       if (last && catalogue.current) {
         const target =
           catalogue.current.querySelector<HTMLElement>(`[data-store-app="${CSS.escape(last)}"]`) ??
@@ -73,23 +138,25 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       }
       return;
     }
-    const element = content.current;
+    const element = split && (!last || movingPane) ? pane.current : content.current;
     if (!element || prefersReducedMotion()) return;
-    const opening = !last;
-    const animation = element.animate(
-      [
-        { opacity: 0, transform: `translateX(${split ? 18 : 12}px)` },
-        { opacity: 1, transform: 'none' },
-      ],
-      { delay: split && opening ? 140 : 70, duration: 210, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards' },
-    );
+    const animation = previewPaneMotion(element, true, movingPane ? visual : undefined);
     motion.current = animation;
-    return () => animation.cancel();
+    void animation.finished.then(
+      () => {
+        animation.cancel();
+        if (motion.current === animation) motion.current = null;
+      },
+      () => undefined,
+    );
   }, [selected, split]);
 
   return (
     <StorePreviewContext.Provider value={{ closePath, split, selectedUrn: selected, previewId, close, nextHistory }}>
       <div
+        onClickCapture={(event) => {
+          if ((event.target as Element).closest('[data-store-app]')) capture();
+        }}
         className={`store-split-layout${split ? ' store-split-desktop' : ''}${installed ? ' installed-app-split' : ''}`}
         data-preview-open={selected ? 'true' : 'false'}
       >
@@ -103,9 +170,18 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
         >
           <WindowVisibilityContext.Provider value={visible && (!selected || split)}>{children}</WindowVisibilityContext.Provider>
         </div>
-        <aside id={previewId} className="store-app-preview" aria-label="App preview" hidden={!split && !selected}>
+        <aside
+          ref={pane}
+          id={previewId}
+          className="store-app-preview"
+          aria-label="App preview"
+          hidden={!split && !selected}
+          inert={!selected}
+          aria-hidden={!selected || undefined}
+          style={split && !selected && retained && paneBounds.current ? { position: 'absolute', ...paneBounds.current, zIndex: 2 } : undefined}
+        >
           <div className="store-preview-surface" aria-hidden="true" />
-          {selected ? (
+          {selected || (split && retained) ? (
             <div ref={content} className="store-preview-content">
               {split ? (
                 <button type="button" className="store-preview-close" aria-label="Close app preview" onClick={close}>
@@ -131,9 +207,7 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
                       </div>
                     )}
                   >
-                    <Suspense fallback={<DelayedRouteLoading label="Loading app…" />}>
-                      <Outlet />
-                    </Suspense>
+                    <Suspense fallback={<DelayedRouteLoading label="Loading app…" />}>{selected ? outlet : retained}</Suspense>
                   </ErrorBoundary>
                 )}
               </QueryErrorResetBoundary>

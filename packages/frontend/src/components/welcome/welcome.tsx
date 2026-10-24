@@ -12,8 +12,9 @@ import {
   type AutomaticUpdateSettings,
 } from '@/desktop/automatic-updates-api';
 import { DesktopPreferencesPreview, useDesktopPreferences } from '@/desktop/preferences';
+import { AppLaunchModeChoice } from '@/desktop/app-launch-mode-choice';
 import { useReducedMotion } from '@/desktop/motion-preferences';
-import { themePresets, presetLabels, presetWallpaperSources } from '@/desktop/wallpaper-presets';
+import { themePresets, presetLabels, presetWallpaperPreviews } from '@/desktop/wallpaper-presets';
 import { IconArrowLeft, IconArrowRight, IconCheck, IconDeviceDesktop, IconLeaf, IconMoon, IconSparkles, IconSun } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -270,7 +271,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                             })
                           }
                         >
-                          <img src={presetWallpaperSources[preset]} alt="" loading="lazy" decoding="async" />
+                          <img src={presetWallpaperPreviews[preset]} alt="" loading="lazy" decoding="async" />
                           <span>
                             {presetLabels[preset]}
                             {(draft.wallpaperMode === 'theme' ? draft.preset === preset : draft.wallpaperPreset === preset) ? (
@@ -313,19 +314,10 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                       }
                     />
                     <p className="orbis-setup-help">You can fine-tune blur, transparency and motion in Settings → Appearance → Performance.</p>
-                    <div className="orbis-setup-schedule">
-                      <label htmlFor="setup-app-opening">Open apps</label>
-                      <select
-                        id="setup-app-opening"
-                        className="form-select"
-                        value={draft.appLaunch.mode}
-                        onChange={(event) => setDraft({ ...draft, appLaunch: { ...draft.appLaunch, mode: event.target.value as 'window' | 'tab' } })}
-                      >
-                        <option value="window">In Orbis</option>
-                        <option value="tab">In a new tab</option>
-                      </select>
-                      <p className="orbis-setup-help">Account default. Smaller screens use tabs. Some apps require a tab for security or sign-in.</p>
-                    </div>
+                    <AppLaunchModeChoice
+                      value={draft.appLaunch.mode}
+                      onChange={(mode) => setDraft({ ...draft, appLaunch: { ...draft.appLaunch, mode } })}
+                    />
                   </>
                 ) : null}
                 {step === 4 ? (
@@ -470,7 +462,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                       </div>
                       <div>
                         <dt>Open apps</dt>
-                        <dd>{draft.appLaunch.mode === 'window' ? 'In Orbis' : 'In a new tab'}</dd>
+                        <dd>{draft.appLaunch.mode === 'window' ? 'Orbis windows' : 'New tabs'}</dd>
                       </div>
                       <div>
                         <dt>Automatic updates</dt>

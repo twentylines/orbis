@@ -10,6 +10,8 @@ import { appAddress, canEmbedApp, primaryAppAddress } from './app-opening';
 import { splitAppBounds } from './app-window-layout';
 import type { AppLaunchRequest } from './app-window-state';
 import type { WindowArea } from './window-geometry';
+import { useDesktopPreferences } from './preferences';
+import { useBlockedAppEmbeds } from './app-embedding';
 
 export function AppSplitPicker({
   anchor,
@@ -29,6 +31,8 @@ export function AppSplitPicker({
   onClose: () => void;
 }) {
   const { userSettings } = useAppContext();
+  const { preferences } = useDesktopPreferences();
+  const blocked = useBlockedAppEmbeds();
   const apps = useQuery(getInstalledAppsOptions());
   const [search, setSearch] = useState('');
   const input = useRef<HTMLInputElement>(null);
@@ -76,6 +80,7 @@ export function AppSplitPicker({
         <IconSearch size={19} aria-hidden="true" />
         <input
           ref={input}
+          className="form-control"
           aria-label="Search split screen apps"
           placeholder="Search apps"
           value={search}
@@ -85,16 +90,21 @@ export function AppSplitPicker({
       {apps.isError ? (
         <p role="alert">
           Installed apps could not be loaded.{' '}
-          <button type="button" onClick={() => void apps.refetch()}>
+          <Button type="button" variant="outline" onClick={() => void apps.refetch()}>
             Retry
-          </button>
+          </Button>
         </p>
       ) : null}
       {apps.isPending ? <output>Loading installed apps…</output> : null}
       <ul>
         {choices.map((request) => {
           const url = appAddress(request.preferredUrl ?? request.launchUrl);
-          const enabled = url && canEmbedApp(url, window.location.origin, true);
+          const enabled =
+            url &&
+            canEmbedApp(url, window.location.origin, true) &&
+            preferences.appLaunch.mode !== 'tab' &&
+            preferences.appLaunch.apps[request.urn]?.mode !== 'tab' &&
+            blocked[request.urn]?.url !== url;
           return (
             <li key={request.urn}>
               <button

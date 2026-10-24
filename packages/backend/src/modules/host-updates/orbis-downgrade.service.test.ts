@@ -201,6 +201,8 @@ describe('reviewed Orbis downgrades', () => {
   it('reviews and rechecks before using the existing verified host transaction once', async () => {
     const plan = await service.plan(target);
     expect(plan.compatibility).toContain('Same Runtipi');
+    expect(plan.forced).toBe(false);
+    expect(plan.warnings).toEqual([]);
     expect(host.plan).toHaveBeenCalledWith(target, true);
     expect(await service.apply(id)).toEqual({ jobId: id, state: 'running' });
     expect(execute).toHaveBeenCalledTimes(2);
@@ -275,5 +277,149 @@ describe('reviewed Orbis downgrades', () => {
     });
     await expect(service.plan(target)).rejects.toThrow('release changed');
     expect(host.apply).not.toHaveBeenCalled();
+  });
+
+  it('forces schema, sign-in and saved preference incompatibility only after an explicit matching review', async () => {
+    const tag = legacyTarget();
+    execute.mockReset().mockImplementation(async () => ({ rows: execute.mock.calls.length % 2 === 1 ? [row] : [{ id: 1, username: 'sai' }] }));
+    preferences.read.mockResolvedValue({ ...DEFAULT_DESKTOP_PREFERENCES, wallpaperPreset: 'blush' });
+    const review = await service.plan(tag, true);
+    expect(review.forced).toBe(true);
+    expect(review.warnings.join(' ')).toContain('database schema');
+    expect(review.warnings.join(' ')).toContain('requires email sign-in');
+    expect(review.warnings.join(' ')).toContain('cannot preserve');
+    expect(review.snapshotBytes).toBe(1024);
+    await expect(service.apply(id)).rejects.toThrow('same force choice');
+    await expect(service.apply(id, false)).rejects.toThrow('same force choice');
+    expect(automaticUpdates.pauseForDowngrade).not.toHaveBeenCalled();
+    expect(host.apply).not.toHaveBeenCalled();
+    await expect(service.apply(id, true)).resolves.toEqual({ jobId: id, state: 'running' });
+    expect(automaticUpdates.pauseForDowngrade).toHaveBeenCalledTimes(1);
+    expect(host.plan).toHaveBeenCalledWith(tag, true);
+    expect(host.apply).toHaveBeenCalledWith(id, true);
+    await expect(service.apply(id, true)).rejects.toThrow('new downgrade review');
+  });
+
+  it('allows an unknown target data contract with explicit warnings when forced', async () => {
+    vi.mocked(fetch).mockImplementation(async () => Response.json({ ...manifest, dataCompatibility: undefined, migrationFingerprint: undefined }));
+    await expect(service.plan(target)).rejects.toThrow('data contract');
+    expect(host.plan).not.toHaveBeenCalled();
+    const review = await service.plan(target, true);
+    expect(review.warnings.join(' ')).toContain('no verified compatible data contract');
+    expect(review.warnings.join(' ')).toContain('database schema');
+    await expect(service.apply(id, true)).resolves.toEqual({ jobId: id, state: 'running' });
+  });
+
+  it('requires a new forced review when schema, contracts, current image or risky account state changes', async () => {
+    await service.plan(target, true);
+    execute.mockResolvedValueOnce({ rows: [{ ...row, hash: 'e'.repeat(64) }] });
+    await expect(service.apply(id, true)).rejects.toThrow('installation changed');
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, dataCompatibility: 'orbis.data.v2' }));
+    await expect(service.apply(id, true)).rejects.toThrow('installation changed');
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, commit: 'f'.repeat(40) }));
+    await expect(service.apply(id, true)).rejects.toThrow('installation changed');
+    host.status.mockResolvedValueOnce({ ...status, currentDigest: `sha256:${'e'.repeat(64)}` });
+    await expect(service.apply(id, true)).rejects.toThrow('installation changed');
+    const tag = legacyTarget();
+    preferences.read.mockResolvedValue({ ...DEFAULT_DESKTOP_PREFERENCES, wallpaperPreset: 'blush' });
+    await service.plan(tag, true);
+    preferences.read.mockResolvedValueOnce({ ...DEFAULT_DESKTOP_PREFERENCES, wallpaperPreset: 'ocean' });
+    await expect(service.apply(id, true)).rejects.toThrow('installation changed');
+    execute.mockResolvedValueOnce({ rows: legacyRows }).mockResolvedValueOnce({ rows: [{ id: 1, username: 'someone@example.test' }] });
+    await expect(service.apply(id, true)).rejects.toThrow('installation changed');
+    expect(host.apply).not.toHaveBeenCalled();
+    expect(automaticUpdates.pauseForDowngrade).not.toHaveBeenCalled();
+  });
+
+  it('does not escalate a normal review at confirmation or accept a truthy force flag', async () => {
+    await service.plan(target);
+    await expect(service.apply(id, true)).rejects.toThrow('same force choice');
+    await expect(service.plan(target, 'true' as never)).rejects.toThrow('whether to force');
+    await expect(service.apply(id, 1 as never)).rejects.toThrow('whether to force');
+    expect(host.apply).not.toHaveBeenCalled();
+  });
+
+  it('advertises force only for compatibility failures, never for runtime or trust failures', async () => {
+    execute.mockResolvedValueOnce({ rows: [{ ...row, hash: 'e'.repeat(64) }] });
+    await expect(service.plan(target)).rejects.toMatchObject({ response: { canForce: true } });
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, dataCompatibility: 'unknown' }));
+    await expect(service.plan(target)).rejects.toMatchObject({ response: { canForce: true } });
+    const tag = legacyTarget();
+    preferences.read.mockResolvedValue({ ...DEFAULT_DESKTOP_PREFERENCES, wallpaperPreset: 'blush' });
+    await expect(service.plan(tag)).rejects.toMatchObject({ response: { canForce: true } });
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, runtipiCompatibility: '4.11.0' }));
+    await expect(service.plan(target)).rejects.not.toMatchObject({ response: { canForce: true } });
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, digest: 'wrong' }));
+    await expect(service.plan(target)).rejects.not.toMatchObject({ response: { canForce: true } });
+  });
+
+  it('keeps runtime, release identity, host health, active-job and nightly guards hard when forced', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, runtipiCompatibility: '4.11.0' }));
+    await expect(service.plan(target, true)).rejects.toThrow('different Runtipi');
+    for (const field of ['image', 'commit', 'digest', 'installationProtocol', 'tag']) {
+      vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, [field]: 'wrong' }));
+      await expect(service.plan(target, true)).rejects.toThrow('verified Orbis');
+    }
+    await expect(service.plan('v0.1.0-nightly.20261025000000.aaaaaaaa', true)).rejects.toThrow('older');
+    host.status.mockResolvedValueOnce({ ...status, coreHealth: 'unhealthy' });
+    await expect(service.plan(target, true)).rejects.toThrow('healthy');
+    host.status.mockResolvedValueOnce({ ...status, imageMatches: false });
+    await expect(service.plan(target, true)).rejects.toThrow('healthy');
+    host.status.mockResolvedValueOnce({ ...status, job: { id, state: 'recovering', targetTag: target, startedAt: Date.now() } });
+    await expect(service.plan(target, true)).rejects.toThrow('current host update');
+    expect(host.plan).not.toHaveBeenCalled();
+    expect(host.apply).not.toHaveBeenCalled();
+  });
+
+  it('keeps backup planning and automatic-update pausing failures as hard stops when forced', async () => {
+    host.plan.mockRejectedValueOnce(new Error('Snapshot unavailable'));
+    await expect(service.plan(target, true)).rejects.toThrow('Snapshot unavailable');
+    await service.plan(target, true);
+    automaticUpdates.pauseForDowngrade.mockRejectedValueOnce(new Error('Pause unavailable'));
+    await expect(service.apply(id, true)).rejects.toThrow('Pause unavailable');
+    expect(host.apply).not.toHaveBeenCalled();
+    await expect(service.apply(id, true)).rejects.toThrow('new downgrade review');
+  });
+
+  it('reports an upcoming Runtipi boundary and the actual host-updater limit without making a host plan', async () => {
+    expect(await service.releaseCompatibility(target)).toEqual({
+      tag: target,
+      currentRuntipiVersion: '4.10.1',
+      targetRuntipiVersion: '4.10.1',
+      crossesRuntipiBoundary: false,
+      hostUpdateSupported: true,
+      warning: null,
+    });
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, runtipiCompatibility: 'v4.11.0' }));
+    const boundary = await service.releaseCompatibility(target);
+    expect(boundary.crossesRuntipiBoundary).toBe(true);
+    expect(boundary.targetRuntipiVersion).toBe('4.11.0');
+    expect(boundary.hostUpdateSupported).toBe(false);
+    expect(boundary.warning).toContain('prevents downgrading');
+    expect(boundary.warning).toContain('cannot apply');
+    vi.stubEnv('TIPI_VERSION', '4.11.0');
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, runtipiCompatibility: '4.11.0' }));
+    expect(await service.releaseCompatibility(target)).toMatchObject({ crossesRuntipiBoundary: false, hostUpdateSupported: false });
+    expect(host.status).not.toHaveBeenCalled();
+    expect(host.plan).not.toHaveBeenCalled();
+    expect(host.apply).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid, nightly, unverified, oversize and unavailable compatibility metadata', async () => {
+    for (const tag of ['../private', '', null, 'v0.1.0-nightly.20261025000000.aaaaaaaa']) {
+      await expect(service.releaseCompatibility(tag)).rejects.toThrow('published');
+    }
+    expect(fetch).not.toHaveBeenCalled();
+    for (const replacement of [{ tag: 'v0.1.0-beta.1' }, { digest: 'latest' }, { runtipiCompatibility: 'unverified' }]) {
+      vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...manifest, ...replacement }));
+      await expect(service.releaseCompatibility(target)).rejects.toThrow('verified');
+    }
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('x'.repeat(16385)));
+    await expect(service.releaseCompatibility(target)).rejects.toThrow('could not be verified');
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('Network unavailable'));
+    await expect(service.releaseCompatibility(target)).rejects.toThrow('could not be verified');
+    vi.stubEnv('TIPI_VERSION', '');
+    await expect(service.releaseCompatibility(target)).rejects.toThrow('unavailable');
   });
 });

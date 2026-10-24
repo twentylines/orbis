@@ -1,30 +1,78 @@
-.desktop-updates-intro {
-  max-width: 680px;
-  margin: 19px 0 26px;
+.desktop-updates {
+  min-width: 0;
+  container-type: inline-size;
+}
+.desktop-updates-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.desktop-updates-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 7rem;
+  gap: 10px;
+  min-height: 46px;
+  min-width: 0;
+  max-width: 14rem;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
   color: var(--desktop-muted);
-  line-height: 1.55;
+  font: inherit;
+  font-weight: 650;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.desktop-updates-tabs button[aria-selected="true"] {
+  border-color: var(--desktop-line);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
+  color: var(--desktop-ink);
+}
+.desktop-updates-tabs button:hover {
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, var(--desktop-surface));
+}
+.desktop-updates-tabs button:focus-visible,
+.desktop-downgrade > summary:focus-visible,
+.desktop-downgrade-confirm input:focus-visible {
+  outline: 3px solid var(--desktop-accent);
+  outline-offset: 3px;
+}
+.desktop-updates-tab-count {
+  min-width: 1.75em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  font-size: 0.8125em;
+  font-variant-numeric: tabular-nums;
 }
 .desktop-updates-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 16px;
+  min-width: 0;
+}
+.desktop-updates-grid > [hidden] {
+  display: none;
 }
 .desktop-updates-card {
   min-width: 0;
-  padding: 22px;
-  border: 1px solid var(--desktop-line);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
 }
 .desktop-updates-card > p {
   color: var(--desktop-muted);
   line-height: 1.5;
 }
+.desktop-updates-card > .desktop-update-action {
+  margin-bottom: 20px;
+}
 .desktop-updates-card-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: start;
+  align-items: center;
   gap: 14px;
   margin-bottom: 24px;
 }
@@ -57,7 +105,6 @@
   line-height: 1.35;
 }
 .desktop-updates-host {
-  grid-column: 1 / -1;
   container-type: inline-size;
 }
 .desktop-updates-host > p {
@@ -108,7 +155,7 @@
 .desktop-host-package-foot button,
 .desktop-host-package-more,
 .desktop-host-changelog button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 7px 12px;
   border: 1px solid var(--desktop-line);
   border-radius: 9px;
@@ -418,7 +465,7 @@ p.desktop-host-package-versions {
 .desktop-update-build {
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(209, 161, 114, 0.1);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 8%, transparent);
   color: var(--desktop-ink);
   font-size: 0.8125rem;
   line-height: 1.5;
@@ -497,7 +544,7 @@ p.desktop-host-package-versions {
 .desktop-update-action,
 .desktop-update-job button,
 .desktop-update-plan-actions button {
-  min-height: 42px;
+  min-height: 44px;
   padding: 8px 14px;
   border: 1px solid var(--desktop-accent);
   border-radius: 9px;
@@ -506,9 +553,6 @@ p.desktop-host-package-versions {
   font: inherit;
   font-weight: 650;
   cursor: pointer;
-}
-.desktop-update-action {
-  margin-top: 20px;
 }
 .desktop-update-action:disabled,
 .desktop-update-job button:disabled,
@@ -558,15 +602,6 @@ p.desktop-host-package-versions {
   .desktop-update-markdown {
     max-height: none;
     overflow: visible;
-  }
-  .desktop-updates-grid {
-    grid-template-columns: 1fr;
-  }
-  .desktop-updates-host {
-    grid-column: auto;
-  }
-  .desktop-updates-card {
-    padding: 14px;
   }
 }
 @container (max-width: 540px) {
@@ -640,10 +675,6 @@ p.desktop-host-package-versions {
   font-size: 0.8125rem;
   font-weight: 650;
 }
-.desktop-package-review .orbis-dialog-header {
-  display: block;
-  padding: 24px 76px 20px 24px;
-}
 .desktop-package-review .orbis-dialog-header .modal-title {
   display: block;
   overflow: visible;
@@ -651,7 +682,6 @@ p.desktop-host-package-versions {
   white-space: normal;
 }
 .desktop-package-review .orbis-dialog-header .modal-body {
-  padding: 8px 0 0;
   color: var(--desktop-muted);
 }
 .modal-content.desktop-package-review .desktop-host-package-plan textarea:focus-visible {
@@ -666,7 +696,9 @@ p.desktop-host-package-versions {
 .desktop-downgrade > summary {
   cursor: pointer;
   font-weight: 600;
-  padding-block: 0.5rem;
+  min-height: 44px;
+  padding-block: 0.625rem;
+  line-height: 1.5;
 }
 .desktop-downgrade-content {
   display: grid;
@@ -675,7 +707,12 @@ p.desktop-host-package-versions {
 }
 .desktop-downgrade-content p {
   margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.55;
   overflow-wrap: break-word;
+}
+.desktop-downgrade-content > .desktop-update-action {
+  justify-self: start;
 }
 .desktop-downgrade-controls {
   display: flex;
@@ -703,22 +740,106 @@ p.desktop-host-package-versions {
   margin-block: 0.25rem 0.75rem;
   overflow-wrap: break-word;
 }
-.desktop-downgrade-dialog {
+:is(.desktop-downgrade-dialog, .desktop-update-review-dialog) {
   max-height: calc(100dvh - 32px);
 }
-.desktop-downgrade-dialog > .modal-body {
+:is(.desktop-downgrade-dialog, .desktop-update-review-dialog) > .modal-body {
   min-height: 0;
   overflow-y: auto;
+  scroll-padding-block: 20px;
 }
-.desktop-downgrade-dialog > :is(.orbis-dialog-header, .modal-footer) {
+:is(.desktop-downgrade-dialog, .desktop-update-review-dialog) > :is(.orbis-dialog-header, .modal-footer) {
   flex-shrink: 0;
 }
-.desktop-downgrade-dialog .orbis-dialog-header {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
+body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: -3px;
 }
 .desktop-downgrade-dialog .orbis-dialog-header .modal-body {
-  padding: 0;
   overflow-wrap: anywhere;
+}
+.desktop-update-process {
+  display: grid;
+  gap: 18px;
+  margin: 20px 0;
+  padding-left: 1.5rem;
+}
+.desktop-update-process li {
+  padding-left: 8px;
+  line-height: 1.55;
+}
+.desktop-update-process li::marker {
+  color: var(--desktop-accent);
+  font-weight: 700;
+}
+.desktop-update-process strong,
+.desktop-update-process span {
+  display: block;
+}
+.desktop-update-process span {
+  margin-top: 4px;
+  color: var(--desktop-muted);
+}
+.desktop-update-risk {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--desktop-negative) 55%, var(--desktop-line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--desktop-negative) 8%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+.desktop-update-risk p {
+  margin: 0;
+  color: var(--desktop-ink);
+}
+.desktop-update-risk ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.desktop-update-risk button {
+  justify-self: start;
+}
+.desktop-downgrade-confirm {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.desktop-downgrade-confirm input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+  scroll-margin-block: 20px;
+}
+.desktop-update-action.is-danger,
+.desktop-update-plan-actions button.is-danger {
+  border-color: #b4232f;
+  background: #b4232f;
+  color: #fff;
+}
+.desktop-update-action.is-danger:hover:not(:disabled),
+.desktop-update-plan-actions button.is-danger:hover:not(:disabled) {
+  border-color: #921d27;
+  background: #921d27;
+}
+@container (max-width: 420px) {
+  .desktop-updates-tabs button {
+    max-width: none;
+  }
+  .desktop-downgrade-controls > button {
+    flex: 1 1 100%;
+  }
 }

@@ -116,6 +116,26 @@ class OrbisHostUpdateTests(unittest.TestCase):
             UPDATE.HOST.saved_state(self.root), UPDATE.HOST.installation_fingerprint(self.root, TARGET, "test-daemon")
         )
 
+    def test_failed_download_is_reported_and_never_stops_running_services(self):
+        fake = FakeDocker(self.root)
+        observed = []
+
+        def docker(context, arguments, root):
+            if arguments[0] == "pull":
+                observed.append(json.loads(UPDATE.journal_path(self.snapshot).read_text())["stage"])
+                return subprocess.CompletedProcess(arguments, 1, "", "synthetic download failure")
+            return fake(context, arguments, root)
+
+        with mock.patch.object(UPDATE.HOST, "docker", side_effect=docker):
+            with self.assertRaises(RuntimeError):
+                UPDATE.apply_update(self.root, CURRENT, TARGET, "test-daemon", self.snapshot)
+        self.assertEqual(observed, ["downloading"])
+        record = UPDATE.read_journal(self.snapshot, self.root, "test-daemon", CURRENT, TARGET)
+        self.assertEqual(record["stage"], "aborted")
+        self.assertEqual(record["failureStage"], "downloading")
+        self.assertTrue(all(state == "running" for state in fake.states.values()))
+        self.assertFalse(any(call[0] == "stop" for call in fake.calls))
+
     def test_installer_capability_must_match_the_published_release(self):
         target = {**TARGET, "installationProtocol": UPDATE.HOST.PLAN.INSTALLATION_PROTOCOL}
         with self.assertRaisesRegex(ValueError, "verified GitHub and GHCR release"):

@@ -17,6 +17,13 @@ ASSET = f"https://github.com/twentylines/orbis/releases/download/{TAG}/release-m
 
 
 class OrbisReleaseCheckTests(unittest.TestCase):
+    def test_inactive_builds_are_rejected_before_network_discovery(self):
+        with patch.object(CHECK, "published_release") as discover:
+            for tag in ["v0.1.0-nightly.20261025", "v0.1.0-dev.1", "v0.1.0-alpha.1"]:
+                with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, "inactive during beta"):
+                    CHECK.check(tag)
+            discover.assert_not_called()
+
     def test_requires_published_matching_github_asset(self):
         release = {"tag_name": TAG, "draft": False, "assets": [{"name": "release-manifest.json", "browser_download_url": ASSET}]}
         self.assertEqual(CHECK.release_asset(release, TAG), ASSET)

@@ -27,6 +27,10 @@ TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$")
 ORBIS_ENV = {"ORBIS_VERSION", "ORBIS_COMMIT", "ORBIS_IMAGE_DIGEST"}
 
 
+def is_stable_release_tag(tag: str) -> bool:
+    return bool(TAG.fullmatch(tag) and not re.search(r"(?:^|[.-])(?:nightly|dev|alpha)(?:[.-]|$)", tag, re.IGNORECASE))
+
+
 def validate_manifest(raw: object) -> dict[str, str]:
     if not isinstance(raw, dict):
         raise ValueError("release manifest must be an object")
@@ -37,6 +41,8 @@ def validate_manifest(raw: object) -> dict[str, str]:
         raise ValueError("release manifest is not an Orbis v1 release")
     if not TAG.fullmatch(raw["tag"]) or not COMMIT.fullmatch(raw["commit"]) or not DIGEST.fullmatch(raw["digest"]):
         raise ValueError("release manifest has an invalid tag, commit, or digest")
+    if not is_stable_release_tag(raw["tag"]):
+        raise ValueError("Nightly is inactive during beta; choose a Stable release")
     if raw["runtipiCompatibility"].removeprefix("v") != "4.10.1":
         raise ValueError("release manifest does not target the 4.10.1 compatibility base")
     if "installationProtocol" in raw and raw["installationProtocol"] != INSTALLATION_PROTOCOL:

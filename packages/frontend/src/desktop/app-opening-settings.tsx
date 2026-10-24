@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import type { AppOpeningMode } from '@runtipi/common/schemas';
 import { useDesktopPreferences } from './preferences';
+import { AppLaunchModeChoice } from './app-launch-mode-choice';
 
 export function AppOpeningPreference({ urn, name, label = name }: { urn: string; name: string; label?: string }) {
   const { preferences, update } = useDesktopPreferences();
@@ -13,6 +14,7 @@ export function AppOpeningPreference({ urn, name, label = name }: { urn: string;
         className="form-select"
         aria-label={`Open ${name}`}
         value={value}
+        disabled={preferences.appLaunch.mode === 'tab'}
         onChange={(event) => {
           const apps = { ...preferences.appLaunch.apps };
           apps[urn] = { ...apps[urn] };
@@ -36,24 +38,10 @@ export function AppOpeningSettings() {
     <section className="appearance-section" aria-labelledby="app-opening-heading">
       <div>
         <h2 id="app-opening-heading">Opening apps</h2>
-        <p>
-          Keep apps in resizable Orbis windows, or open a browser tab. Smaller screens use tabs. Some apps require a tab for their security or sign-in
-          settings.
-        </p>
+        <p>Choose how apps open on this account.</p>
       </div>
       <div>
-        <label className="app-opening-select">
-          <span>Account default</span>
-          <select
-            className="form-select"
-            aria-label="Default app opening"
-            value={preferences.appLaunch.mode}
-            onChange={(event) => update({ appLaunch: { ...preferences.appLaunch, mode: event.target.value as AppOpeningMode } })}
-          >
-            <option value="window">In Orbis</option>
-            <option value="tab">In a new tab</option>
-          </select>
-        </label>
+        <AppLaunchModeChoice value={preferences.appLaunch.mode} onChange={(mode) => update({ appLaunch: { ...preferences.appLaunch, mode } })} />
         <details className="app-opening-details">
           <summary>Choose for each app</summary>
           {apps.isError ? (

@@ -596,6 +596,13 @@
   font-size: 0.875rem;
   color: var(--desktop-ink);
 }
+.workspace-app-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.875rem;
+}
 .workspace-app-copy small {
   line-height: 1.35;
   white-space: normal;

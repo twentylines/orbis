@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router';
+import { useEffect } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import * as Tabs from '@radix-ui/react-tabs';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas/metric-history';
 import type { HostSensors } from '@runtipi/common/schemas/host-sensors';
 import { IconActivity, IconArrowDown, IconArrowUp, IconCpu, IconDatabase, IconDeviceDesktopAnalytics, IconNetwork } from '@tabler/icons-react';
@@ -8,10 +10,8 @@ import { MetricChart } from '@/components/metric-chart/metric-chart';
 import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
 import { formatUptime } from '@/desktop/uptime';
 import './monitor.css';
-import { ContainerResources } from '@/components/container-resources/container-resources';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { HostDevices, useHostReadings } from '../components/host-devices';
-import { HostProcessesView } from '../components/host-processes';
 import { HostDeviceHistoryView } from '../components/host-device-history';
 import { HostSensorsView } from '../components/host-sensors';
 import { ServerRack, useCluster } from '@/desktop/cluster';
@@ -19,6 +19,32 @@ import { useServerPath } from '@/desktop/cluster-data';
 import { ClusterOverview } from '@/desktop/cluster-views';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { statusNetwork, usagePercent } from '../components/system-readings';
+import { MonitorDisclosure, MonitorUsage } from '../components/monitor-usage';
+
+const monitorSections = [
+  ['usage', 'Usage'],
+  ['performance', 'Performance'],
+  ['devices', 'Devices'],
+  ['sensors', 'Sensors'],
+] as const;
+type MonitorSection = (typeof monitorSections)[number][0];
+const sectionForHash = (hash: string): MonitorSection | null => {
+  if (['#telemetry-cpu-title', '#telemetry-memory-title'].includes(hash)) return 'performance';
+  if (
+    [
+      '#host-storage-title',
+      '#host-network-title',
+      '#host-disk-activity-title',
+      '#device-history',
+      '#telemetry-disks-title',
+      '#telemetry-network-title',
+    ].includes(hash)
+  )
+    return 'devices';
+  if (['#sensors', '#host-temperatures-title', '#host-fans-title', '#host-gpus-title'].includes(hash)) return 'sensors';
+  if (['#containers', '#processes'].includes(hash)) return 'usage';
+  return null;
+};
 
 const bytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value) || value < 0) return 'Unavailable';
@@ -47,6 +73,27 @@ function ServerMonitor() {
   const telemetryPath = useServerPath()('/api/system/telemetry');
   const sensorsPath = useServerPath()('/api/system/host-sensors');
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const requestedSection = searchParams.get('section');
+  const section =
+    sectionForHash(location.hash) ?? (monitorSections.some(([value]) => value === requestedSection) ? (requestedSection as MonitorSection) : 'usage');
+  useEffect(() => {
+    const linkedSection = sectionForHash(location.hash);
+    if (!linkedSection || requestedSection === linkedSection) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('section', linkedSection);
+    navigate(
+      { pathname: location.pathname, search: next.toString(), hash: location.hash },
+      { replace: true, preventScrollReset: true, state: location.state },
+    );
+  }, [location.hash, location.pathname, location.state, navigate, requestedSection, searchParams]);
+  const changeSection = (value: string) => {
+    if (!monitorSections.some(([section]) => section === value)) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('section', value);
+    navigate({ pathname: location.pathname, search: next.toString(), hash: '' }, { replace: true, preventScrollReset: true });
+  };
   const selectedRange = searchParams.get('range');
   const range: MetricHistoryRange = selectedRange && Object.hasOwn(metricHistoryRanges, selectedRange) ? (selectedRange as MetricHistoryRange) : '1h';
   const history = useMetricHistory(range);
@@ -212,10 +259,6 @@ function ServerMonitor() {
               <dt>Logical CPUs</dt>
               <dd>{sample?.cpu.perCorePercent.length || 'Unavailable'}</dd>
             </div>
-            <div title={cpuSensor ? `Reported by ${cpuSensor.label} (${cpuSensor.chip})` : undefined}>
-              <dt>CPU temperature</dt>
-              <dd>{cpuSensor?.celsius !== null && cpuSensor?.celsius !== undefined ? `${cpuSensor.celsius.toFixed(1)} °C` : 'Unavailable'}</dd>
-            </div>
           </dl>
         </div>
         <div className="monitor-rack-panel">
@@ -226,203 +269,260 @@ function ServerMonitor() {
           <ServerRack cpu={sample?.cpu.totalPercent ?? null} memory={memoryPercent} online={telemetry.isPending ? undefined : !telemetry.isError} />
         </div>
       </section>
-      {sample ? (
-        <>
-          <div className="monitor-history-toolbar">
-            <h2>Performance history</h2>
-            <fieldset className="monitor-history-ranges">
-              <legend className="visually-hidden">History time range</legend>
-              {(
-                [
-                  ['5m', '5 min'],
-                  ['1h', '1 hour'],
-                  ['24h', '24 hours'],
-                  ['7d', '7 days'],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  type="button"
-                  key={value}
-                  aria-pressed={range === value}
-                  onClick={() => {
-                    const next = new URLSearchParams(searchParams);
-                    next.set('range', value);
-                    setSearchParams(next, { replace: true, preventScrollReset: true });
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </fieldset>
-            <span className="monitor-history-resolution">
-              {range === '5m' ? 'Recent samples' : range === '1h' ? '1 min averages' : range === '24h' ? '5 min averages' : '30 min averages'}
-            </span>
-            <details className="monitor-history-info">
-              <summary>Recorded on this server</summary>
-              <p>
-                Readings are collected every ten seconds while Orbis is in use. Minute summaries are saved for seven days; longer ranges show sample
-                averages and peaks. Idle periods appear as gaps.
-              </p>
-              {history.data?.persistedThrough ? (
-                <p>Saved through {new Date(history.data.persistedThrough).toLocaleString()}.</p>
-              ) : (
-                <p>The first minute has not been saved yet.</p>
-              )}
-            </details>
+      <div className="monitor-temperature-strip">
+        <dl>
+          <div>
+            <dt>CPU temperature</dt>
+            <dd>{cpuSensor?.celsius !== null && cpuSensor?.celsius !== undefined ? `${cpuSensor.celsius.toFixed(1)} °C` : 'Unavailable'}</dd>
           </div>
-          {history.isError ? (
-            <p className="workspace-message" role="alert">
-              History could not be refreshed. Previous chart samples may be stale.{' '}
-              <button type="button" onClick={() => history.refetch()}>
-                Retry
-              </button>
-            </p>
-          ) : null}
-          {history.data?.storage === 'unavailable' ? (
-            <p className="workspace-message" role="alert">
-              History storage is unavailable. Recent readings remain in memory and may be lost on restart.
-            </p>
-          ) : null}
-          {history.data && !history.data.collectorAvailable ? (
-            <output className="workspace-message">History collection is interrupted. Charts contain the last recorded samples.</output>
-          ) : null}
-          <div className="desktop-telemetry-grid">
-            <section className="desktop-telemetry-cpu" aria-labelledby="telemetry-cpu-title">
-              <h2 id="telemetry-cpu-title">CPU</h2>
-              <div className="desktop-telemetry-lead">
-                <strong>{percent(sample.cpu.totalPercent)}</strong>
-                <span>{sample.cpu.scope === 'host-proc' ? 'Utilisation' : 'Core container load'}</span>
-              </div>
-              <MetricChart history={history.data} field="cpu" label="CPU utilisation" color="var(--desktop-accent)" loading={history.isPending} />
-              {sample.cpu.perCorePercent.length ? (
-                <div className="desktop-core-grid">
-                  {sample.cpu.perCorePercent.map((core, index) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: Core position identifies the processor across samples.
-                    <div key={index}>
-                      <span>Core {index + 1}</span>
-                      <strong>{percent(core)}</strong>
-                      <div className="workspace-meter">
-                        <span style={{ width: width(core) }} />
-                      </div>
-                    </div>
+        </dl>
+        <p>
+          {sensors.isPending
+            ? 'Reading hardware sensors…'
+            : sensors.isError || (sensors.data?.available && sensors.data.stale)
+              ? 'Hardware readings are delayed.'
+              : sensors.data?.available === false
+                ? sensors.data.reason
+                : cpuSensor
+                  ? `${cpuSensor.label} · ${cpuSensor.chip}`
+                  : 'No CPU temperature sensor is reported by this host.'}
+        </p>
+        <button type="button" className="monitor-detail-action" onClick={() => changeSection('sensors')}>
+          Hardware details
+        </button>
+      </div>
+      <Tabs.Root className="monitor-sections" value={section} onValueChange={changeSection}>
+        <Tabs.List className="monitor-section-tabs" aria-label="Monitor sections">
+          {monitorSections.map(([value, label]) => (
+            <Tabs.Trigger className="monitor-section-tab" key={value} value={value}>
+              {label}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+        <Tabs.Content className="monitor-section-panel" value="usage">
+          <MonitorUsage key={telemetryPath} />
+        </Tabs.Content>
+        <Tabs.Content className="monitor-section-panel" value="performance">
+          {sample ? (
+            <>
+              <div className="monitor-history-toolbar">
+                <h2>Performance history</h2>
+                <fieldset className="monitor-history-ranges">
+                  <legend className="visually-hidden">History time range</legend>
+                  {(
+                    [
+                      ['5m', '5 min'],
+                      ['1h', '1 hour'],
+                      ['24h', '24 hours'],
+                      ['7d', '7 days'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      type="button"
+                      key={value}
+                      aria-pressed={range === value}
+                      onClick={() => {
+                        const next = new URLSearchParams(searchParams);
+                        next.set('range', value);
+                        setSearchParams(next, { replace: true, preventScrollReset: true });
+                      }}
+                    >
+                      {label}
+                    </button>
                   ))}
-                </div>
-              ) : (
-                <p>Per-core readings unavailable.</p>
-              )}
-            </section>
-            <section className="desktop-telemetry-memory" aria-labelledby="telemetry-memory-title">
-              <h2 id="telemetry-memory-title">Memory</h2>
-              <div className="desktop-telemetry-lead">
-                <strong className="desktop-memory-total">
-                  <span>{bytes(usedMemory)}</span>
-                  <span aria-hidden="true"> / </span>
-                  <span>{bytes(sample.memory.totalBytes)}</span>
-                </strong>
+                </fieldset>
+                <span className="monitor-history-resolution">
+                  {range === '5m' ? 'Recent samples' : range === '1h' ? '1 min averages' : range === '24h' ? '5 min averages' : '30 min averages'}
+                </span>
+                <details className="monitor-history-info">
+                  <summary>Recorded on this server</summary>
+                  <p>
+                    Readings are collected every ten seconds while Orbis is in use. Minute summaries are saved for seven days; longer ranges show
+                    sample averages and peaks. Idle periods appear as gaps.
+                  </p>
+                  {history.data?.persistedThrough ? (
+                    <p>Saved through {new Date(history.data.persistedThrough).toLocaleString()}.</p>
+                  ) : (
+                    <p>The first minute has not been saved yet.</p>
+                  )}
+                </details>
               </div>
-              <MetricChart
-                history={history.data}
-                field="memory"
-                label="Memory used"
-                color="color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-positive))"
-                loading={history.isPending}
-              />
-              <div className="workspace-meter">
-                <span
-                  style={{ width: width(usedMemory !== null && sample.memory.totalBytes ? (usedMemory / sample.memory.totalBytes) * 100 : null) }}
-                />
-              </div>
-              <div className="desktop-telemetry-pair">
-                <span>Available</span>
-                <strong>{bytes(sample.memory.availableBytes)}</strong>
-              </div>
-              <div className="desktop-telemetry-pair">
-                <span>Swap used</span>
-                <strong>{bytes(usedSwap)}</strong>
-              </div>
-              <div className="desktop-telemetry-pair">
-                <span>Swap total</span>
-                <strong>{bytes(sample.memory.swapTotalBytes)}</strong>
-              </div>
-            </section>
-            <HostDevices />
-            <section className="desktop-telemetry-disks" aria-labelledby="telemetry-disks-title">
-              <h2 id="telemetry-disks-title">Orbis core storage</h2>
-              {sample.filesystems.length ? (
-                <div className="desktop-telemetry-list">
-                  {sample.filesystems.map((disk) => (
-                    <div className="desktop-disk" key={`${disk.mount}-${disk.filesystem}`}>
-                      <div>
-                        <strong>{disk.mount}</strong>
-                        <small>{disk.filesystem}</small>
+              {history.isError ? (
+                <p className="workspace-message" role="alert">
+                  History could not be refreshed. Previous chart samples may be stale.{' '}
+                  <button type="button" onClick={() => history.refetch()}>
+                    Retry
+                  </button>
+                </p>
+              ) : null}
+              {history.data?.storage === 'unavailable' ? (
+                <p className="workspace-message" role="alert">
+                  History storage is unavailable. Recent readings remain in memory and may be lost on restart.
+                </p>
+              ) : null}
+              {history.data && !history.data.collectorAvailable ? (
+                <output className="workspace-message">History collection is interrupted. Charts contain the last recorded samples.</output>
+              ) : null}
+              <div className="desktop-telemetry-grid">
+                <section className="desktop-telemetry-cpu" aria-labelledby="telemetry-cpu-title">
+                  <h2 id="telemetry-cpu-title">CPU</h2>
+                  <div className="desktop-telemetry-lead">
+                    <strong>{percent(sample.cpu.totalPercent)}</strong>
+                    <span>{sample.cpu.scope === 'host-proc' ? 'Utilisation' : 'Core container load'}</span>
+                  </div>
+                  <MetricChart history={history.data} field="cpu" label="CPU utilisation" color="var(--desktop-accent)" loading={history.isPending} />
+                  {sample.cpu.perCorePercent.length ? (
+                    <MonitorDisclosure title={`Logical processors (${sample.cpu.perCorePercent.length})`}>
+                      <div className="desktop-core-grid">
+                        {sample.cpu.perCorePercent.map((core, index) => (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: Core position identifies the processor across samples.
+                          <div key={index}>
+                            <span>Core {index + 1}</span>
+                            <strong>{percent(core)}</strong>
+                            <div className="workspace-meter">
+                              <span style={{ width: width(core) }} />
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <span>
-                        {bytes(disk.usedBytes)} / {bytes(disk.sizeBytes)}
-                      </span>
-                      <div className="workspace-meter">
-                        <span style={{ width: width(disk.usedBytes !== null && disk.sizeBytes ? (disk.usedBytes / disk.sizeBytes) * 100 : null) }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p>No filesystem readings available.</p>
-              )}
-            </section>
-            <section className="desktop-telemetry-network" aria-labelledby="telemetry-network-title">
-              <h2 id="telemetry-network-title">Orbis core network</h2>
-              <div className="desktop-network-charts">
-                <div>
-                  <h3>↓ Download</h3>
+                    </MonitorDisclosure>
+                  ) : (
+                    <p>Per-core readings unavailable.</p>
+                  )}
+                </section>
+                <section className="desktop-telemetry-memory" aria-labelledby="telemetry-memory-title">
+                  <h2 id="telemetry-memory-title">Memory</h2>
+                  <div className="desktop-telemetry-lead">
+                    <strong className="desktop-memory-total">
+                      <span>{bytes(usedMemory)}</span>
+                      <span aria-hidden="true"> / </span>
+                      <span>{bytes(sample.memory.totalBytes)}</span>
+                    </strong>
+                  </div>
                   <MetricChart
                     history={history.data}
-                    field="download"
-                    label="Core network download"
+                    field="memory"
+                    label="Memory used"
                     color="color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-positive))"
                     loading={history.isPending}
                   />
-                </div>
-                <div>
-                  <h3>↑ Upload</h3>
-                  <MetricChart
-                    history={history.data}
-                    field="upload"
-                    label="Core network upload"
-                    color="var(--desktop-accent)"
-                    loading={history.isPending}
-                  />
-                </div>
+                  <div className="workspace-meter">
+                    <span
+                      style={{ width: width(usedMemory !== null && sample.memory.totalBytes ? (usedMemory / sample.memory.totalBytes) * 100 : null) }}
+                    />
+                  </div>
+                  <div className="desktop-telemetry-pair">
+                    <span>Available</span>
+                    <strong>{bytes(sample.memory.availableBytes)}</strong>
+                  </div>
+                  <div className="desktop-telemetry-pair">
+                    <span>Swap used</span>
+                    <strong>{bytes(usedSwap)}</strong>
+                  </div>
+                  <div className="desktop-telemetry-pair">
+                    <span>Swap total</span>
+                    <strong>{bytes(sample.memory.swapTotalBytes)}</strong>
+                  </div>
+                </section>
               </div>
-              {sample.network.length ? (
-                <div className="desktop-telemetry-list">
-                  {sample.network.map((item) => (
-                    <div className="desktop-network" key={item.interface}>
-                      <strong>{item.interface}</strong>
-                      <div className="desktop-telemetry-pair">
-                        <span>Download</span>
-                        <strong>{item.rxBytesPerSecond === null ? 'Unavailable' : `${bytes(item.rxBytesPerSecond)}/s`}</strong>
-                      </div>
-                      <div className="desktop-telemetry-pair">
-                        <span>Upload</span>
-                        <strong>{item.txBytesPerSecond === null ? 'Unavailable' : `${bytes(item.txBytesPerSecond)}/s`}</strong>
-                      </div>
-                      <small>
-                        Received {bytes(item.receivedBytes)} · Sent {bytes(item.transmittedBytes)}
-                      </small>
+            </>
+          ) : (
+            <p>CPU and memory readings are unavailable.</p>
+          )}
+        </Tabs.Content>
+        <Tabs.Content className="monitor-section-panel monitor-devices-panel" value="devices">
+          <HostDevices />
+          <MonitorDisclosure title="Recorded device history" openRequest={location.hash === '#device-history' ? location.key : undefined}>
+            <HostDeviceHistoryView section="devices" />
+          </MonitorDisclosure>
+          <MonitorDisclosure
+            title="Orbis core storage and network"
+            openRequest={['#telemetry-disks-title', '#telemetry-network-title'].includes(location.hash) ? location.key : undefined}
+          >
+            {sample ? (
+              <div className="desktop-telemetry-grid">
+                <section className="desktop-telemetry-disks" aria-labelledby="telemetry-disks-title">
+                  <h2 id="telemetry-disks-title">Orbis core storage</h2>
+                  {sample.filesystems.length ? (
+                    <div className="desktop-telemetry-list">
+                      {sample.filesystems.map((disk) => (
+                        <div className="desktop-disk" key={`${disk.mount}-${disk.filesystem}`}>
+                          <div>
+                            <strong>{disk.mount}</strong>
+                            <small>{disk.filesystem}</small>
+                          </div>
+                          <span>
+                            {bytes(disk.usedBytes)} / {bytes(disk.sizeBytes)}
+                          </span>
+                          <div className="workspace-meter">
+                            <span
+                              style={{ width: width(disk.usedBytes !== null && disk.sizeBytes ? (disk.usedBytes / disk.sizeBytes) * 100 : null) }}
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p>No network interface readings available.</p>
-              )}
-            </section>
-          </div>
-          <ContainerResources />
-        </>
-      ) : null}
-      <HostDeviceHistoryView />
-      <HostProcessesView key={telemetryPath} />
-      <HostSensorsView />
+                  ) : (
+                    <p>No filesystem readings available.</p>
+                  )}
+                </section>
+                <section className="desktop-telemetry-network" aria-labelledby="telemetry-network-title">
+                  <h2 id="telemetry-network-title">Orbis core network</h2>
+                  <div className="desktop-network-charts">
+                    <div>
+                      <h3>↓ Download</h3>
+                      <MetricChart
+                        history={history.data}
+                        field="download"
+                        label="Core network download"
+                        color="color-mix(in srgb, var(--desktop-accent) 60%, var(--desktop-positive))"
+                        loading={history.isPending}
+                      />
+                    </div>
+                    <div>
+                      <h3>↑ Upload</h3>
+                      <MetricChart
+                        history={history.data}
+                        field="upload"
+                        label="Core network upload"
+                        color="var(--desktop-accent)"
+                        loading={history.isPending}
+                      />
+                    </div>
+                  </div>
+                  {sample.network.length ? (
+                    <div className="desktop-telemetry-list">
+                      {sample.network.map((item) => (
+                        <div className="desktop-network" key={item.interface}>
+                          <strong>{item.interface}</strong>
+                          <div className="desktop-telemetry-pair">
+                            <span>Download</span>
+                            <strong>{item.rxBytesPerSecond === null ? 'Unavailable' : `${bytes(item.rxBytesPerSecond)}/s`}</strong>
+                          </div>
+                          <div className="desktop-telemetry-pair">
+                            <span>Upload</span>
+                            <strong>{item.txBytesPerSecond === null ? 'Unavailable' : `${bytes(item.txBytesPerSecond)}/s`}</strong>
+                          </div>
+                          <small>
+                            Received {bytes(item.receivedBytes)} · Sent {bytes(item.transmittedBytes)}
+                          </small>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>No network interface readings available.</p>
+                  )}
+                </section>
+              </div>
+            ) : (
+              <p>Core storage and network readings are unavailable.</p>
+            )}
+          </MonitorDisclosure>
+        </Tabs.Content>
+        <Tabs.Content className="monitor-section-panel" value="sensors">
+          <HostSensorsView />
+        </Tabs.Content>
+      </Tabs.Root>
     </div>
   );
 }

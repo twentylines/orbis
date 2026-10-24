@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { appLaunchSchema, defaultAppLaunch } from '@runtipi/common/schemas/app-launch';
-import { appAddress, appOpeningMode, initialAppBounds, primaryAppAddress } from './app-opening';
+import { appAddress, appOpeningMode, initialAppBounds, primaryAppAddress, restoreAppBounds } from './app-opening';
 
 describe('actual app opening', () => {
   test('rejects executable addresses and embedded credentials', () => {
@@ -10,7 +10,17 @@ describe('actual app opening', () => {
   });
   test('resolves account and per-app choices while enforcing browser boundaries', () => {
     const preferences = { ...defaultAppLaunch, mode: 'tab' as const, apps: { 'notes:store': { mode: 'window' as const } } };
-    expect(appOpeningMode(preferences, 'notes:store', 'https://notes.local', 'https://orbis.local', true)).toBe('window');
+    expect(appOpeningMode(preferences, 'notes:store', 'https://notes.local', 'https://orbis.local', true)).toBe('tab');
+    expect(appOpeningMode({ ...preferences, mode: 'window' }, 'notes:store', 'https://notes.local', 'https://orbis.local', true)).toBe('window');
+    expect(
+      appOpeningMode(
+        { ...preferences, mode: 'window', apps: { 'notes:store': { mode: 'tab' } } },
+        'notes:store',
+        'https://notes.local',
+        'https://orbis.local',
+        true,
+      ),
+    ).toBe('tab');
     expect(appOpeningMode(preferences, 'other:store', 'https://other.local', 'https://orbis.local', true)).toBe('tab');
     expect(appOpeningMode(preferences, 'notes:store', 'http://notes.local', 'https://orbis.local', true)).toBe('tab');
     expect(appOpeningMode(preferences, 'notes:store', 'https://orbis.local/apps', 'https://orbis.local', true)).toBe('tab');
@@ -48,5 +58,13 @@ describe('actual app opening', () => {
       Object.fromEntries(Array.from({ length: 513 }, (_, index) => [`app${index}:store`, {}])),
     ])
       expect(appLaunchSchema.allows({ mode: 'window', apps })).toBe(false);
+  });
+  test('fullscreen saved geometry restores to a smaller floating frame and ordinary geometry is retained', () => {
+    const area = { x: 24, y: 100, width: 1392, height: 750 };
+    const restored = restoreAppBounds(area, area, ['utilities']);
+    expect(restored.width).toBe(940);
+    expect(restored.height).toBeLessThan(area.height);
+    expect(restored.x).toBeGreaterThan(area.x);
+    expect(restoreAppBounds(area, restored)).toEqual(restored);
   });
 });

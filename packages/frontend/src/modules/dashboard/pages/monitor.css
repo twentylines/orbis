@@ -473,8 +473,226 @@
   font-size: 1.125rem;
   font-weight: 650;
 }
-.desktop-monitor :is(.host-processes, .container-resources, .host-sensors, .host-device-history) {
-  margin-top: 24px;
+.monitor-temperature-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 24px;
+  margin-bottom: var(--desktop-density-section, 24px);
+  padding: 18px 20px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
+}
+.monitor-temperature-strip dl {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+.monitor-temperature-strip dt {
+  margin-bottom: 4px;
+  color: var(--desktop-status-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.monitor-temperature-strip dd {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 650;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.monitor-temperature-strip p {
+  flex: 1 1 20em;
+  min-width: 0;
+  margin: 0;
+  color: var(--desktop-status-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.monitor-detail-action,
+.monitor-usage-source button {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 9px 14px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.monitor-detail-action:hover,
+.monitor-usage-source button:hover {
+  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, var(--desktop-surface));
+}
+.monitor-sections {
+  min-width: 0;
+  border: 1px solid var(--desktop-line);
   border-radius: 15px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 4%, var(--desktop-surface));
+}
+.monitor-section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.monitor-section-tab {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--desktop-status-muted);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.monitor-section-tab:hover {
+  background: color-mix(in srgb, var(--desktop-preset-tint) 8%, transparent);
+  color: var(--desktop-ink);
+}
+.monitor-section-tab[data-state="active"],
+.monitor-usage-source button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--desktop-accent) 45%, var(--desktop-line));
+  background: color-mix(in srgb, var(--desktop-preset-tint) 15%, var(--desktop-surface));
+  color: var(--desktop-ink);
+}
+.monitor-section-panel {
+  min-width: 0;
+  padding: var(--orbis-compact-panel-space, 24px);
+}
+.monitor-section-panel:focus-visible {
+  outline-offset: -5px;
+}
+.monitor-section-panel .monitor-history-toolbar {
+  margin-top: 0;
+}
+.desktop .desktop-monitor .monitor-sections .monitor-section-panel :is(.host-processes, .container-resources, .host-sensors, .host-device-history) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.monitor-section-panel > .desktop-telemetry-grid {
+  gap: 24px;
+}
+.desktop .desktop-monitor .monitor-sections .desktop-telemetry-grid > section {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.monitor-usage-panel {
+  min-width: 0;
+  container-type: inline-size;
+}
+.monitor-usage-source {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+.monitor-usage-panel .monitor-usage-scope {
+  margin: 12px 0;
+  color: var(--desktop-status-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.monitor-usage-panel > .monitor-detail-action {
+  margin-top: 16px;
+}
+.monitor-usage-panel .container-resources-heading h2 {
+  font-size: 1rem;
+}
+.monitor-usage-panel .container-resources-sort {
+  margin-block: 16px 6px;
+}
+.monitor-usage-panel .container-resources-sort button {
+  min-height: 44px;
+}
+.monitor-usage-panel .host-process-list {
+  margin-block: 8px 12px;
+}
+.desktop .desktop-monitor .monitor-usage-panel :is(.host-process-list, .container-resource-list) > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 24px;
+  padding-block: 14px;
+}
+.monitor-usage-panel :is(.host-process-bar, .container-resource-bar, .container-resource-details) {
+  grid-column: 1 / -1;
+}
+.monitor-usage-panel :is(.host-process-identity, .container-resource-name) {
+  gap: 2px;
+}
+.monitor-usage-panel :is(.host-process-values, .container-resource-values) {
+  gap: 14px 24px;
+  text-align: right;
+}
+.monitor-usage-panel .host-process-values {
+  grid-template-columns: repeat(2, minmax(5em, auto));
+}
+.monitor-usage-panel .host-process-values dd {
+  margin-top: 2px;
+}
+.monitor-usage-panel .container-resource-name strong,
+.monitor-usage-panel .container-resource-values b {
+  font-size: 0.875rem;
+}
+.monitor-usage-panel .container-resource-values small,
+.monitor-usage-panel .container-resource-name small {
+  font-size: 0.75rem;
+}
+.monitor-detail-disclosure {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--desktop-line);
+}
+.monitor-detail-disclosure > summary {
+  min-height: 44px;
+  width: fit-content;
+  max-width: 100%;
+  padding-block: 10px;
+  color: var(--desktop-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.monitor-disclosure-content {
+  padding-top: 16px;
+}
+@container (max-width: 38em) {
+  .desktop .desktop-monitor .monitor-usage-panel :is(.host-process-list, .container-resource-list) > li {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+  }
+  .monitor-usage-panel :is(.host-process-values, .container-resource-values) {
+    justify-content: start;
+    text-align: left;
+  }
+  .monitor-usage-panel .host-process-values {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 7em), 1fr));
+  }
+}
+@container (max-width: 650px) {
+  .monitor-temperature-strip {
+    padding: var(--orbis-compact-panel-space, 18px);
+  }
+  .monitor-section-tab {
+    padding-inline: 12px;
+  }
 }

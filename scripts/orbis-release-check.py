@@ -125,6 +125,8 @@ def verify_index(body: bytes, header_digest: str | None, expected_digest: str) -
 def check(tag: str) -> dict[str, object]:
     if not PLAN.TAG.fullmatch(tag):
         raise ValueError("release tag is invalid")
+    if not PLAN.is_stable_release_tag(tag):
+        raise ValueError("Nightly is inactive during beta; choose a Stable release")
     asset_url, commit, published_at, notes = published_release(tag)
     manifest = PLAN.validate_manifest(read_json(asset_url, 16 * 1024))
     if manifest["tag"] != tag:

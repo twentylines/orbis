@@ -22,6 +22,14 @@ MANIFEST = {
 
 
 class OrbisReleasePlanTests(unittest.TestCase):
+    def test_stable_keeps_legacy_beta_manifests_and_rejects_inactive_builds(self):
+        beta = {**MANIFEST, "tag": "v0.1.0-beta.96"}
+        self.assertIs(PLAN.validate_manifest(beta), beta)
+        self.assertNotIn("releaseChannel", beta)
+        for tag in ["v0.1.0-nightly.20261025", "v0.1.0-dev.1", "v0.1.0-alpha.1"]:
+            with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, "inactive during beta"):
+                PLAN.validate_manifest({**MANIFEST, "tag": tag})
+
     def test_manifest_requires_immutable_orbis_image(self):
         self.assertEqual(PLAN.validate_manifest(MANIFEST), MANIFEST)
         with self.assertRaises(ValueError):

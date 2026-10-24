@@ -12,7 +12,7 @@ async function loadProcesses(signal: AbortSignal, path: string): Promise<HostPro
   return response.json();
 }
 
-export function HostProcessesView() {
+export function HostProcessesView({ limit }: { limit?: number } = {}) {
   const visible = useWindowVisible();
   const path = useServerPath()('/api/system/host-processes');
   const [sort, setSort] = useState<'cpuPercent' | 'memoryBytes'>('cpuPercent');
@@ -40,6 +40,7 @@ export function HostProcessesView() {
   const displayed = showingPreviousCpu ? lastCpuSample : ready;
   const stale = query.isError || Boolean(ready?.stale) || showingPreviousCpu;
   const rows = displayed ? (sort === 'cpuPercent' ? displayed.byCpu : displayed.byMemory) : [];
+  const visibleRows = limit ? rows.slice(0, limit) : rows;
   const maximum = Math.max(1, ...rows.map((row) => row[sort] ?? 0));
   const heading = useRef<HTMLHeadingElement>(null);
   const retry = useRef<HTMLButtonElement>(null);
@@ -113,7 +114,7 @@ export function HostProcessesView() {
             </p>
           ) : null}
           <ol className="host-process-list">
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <li key={row.pid} data-process-pid={row.pid}>
                 <div className="host-process-identity">
                   <strong title={row.name}>
@@ -138,7 +139,7 @@ export function HostProcessesView() {
             ))}
           </ol>
           <p className="host-processes-coverage">
-            {rows.length.toLocaleString()} shown · {displayed.readable.toLocaleString()} readable processes
+            {visibleRows.length.toLocaleString()} shown · {displayed.readable.toLocaleString()} readable processes
             {sort === 'cpuPercent' ? ` · ${displayed.compared.toLocaleString()} CPU comparisons` : ''}
           </p>
         </>

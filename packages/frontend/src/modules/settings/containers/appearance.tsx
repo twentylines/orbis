@@ -206,7 +206,7 @@ export const Appearance = () => {
       <section className="appearance-section" aria-labelledby="appearance-density">
         <div>
           <h2 id="appearance-density">Density</h2>
-          <p>Change spacing without reducing text size.</p>
+          <p>Compact fits more cards and rows by reducing spacing across Home, Apps, Store, Monitor and Settings. Text size stays the same.</p>
         </div>
         <div className="appearance-choice">
           <button type="button" aria-pressed={preferences.density === 'comfortable'} onClick={() => update({ density: 'comfortable' })}>

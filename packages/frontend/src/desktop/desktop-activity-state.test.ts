@@ -64,3 +64,11 @@ describe('dock activity describes actual active work', () => {
     expect(desktopActivity([], names, watch, null)).toMatchObject({ title: 'Restarting Orbis', kind: 'core', count: 1 });
   });
 });
+
+test('compatibility reviews appear in the tasks pill without creating an app operation', () => {
+  const result = desktopActivity([], new Map(), null, null, [{ id: 'review-1', target: 'v0.1.0-beta.91', operation: 'downgrade' }]);
+  expect(result?.title).toBe('Checking compatibility');
+  expect(result?.detail).toBe('Downgrade to v0.1.0-beta.91');
+  expect(result?.items[0]?.kind).toBe('core');
+  expect(desktopActivity([], new Map(), null, null, [])).toBeNull();
+});

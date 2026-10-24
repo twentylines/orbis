@@ -41,8 +41,12 @@ export function resizeAppBounds(bounds: DesktopWindowBounds, edge: ResizeEdge, d
   return clampAppBounds({ x, y, width: nextRight - x, height: nextBottom - y }, area);
 }
 
-export function appSnapTarget(x: number, y: number, area: WindowArea): Exclude<AppWindowMode, 'floating'> | null {
-  if (canSplitAppWindows(area) && x <= area.x + 24) return 'left';
-  if (canSplitAppWindows(area) && x >= area.x + area.width - 24) return 'right';
-  return y <= area.y + 18 ? 'maximized' : null;
+export function appSnapTarget(
+  bounds: DesktopWindowBounds,
+  movement: { x: number; y: number },
+  area: WindowArea,
+): Exclude<AppWindowMode, 'floating'> | null {
+  if (canSplitAppWindows(area) && movement.x < -2 && bounds.x <= area.x + 16) return 'left';
+  if (canSplitAppWindows(area) && movement.x > 2 && bounds.x + bounds.width >= area.x + area.width - 16) return 'right';
+  return movement.y < -2 && bounds.y <= area.y + 16 ? 'maximized' : null;
 }

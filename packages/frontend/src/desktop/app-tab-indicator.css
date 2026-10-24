@@ -1,0 +1,15 @@
+.app-tab-indicator {
+  display: inline-flex;
+  flex: none;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  width: 0.875em;
+  height: 0.875em;
+  margin-block-start: calc((1lh - 0.875em) / 2 + 0.065em);
+  color: var(--desktop-muted);
+}
+.app-tab-indicator > svg {
+  width: 100%;
+  height: 100%;
+}

@@ -2,8 +2,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { BadRequestException, HttpException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { gt, valid } from 'semver';
+import { isStableOrbisReleaseTag } from '@runtipi/common/schemas/orbis-release-channel';
 
-const TAG = /^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$/;
 const PLAN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PACKAGE_NAME = /^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?$/;
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -264,7 +264,7 @@ export class HostUpdatesService {
   }
 
   plan(tag: unknown, reviewedDowngrade = false): Promise<HostUpdatePlan> {
-    if (typeof tag !== 'string' || !TAG.test(tag) || tag.length > 80) {
+    if (typeof tag !== 'string' || !isStableOrbisReleaseTag(tag) || tag.length > 80) {
       throw new BadRequestException('Choose a valid Orbis release tag.');
     }
     const installed = process.env.ORBIS_VERSION;

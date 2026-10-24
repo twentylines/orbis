@@ -36,6 +36,24 @@ describe('Orbis release feed', () => {
     expect(latestTagFromAtom(FEED.replace(TAG, 'v0.1.0;unsafe'))).toBeNull();
   });
 
+  it('keeps published beta releases in Stable and skips inactive build tags before fetching their assets', async () => {
+    const excluded = ['v0.1.0-nightly.20261025', 'v0.1.0-dev.1', 'v0.1.0-alpha.1'];
+    const feed = FEED.replace(
+      '<feed>',
+      `<feed>${excluded.map((tag) => `<entry><id>tag:github.com,2008:Repository/1419897175/${tag}</id></entry>`).join('')}`,
+    );
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases.atom')) return new Response(feed);
+      if (url.endsWith(`/${TAG}.md`)) return new Response('# Current beta');
+      if (url.includes(`/${TAG}/release-manifest.json`)) return new Response(null);
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    expect((await new OrbisReleaseService().latest())?.tag).toBe(TAG);
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls.every(([url]) => !excluded.some((tag) => String(url).includes(tag)))).toBe(true);
+  });
+
   it('rechecks an unfinished release after 30 seconds and shares concurrent requests', async () => {
     vi.useFakeTimers();
     let manifestReady = false;
@@ -185,6 +203,26 @@ describe('Orbis included release history', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('excludes inactive build tags from API catalogues while retaining beta prereleases', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      Response.json([
+        metadata(96, { prerelease: true }),
+        metadata(97, { tag_name: 'v0.1.0-nightly.20261025', prerelease: true }),
+        metadata(97, { tag_name: 'v0.1.0-dev.1', prerelease: true }),
+        metadata(97, { tag_name: 'v0.1.0-alpha.1', prerelease: true }),
+      ]),
+    );
+    expect((await new OrbisReleaseService().listPublished()).releases.map((release) => release.tag)).toEqual(['v0.1.0-beta.96']);
+  });
+
+  it('rejects inactive history targets before requesting the published catalogue', async () => {
+    const request = vi.spyOn(global, 'fetch');
+    for (const target of ['v0.1.0-nightly.20261025', '1.0.0-dev.1', 'v1.0.0-alpha.1']) {
+      await expect(new OrbisReleaseService().history(TAG, target)).rejects.toThrow('inactive during beta');
+    }
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('includes every skipped release after the installed version through the target, newest first', async () => {

@@ -38,12 +38,16 @@ test('split panes fill the usable screen with one shared gap and keep both apps 
   }
 });
 
-test('snap targets use screen edges, and narrow browser sizes keep windows inside the available area', () => {
-  expect(appSnapTarget(24, 300, area)).toBe('left');
-  expect(appSnapTarget(1416, 300, area)).toBe('right');
-  expect(appSnapTarget(700, 104, area)).toBe('maximized');
-  expect(appSnapTarget(700, 300, area)).toBeNull();
+test('window edges trigger snapping in the drag direction without requiring the pointer to reach an edge', () => {
+  expect(appSnapTarget({ ...bounds, x: 30 }, { x: -194, y: 0 }, area)).toBe('left');
+  expect(appSnapTarget({ ...bounds, x: 610 }, { x: 386, y: 0 }, area)).toBe('right');
+  expect(appSnapTarget({ ...bounds, y: 110 }, { x: 0, y: -94 }, area)).toBe('maximized');
+  expect(appSnapTarget(bounds, { x: -10, y: -10 }, area)).toBeNull();
+  expect(appSnapTarget({ ...bounds, x: 24 }, { x: 10, y: 0 }, area)).toBeNull();
+  expect(appSnapTarget({ ...bounds, y: 104 }, { x: 0, y: 10 }, area)).toBeNull();
+  expect(appSnapTarget({ ...bounds, x: 24 }, { x: 0, y: 0 }, area)).toBeNull();
   const narrow = { x: 16, y: 140, width: 288, height: 240 };
   expect(canSplitAppWindows(narrow)).toBe(false);
+  expect(appSnapTarget(narrow, { x: -30, y: 0 }, narrow)).toBeNull();
   expect(clampAppBounds(bounds, narrow)).toEqual(narrow);
 });

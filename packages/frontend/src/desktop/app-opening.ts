@@ -16,7 +16,7 @@ export function canEmbedApp(url: string, origin: string, desktop: boolean) {
 }
 
 export function appOpeningMode(preferences: AppLaunchPreferences, key: string, url: string, origin: string, desktop: boolean) {
-  if (!canEmbedApp(url, origin, desktop)) return 'tab';
+  if (preferences.mode === 'tab' || !canEmbedApp(url, origin, desktop)) return 'tab';
   return preferences.apps[key]?.mode ?? preferences.mode;
 }
 
@@ -30,4 +30,9 @@ export function initialAppBounds(area: WindowArea, saved?: DesktopWindowBounds, 
   const width = Math.min(compact ? 940 : 1280, Math.round(area.width * (compact ? 0.84 : 0.92)));
   const height = Math.min(compact ? 720 : 900, Math.round(area.height * 0.94));
   return clampAppBounds({ ...area, x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height }, area);
+}
+
+export function restoreAppBounds(area: WindowArea, floating: DesktopWindowBounds, categories: string[] = []) {
+  const bounds = clampAppBounds(floating, area);
+  return bounds.width >= area.width - 1 && bounds.height >= area.height - 1 ? initialAppBounds(area, undefined, categories) : bounds;
 }

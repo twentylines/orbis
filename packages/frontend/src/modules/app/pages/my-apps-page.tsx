@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router';
+import { useId } from 'react';
 import { getInstalledAppsOptions, getLinksOptions } from '@/api-client/@tanstack/react-query.gen';
 import { EmptyPage } from '@/components/empty-page/empty-page';
 import type { CustomLink } from '@/types/app.types';
@@ -25,6 +26,10 @@ import { useCluster } from '@/desktop/cluster';
 import { ClusterApps } from '@/desktop/cluster-views';
 import { useStorePreview } from './store-preview-context';
 import { appsReturnPath } from './store-preview-navigation';
+import { appDestinations } from '@/desktop/app-destinations';
+import { appOpeningMode, primaryAppAddress } from '@/desktop/app-opening';
+import { useDesktopPreferences } from '@/desktop/preferences';
+import { useBlockedAppEmbeds } from '@/desktop/app-embedding';
 
 export default () => {
   const cluster = useCluster();
@@ -33,6 +38,8 @@ export default () => {
 };
 
 function LocalApps() {
+  const { preferences } = useDesktopPreferences();
+  const blockedEmbeds = useBlockedAppEmbeds();
   const { filters, change } = useLibraryFilters();
   const opened = useOpenedApps();
   const visible = useWindowVisible();
@@ -49,9 +56,11 @@ function LocalApps() {
     ...getLinksOptions(),
   });
 
-  const { updatesAvailable } = useAppContext();
+  const { updatesAvailable, userSettings } = useAppContext();
 
   const addLinkDisclosure = useDisclosure();
+  const batchActions = useDisclosure();
+  const batchActionsId = useId();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -80,6 +89,10 @@ function LocalApps() {
     const updateAvailable = Number(app.version) < Number(metadata.latestVersion) && !versionIsIgnored;
 
     const [appName, storeId] = info.urn.split(':');
+    const url = primaryAppAddress(appDestinations({ info, app, metadata }, userSettings, window.location.hostname), window.location.origin);
+    const opensInTab = Boolean(
+      url && (appOpeningMode(preferences.appLaunch, info.urn, url, window.location.origin, true) === 'tab' || blockedEmbeds[info.urn]?.url === url),
+    );
 
     return (
       <Link
@@ -98,6 +111,7 @@ function LocalApps() {
           info={info}
           updateAvailable={updateAvailable}
           pendingRestart={app.pendingRestart}
+          opensInTab={opensInTab}
           recentlyInstalled={app.createdAt * 1000 > Date.now() - 7 * 86400000}
           docker={{ data: containers.data, stale: containers.isError }}
         />
@@ -116,27 +130,31 @@ function LocalApps() {
   const library = (
     <div key="library" className="orbis-managed-apps">
       <AppLibraryControls filters={filters} change={change} categories={installed.flatMap(({ info }) => info.categories ?? [])} />
-      <output className="app-library-results">
-        {matching.length} of {installed.length} apps{matchingLinks.length ? ` · ${matchingLinks.length} links` : ''}
-      </output>
-      <details className={clsx('desktop-batch-controls', { 'd-none': installed.length <= 1 })}>
-        <summary>
-          <IconAdjustmentsHorizontal size={17} aria-hidden="true" />
-          Manage Orbis apps
-          <IconChevronDown size={15} aria-hidden="true" />
-        </summary>
-        <ActionBar>
-          <ActionBar.Left>
-            <StartAllButton availableUpdates={updatesAvailable} />
-          </ActionBar.Left>
-          <ActionBar.Center>
-            <StopAllButton availableUpdates={updatesAvailable} />
-          </ActionBar.Center>
-          <ActionBar.Right>
-            <RestartAllButton availableUpdates={updatesAvailable} />
-          </ActionBar.Right>
-        </ActionBar>
-      </details>
+      <div className="app-library-meta">
+        <output className="app-library-results">
+          {matching.length} of {installed.length} apps{matchingLinks.length ? ` · ${matchingLinks.length} links` : ''}
+        </output>
+        <div className={clsx('desktop-batch-controls', { 'd-none': installed.length <= 1 })} data-open={batchActions.isOpen}>
+          <button type="button" aria-expanded={batchActions.isOpen} aria-controls={batchActionsId} onClick={() => batchActions.toggle()}>
+            <IconAdjustmentsHorizontal size={17} aria-hidden="true" />
+            Manage Orbis apps
+            <IconChevronDown size={15} aria-hidden="true" />
+          </button>
+          <div id={batchActionsId} hidden={!batchActions.isOpen}>
+            <ActionBar className="app-library-batch-actions">
+              <ActionBar.Left>
+                <StartAllButton availableUpdates={updatesAvailable} />
+              </ActionBar.Left>
+              <ActionBar.Center>
+                <StopAllButton availableUpdates={updatesAvailable} />
+              </ActionBar.Center>
+              <ActionBar.Right>
+                <RestartAllButton availableUpdates={updatesAvailable} />
+              </ActionBar.Right>
+            </ActionBar>
+          </div>
+        </div>
+      </div>
       {installed.length === 0 && customLinks.length === 0 ? (
         <EmptyPage
           title="No apps in the Orbis library"

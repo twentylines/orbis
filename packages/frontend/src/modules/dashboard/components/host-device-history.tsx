@@ -20,7 +20,7 @@ const ranges = [
   ['7d', '7 days'],
 ] as const;
 
-export function HostDeviceHistoryView() {
+export function HostDeviceHistoryView({ section }: { section?: string } = {}) {
   const visible = useWindowVisible();
   const serverPath = useServerPath();
   const queryClient = useQueryClient();
@@ -70,8 +70,9 @@ export function HostDeviceHistoryView() {
     const next = new URLSearchParams(searchParams);
     next.set('hostDevice', resolved);
     next.set('range', range);
+    if (section) next.set('section', section);
     setSearchParams(next, { replace: true, preventScrollReset: true, state: null });
-  }, [basePath, device, data, range, query.dataUpdatedAt, queryClient, searchParams, setSearchParams]);
+  }, [basePath, device, data, range, query.dataUpdatedAt, queryClient, searchParams, section, setSearchParams]);
   const plots = useMemo(() => {
     if (!data) return null;
     const plot = (field: 'inbound' | 'outbound' | 'busy'): MetricPlotHistory => ({
@@ -113,6 +114,7 @@ export function HostDeviceHistoryView() {
     const next = new URLSearchParams(searchParams);
     if (selected && name === 'range') next.set('hostDevice', keyOf(selected));
     next.set(name, value);
+    if (section) next.set('section', section);
     setSearchParams(next, { replace: true, preventScrollReset: true, state: null });
   };
   const fields =

@@ -36,6 +36,7 @@ export function desktopActivity(
   names: ReadonlyMap<string, string>,
   watch: CoreUpdateWatch | null,
   packageJob: PackageActivityJob | null,
+  checks: readonly { id: string; target: string; operation: string }[] = [],
 ): DesktopActivity | null {
   const activeTasks = tasks
     .filter((task) => task.status === 'queued' || task.status === 'running')
@@ -62,6 +63,12 @@ export function desktopActivity(
       kind: 'app',
       count: items.length,
     };
+  }
+  for (const check of checks) {
+    const title = 'Checking compatibility';
+    const detail = `${check.operation === 'downgrade' ? 'Downgrade' : 'Update'} to ${check.target}`;
+    items.unshift({ id: check.id, kind: 'core', title, detail, state: 'checking' });
+    summary = { title, detail, kind: 'core', count: items.length };
   }
   if (packageJob && ['queued', 'running'].includes(packageJob.state)) {
     const count = packageJob.operationCount;

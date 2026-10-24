@@ -1,0 +1,168 @@
+.desktop[data-desktop-density="compact"] {
+  --desktop-density-gap: 12px;
+  --desktop-density-section: 18px;
+  --orbis-compact-panel-space: 20px;
+  --orbis-compact-section-gap: var(--desktop-density-section);
+}
+
+.desktop[data-desktop-density="compact"] .desktop-route-window {
+  --desktop-window-gutter: 18px;
+}
+.desktop[data-desktop-density="compact"] .desktop-window-content {
+  padding: 18px var(--desktop-window-gutter) 20px;
+}
+.desktop[data-desktop-density="compact"]
+  :is(.workspace-grid, .workspace-main-stack, .workspace-custom-row, .workspace-auxiliary, .cluster-home, .docker-apps-grid) {
+  gap: var(--desktop-density-gap);
+}
+.desktop[data-desktop-density="compact"] :is(.workspace-heading, .workspace-section-heading) {
+  gap: var(--desktop-density-section);
+  margin-bottom: var(--desktop-density-section);
+}
+.desktop[data-desktop-density="compact"]
+  :is(.workspace-activity, .workspace-storage, .workspace-attention, .workspace-get-started, .workspace-empty) {
+  padding: var(--orbis-compact-panel-space);
+}
+.desktop[data-desktop-density="compact"] :is(.workspace-get-started, .workspace-empty) {
+  min-height: 180px;
+}
+.desktop[data-desktop-density="compact"] .workspace-app-list {
+  gap: 10px;
+}
+.desktop[data-desktop-density="compact"] .workspace-app {
+  padding-block: 12px;
+}
+.desktop[data-desktop-density="compact"] :is(.workspace-panel-kicker, .workspace-storage-top) {
+  margin-bottom: 12px;
+}
+.desktop[data-desktop-density="compact"] .workspace-metrics {
+  gap: var(--desktop-density-gap);
+}
+.desktop[data-desktop-density="compact"] .workspace-links {
+  gap: 10px 14px;
+  margin-top: var(--desktop-density-section);
+  padding-top: 16px;
+}
+
+.desktop[data-desktop-density="compact"] :is(.desktop-installed-grid, .desktop-catalogue-grid, .desktop-catalogue-skeleton, .cluster-catalogue-grid) {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17em), 1fr));
+  gap: 10px;
+}
+.desktop[data-desktop-density="compact"] .app-library-controls {
+  margin-bottom: 12px;
+}
+.desktop[data-desktop-density="compact"] .app-library-meta {
+  margin-bottom: 12px;
+}
+.desktop[data-desktop-density="compact"] .desktop-view-app .action-bar:not(.app-library-batch-actions) {
+  margin-bottom: 16px;
+}
+.desktop[data-desktop-density="compact"] .desktop-view-app .action-bar-content {
+  padding: 10px;
+}
+.desktop[data-desktop-density="compact"] .desktop-view-app :is(.app-tile, .catalogue-tile) {
+  min-height: 88px;
+}
+.desktop[data-desktop-density="compact"] .desktop-view-app :is(.catalogue-tile, .app-tile > .card-body, .button-tile .card-body) {
+  padding: 12px;
+}
+.desktop[data-desktop-density="compact"] .desktop-view-app .catalogue-tile {
+  gap: 12px;
+}
+.desktop[data-desktop-density="compact"] :is(.cluster-catalogue-tile, .docker-app-card) {
+  padding: 16px;
+  gap: 12px;
+}
+.desktop[data-desktop-density="compact"] .orbis-app-library:not(.is-empty) .docker-apps-section {
+  margin-top: var(--desktop-density-section);
+  padding-top: var(--desktop-density-section);
+}
+
+.desktop[data-desktop-density="compact"] :is(.desktop-host-overview, .desktop-telemetry-grid, .desktop-network-charts, .monitor-summary-grid) {
+  gap: var(--desktop-density-gap);
+}
+.desktop[data-desktop-density="compact"] :is(.desktop-telemetry-grid > section, .monitor-summary-stat) {
+  padding: var(--orbis-compact-panel-space);
+}
+.desktop[data-desktop-density="compact"] :is(.monitor-page-heading, .desktop-host-overview) {
+  margin-bottom: var(--desktop-density-section);
+}
+.desktop[data-desktop-density="compact"] .monitor-history-toolbar {
+  gap: 12px 18px;
+  margin-block: var(--desktop-density-section) 16px;
+}
+.desktop[data-desktop-density="compact"] .monitor-system-facts {
+  gap: 12px 18px;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+.desktop[data-desktop-density="compact"] .desktop-monitor :is(.host-processes, .container-resources, .host-sensors, .host-device-history) {
+  margin-top: var(--desktop-density-section);
+}
+.desktop[data-desktop-density="compact"] :is(.host-process-list, .container-resource-list) > li {
+  padding-block: 14px;
+  column-gap: 18px;
+}
+.desktop[data-desktop-density="compact"] :is(.host-sensor-groups, .host-device-sections) {
+  gap: 16px;
+}
+.desktop[data-desktop-density="compact"] .host-device {
+  padding: 14px;
+}
+
+.desktop[data-desktop-density="compact"] .desktop-settings > .card > [role="tabpanel"] > .card-body {
+  padding-top: 16px;
+}
+.desktop[data-desktop-density="compact"] :is(.appearance-section, .cluster-settings-section) {
+  padding-block: 16px;
+  column-gap: 20px;
+  row-gap: 12px;
+}
+.desktop[data-desktop-density="compact"] :is(.appearance-wallpaper-settings, .appearance-wallpaper-controls, .appearance-material-controls) {
+  gap: 14px;
+}
+.desktop[data-desktop-density="compact"] .appearance-range-grid {
+  gap: 16px 20px;
+}
+.desktop[data-desktop-density="compact"] .appearance .appearance-mode {
+  min-height: 88px;
+  padding: 14px;
+  gap: 12px;
+}
+.desktop[data-desktop-density="compact"] .appearance .appearance-preset {
+  min-height: 112px;
+}
+.desktop[data-desktop-density="compact"] .settings-passkeys {
+  gap: 12px;
+  padding-bottom: 24px;
+}
+.desktop[data-desktop-density="compact"] .settings-passkey-list > li {
+  padding-block: 14px;
+  gap: 12px 18px;
+}
+.desktop[data-desktop-density="compact"] .automatic-updates-settings {
+  margin-top: 24px;
+  padding-top: 20px;
+}
+.desktop[data-desktop-density="compact"] .automatic-updates-settings header {
+  margin-bottom: 16px;
+}
+.desktop[data-desktop-density="compact"] .automatic-updates-settings form {
+  gap: 16px;
+}
+
+@media (max-width: 760px) {
+  .desktop[data-desktop-density="compact"] {
+    --desktop-density-gap: 10px;
+    --desktop-density-section: 14px;
+    --orbis-compact-panel-space: 14px;
+  }
+  .desktop[data-desktop-density="compact"] .desktop-route-window {
+    --desktop-window-gutter: 16px;
+  }
+}
+@media (max-width: 380px) {
+  .desktop[data-desktop-density="compact"] {
+    --orbis-compact-panel-space: 12px;
+  }
+}

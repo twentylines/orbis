@@ -15,6 +15,7 @@ import { coreUpdateIsPending } from './desktop/host-update-watch';
 import { claimPreloadRetry } from './components/startup/preload-retry';
 
 export const links: Route.LinksFunction = () => [
+  { rel: 'preload', href: '/fonts/source-sans-3-variable.woff2', as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
   { rel: 'stylesheet', href: stylesheet },
   { rel: 'icon', type: 'image/svg+xml', href: '/icons/orbis.svg' },
   { rel: 'manifest', href: '/icons/site.webmanifest' },

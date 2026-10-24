@@ -8,7 +8,9 @@ import { DockerHealth } from '@/components/docker-health/docker-health';
 import { ContainerResources } from '@/components/container-resources/container-resources';
 import { useAppLauncher } from '@/desktop/app-launcher';
 import { appDestinations } from '@/desktop/app-destinations';
-import { primaryAppAddress } from '@/desktop/app-opening';
+import { appOpeningMode, primaryAppAddress } from '@/desktop/app-opening';
+import { useBlockedAppEmbeds } from '@/desktop/app-embedding';
+import { AppTabIndicator } from '@/desktop/app-tab-indicator';
 import { useAppContext } from '@/context/app-context';
 import { Switch } from '@/components/ui/Switch';
 import { useTasks, taskIsActive, taskLabels, taskStates } from '@/desktop/tasks';
@@ -105,6 +107,7 @@ function ReorderTools({
 
 function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const openApp = useAppLauncher();
+  const blockedEmbeds = useBlockedAppEmbeds();
   const { userSettings, user } = useAppContext();
   const startedKey = `orbis-home-started-v1:${user.id}`;
   const [hasStarted, setHasStarted] = useState(() => {
@@ -399,6 +402,11 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                   window.location.origin,
                 );
                 const appUpdate = Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion;
+                const tabOnly = Boolean(
+                  launchUrl &&
+                    (appOpeningMode(preferences.appLaunch, info.urn, launchUrl, window.location.origin, true) === 'tab' ||
+                      blockedEmbeds[info.urn]?.url === launchUrl),
+                );
                 return (
                   <div className="workspace-app-entry" key={info.urn}>
                     <Link
@@ -418,11 +426,14 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                         )
                           event.preventDefault();
                       }}
-                      aria-label={`${info.name}, ${app.status}${appUpdate ? ', update available' : ''}${workspace.pinnedApps.includes(info.urn) ? ', pinned' : ''}`}
+                      aria-label={`${info.name}, ${app.status}${tabOnly ? ', opens in a new tab' : ''}${appUpdate ? ', update available' : ''}${workspace.pinnedApps.includes(info.urn) ? ', pinned' : ''}`}
                     >
                       <AppLogo urn={info.urn} size={54} alt="" />
                       <span className="workspace-app-copy">
-                        <strong title={info.name}>{info.name}</strong>
+                        <span className="workspace-app-title">
+                          <strong title={info.name}>{info.name}</strong>
+                          {tabOnly ? <AppTabIndicator /> : null}
+                        </span>
                         {appUpdate ? <small>Update available</small> : null}
                         <DockerHealth appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
                       </span>

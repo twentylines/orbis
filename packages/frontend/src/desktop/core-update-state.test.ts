@@ -119,3 +119,14 @@ describe('observing a single accepted Orbis update', () => {
     }
   });
 });
+
+test('the actual image-pull stage appears as a download and preserves the target identity', () => {
+  const watch = advanceCoreUpdate(accepted(), {
+    type: 'status',
+    status: status('running', { job: { id, targetTag, state: 'running', phase: 'downloading' } }),
+  });
+  expect(watch?.phase).toBe('downloading');
+  expect(coreUpdateTitle(watch?.phase ?? 'failed')).toBe('Downloading Orbis');
+  expect(watch?.message).toContain(targetTag);
+  expect(coreWatchIsActive(watch)).toBe(true);
+});

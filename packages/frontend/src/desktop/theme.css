@@ -41,11 +41,13 @@
   --desktop-wallpaper-base: color-mix(in srgb, var(--desktop-preset-tint) 35%, var(--desktop-surface));
   --desktop-wallpaper-shade-start-alpha: 0;
   --desktop-wallpaper-shade-end-alpha: 0;
-  --desktop-wallpaper-shade: linear-gradient(
-    145deg,
-    rgba(var(--desktop-base-chrome-rgb), var(--desktop-wallpaper-shade-start-alpha)),
-    rgba(var(--desktop-base-chrome-rgb), var(--desktop-wallpaper-shade-end-alpha))
-  );
+  --desktop-wallpaper-shade:
+    linear-gradient(180deg, color-mix(in srgb, var(--desktop-surface) 36%, transparent) 38%, transparent 70%),
+    linear-gradient(
+      145deg,
+      rgba(var(--desktop-base-chrome-rgb), var(--desktop-wallpaper-shade-start-alpha)),
+      rgba(var(--desktop-base-chrome-rgb), var(--desktop-wallpaper-shade-end-alpha))
+    );
   --desktop-status-background: linear-gradient(
     125deg,
     color-mix(in srgb, var(--desktop-preset-tint) 8%, var(--desktop-surface)),
@@ -133,13 +135,13 @@ body:has(.orbis-theme) .desktop-settings .dropdown-toggle {
 .orbis-theme[data-desktop-wallpaper="tidal"],
 body:has(.orbis-theme[data-desktop-wallpaper="tidal"]),
 html[data-desktop-wallpaper="tidal"]:has(.orbis-startup) {
-  --desktop-wallpaper: url("/wallpapers/tidal.svg");
+  --desktop-wallpaper: url("/wallpapers/ocean.webp");
 }
 
 .orbis-theme[data-desktop-wallpaper="canopy"],
 body:has(.orbis-theme[data-desktop-wallpaper="canopy"]),
 html[data-desktop-wallpaper="canopy"]:has(.orbis-startup) {
-  --desktop-wallpaper: url("/wallpapers/canopy.svg");
+  --desktop-wallpaper: url("/wallpapers/forest.webp");
 }
 
 html[data-desktop-preset="frost"] {

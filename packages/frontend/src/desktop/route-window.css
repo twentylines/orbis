@@ -219,12 +219,6 @@
 .desktop .desktop-dock-item.is-minimized {
   position: relative;
 }
-.desktop[data-desktop-density="compact"] .desktop-route-window {
-  --desktop-window-gutter: 18px;
-}
-.desktop[data-desktop-density="compact"] .desktop-window-content {
-  padding: 24px var(--desktop-window-gutter) 18px;
-}
 @media (max-width: 760px) {
   .desktop .desktop-route-window {
     --desktop-window-gutter: 20px;

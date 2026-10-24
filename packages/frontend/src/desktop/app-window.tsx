@@ -19,7 +19,9 @@ import { canSplitAppWindows, splitAppBounds, type AppWindowMode, type ResizeEdge
 import type { AppWindow as WindowState } from './app-window-state';
 import type { WindowArea } from './window-geometry';
 import { prefersReducedMotion } from './motion-setting';
-import { sectionMotionTiming } from './section-motion-geometry';
+import { dockMotionDuration, sectionMotionTiming } from './section-motion-geometry';
+import { useAppEmbedding, useBlockedAppEmbeds } from './app-embedding';
+import { useDesktopPreferences } from './preferences';
 
 const WindowSettings = lazy(() => import('./app-window-settings'));
 const edges: ResizeEdge[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
@@ -35,6 +37,7 @@ export function AppWindow({
   serverName,
   saved,
   origin,
+  originOpacity,
   trayReady,
   trayTarget,
   onPlace,
@@ -54,6 +57,7 @@ export function AppWindow({
   serverName: string;
   saved?: DesktopWindowBounds;
   origin?: DOMRect;
+  originOpacity?: number;
   trayReady: boolean;
   trayTarget: () => DOMRect | undefined;
   onPlace: (mode: AppWindowMode) => void;
@@ -66,20 +70,60 @@ export function AppWindow({
   onSave: (bounds: DesktopWindowBounds) => void;
 }) {
   const { request, status, mode } = item;
+  const blockedEmbeds = useBlockedAppEmbeds();
+  const blocked = blockedEmbeds[request.urn]?.url === request.launchUrl;
   const titleId = useId();
   const helpId = useId();
   const panel = useRef<HTMLDialogElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const settingsButton = useRef<HTMLButtonElement>(null);
   const settingsClose = useRef<HTMLButtonElement>(null);
+  const placementFrom = useRef<DOMRect | null>(null);
+  const flightAnimation = useRef<Animation | null>(null);
+  const departure = useRef<{ box: DOMRect; opacity: number } | null>(null);
   const [settings, setSettings] = useState(false);
   const keyboardWindow = useRef(false);
-  const geometry = useAppWindowGeometry({ area, mode, ratio, saved, categories: request.categories, save: onSave, place: onPlace });
+  const capturePlacement = (next: AppWindowMode) => {
+    placementFrom.current = panel.current?.getBoundingClientRect() ?? null;
+    onPlace(next);
+  };
+  const geometry = useAppWindowGeometry({
+    area,
+    mode,
+    ratio,
+    saved,
+    categories: request.categories,
+    canSnap: !blocked,
+    save: onSave,
+    place: capturePlacement,
+  });
   const hidden = !desktop || status === 'minimized';
   const busy = status === 'minimizing' || status === 'closing';
   const flightReady = status !== 'minimizing' || trayReady;
-  const motion = useRef({ origin, trayTarget, onMinimized, onRemoved, settings, bounds: geometry.bounds });
-  motion.current = { origin, trayTarget, onMinimized, onRemoved, settings, bounds: geometry.bounds };
+  const motion = useRef({
+    origin,
+    trayTarget,
+    onMinimized,
+    onRemoved,
+    settings,
+    mode,
+    status,
+    automatic: item.automatic,
+    originOpacity,
+    bounds: geometry.bounds,
+  });
+  motion.current = {
+    origin,
+    trayTarget,
+    onMinimized,
+    onRemoved,
+    settings,
+    mode,
+    status,
+    automatic: item.automatic,
+    originOpacity,
+    bounds: geometry.bounds,
+  };
 
   useLayoutEffect(() => {
     const element = panel.current;
@@ -90,7 +134,8 @@ export function AppWindow({
   useLayoutEffect(() => {
     const element = panel.current;
     if (!element || hidden || !flightReady) return;
-    if (status === 'visible') (motion.current.settings ? settingsClose.current : settingsButton.current)?.focus({ preventScroll: true });
+    if (status === 'visible' && !motion.current.automatic)
+      (motion.current.settings ? settingsClose.current : settingsButton.current)?.focus({ preventScroll: true });
     const end = status === 'minimizing' ? motion.current.trayTarget() : undefined;
     if (prefersReducedMotion()) {
       if (status === 'minimizing') motion.current.onMinimized();
@@ -98,30 +143,38 @@ export function AppWindow({
       return;
     }
     const from = motion.current.origin;
+    const start = motion.current.automatic ? (from ? { box: from, opacity: motion.current.originOpacity ?? 1 } : null) : departure.current;
     const box = element.getBoundingClientRect();
     const transformTo = (target: DOMRect) =>
       `translate(${target.x - box.x}px, ${target.y - box.y}px) scale(${target.width / box.width}, ${target.height / box.height})`;
     const frames =
       status === 'minimizing' && end
         ? [
-            { transform: 'none', opacity: 1 },
+            { transform: start ? transformTo(start.box) : 'none', opacity: start?.opacity ?? 1 },
             { transform: transformTo(end), opacity: 0.2 },
           ]
         : status === 'closing'
           ? [
-              { transform: 'none', opacity: 1 },
+              { transform: start ? transformTo(start.box) : 'none', opacity: start?.opacity ?? 1 },
               { transform: 'translateY(12px) scale(.985)', opacity: 0 },
             ]
           : from
             ? [
-                { transform: transformTo(from), opacity: 0.35 },
+                { transform: transformTo(from), opacity: motion.current.originOpacity ?? 0.35 },
                 { transform: 'none', opacity: 1 },
               ]
             : [
                 { transform: 'translateY(12px)', opacity: 0.75 },
                 { transform: 'none', opacity: 1 },
               ];
-    const duration = status === 'closing' ? 240 : sectionMotionTiming.surface;
+    const duration =
+      status === 'closing'
+        ? 240
+        : status === 'minimizing' || motion.current.automatic
+          ? dockMotionDuration
+          : motion.current.mode === 'floating'
+            ? sectionMotionTiming.surface
+            : 300;
     const deadline = performance.now() + duration;
     const options = {
       duration,
@@ -130,11 +183,12 @@ export function AppWindow({
     };
     let animation = element.animate(frames, options);
     const complete = () => {
-      if (status === 'minimizing') motion.current.onMinimized();
-      else if (status === 'closing') motion.current.onRemoved();
-      animation.cancel();
+      if (status === 'minimizing' && motion.current.status === 'minimizing') motion.current.onMinimized();
+      else if (status === 'closing' && motion.current.status === 'closing') motion.current.onRemoved();
+      else animation.cancel();
     };
     const track = () => {
+      flightAnimation.current = animation;
       animation.id = `orbis-app-${status === 'visible' ? 'open' : status}`;
       void animation.finished.then(complete, () => undefined);
     };
@@ -190,15 +244,18 @@ export function AppWindow({
       return;
     }
     if (before.mode === mode || hidden || !panel.current || prefersReducedMotion()) return;
+    const from = placementFrom.current ?? new DOMRect(before.bounds.x, before.bounds.y, before.bounds.width, before.bounds.height);
+    placementFrom.current = null;
+    flightAnimation.current?.cancel();
     placementAnimation.current?.cancel();
     placementAnimation.current = panel.current.animate(
       [
         {
-          transform: `translate(${before.bounds.x - next.x}px, ${before.bounds.y - next.y}px) scale(${before.bounds.width / next.width}, ${before.bounds.height / next.height})`,
+          transform: `translate(${from.x - next.x}px, ${from.y - next.y}px) scale(${from.width / next.width}, ${from.height / next.height})`,
         },
         { transform: 'none' },
       ],
-      { duration: 360, easing: 'cubic-bezier(.2,.76,.22,1)' },
+      { duration: 300, easing: 'cubic-bezier(.2,.76,.22,1)' },
     );
   }, [mode, area, hidden, geometry.bounds, geometry.gestureKind, status]);
 
@@ -206,7 +263,14 @@ export function AppWindow({
     setSettings(false);
     settingsButton.current?.focus({ preventScroll: true });
   };
+  const depart = (action: () => void) => {
+    const element = panel.current;
+    departure.current = element ? { box: element.getBoundingClientRect(), opacity: Number(getComputedStyle(element).opacity) } : null;
+    action();
+  };
   const place = (next: AppWindowMode) => {
+    placementFrom.current = panel.current?.getBoundingClientRect() ?? null;
+    if (next === 'floating') geometry.restoreFloating();
     geometry.cancel();
     onPlace(next);
   };
@@ -237,7 +301,7 @@ export function AppWindow({
           if ((event.target as Element).closest('[role="menu"],[role="listbox"],.react-tooltip')) return;
           event.stopPropagation();
           if (settings) closeSettings();
-          else onClose();
+          else depart(onClose);
         }}
       >
         <span id={helpId} className="visually-hidden">
@@ -275,13 +339,14 @@ export function AppWindow({
             >
               <IconSettings size={18} aria-hidden="true" />
             </Button>
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button className="app-launcher-close" size="icon" aria-label="Window layout" title="Window layout">
                   <IconLayoutColumns size={19} aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
+                className="app-window-layout-menu"
                 align="end"
                 onCloseAutoFocus={(event) => {
                   if (keyboardWindow.current) {
@@ -292,10 +357,10 @@ export function AppWindow({
                 }}
               >
                 <DropdownMenuLabel>Window layout</DropdownMenuLabel>
-                <DropdownMenuItem disabled={!canSplitAppWindows(area)} onSelect={() => place('left')}>
+                <DropdownMenuItem disabled={blocked || !canSplitAppWindows(area)} onSelect={() => place('left')}>
                   Snap left
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={!canSplitAppWindows(area)} onSelect={() => place('right')}>
+                <DropdownMenuItem disabled={blocked || !canSplitAppWindows(area)} onSelect={() => place('right')}>
                   Snap right
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => place('floating')}>Floating window</DropdownMenuItem>
@@ -336,17 +401,17 @@ export function AppWindow({
             >
               {mode === 'maximized' ? <IconArrowsMinimize size={19} aria-hidden="true" /> : <IconArrowsMaximize size={19} aria-hidden="true" />}
             </Button>
-            <Button className="app-launcher-close" size="icon" aria-label="Minimize app window" onClick={onMinimize}>
+            <Button className="app-launcher-close" size="icon" aria-label="Minimize app window" onClick={() => depart(onMinimize)}>
               <IconMinus size={19} aria-hidden="true" />
             </Button>
-            <Button className="app-launcher-close" size="icon" aria-label="Close app window" onClick={onClose}>
+            <Button className="app-launcher-close" size="icon" aria-label="Close app window" onClick={() => depart(onClose)}>
               <IconX size={19} aria-hidden="true" />
             </Button>
           </div>
         </div>
         <div className="app-launcher-body">
           <div className="app-window-document" inert={settings || geometry.gestureKind !== null || undefined} aria-hidden={settings || undefined}>
-            <AppFrame request={request} />
+            <AppFrame request={request} enabled={desktop && status === 'visible'} onTab={onTab} />
           </div>
           {settings ? (
             <section className="app-window-settings" aria-label={`${request.name} settings`}>
@@ -386,12 +451,47 @@ export function AppWindow({
   );
 }
 
-const AppFrame = memo(function AppFrame({ request }: { request: WindowState['request'] }) {
+const AppFrame = memo(function AppFrame({ request, enabled, onTab }: { request: WindowState['request']; enabled: boolean; onTab: () => void }) {
+  const [documentReady, setDocumentReady] = useState(false);
+  const check = useAppEmbedding(request, enabled && !documentReady);
+  const knownBlocked = useBlockedAppEmbeds()[request.urn]?.url === request.launchUrl;
+  const { preferences, update } = useDesktopPreferences();
+  if (check.isPending) return <output className="app-window-compatibility">Checking window compatibility…</output>;
+  if (check.data?.status === 'blocked' || (knownBlocked && check.data?.status === 'unknown')) {
+    return (
+      <section className="app-window-compatibility" aria-label="App window compatibility">
+        <IconExternalLink size={30} aria-hidden="true" />
+        <h3>{request.name} needs a browser tab</h3>
+        <p>This app blocks embedded windows. Use a browser tab, or allow Orbis in its embedding settings if available.</p>
+        <div className="app-window-compatibility-actions">
+          <Button onClick={onTab}>Open in new tab</Button>
+          <Button
+            intent="primary"
+            onClick={() => {
+              update({
+                appLaunch: {
+                  ...preferences.appLaunch,
+                  apps: { ...preferences.appLaunch.apps, [request.urn]: { ...preferences.appLaunch.apps[request.urn], mode: 'tab' } },
+                },
+              });
+              onTab();
+            }}
+          >
+            Always open in new tab
+          </Button>
+        </div>
+        <Button variant="ghost" disabled={check.isFetching} onClick={() => void check.refetch()}>
+          {check.isFetching ? 'Checking…' : 'Check again'}
+        </Button>
+      </section>
+    );
+  }
   return (
     <iframe
       className="app-window-frame"
       title={`${request.name} app`}
       src={request.launchUrl}
+      onLoad={() => setDocumentReady(true)}
       referrerPolicy="no-referrer"
       allow="fullscreen; clipboard-read; clipboard-write; camera; microphone; geolocation; display-capture"
       sandbox="allow-forms allow-scripts allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation"

@@ -1,5 +1,6 @@
 /* biome-ignore-all lint/a11y/noNoninteractiveTabindex: The bounded activity list needs native keyboard scrolling. */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useMutationState } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
 import { IconApps, IconChevronDown, IconChevronUp, IconPackage, IconServerCog } from '@tabler/icons-react';
@@ -13,8 +14,9 @@ import { useTasks } from './tasks';
 import { useDesktopWindows } from './window-viewport';
 import { desktopActivity, type DesktopActivityItem } from './desktop-activity-state';
 import { DockCompanion } from './dock-companion';
-import { dockMotionDuration } from './section-motion-geometry';
 import './desktop-activity.css';
+
+const activityMotionDuration = 320;
 
 function focusDock() {
   const target =
@@ -35,7 +37,24 @@ export function DockActivity() {
   const reduced = useReducedMotion();
   const desktop = useDesktopWindows();
   const names = useMemo(() => new Map(apps.map((app) => [app.urn, app.name])), [apps]);
-  const activity = desktopActivity(tasks.data?.tasks ?? [], names, watch, packageJob);
+  const checks = useMutationState({
+    filters: { mutationKey: ['orbis-compatibility'], status: 'pending' },
+    select: (mutation) => {
+      const value = mutation.state.variables;
+      const target =
+        typeof value === 'string'
+          ? value
+          : value && typeof value === 'object' && 'tag' in value && typeof value.tag === 'string'
+            ? value.tag
+            : 'Orbis';
+      return {
+        id: `compatibility-${mutation.state.submittedAt}-${target}`,
+        target,
+        operation: String(mutation.options.mutationKey?.[1] ?? 'update'),
+      };
+    },
+  });
+  const activity = desktopActivity(tasks.data?.tasks ?? [], names, watch, packageJob, checks);
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -80,9 +99,9 @@ export function DockActivity() {
       window.removeEventListener('resize', measure);
     };
   }, [open]);
-  const transition = { duration: reduced ? 0 : dockMotionDuration / 1000, ease: [0.32, 0.08, 0.24, 1] as [number, number, number, number] };
+  const transition = { duration: reduced ? 0 : activityMotionDuration / 1000, ease: [0.32, 0.08, 0.24, 1] as [number, number, number, number] };
   return (
-    <DockCompanion visible={hasActivity} side="left">
+    <DockCompanion visible={hasActivity} side="left" duration={activityMotionDuration}>
       {displayed ? (
         <div
           className="desktop-activity"

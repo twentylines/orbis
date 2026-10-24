@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -11,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router';
 import { IconX } from '@tabler/icons-react';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Button } from '@/components/ui/Button';
@@ -21,13 +23,15 @@ import { DockCompanion } from './dock-companion';
 import { useDesktopPreferences } from './preferences';
 import { appAddress, appOpeningMode } from './app-opening';
 import { readOpenedApps, rememberOpenedApp, type OpenedApps } from './app-library';
-import { appWindowReducer, type AppLaunchRequest } from './app-window-state';
+import { appWindowReducer, appWorkspace, type AppLaunchRequest } from './app-window-state';
 import { AppWindow } from './app-window';
 import { useAppWindowArea } from './app-window-area';
 import { useAppTrayLayout } from './app-tray-layout';
 import { AppSplitPicker } from './app-split-picker';
 import { AppSplitDivider } from './app-split-divider';
 import { dockFlightTargetLeft } from './dock-motion-geometry';
+import { desktopNavigation } from './navigation';
+import { AppEmbeddingProvider } from './app-embedding';
 import './app-launcher.css';
 
 const dockFocusTarget = () =>
@@ -41,7 +45,10 @@ export const MinimizedApps = () => useContext(AppTrayContext);
 
 export function AppLauncherProvider({ children }: PropsWithChildren) {
   const desktop = useDesktopWindows();
+  const location = useLocation();
+  const section = desktopNavigation.find(({ path }) => location.pathname === path || location.pathname.startsWith(`${path}/`))?.path ?? '/dashboard';
   const { preferences, update } = useDesktopPreferences();
+  const windowsEnabled = desktop && preferences.appLaunch.mode !== 'tab';
   const latestPreferences = useRef(preferences);
   latestPreferences.current = preferences;
   const { user } = useAppContext();
@@ -60,11 +67,18 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       /* App launch works with storage blocked. */
     }
   }, [opened, recentStorageKey]);
-  const [state, dispatch] = useReducer(appWindowReducer, { windows: [] });
+  const [state, dispatch] = useReducer(appWindowReducer, { windows: [], section });
+  const latestState = useRef(state);
+  latestState.current = state;
+  const workspace = appWorkspace(state);
+  const split =
+    workspace.split && state.windows.some(({ request, status }) => request.urn === workspace.split?.anchor && status === 'visible')
+      ? workspace.split
+      : undefined;
   const [tray, setTray] = useState<HTMLElement | null>(null);
-  const [ratio, setRatio] = useState(0.5);
+  const ratio = workspace.ratio ?? 0.5;
   const area = useAppWindowArea();
-  const origins = useRef(new Map<string, DOMRect>());
+  const origins = useRef(new Map<string, { bounds: DOMRect; opacity?: number }>());
   const openers = useRef(new Map<string, HTMLElement>());
   const minimized = useMemo(() => state.windows.filter(({ status }) => status === 'minimized' || status === 'minimizing'), [state.windows]);
   useAppTrayLayout(desktop, minimized.length, tray);
@@ -93,7 +107,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       } else {
         captureOpener(request.urn);
         const origin = trayButton(request.urn)?.getBoundingClientRect();
-        if (origin) origins.current.set(request.urn, origin);
+        if (origin) origins.current.set(request.urn, { bounds: origin });
         else origins.current.delete(request.urn);
         dispatch({ type: 'open', request: { ...request, launchUrl: url } });
       }
@@ -114,18 +128,37 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       target?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
     });
   };
-  const remove = (urn: string) => {
-    dispatch({ type: 'remove', urn });
+  const remove = (urn: string, completed = false) => {
+    if (completed && !latestState.current.windows.some((item) => item.request.urn === urn && item.status === 'closing')) return;
+    dispatch({ type: completed ? 'closed' : 'remove', urn });
     restoreFocus(urn);
     origins.current.delete(urn);
     openers.current.delete(urn);
   };
+  useLayoutEffect(() => {
+    if (!windowsEnabled) return;
+    for (const item of latestState.current.windows) {
+      const leaving = item.status === 'visible' && item.section !== section;
+      const returning = item.section === section && item.automatic && ['minimizing', 'minimized'].includes(item.status);
+      if (!leaving && !returning) continue;
+      const panel = document.querySelector<HTMLElement>(`[data-app-window="${CSS.escape(item.request.urn)}"]`);
+      const moving = leaving || item.status === 'minimizing';
+      const origin = moving && panel ? panel : trayButton(item.request.urn);
+      if (origin)
+        origins.current.set(item.request.urn, {
+          bounds: origin.getBoundingClientRect(),
+          opacity: moving ? Number(getComputedStyle(origin).opacity) : 0.35,
+        });
+    }
+    dispatch({ type: 'visit', section });
+  }, [windowsEnabled, section, trayButton]);
+
   useEffect(() => {
-    if (desktop) return;
+    if (windowsEnabled) return;
     if (document.activeElement instanceof Element && document.activeElement.closest('.orbis-app-launcher,.orbis-app-tray,.app-split-picker'))
       dockFocusTarget()?.focus({ preventScroll: true });
     dispatch({ type: 'hide' });
-  }, [desktop]);
+  }, [windowsEnabled]);
   const saveBounds = (urn: string, bounds: DesktopWindowBounds) => {
     const current = latestPreferences.current;
     const next = {
@@ -142,8 +175,6 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     const wrapper = tray?.closest<HTMLElement>('.desktop-dock-companion');
     const inner = wrapper?.firstElementChild;
     if (!button || !dock || !primary || !wrapper || !inner) return button?.getBoundingClientRect();
-    button.focus({ preventScroll: true });
-    button.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
     const box = button.getBoundingClientRect();
     const gap = Number.parseFloat(getComputedStyle(dock).columnGap) || 12;
     const leftSpace = [...dock.querySelectorAll<HTMLElement>(':scope > .desktop-dock-companion[data-side="left"]')].reduce(
@@ -172,7 +203,13 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
         leftSpace,
         trayWidth: Number.parseFloat(wrapper.style.width) || inner.getBoundingClientRect().width,
         gap,
-        offset: box.x - inner.getBoundingClientRect().x,
+        offset: Math.max(
+          0,
+          Math.min(
+            box.x - inner.getBoundingClientRect().x,
+            (Number.parseFloat(wrapper.style.width) || inner.getBoundingClientRect().width) - box.width,
+          ),
+        ),
       }),
       box.y,
       box.width,
@@ -190,13 +227,16 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                   className="app-tray-restore"
                   data-minimized-app={request.urn}
                   data-flying={status === 'minimizing' || undefined}
-                  aria-label={`Restore ${request.name}`}
+                  aria-label={
+                    preferences.appLaunch.mode === 'tab' || preferences.appLaunch.apps[request.urn]?.mode === 'tab'
+                      ? `Open ${request.name} in new tab`
+                      : `Restore ${request.name}`
+                  }
                   title={request.name}
                   onClick={() => {
-                    const origin = trayButton(request.urn)?.getBoundingClientRect();
-                    if (origin) origins.current.set(request.urn, origin);
-                    captureOpener(request.urn);
-                    dispatch({ type: 'open', request });
+                    openApp(request);
+                    if (preferences.appLaunch.mode === 'tab' || preferences.appLaunch.apps[request.urn]?.mode === 'tab')
+                      dockFocusTarget()?.focus({ preventScroll: true });
                   }}
                   onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })}
                 >
@@ -224,72 +264,76 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
         </fieldset>
       </DockCompanion>
     ),
-    [desktop, minimized, trayButton, captureOpener],
+    [desktop, minimized, trayButton, openApp, preferences.appLaunch],
   );
   return (
-    <OpenedAppsContext.Provider value={opened}>
-      <AppLauncherContext.Provider value={openApp}>
-        <AppTrayContext.Provider value={minimizedApps}>
-          {children}
-          {state.windows.length > 0 && typeof document !== 'undefined'
-            ? createPortal(
-                <>
-                  {state.windows.map((item) => (
-                    <AppWindow
-                      key={item.request.urn}
-                      item={item}
-                      active={state.active === item.request.urn}
-                      desktop={desktop}
-                      area={area}
-                      ratio={ratio}
-                      serverName={preferences.serverName}
-                      saved={preferences.appLaunch.apps[item.request.urn]?.bounds}
-                      origin={origins.current.get(item.request.urn)}
-                      trayReady={Boolean(tray)}
-                      trayTarget={() => flightTarget(item.request.urn)}
-                      onPlace={(mode) => {
-                        if (mode === 'left' || mode === 'right') setRatio(0.5);
-                        dispatch({ type: 'place', urn: item.request.urn, mode });
-                      }}
-                      onFocus={() => dispatch({ type: 'focus', urn: item.request.urn })}
-                      onMinimize={() => dispatch({ type: 'minimize', urn: item.request.urn })}
-                      onMinimized={() => {
-                        dispatch({ type: 'minimized', urn: item.request.urn });
-                        restoreFocus(item.request.urn, true);
-                      }}
-                      onClose={() => dispatch({ type: 'close', urn: item.request.urn })}
-                      onRemoved={() => remove(item.request.urn)}
-                      onTab={() => {
-                        window.open(item.request.launchUrl, '_blank', 'noopener,noreferrer');
-                        remove(item.request.urn);
-                      }}
-                      onSave={(bounds) => saveBounds(item.request.urn, bounds)}
-                    />
-                  ))}
-                  {desktop && state.split && !state.split.partner ? (
-                    <AppSplitPicker
-                      anchor={state.split.anchor}
-                      side={state.split.side === 'left' ? 'right' : 'left'}
-                      area={area}
-                      ratio={ratio}
-                      opened={state.windows.map(({ request }) => request)}
-                      onChoose={(request) => {
-                        remember(request);
-                        dispatch({ type: 'pair', request });
-                      }}
-                      onClose={() => {
-                        dispatch({ type: 'dismiss-picker' });
-                        restoreFocus(state.split?.anchor ?? '');
-                      }}
-                    />
-                  ) : null}
-                  {desktop && state.split?.partner ? <AppSplitDivider area={area} ratio={ratio} onChange={setRatio} /> : null}
-                </>,
-                document.body,
-              )
-            : null}
-        </AppTrayContext.Provider>
-      </AppLauncherContext.Provider>
-    </OpenedAppsContext.Provider>
+    <AppEmbeddingProvider>
+      <OpenedAppsContext.Provider value={opened}>
+        <AppLauncherContext.Provider value={openApp}>
+          <AppTrayContext.Provider value={minimizedApps}>
+            {children}
+            {state.windows.length > 0 && typeof document !== 'undefined'
+              ? createPortal(
+                  <>
+                    {state.windows.map((item) => (
+                      <AppWindow
+                        key={item.request.urn}
+                        item={item}
+                        active={workspace.active === item.request.urn}
+                        desktop={windowsEnabled}
+                        area={area}
+                        ratio={ratio}
+                        serverName={preferences.serverName}
+                        saved={preferences.appLaunch.apps[item.request.urn]?.bounds}
+                        origin={origins.current.get(item.request.urn)?.bounds}
+                        originOpacity={origins.current.get(item.request.urn)?.opacity}
+                        trayReady={Boolean(tray)}
+                        trayTarget={() => flightTarget(item.request.urn)}
+                        onPlace={(mode) => {
+                          dispatch({ type: 'place', urn: item.request.urn, mode });
+                        }}
+                        onFocus={() => dispatch({ type: 'focus', urn: item.request.urn })}
+                        onMinimize={() => dispatch({ type: 'minimize', urn: item.request.urn })}
+                        onMinimized={() => {
+                          dispatch({ type: 'minimized', urn: item.request.urn });
+                          if (!item.automatic) restoreFocus(item.request.urn, true);
+                        }}
+                        onClose={() => dispatch({ type: 'close', urn: item.request.urn })}
+                        onRemoved={() => remove(item.request.urn, true)}
+                        onTab={() => {
+                          window.open(item.request.launchUrl, '_blank', 'noopener,noreferrer');
+                          remove(item.request.urn);
+                        }}
+                        onSave={(bounds) => saveBounds(item.request.urn, bounds)}
+                      />
+                    ))}
+                    {windowsEnabled && split && !split.partner ? (
+                      <AppSplitPicker
+                        anchor={split.anchor}
+                        side={split.side === 'left' ? 'right' : 'left'}
+                        area={area}
+                        ratio={ratio}
+                        opened={state.windows.map(({ request }) => request)}
+                        onChoose={(request) => {
+                          remember(request);
+                          dispatch({ type: 'pair', request });
+                        }}
+                        onClose={() => {
+                          dispatch({ type: 'dismiss-picker' });
+                          restoreFocus(split?.anchor ?? '');
+                        }}
+                      />
+                    ) : null}
+                    {windowsEnabled && split?.partner ? (
+                      <AppSplitDivider area={area} ratio={ratio} onChange={(value) => dispatch({ type: 'ratio', value })} />
+                    ) : null}
+                  </>,
+                  document.body,
+                )
+              : null}
+          </AppTrayContext.Provider>
+        </AppLauncherContext.Provider>
+      </OpenedAppsContext.Provider>
+    </AppEmbeddingProvider>
   );
 }

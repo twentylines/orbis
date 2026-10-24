@@ -14,6 +14,9 @@
   border: 1px solid var(--desktop-line);
   border-radius: 12px;
 }
+.store-split-layout {
+  position: relative;
+}
 .store-split-layout,
 .store-catalogue-pane,
 .store-app-preview {
@@ -71,9 +74,6 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 0fr);
   gap: 0;
   height: max(260px, calc(100dvh - var(--orbis-bar-bottom, 88px) - var(--orbis-dock-height, 78px) - 190px));
-  transition:
-    grid-template-columns 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    gap 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .store-split-desktop[data-preview-open="true"] {
   grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr);
@@ -94,12 +94,6 @@
   background: var(--desktop-surface);
   backdrop-filter: var(--desktop-glass-filter);
   -webkit-backdrop-filter: var(--desktop-glass-filter);
-  opacity: 0;
-  transition: opacity 120ms 260ms ease;
-}
-.store-split-desktop[data-preview-open="true"] .store-preview-surface {
-  opacity: 1;
-  transition-delay: 0ms;
 }
 .store-split-desktop .store-preview-content {
   height: 100%;

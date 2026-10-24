@@ -113,6 +113,15 @@ describe('host update Unix socket transport', () => {
     expect(requests).toHaveLength(count);
   });
 
+  it('rejects inactive Nightly, dev and alpha targets before contacting the host service', () => {
+    const count = requests.length;
+    for (const tag of ['v0.1.0-nightly.20261025', 'v0.1.0-dev.1', 'v0.1.0-alpha.1']) {
+      expect(() => service.plan(tag)).toThrow(BadRequestException);
+      expect(() => service.plan(tag, true)).toThrow(BadRequestException);
+    }
+    expect(requests).toHaveLength(count);
+  });
+
   it('reads packages and a fixed candidate changelog through the socket', async () => {
     expect(await service.packages()).toMatchObject({ available: true, packageCount: 1 });
     expect(await service.packageChangelog('base-files:arm64')).toMatchObject({ available: true, name: 'base-files:arm64' });

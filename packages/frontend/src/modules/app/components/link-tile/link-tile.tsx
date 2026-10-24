@@ -33,7 +33,7 @@ export const LinkTile: React.FC<LinkTileProps> = ({ link }) => {
         <ContextMenuTrigger asChild>
           <div className="app-link-tile" data-testid={`link-tile-${link.title}`}>
             <div className="card card-sm card-link">
-              <div className="card-body d-flex align-items-center gap-3 app-link-tile-body">
+              <div className="card-body d-flex align-items-start gap-3 app-link-tile-body">
                 <AppLogo url={link.iconUrl || ''} size={60} />
                 <div className="app-link-tile-copy" lang={i18n.resolvedLanguage ?? i18n.language}>
                   <span className="fw-bolder">{link.title}</span>

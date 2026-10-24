@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { DesktopWindowBounds } from '@runtipi/common/schemas';
 import type { WindowArea } from './window-geometry';
-import { initialAppBounds } from './app-opening';
+import { initialAppBounds, restoreAppBounds } from './app-opening';
 import { appSnapTarget, clampAppBounds, resizeAppBounds, splitAppBounds, type AppWindowMode, type ResizeEdge } from './app-window-layout';
 
 type Gesture = {
@@ -18,6 +18,7 @@ export function useAppWindowGeometry({
   ratio,
   saved,
   categories,
+  canSnap = true,
   save,
   place,
 }: {
@@ -26,6 +27,7 @@ export function useAppWindowGeometry({
   ratio: number;
   saved?: DesktopWindowBounds;
   categories?: string[];
+  canSnap?: boolean;
   save: (bounds: DesktopWindowBounds) => void;
   place: (mode: AppWindowMode) => void;
 }) {
@@ -90,7 +92,7 @@ export function useAppWindowGeometry({
       if (gesture.current) {
         // Pull a snapped window beneath the pointer without jumping to its saved position.
         if (kind === 'move' && mode !== 'floating') {
-          const restored = clampAppBounds(floating, area);
+          const restored = restoreAppBounds(area, floating, categories);
           const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.x) / bounds.width));
           gesture.current.bounds = clampAppBounds({ ...restored, x: event.clientX - restored.width * fraction, y: bounds.y }, area);
         }
@@ -102,12 +104,12 @@ export function useAppWindowGeometry({
       if (!active?.pointer || active.pointer.id !== event.pointerId) return;
       const dx = event.clientX - active.pointer.x;
       const dy = event.clientY - active.pointer.y;
-      target.current = active.kind === 'move' ? appSnapTarget(event.clientX, event.clientY, area) : null;
-      change(
+      const next =
         active.kind === 'move'
           ? { ...active.bounds, x: active.bounds.x + dx, y: active.bounds.y + dy }
-          : resizeAppBounds(active.bounds, active.edge, dx, dy, area),
-      );
+          : resizeAppBounds(active.bounds, active.edge, dx, dy, area);
+      target.current = canSnap && active.kind === 'move' ? appSnapTarget(next, { x: dx, y: dy }, area) : null;
+      change(next);
     },
     onPointerUp: (event: PointerEvent<HTMLElement>) => {
       if (gesture.current?.pointer?.id !== event.pointerId) return;
@@ -144,6 +146,13 @@ export function useAppWindowGeometry({
     gestureKind,
     keyboard,
     beginKeyboard: begin,
+    restoreFloating: () => {
+      const next = restoreAppBounds(area, floating, categories);
+      if (next.width !== floating.width || next.height !== floating.height || next.x !== floating.x || next.y !== floating.y) {
+        setFloating(next);
+        save(next);
+      }
+    },
     cancel,
     move: pointer('move'),
     resize: (edge: ResizeEdge) => pointer('resize', edge),

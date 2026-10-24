@@ -62,6 +62,85 @@ describe('host update authorization', () => {
     hostUpdates.restartApply.mockReset();
     downgrades.plan.mockReset();
     downgrades.apply.mockReset();
+    downgrades.releaseCompatibility.mockReset();
+  });
+
+  it('accepts only strict boolean force flags and exact downgrade request shapes', async () => {
+    const headers = { Authorization: 'Bearer fixture-session', Host: 'orbis.example', Origin: 'http://orbis.example' };
+    for (const action of ['plan', 'apply']) {
+      const required = action === 'plan' ? { tag: 'v0.1.0-beta.90' } : { planId: 'reviewed-plan' };
+      const route = `/host-updates/downgrade/${action}`;
+      for (const force of ['true', 'false', 1, 0, null, [], {}]) {
+        expect(
+          (
+            await request(app.getHttpServer())
+              .post(route)
+              .set(headers)
+              .send({ ...required, force })
+          ).status,
+        ).toBe(400);
+      }
+      for (const body of [
+        {},
+        [],
+        { ...required, extra: true },
+        { ...required, ...Object.fromEntries(Object.keys(required).map((key) => [key, 1])) },
+      ]) {
+        expect((await request(app.getHttpServer()).post(route).set(headers).send(body)).status).toBe(400);
+      }
+    }
+    expect(downgrades.plan).not.toHaveBeenCalled();
+    expect(downgrades.apply).not.toHaveBeenCalled();
+    downgrades.plan.mockResolvedValue({ planId: 'reviewed-plan', forced: true, warnings: ['Data may be unreadable.'] } as never);
+    const plan = await request(app.getHttpServer()).post('/host-updates/downgrade/plan').set(headers).send({ tag: 'v0.1.0-beta.90', force: true });
+    expect(plan.status).toBe(200);
+    expect(plan.body.forced).toBe(true);
+    expect(plan.body.warnings).toEqual(['Data may be unreadable.']);
+    expect(downgrades.plan).toHaveBeenCalledWith('v0.1.0-beta.90', true);
+    downgrades.apply.mockResolvedValue({ jobId: 'reviewed-plan', state: 'running' });
+    expect(
+      (await request(app.getHttpServer()).post('/host-updates/downgrade/apply').set(headers).send({ planId: 'reviewed-plan', force: true })).status,
+    ).toBe(202);
+    expect(downgrades.apply).toHaveBeenCalledWith('reviewed-plan', true);
+    expect(
+      (await request(app.getHttpServer()).post('/host-updates/downgrade/plan').set(headers).send({ tag: 'v0.1.0-beta.90', force: false })).status,
+    ).toBe(200);
+    expect(downgrades.plan).toHaveBeenLastCalledWith('v0.1.0-beta.90', false);
+  });
+
+  it('restricts release compatibility metadata to an operator session and one exact tag query', async () => {
+    const route = '/host-updates/release-compatibility';
+    expect((await request(app.getHttpServer()).get(route).query({ tag: 'v0.1.0-beta.99' })).status).toBe(401);
+    for (const authorization of ['guest-session', 'fixture-cli']) {
+      expect(
+        (await request(app.getHttpServer()).get(route).set('Authorization', `Bearer ${authorization}`).query({ tag: 'v0.1.0-beta.99' })).status,
+      ).toBe(403);
+    }
+    for (const query of ['', '?extra=value', '?tag=a&tag=b', '?tag=a&force=true']) {
+      expect(
+        (
+          await request(app.getHttpServer())
+            .get(route + query)
+            .set('Authorization', 'Bearer fixture-session')
+        ).status,
+      ).toBe(400);
+    }
+    expect(downgrades.releaseCompatibility).not.toHaveBeenCalled();
+    downgrades.releaseCompatibility.mockResolvedValue({
+      tag: 'v0.1.0-beta.99',
+      currentRuntipiVersion: '4.10.1',
+      targetRuntipiVersion: '4.11.0',
+      crossesRuntipiBoundary: true,
+      hostUpdateSupported: false,
+      warning: 'This update cannot be applied by the current host updater.',
+    });
+    const response = await request(app.getHttpServer()).get(route).set('Authorization', 'Bearer fixture-session').query({ tag: 'v0.1.0-beta.99' });
+    expect(response.status).toBe(200);
+    expect(response.body.crossesRuntipiBoundary).toBe(true);
+    expect(response.body.hostUpdateSupported).toBe(false);
+    expect(downgrades.releaseCompatibility).toHaveBeenCalledWith('v0.1.0-beta.99');
+    expect(hostUpdates.plan).not.toHaveBeenCalled();
+    expect(hostUpdates.apply).not.toHaveBeenCalled();
   });
 
   it('requires an operator session and same origin for downgrade review and apply', async () => {

@@ -2,7 +2,8 @@ import { useLayoutEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import type { LibraryFilters, LibrarySort } from './app-library';
-import { IconChevronDown } from '@tabler/icons-react';
+import { IconChevronDown, IconSearch, IconX } from '@tabler/icons-react';
+import { openCommandSearch } from './command-search-event';
 import './app-library.css';
 
 export function useLibraryFilters() {
@@ -38,15 +39,23 @@ export function AppLibraryControls({
 }) {
   const { t } = useTranslation();
   return (
-    <search className="app-library-controls" aria-label="Filter apps">
+    <fieldset className="app-library-controls" aria-label="App library controls">
+      <button
+        type="button"
+        className="btn app-library-find"
+        onClick={(event) => {
+          event.currentTarget.focus({ preventScroll: true });
+          openCommandSearch();
+        }}
+        aria-haspopup="dialog"
+      >
+        <IconSearch size={17} aria-hidden="true" />
+        Find an app
+      </button>
       <label>
-        <span>Find an app</span>
-        <input type="search" placeholder="Search apps" value={filters.search} onChange={(event) => change('q', event.target.value)} />
-      </label>
-      <label>
-        <span>Category</span>
+        <span className="visually-hidden">Category</span>
         <span className="app-library-select">
-          <select value={filters.category} onChange={(event) => change('category', event.target.value)}>
+          <select className="form-select" aria-label="Category" value={filters.category} onChange={(event) => change('category', event.target.value)}>
             <option value="">All categories</option>
             {[...new Set([...categories, 'uncategorized', ...(filters.category ? [filters.category] : [])])].sort().map((category) => (
               <option key={category} value={category}>
@@ -60,9 +69,14 @@ export function AppLibraryControls({
         </span>
       </label>
       <label>
-        <span>Sort by</span>
+        <span className="visually-hidden">Sort by</span>
         <span className="app-library-select">
-          <select value={filters.sort} onChange={(event) => change('sort', event.target.value as LibrarySort)}>
+          <select
+            className="form-select"
+            aria-label="Sort by"
+            value={filters.sort}
+            onChange={(event) => change('sort', event.target.value as LibrarySort)}
+          >
             <option value="az">A–Z</option>
             <option value="za">Z–A</option>
             <option value="opened">Last opened</option>
@@ -71,6 +85,18 @@ export function AppLibraryControls({
           <IconChevronDown size={18} aria-hidden="true" />
         </span>
       </label>
-    </search>
+      {filters.search ? (
+        <button
+          type="button"
+          className="btn app-library-clear"
+          aria-label="Clear search filter"
+          title={filters.search}
+          onClick={() => change('q', '')}
+        >
+          <span>{filters.search}</span>
+          <IconX size={16} aria-hidden="true" />
+        </button>
+      ) : null}
+    </fieldset>
   );
 }

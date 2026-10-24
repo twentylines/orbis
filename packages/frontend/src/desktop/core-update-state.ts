@@ -23,7 +23,7 @@ export type CoreUpdateStatus = {
 export type CoreUpdateWatch = {
   id: string;
   targetTag: string;
-  phase: 'updating' | 'offline' | 'checking' | 'failed' | 'ready';
+  phase: 'downloading' | 'updating' | 'offline' | 'checking' | 'failed' | 'ready';
   message: string;
   refreshIssued: boolean;
   operation?: CoreUpdateOperation;
@@ -39,13 +39,15 @@ export const coreJobIsActive = (job?: CoreUpdateJob | null) => ['queued', 'runni
 export const coreWatchIsActive = (watch: CoreUpdateWatch | null) => Boolean(watch && !watch.refreshIssued && watch.phase !== 'failed');
 export const validCoreUpdate = (id: string, targetTag: string) => jobId.test(id) && releaseTag.test(targetTag);
 export const coreUpdateTitle = (phase: CoreUpdateWatch['phase'], operation: CoreUpdateOperation = 'update') =>
-  phase === 'offline'
-    ? 'Restarting Orbis'
-    : phase === 'checking' || phase === 'ready'
-      ? 'Checking Orbis'
-      : operation === 'downgrade'
-        ? 'Downgrading Orbis'
-        : 'Updating Orbis';
+  phase === 'downloading'
+    ? 'Downloading Orbis'
+    : phase === 'offline'
+      ? 'Restarting Orbis'
+      : phase === 'checking' || phase === 'ready'
+        ? 'Checking Orbis'
+        : operation === 'downgrade'
+          ? 'Downgrading Orbis'
+          : 'Updating Orbis';
 
 const restartingMessage = 'Orbis is restarting. Reconnecting automatically.';
 
@@ -99,12 +101,14 @@ export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpda
   }
   return {
     ...next,
-    phase: 'updating',
+    phase: job.phase === 'downloading' ? 'downloading' : 'updating',
     message:
-      job.message ||
-      (next.operation === 'downgrade'
-        ? 'Installing the earlier Orbis release. Applications keep running.'
-        : 'Orbis is updating. Applications keep running.'),
+      job.phase === 'downloading'
+        ? `Downloading ${next.targetTag}. Applications keep running.`
+        : job.message ||
+          (next.operation === 'downgrade'
+            ? 'Installing the earlier Orbis release. Applications keep running.'
+            : 'Orbis is updating. Applications keep running.'),
   };
 }
 

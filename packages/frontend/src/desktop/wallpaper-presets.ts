@@ -25,10 +25,13 @@ export const presetWallpaperSources: Record<ThemePreset, string> = {
   ocean: '/wallpapers/ocean.webp',
   blush: '/wallpapers/blush.webp',
 };
+export const presetWallpaperPreviews = Object.fromEntries(
+  themePresets.map((preset) => [preset, presetWallpaperSources[preset].replace('.webp', '-preview.webp')]),
+) as Record<ThemePreset, string>;
 export const wallpaperSources: Record<WallpaperKey, string> = {
-  sandstone: '/wallpapers/orbis-horizon.webp',
-  tidal: '/wallpapers/tidal.svg',
-  canopy: '/wallpapers/canopy.svg',
+  sandstone: presetWallpaperSources.stone,
+  tidal: presetWallpaperSources.ocean,
+  canopy: presetWallpaperSources.forest,
   ...Object.fromEntries(themePresets.map((preset) => [`theme-${preset}`, presetWallpaperSources[preset]])),
 } as Record<WallpaperKey, string>;
 

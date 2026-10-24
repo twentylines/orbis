@@ -7,14 +7,14 @@ import { useAppContext } from '@/context/app-context';
 import { IconArrowRight, IconBrandGithub, IconPackage, IconServerCog } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import './updates.css';
 import { useCluster } from '@/desktop/cluster';
 import { ClusterUpdates } from '@/desktop/cluster-updates';
 import { UpdateAllButton } from '@/modules/app/components/update-all-button/update-all-button';
 import { UpdateTerminal } from './update-terminal';
-import { OrbisDowngrade } from './orbis-downgrade';
+import { OrbisDowngrade, compatibilityReviewTime, useCompatibilityResult } from './orbis-downgrade';
 import {
   rememberAcceptedCoreUpdate,
   prepareDesktopForCoreUpdate,
@@ -44,6 +44,14 @@ type HostPlan = {
   targetDigest: string;
   snapshotBytes: number;
   appsMustBeStopped: boolean;
+};
+type ReleaseCompatibility = {
+  tag: string;
+  currentRuntipiVersion: string;
+  targetRuntipiVersion: string;
+  crossesRuntipiBoundary: boolean;
+  hostUpdateSupported: boolean;
+  warning: string | null;
 };
 type HostPackage = {
   name: string;
@@ -119,7 +127,10 @@ async function hostRequest<T>(path: string, body?: object, signal?: AbortSignal)
   if (!response.ok) {
     const message =
       typeof result === 'object' && result !== null && 'message' in result && typeof result.message === 'string' ? result.message : null;
-    throw new Error(message || `Host update request failed (${response.status})`);
+    const error = new Error(message || `Host update request failed (${response.status})`);
+    throw Object.assign(error, {
+      canForce: response.status === 400 && typeof result === 'object' && result !== null && 'canForce' in result && result.canForce === true,
+    });
   }
   return result as T;
 }
@@ -131,6 +142,9 @@ export default function Updates() {
 }
 
 function LocalUpdates() {
+  const tabsId = useId();
+  const [section, setSection] = useState<'orbis' | 'apps' | 'system'>('orbis');
+  const [coreReview, setCoreReview] = useState<ReleaseCompatibility | null>(null);
   const entry = useLocation().key;
   const lastEntry = useRef(entry);
   const visible = useWindowVisible();
@@ -184,6 +198,8 @@ function LocalUpdates() {
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   });
+  const lastCoreReview = useCompatibilityResult<ReleaseCompatibility>('update', user.id, build.data?.version ?? '');
+  const checkingCore = lastCoreReview?.status === 'pending';
   const releases = useQuery({
     ...orbisReleasesOptions(),
     enabled: visible,
@@ -249,7 +265,30 @@ function LocalUpdates() {
       void packageJob.refetch();
     },
   });
+  const reviewCore = useMutation({
+    mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? ''],
+    gcTime: compatibilityReviewTime,
+    mutationFn: async (tag: string) => {
+      const result = await hostRequest<ReleaseCompatibility>(`release-compatibility?tag=${encodeURIComponent(tag)}`);
+      if (
+        result.tag !== tag ||
+        typeof result.currentRuntipiVersion !== 'string' ||
+        typeof result.targetRuntipiVersion !== 'string' ||
+        typeof result.crossesRuntipiBoundary !== 'boolean' ||
+        typeof result.hostUpdateSupported !== 'boolean' ||
+        (result.warning !== null && typeof result.warning !== 'string') ||
+        result.crossesRuntipiBoundary !== (result.currentRuntipiVersion !== result.targetRuntipiVersion) ||
+        (result.hostUpdateSupported && (result.crossesRuntipiBoundary || result.currentRuntipiVersion !== '4.10.1'))
+      )
+        throw new Error('The release compatibility check could not be verified. Try again before updating.');
+      return result;
+    },
+    onSuccess: setCoreReview,
+    retry: false,
+  });
   const updateCore = useMutation({
+    mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? '', 'apply'],
+    gcTime: compatibilityReviewTime,
     mutationFn: async (tag: string) => {
       setCoreRequestStage('checking');
       const checked = await hostRequest<HostPlan>('plan', { tag });
@@ -258,7 +297,10 @@ function LocalUpdates() {
       setCoreRequestStage('starting');
       return hostRequest<{ jobId: string; state: string }>('apply', { planId: checked.planId });
     },
-    onSuccess: (result, tag) => rememberAcceptedCoreUpdate(result.jobId, tag),
+    onSuccess: (result, tag) => {
+      setCoreReview(null);
+      rememberAcceptedCoreUpdate(result.jobId, tag);
+    },
     onSettled: () => {
       setCoreRequestStage(null);
       void host.refetch();
@@ -273,6 +315,7 @@ function LocalUpdates() {
   const corePhase = (
     {
       preparing: 'Checking the release and backup storage…',
+      downloading: 'Downloading the verified Orbis image…',
       pulled: 'Image downloaded. Preparing the backup…',
       stopping: 'Backing up control data. Apps keep running.',
       stopped: 'Control services paused for backup…',
@@ -321,8 +364,60 @@ function LocalUpdates() {
 
   return (
     <div className="desktop-updates">
+      <div className="desktop-updates-tabs" role="tablist" aria-label="Update categories">
+        {(
+          [
+            { key: 'orbis', label: 'Orbis', count: build.data && latest ? Number(Boolean(newerOrbisRelease(latest, build.data.version))) : null },
+            { key: 'apps', label: 'Apps', count: apps.data ? available.length : null },
+            { key: 'system', label: 'System', count: systemPackages.data?.packageCount ?? null },
+          ] as const
+        ).map(({ key, label, count }, index, tabs) => (
+          <button
+            type="button"
+            role="tab"
+            key={key}
+            id={`${tabsId}-${key}-tab`}
+            aria-controls={`${tabsId}-${key}-panel`}
+            aria-selected={section === key}
+            aria-label={count !== null ? `${label}, ${count} available updates` : label}
+            tabIndex={section === key ? 0 : -1}
+            onClick={() => setSection(key)}
+            onKeyDown={(event) => {
+              const nextIndex =
+                event.key === 'ArrowRight'
+                  ? (index + 1) % tabs.length
+                  : event.key === 'ArrowLeft'
+                    ? (index + tabs.length - 1) % tabs.length
+                    : event.key === 'Home'
+                      ? 0
+                      : event.key === 'End'
+                        ? tabs.length - 1
+                        : null;
+              if (nextIndex === null) return;
+              event.preventDefault();
+              const next = tabs[nextIndex];
+              if (!next) return;
+              setSection(next.key);
+              document.getElementById(`${tabsId}-${next.key}-tab`)?.focus();
+            }}
+          >
+            <span>{label}</span>
+            {count !== null ? (
+              <span className="desktop-updates-tab-count" aria-hidden="true">
+                {count}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
       <div className="desktop-updates-grid">
-        <section className="desktop-updates-card" aria-labelledby="application-updates-title">
+        <section
+          className="desktop-updates-card"
+          id={`${tabsId}-apps-panel`}
+          role="tabpanel"
+          aria-labelledby={`${tabsId}-apps-tab`}
+          hidden={section !== 'apps'}
+        >
           <div className="desktop-updates-card-head">
             <IconPackage size={22} aria-hidden="true" />
             <div>
@@ -358,7 +453,13 @@ function LocalUpdates() {
           </Link>
         </section>
 
-        <section className="desktop-updates-card" aria-labelledby="orbis-updates-title">
+        <section
+          className="desktop-updates-card"
+          id={`${tabsId}-orbis-panel`}
+          role="tabpanel"
+          aria-labelledby={`${tabsId}-orbis-tab`}
+          hidden={section !== 'orbis'}
+        >
           <div className="desktop-updates-card-head">
             <IconBrandGithub size={22} aria-hidden="true" />
             <div>
@@ -366,11 +467,85 @@ function LocalUpdates() {
               <p>Release notes from the Orbis GitHub repository</p>
             </div>
             {canPlan && latest ? (
-              <button className="desktop-update-action" type="button" disabled={updateCore.isPending} onClick={() => updateCore.mutate(latest.tag)}>
-                {updateCore.isPending ? 'Updating…' : 'Update'}
+              <button
+                className="desktop-update-action"
+                type="button"
+                disabled={checkingCore || updateCore.isPending}
+                onClick={() => {
+                  updateCore.reset();
+                  reviewCore.mutate(latest.tag);
+                }}
+              >
+                {checkingCore ? 'Checking compatibility…' : updateCore.isPending ? 'Updating…' : 'Update'}
               </button>
             ) : null}
           </div>
+          <Dialog
+            open={coreReview !== null}
+            onOpenChange={(open) => {
+              if (!open && !updateCore.isPending) setCoreReview(null);
+            }}
+          >
+            <DialogContent className="desktop-update-review-dialog" closeDisabled={updateCore.isPending}>
+              <DialogHeader>
+                <DialogTitle>{coreReview?.crossesRuntipiBoundary ? 'Runtipi version changes' : 'Update Orbis?'}</DialogTitle>
+                <DialogDescription>
+                  {build.data?.version} → {coreReview?.tag}
+                </DialogDescription>
+              </DialogHeader>
+              {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The update details scroll independently and need native keyboard access. */}
+              <section className="modal-body" tabIndex={0} aria-label="Update details">
+                {coreReview?.warning ? (
+                  <div className="desktop-update-risk" role="note">
+                    <strong>{coreReview.crossesRuntipiBoundary ? 'Downgrade boundary' : 'Host updater unavailable'}</strong>
+                    <p>{coreReview.warning}</p>
+                  </div>
+                ) : null}
+                {coreReview?.hostUpdateSupported ? (
+                  <ol className="desktop-update-process">
+                    <li>
+                      <strong>Verify</strong>
+                      <span>Check the published release, image, and available backup storage.</span>
+                    </li>
+                    <li>
+                      <strong>Back up and install</strong>
+                      <span>Create a verified recovery snapshot, then switch Orbis to {coreReview?.tag}.</span>
+                    </li>
+                    <li>
+                      <strong>Reconnect</strong>
+                      <span>Check server health and reconnect automatically. Restore the previous release if startup fails.</span>
+                    </li>
+                  </ol>
+                ) : null}
+                {updateCore.isError ? <p role="alert">{updateCore.error.message} Check the update status before retrying.</p> : null}
+              </section>
+              <DialogFooter className="desktop-update-plan-actions">
+                <button type="button" disabled={updateCore.isPending} onClick={() => setCoreReview(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!coreReview?.hostUpdateSupported || coreReview.crossesRuntipiBoundary || !canPlan || updateCore.isPending}
+                  onClick={() => {
+                    if (coreReview?.hostUpdateSupported && !coreReview.crossesRuntipiBoundary) updateCore.mutate(coreReview.tag);
+                  }}
+                >
+                  {updateCore.isPending ? 'Starting update…' : 'Update Orbis'}
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          {lastCoreReview?.status === 'error' ? <p role="alert">{lastCoreReview.error?.message}</p> : null}
+          {!coreReview && lastCoreReview?.status === 'success' && lastCoreReview.data ? (
+            <button
+              type="button"
+              className="desktop-update-action secondary"
+              disabled={!canPlan || updateCore.isPending}
+              onClick={() => setCoreReview(lastCoreReview.data ?? null)}
+            >
+              Open last update review
+            </button>
+          ) : null}
           <div className="desktop-update-build">
             {build.isPending ? 'Reading installed Orbis build…' : null}
             {build.isError ? 'Installed Orbis build metadata is unavailable.' : null}
@@ -421,7 +596,8 @@ function LocalUpdates() {
                   host.data.coreHealth === 'healthy' &&
                   !jobBusy &&
                   job?.state !== 'interrupted' &&
-                  !updateCore.isPending,
+                  !updateCore.isPending &&
+                  !checkingCore,
               )}
               request={hostRequest}
             />
@@ -479,7 +655,13 @@ function LocalUpdates() {
           ) : null}
         </section>
 
-        <section className="desktop-updates-card desktop-updates-host" aria-labelledby="host-updates-title">
+        <section
+          className="desktop-updates-card desktop-updates-host"
+          id={`${tabsId}-system-panel`}
+          role="tabpanel"
+          aria-labelledby={`${tabsId}-system-tab`}
+          hidden={section !== 'system'}
+        >
           <div className="desktop-updates-card-head">
             <IconServerCog size={22} aria-hidden="true" />
             <div>
@@ -516,7 +698,7 @@ function LocalUpdates() {
               if (!open && !applyRestart.isPending) setRestartPlan(null);
             }}
           >
-            <DialogContent>
+            <DialogContent closeDisabled={applyRestart.isPending}>
               <DialogHeader>
                 <DialogTitle>Restart this server?</DialogTitle>
                 <DialogDescription>
@@ -655,7 +837,7 @@ function LocalUpdates() {
                       if (!open && !applyPackages.isPending) setReviewPackagePlan(null);
                     }}
                   >
-                    <DialogContent size="lg" className="desktop-package-review">
+                    <DialogContent size="lg" className="desktop-package-review" closeDisabled={applyPackages.isPending}>
                       <DialogHeader>
                         <DialogTitle>Update system packages</DialogTitle>
                         <DialogDescription>
