@@ -5,7 +5,9 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -84,6 +86,22 @@ def select_installation(report, root=None, ask=None):
 
 def semantic_review(value):
     return REPLACE.semantic_review(value)
+
+
+def prepare_backup_tools(display):
+    if shutil.which("rsync"):
+        return
+    release = platform.freedesktop_os_release()
+    if release.get("ID") not in {"ubuntu", "debian"} or not Path("/usr/bin/apt-get").is_file():
+        raise ValueError("Install rsync 3.1.3 or newer before continuing; it is required for Orbis update backups and recovery")
+    with display.step("Installing required backup tools"):
+        environment = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
+        command = ["/usr/bin/apt-get", "-o", "DPkg::Lock::Timeout=30", "-o", "Acquire::Retries=1", "-o", "Acquire::http::Timeout=20", "-o", "Acquire::https::Timeout=20"]
+        for arguments in (["update"], ["install", "--yes", "--no-install-recommends", "--no-upgrade", "rsync"]):
+            result = subprocess.run([*command, *arguments], env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, timeout=180)
+            if result.returncode:
+                raise RuntimeError("APT could not prepare rsync. Check package-manager locks and network access, then rerun the installer; Orbis has not been replaced")
+        REPLACE.TX.RESTORE.runtime()
 
 
 def executor_failure(path):
@@ -223,9 +241,10 @@ def update_existing(root, reader, target, display, *, without_host_service=False
     current = upgrade.SERVICE.installed_manifest(root, reader.context)
     if release_order(target["tag"]) < release_order(current["tag"]):
         raise ValueError(f"Installed {current['tag']} is newer than this installer. Use the latest installer; no downgrade was made")
-    display.set_remaining_steps(2 if without_host_service else 4)
+    display.set_remaining_steps((2 if without_host_service else 4) + (0 if shutil.which("rsync") else 1))
     with display.step("Verifying the Orbis release"):
         REPLACE.UPDATE.verify_release(target)
+    prepare_backup_tools(display)
     if not without_host_service:
         with display.step("Updating the host service"):
             enable = load("orbis-host-service-enable.py", "orbis_guided_update_enable")
@@ -363,7 +382,7 @@ def main():
         if new:
             args.http_port, args.https_port = new.choose_ports(root, reader, args.http_port, args.https_port, None if args.yes else ask)
         remaining = 4 if selected else 3 + len(new.IMAGES)
-        display.set_remaining_steps(remaining + (0 if args.without_host_service else 1))
+        display.set_remaining_steps(remaining + (0 if args.without_host_service else 1) + (0 if shutil.which("rsync") else 1))
         enable = load("orbis-host-service-enable.py", "orbis_guided_enable")
         if not args.without_host_service:
             enable.available(root, reader.context)
@@ -386,6 +405,7 @@ def main():
                     raise ValueError("Stop native and remote storage writers before replacing the installation")
             if not args.yes and ask(f"Type {chosen} to confirm installation: ").strip() != str(chosen):
                 raise ValueError("Installation cancelled; no controller was replaced")
+            prepare_backup_tools(display)
 
         if selected:
             result = replacement(root, reader, manifest, state, mode, confirm, display, backup_scope=args.backup_scope)

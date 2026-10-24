@@ -34,6 +34,38 @@ HEALTHY = {"state": "running", "health": "healthy", "image": MANIFEST["image"] +
 
 
 class GuidedTests(unittest.TestCase):
+    def test_present_backup_tool_does_not_touch_the_package_manager(self):
+        with mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/rsync"), mock.patch.object(GUIDE.subprocess, "run") as execute:
+            GUIDE.prepare_backup_tools(mock.Mock())
+            execute.assert_not_called()
+
+    def test_missing_backup_tool_is_installed_without_upgrading_host_packages(self):
+        display = mock.Mock()
+        display.step.return_value = contextlib.nullcontext()
+        for distribution in ("ubuntu", "debian"):
+            with self.subTest(distribution=distribution), mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE.platform, "freedesktop_os_release", return_value={"ID": distribution}), mock.patch.object(Path, "is_file", return_value=True), mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as execute, mock.patch.object(GUIDE.REPLACE.TX.RESTORE, "runtime") as verify:
+                GUIDE.prepare_backup_tools(display)
+                commands = [call.args[0] for call in execute.call_args_list]
+                self.assertEqual(len(commands), 2)
+                self.assertEqual(commands[0][-1], "update")
+                self.assertEqual(commands[1][-5:], ["install", "--yes", "--no-install-recommends", "--no-upgrade", "rsync"])
+                self.assertTrue(all(command[0] == "/usr/bin/apt-get" and "upgrade" not in command for command in commands))
+                self.assertTrue(all(call.kwargs["env"]["DEBIAN_FRONTEND"] == "noninteractive" and call.kwargs["timeout"] == 180 for call in execute.call_args_list))
+                verify.assert_called_once()
+
+    def test_unsupported_host_and_failed_package_refresh_stop_before_installation(self):
+        display = mock.Mock()
+        display.step.return_value = contextlib.nullcontext()
+        with mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE.platform, "freedesktop_os_release", return_value={"ID": "fedora"}), mock.patch.object(GUIDE.subprocess, "run") as execute:
+            with self.assertRaisesRegex(ValueError, "required for Orbis update backups"):
+                GUIDE.prepare_backup_tools(display)
+            execute.assert_not_called()
+        with mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE.platform, "freedesktop_os_release", return_value={"ID": "ubuntu"}), mock.patch.object(Path, "is_file", return_value=True), mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 100)) as execute, mock.patch.object(GUIDE.REPLACE.TX.RESTORE, "runtime") as verify:
+            with self.assertRaisesRegex(RuntimeError, "Orbis has not been replaced"):
+                GUIDE.prepare_backup_tools(display)
+            self.assertEqual(execute.call_count, 1)
+            verify.assert_not_called()
+
     def test_inspection_keeps_stdout_json_without_starting_the_terminal_display(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
