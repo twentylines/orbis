@@ -352,7 +352,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
       url = `https://${appLocalDomain}${info.url_suffix || ''}`;
     }
 
-    if (!openApp({ urn: info.urn, name: info.name, preferredUrl: url })) window.open(url, '_blank', 'noreferrer');
+    if (!openApp({ urn: info.urn, name: info.name, categories: info.categories, preferredUrl: url })) window.open(url, '_blank', 'noreferrer');
   };
 
   return (

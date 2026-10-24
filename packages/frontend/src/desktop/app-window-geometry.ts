@@ -1,107 +1,112 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { DesktopWindowBounds } from '@runtipi/common/schemas';
-import { clampWindowBounds, type WindowArea } from './window-geometry';
+import type { WindowArea } from './window-geometry';
 import { initialAppBounds } from './app-opening';
+import { appSnapTarget, clampAppBounds, resizeAppBounds, splitAppBounds, type AppWindowMode, type ResizeEdge } from './app-window-layout';
 
-type Placement = { bounds: DesktopWindowBounds; maximized: boolean };
-type Gesture = { kind: 'move' | 'resize'; bounds: DesktopWindowBounds; pointer?: { id: number; x: number; y: number } };
+type Gesture = {
+  kind: 'move' | 'resize';
+  edge: ResizeEdge;
+  bounds: DesktopWindowBounds;
+  changed?: boolean;
+  pointer?: { id: number; x: number; y: number };
+};
 
-export function useAppWindowGeometry(
-  key: string | undefined,
-  saved: DesktopWindowBounds | undefined,
-  categories: string[] | undefined,
-  save: (bounds: DesktopWindowBounds) => void,
-) {
-  const [area, setArea] = useState<WindowArea>({ x: 24, y: 110, width: 1000, height: 600 });
-  const areaRef = useRef(area);
-  const activeKey = useRef(key);
-  const [placements, setPlacements] = useState<Record<string, Placement>>({});
+export function useAppWindowGeometry({
+  area,
+  mode,
+  ratio,
+  saved,
+  categories,
+  save,
+  place,
+}: {
+  area: WindowArea;
+  mode: AppWindowMode;
+  ratio: number;
+  saved?: DesktopWindowBounds;
+  categories?: string[];
+  save: (bounds: DesktopWindowBounds) => void;
+  place: (mode: AppWindowMode) => void;
+}) {
+  const [floating, setFloating] = useState(() => initialAppBounds(area, saved, categories));
   const [draft, setDraft] = useState<DesktopWindowBounds | null>(null);
   const [gestureKind, setGestureKind] = useState<Gesture['kind'] | null>(null);
+  const [preview, setPreview] = useState<Exclude<AppWindowMode, 'floating'> | null>(null);
   const gesture = useRef<Gesture | null>(null);
   const latest = useRef<DesktopWindowBounds | null>(null);
+  const target = useRef<Exclude<AppWindowMode, 'floating'> | null>(null);
   const pending = useRef(0);
-  const state = (key && placements[key]) || { bounds: initialAppBounds(area, saved, categories), maximized: false };
-  const bounds = draft ?? (state.maximized ? area : clampWindowBounds(state.bounds, area));
+  const placed = mode === 'floating' ? clampAppBounds(floating, area) : mode === 'maximized' ? area : splitAppBounds(mode, area, ratio);
+  const bounds = draft ?? placed;
   const cancel = useCallback(() => {
     cancelAnimationFrame(pending.current);
     pending.current = 0;
     gesture.current = null;
     latest.current = null;
+    target.current = null;
     setDraft(null);
     setGestureKind(null);
+    setPreview(null);
   }, []);
+  const constraint = useRef({ area, mode });
   useLayoutEffect(() => {
-    const measure = () => {
-      const bar = document.querySelector('.desktop-system-bar')?.getBoundingClientRect();
-      const dock = document.querySelector('.desktop-dock')?.getBoundingClientRect();
-      const x = Math.round(bar?.x ?? 24);
-      const y = Math.round((bar?.bottom ?? 90) + 16);
-      const next = { x, y, width: Math.max(1, innerWidth - x * 2), height: Math.max(1, Math.round((dock?.top ?? innerHeight - 100) - y - 16)) };
-      const previous = areaRef.current;
-      if (previous.x === next.x && previous.y === next.y && previous.width === next.width && previous.height === next.height) return;
-      areaRef.current = next;
-      cancel();
-      setArea(next);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    for (const element of document.querySelectorAll('.desktop-system-bar,.desktop-dock')) observer.observe(element);
-    window.addEventListener('resize', measure);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', measure);
-    };
-  }, [cancel]);
-  useLayoutEffect(() => {
-    if (activeKey.current === key) return;
-    activeKey.current = key;
-    cancel();
-  }, [key, cancel]);
+    if (constraint.current.area !== area || constraint.current.mode !== mode) cancel();
+    constraint.current = { area, mode };
+  }, [area, mode, cancel]);
   useEffect(() => () => cancelAnimationFrame(pending.current), []);
   const finish = (commit: boolean) => {
-    if (commit && key && latest.current) {
+    if (commit && gesture.current?.changed && latest.current) {
       const next = latest.current;
-      setPlacements((previous) => ({ ...previous, [key]: { bounds: next, maximized: false } }));
+      setFloating(next);
       save(next);
+      place(target.current ?? 'floating');
     }
     cancel();
   };
   const change = (next: DesktopWindowBounds) => {
-    latest.current = clampWindowBounds(next, area);
+    if (gesture.current) gesture.current.changed = true;
+    latest.current = clampAppBounds(next, area);
     if (!pending.current)
       pending.current = requestAnimationFrame(() => {
         pending.current = 0;
         setDraft(latest.current);
+        setPreview(target.current);
       });
   };
-  const begin = (kind: Gesture['kind']) => {
-    gesture.current = { kind, bounds };
+  const begin = (kind: Gesture['kind'], edge: ResizeEdge = 'se') => {
+    gesture.current = { kind, edge, bounds };
     latest.current = bounds;
     setGestureKind(kind);
   };
-  const pointer = (kind: Gesture['kind']) => ({
+  const pointer = (kind: Gesture['kind'], edge: ResizeEdge = 'se') => ({
     onPointerDown: (event: PointerEvent<HTMLElement>) => {
       if (event.button !== 0 || (kind === 'move' && (event.target as HTMLElement).closest('button,a,input,select,[role=menuitem],[role=menu]')))
         return;
       event.preventDefault();
+      event.currentTarget.focus({ preventScroll: true });
       event.currentTarget.setPointerCapture(event.pointerId);
-      begin(kind);
-      if (gesture.current) gesture.current.pointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      begin(kind, edge);
+      if (gesture.current) {
+        // Pull a snapped window beneath the pointer without jumping to its saved position.
+        if (kind === 'move' && mode !== 'floating') {
+          const restored = clampAppBounds(floating, area);
+          const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.x) / bounds.width));
+          gesture.current.bounds = clampAppBounds({ ...restored, x: event.clientX - restored.width * fraction, y: bounds.y }, area);
+        }
+        gesture.current.pointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      }
     },
     onPointerMove: (event: PointerEvent<HTMLElement>) => {
       const active = gesture.current;
       if (!active?.pointer || active.pointer.id !== event.pointerId) return;
       const dx = event.clientX - active.pointer.x;
       const dy = event.clientY - active.pointer.y;
+      target.current = active.kind === 'move' ? appSnapTarget(event.clientX, event.clientY, area) : null;
       change(
         active.kind === 'move'
           ? { ...active.bounds, x: active.bounds.x + dx, y: active.bounds.y + dy }
-          : {
-              ...active.bounds,
-              width: Math.min(area.x + area.width - active.bounds.x, active.bounds.width + dx),
-              height: Math.min(area.y + area.height - active.bounds.y, active.bounds.height + dy),
-            },
+          : resizeAppBounds(active.bounds, active.edge, dx, dy, area),
       );
     },
     onPointerUp: (event: PointerEvent<HTMLElement>) => {
@@ -116,13 +121,14 @@ export function useAppWindowGeometry(
   });
   const keyboard = (event: KeyboardEvent) => {
     const active = gesture.current;
-    if (!active || active.pointer) return;
-    if (event.key === 'Escape' || event.key === 'Enter') {
+    if (!active) return;
+    if (event.key === 'Escape' || (event.key === 'Enter' && !active.pointer)) {
       event.preventDefault();
       event.stopPropagation();
       finish(event.key === 'Enter');
       return;
     }
+    if (active.pointer) return;
     const direction = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
     if (!direction) return;
     event.preventDefault();
@@ -130,30 +136,16 @@ export function useAppWindowGeometry(
     const dx = (direction[0] ?? 0) * step;
     const dy = (direction[1] ?? 0) * step;
     const before = latest.current ?? active.bounds;
-    change(
-      active.kind === 'move'
-        ? { ...before, x: before.x + dx, y: before.y + dy }
-        : {
-            ...before,
-            width: Math.min(area.x + area.width - before.x, before.width + dx),
-            height: Math.min(area.y + area.height - before.y, before.height + dy),
-          },
-    );
-  };
-  const maximize = () => {
-    if (!key) return;
-    cancel();
-    setPlacements((previous) => ({ ...previous, [key]: { bounds: state.bounds, maximized: !state.maximized } }));
+    change(active.kind === 'move' ? { ...before, x: before.x + dx, y: before.y + dy } : resizeAppBounds(before, active.edge, dx, dy, area));
   };
   return {
     bounds,
-    maximize,
-    maximized: state.maximized,
+    preview,
     gestureKind,
     keyboard,
     beginKeyboard: begin,
-    finish,
+    cancel,
     move: pointer('move'),
-    resize: pointer('resize'),
+    resize: (edge: ResizeEdge) => pointer('resize', edge),
   };
 }

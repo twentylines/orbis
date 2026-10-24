@@ -99,6 +99,7 @@ function PairedAppPreview({ server, urn }: { server: ClusterServer; urn: string 
                     openApp({
                       urn: `${server.id}/${urn}`,
                       name: entry.info.name,
+                      categories: entry.info.categories,
                       recentKey: `${server.id}/${urn}`,
                       serverName: server.name,
                       logoUrl,

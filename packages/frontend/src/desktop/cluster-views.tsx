@@ -234,6 +234,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
       openApp({
         urn: server.local ? entry.info.urn : `${server.id}/${entry.info.urn}`,
         name: entry.info.name,
+        categories: entry.info.categories,
         recentKey: server.local ? entry.info.urn : `${server.id}/${entry.info.urn}`,
         serverName: serverName(server),
         logoUrl,

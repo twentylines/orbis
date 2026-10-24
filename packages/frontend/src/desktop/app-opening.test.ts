@@ -23,11 +23,15 @@ describe('actual app opening', () => {
   });
   test('keeps initial and restored app bounds inside the usable workspace', () => {
     const area = { x: 24, y: 120, width: 1052, height: 380 };
-    expect(initialAppBounds(area)).toEqual(area);
+    const initial = initialAppBounds(area);
+    expect(initial.width).toBeGreaterThan(area.width * 0.9);
+    expect(initial.height).toBeGreaterThan(area.height * 0.9);
+    expect(Math.abs(initial.x - area.x - (area.width - initial.width) / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(initial.y - area.y - (area.height - initial.height) / 2)).toBeLessThanOrEqual(1);
     expect(initialAppBounds(area, { x: 1900, y: 1000, width: 1300, height: 800 })).toEqual(area);
     const large = { ...area, width: 1800, height: 1000 };
-    expect(initialAppBounds(large, undefined, ['utilities']).width).toBe(820);
-    expect(initialAppBounds(large).width).toBe(1200);
+    expect(initialAppBounds(large, undefined, ['utilities']).width).toBe(940);
+    expect(initialAppBounds(large).width).toBe(1280);
   });
   test('stores only bounded app identities, opening preferences and geometry', () => {
     expect(

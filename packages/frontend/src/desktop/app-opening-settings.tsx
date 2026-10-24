@@ -3,12 +3,12 @@ import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen'
 import type { AppOpeningMode } from '@runtipi/common/schemas';
 import { useDesktopPreferences } from './preferences';
 
-export function AppOpeningPreference({ urn, name }: { urn: string; name: string }) {
+export function AppOpeningPreference({ urn, name, label = name }: { urn: string; name: string; label?: string }) {
   const { preferences, update } = useDesktopPreferences();
   const value = preferences.appLaunch.apps[urn]?.mode ?? 'default';
   return (
     <label className="app-opening-select">
-      <span>{name}</span>
+      <span>{label}</span>
       <select
         className="form-select"
         aria-label={`Open ${name}`}

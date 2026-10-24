@@ -1,17 +1,7 @@
-import { updateAppSettingsMutation } from '@/api-client/@tanstack/react-query.gen';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
-import { ScrollArea } from '@/components/ui/ScrollArea';
-import { useAppContext } from '@/context/app-context';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import type { AppInfo, AppStatus } from '@/types/app.types';
-import type { TranslatableError } from '@/types/error.types';
-import { useMutation } from '@tanstack/react-query';
-import type React from 'react';
-import { useId } from 'react';
-import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
-import { InstallFormButtons } from '../../install-form-buttons/install-form-buttons';
-import { type FormValues, InstallForm } from '../../install-form/install-form';
-import { AppUpdateSchedule } from './app-update-schedule';
+import { AppSettingsEditor } from './app-settings-editor';
 
 interface IProps {
   info: AppInfo;
@@ -21,55 +11,21 @@ interface IProps {
   status?: AppStatus;
 }
 
-export const UpdateSettingsDialog: React.FC<IProps> = ({ info, config, isOpen, onClose }) => {
+export function UpdateSettingsDialog({ info, config, isOpen, onClose }: IProps) {
   const { t } = useTranslation();
-  const { user } = useAppContext();
-  const formId = useId();
-
-  const updateConfig = useMutation({
-    ...updateAppSettingsMutation(),
-    onError: (e: TranslatableError) => {
-      toast.error(t(e.message, e.intlParams));
-    },
-    onMutate: () => {
-      onClose();
-    },
-    onSuccess: () => {
-      toast.success(t('APP_UPDATE_CONFIG_SUCCESS'));
-    },
-  });
-
-  const normalizeFormValues = (values: FormValues) => {
-    return {
-      ...values,
-      port: values.port ? Number(values.port) : undefined,
-      localSubdomain: values.localSubdomain || undefined,
-      maxBackups: values.maxBackups !== undefined && Number.isNaN(values.maxBackups) ? undefined : values.maxBackups,
-    };
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="app-settings-dialog" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{t('APP_UPDATE_SETTINGS_FORM_TITLE', { name: info.id })}</DialogTitle>
         </DialogHeader>
-        <ScrollArea maxheight={500}>
-          <DialogDescription>
-            <InstallForm
-              onSubmit={(values: FormValues) => updateConfig.mutate({ path: { urn: info.urn }, body: normalizeFormValues(values) })}
-              formFields={info.form_fields}
-              info={info}
-              initialValues={{ ...config }}
-              formId={formId}
-            />
-            {isOpen && user.operator === true ? <AppUpdateSchedule key={info.urn} urn={info.urn} name={info.name} /> : null}
-          </DialogDescription>
-        </ScrollArea>
-        <DialogFooter>
-          <InstallFormButtons loading={updateConfig.isPending} isEdit formId={formId} />
-        </DialogFooter>
+        {isOpen ? <AppSettingsEditor info={info} config={config} onSaved={onClose} /> : null}
       </DialogContent>
     </Dialog>
   );
-};
+}
