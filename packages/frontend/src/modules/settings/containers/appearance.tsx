@@ -33,7 +33,7 @@ export const Appearance = () => {
   useEffect(() => setName(preferences.serverName), [preferences.serverName]);
 
   const changePreset = (preset: DesktopPreferences['preset']) => {
-    update({ preset });
+    update({ preset, appearance: { ...preferences.appearance, accent: null } });
     setMessage(`${presets.find((item) => item.value === preset)?.title} applied.`);
   };
 

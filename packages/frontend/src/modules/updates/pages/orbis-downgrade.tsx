@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { gte, lt, rcompare, valid } from 'semver';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
@@ -20,6 +20,7 @@ export function OrbisDowngrade({ installed, enabled, request }: { installed: str
   const [open, setOpen] = useState(false);
   const [tag, setTag] = useState('');
   const [review, setReview] = useState<Review | null>(null);
+  const errorMessage = useRef<HTMLParagraphElement>(null);
   const releases = useQuery({ ...orbisPublishedReleasesOptions(), enabled: open && enabled });
   const choices = (releases.data?.releases ?? [])
     .filter(
@@ -44,12 +45,15 @@ export function OrbisDowngrade({ installed, enabled, request }: { installed: str
     },
     retry: false,
   });
+  useLayoutEffect(() => {
+    if (review && apply.isError) errorMessage.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }, [review, apply.isError]);
   return (
     <details className="desktop-downgrade" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Previous Orbis versions</summary>
       {open ? (
         <div className="desktop-downgrade-content">
-          <p>Downgrade Orbis while keeping your apps and current data. The Runtipi version and database schema must match.</p>
+          <p>Downgrade Orbis while keeping your apps and current data. The Runtipi version, database schema and saved settings must be compatible.</p>
           <p>Supported from beta 90 onward. Earlier releases may restore bugs or security weaknesses fixed in newer versions.</p>
           {enabled ? null : <p>The local Orbis host must be healthy and idle before reviewing a downgrade.</p>}
           {enabled && releases.isPending ? <p>Reading previous releases…</p> : null}
@@ -66,6 +70,7 @@ export function OrbisDowngrade({ installed, enabled, request }: { installed: str
                   onChange={(event) => {
                     setTag(event.target.value);
                     plan.reset();
+                    apply.reset();
                   }}
                   disabled={plan.isPending || apply.isPending}
                 >
@@ -80,7 +85,10 @@ export function OrbisDowngrade({ installed, enabled, request }: { installed: str
                 type="button"
                 className="desktop-update-action"
                 disabled={!selected || plan.isPending || apply.isPending}
-                onClick={() => plan.mutate(selected)}
+                onClick={() => {
+                  apply.reset();
+                  plan.mutate(selected);
+                }}
               >
                 {plan.isPending ? 'Checking compatibility…' : 'Review downgrade'}
               </button>
@@ -88,7 +96,7 @@ export function OrbisDowngrade({ installed, enabled, request }: { installed: str
           ) : null}
           {releases.data && !releases.data.complete ? <p>Only the available release history is shown.</p> : null}
           {plan.isError ? <p role="alert">{plan.error.message}</p> : null}
-          {apply.isError ? <p role="alert">{apply.error.message}</p> : null}
+          {apply.isError && !review ? <p role="alert">{apply.error.message}</p> : null}
           <Dialog
             open={review !== null}
             onOpenChange={(value) => {
@@ -112,7 +120,11 @@ export function OrbisDowngrade({ installed, enabled, request }: { installed: str
                 {review?.appsMustBeStopped ? (
                   <p role="alert">This release requires applications to be stopped. Finish them before continuing.</p>
                 ) : null}
-                {apply.isError ? <p role="alert">{apply.error.message}</p> : null}
+                {apply.isError ? (
+                  <p ref={errorMessage} role="alert">
+                    {apply.error.message}
+                  </p>
+                ) : null}
               </div>
               <DialogFooter className="desktop-update-plan-actions">
                 <button type="button" className="desktop-update-action secondary" disabled={apply.isPending} onClick={() => setReview(null)}>

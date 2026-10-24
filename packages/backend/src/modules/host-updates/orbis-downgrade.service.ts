@@ -6,6 +6,7 @@ import validator from 'validator';
 import { DatabaseService } from '@/core/database/database.service';
 import { HostUpdatesService, type HostUpdatePlan } from './host-updates.service';
 import { AutomaticUpdatesService } from './automatic-updates.service';
+import { DesktopPreferencesService, type DesktopPreferences } from '../desktop-preferences/desktop-preferences.service';
 
 const TAG = /^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$/;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -18,6 +19,19 @@ const LEGACY_90 = {
   migrations: 'sha256:ed90c4f22eb28f9c594d4fa56f27eb7447dbd39962659f4a8657cf2a47cca5ae',
 };
 type Review = HostUpdatePlan & { expiresAt: number; migrationFingerprint: string; compatibility: string };
+
+export function requireLegacyDesktopCompatibility(preferences: DesktopPreferences) {
+  const launch = preferences.appLaunch;
+  const wallpaperMode =
+    (preferences.wallpaper && preferences.wallpaper !== 'sandstone') || preferences.appearance?.wallpaperImage ? 'custom' : 'theme';
+  if (
+    (launch && (launch.mode !== 'window' || Object.keys(launch.apps).length > 0)) ||
+    (preferences.wallpaperMode && preferences.wallpaperMode !== wallpaperMode) ||
+    preferences.wallpaperPreset
+  ) {
+    throw new BadRequestException('Beta 90 cannot preserve your app opening or wallpaper settings. Choose beta 91 or later to keep these choices.');
+  }
+}
 
 export function migrationFingerprint(rows: Array<{ created_at: unknown; hash: unknown }>): string {
   if (!rows.length || rows.length > 4096) throw new BadRequestException('The installed database migration history is unavailable.');
@@ -55,7 +69,12 @@ export function downgradeManifest(raw: unknown, tag: string, runtime: string) {
   if ((!legacy && value.dataCompatibility !== DATA_CONTRACT) || typeof migrations !== 'string' || !DIGEST.test(migrations)) {
     throw new BadRequestException('This release has no compatible data contract. Downgrades are supported from beta 90 onward.');
   }
-  return { digest: value.digest, migrations, usernames: !legacy && value.accountIdentifierCompatibility === 'orbis.account-identifier.v1' };
+  return {
+    digest: value.digest,
+    migrations,
+    usernames: !legacy && value.accountIdentifierCompatibility === 'orbis.account-identifier.v1',
+    legacyDesktop: legacy,
+  };
 }
 
 @Injectable()
@@ -65,6 +84,7 @@ export class OrbisDowngradeService {
     private readonly host: HostUpdatesService,
     private readonly database: DatabaseService,
     private readonly automaticUpdates: AutomaticUpdatesService,
+    private readonly preferences: DesktopPreferencesService,
   ) {}
 
   private async fingerprint() {
@@ -126,11 +146,14 @@ export class OrbisDowngradeService {
       throw new BadRequestException('This release cannot read the installed database schema. No data or services were changed.');
     }
     if (!manifest.usernames) {
-      const accounts = await this.database.db.execute<{ username: unknown }>(sql`SELECT username FROM "user" LIMIT 4097`);
+      const accounts = await this.database.db.execute<{ id: number; username: unknown }>(sql`SELECT id, username FROM "user" LIMIT 4097`);
       if (accounts.rows.length > 4096 || accounts.rows.some(({ username }) => typeof username !== 'string' || !validator.isEmail(username))) {
         throw new BadRequestException(
           'This release requires email sign-in. Change username-only account identifiers to email addresses in Settings → Security before downgrading.',
         );
+      }
+      if (manifest.legacyDesktop) {
+        for (const account of accounts.rows) requireLegacyDesktopCompatibility(await this.preferences.read(account.id));
       }
     }
     return { installed, tag, manifest, fingerprint };

@@ -10,9 +10,10 @@ import { SystemModule } from '../system/system.module';
 import { AppsModule } from '../apps/apps.module';
 import { MarketplaceModule } from '../marketplace/marketplace.module';
 import { AppLifecycleModule } from '../app-lifecycle/app-lifecycle.module';
+import { DesktopPreferencesModule } from '../desktop-preferences/desktop-preferences.module';
 
 @Module({
-  imports: [MonitoringActivityModule, SystemModule, AppsModule, MarketplaceModule, AppLifecycleModule],
+  imports: [MonitoringActivityModule, SystemModule, AppsModule, MarketplaceModule, AppLifecycleModule, DesktopPreferencesModule],
   controllers: [HostUpdatesController, AutomaticUpdatesController],
   providers: [HostUpdatesService, HostUpdatesGuard, OrbisDowngradeService, AutomaticUpdatesService],
   exports: [HostUpdatesService, AutomaticUpdatesService],

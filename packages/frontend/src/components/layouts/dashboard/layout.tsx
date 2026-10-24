@@ -157,6 +157,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                 </span>
               </span>
               <div className="desktop-system-actions">
+                <OrbisUpdateNotice />
                 <Link
                   to="/tasks"
                   className="desktop-task-trigger"
@@ -166,7 +167,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                   <IconActivity size={20} aria-hidden="true" />
                   {activeTasks > 0 ? <span>{activeTasks}</span> : null}
                 </Link>
-                <OrbisUpdateNotice />
                 <button
                   type="button"
                   className="desktop-mode-toggle"

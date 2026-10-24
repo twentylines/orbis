@@ -205,7 +205,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                           className="orbis-setup-palette"
                           data-palette={preset}
                           aria-pressed={draft.preset === preset}
-                          onClick={() => setDraft({ ...draft, preset })}
+                          onClick={() => setDraft({ ...draft, preset, appearance: { ...draft.appearance, accent: null } })}
                         >
                           <span aria-hidden="true">
                             <i />

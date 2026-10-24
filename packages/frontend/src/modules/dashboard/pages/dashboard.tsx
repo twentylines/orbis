@@ -26,10 +26,11 @@ import {
   IconX,
   IconAlertCircle,
   IconSettings,
+  IconDownload,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type DragEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type DragEvent } from 'react';
 import { Link } from 'react-router';
 import './dashboard.css';
 import { useCluster } from '@/desktop/cluster';
@@ -104,7 +105,15 @@ function ReorderTools({
 
 function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const openApp = useAppLauncher();
-  const { userSettings } = useAppContext();
+  const { userSettings, user } = useAppContext();
+  const startedKey = `orbis-home-started-v1:${user.id}`;
+  const [hasStarted, setHasStarted] = useState(() => {
+    try {
+      return localStorage.getItem(startedKey) === '1';
+    } catch {
+      return false;
+    }
+  });
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) heading.current?.focus({ preventScroll: true });
@@ -129,15 +138,32 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
   });
-  const installed = apps.data?.installed.filter(({ info }) => info.available) ?? [];
-  const installedUrns = new Set(installed.map(({ info }) => info.urn));
-  const missingPins = workspace.pinnedApps.filter((urn) => !installedUrns.has(urn));
-  const visibleInstalled = homeApps(installed, workspace.pinnedApps, workspace.showAllApps);
-  const running = installed.filter(({ app }) => app.status === 'running').length;
-  const attentionApps = installed.filter(
-    ({ app, metadata }) =>
-      app.status === 'stopped' || (Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion),
-  );
+  const { installed, installedUrns, missingPins, visibleInstalled, running, attentionApps } = useMemo(() => {
+    const installed = apps.data?.installed.filter(({ info }) => info.available) ?? [];
+    const installedUrns = new Set(installed.map(({ info }) => info.urn));
+    return {
+      installed,
+      installedUrns,
+      missingPins: workspace.pinnedApps.filter((urn) => !installedUrns.has(urn)),
+      visibleInstalled: homeApps(installed, workspace.pinnedApps, workspace.showAllApps),
+      running: installed.filter(({ app }) => app.status === 'running').length,
+      attentionApps: installed.filter(
+        ({ app, metadata }) =>
+          app.status === 'stopped' || (Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion),
+      ),
+    };
+  }, [apps.data, workspace.pinnedApps, workspace.showAllApps]);
+  const usedHome = (apps.data?.installed.length ?? 0) > 0 || (tasks.data?.tasks.length ?? 0) > 0;
+  const checkingFirstHome = apps.data?.installed.length === 0 && !hasStarted && !usedHome && tasks.isPending;
+  useEffect(() => {
+    if (!usedHome || hasStarted) return;
+    setHasStarted(true);
+    try {
+      localStorage.setItem(startedKey, '1');
+    } catch {
+      // Installed apps and task history still suppress the first-run card when storage is unavailable.
+    }
+  }, [usedHome, hasStarted, startedKey]);
   const attention = attentionApps.length;
   const unhealthy = new Set(containers.data?.containers.filter((item) => item.health === 'unhealthy' && item.appUrn).map((item) => item.appUrn)).size;
   const activeTasks = tasks.data?.tasks.filter(taskIsActive) ?? [];
@@ -333,7 +359,23 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
             <span />
           </div>
         ) : null}
-        {apps.data && installed.length === 0 ? (
+        {checkingFirstHome ? (
+          <div className="workspace-empty" aria-busy="true">
+            <span className="visually-hidden">Loading your workspace</span>
+          </div>
+        ) : null}
+        {apps.data && apps.data.installed.length === 0 && !hasStarted && !usedHome && tasks.isSuccess ? (
+          <Link to="/app-store" className="workspace-get-started">
+            <IconDownload size={44} stroke={1.5} aria-hidden="true" />
+            <div>
+              <h3>Get started</h3>
+              <p>Download apps from the store</p>
+              <span>
+                Open Store <IconArrowRight size={18} aria-hidden="true" />
+              </span>
+            </div>
+          </Link>
+        ) : apps.data && installed.length === 0 && !checkingFirstHome ? (
           <div className="workspace-empty">
             <IconApps size={28} stroke={1.5} aria-hidden="true" />
             <strong>No apps installed</strong>
