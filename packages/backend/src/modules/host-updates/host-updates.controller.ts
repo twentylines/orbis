@@ -95,6 +95,15 @@ export class HostUpdatesController {
     return this.hostUpdates.packageJob();
   }
 
+  @Post('packages/refresh')
+  @HttpCode(202)
+  packageRefresh(@Body() body: Record<string, unknown>) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 0) {
+      throw new BadRequestException('Check for system updates without additional options.');
+    }
+    return this.hostUpdates.packageRefresh();
+  }
+
   @Post('packages/plan')
   @HttpCode(200)
   packagePlan(@Body() body: Record<string, unknown>) {

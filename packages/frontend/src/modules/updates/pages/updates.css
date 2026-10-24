@@ -60,6 +60,7 @@
   display: none;
 }
 .desktop-updates-card {
+  --desktop-update-heading-size: min(1.1875rem, var(--orbis-compact-section, 1.1875rem));
   min-width: 0;
 }
 .desktop-updates-card > p {
@@ -82,11 +83,16 @@
 }
 .desktop-updates-card-head > svg {
   flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: max(0px, calc((var(--desktop-update-heading-size) * 1.4 - 22px) / 2));
   color: var(--desktop-accent);
 }
 .desktop-updates-card h2 {
   margin: 0 0 4px;
-  font-size: min(1.1875rem, var(--orbis-compact-section, 1.1875rem));
+  font-size: var(--desktop-update-heading-size);
+}
+.desktop-updates-card-head h2 {
+  line-height: 1.4;
 }
 .desktop-updates-card-head p {
   margin: 0;
@@ -98,6 +104,28 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 18px;
+}
+.desktop-updates-card-head > .desktop-host-update-actions {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  max-width: 100%;
+  margin: 0;
+}
+.desktop-host-update-actions > .desktop-update-action {
+  flex: 1 1 auto;
+  max-width: 100%;
+}
+.desktop-update-check {
+  display: grid;
+  place-items: center;
+}
+.desktop-update-check > span {
+  grid-area: 1 / 1;
+  position: relative;
+  top: -0.5px;
+}
+.desktop-update-check-reserve {
+  visibility: hidden;
 }
 .desktop .desktop-update-actions > .btn {
   min-height: 44px;

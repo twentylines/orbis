@@ -44,6 +44,7 @@ describe('host update authorization', () => {
       next();
     }) as NestMiddleware['use']);
     await app.init();
+    await app.listen(0, '127.0.0.1');
   });
 
   afterAll(async () => app.close());
@@ -52,6 +53,7 @@ describe('host update authorization', () => {
     hostUpdates.packages.mockReset();
     hostUpdates.packageChangelog.mockReset();
     hostUpdates.packageJob.mockReset();
+    hostUpdates.packageRefresh.mockReset();
     hostUpdates.packagePlan.mockReset();
     hostUpdates.packageApply.mockReset();
     hostUpdates.plan.mockReset();
@@ -320,6 +322,33 @@ describe('host update authorization', () => {
     ).toBe(200);
     expect((await base.post('/host-updates/packages/apply').set(headers).send({ planId: '00000000-0000-4000-8000-000000000000' })).status).toBe(202);
     expect(hostUpdates.packageApply).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000000');
+  });
+
+  it('requires an exact same-origin operator session request to refresh package lists', async () => {
+    const route = '/host-updates/packages/refresh';
+    for (const identity of [undefined, 'guest-session', 'fixture-cli']) {
+      const headers = identity ? { Authorization: `Bearer ${identity}` } : {};
+      expect((await request(app.getHttpServer()).post(route).set(headers).send({})).status).toBe(identity ? 403 : 401);
+    }
+    const headers = { Authorization: 'Bearer fixture-session', Host: 'orbis.example', Origin: 'http://orbis.example' };
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(route)
+          .set({ ...headers, Origin: 'http://other.example' })
+          .send({})
+      ).status,
+    ).toBe(403);
+    for (const body of [[], { command: 'apt-get update' }, { names: [] }, { options: [] }]) {
+      expect((await request(app.getHttpServer()).post(route).set(headers).send(body)).status).toBe(400);
+    }
+    expect((await request(app.getHttpServer()).post(route).set(headers).set('Content-Type', 'application/json').send('null')).status).toBe(400);
+    expect(hostUpdates.packageRefresh).not.toHaveBeenCalled();
+    hostUpdates.packageRefresh.mockResolvedValue({ jobId: '00000000-0000-4000-8000-000000000000', state: 'queued' });
+    const result = await request(app.getHttpServer()).post(route).set(headers).send({});
+    expect(result.status).toBe(202);
+    expect(result.body).toEqual({ jobId: '00000000-0000-4000-8000-000000000000', state: 'queued' });
+    expect(hostUpdates.packageRefresh).toHaveBeenCalledExactlyOnceWith();
   });
 
   it('accepts a same-origin plan and apply request with exact fields', async () => {

@@ -50,7 +50,7 @@ describe('host update Unix socket transport', () => {
                   ? { available: true, job: null }
                   : request.url === '/v1/packages/plan'
                     ? { planId: '00000000-0000-4000-8000-000000000000', selected: [], operations: [] }
-                    : request.url === '/v1/packages/apply'
+                    : request.url === '/v1/packages/apply' || request.url === '/v1/packages/refresh'
                       ? { jobId: '00000000-0000-4000-8000-000000000000', state: 'queued' }
                       : request.url?.startsWith('/v1/packages/changelog?')
                         ? { name: 'base-files:arm64', available: true, body: 'Ubuntu changelog' }
@@ -145,6 +145,11 @@ describe('host update Unix socket transport', () => {
       path: '/v1/packages/apply',
       body: { planId: '00000000-0000-4000-8000-000000000000' },
     });
+  });
+
+  it('refreshes through the fixed host endpoint with no command or package options', async () => {
+    expect(await service.packageRefresh()).toMatchObject({ jobId: '00000000-0000-4000-8000-000000000000', state: 'queued' });
+    expect(requests.at(-1)).toEqual({ method: 'POST', path: '/v1/packages/refresh', body: {} });
   });
 
   it('rejects malformed package plans before sending them to the host', () => {

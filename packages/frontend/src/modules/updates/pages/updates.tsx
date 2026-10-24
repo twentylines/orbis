@@ -28,6 +28,7 @@ import { installedOrbisBuildOptions, orbisReleasesOptions, newerOrbisRelease } f
 type HostJob = { id: string; state: string; targetTag: string; startedAt: number; finishedAt?: number; message?: string; phase?: string | null };
 type HostStatus = {
   available: boolean;
+  capabilities?: string[];
   enrolled?: boolean;
   currentTag?: string | null;
   currentDigest?: string | null;
@@ -253,6 +254,15 @@ function LocalUpdates() {
     refetchInterval: (query) => (['queued', 'running'].includes(query.state.data?.job?.state ?? '') ? 1500 : 30_000),
     retry: 1,
   });
+  const refreshPackages = useMutation({
+    mutationFn: () => hostRequest<{ jobId: string; state: string }>('packages/refresh', {}),
+    retry: false,
+    onMutate: () => {
+      setReviewPackagePlan(null);
+      setSelectedPackages([]);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['orbis-host-package-job'] }),
+  });
   const planPackages = useMutation({
     mutationFn: (names: string[]) => hostRequest<HostPackagePlan>('packages/plan', { names }),
     onSuccess: (result) => setReviewPackagePlan(result),
@@ -346,6 +356,15 @@ function LocalUpdates() {
   const packageJobState = packageJob.data?.job?.state;
   const packageJobBusy = packageJobState === 'queued' || packageJobState === 'running';
   const packageJobNeedsInspection = packageJobState === 'failed' || packageJobState === 'interrupted';
+  const packageControlsBlocked =
+    refreshPackages.isPending ||
+    packageJob.isPending ||
+    packageJob.isError ||
+    packageJobBusy ||
+    packageJobNeedsInspection ||
+    jobBusy ||
+    job?.state === 'interrupted';
+  const refreshSupported = host.data?.capabilities?.includes('packages.refresh.v1') === true;
   const matchingSelection =
     matchingPackages.length > 0 && matchingPackages.length <= 250 && matchingPackages.every((item) => selectedPackages.includes(item.name));
   const matchingSelectionExceedsLimit = new Set([...selectedPackages, ...matchingPackages.map((item) => item.name)]).size > 250;
@@ -670,25 +689,58 @@ function LocalUpdates() {
               <p>Install operating system updates and follow the live terminal output.</p>
             </div>
             {user.operator ? (
-              <button
-                type="button"
-                className="desktop-update-action"
-                disabled={
-                  !restart?.available ||
-                  restartError ||
-                  reviewRestart.isPending ||
-                  applyRestart.isPending ||
-                  restart.job?.state === 'restarting' ||
-                  packageJobBusy ||
-                  jobBusy ||
-                  coreWatchIsActive(watch)
-                }
-                onClick={() => reviewRestart.mutate()}
-              >
-                {reviewRestart.isPending ? 'Reviewing restart…' : 'Restart server'}
-              </button>
+              <div className="desktop-update-actions desktop-host-update-actions">
+                <button
+                  type="button"
+                  className="desktop-update-action desktop-update-check"
+                  aria-describedby={host.data?.available && !refreshSupported ? `${tabsId}-refresh-help` : undefined}
+                  disabled={
+                    !refreshSupported ||
+                    !host.data?.enrolled ||
+                    !host.data.imageMatches ||
+                    host.data.coreHealth !== 'healthy' ||
+                    host.data.coreState !== 'running' ||
+                    packageControlsBlocked ||
+                    planPackages.isPending ||
+                    applyPackages.isPending ||
+                    reviewRestart.isPending ||
+                    applyRestart.isPending ||
+                    coreWatchIsActive(watch)
+                  }
+                  onClick={() => refreshPackages.mutate()}
+                >
+                  <span className="desktop-update-check-reserve" aria-hidden="true">
+                    Check for updates
+                  </span>
+                  <span>
+                    {refreshPackages.isPending || (packageJobBusy && packageJob.data?.job?.kind === 'refresh') ? 'Checking…' : 'Check for updates'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="desktop-update-action"
+                  disabled={
+                    !restart?.available ||
+                    restartError ||
+                    reviewRestart.isPending ||
+                    applyRestart.isPending ||
+                    restart.job?.state === 'restarting' ||
+                    packageControlsBlocked ||
+                    coreWatchIsActive(watch)
+                  }
+                  onClick={() => reviewRestart.mutate()}
+                >
+                  {reviewRestart.isPending ? 'Reviewing restart…' : 'Restart server'}
+                </button>
+              </div>
             ) : null}
           </div>
+          {user.operator && host.data?.available && !refreshSupported ? (
+            <p className="desktop-update-note" id={`${tabsId}-refresh-help`}>
+              Update the Orbis host service to check for new system updates.
+            </p>
+          ) : null}
+          {refreshPackages.isError ? <p role="alert">{refreshPackages.error.message} Check the package job status before trying again.</p> : null}
           {user.operator && restart?.available === false ? <p className="desktop-update-note">{restart.reason}</p> : null}
           {restartError ? <p role="alert">Restart status could not be checked. Reconnecting to the server.</p> : null}
           {restart?.job?.state === 'failed' ? <p role="alert">{restart.job.message}</p> : null}
@@ -751,7 +803,9 @@ function LocalUpdates() {
             <>
               <div className="desktop-host-package-summary">
                 <div>
-                  <strong>{systemPackages.data.packageCount ?? 0} available package updates</strong>
+                  <strong>
+                    {systemPackages.data.packageCount ?? 0} available package update{systemPackages.data.packageCount === 1 ? '' : 's'}
+                  </strong>
                   <span>{systemPackages.data.operatingSystem || 'Host operating system'}</span>
                 </div>
                 {systemPackages.data.rebootRequired ? <span className="desktop-host-reboot">Restart required</span> : null}
@@ -786,14 +840,7 @@ function LocalUpdates() {
                       <div>
                         <button
                           type="button"
-                          disabled={
-                            matchingPackages.length === 0 ||
-                            (!matchingSelection && matchingSelectionExceedsLimit) ||
-                            packageJob.isPending ||
-                            packageJob.isError ||
-                            packageJobBusy ||
-                            packageJobNeedsInspection
-                          }
+                          disabled={matchingPackages.length === 0 || (!matchingSelection && matchingSelectionExceedsLimit) || packageControlsBlocked}
                           onClick={() => {
                             const names = matchingPackages.map((item) => item.name);
                             setSelectedPackages(
@@ -814,16 +861,7 @@ function LocalUpdates() {
                         </button>
                         <button
                           type="button"
-                          disabled={
-                            selectedPackages.length === 0 ||
-                            planPackages.isPending ||
-                            packageJob.isPending ||
-                            packageJob.isError ||
-                            packageJobBusy ||
-                            packageJobNeedsInspection ||
-                            jobBusy ||
-                            job?.state === 'interrupted'
-                          }
+                          disabled={selectedPackages.length === 0 || planPackages.isPending || packageControlsBlocked}
                           onClick={() => planPackages.mutate(selectedPackages)}
                         >
                           {planPackages.isPending ? 'Checking updates…' : 'Update selected'}
