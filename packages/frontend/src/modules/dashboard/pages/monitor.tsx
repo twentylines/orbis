@@ -7,7 +7,7 @@ import type { HostSensors } from '@runtipi/common/schemas/host-sensors';
 import { IconActivity, IconArrowDown, IconArrowUp, IconCpu, IconDatabase, IconDeviceDesktopAnalytics, IconNetwork } from '@tabler/icons-react';
 import { useMetricHistory } from '@/desktop/metric-history';
 import { MetricChart } from '@/components/metric-chart/metric-chart';
-import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
+import { telemetryOptions } from '@/desktop/telemetry';
 import { formatUptime } from '@/desktop/uptime';
 import './monitor.css';
 import { useWindowVisible } from '@/desktop/window-visibility';
@@ -97,18 +97,7 @@ function ServerMonitor() {
   const selectedRange = searchParams.get('range');
   const range: MetricHistoryRange = selectedRange && Object.hasOwn(metricHistoryRanges, selectedRange) ? (selectedRange as MetricHistoryRange) : '1h';
   const history = useMetricHistory(range);
-  const telemetry = useQuery<Telemetry>({
-    enabled: visible,
-    queryKey: selectedId ? ['cluster-server', selectedId, 'telemetry'] : [...telemetryQueryKey, telemetryPath],
-    queryFn: async ({ signal }) => {
-      if (telemetryPath === '/api/system/telemetry') return loadTelemetry(signal);
-      const response = await fetch(telemetryPath, { credentials: 'include', signal });
-      if (!response.ok) throw new Error('The selected server is unavailable');
-      return response.json();
-    },
-    refetchInterval: 5000,
-    refetchIntervalInBackground: false,
-  });
+  const telemetry = useQuery(telemetryOptions(visible, telemetryPath, selectedId));
   const sample = telemetry.data;
   const sensors = useQuery<HostSensors>({
     queryKey: ['host-sensors', sensorsPath],
@@ -153,9 +142,12 @@ function ServerMonitor() {
           <h2>System overview</h2>
           <p title={serverName}>{serverName}</p>
         </div>
-        <div className="desktop-monitor-live-status">
+        <div
+          className="desktop-monitor-live-status"
+          title="CPU and memory update every second. Other hardware readings keep their own sampling rate."
+        >
           <span className={telemetry.isError ? 'desktop-live-dot desktop-live-dot-stale' : 'desktop-live-dot'} aria-hidden="true" />
-          <span>{telemetry.isError ? 'Readings delayed' : telemetry.isPending ? 'Connecting' : 'Live · every 5 seconds'}</span>
+          <span>{telemetry.isError ? 'Readings delayed' : telemetry.isPending ? 'Connecting' : 'Live · every second'}</span>
         </div>
       </header>
       {telemetry.isError ? (

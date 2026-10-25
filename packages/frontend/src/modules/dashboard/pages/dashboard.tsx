@@ -1,11 +1,8 @@
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { defaultDesktopPreferences, useDesktopPreferences, type WidgetId, type WorkspacePreferences } from '@/desktop/preferences';
-import { loadTelemetry, telemetryQueryKey, type Telemetry } from '@/desktop/telemetry';
-import { formatUptime } from '@/desktop/uptime';
 import { useContainerTelemetry } from '@/desktop/containers';
 import { DockerHealth } from '@/components/docker-health/docker-health';
-import { ContainerResources } from '@/components/container-resources/container-resources';
 import { useAppLauncher } from '@/desktop/app-launcher';
 import { appDestinations } from '@/desktop/app-destinations';
 import { appOpeningMode, primaryAppAddress } from '@/desktop/app-opening';
@@ -18,10 +15,9 @@ import {
   IconAdjustmentsHorizontal,
   IconApps,
   IconArrowRight,
-  IconArrowsDownUp,
   IconDeviceDesktopAnalytics,
-  IconPin,
   IconClock,
+  IconPin,
   IconGripVertical,
   IconArrowUp,
   IconArrowDown,
@@ -39,28 +35,13 @@ import { useCluster } from '@/desktop/cluster';
 import { ClusterApps, ClusterOverview } from '@/desktop/cluster-views';
 
 import { homeApps, maximumHomePins, moveHomePin, placeHomePin, workspaceRows } from '@/desktop/workspace-apps';
-import { useHostReadings } from '../components/host-devices';
-import { SystemGauges } from '../components/system-gauges';
-import { statusBytes, statusNetwork } from '../components/system-readings';
+import { HomeSystemStatus } from '../components/home-system-status';
 
 const labels: Record<WidgetId, string> = {
   applications: 'Applications',
   activity: 'System status',
   storage: 'Recent operations',
   attention: 'Needs attention',
-};
-
-const rate = (value: number | null) => {
-  if (value === null) return 'Unavailable';
-  if (value < 1024) return `${value.toFixed(0)} B/s`;
-  const units = ['KB/s', 'MB/s', 'GB/s'];
-  let amount = value;
-  let index = -1;
-  do {
-    amount /= 1024;
-    index++;
-  } while (amount >= 1024 && index < units.length - 1);
-  return `${amount.toFixed(amount < 10 ? 1 : 0)} ${units[index]}`;
 };
 
 export default function Dashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
@@ -132,15 +113,9 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const { workspace } = preferences;
   const longServerName = preferences.serverName.length > 16 || preferences.serverName.split(/\s+/).some((word) => word.length > 7);
   const apps = useQuery({ ...getInstalledAppsOptions(), refetchInterval: 15000 });
-  const host = useHostReadings();
   const containers = useContainerTelemetry();
   const tasks = useTasks();
-  const system = useQuery<Telemetry>({
-    queryKey: telemetryQueryKey,
-    queryFn: ({ signal }) => loadTelemetry(signal),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: false,
-  });
+
   const { installed, installedUrns, missingPins, visibleInstalled, running, attentionApps } = useMemo(() => {
     const installed = apps.data?.installed.filter(({ info }) => info.available) ?? [];
     const installedUrns = new Set(installed.map(({ info }) => info.urn));
@@ -170,23 +145,6 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const attention = attentionApps.length;
   const unhealthy = new Set(containers.data?.containers.filter((item) => item.health === 'unhealthy' && item.appUrn).map((item) => item.appUrn)).size;
   const activeTasks = tasks.data?.tasks.filter(taskIsActive) ?? [];
-  const currentHost = host.data?.available && !host.data.stale && !host.isError ? host.data : null;
-  const hostDisk = currentHost?.filesystems.find((filesystem) => filesystem.mount === '/');
-  const disk = hostDisk ?? system.data?.filesystems.find((filesystem) => filesystem.mount === '/') ?? system.data?.filesystems[0];
-  const diskLabel = hostDisk ? 'Storage' : 'Core storage';
-  const memoryTotal = system.data?.memory.totalBytes;
-  const memoryFree = system.data?.memory.availableBytes;
-  const memoryAvailable =
-    typeof memoryTotal === 'number' &&
-    Number.isFinite(memoryTotal) &&
-    memoryTotal > 0 &&
-    typeof memoryFree === 'number' &&
-    Number.isFinite(memoryFree) &&
-    memoryFree >= 0 &&
-    memoryFree <= memoryTotal;
-  const memoryUsed = memoryAvailable ? memoryTotal - memoryFree : null;
-  const cpuPercent = system.data?.cpu.totalPercent;
-  const network = statusNetwork(host.isError ? undefined : host.data, system.data);
 
   const saveWorkspace = (next: WorkspacePreferences) => update({ workspace: next });
   const move = (id: WidgetId, direction: -1 | 1) => {
@@ -454,68 +412,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
         ) : null}
       </section>
     ),
-    activity: (
-      <section className="workspace-activity" aria-labelledby="workspace-activity-title">
-        <div className="workspace-section-heading">
-          <div>
-            <h2 id="workspace-activity-title">System status</h2>
-          </div>
-          <Link to="/monitor" aria-label="Expand System status">
-            <IconDeviceDesktopAnalytics size={21} aria-hidden="true" />
-          </Link>
-        </div>
-        {system.isError ? (
-          <div className="workspace-message" role="alert">
-            System readings are unavailable.{' '}
-            <button type="button" onClick={() => system.refetch()}>
-              Retry
-            </button>
-          </div>
-        ) : (
-          <div className="workspace-metrics">
-            <SystemGauges
-              cpu={cpuPercent ?? null}
-              clockGHz={system.data?.cpu.reportedClockGHz}
-              memoryUsed={memoryUsed}
-              memoryTotal={memoryAvailable ? memoryTotal : null}
-              diskUsed={disk?.usedBytes ?? null}
-              diskTotal={disk?.sizeBytes ?? null}
-              diskLabel={diskLabel}
-            />
-            <div className="workspace-uptime">
-              <span>
-                <IconClock size={18} aria-hidden="true" /> Uptime
-              </span>
-              <strong>{system.data ? formatUptime(system.data.cpu.uptimeSeconds) : '—'}</strong>
-            </div>
-            <section className="workspace-network" aria-label={network?.label ?? 'Network'}>
-              <span className="workspace-network-heading">
-                <IconArrowsDownUp size={17} aria-hidden="true" /> {network?.label ?? 'Network'}
-              </span>
-              {network ? (
-                <strong className="workspace-network-interface" title={network.interface}>
-                  {network.interface}
-                  {network.speedMbps !== null ? (
-                    <small>{network.speedMbps >= 1000 ? `${(network.speedMbps / 1000).toFixed(1)} Gbps` : `${network.speedMbps} Mbps`} link</small>
-                  ) : null}
-                </strong>
-              ) : null}
-              <div className="workspace-network-direction">
-                <small>Download</small>
-                <strong className="workspace-network-rate">{rate(network?.rxBytesPerSecond ?? null)}</strong>
-                {network ? <small>{statusBytes(network.receivedBytes)} received</small> : null}
-              </div>
-              <div className="workspace-network-direction">
-                <small>Upload</small>
-                <strong className="workspace-network-rate">{rate(network?.txBytesPerSecond ?? null)}</strong>
-                {network ? <small>{statusBytes(network.transmittedBytes)} sent</small> : null}
-              </div>
-            </section>
-          </div>
-        )}
-        <ContainerResources compact />
-      </section>
-    ),
+    activity: <HomeSystemStatus />,
     storage: (
       <section className="workspace-operations" aria-labelledby="workspace-operations-title">
         <div className="workspace-section-heading">

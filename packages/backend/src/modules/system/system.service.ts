@@ -3,13 +3,20 @@ import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
 import si from 'systeminformation';
+import fs from 'node:fs/promises';
 import { cpuUsage, parseHostCpuStat, reportedCpuClockGHz, reportedCpuModel, type CpuSnapshot } from './host-cpu';
+import { parseRuntimeNetwork, runtimeNetworkRates, type RuntimeNetworkSnapshot } from './runtime-network';
 
 @Injectable()
 export class SystemService {
   private previousHostCpu: CpuSnapshot | null = null;
+  private previousHostCpuAt: number | null = null;
+  private previousRuntimeNetwork: RuntimeNetworkSnapshot | null = null;
+  private networkInterface: { expiresAt: number; name: string } | null = null;
   private telemetryCache: { expiresAt: number; result: Awaited<ReturnType<SystemService['readTelemetry']>> } | null = null;
   private telemetryInFlight: Promise<Awaited<ReturnType<SystemService['readTelemetry']>>> | null = null;
+  private disksCache: { expiresAt: number; result: Awaited<ReturnType<typeof si.fsSize>> } | null = null;
+  private disksInFlight: Promise<Awaited<ReturnType<typeof si.fsSize>>> | null = null;
 
   constructor(
     private readonly logger: LoggerService,
@@ -59,7 +66,7 @@ export class SystemService {
     if (!this.telemetryInFlight) {
       this.telemetryInFlight = this.readTelemetry()
         .then((result) => {
-          this.telemetryCache = { expiresAt: Date.now() + 4000, result };
+          this.telemetryCache = { expiresAt: Date.now() + 1000, result };
           return result;
         })
         .finally(() => {
@@ -69,19 +76,64 @@ export class SystemService {
     return this.telemetryInFlight;
   }
 
+  private getDisks() {
+    if (this.disksCache && Date.now() < this.disksCache.expiresAt) return Promise.resolve(this.disksCache.result);
+    if (!this.disksInFlight) {
+      this.disksInFlight = si
+        .fsSize()
+        .then(
+          (result) => {
+            this.disksCache = { expiresAt: Date.now() + 10000, result };
+            return result;
+          },
+          () => {
+            this.disksCache = { expiresAt: Date.now() + 2000, result: [] };
+            return [];
+          },
+        )
+        .finally(() => {
+          this.disksInFlight = null;
+        });
+    }
+    return this.disksInFlight;
+  }
+
+  private async readRuntimeNetwork() {
+    try {
+      const counters = parseRuntimeNetwork(await fs.readFile('/proc/net/dev', 'utf8'));
+      if (!counters.size) throw new Error('No runtime network counters');
+      if (!this.networkInterface || Date.now() >= this.networkInterface.expiresAt) {
+        this.networkInterface = { name: await si.networkInterfaceDefault().catch(() => ''), expiresAt: Date.now() + 10000 };
+      }
+      const current =
+        counters.get(this.networkInterface.name) ?? [...counters.values()].find((item) => item.iface !== 'lo') ?? counters.values().next().value;
+      if (!current) return [];
+      const snapshot = { ...current, at: performance.now() };
+      const reading = runtimeNetworkRates(this.previousRuntimeNetwork, snapshot);
+      this.previousRuntimeNetwork = snapshot;
+      return [reading];
+    } catch {
+      this.previousRuntimeNetwork = null;
+      return si.networkStats();
+    }
+  }
+
   private async readTelemetry() {
     const [cpuStatResult, uptimeResult, diskResult, networkResult, memoryResult, cpuInfoResult] = await Promise.allSettled([
       this.filesystem.readTextFile('/host/proc/stat'),
       this.filesystem.readTextFile('/host/proc/uptime'),
-      si.fsSize(),
-      si.networkStats(),
+      this.getDisks(),
+      this.readRuntimeNetwork(),
       this.filesystem.readTextFile('/host/proc/meminfo'),
       this.filesystem.readTextFile('/host/proc/cpuinfo'),
     ]);
 
     const hostCounters = cpuStatResult.status === 'fulfilled' && cpuStatResult.value ? parseHostCpuStat(cpuStatResult.value) : null;
+    const now = Date.now();
+    if (this.previousHostCpuAt !== null && (now - this.previousHostCpuAt > 30_000 || now < this.previousHostCpuAt)) this.previousHostCpu = null;
     const hostCpu = hostCounters?.has('cpu') ? cpuUsage(this.previousHostCpu, hostCounters) : null;
-    if (hostCounters?.has('cpu')) this.previousHostCpu = hostCounters;
+    this.previousHostCpu = hostCounters?.has('cpu') ? hostCounters : null;
+    this.previousHostCpuAt = hostCounters?.has('cpu') ? now : null;
     const runtimeCpu = hostCpu ? null : await si.currentLoad().catch(() => null);
     const uptime = uptimeResult.status === 'fulfilled' && uptimeResult.value ? Number(uptimeResult.value.split(/\s+/)[0]) : null;
     const disks = diskResult.status === 'fulfilled' ? diskResult.value : [];

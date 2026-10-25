@@ -41,6 +41,7 @@
   --desktop-wallpaper-base: color-mix(in srgb, var(--desktop-preset-tint) 35%, var(--desktop-surface));
   --desktop-wallpaper-shade-start-alpha: 0;
   --desktop-wallpaper-shade-end-alpha: 0;
+  --desktop-wallpaper-tint: rgb(255 255 255 / 0.24);
   --desktop-wallpaper-shade:
     linear-gradient(180deg, color-mix(in srgb, var(--desktop-surface) 36%, transparent) 38%, transparent 70%),
     linear-gradient(
@@ -248,6 +249,7 @@ html[data-desktop-mode="dark"] {
   --workspace-heading-shadow: rgb(0 0 0 / 0.18);
   --desktop-wallpaper-shade-start-alpha: 0.43;
   --desktop-wallpaper-shade-end-alpha: 0.72;
+  --desktop-wallpaper-tint: rgba(var(--desktop-base-chrome-rgb), 0.55);
   color-scheme: dark;
 }
 

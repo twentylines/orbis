@@ -43,12 +43,13 @@ html[data-desktop-local-wallpaper="true"] .orbis-startup {
   background:
     linear-gradient(135deg, var(--desktop-surface), color-mix(in srgb, var(--desktop-surface) 76%, transparent)), var(--desktop-wallpaper-shade);
 }
+.desktop-wallpaper-shade,
 .desktop-wallpaper-dim {
   position: absolute;
   inset: 0;
 }
 .orbis-theme > .desktop-wallpaper-layer .desktop-wallpaper-shade {
-  background: var(--desktop-wallpaper-shade);
+  background: var(--desktop-wallpaper-tint);
 }
 .orbis-startup > .desktop-wallpaper-layer .desktop-wallpaper-shade {
   background:

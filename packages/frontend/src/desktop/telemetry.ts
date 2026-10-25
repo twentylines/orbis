@@ -1,3 +1,5 @@
+import { queryOptions } from '@tanstack/react-query';
+
 export type Telemetry = {
   sampledAt: string;
   cpu: {
@@ -34,6 +36,23 @@ export type Telemetry = {
 };
 
 export const telemetryQueryKey = ['system-telemetry'] as const;
+
+export function telemetryOptions(visible: boolean, path = '/api/system/telemetry', serverId?: string | null) {
+  return queryOptions<Telemetry>({
+    queryKey:
+      path === '/api/system/telemetry' ? telemetryQueryKey : serverId ? ['cluster-server', serverId, 'telemetry'] : [...telemetryQueryKey, path],
+    queryFn: async ({ signal }) => {
+      if (path === '/api/system/telemetry') return loadTelemetry(signal);
+      const response = await fetch(path, { credentials: 'include', signal });
+      if (!response.ok) throw new Error('The selected server is unavailable');
+      return response.json();
+    },
+    enabled: visible,
+    staleTime: 800,
+    refetchInterval: 1000,
+    refetchIntervalInBackground: false,
+  });
+}
 
 export async function loadTelemetry(signal: AbortSignal): Promise<Telemetry> {
   const response = await fetch('/api/system/telemetry', { credentials: 'include', signal });
