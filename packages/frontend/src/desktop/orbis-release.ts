@@ -43,6 +43,17 @@ export const orbisReleasesOptions = () =>
     },
     ...checkOnEntry,
   });
+export const orbisUpdateNoticeOptions = (visible: boolean) =>
+  queryOptions({
+    ...orbisReleasesOptions(),
+    enabled: visible,
+    staleTime: 10 * 60_000,
+    refetchInterval: 10 * 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
 export function newerOrbisRelease(release: OrbisRelease | undefined, installed: string | undefined) {
   return Boolean(release?.imageManifestUrl && valid(release.tag) && installed && valid(installed) && gt(release.tag, installed));
 }

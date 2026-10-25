@@ -1,5 +1,14 @@
 import { expect, test } from 'bun:test';
-import { newerOrbisRelease, includedOrbisReleases, orbisReleaseHistoryOptions, groupOrbisReleaseNotes, type OrbisRelease } from './orbis-release';
+import { QueryObserver } from '@tanstack/react-query';
+import { createAppQueryClient } from '@/lib/query-client';
+import {
+  newerOrbisRelease,
+  includedOrbisReleases,
+  orbisReleaseHistoryOptions,
+  orbisUpdateNoticeOptions,
+  groupOrbisReleaseNotes,
+  type OrbisRelease,
+} from './orbis-release';
 const release = (tag: string, imageManifestUrl: string | null = 'https://example.test/release.json'): OrbisRelease => ({
   tag,
   imageManifestUrl,
@@ -63,4 +72,91 @@ test('uses current catalogue significance when an older paired server omits rele
   const included = includedOrbisReleases(latest, 'v1.0.0', [{ ...latest, kind: 'feature' }]);
   expect(included[0]?.kind).toBe('feature');
   expect(groupOrbisReleaseNotes(included)[0]?.feature?.tag).toBe(latest.tag);
+});
+
+function noticeScope({ stale = false, failure = false } = {}) {
+  const client = createAppQueryClient();
+  const options = orbisUpdateNoticeOptions(false);
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = (async (input) => {
+    expect(input).toBe('/api/system/orbis-release');
+    requests++;
+    return Response.json(failure ? { message: 'Unavailable' } : release('v0.1.0-beta.91'), { status: failure ? 503 : 200 });
+  }) as typeof fetch;
+  client.setQueryData(options.queryKey, [release('v0.1.0-beta.90')], { updatedAt: Date.now() - (stale ? 11 * 60_000 : 0) });
+  client.setQueryData(['apps'], 'unchanged');
+  const subscriptions: Array<() => void> = [];
+  return {
+    client,
+    requests: () => requests,
+    watch(visible: boolean) {
+      const observer = new QueryObserver(client, orbisUpdateNoticeOptions(visible));
+      subscriptions.push(observer.subscribe(() => undefined));
+      return observer;
+    },
+    close() {
+      for (const unsubscribe of subscriptions) unsubscribe();
+      client.clear();
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
+test('a hidden notice does not fetch stale releases and catches up once when visible', async () => {
+  const scope = noticeScope({ stale: true });
+  try {
+    const observer = scope.watch(false);
+    await Bun.sleep(0);
+    expect(scope.requests()).toBe(0);
+    observer.setOptions(orbisUpdateNoticeOptions(true));
+    await Bun.sleep(0);
+    expect(scope.requests()).toBe(1);
+    expect(observer.getCurrentResult().data?.[0]?.tag).toBe('v0.1.0-beta.91');
+    expect(scope.client.getQueryState(['apps'])).toMatchObject({ data: 'unchanged', isInvalidated: false });
+  } finally {
+    scope.close();
+  }
+});
+
+test('fresh release data survives notice remounts and visibility changes without another request', async () => {
+  const scope = noticeScope();
+  try {
+    const observer = scope.watch(true);
+    observer.setOptions(orbisUpdateNoticeOptions(false));
+    observer.setOptions(orbisUpdateNoticeOptions(true));
+    scope.watch(true);
+    await Bun.sleep(0);
+    expect(scope.requests()).toBe(0);
+  } finally {
+    scope.close();
+  }
+});
+
+test('stale notices sharing the release cache deduplicate discovery requests', async () => {
+  const scope = noticeScope({ stale: true });
+  try {
+    const first = scope.watch(true);
+    const second = scope.watch(true);
+    await Bun.sleep(0);
+    expect(scope.requests()).toBe(1);
+    expect(first.getCurrentResult().data).toEqual(second.getCurrentResult().data);
+    expect(first.getCurrentResult().data?.[0]?.tag).toBe('v0.1.0-beta.91');
+  } finally {
+    scope.close();
+  }
+});
+
+test('a failed automatic check retains the last known update without immediate retries', async () => {
+  const scope = noticeScope({ stale: true, failure: true });
+  try {
+    const observer = scope.watch(true);
+    await Bun.sleep(20);
+    expect(scope.requests()).toBe(1);
+    expect(observer.getCurrentResult().isError).toBe(true);
+    expect(observer.getCurrentResult().data?.[0]?.tag).toBe('v0.1.0-beta.90');
+    expect(scope.client.getQueryState(['apps'])?.isInvalidated).toBe(false);
+  } finally {
+    scope.close();
+  }
 });

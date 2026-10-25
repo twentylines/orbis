@@ -1258,6 +1258,14 @@ html:has(.desktop) {
     font-size: 0.625rem;
   }
 }
+@media (max-width: 360px) {
+  .desktop-system-bar:has(.desktop-update-notice) {
+    justify-content: center;
+  }
+  .desktop-system-bar:has(.desktop-update-notice) .desktop-connection[data-connection-kind="address"] {
+    flex-basis: calc(100% - 40px);
+  }
+}
 @media (max-width: 380px) {
   .desktop-system-bar {
     column-gap: 4px;
