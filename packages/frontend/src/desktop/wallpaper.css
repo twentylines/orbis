@@ -6,6 +6,23 @@ html[data-desktop-local-wallpaper="true"] .orbis-startup {
   isolation: isolate;
   background-image: none;
 }
+@supports (-webkit-touch-callout: none) {
+  html[data-desktop-mode]:has(.orbis-theme > .desktop-wallpaper-layer),
+  html[data-desktop-mode] body:has(.orbis-theme > .desktop-wallpaper-layer) {
+    background-color: transparent;
+  }
+  /* Fixed image layers do not paint Safari's extended browser-control area. */
+  .orbis-theme[data-desktop-wallpaper]:has(> .desktop-wallpaper-layer) {
+    background-color: transparent;
+    background-image:
+      linear-gradient(rgb(0 0 0 / var(--orbis-wallpaper-dim, 0)), rgb(0 0 0 / var(--orbis-wallpaper-dim, 0))), var(--desktop-wallpaper-shade),
+      var(--orbis-wallpaper-image, none);
+    background-size: var(--orbis-wallpaper-fit, cover);
+    background-position: var(--orbis-wallpaper-position, 50% 0%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+  }
+}
 .desktop-wallpaper-layer {
   position: fixed;
   inset: 0;

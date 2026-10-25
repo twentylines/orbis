@@ -1,5 +1,5 @@
 import { prefersReducedMotion } from './motion-setting';
-import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import type { DesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
 import { resolveWallpaperKey, wallpaperSources, type WallpaperChoice } from './wallpaper-presets';
 import { readWallpaperImage, rememberBrowserWallpaper, wallpaperCacheEvent } from './wallpaper-cache';
@@ -117,6 +117,7 @@ export function WallpaperLayer({
   revision?: number;
   onUnavailable?: () => void;
 }) {
+  const layer = useRef<HTMLDivElement>(null);
   const systemReducedMotion = useSyncExternalStore(subscribeMotion, prefersReducedMotion, fullMotion);
   const value = {
     wallpaperImage: null,
@@ -135,8 +136,28 @@ export function WallpaperLayer({
     hash || value.wallpaperFit !== 'cover' || value.wallpaperX !== 50 || value.wallpaperY !== 0 || value.wallpaperDim || value.wallpaperBlur,
   );
   const source = hash ? custom.source : wallpaperSources[resolveWallpaperKey(choice)];
+  useLayoutEffect(() => {
+    const surface = layer.current?.parentElement;
+    if (!surface) return;
+    // iOS Safari extends the scrolling surface beneath its toolbar, beyond fixed images.
+    const properties = {
+      '--orbis-wallpaper-image': source ? `url(${JSON.stringify(source)})` : 'none',
+      '--orbis-wallpaper-fit': value.wallpaperFit,
+      '--orbis-wallpaper-position': `${value.wallpaperX}% ${value.wallpaperY}%`,
+      '--orbis-wallpaper-dim': String(value.wallpaperDim / 100),
+    };
+    const previous = Object.keys(properties).map((property) => [property, surface.style.getPropertyValue(property)] as const);
+    for (const [property, next] of Object.entries(properties)) surface.style.setProperty(property, next);
+    return () => {
+      for (const [property, before] of previous) {
+        if (before) surface.style.setProperty(property, before);
+        else surface.style.removeProperty(property);
+      }
+    };
+  }, [source, value.wallpaperFit, value.wallpaperX, value.wallpaperY, value.wallpaperDim]);
   return (
     <div
+      ref={layer}
       className="desktop-wallpaper-layer"
       aria-hidden="true"
       data-custom={Boolean(hash)}
