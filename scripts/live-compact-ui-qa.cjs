@@ -12,7 +12,7 @@ const inspectSettingsAlignment = require('./settings-alignment-checks.cjs');
 const compactCopy = require('./compact-copy-checks.cjs');
 const inputPlaceholders = require('./input-placeholder-checks.cjs');
 
-const installRoot = (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install');
+const installRoot = process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install';
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
 const dockerContext = 'colima-runtipi-test';
 const expectedTag = 'v0.1.0-beta.57';

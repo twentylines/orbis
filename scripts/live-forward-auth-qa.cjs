@@ -9,7 +9,7 @@ const { isDeepStrictEqual } = require('node:util');
 const { chromium } = require('@playwright/test');
 
 process.umask(0o077);
-const root = (process.env.ORBIS_QA_AUTH_ROOT || '/opt/orbis-qa/auth');
+const root = process.env.ORBIS_QA_AUTH_ROOT || '/opt/orbis-qa/auth';
 const contextName = 'colima-orbis-amd64-test';
 const base = 'https://orbis-auth.local:19443';
 const rootHost = new URL(base).hostname;

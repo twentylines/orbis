@@ -11,7 +11,7 @@ const yaml = backendRequire('yaml');
 
 const urn = 'rehearsal-app:orbis-qa';
 const dockerContext = 'colima-runtipi-test';
-const installRoot = (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install');
+const installRoot = process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install';
 const sourceImage = 'nginx:1.28.0-alpine';
 const targetImage = 'nginx:1.28.1-alpine';
 const privateNetworkKey = 'rehearsal-app_orbis-qa_network';

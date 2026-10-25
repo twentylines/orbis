@@ -5,7 +5,7 @@ const path = require('node:path');
 const { isDeepStrictEqual } = require('node:util');
 const { chromium } = require('@playwright/test');
 
-const root = (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install');
+const root = process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install';
 const base = 'http://127.0.0.1:18080';
 const tag = process.env.ORBIS_AUDIT_EXPECTED_TAG;
 const commit = process.env.ORBIS_AUDIT_EXPECTED_COMMIT;
