@@ -95,10 +95,6 @@
   }
 }
 
-.desktop-release-note-content > .desktop-release-context {
-  margin: 0 0 14px;
-  font-size: 0.8125rem;
-}
 .desktop-release-revisions {
   display: grid;
   gap: 10px;

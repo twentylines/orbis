@@ -3,8 +3,8 @@ import { useId } from 'react';
 import './app-launch-mode-choice.css';
 
 const modes = [
-  { value: 'window', title: 'Orbis windows', description: 'Resize apps and arrange them side by side.' },
-  { value: 'tab', title: 'New tabs', description: 'Open every app in its own browser tab.' },
+  { value: 'window', title: 'Window layout', description: 'Resize apps and arrange them side by side.' },
+  { value: 'tab', title: 'Open apps in new tabs', description: 'Open every app in its own browser tab.' },
 ] as const;
 
 export function AppLaunchModeChoice({ value, onChange }: { value: AppOpeningMode; onChange: (mode: AppOpeningMode) => void }) {
@@ -55,7 +55,7 @@ export function AppLaunchModeChoice({ value, onChange }: { value: AppOpeningMode
       <small id={`${id}-help`} className="app-launch-mode-help">
         {value === 'window'
           ? 'Windows are available on larger screens. Some apps need a tab for security or sign-in. Per-app choices apply in this mode.'
-          : 'All apps will open in new tabs. Your per-app choices are kept for when Orbis windows is selected.'}
+          : 'All apps will open in new tabs. Your per-app choices are kept for when Window layout is selected.'}
       </small>
     </fieldset>
   );

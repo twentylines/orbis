@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { appLaunchSchema, defaultAppLaunch } from '@runtipi/common/schemas/app-launch';
-import { appAddress, appOpeningMode, initialAppBounds, primaryAppAddress, restoreAppBounds } from './app-opening';
+import { appAddress, appEmbeddingWarning, appOpeningMode, initialAppBounds, primaryAppAddress, restoreAppBounds } from './app-opening';
 
 describe('actual app opening', () => {
   test('rejects executable addresses and embedded credentials', () => {
@@ -66,5 +66,36 @@ describe('actual app opening', () => {
     expect(restored.height).toBeLessThan(area.height);
     expect(restored.x).toBeGreaterThan(area.x);
     expect(restoreAppBounds(area, restored)).toEqual(restored);
+  });
+});
+
+describe('general app window compatibility warnings', () => {
+  test('warns for a failed app connection without falsely declaring a framing block', () => {
+    const warning = appEmbeddingWarning({ status: 'unknown', reason: 'unreachable' });
+    expect(warning?.blocked).toBe(false);
+    expect(warning?.title).toBe('The app did not respond');
+    expect(warning?.description).toContain('may still be reachable from your browser');
+  });
+  test('allows ordinary redirects, sign-in, unsupported HEAD and failed checks to open normally', () => {
+    for (const reason of [
+      'redirect',
+      'authentication-required',
+      'head-unsupported',
+      'policy-unknown',
+      'unverified-destination',
+      'check-unavailable',
+      'busy',
+    ])
+      expect(appEmbeddingWarning({ status: 'unknown', reason })).toBeUndefined();
+    expect(appEmbeddingWarning({ status: 'not-blocked-by-headers', reason: 'no-blocking-header' })).toBeUndefined();
+    expect(appEmbeddingWarning()).toBeUndefined();
+  });
+  test('gives accurate browser-boundary guidance and retains proven blocks across ambiguous rechecks', () => {
+    for (const reason of ['x-frame-options-deny', 'x-frame-options-sameorigin', 'csp-frame-ancestors'])
+      expect(appEmbeddingWarning({ status: 'blocked', reason })?.blocked).toBe(true);
+    expect(appEmbeddingWarning({ status: 'blocked', reason: 'mixed-content' })?.description).toContain('HTTP');
+    expect(appEmbeddingWarning({ status: 'blocked', reason: 'same-origin' })?.description).toContain('same address');
+    expect(appEmbeddingWarning({ status: 'unknown', reason: 'unreachable' }, true)?.blocked).toBe(true);
+    expect(appEmbeddingWarning({ status: 'not-blocked-by-headers', reason: 'no-blocking-header' }, true)).toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-const timing = { duration: 320, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'both' } as const;
+const timing = { duration: 380, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'both' } as const;
 const parts = '.orbis-whole-word, .app-logo, .docker-health, .app-tile-notice, .app-tab-indicator, .badge';
 type Box = { x: number; y: number; width: number; height: number };
 type Tile = { element: HTMLElement; box: Box; parts: { element: HTMLElement; box: Box }[] };

@@ -4,7 +4,7 @@ import { AppLogo } from '@/components/app-logo/app-logo';
 import { OrbisReleaseNotes } from './orbis-release-notes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
-import { IconArrowRight, IconBrandGithub, IconPackage, IconServerCog } from '@tabler/icons-react';
+import { IconArrowRight, IconBrandGithub, IconPackage, IconRefresh, IconServerCog } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useId, useRef, useState } from 'react';
@@ -390,11 +390,16 @@ function LocalUpdates() {
       <div className="desktop-updates-tabs" role="tablist" aria-label="Update categories">
         {(
           [
-            { key: 'orbis', label: 'Orbis', count: build.data && latest ? Number(Boolean(newerOrbisRelease(latest, build.data.version))) : null },
-            { key: 'apps', label: 'Apps', count: apps.data ? available.length : null },
-            { key: 'system', label: 'System', count: systemPackages.data?.packageCount ?? null },
+            {
+              key: 'orbis',
+              label: 'Orbis',
+              Icon: IconRefresh,
+              count: build.data && latest ? Number(Boolean(newerOrbisRelease(latest, build.data.version))) : null,
+            },
+            { key: 'apps', label: 'Apps', Icon: IconPackage, count: apps.data ? available.length : null },
+            { key: 'system', label: 'System', Icon: IconServerCog, count: systemPackages.data?.packageCount ?? null },
           ] as const
-        ).map(({ key, label, count }, index, tabs) => (
+        ).map(({ key, label, Icon, count }, index, tabs) => (
           <button
             type="button"
             role="tab"
@@ -424,6 +429,7 @@ function LocalUpdates() {
               document.getElementById(`${tabsId}-${next.key}-tab`)?.focus();
             }}
           >
+            <Icon size={18} aria-hidden="true" />
             <span>{label}</span>
             {count !== null ? (
               <span className="desktop-updates-tab-count" aria-hidden="true">

@@ -22,6 +22,7 @@ import { prefersReducedMotion } from './motion-setting';
 import { dockMotionDuration, sectionMotionTiming } from './section-motion-geometry';
 import { useAppEmbedding, useBlockedAppEmbeds } from './app-embedding';
 import { useDesktopPreferences } from './preferences';
+import { appEmbeddingWarning } from './app-opening';
 
 const WindowSettings = lazy(() => import('./app-window-settings'));
 const edges: ResizeEdge[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
@@ -411,7 +412,7 @@ export function AppWindow({
         </div>
         <div className="app-launcher-body">
           <div className="app-window-document" inert={settings || geometry.gestureKind !== null || undefined} aria-hidden={settings || undefined}>
-            <AppFrame request={request} enabled={desktop && status === 'visible'} onTab={onTab} />
+            <AppFrame request={request} enabled={desktop && status === 'visible'} active={active} onTab={onTab} />
           </div>
           {settings ? (
             <section className="app-window-settings" aria-label={`${request.name} settings`}>
@@ -451,50 +452,114 @@ export function AppWindow({
   );
 }
 
-const AppFrame = memo(function AppFrame({ request, enabled, onTab }: { request: WindowState['request']; enabled: boolean; onTab: () => void }) {
-  const [documentReady, setDocumentReady] = useState(false);
-  const check = useAppEmbedding(request, enabled && !documentReady);
+const AppFrame = memo(function AppFrame({
+  request,
+  enabled,
+  active,
+  onTab,
+}: {
+  request: WindowState['request'];
+  enabled: boolean;
+  active: boolean;
+  onTab: () => void;
+}) {
+  const [loadObserved, setLoadObserved] = useState(false);
+  const [tryWindow, setTryWindow] = useState(false);
+  const [help, setHelp] = useState(false);
+  const noticeHeading = useRef<HTMLHeadingElement>(null);
+  const recoveryButton = useRef<HTMLButtonElement>(null);
+  const noticeWasOpen = useRef(false);
+  // A cross-origin iframe fires load for browser error pages too; it only stops automatic rechecks.
+  const check = useAppEmbedding(request, enabled && !loadObserved);
   const knownBlocked = useBlockedAppEmbeds()[request.urn]?.url === request.launchUrl;
   const { preferences, update } = useDesktopPreferences();
-  if (check.isPending) return <output className="app-window-compatibility">Checking window compatibility…</output>;
-  if (check.data?.status === 'blocked' || (knownBlocked && check.data?.status === 'unknown')) {
+  const warning = appEmbeddingWarning(check.data, knownBlocked);
+  const showWarning = Boolean(warning?.blocked || help || (warning && !tryWindow && !loadObserved));
+  const showFrame = !warning?.blocked && (!warning || tryWindow || loadObserved);
+  const notice = warning ?? {
+    blocked: false,
+    title: 'App not loading?',
+    description:
+      'If the page is blank or refuses to connect, its browser security or connection may prevent it opening here. Try a browser tab. You can remember that choice for this app.',
+  };
+  useLayoutEffect(() => {
+    if (!enabled || !active) return;
+    if (showWarning) {
+      noticeHeading.current?.focus({ preventScroll: true });
+      noticeWasOpen.current = true;
+    } else if (noticeWasOpen.current) {
+      recoveryButton.current?.focus({ preventScroll: true });
+      noticeWasOpen.current = false;
+    }
+  }, [enabled, active, showWarning]);
+  if (check.isPending)
     return (
-      <section className="app-window-compatibility" aria-label="App window compatibility">
-        <IconExternalLink size={30} aria-hidden="true" />
-        <h3>{request.name} needs a browser tab</h3>
-        <p>This app blocks embedded windows. Use a browser tab, or allow Orbis in its embedding settings if available.</p>
-        <div className="app-window-compatibility-actions">
-          <Button onClick={onTab}>Open in new tab</Button>
-          <Button
-            intent="primary"
-            onClick={() => {
-              update({
-                appLaunch: {
-                  ...preferences.appLaunch,
-                  apps: { ...preferences.appLaunch.apps, [request.urn]: { ...preferences.appLaunch.apps[request.urn], mode: 'tab' } },
-                },
-              });
-              onTab();
-            }}
-          >
-            Always open in new tab
-          </Button>
-        </div>
-        <Button variant="ghost" disabled={check.isFetching} onClick={() => void check.refetch()}>
-          {check.isFetching ? 'Checking…' : 'Check again'}
-        </Button>
-      </section>
+      <output className="app-window-compatibility">
+        <span className="app-window-compatibility-content">Checking window compatibility…</span>
+      </output>
     );
-  }
   return (
-    <iframe
-      className="app-window-frame"
-      title={`${request.name} app`}
-      src={request.launchUrl}
-      onLoad={() => setDocumentReady(true)}
-      referrerPolicy="no-referrer"
-      allow="fullscreen; clipboard-read; clipboard-write; camera; microphone; geolocation; display-capture"
-      sandbox="allow-forms allow-scripts allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation"
-    />
+    <>
+      {showFrame ? (
+        <iframe
+          className="app-window-frame"
+          title={`${request.name} app`}
+          src={request.launchUrl}
+          hidden={!!showWarning}
+          onLoad={() => setLoadObserved(true)}
+          onError={() => setHelp(true)}
+          referrerPolicy="no-referrer"
+          allow="fullscreen; clipboard-read; clipboard-write; camera; microphone; geolocation; display-capture"
+          sandbox="allow-forms allow-scripts allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation"
+        />
+      ) : null}
+      {showWarning ? (
+        <section className="app-window-compatibility" aria-label="App window compatibility">
+          <div className="app-window-compatibility-content">
+            <IconExternalLink size={30} aria-hidden="true" />
+            <h3 ref={noticeHeading} tabIndex={-1}>
+              {notice.title}
+            </h3>
+            <p>{notice.description}</p>
+            <div className="app-window-compatibility-actions">
+              {notice.blocked ? null : (
+                <Button
+                  onClick={() => {
+                    setTryWindow(true);
+                    setHelp(false);
+                  }}
+                >
+                  {loadObserved ? 'Back to app' : 'Try window'}
+                </Button>
+              )}
+              <Button onClick={onTab}>Open in new tab</Button>
+              <Button
+                intent="primary"
+                onClick={() => {
+                  update({
+                    appLaunch: {
+                      ...preferences.appLaunch,
+                      apps: { ...preferences.appLaunch.apps, [request.urn]: { ...preferences.appLaunch.apps[request.urn], mode: 'tab' } },
+                    },
+                  });
+                  onTab();
+                }}
+              >
+                Always open in new tab
+              </Button>
+            </div>
+            <Button variant="ghost" disabled={check.isFetching} onClick={() => void check.refetch()}>
+              {check.isFetching ? 'Checking…' : 'Check again'}
+            </Button>
+          </div>
+        </section>
+      ) : (
+        <footer className="app-window-recovery">
+          <Button ref={recoveryButton} variant="ghost" onClick={() => setHelp(true)}>
+            App not loading?
+          </Button>
+        </footer>
+      )}
+    </>
   );
 });

@@ -7,17 +7,7 @@ import { includedOrbisReleases, groupOrbisReleaseNotes, orbisReleaseHistoryOptio
 import { useWindowVisible } from '@/desktop/window-visibility';
 import './orbis-release-notes.css';
 
-function ReleaseNote({
-  release,
-  expanded,
-  alreadyInstalled = false,
-  children,
-}: {
-  release: OrbisRelease;
-  expanded: boolean;
-  alreadyInstalled?: boolean;
-  children?: ReactNode;
-}) {
+function ReleaseNote({ release, expanded, children }: { release: OrbisRelease; expanded: boolean; children?: ReactNode }) {
   const [open, setOpen] = useState(expanded);
   return (
     <details className="desktop-release-note" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
@@ -28,7 +18,6 @@ function ReleaseNote({
       </summary>
       {open ? (
         <div className="desktop-release-note-content">
-          {alreadyInstalled ? <p className="desktop-release-context">Feature overview — already installed.</p> : null}
           {release.body ? (
             <Markdown
               content={release.body.trimStart().replace(/^#\s+Orbis[^\n]*\r?\n(?:\r?\n)*/i, '')}
@@ -52,6 +41,18 @@ function ReleaseNote({
   );
 }
 
+function IncludedNotes({ releases }: { releases: OrbisRelease[] }) {
+  if (!releases.length) return null;
+  return (
+    <div className="desktop-release-revisions">
+      <h4>Earlier included updates</h4>
+      {releases.map((release) => (
+        <ReleaseNote key={release.tag} release={release} expanded={false} />
+      ))}
+    </div>
+  );
+}
+
 export function OrbisReleaseNotes({ latest, installed }: { latest: OrbisRelease; installed: string | undefined }) {
   const titleId = useId();
   const visible = useWindowVisible();
@@ -65,8 +66,8 @@ export function OrbisReleaseNotes({ latest, installed }: { latest: OrbisRelease;
     if (visible && options.enabled) void history.refetch();
   }, [entry, visible, options.enabled, history.refetch]);
   const releases = includedOrbisReleases(latest, installed, history.data?.releases);
-  const groups = groupOrbisReleaseNotes(releases, history.data?.context);
-  const hasFeature = groups.some((group) => group.feature);
+  const groups = groupOrbisReleaseNotes(releases.filter((release) => release.tag !== latest.tag));
+  const earlierUpdates = groups.filter((group) => !group.feature).flatMap((group) => group.revisions);
   return (
     <section className="desktop-release-history" aria-labelledby={titleId}>
       <h3 id={titleId}>Changelog</h3>
@@ -84,28 +85,16 @@ export function OrbisReleaseNotes({ latest, installed }: { latest: OrbisRelease;
         </p>
       ) : null}
       <div className="desktop-release-history-list">
-        {groups.map((group) => {
-          const primary = group.feature ?? group.revisions[0];
-          if (!primary) return null;
-          const revisions = group.feature ? group.revisions : group.revisions.slice(1);
-          return (
-            <ReleaseNote
-              key={`${latest.tag}:${primary.tag}`}
-              release={primary}
-              expanded={Boolean(group.feature) || !hasFeature}
-              alreadyInstalled={group.alreadyInstalled}
-            >
-              {revisions.length ? (
-                <div className="desktop-release-revisions">
-                  <h4>{group.feature ? 'Included updates' : 'Earlier included updates'}</h4>
-                  {revisions.map((release) => (
-                    <ReleaseNote key={release.tag} release={release} expanded={false} />
-                  ))}
-                </div>
-              ) : null}
+        <ReleaseNote key={latest.tag} release={latest} expanded>
+          <IncludedNotes releases={earlierUpdates} />
+        </ReleaseNote>
+        {groups.map((group) =>
+          group.feature ? (
+            <ReleaseNote key={`${latest.tag}:${group.feature.tag}`} release={group.feature} expanded>
+              <IncludedNotes releases={group.revisions} />
             </ReleaseNote>
-          );
-        })}
+          ) : null,
+        )}
       </div>
     </section>
   );

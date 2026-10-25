@@ -84,7 +84,10 @@
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   container-type: inline-size;
-  padding: 2px 12px 14px 2px;
+  padding: 6px 12px 14px 6px;
+}
+.store-catalogue-pane .app-link {
+  border-radius: 14px;
 }
 .store-split-desktop .store-app-preview {
   overflow: hidden;

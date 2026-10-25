@@ -61,10 +61,17 @@ test('expands feature baselines and nests only their later maintenance revisions
   const groups = groupOrbisReleaseNotes([release('v1.1.0-beta.2'), nextFeature, release('v1.1.0-beta.1'), feature, release('v1.2.0-beta.1')]);
   expect(groups.map((group) => group.feature?.tag)).toEqual(['v1.2.0-beta.0', 'v1.1.0-beta.0']);
   expect(groups[1]?.revisions.map((entry) => entry.tag)).toEqual(['v1.1.0-beta.2', 'v1.1.0-beta.1']);
-  expect(groups.every((group) => !group.alreadyInstalled)).toBe(true);
-  const installedBaseline = groupOrbisReleaseNotes([release('v1.1.0-beta.2')], feature);
-  expect(installedBaseline[0]).toMatchObject({ feature, alreadyInstalled: true });
-  expect(installedBaseline[0]?.revisions.map((entry) => entry.tag)).toEqual(['v1.1.0-beta.2']);
+  const revisions = groupOrbisReleaseNotes([release('v1.1.0-beta.2')]);
+  expect(revisions[0]?.feature).toBeNull();
+  expect(revisions[0]?.revisions.map((entry) => entry.tag)).toEqual(['v1.1.0-beta.2']);
+});
+
+test('excludes the installed feature from update notes even when history contains it', () => {
+  const installed = { ...release('v0.1.0-beta.97'), kind: 'feature' as const };
+  const latest = release('v0.1.0-beta.103');
+  const included = includedOrbisReleases(latest, installed.tag, [installed, release('v0.1.0-beta.99'), release('v0.1.0-beta.102')]);
+  expect(included.map((entry) => entry.tag)).toEqual([latest.tag, 'v0.1.0-beta.102', 'v0.1.0-beta.99']);
+  expect(groupOrbisReleaseNotes(included).every((group) => group.feature === null)).toBe(true);
 });
 
 test('uses current catalogue significance when an older paired server omits release metadata', () => {

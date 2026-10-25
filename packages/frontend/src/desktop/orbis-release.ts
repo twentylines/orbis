@@ -85,14 +85,14 @@ export function includedOrbisReleases(latest: OrbisRelease, installed: string | 
   return [...releases.values()].sort((a, b) => rcompare(a.tag, b.tag));
 }
 
-export type OrbisReleaseGroup = { feature: OrbisRelease | null; revisions: OrbisRelease[]; alreadyInstalled: boolean };
-export function groupOrbisReleaseNotes(releases: OrbisRelease[], context?: OrbisRelease | null): OrbisReleaseGroup[] {
+export type OrbisReleaseGroup = { feature: OrbisRelease | null; revisions: OrbisRelease[] };
+export function groupOrbisReleaseNotes(releases: OrbisRelease[]): OrbisReleaseGroup[] {
   const groups: OrbisReleaseGroup[] = [];
-  let current: OrbisReleaseGroup = { feature: context ?? null, revisions: [], alreadyInstalled: Boolean(context) };
+  let current: OrbisReleaseGroup = { feature: null, revisions: [] };
   for (const release of [...releases].sort((a, b) => rcompare(b.tag, a.tag))) {
     if (release.kind === 'feature') {
       if (current.feature || current.revisions.length) groups.push(current);
-      current = { feature: release, revisions: [], alreadyInstalled: false };
+      current = { feature: release, revisions: [] };
     } else current.revisions.unshift(release);
   }
   if (current.feature || current.revisions.length) groups.push(current);

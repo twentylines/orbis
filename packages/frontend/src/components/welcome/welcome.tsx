@@ -462,7 +462,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                       </div>
                       <div>
                         <dt>Open apps</dt>
-                        <dd>{draft.appLaunch.mode === 'window' ? 'Orbis windows' : 'New tabs'}</dd>
+                        <dd>{draft.appLaunch.mode === 'window' ? 'Window layout' : 'Open apps in new tabs'}</dd>
                       </div>
                       <div>
                         <dt>Automatic updates</dt>
