@@ -1,18 +1,9 @@
 import { type } from 'arktype';
 import { dynamicComposeSchemaV1 } from './utils/converters/v1.js';
 import { dynamicComposeSchemaArk, serviceSchemaArk } from './dynamic-compose-ark.js';
+import { MIN_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION } from './dynamic-compose-version.js';
 
-/**
- * Minimum supported schema version
- * Apps with schema version below this will be blocked from installation/update
- */
-export const MIN_SCHEMA_VERSION = 1;
-
-/**
- * Current schema version
- * Apps below this version will show a deprecation warning
- */
-export const CURRENT_SCHEMA_VERSION = 2;
+export { MIN_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION };
 
 // V2 schemas (current)
 export const serviceSchemaV2 = serviceSchemaArk;

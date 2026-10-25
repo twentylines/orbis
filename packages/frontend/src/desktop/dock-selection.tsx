@@ -85,7 +85,14 @@ export function DockSelection({ path, reduced }: { path?: string; reduced: boole
     };
     measure.current = update;
     update(false);
-    const updateSizes = () => update(false);
+    let resizeFrame = 0;
+    const updateSizes = () => {
+      if (!resizeFrame)
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = 0;
+          update(false);
+        });
+    };
     const sizes = new ResizeObserver(updateSizes);
     sizes.observe(main);
     for (const link of main.querySelectorAll('.desktop-dock-item')) sizes.observe(link);
@@ -93,6 +100,7 @@ export function DockSelection({ path, reduced }: { path?: string; reduced: boole
     return () => {
       measure.current = () => undefined;
       window.removeEventListener('resize', updateSizes);
+      cancelAnimationFrame(resizeFrame);
       motion?.cancel();
       sizes.disconnect();
     };

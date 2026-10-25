@@ -4,12 +4,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import type { TranslatableError } from '@/types/error.types';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
-import { unifiedMergeView } from '@codemirror/merge';
-import { CodeEditor } from '@/components/code-editor/code-editor';
-import { yaml } from '@codemirror/lang-yaml';
+
+const TemplateDiff = lazy(() => import('./template-diff').then((module) => ({ default: module.TemplateDiff })));
 
 interface TemplateSyncDialogProps {
   appUrn: string;
@@ -26,8 +25,6 @@ export const TemplateSyncDialog = ({ appUrn, isOpen, onClose }: TemplateSyncDial
     queryFn: () => getTemplateDiff({ path: { urn: appUrn } }),
     enabled: isOpen && Boolean(appUrn),
   });
-  const original = diffData?.data?.current || '';
-  const reviewExtensions = useMemo(() => [yaml(), unifiedMergeView({ original, mergeControls: false })], [original]);
 
   const syncMutation = useMutation({
     mutationFn: () => syncWithTemplate({ path: { urn: appUrn } }),
@@ -47,7 +44,7 @@ export const TemplateSyncDialog = ({ appUrn, isOpen, onClose }: TemplateSyncDial
           <DialogHeader>
             <DialogTitle>{t('APP_SYNC_TITLE')}</DialogTitle>
           </DialogHeader>
-          <DialogDescription>{t('LOADING')}</DialogDescription>
+          <DialogDescription>{t('APP_ACTION_LOADING')}</DialogDescription>
         </DialogContent>
       </Dialog>
     );
@@ -95,7 +92,15 @@ export const TemplateSyncDialog = ({ appUrn, isOpen, onClose }: TemplateSyncDial
 
             {viewMode === 'diff' && (
               <ScrollArea maxheight={500}>
-                <CodeEditor label={t('APP_SYNC_TITLE')} value={diff.template || ''} readOnly height="400px" extensions={reviewExtensions} />
+                <Suspense
+                  fallback={
+                    <output className="d-flex align-items-center justify-content-center" style={{ minHeight: 400 }}>
+                      {t('APP_ACTION_LOADING')}
+                    </output>
+                  }
+                >
+                  <TemplateDiff label={t('APP_SYNC_TITLE')} original={diff.current || ''} template={diff.template || ''} />
+                </Suspense>
               </ScrollArea>
             )}
 

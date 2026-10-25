@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { AppDetails, AppInfo, AppMetadata } from '@/types/app.types';
 import { extractAppUrn } from '@/utils/app-helpers';
 import type { AppUrn } from '@runtipi/common/types';
-import { CURRENT_SCHEMA_VERSION } from '@runtipi/common/schemas/dynamic-compose';
+import { CURRENT_SCHEMA_VERSION } from '@runtipi/common/schemas/dynamic-compose-version';
 import { IconAlertCircle, IconAlertTriangle, IconExternalLink } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { Suspense, lazy } from 'react';

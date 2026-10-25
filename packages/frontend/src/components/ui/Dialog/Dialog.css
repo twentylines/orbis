@@ -20,6 +20,12 @@
   position: relative;
   width: 100%;
 }
+.modal {
+  scroll-padding-block: 12px;
+}
+.modal-content :is(button, input, select, textarea, a, [tabindex]) {
+  scroll-margin-block: 8px;
+}
 .orbis-modal-frame > .modal-status {
   top: 1px;
   right: 20px;
