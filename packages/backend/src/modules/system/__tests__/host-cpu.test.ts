@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { cpuUsage, parseHostCpuStat, reportedCpuClockGHz } from '../host-cpu';
+import { cpuUsage, parseHostCpuStat, reportedCpuClockGHz, reportedCpuModel } from '../host-cpu';
 
 describe('host CPU snapshots', () => {
+  it('reads a host model on x86 or ARM without exposing unrelated cpuinfo fields', () => {
+    expect(reportedCpuModel('processor : 0\nmodel name : Intel(R)  Core(TM) i7\nprocessor : 1\nmodel name : Intel(R) Core(TM) i7\n')).toBe(
+      'Intel(R) Core(TM) i7',
+    );
+    expect(reportedCpuModel('processor : 0\nProcessor : AArch64 Processor rev 4 (aarch64)\nHardware : ARM board\nSerial : private\n')).toBe(
+      'AArch64 Processor rev 4 (aarch64)',
+    );
+    expect(reportedCpuModel('Hardware : ARM board\nSerial : private\n')).toBeNull();
+    expect(reportedCpuModel('CPU implementer : 0x41\nSerial : private\n')).toBeNull();
+    expect(reportedCpuModel('model name : \nSerial : private\n')).toBeNull();
+    expect(reportedCpuModel(null)).toBeNull();
+  });
   it('reports the mean kernel CPU MHz sample without substituting a model name or nominal clock', () => {
     expect(reportedCpuClockGHz('model name : CPU @ 9.90GHz\ncpu MHz\t: 2400.0\ncpu MHz\t: 3600.0\n')).toBe(3);
     expect(reportedCpuClockGHz('model name : CPU @ 9.90GHz\n')).toBeNull();

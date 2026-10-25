@@ -551,6 +551,24 @@ p.desktop-host-package-versions {
   display: block;
   overflow-wrap: anywhere;
 }
+.desktop-update-build-details {
+  margin-top: 16px;
+  border-top: 1px solid var(--desktop-line);
+  padding-top: 12px;
+}
+.desktop-update-build-details summary {
+  width: fit-content;
+  max-width: 100%;
+  color: var(--desktop-muted);
+  cursor: pointer;
+}
+.desktop-update-build-details summary:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.desktop-update-build-details[open] > summary {
+  margin-bottom: 12px;
+}
 .desktop-update-image {
   display: flex;
   align-items: baseline;

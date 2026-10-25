@@ -1,0 +1,82 @@
+.settings-about {
+  container-type: inline-size;
+  min-width: 0;
+  color: var(--desktop-ink);
+  line-height: 1.5;
+}
+.settings-about h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+.settings-about header p {
+  margin: 6px 0 0;
+  color: var(--desktop-muted);
+}
+.settings-about-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  gap: 28px 40px;
+  margin-block: 28px;
+}
+.settings-about-sections section {
+  min-width: 0;
+}
+.settings-about h3 {
+  margin: 0 0 16px;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.settings-about-facts {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+}
+.settings-about-facts > div {
+  display: grid;
+  grid-template-columns: minmax(7em, 1fr) minmax(0, 2fr);
+  align-items: baseline;
+  gap: 8px 20px;
+}
+.settings-about-facts dt {
+  color: var(--desktop-muted);
+  font-weight: 400;
+}
+.settings-about-facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.settings-about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  border-top: 1px solid var(--desktop-line);
+  padding-top: 20px;
+}
+.settings-about-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 36px;
+  color: var(--desktop-accent);
+  text-underline-offset: 4px;
+}
+.settings-about-links svg {
+  flex: none;
+}
+@container (max-width: 46rem) {
+  .settings-about-sections {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container (max-width: 23rem) {
+  .settings-about-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}

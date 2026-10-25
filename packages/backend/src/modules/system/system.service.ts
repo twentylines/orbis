@@ -3,7 +3,7 @@ import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
 import si from 'systeminformation';
-import { cpuUsage, parseHostCpuStat, reportedCpuClockGHz, type CpuSnapshot } from './host-cpu';
+import { cpuUsage, parseHostCpuStat, reportedCpuClockGHz, reportedCpuModel, type CpuSnapshot } from './host-cpu';
 
 @Injectable()
 export class SystemService {
@@ -96,12 +96,14 @@ export class SystemService {
     const swapTotal = memory('SwapTotal');
     const swapFree = memory('SwapFree');
     const clock = reportedCpuClockGHz(cpuInfoResult.status === 'fulfilled' ? cpuInfoResult.value : null);
+    const model = reportedCpuModel(cpuInfoResult.status === 'fulfilled' ? cpuInfoResult.value : null);
     const safe = (value: number | undefined | null) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null);
 
     return {
       sampledAt: new Date().toISOString(),
       cpu: {
         scope: hostCpu ? 'host-proc' : 'runtime',
+        ...(model ? { model } : {}),
         totalPercent: safe(hostCpu?.totalPercent ?? runtimeCpu?.currentLoad),
         perCorePercent: hostCpu?.perCorePercent ?? runtimeCpu?.cpus.map((core) => safe(core.load)) ?? [],
         uptimeSeconds: safe(uptime ?? si.time().uptime),

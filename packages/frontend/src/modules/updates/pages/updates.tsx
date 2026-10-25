@@ -1,6 +1,7 @@
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
+import { InstalledVersions } from '@/components/installed-versions/installed-versions';
 import { OrbisReleaseNotes } from './orbis-release-notes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
@@ -150,7 +151,7 @@ function LocalUpdates() {
   const entry = useLocation().key;
   const lastEntry = useRef(entry);
   const visible = useWindowVisible();
-  const { user } = useAppContext();
+  const { user, version } = useAppContext();
   const { watch, restart, restartError } = useHostUpdateWatch();
   const queryClient = useQueryClient();
   const restarting = coreWatchIsActive(watch) && watch?.phase === 'offline';
@@ -580,21 +581,19 @@ function LocalUpdates() {
             {build.isError ? 'Installed Orbis build metadata is unavailable.' : null}
             {build.data ? (
               <>
-                <strong>
-                  Installed:{' '}
-                  <span title={build.data.version}>
-                    <WrapWords text={build.data.version} />
-                  </span>
-                </strong>
-                {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
-                {build.data.imageDigest ? (
-                  <div className="desktop-update-image">
-                    <span>Image</span>
-                    <code title={build.data.imageDigest}>{build.data.imageDigest}</code>
-                  </div>
-                ) : (
-                  <span>Image digest unavailable.</span>
-                )}
+                <InstalledVersions orbis={build.data.version} runtipi={build.data.runtipiCompatibility || version.current} />
+                <details className="desktop-update-build-details">
+                  <summary>Build details</summary>
+                  {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
+                  {build.data.imageDigest ? (
+                    <div className="desktop-update-image">
+                      <span>Image</span>
+                      <code title={build.data.imageDigest}>{build.data.imageDigest}</code>
+                    </div>
+                  ) : (
+                    <span>Image digest unavailable.</span>
+                  )}
+                </details>
               </>
             ) : null}
           </div>

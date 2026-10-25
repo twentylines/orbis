@@ -2,6 +2,7 @@ export type Telemetry = {
   sampledAt: string;
   cpu: {
     scope: 'host-proc' | 'runtime';
+    model?: string | null;
     totalPercent: number | null;
     perCorePercent: (number | null)[];
     uptimeSeconds: number | null;

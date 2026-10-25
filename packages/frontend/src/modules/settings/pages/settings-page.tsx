@@ -12,13 +12,14 @@ import { DelayedRouteLoading } from '@/desktop/route-loading';
 const UserSettingsContainer = lazy(() => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer })));
 const SecurityContainer = lazy(() => import('../containers/security').then((module) => ({ default: module.SecurityContainer })));
 const LogsContainer = lazy(() => import('../containers/logs').then((module) => ({ default: module.LogsContainer })));
+const About = lazy(() => import('../containers/about').then((module) => ({ default: module.About })));
 
 export default () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get('tab');
   const { userSettings, user } = useAppContext();
-  const currentTab = tab && ['appearance', 'settings', 'security', 'cluster', 'appstores', 'logs'].includes(tab) ? tab : 'appearance';
+  const currentTab = tab && ['appearance', 'settings', 'security', 'cluster', 'appstores', 'logs', 'about'].includes(tab) ? tab : 'appearance';
   const panels = useRef<HTMLDivElement>(null);
   const reservedHeight = useRef(0);
 
@@ -57,11 +58,15 @@ export default () => {
           <TabsTrigger value="logs" className="d-none d-md-block">
             {t('SETTINGS_LOGS_TAB_TITLE')}
           </TabsTrigger>
+          <TabsTrigger value="about" className="d-none d-md-block">
+            About
+          </TabsTrigger>
           <DropdownMenu>
             <DropdownMenuTrigger className="nav-link dropdown-toggle d-block d-md-none">{t('MORE')}</DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={() => handleTabChange('appstores')}>{t('SETTINGS_APPSTORES_TAB_TITLE')}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleTabChange('logs')}>{t('SETTINGS_LOGS_TAB_TITLE')}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleTabChange('about')}>About</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </TabsList>
@@ -89,6 +94,11 @@ export default () => {
         <TabsContent value="logs">
           <Suspense fallback={loading}>
             <LogsContainer />
+          </Suspense>
+        </TabsContent>
+        <TabsContent value="about">
+          <Suspense fallback={loading}>
+            <About />
           </Suspense>
         </TabsContent>
       </Tabs>

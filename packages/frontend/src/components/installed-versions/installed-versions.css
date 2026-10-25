@@ -1,0 +1,32 @@
+.installed-versions {
+  container-type: inline-size;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  color: var(--desktop-ink);
+  line-height: 1.5;
+}
+.installed-versions > div {
+  display: grid;
+  grid-template-columns: minmax(5em, 1fr) minmax(0, 2fr);
+  align-items: baseline;
+  gap: 8px 20px;
+}
+.installed-versions dt {
+  color: var(--desktop-muted);
+  font-weight: 400;
+}
+.installed-versions dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+@container (max-width: 23rem) {
+  .installed-versions > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
