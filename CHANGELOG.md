@@ -113,7 +113,7 @@
 ### Process reading position and compact gutters
 
 - Keep the previous CPU sample, explicitly delayed with its original timestamp, while new comparisons are pending. Keep Memory current and replace the old ranking when fresh CPU readings arrive. Initial warmup does not invent previous data.
-- Reproduce the preceding end-of-scroll clamp; verify three source viewport/text cases and a composed40-state functional matrix. Match compact Docker/process panel gutters through the shared padding token. The published desktop Monitor refresh preserves exact DOM focus and0px position. Full native/enlarged route acceptance remains unfinished because of verifier failures and manually identified spacing defects; see [actual evidence](screenshots/live-beta49/README.md).
+- Reproduce the preceding end-of-scroll clamp; verify three source viewport/text cases and a composed40-state functional matrix. Match compact Docker/process panel gutters through the shared padding token. The published desktop Monitor refresh preserves exact DOM focus and0px position. Full native/enlarged route acceptance remains unfinished because of verifier failures and manually identified spacing defects; see actual evidence.
 
 ## Beta48 — 18 October 2026
 
@@ -129,14 +129,14 @@
 ## Beta47 — 18 October 2026
 
 - Enforce local recovery password length, current request timestamps, single-process overlap rejection and explicit failed request cleanup.
-- Verify actual stock adoption, original password/TOTP retention, hidden-prompt CLI recovery, old-session/password/challenge rejection and unrelated data preservation in a separate arm64 fixture. Four actual browser groups pass112 reads/assets. [Evidence and limits](screenshots/live-beta47/README.md).
+- Verify actual stock adoption, original password/TOTP retention, hidden-prompt CLI recovery, old-session/password/challenge rejection and unrelated data preservation in a separate arm64 fixture. Four actual browser groups pass112 reads/assets. Evidence and limits.
 
 ## Beta46 — 18 October 2026
 
 - Add current kernel temperature/fan readings and DRM GPU identity to Monitor, with AMDGPU activity/VRAM where supported. Missing, faulted, partial and empty hardware states stay explicit; the restricted helper uses bounded shared reads and no hardware-control commands.
 - Refresh sensors every 30 seconds while visible. Preserve focused Docker disclosures through live ranking changes and move focus to Usage if their row disappears.
 - Keep wrapped ordinary fallback copy, comfortable disclosure padding, full accessible identifiers and theme-aware warnings. Top bars/titlebars retain the dock's translucent blur without white rims.
-- Verify the published arm64 update, private stopped snapshot, exact saved records and five actual native/enlarged browser groups. The VM exposes no physical sensor/GPU devices; numerical hardware acceptance remains open. See [current release evidence](screenshots/live-beta46/README.md).
+- Verify the published arm64 update, private stopped snapshot, exact saved records and five actual native/enlarged browser groups. The VM exposes no physical sensor/GPU devices; numerical hardware acceptance remains open. See current release evidence.
 
 ## Unreleased development preview
 

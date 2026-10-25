@@ -4,17 +4,17 @@ import argparse
 import hashlib
 import json
 import os
-import subprocess
+import subprocess,os
 from pathlib import Path
 
 
 CONTEXT = "colima-runtipi-test"
-INSTALL = "/Users/sai/.codex/tmp/orbis-stock-20261015"
+INSTALL = os.environ.get('ORBIS_QA_INSTALL_ROOT', '/opt/orbis-qa/install')
 IMAGE = "ghcr.io/twentylines/orbis@sha256:0e899b65f10b4bb8fbd72b49fc1ca20ec1856ce1c471ca5f5686b081b8f52d06"
 PROBE = r'''
 import hashlib,http.client,importlib.util,json,os,re,socket,stat,tempfile,threading,time
 from pathlib import Path
-source=Path('/Users/sai/Documents/ChatGPT/homelab/scripts')
+source=(Path(os.environ.get('ORBIS_QA_SOURCE_ROOT', '/opt/orbis-qa/source'))/'scripts')
 assert os.uname().sysname=='Linux' and os.uname().machine=='aarch64'
 spec=importlib.util.spec_from_file_location('orbis_sensor_source_handler',source/'orbis-host-service.py')
 service=importlib.util.module_from_spec(spec);spec.loader.exec_module(service)
@@ -74,7 +74,7 @@ print(json.dumps(result))
 INSTALLED_PROBE = r'''
 import datetime,hashlib,http.client,json,os,re,socket,stat,subprocess,tarfile,time
 from pathlib import Path
-source=Path('/Users/sai/Documents/ChatGPT/homelab/scripts');installed=Path('/opt/orbis/host-service')
+source=(Path(os.environ.get('ORBIS_QA_SOURCE_ROOT', '/opt/orbis-qa/source'))/'scripts');installed=Path('/opt/orbis/host-service')
 archive=Path('/var/lib/orbis/snapshots/helper-before-sensors-20261018T075207Z.tar.gz')
 archive_hash='19c6accfa4307ca49c862ec5950bd997bb1ec07c0bfd365a659426047c3b2f8b'
 assert archive.is_file() and not archive.is_symlink() and stat.S_IMODE(archive.stat().st_mode)==0o600

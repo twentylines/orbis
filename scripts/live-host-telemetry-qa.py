@@ -3,14 +3,14 @@
 import argparse
 import json
 import os
-import subprocess
+import subprocess,os
 from pathlib import Path
 
 
 PROBE = r'''
 import hashlib,http.client,importlib.util,json,os,socket,tempfile,threading,time
 from pathlib import Path
-base=Path('/Users/sai/Documents/ChatGPT/homelab/scripts')
+base=(Path(os.environ.get('ORBIS_QA_SOURCE_ROOT', '/opt/orbis-qa/source'))/'scripts')
 spec=importlib.util.spec_from_file_location('orbis_source_counter_probe',base/'orbis-host-service.py')
 service=importlib.util.module_from_spec(spec); spec.loader.exec_module(service)
 with tempfile.TemporaryDirectory(prefix='orbis-counters-proof-') as directory:
@@ -64,7 +64,7 @@ print(json.dumps(result))
 INSTALLED_PROBE = r'''
 import hashlib,http.client,json,os,socket,stat,subprocess,time
 from pathlib import Path
-source=Path('/Users/sai/Documents/ChatGPT/homelab/scripts')
+source=(Path(os.environ.get('ORBIS_QA_SOURCE_ROOT', '/opt/orbis-qa/source'))/'scripts')
 installed=Path('/opt/orbis/host-service')
 names=['orbis-host-service.py','orbis-host-telemetry.py']
 hashes={name:hashlib.sha256((installed/name).read_bytes()).hexdigest() for name in names}

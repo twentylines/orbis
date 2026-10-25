@@ -1,9 +1,0 @@
-{
-  "scripts/host-sensors-checks.cjs": "d988d4fa43f532bc55986cfc1dc9f3fadebc79a9bd2f670947605551817d687f",
-  "scripts/visual-qa.cjs": "07f17b408c64273e530a3d3aa4c17085389816510f7d5e992446480b021f8555",
-  "packages/frontend/dist/client/index.html": "4819e494a14c35ad9a82de6e9490d730b9c21d00992b5144faaf7656e6b81f84",
-  "packages/frontend/src/modules/dashboard/components/host-sensors.tsx": "57945d34fdf20206526642d5b97acfd769ad1e1beb2f5f8a99cce0c26a21530b",
-  "packages/frontend/src/modules/dashboard/components/host-sensors.css": "4097e02d549446584af634e62ef39cc76f89cfdd5b4ce17cdcbc3868a0442017",
-  "packages/frontend/src/modules/dashboard/pages/monitor.tsx": "60144040c027a7b4f291bbf9fb6357ba5f7a212321a33f62961de3e48cbbd204",
-  "actual8080IndexSha256": "4819e494a14c35ad9a82de6e9490d730b9c21d00992b5144faaf7656e6b81f84"
-}

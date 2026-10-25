@@ -7,7 +7,7 @@ const { isDeepStrictEqual } = require('node:util');
 const { chromium } = require('@playwright/test');
 const inspectAppUpdateComfort = require('./app-update-comfort-checks.cjs');
 
-const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
+const installRoot = (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install');
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
 const dockerContext = 'colima-runtipi-test';
 const urn = 'rehearsal-app:orbis-qa';

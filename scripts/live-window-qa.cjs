@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { isDeepStrictEqual } = require('node:util');
 const { chromium } = require('@playwright/test');
 
-const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
+const installRoot = (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install');
 const cookieFile = process.env.ORBIS_AUDIT_COOKIE_FILE;
 const releaseFile = process.env.ORBIS_AUDIT_RELEASE_FILE;
 const expectedTag = process.env.ORBIS_AUDIT_EXPECTED_TAG;

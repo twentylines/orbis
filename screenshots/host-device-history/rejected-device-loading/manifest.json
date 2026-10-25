@@ -1,9 +1,0 @@
-{
-  "originalReportSha256": "bc269edb140c7bebb6bc8ad3772729367cbe2f21f60a7b30c3031ab72f1d1227",
-  "parsedReportSha256": "6991a1dc5944ff8b886985dd50fe4fc3a959b661604a6a2dc7f9170cfbe1bb05",
-  "completeParsedReportRestored": true,
-  "parts": 0,
-  "originalBytes": 7145,
-  "status": false,
-  "referenceFormat": "Resolve $orbis_array_parts by concatenation and $orbis_object_parts by merging; recursively resolve report.json."
-}

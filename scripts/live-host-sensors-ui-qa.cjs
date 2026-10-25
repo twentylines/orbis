@@ -10,7 +10,7 @@ const { chromium } = require('@playwright/test');
 const { dom } = require('./host-devices-checks.cjs');
 const { dom: sensorDom } = require('./host-sensors-checks.cjs');
 
-const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
+const installRoot = (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install');
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
 const dockerContext = 'colima-runtipi-test';
 const expectedTag = process.env.ORBIS_AUDIT_EXPECTED_TAG;
@@ -1018,7 +1018,7 @@ function selfCheck() {
     ['ORBIS_AUDIT_COOKIE_FILE', '/tmp/not-owned'],
     ['ORBIS_AUDIT_URL', 'http://example.com:18080'],
     ['ORBIS_AUDIT_URL', 'http://127.0.0.1:18080/monitor'],
-    ['ORBIS_AUDIT_OUTPUT_DIR', '/Users/sai/no'],
+    ['ORBIS_AUDIT_OUTPUT_DIR', '/opt/orbis-qa/output'],
     ['ORBIS_AUDIT_BASELINE_FILE', '/tmp/unreviewed.json'],
     ['ORBIS_AUDIT_HELPER_PROOF_FILE', '/tmp/unreviewed.json'],
   ])

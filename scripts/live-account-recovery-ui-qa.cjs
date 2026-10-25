@@ -9,7 +9,7 @@ const { isDeepStrictEqual } = require('node:util');
 const { chromium } = require('@playwright/test');
 const { dom } = require('./host-devices-checks.cjs');
 
-const installRoot = '/Users/sai/.codex/tmp/orbis-recovery-20261018';
+const installRoot = (process.env.ORBIS_QA_RECOVERY_ROOT || '/opt/orbis-qa/recovery');
 const ownedCookieFile = `${installRoot}/post-reset-observer.private.cookies`;
 const credentialFile = `${installRoot}/recovery-credentials.private.json`;
 const dockerContext = 'colima-orbis-recovery-test';
@@ -1338,12 +1338,12 @@ function selfCheck() {
     ['ORBIS_AUDIT_EXPECTED_TAG', 'v0.1.0-beta.46'],
     ['ORBIS_AUDIT_EXPECTED_COMMIT', 'b'.repeat(40)],
     ['ORBIS_AUDIT_EXPECTED_DIGEST', 'latest'],
-    ['ORBIS_AUDIT_COOKIE_FILE', '/Users/sai/.codex/tmp/orbis-stock-20261015/test-cookies.txt'],
+    ['ORBIS_AUDIT_COOKIE_FILE', (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install') + '/test-cookies.txt'],
     ['ORBIS_AUDIT_CREDENTIAL_FILE', '/tmp/unreviewed.json'],
     ['ORBIS_AUDIT_URL', 'http://127.0.0.1:18080'],
     ['ORBIS_AUDIT_URL', 'http://example.com:18082'],
     ['ORBIS_AUDIT_URL', 'http://127.0.0.1:18082/login'],
-    ['ORBIS_AUDIT_OUTPUT_DIR', '/Users/sai/no'],
+    ['ORBIS_AUDIT_OUTPUT_DIR', '/opt/orbis-qa/output'],
     ['ORBIS_AUDIT_GO_PROOF_FILE', '/tmp/unreviewed.json'],
   ];
   for (const [key, value] of rejected) assert.throws(() => options({ ...env, [key]: value }, argv));
@@ -1367,7 +1367,7 @@ function selfCheck() {
     { schema: 'unreviewed' },
     { phase: 'pre-reset' },
     { dockerContext: 'default' },
-    { root: '/Users/sai/.codex/tmp/orbis-stock-20261015' },
+    { root: (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install') },
     { recordBaselineSha256: 'b'.repeat(64) },
     { checks: { ...proof.checks, localCliResetComplete: false } },
   ])
@@ -1478,7 +1478,7 @@ function selfCheck() {
       proxy.service = 'another-service';
     },
     (core) => {
-      core.workingDir = '/Users/sai/.codex/tmp/orbis-stock-20261015';
+      core.workingDir = (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install');
     },
     (_, proxy) => {
       proxy.configFiles = '/tmp/unreviewed-compose.yml';

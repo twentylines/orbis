@@ -1,7 +1,0 @@
-{
-  "scripts/host-sensors-checks.cjs": "f12c30bd3ec4a01ccdb08a636604d4dcbfe252915180e9e619a029b4f3c99c1c",
-  "scripts/visual-qa.cjs": "07f17b408c64273e530a3d3aa4c17085389816510f7d5e992446480b021f8555",
-  "packages/frontend/dist/client/index.html": "b963b41d19d9bc9b9a1ac2eb5f09de512d625e25b1a3434d13ecf9fadadc0507",
-  "packages/frontend/src/modules/dashboard/components/host-sensors.tsx": "6e044fa3ca207a72967de953eb815d14e2244c488f28a81979374b294dc2e74e",
-  "packages/frontend/src/modules/dashboard/components/host-sensors.css": "4097e02d549446584af634e62ef39cc76f89cfdd5b4ce17cdcbc3868a0442017"
-}

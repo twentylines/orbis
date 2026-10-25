@@ -14,7 +14,7 @@ const { chromium } = require('@playwright/test');
 const { dom } = require('./host-devices-checks.cjs');
 const { dom: historyDom } = require('./host-device-history-checks.cjs');
 
-const installRoot = '/Users/sai/.codex/tmp/orbis-stock-20261015';
+const installRoot = (process.env.ORBIS_QA_INSTALL_ROOT || '/opt/orbis-qa/install');
 const ownedCookieFile = `${installRoot}/test-cookies.txt`;
 const dockerContext = 'colima-runtipi-test';
 const expectedTag = process.env.ORBIS_AUDIT_EXPECTED_TAG;

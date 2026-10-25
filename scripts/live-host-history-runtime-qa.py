@@ -26,7 +26,7 @@ import urllib.request
 TAG = "v0.1.0-beta.45"
 COMMIT = "c58aa30268d2b7ec8b7d49cbb1cbde91344db2ef"
 CONTEXT = "colima-runtipi-test"
-INSTALL = "/Users/sai/.codex/tmp/orbis-stock-20261015"
+INSTALL = os.environ.get('ORBIS_QA_INSTALL_ROOT', '/opt/orbis-qa/install')
 ORIGIN = "http://127.0.0.1:18080"
 MAX_BYTES = 32 * 1024 * 1024
 MAX_SAFE = 2**53 - 1

@@ -3,7 +3,7 @@
 import argparse
 import json
 import os
-import subprocess
+import subprocess,os
 from pathlib import Path
 
 
@@ -38,7 +38,7 @@ PROBE = r'''
 import hashlib,http.client,importlib.util,json,os,platform,re,socket,subprocess,tempfile,threading,time
 from pathlib import Path
 assert platform.machine()=='aarch64' and os.cpu_count()==2
-base=Path('/Users/sai/Documents/ChatGPT/homelab/scripts')
+base=(Path(os.environ.get('ORBIS_QA_SOURCE_ROOT', '/opt/orbis-qa/source'))/'scripts')
 image='ghcr.io/twentylines/orbis@sha256:85466caef871350b9034287d024fe71dfea27ae670c12197b61df1bfdcdeee86'
 def core():
     result=subprocess.run(['docker','--context','default','inspect','--format','{{json .Config.Image}} {{json .State.Health.Status}}','runtipi'],capture_output=True,text=True,timeout=5,check=True)
@@ -107,7 +107,7 @@ print(json.dumps(result))
 INSTALLED_PROBE = r'''
 import hashlib,http.client,json,os,re,socket,stat,subprocess,tarfile,time
 from pathlib import Path
-source=Path('/Users/sai/Documents/ChatGPT/homelab/scripts')
+source=(Path(os.environ.get('ORBIS_QA_SOURCE_ROOT', '/opt/orbis-qa/source'))/'scripts')
 installed=Path('/opt/orbis/host-service')
 archive=Path('/var/lib/orbis/snapshots/helper-before-device-history-20261018T053642Z.tar.gz')
 archive_hash='6bf69144907a111acc9d0c36f44a467769fbb442fc9e5dee49c1b9aabfadaeaa'

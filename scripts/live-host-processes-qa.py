@@ -3,7 +3,7 @@
 import argparse
 import json
 import os
-import subprocess
+import subprocess,os
 from pathlib import Path
 
 
@@ -11,7 +11,7 @@ PROBE = r'''
 import hashlib,http.client,importlib.util,json,os,platform,socket,subprocess,tempfile,threading,time
 from pathlib import Path
 assert platform.machine()=='aarch64' and os.cpu_count()==2
-base=Path('/Users/sai/Documents/ChatGPT/homelab/scripts')
+base=(Path(os.environ.get('ORBIS_QA_SOURCE_ROOT', '/opt/orbis-qa/source'))/'scripts')
 installed=Path('/opt/orbis/host-service/orbis-host-service.py')
 before=hashlib.sha256(installed.read_bytes()).hexdigest()
 def core():
@@ -85,7 +85,7 @@ print(json.dumps(result))
 INSTALLED_PROBE = r'''
 import hashlib,http.client,json,os,socket,stat,subprocess,time
 from pathlib import Path
-source=Path('/Users/sai/Documents/ChatGPT/homelab/scripts')
+source=(Path(os.environ.get('ORBIS_QA_SOURCE_ROOT', '/opt/orbis-qa/source'))/'scripts')
 installed=Path('/opt/orbis/host-service')
 names=['orbis-host-service.py','orbis-host-processes.py']
 hashes={name:hashlib.sha256((installed/name).read_bytes()).hexdigest() for name in names}

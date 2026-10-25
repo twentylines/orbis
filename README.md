@@ -16,28 +16,6 @@ curl -fsSL https://twentylines.github.io/orbis/install | sudo python3
 
 This fetches the newest published release, including betas. See [installation requirements and replacement choices](INSTALLATION.md).
 
-## Screenshots
-
-![Orbis Monitor](screenshots/navigation/monitor.png)
-
-[Workspace](screenshots/navigation/workspace.png) · [Applications](screenshots/navigation/applications.png) · [App Store](screenshots/navigation/app-store.png) · [App details](screenshots/navigation/app-details.png) · [Phone app details](screenshots/navigation/phone-app-details.png)
-
-[Light app launcher](screenshots/navigation/launcher-light.png) · [Dark app launcher](screenshots/navigation/launcher-dark.png) · [Phone applications](screenshots/navigation/phone-applications.png) · [Phone uninstall review](screenshots/navigation/phone-uninstall.png)
-
-[Minimized apps, light](screenshots/navigation/minimized-light.png) · [Minimized apps, dark](screenshots/navigation/minimized-dark.png)
-
-[Server selector](screenshots/navigation/server-selector.png) · [Merged applications](screenshots/navigation/cluster-applications.png) · [Cluster updates](screenshots/cluster-updates/desktop-light.png) · [Pairing settings](screenshots/navigation/cluster-settings.png)
-
-[Cluster updates, dark](screenshots/cluster-updates/desktop-dark.png) · [Phone server selector](screenshots/cluster-updates/phone-selector.png) · [Cluster gallery](screenshots/cluster-updates/README.md)
-
-[Login, light](screenshots/navigation/login-light.png) · [Login, dark](screenshots/navigation/login-dark.png) · [Phone login](screenshots/navigation/phone-login-light.png)
-
-[First-run setup](screenshots/navigation/onboarding-light.png) · [Appearance, light](screenshots/appearance/desktop-light.png) · [Appearance, dark](screenshots/appearance/desktop-dark.png)
-
-Workspace, Monitor, app details and minimized views show the beta79 source build on a disposable Linux host with a real installed app. Other views show earlier beta builds. See the [gallery](screenshots/navigation/README.md).
-
-[Earlier beta62 gallery](screenshots/live-beta62/README.md) · [Backup views](screenshots/backups/desktop.png)
-
 ## Documentation
 
 - [Inspect existing Runtipi and Orbis installations](INSTALLATION.md)
@@ -85,15 +63,6 @@ Orbis is based on [Runtipi](https://github.com/runtipi/runtipi) and is distribut
 
 Runtipi is a personal homeserver orchestrator that makes it easy to manage and run multiple services on a single server. It is based on Docker and comes with a simple web interface to manage your services. Runtipi is designed to be easy to use, so you don't have to worry about manual configuration or networking. Simply install Runtipi on your server and use the web interface to add and manage services. You can see a list of available services in the [App Store repo](https://github.com/runtipi/runtipi-appstore) and if you can't find what you're looking for, there are many community app stores to choose from and you can even create your own. To get started with Runtipi, follow the installation instructions below.
 
-## Sponsors
-
-Thanks to our generous sponsors for supporting the development of Runtipi:
-
-| CodeRabbit       | TestMu AI        |
-|------------------| ------------------|
-| <img src="https://raw.githubusercontent.com/runtipi/runtipi/develop/screenshots/sponsors/coderabbit.png" alt="CodeRabbit logo" width="200"/> | <img src="https://assets.testmu.ai/resources/images/logos/logo.svg" style="vertical-align: middle;" width="250" height="45" />
-| [coderabbit.ai](https://coderabbit.ai?utm_source=runtipi&utm_campaign=readme) | Browser testing via [testmu.ai](https://www.testmu.ai/?utm_source=runtipi&utm_medium=sponsor)
-
 ## Getting started
 
 Visit our website [runtipi.io](https://www.runtipi.io/docs/getting-started/installation?utm_source=github&utm_campaign=readme) for installation instructions, documentation and guides.
@@ -131,11 +100,9 @@ Runtipi is licensed under the GNU General Public License v3.0. TL;DR — You may
 ## 🙏 Acknowledgements
 
 - [GitHub](https://github.com) - Thanks for generously giving us access to your full product suite
-- [OpenAI](https://openai.com) - Thanks for providing free access to codex and security tools for the project
 - [Freepik](https://www.flaticon.com/free-icons/tipi?utm_source=runtipi&utm_campaign=readme) - Thanks for providing a free logo for the project
 - [Sentry](https://sentry.io?utm_source=runtipi&utm_campaign=readme) - Thanks for providing error tracking for the project
 - [Crowdin](https://crowdin.com?utm_source=runtipi&utm_campaign=readme) - Thanks for providing localization management for the project
-- [CodeRabbit](https://coderabbit.ai?utm_source=runtipi&utm_campaign=readme) - Thanks for providing free AI code reviews in our Pull Requests
 
 ## ✨ Contributors
 
