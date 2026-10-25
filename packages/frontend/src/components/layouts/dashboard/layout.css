@@ -341,20 +341,20 @@ html:has(.desktop) {
   isolation: isolate;
   background: transparent;
 }
-.desktop-connection-dot.is-connected::before,
+.desktop-connection-dot.is-connected > .desktop-connection-pulse,
 .desktop-connection-dot.is-connected::after {
-  content: "";
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
 }
-.desktop-connection-dot.is-connected::before {
+.desktop-connection-dot.is-connected > .desktop-connection-pulse {
   inset: -8px;
   background: rgb(93, 184, 128);
   opacity: 0;
   animation: orbis-connection-pulse 3s ease-out infinite;
 }
 .desktop-connection-dot.is-connected::after {
+  content: "";
   inset: 0;
   z-index: 1;
   background: #42815b;
@@ -973,9 +973,7 @@ html:has(.desktop) {
 }
 /* Preserve the original 7px, 17px and 23px pulse diameters. */
 @keyframes orbis-connection-pulse {
-  0%,
-  75%,
-  100% {
+  0% {
     transform: scale(0.3043478261);
     opacity: 0;
   }
@@ -983,7 +981,8 @@ html:has(.desktop) {
     transform: scale(0.7391304348);
     opacity: 0.25;
   }
-  24% {
+  24%,
+  100% {
     transform: scale(1);
     opacity: 0;
   }

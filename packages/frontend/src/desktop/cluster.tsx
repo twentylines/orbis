@@ -175,7 +175,9 @@ export function ClusterConnection() {
       }
       title={restartingServer ? restart?.job?.message : updating ? watch?.message : label}
     >
-      <span className={`desktop-connection-dot is-${connectionState}`} aria-hidden="true" />
+      <span className={`desktop-connection-dot is-${connectionState}`} aria-hidden="true">
+        {connectionState === 'connected' ? <span className="desktop-connection-pulse" /> : null}
+      </span>
       <span className="desktop-connection-label">{label}</span>
     </output>
   );
