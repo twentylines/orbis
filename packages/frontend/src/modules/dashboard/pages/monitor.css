@@ -474,10 +474,10 @@
   font-weight: 650;
 }
 .monitor-temperature-strip {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px 24px;
+  gap: 6px 24px;
   margin-bottom: var(--desktop-density-section, 24px);
   padding: 18px 20px;
   border: 1px solid var(--desktop-line);
@@ -510,6 +510,28 @@
   font-size: 0.8125rem;
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+.monitor-temperature-description {
+  grid-column: 1;
+  grid-row: 2;
+}
+.monitor-temperature-strip > button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.monitor-temperature-age {
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+}
+@media (max-width: 600px) {
+  .monitor-temperature-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .monitor-temperature-strip > button {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
 }
 .monitor-detail-action,
 .monitor-usage-source button {

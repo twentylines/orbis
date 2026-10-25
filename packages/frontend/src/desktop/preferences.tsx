@@ -10,7 +10,7 @@ import { desktopWindowsSchema, type DesktopWindows, type DesktopWindowId, type D
 import { appLaunchSchema, defaultAppLaunch, type AppLaunchPreferences } from '@runtipi/common/schemas/app-launch';
 import { desktopAppearanceSchema, normaliseDesktopAppearance, type DesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
 import { useResolvedColourMode, readSystemColourMode, type ColourMode, type ResolvedColourMode } from './colour-mode';
-import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, preferenceChangeEvent } from './appearance-cache';
+import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, preferenceChangeEvent, appearanceCacheEvent } from './appearance-cache';
 import { validHomePins } from './workspace-apps';
 import { resolveWallpaperKey, type ThemePreset } from './wallpaper-presets';
 
@@ -123,8 +123,11 @@ function readPreferenceCache() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const value: unknown = raw && raw.length <= preferenceCacheLimit ? JSON.parse(raw) : null;
+    const cachedAppearance = appearanceFromStored(value);
     return {
-      preferences: isPreferences(value) ? normalisePreferences(value) : { ...defaultDesktopPreferences, ...appearanceFromStored(value) },
+      preferences: isPreferences(value)
+        ? normalisePreferences(value)
+        : { ...defaultDesktopPreferences, ...cachedAppearance, appearance: normaliseDesktopAppearance(cachedAppearance.appearance) },
       available: true,
     };
   } catch {
@@ -189,6 +192,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       root.dataset.desktopPreset = displayed.preset;
       root.dataset.desktopMode = effectiveMode;
       root.dataset.desktopWallpaper = displayedWallpaper;
+      root.dataset.desktopLocalWallpaper = String(displayed.wallpaperMode === 'custom' && Boolean(displayed.appearance.wallpaperImage));
       root.dataset.orbisAppearanceReady = 'true';
       applyAppearanceRuntime(displayed.appearance, effectiveMode);
     };
@@ -205,7 +209,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     return () => {
       for (const query of queries) query.removeEventListener('change', apply);
     };
-  }, [displayed.appearance, displayed.preset, displayedWallpaper, displayed.mode, resolvedMode]);
+  }, [displayed.appearance, displayed.preset, displayedWallpaper, displayed.mode, displayed.wallpaperMode, resolvedMode]);
 
   useEffect(() => {
     if (isLoggedIn && !initialLoadComplete) return;
@@ -213,6 +217,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       const stored = JSON.stringify(preferences);
       localStorage.setItem(STORAGE_KEY, stored);
       setCacheAvailable(localStorage.getItem(STORAGE_KEY) === stored);
+      window.dispatchEvent(new Event(appearanceCacheEvent));
     } catch {
       setCacheAvailable(false);
     }

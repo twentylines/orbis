@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
 import type { TaskRecord } from '@runtipi/common/schemas';
-import { desktopActivity } from './desktop-activity-state';
+import { desktopActivity, desktopActivityGroups } from './desktop-activity-state';
 import { advanceCoreUpdate } from './core-update-state';
 const task = (id: string, urn: string, action: TaskRecord['action'] = 'update', status: TaskRecord['status'] = 'running', time = 1): TaskRecord => ({
   id,
@@ -17,6 +17,18 @@ const names = new Map([
   ['photos:store', 'Photos'],
   ['media:store', 'Media'],
 ]);
+test('simultaneous categories retain independent summaries and exclude completed history', () => {
+  const groups = desktopActivityGroups(
+    [task('a', 'photos:store', 'install'), task('b', 'media:store', 'update'), task('old', 'media:store', 'backup', 'succeeded')],
+    names,
+    null,
+    { id: 'apt', state: 'running' },
+    [{ id: 'review', target: 'v0.1.0-beta.110', operation: 'update' }],
+  );
+  expect(groups.map((group) => group.category)).toEqual(['system', 'compatibility', 'app:install', 'app:update']);
+  expect(groups.map((group) => group.count)).toEqual([1, 1, 1, 1]);
+  expect(groups.find((group) => group.category === 'app:install')?.title).toBe('Installing');
+});
 describe('dock activity describes actual active work', () => {
   test('completed history does not create an ongoing task', () => {
     expect(desktopActivity([task('old', 'photos:store', 'update', 'succeeded')], names, null, null)).toBeNull();

@@ -14,6 +14,7 @@ import { appearanceBootstrap } from './desktop/appearance-cache';
 import { sessionExitBootstrap } from './desktop/session-motion';
 import { coreUpdateIsPending } from './desktop/host-update-watch';
 import { claimPreloadRetry } from './components/startup/preload-retry';
+import { recoverNavigation } from './components/startup/navigation-recovery';
 import { startupViewportBootstrap } from './components/startup/startup-surface';
 
 export const links: Route.LinksFunction = () => [
@@ -23,10 +24,20 @@ export const links: Route.LinksFunction = () => [
   { rel: 'manifest', href: '/icons/site.webmanifest' },
 ];
 
+let navigationRecoveryChecked = false;
 export async function clientLoader({ request }: Route.ActionArgs) {
-  const user = await userContext();
-
   const url = new URL(request.url);
+  if (!navigationRecoveryChecked) {
+    navigationRecoveryChecked = true;
+    try {
+      const entry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+      const destination = recoverNavigation(window.sessionStorage, url.pathname + url.search + url.hash, Date.now(), entry?.type === 'reload');
+      if (destination) return redirect(destination);
+    } catch {
+      // Browser storage is optional; authentication still runs normally.
+    }
+  }
+  const user = await userContext();
   if (url.pathname !== '/') {
     return user;
   }
@@ -50,7 +61,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handlePreloadError = (event: Event) => {
       if (coreUpdateIsPending()) {
-        event.preventDefault();
+        // The update watcher owns the reload; import failures still reach their error boundary.
         return;
       }
       try {

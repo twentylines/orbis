@@ -1,7 +1,8 @@
+import { WallpaperLayer } from '@/desktop/wallpaper-layer';
 import { resolveWallpaperKey } from '@/desktop/wallpaper-presets';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
-import { readCachedAppearance, type CachedAppearance } from '@/desktop/appearance-cache';
+import { readCachedAppearance, appearanceCacheEvent, type CachedAppearance } from '@/desktop/appearance-cache';
 import { isLoggingOff } from '@/desktop/session-motion';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
 
@@ -57,6 +58,9 @@ export function StartupSurface({
   useLayoutEffect(() => {
     setCached(readCachedAppearance());
     setResumingLogout(isLoggingOff());
+    const changed = () => setCached(readCachedAppearance());
+    window.addEventListener(appearanceCacheEvent, changed);
+    return () => window.removeEventListener(appearanceCacheEvent, changed);
   }, []);
   const current = appearance ?? cached;
   const mode = useResolvedColourMode(current?.mode ?? 'light');
@@ -74,6 +78,7 @@ export function StartupSurface({
       data-desktop-preset={current?.preset}
       data-desktop-wallpaper={current ? resolveWallpaperKey(current) : undefined}
     >
+      {current ? <WallpaperLayer choice={current} /> : null}
       <div className="orbis-startup-scene" aria-hidden="true">
         <span />
         <span />

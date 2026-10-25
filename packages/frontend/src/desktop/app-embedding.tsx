@@ -1,24 +1,25 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { AppLaunchRequest } from './app-window-state';
-import type { AppEmbeddingCheck } from './app-opening';
+import { appEmbeddingBoundary, type AppEmbeddingCheck } from './app-opening';
 
 type BlockedApps = Record<string, { url: string; reason: string }>;
-const EmbeddingContext = createContext<{ blocked: BlockedApps; report: (urn: string, url: string, check: AppEmbeddingCheck) => void }>({
+const EmbeddingContext = createContext<{ blocked: BlockedApps; report: (urn: string, url: string) => void }>({
   blocked: {},
   report: () => undefined,
 });
 
 export function AppEmbeddingProvider({ children }: PropsWithChildren) {
   const [blocked, setBlocked] = useState<BlockedApps>({});
-  const report = useCallback((urn: string, url: string, check: AppEmbeddingCheck) => {
+  const report = useCallback((urn: string, url: string) => {
     setBlocked((previous) => {
       const current = previous[urn];
-      if (check.status === 'blocked') {
-        if (current?.url === url && current.reason === check.reason) return previous;
-        return { ...previous, [urn]: { url, reason: check.reason } };
+      const boundary = appEmbeddingBoundary(url, window.location.origin);
+      if (boundary) {
+        if (current?.url === url && current.reason === boundary.reason) return previous;
+        return { ...previous, [urn]: { url, reason: boundary.reason } };
       }
-      if (!current || current.url !== url || check.status === 'unknown') return previous;
+      if (!current || current.url !== url) return previous;
       const next = { ...previous };
       delete next[urn];
       return next;
@@ -61,7 +62,7 @@ export function useAppEmbedding(request: AppLaunchRequest, enabled: boolean) {
     },
   });
   useEffect(() => {
-    if (check.data) report(request.urn, url, check.data);
-  }, [check.data, request.urn, url, report]);
+    report(request.urn, url);
+  }, [request.urn, url, report]);
   return check;
 }

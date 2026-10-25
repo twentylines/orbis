@@ -25,6 +25,26 @@
   max-height: none;
   padding: 0;
 }
+.app-settings-preview {
+  padding: 4px;
+}
+.store-preview-content:has(.app-settings-preview) > .store-preview-close {
+  float: inline-end;
+  margin: 0 0 12px 12px;
+}
+.app-settings-preview > h2 {
+  margin: 0 52px 24px 0;
+  font-size: 1.25rem;
+  line-height: 1.45;
+}
+.app-settings-preview .app-settings-fields {
+  overflow: visible;
+  max-height: none;
+  padding: 0;
+}
+.app-settings-preview .app-settings-save {
+  padding: 24px 0 0;
+}
 .app-window-settings .app-settings-save {
   padding: 20px 0 0;
 }

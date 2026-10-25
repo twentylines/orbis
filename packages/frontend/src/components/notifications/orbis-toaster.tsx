@@ -13,7 +13,7 @@ export function OrbisToaster() {
     duration: 5000,
     error: { duration: 8000 },
     loading: { duration: Number.POSITIVE_INFINITY },
-    removeDelay: 240,
+    removeDelay: 320,
   });
   const reducedMotion = useReducedMotion();
   const tray = useRef<HTMLElement>(null);
@@ -23,23 +23,26 @@ export function OrbisToaster() {
     if (!hasVisibleNotifications) handlers.endPause();
   }, [hasVisibleNotifications, handlers.endPause]);
 
-  const dismiss = (id: string) => {
+  const restoreFocus = (id: string) => {
     const focused = document.activeElement;
+    if (!(focused instanceof HTMLElement) || focused.closest<HTMLElement>('[data-notification-id]')?.dataset.notificationId !== id) return;
     const visibleIds = new Set(toasts.filter((item) => item.visible).map((item) => item.id));
-    const buttons = Array.from(tray.current?.querySelectorAll<HTMLButtonElement>('.orbis-notification-dismiss') ?? []).filter((button) =>
-      visibleIds.has(button.closest<HTMLElement>('[data-notification-id]')?.dataset.notificationId ?? ''),
+    const buttons = Array.from(tray.current?.querySelectorAll<HTMLButtonElement>('.orbis-notification-dismiss') ?? []).filter(
+      (button) =>
+        visibleIds.has(button.closest<HTMLElement>('[data-notification-id]')?.dataset.notificationId ?? '') &&
+        button.closest<HTMLElement>('[data-notification-id]')?.dataset.notificationId !== id,
     );
-    const current = buttons.indexOf(focused as HTMLButtonElement);
+    const previous = previousFocus.current;
+    const target =
+      buttons[0] ??
+      (previous?.isConnected && !previous.closest('[inert],[hidden]')
+        ? previous
+        : document.querySelector<HTMLElement>('.desktop-dock-item[aria-current="page"], .desktop-search-trigger, .desktop-auth input, #root'));
+    target?.focus({ preventScroll: true });
+  };
+  const dismiss = (id: string) => {
+    restoreFocus(id);
     toast.dismiss(id);
-    if (current !== -1) {
-      const target =
-        buttons[current + 1] ??
-        buttons[current - 1] ??
-        (previousFocus.current?.isConnected
-          ? previousFocus.current
-          : document.querySelector<HTMLElement>('.desktop-search-trigger, .desktop-auth input'));
-      target?.focus({ preventScroll: true });
-    }
   };
   const onFocus = (event: FocusEvent<HTMLElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget)) {
@@ -62,6 +65,12 @@ export function OrbisToaster() {
         if (!tray.current?.contains(document.activeElement)) handlers.endPause();
       }}
       onFocusCapture={onFocus}
+      onClickCapture={(event) => {
+        if (!(event.target instanceof Element)) return;
+        const action = event.target.closest('.orbis-notification-action');
+        const id = action?.closest<HTMLElement>('[data-notification-id]')?.dataset.notificationId;
+        if (id) restoreFocus(id);
+      }}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget) && !event.currentTarget.matches(':hover')) handlers.endPause();
       }}
@@ -91,13 +100,12 @@ function NotificationCard({ item, reducedMotion, onDismiss }: { item: Toast; red
       data-notification-exiting={!present}
       {...item.ariaProps}
       aria-live={present ? item.ariaProps['aria-live'] : 'off'}
-      aria-hidden={present ? undefined : true}
       aria-atomic="true"
       inert={!present}
-      initial={reducedMotion ? false : { opacity: 0, x: 24, scale: 0.97 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 16, scale: 0.97 }}
-      transition={{ duration: reducedMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+      initial={reducedMotion ? false : { opacity: 0, x: '105%' }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: '105%' }}
+      transition={{ duration: reducedMotion ? 0 : 0.3, ease: [0.22, 1, 0.36, 1] }}
     >
       <span className="orbis-notification-icon" aria-hidden="true">
         {item.icon ?? <Icon size={20} stroke={1.9} />}

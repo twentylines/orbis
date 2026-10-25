@@ -113,7 +113,7 @@ describe('observing a single accepted Orbis update', () => {
       const watch = advanceCoreUpdate(accepted(), event);
       if (!watch) throw new Error('The accepted update must remain visible while restarting.');
       expect(watch?.phase).toBe('offline');
-      expect(watch?.message).toBe('Orbis is restarting. Reconnecting automatically.');
+      expect(watch?.message).toBe('The page will reload automatically when Orbis is ready.');
       expect(coreUpdateTitle(watch.phase)).toBe('Restarting Orbis');
       expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
     }

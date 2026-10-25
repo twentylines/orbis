@@ -16,7 +16,7 @@ import {
   IconTrash,
 } from '@tabler/icons-react';
 import type React from 'react';
-import { createElement } from 'react';
+import { createElement, useRef } from 'react';
 import { Button, type ButtonProps } from '@/components/ui/Button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { useDisclosure } from '@/lib/hooks/use-disclosure';
@@ -40,6 +40,8 @@ import { Tooltip } from 'react-tooltip';
 import { DropdownMenuSeparator } from '@/components/ui/DropdownMenu/DropdownMenu';
 import { useLocation, useNavigate } from 'react-router';
 import { useAppLauncher } from '@/desktop/app-launcher';
+import { useStorePreview } from '../../pages/store-preview-context';
+import { AppSettingsEditor } from '../../components/dialogs/update-settings-dialog/app-settings-editor';
 
 interface IProps {
   app?: AppDetails | null;
@@ -82,6 +84,14 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
   const { setOptimisticStatus } = useAppStatus();
   const location = useLocation();
   const navigate = useNavigate();
+  const preview = useStorePreview();
+  const openingInlineSettings = useRef(false);
+  const openSettings = () => {
+    if (preview?.openPanel && preview.closePanel) {
+      openingInlineSettings.current = true;
+      preview.openPanel(`${info.name} settings`, <AppSettingsEditor info={info} config={app?.config ?? {}} onSaved={preview.closePanel} />);
+    } else updateSettingsDisclosure.open();
+  };
 
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   const versionIsIgnored = app?.ignoredVersion === metadata.latestVersion;
@@ -137,7 +147,7 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
     </DropdownMenuItem>
   );
   const SettingsListItem = (
-    <DropdownMenuItem onClick={updateSettingsDisclosure.open} key="settings">
+    <DropdownMenuItem onClick={openSettings} key="settings">
       <IconSettings className="me-2" size={16} />
       {t('APP_ACTION_SETTINGS')}
     </DropdownMenuItem>
@@ -386,7 +396,15 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
                 {((updateAvailable && !versionIsIgnored) || app?.pendingRestart) && <span className="app-action-notice" aria-hidden="true" />}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(event) => {
+                if (!openingInlineSettings.current) return;
+                openingInlineSettings.current = false;
+                event.preventDefault();
+                requestAnimationFrame(() => document.querySelector<HTMLElement>('.app-settings-preview > h2')?.focus({ preventScroll: true }));
+              }}
+            >
               <DropdownMenuGroup>{listItems}</DropdownMenuGroup>
               {listItemsAdvanced.length > 0 ? <DropdownMenuSeparator /> : null}
               <DropdownMenuGroup>{listItemsAdvanced}</DropdownMenuGroup>

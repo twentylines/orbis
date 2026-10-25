@@ -49,7 +49,7 @@ export const coreUpdateTitle = (phase: CoreUpdateWatch['phase'], operation: Core
           ? 'Downgrading Orbis'
           : 'Updating Orbis';
 
-const restartingMessage = 'Orbis is restarting. Reconnecting automatically.';
+const restartingMessage = 'The page will reload automatically when Orbis is ready.';
 
 export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpdateEvent): CoreUpdateWatch | null {
   if (event.type === 'accepted') {

@@ -30,7 +30,7 @@ export const StoreTile: React.FC<{ app: AppInfoSimple; isLoading: boolean }> = (
       aria-controls={preview?.split ? 'store-app-preview' : undefined}
       aria-expanded={preview?.split ? preview.selectedUrn === app.urn : undefined}
     >
-      <div key={app.id} className="d-flex overflow-hidden align-items-center catalogue-tile">
+      <div key={app.id} className="d-flex overflow-hidden align-items-start catalogue-tile">
         <Skeleton loading={isLoading}>
           <AppLogo className="logo" urn={app.urn} placeholder={isLoading} />
         </Skeleton>
@@ -45,7 +45,7 @@ export const StoreTile: React.FC<{ app: AppInfoSimple; isLoading: boolean }> = (
             </h3>
             {isNew ? <div className="text-white badge me-1 bg-green">{t('APP_NEW')}</div> : null}
           </div>
-          <p className="text-muted mb-2">
+          <p className="text-muted mb-2 catalogue-tile-description" title={app.short_desc}>
             <Skeleton loading={isLoading}>
               <span>
                 <WrapWords text={app.short_desc} />

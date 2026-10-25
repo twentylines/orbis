@@ -433,8 +433,23 @@ body:has(.orbis-theme) .form-control::placeholder {
   opacity: 1;
 }
 body:has(.orbis-theme) :is(.form-control, .form-select):focus {
-  border-color: var(--desktop-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--desktop-accent) 14%, transparent);
+  border-color: var(--desktop-line);
+  box-shadow: none;
+}
+body:has(.orbis-theme) :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]), textarea, select) {
+  transition: background-color 160ms ease;
+}
+body:has(.orbis-theme)
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]), textarea, select):is(:focus, :focus-visible) {
+  outline: none;
+  box-shadow: none;
+  background-color: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
+}
+@media (forced-colors: active) {
+  body:has(.orbis-theme) :is(input, textarea, select):focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 body:has(.orbis-theme) .btn {
   --tblr-btn-box-shadow: none;

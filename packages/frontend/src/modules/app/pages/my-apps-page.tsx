@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { getInstalledAppsOptions, getLinksOptions } from '@/api-client/@tanstack/react-query.gen';
 import { EmptyPage } from '@/components/empty-page/empty-page';
 import type { CustomLink } from '@/types/app.types';
@@ -61,6 +61,32 @@ function LocalApps() {
   const addLinkDisclosure = useDisclosure();
   const batchActions = useDisclosure();
   const batchActionsId = useId();
+  const batchAnchor = useRef<HTMLDivElement>(null);
+  const batchPanel = useRef<HTMLDivElement>(null);
+  const batchOpen = batchActions.isOpen;
+  const closeBatch = batchActions.close;
+  useEffect(() => {
+    if (!batchOpen) return;
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !batchAnchor.current?.contains(event.target)) closeBatch();
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      closeBatch();
+      batchAnchor.current?.querySelector('button')?.focus();
+    };
+    const selected = (event: MouseEvent) => {
+      if (event.target instanceof Element && batchPanel.current?.contains(event.target) && event.target.closest('button')) closeBatch();
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', dismissOnEscape);
+    document.addEventListener('click', selected);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', dismissOnEscape);
+      document.removeEventListener('click', selected);
+    };
+  }, [batchOpen, closeBatch]);
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -134,13 +160,13 @@ function LocalApps() {
         <output className="app-library-results">
           {matching.length} of {installed.length} apps{matchingLinks.length ? ` · ${matchingLinks.length} links` : ''}
         </output>
-        <div className={clsx('desktop-batch-controls', { 'd-none': installed.length <= 1 })} data-open={batchActions.isOpen}>
+        <div ref={batchAnchor} className={clsx('desktop-batch-controls', { 'd-none': installed.length <= 1 })} data-open={batchActions.isOpen}>
           <button type="button" aria-expanded={batchActions.isOpen} aria-controls={batchActionsId} onClick={() => batchActions.toggle()}>
             <IconAdjustmentsHorizontal size={17} aria-hidden="true" />
             Manage Orbis apps
             <IconChevronDown size={15} aria-hidden="true" />
           </button>
-          <div id={batchActionsId} hidden={!batchActions.isOpen}>
+          <div ref={batchPanel} id={batchActionsId} hidden={!batchActions.isOpen}>
             <ActionBar className="app-library-batch-actions">
               <ActionBar.Left>
                 <StartAllButton availableUpdates={updatesAvailable} />

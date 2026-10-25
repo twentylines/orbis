@@ -32,6 +32,7 @@ import { AppSplitDivider } from './app-split-divider';
 import { dockFlightTargetLeft } from './dock-motion-geometry';
 import { desktopNavigation } from './navigation';
 import { AppEmbeddingProvider } from './app-embedding';
+import { appLaunchEvent } from './app-launch-event';
 import './app-launcher.css';
 
 const dockFocusTarget = () =>
@@ -115,12 +116,22 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     },
     [desktop, preferences.appLaunch, remember, trayButton, captureOpener],
   );
+  useEffect(() => {
+    const launch = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const request = event.detail as AppLaunchRequest | undefined;
+      if (request && typeof request.urn === 'string' && typeof request.name === 'string' && openApp(request)) event.preventDefault();
+    };
+    window.addEventListener(appLaunchEvent, launch);
+    return () => window.removeEventListener(appLaunchEvent, launch);
+  }, [openApp]);
   const restoreFocus = (urn: string, preferTray = false) => {
     const opener = openers.current.get(urn);
     requestAnimationFrame(() => {
       const surviving = document.querySelector<HTMLElement>('.orbis-app-launcher:not([hidden]):not([inert]) .app-launcher-close');
       const target =
         (preferTray ? trayButton(urn) : null) ??
+        document.querySelector<HTMLElement>('.app-split-picker input') ??
         surviving ??
         (opener?.isConnected && !opener.closest('[hidden],[inert]') ? opener : null) ??
         dockFocusTarget();
@@ -307,7 +318,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                         onSave={(bounds) => saveBounds(item.request.urn, bounds)}
                       />
                     ))}
-                    {windowsEnabled && split && !split.partner ? (
+                    {windowsEnabled && split && !split.partner && !workspace.pickerDismissed ? (
                       <AppSplitPicker
                         anchor={split.anchor}
                         side={split.side === 'left' ? 'right' : 'left'}

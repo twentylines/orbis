@@ -18,7 +18,7 @@ import { ServerRack, useCluster } from '@/desktop/cluster';
 import { useServerPath } from '@/desktop/cluster-data';
 import { ClusterOverview } from '@/desktop/cluster-views';
 import { useDesktopPreferences } from '@/desktop/preferences';
-import { statusNetwork, usagePercent } from '../components/system-readings';
+import { statusNetwork, usagePercent, cpuTemperature, sensorRefreshInterval } from '../components/system-readings';
 import { MonitorDisclosure, MonitorUsage } from '../components/monitor-usage';
 
 const monitorSections = [
@@ -118,26 +118,11 @@ function ServerMonitor() {
       return response.json();
     },
     enabled: visible,
-    refetchInterval: (query) => (query.state.data?.available === false && query.state.data.reason === 'Collecting sensor readings.' ? 2000 : 30_000),
+    refetchInterval: (query) => sensorRefreshInterval(query.state.data),
     refetchIntervalInBackground: false,
   });
-  const cpuSensor =
-    !sensors.isError && sensors.data?.available && !sensors.data.stale
-      ? (sensors.data.temperatures
-          .filter(
-            (sensor) =>
-              sensor.status === 'available' &&
-              sensor.celsius !== null &&
-              /(?:coretemp|k10temp|zenpower|cpu[_ -]?thermal|\bcpu\b|package id|\btctl\b|\btdie\b)/i.test(`${sensor.chip} ${sensor.label}`),
-          )
-          .sort((left, right) => {
-            const packageSensor = (label: string) => /package|\btctl\b|\btdie\b/i.test(label);
-            return (
-              Number(packageSensor(right.label)) - Number(packageSensor(left.label)) ||
-              (right.celsius ?? Number.NEGATIVE_INFINITY) - (left.celsius ?? Number.NEGATIVE_INFINITY)
-            );
-          })[0] ?? null)
-      : null;
+  const cpuSensor = cpuTemperature(sensors.data);
+  const delayedTemperature = sensors.isError || Boolean(sensors.data?.available && sensors.data.stale);
   const host = useHostReadings();
   const currentHost = host.data?.available && !host.data.stale && !host.isError ? host.data : null;
   const hostDisk = currentHost?.filesystems.find((disk) => disk.mount === '/');
@@ -276,17 +261,18 @@ function ServerMonitor() {
             <dd>{cpuSensor?.celsius !== null && cpuSensor?.celsius !== undefined ? `${cpuSensor.celsius.toFixed(1)} °C` : 'Unavailable'}</dd>
           </div>
         </dl>
-        <p>
+        <p className="monitor-temperature-description">
           {sensors.isPending
             ? 'Reading hardware sensors…'
             : sensors.isError || (sensors.data?.available && sensors.data.stale)
-              ? 'Hardware readings are delayed.'
+              ? `Last reading${sensors.data?.available ? ` at ${new Date(sensors.data.sampledAt).toLocaleTimeString()}` : ''}. Refreshing hardware sensors…`
               : sensors.data?.available === false
                 ? sensors.data.reason
                 : cpuSensor
-                  ? `${cpuSensor.label} · ${cpuSensor.chip}`
+                  ? `${/package id|tctl|tdie/i.test(cpuSensor.label) ? 'CPU package' : cpuSensor.label} · ${cpuSensor.chip}`
                   : 'No CPU temperature sensor is reported by this host.'}
         </p>
+        {delayedTemperature && cpuSensor ? <span className="monitor-temperature-age">Readings delayed</span> : null}
         <button type="button" className="monitor-detail-action" onClick={() => changeSection('sensors')}>
           Hardware details
         </button>

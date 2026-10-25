@@ -2,17 +2,19 @@ import type { AppLaunchPreferences, DesktopWindowBounds } from '@runtipi/common/
 import type { WindowArea } from './window-geometry';
 import { clampAppBounds } from './app-window-layout';
 
-export function appAddress(value?: string) {
+function appUrl(value?: string) {
   try {
     const url = new URL(value ?? '');
-    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : undefined;
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url : undefined;
   } catch {
     return undefined;
   }
 }
 
+export const appAddress = (value?: string) => appUrl(value)?.href;
+
 export function canEmbedApp(url: string, origin: string, desktop: boolean) {
-  return desktop && !(new URL(origin).protocol === 'https:' && new URL(url).protocol === 'http:') && new URL(url).origin !== new URL(origin).origin;
+  return desktop && !appEmbeddingBoundary(url, origin);
 }
 
 export function appOpeningMode(preferences: AppLaunchPreferences, key: string, url: string, origin: string, desktop: boolean) {
@@ -39,8 +41,16 @@ export function restoreAppBounds(area: WindowArea, floating: DesktopWindowBounds
 
 export type AppEmbeddingCheck = { status: 'blocked' | 'not-blocked-by-headers' | 'unknown'; reason: string };
 
-export function appEmbeddingWarning(check?: AppEmbeddingCheck, knownBlocked = false) {
-  if (check?.status === 'blocked' || (knownBlocked && check?.status === 'unknown')) {
+export function appEmbeddingBoundary(url: string | undefined, origin: string): AppEmbeddingCheck | undefined {
+  const target = appUrl(url);
+  const source = appUrl(origin);
+  if (!target || !source) return { status: 'blocked', reason: 'invalid-address' };
+  if (source.protocol === 'https:' && target.protocol === 'http:') return { status: 'blocked', reason: 'mixed-content' };
+  if (target.origin === source.origin) return { status: 'blocked', reason: 'same-origin' };
+}
+
+export function appEmbeddingWarning(check?: AppEmbeddingCheck) {
+  if (check?.status === 'blocked') {
     if (check?.reason === 'mixed-content')
       return {
         blocked: true,
@@ -53,18 +63,25 @@ export function appEmbeddingWarning(check?: AppEmbeddingCheck, knownBlocked = fa
         title: 'This address needs a browser tab',
         description: 'Apps at the same address as Orbis cannot run safely inside an Orbis window.',
       };
+    if (check?.reason === 'invalid-address')
+      return {
+        blocked: true,
+        title: 'An app address is needed',
+        description: 'Set a complete HTTP or HTTPS app address without embedded credentials before opening its window.',
+      };
     return {
-      blocked: true,
-      title: 'This app needs a browser tab',
-      description: 'This app blocks embedded windows. Use a browser tab, or allow Orbis in its embedding settings if available.',
+      blocked: false,
+      title: 'Embedding may be restricted',
+      description:
+        'The server check found an embedding restriction. Your signed-in browser may receive a different page. Keep using the window if it works, or open a browser tab.',
     };
   }
   if (check?.status === 'unknown' && check.reason === 'unreachable')
     return {
       blocked: false,
-      title: 'The app did not respond',
+      title: 'Server check unavailable',
       description:
-        'Orbis could not reach this app during its compatibility check. It may still be reachable from your browser. Try its window or open a new tab.',
+        'The server could not complete its compatibility check. This does not mean the app failed in your browser. Keep using the window if it works, or open a browser tab.',
     };
   return undefined;
 }

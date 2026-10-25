@@ -78,12 +78,63 @@ body:has(.orbis-theme) .app-library-controls button:focus-visible {
   margin-bottom: 16px;
 }
 .app-library-meta > .desktop-batch-controls {
+  position: relative;
   min-width: 0;
   max-width: 100%;
   margin: 0;
 }
-.app-library-meta > .desktop-batch-controls[data-open="true"] {
-  flex-basis: 100%;
+.app-library-meta > .desktop-batch-controls > div:not([hidden]) {
+  position: absolute;
+  z-index: 35;
+  inset-block-start: calc(100% + 10px);
+  inset-inline-end: 0;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 64px));
+  padding: 10px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  background: var(--desktop-surface);
+  backdrop-filter: var(--desktop-glass-filter);
+  -webkit-backdrop-filter: var(--desktop-glass-filter);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--desktop-chrome) 25%, transparent);
+  transform-origin: top right;
+  animation: orbis-batch-open 240ms cubic-bezier(0.2, 0.76, 0.22, 1) both;
+}
+.desktop-batch-controls .app-library-batch-actions {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.desktop-batch-controls .app-library-batch-actions .action-bar-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.desktop-batch-controls .app-library-batch-actions .action-bar-section,
+.desktop-batch-controls .app-library-batch-actions .action-bar-section > button {
+  width: 100%;
+}
+.desktop-batch-controls .app-library-batch-actions .action-bar-section > button {
+  justify-content: flex-start;
+  gap: 10px;
+  padding-inline: 14px;
+}
+@keyframes orbis-batch-open {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) rotate(-4deg) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-library-meta > .desktop-batch-controls > div:not([hidden]) {
+    animation: none;
+  }
 }
 .app-library-results {
   display: block;

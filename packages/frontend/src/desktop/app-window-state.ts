@@ -19,7 +19,7 @@ export type AppWindow = {
   status: 'visible' | 'minimizing' | 'minimized' | 'closing';
   automatic?: boolean;
 };
-type Workspace = { active?: string; ratio?: number; split?: { anchor: string; side: 'left' | 'right'; partner?: string } };
+type Workspace = { active?: string; ratio?: number; pickerDismissed?: boolean; split?: { anchor: string; side: 'left' | 'right'; partner?: string } };
 export type AppWindowState = { windows: AppWindow[]; section?: string; workspaces?: Record<string, Workspace> };
 type Action =
   | { type: 'open'; request: AppLaunchRequest }
@@ -38,14 +38,18 @@ export function appWindowReducer(state: AppWindowState, action: Action): AppWind
   const updateWorkspace = (next: Workspace) => ({ ...state.workspaces, [section]: next });
   const clearReference = (urn: string) =>
     Object.fromEntries(
-      Object.entries(state.workspaces ?? {}).map(([key, value]) => [
-        key,
-        {
-          ...value,
-          active: value.active === urn ? undefined : value.active,
-          split: value.split?.anchor === urn || value.split?.partner === urn ? undefined : value.split,
-        },
-      ]),
+      Object.entries(state.workspaces ?? {}).map(([key, value]) => {
+        let split = value.split;
+        if (split?.anchor === urn || split?.partner === urn) {
+          const survivor = split.anchor === urn ? split.partner : split.anchor;
+          const visible = state.windows.some((item) => item.request.urn === survivor && item.status === 'visible');
+          split =
+            survivor && visible
+              ? { anchor: survivor, side: split.anchor === urn ? (split.side === 'left' ? 'right' : 'left') : split.side }
+              : undefined;
+        }
+        return [key, { ...value, active: value.active === urn ? split?.anchor : value.active, split }];
+      }),
     );
   switch (action.type) {
     case 'open': {
@@ -79,7 +83,7 @@ export function appWindowReducer(state: AppWindowState, action: Action): AppWind
       const split = action.mode === 'left' || action.mode === 'right' ? { anchor: action.urn, side: action.mode } : undefined;
       return {
         ...state,
-        workspaces: updateWorkspace({ active: action.urn, split, ratio: split ? 0.5 : workspace.ratio }),
+        workspaces: updateWorkspace({ active: action.urn, split, pickerDismissed: false, ratio: split ? 0.5 : workspace.ratio }),
         windows: state.windows.map((item) =>
           item.request.urn === action.urn ? { ...item, mode: action.mode, status: 'visible', automatic: false } : item,
         ),
@@ -100,7 +104,12 @@ export function appWindowReducer(state: AppWindowState, action: Action): AppWind
       const windows = state.windows.map((item) => (item === existing ? partner : item));
       return {
         ...state,
-        workspaces: updateWorkspace({ ...workspace, active: action.request.urn, split: { ...split, partner: action.request.urn } }),
+        workspaces: updateWorkspace({
+          ...workspace,
+          active: action.request.urn,
+          pickerDismissed: false,
+          split: { ...split, partner: action.request.urn },
+        }),
         windows: existing ? windows : [...windows, partner],
       };
     }
@@ -110,7 +119,7 @@ export function appWindowReducer(state: AppWindowState, action: Action): AppWind
         windows: state.windows.filter(({ status }) => status !== 'closing').map((item) => ({ ...item, status: 'minimized', automatic: false })),
       };
     case 'dismiss-picker':
-      return { ...state, workspaces: updateWorkspace({ ...workspace, split: undefined }) };
+      return { ...state, workspaces: updateWorkspace({ ...workspace, pickerDismissed: true }) };
     case 'closed':
       if (!state.windows.some((item) => item.request.urn === action.urn && item.status === 'closing')) return state;
       return { ...state, workspaces: clearReference(action.urn), windows: state.windows.filter(({ request }) => request.urn !== action.urn) };
@@ -127,7 +136,7 @@ export function appWindowReducer(state: AppWindowState, action: Action): AppWind
     case 'close':
       return {
         ...state,
-        workspaces: clearReference(action.urn),
+        workspaces: action.type === 'close' ? state.workspaces : clearReference(action.urn),
         windows: state.windows.map((item) =>
           item.request.urn === action.urn ? { ...item, status: action.type === 'minimize' ? 'minimizing' : 'closing', automatic: false } : item,
         ),

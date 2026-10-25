@@ -29,13 +29,39 @@ test('opening, minimizing, restoring and crossing the desktop breakpoint retain 
   expect(open(compact).windows[0]?.request).toBe(first);
 });
 
-test('removing a split partner ends the split without closing or replacing the surviving app', () => {
+test('removing a split partner offers the empty half without replacing the surviving app', () => {
   const pair = reduce(reduce(open({ windows: [] }), { type: 'place', urn: first.urn, mode: 'right' }), { type: 'pair', request: second });
   const removed = reduce(pair, { type: 'remove', urn: second.urn });
-  expect(appWorkspace(removed).split).toBeUndefined();
+  expect(appWorkspace(removed).split).toEqual({ anchor: first.urn, side: 'right' });
   expect(removed.windows).toHaveLength(1);
   expect(removed.windows[0]?.request).toBe(first);
   expect(removed.windows[0]?.status).toBe('visible');
+});
+
+test('closing either half reopens the picker after the close animation, retaining its ratio', () => {
+  for (const closing of [first, second]) {
+    let state = reduce(reduce(open({ windows: [] }), { type: 'place', urn: first.urn, mode: 'left' }), { type: 'pair', request: second });
+    state = reduce(state, { type: 'ratio', value: 0.6 });
+    const other = closing === first ? second : first;
+    const pending = reduce(state, { type: 'close', urn: closing.urn });
+    expect(appWorkspace(pending).split?.partner).toBe(second.urn);
+    const complete = reduce(pending, { type: 'closed', urn: closing.urn });
+    expect(appWorkspace(complete).split).toEqual({ anchor: other.urn, side: closing === first ? 'right' : 'left' });
+    expect(appWorkspace(complete).ratio).toBe(0.6);
+    expect(complete.windows[0]?.request).toBe(other);
+  }
+});
+
+test('explicitly dismissing the picker survives closing a partner; snapping again reopens it', () => {
+  const snapped = reduce(open({ windows: [] }), { type: 'place', urn: first.urn, mode: 'right' });
+  let state = reduce(snapped, { type: 'dismiss-picker' });
+  expect(appWorkspace(state).split).toEqual({ anchor: first.urn, side: 'right' });
+  expect(appWorkspace(state).pickerDismissed).toBe(true);
+  state = open(state, second);
+  state = reduce(state, { type: 'remove', urn: second.urn });
+  expect(appWorkspace(state).pickerDismissed).toBe(true);
+  state = reduce(state, { type: 'place', urn: first.urn, mode: 'left' });
+  expect(appWorkspace(state).pickerDismissed).toBe(false);
 });
 
 test('reusing an already opened app as a split partner preserves its document and stable DOM order', () => {

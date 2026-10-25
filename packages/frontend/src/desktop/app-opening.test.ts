@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { appLaunchSchema, defaultAppLaunch } from '@runtipi/common/schemas/app-launch';
-import { appAddress, appEmbeddingWarning, appOpeningMode, initialAppBounds, primaryAppAddress, restoreAppBounds } from './app-opening';
+import {
+  appAddress,
+  appEmbeddingBoundary,
+  appEmbeddingWarning,
+  appOpeningMode,
+  initialAppBounds,
+  primaryAppAddress,
+  restoreAppBounds,
+} from './app-opening';
 
 describe('actual app opening', () => {
   test('rejects executable addresses and embedded credentials', () => {
@@ -70,11 +78,11 @@ describe('actual app opening', () => {
 });
 
 describe('general app window compatibility warnings', () => {
-  test('warns for a failed app connection without falsely declaring a framing block', () => {
+  test('distinguishes a server probe failure from the browser app connection', () => {
     const warning = appEmbeddingWarning({ status: 'unknown', reason: 'unreachable' });
     expect(warning?.blocked).toBe(false);
-    expect(warning?.title).toBe('The app did not respond');
-    expect(warning?.description).toContain('may still be reachable from your browser');
+    expect(warning?.title).toBe('Server check unavailable');
+    expect(warning?.description).toContain('does not mean the app failed in your browser');
   });
   test('allows ordinary redirects, sign-in, unsupported HEAD and failed checks to open normally', () => {
     for (const reason of [
@@ -90,12 +98,22 @@ describe('general app window compatibility warnings', () => {
     expect(appEmbeddingWarning({ status: 'not-blocked-by-headers', reason: 'no-blocking-header' })).toBeUndefined();
     expect(appEmbeddingWarning()).toBeUndefined();
   });
-  test('gives accurate browser-boundary guidance and retains proven blocks across ambiguous rechecks', () => {
+  test('treats anonymous server header restrictions as advisory for the signed-in browser', () => {
     for (const reason of ['x-frame-options-deny', 'x-frame-options-sameorigin', 'csp-frame-ancestors'])
-      expect(appEmbeddingWarning({ status: 'blocked', reason })?.blocked).toBe(true);
+      expect(appEmbeddingWarning({ status: 'blocked', reason })).toMatchObject({ blocked: false, title: 'Embedding may be restricted' });
+  });
+  test('enforces browser-local safety independently of anonymous or stale probe results', () => {
+    expect(appEmbeddingBoundary('http://app.local', 'https://orbis.local')).toEqual({ status: 'blocked', reason: 'mixed-content' });
+    expect(appEmbeddingBoundary('https://orbis.local/app', 'https://orbis.local')).toEqual({ status: 'blocked', reason: 'same-origin' });
+    for (const url of [undefined, 'javascript:alert(1)', 'https://user:secret@app.local'])
+      expect(appEmbeddingBoundary(url, 'https://orbis.local')).toEqual({ status: 'blocked', reason: 'invalid-address' });
+    expect(appEmbeddingBoundary('https://app.local', 'https://orbis.local')).toBeUndefined();
     expect(appEmbeddingWarning({ status: 'blocked', reason: 'mixed-content' })?.description).toContain('HTTP');
     expect(appEmbeddingWarning({ status: 'blocked', reason: 'same-origin' })?.description).toContain('same address');
-    expect(appEmbeddingWarning({ status: 'unknown', reason: 'unreachable' }, true)?.blocked).toBe(true);
-    expect(appEmbeddingWarning({ status: 'not-blocked-by-headers', reason: 'no-blocking-header' }, true)).toBeUndefined();
+    expect(appEmbeddingWarning({ status: 'blocked', reason: 'invalid-address' })?.blocked).toBe(true);
+    for (const reason of ['unreachable', 'check-unavailable', 'redirect', 'authentication-required']) {
+      expect(appEmbeddingWarning({ status: 'unknown', reason })?.blocked ?? false).toBe(false);
+      expect(appEmbeddingBoundary('https://app.local', 'https://orbis.local')).toBeUndefined();
+    }
   });
 });

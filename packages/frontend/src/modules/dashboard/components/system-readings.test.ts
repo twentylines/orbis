@@ -1,8 +1,25 @@
 /// <reference types="bun" />
 import { expect, test } from 'bun:test';
-import type { HostTelemetry } from '@runtipi/common/schemas';
+import type { HostTelemetry, HostSensors } from '@runtipi/common/schemas';
 import type { Telemetry } from '@/desktop/telemetry';
-import { statusNetwork, usagePercent } from './system-readings';
+import { statusNetwork, usagePercent, cpuTemperature, sensorRefreshInterval } from './system-readings';
+
+test('a delayed sensor sample retains the valid package temperature and retries promptly', () => {
+  const data = {
+    available: true,
+    stale: true,
+    temperatures: [
+      { label: 'Core 0', chip: 'coretemp', status: 'available', celsius: 60 },
+      { label: 'Package id 0', chip: 'coretemp', status: 'available', celsius: 56 },
+      { label: 'Composite', chip: 'nvme', status: 'available', celsius: 74 },
+    ],
+  } as HostSensors;
+  expect(cpuTemperature(data)?.celsius).toBe(56);
+  expect(sensorRefreshInterval(data)).toBe(2000);
+  expect(sensorRefreshInterval({ ...data, stale: false } as HostSensors)).toBe(30_000);
+  expect(sensorRefreshInterval({ available: false, reason: 'Collecting sensor readings.' })).toBe(2000);
+  expect(cpuTemperature({ available: false, reason: 'Not supported' })).toBeNull();
+});
 const network = (name: string, rx: number, speed: number | null = 1000) => ({
   interface: name,
   state: 'up',

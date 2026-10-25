@@ -3,6 +3,29 @@
   min-width: 0;
   gap: 4px;
 }
+.app-tile-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.5;
+  min-height: 3em;
+}
+.app-tile-health {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 12px;
+  margin-top: 5px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.app-tile-docker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--desktop-muted);
+}
 .app-tile-name {
   display: block;
   min-width: 0;

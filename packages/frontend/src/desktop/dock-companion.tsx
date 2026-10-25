@@ -8,12 +8,16 @@ export function DockCompanion({
   visible,
   side,
   retainOnExit = false,
+  fluidWidth = false,
+  motionStart,
   duration = dockMotionDuration,
   children,
 }: {
   visible: boolean;
   side: 'left' | 'right';
   retainOnExit?: boolean;
+  fluidWidth?: boolean;
+  motionStart?: number | null;
   duration?: number;
   children: ReactNode;
 }) {
@@ -36,11 +40,15 @@ export function DockCompanion({
     if (!present || !outer || !inner) return;
     const margin = side === 'right' ? 'marginLeft' : 'marginRight';
     const move = () => {
-      const width = Number.parseFloat(getComputedStyle(inner).width);
+      const rail = fluidWidth ? outer.closest<HTMLElement>('.desktop-activity-rail') : null;
+      const count = Math.max(1, Number(rail?.dataset.activityCount) || 1);
+      const width = rail
+        ? Math.max(64, (rail.getBoundingClientRect().width - (count - 1) * 12) / count)
+        : Number.parseFloat(getComputedStyle(inner).width);
       const current = Number.parseFloat(getComputedStyle(outer).width);
       const primary = outer.closest('.desktop-dock')?.querySelector('.desktop-dock-main');
       const mainHeight = primary ? Number.parseFloat(getComputedStyle(primary).height) : 78;
-      const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-trigger');
+      const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-rail, .desktop-activity-trigger');
       const controlStyle = controls ? getComputedStyle(controls) : null;
       const padding = controlStyle
         ? ['padding-top', 'padding-bottom', 'border-top-width', 'border-bottom-width'].reduce(
@@ -67,7 +75,7 @@ export function DockCompanion({
       )
         return;
       if (!initialized.current) {
-        if (controls) controls.style.clipPath = side === 'right' ? `inset(0 0 0 ${width}px)` : `inset(0 ${width}px 0 0)`;
+        if (controls && !fluidWidth) controls.style.clipPath = side === 'right' ? `inset(0 0 0 ${width}px)` : `inset(0 ${width}px 0 0)`;
       }
       initialized.current = true;
       const run = ++generation.current;
@@ -102,16 +110,18 @@ export function DockCompanion({
       );
       const travel = inner.animate(
         [
-          { transform, height: `${currentHeight}px` },
-          { transform: targetTransform, height: `${targetHeight}px` },
+          { transform, height: `${currentHeight}px`, ...(fluidWidth ? { width: `${current}px` } : {}) },
+          { transform: targetTransform, height: `${targetHeight}px`, ...(fluidWidth ? { width: `${targetWidth}px` } : {}) },
         ],
         options,
       );
       sizing.id = 'orbis-dock-pill-size';
       travel.id = 'orbis-dock-pill-travel';
       motions.current = [sizing, travel];
-      const started = document.timeline.currentTime;
+      const now = document.timeline.currentTime;
+      const started = typeof now === 'number' && motionStart != null && now - motionStart < duration ? motionStart : now;
       if (started !== null) for (const animation of motions.current) animation.startTime = started;
+      if (outer.closest('.desktop-dock')?.hasAttribute('data-pointer-held')) for (const animation of motions.current) animation.pause();
       outer.closest('.desktop-dock')?.dispatchEvent(new Event(shapeEvent));
       void Promise.all(motions.current.map((animation) => animation.finished)).then(finish, () => undefined);
     };
@@ -129,7 +139,7 @@ export function DockCompanion({
       observer.disconnect();
       cancelAnimationFrame(resizeFrame);
     };
-  }, [present, visible, side, duration]);
+  }, [present, visible, side, duration, fluidWidth, motionStart]);
 
   useLayoutEffect(
     () => () => {
@@ -176,6 +186,23 @@ export function DockGlass() {
     if (!element || !dock) return;
     let frame = 0;
     let disposed = false;
+    const pillMotions = () =>
+      dock.getAnimations({ subtree: true }).filter((animation) => ['orbis-dock-pill-size', 'orbis-dock-pill-travel'].includes(animation.id));
+    const holdTargets = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      dock.setAttribute('data-pointer-held', '');
+      for (const animation of pillMotions()) if (animation.playState === 'running') animation.pause();
+    };
+    const releaseTargets = () => {
+      if (!dock.hasAttribute('data-pointer-held')) return;
+      dock.removeAttribute('data-pointer-held');
+      for (const animation of pillMotions()) if (animation.playState === 'paused') animation.play();
+      schedule();
+    };
+    dock.addEventListener('pointerdown', holdTargets, true);
+    window.addEventListener('pointerup', releaseTargets, true);
+    window.addEventListener('pointercancel', releaseTargets, true);
+    window.addEventListener('blur', releaseTargets);
     const draw = () => {
       frame = 0;
       const origin = dock.getBoundingClientRect();
@@ -199,13 +226,30 @@ export function DockGlass() {
       const primary = dock.querySelector<HTMLElement>('.desktop-dock-main');
       if (!primary) return;
       const main = read(primary);
+      const trayWidth = dock.querySelector<HTMLElement>('.orbis-app-tray')?.offsetWidth ?? 0;
+      const activitySpace = `${Math.min(400, Math.max(64, (Number.parseFloat(style.maxWidth) || innerWidth - 48) - main.width - trayWidth - 24))}px`;
+      if (dock.style.getPropertyValue('--orbis-activity-space') !== activitySpace) dock.style.setProperty('--orbis-activity-space', activitySpace);
       let path = rounded(main);
       for (const inner of dock.querySelectorAll<HTMLElement>('.desktop-dock-companion-content')) {
+        if (inner.closest('.desktop-activity-rail')) continue;
         const box = read(inner);
         const side = inner.parentElement?.dataset.side;
-        path += rounded(box) + (side === 'left' ? bridge(box, main) : '');
+        const rail = inner.querySelector<HTMLElement>('.desktop-activity-rail');
+        if (rail) {
+          const clip = read(rail);
+          const shapes: Box[] = [];
+          for (const trigger of rail.querySelectorAll('.desktop-activity-trigger')) {
+            const shape = read(trigger);
+            shape.left = Math.max(shape.left, clip.left);
+            shape.right = Math.min(shape.right, clip.right);
+            shape.width = Math.max(0, shape.right - shape.left);
+            if (shape.width > 0) shapes.push(shape);
+          }
+          shapes.sort((a, b) => a.left - b.left);
+          for (const [index, shape] of shapes.entries()) path += rounded(shape) + bridge(shape, shapes[index + 1] ?? main);
+        } else path += rounded(box) + (side === 'left' ? bridge(box, main) : '');
         const covered = side === 'right' ? Math.max(0, main.right - box.left) : Math.max(0, box.right - main.left);
-        const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-trigger');
+        const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-rail, .desktop-activity-trigger');
         if (controls) {
           const clip = covered > 0.01 ? (side === 'right' ? `inset(0 0 0 ${covered}px)` : `inset(0 ${covered}px 0 0)`) : 'none';
           if (controls.style.clipPath !== clip) controls.style.clipPath = clip;
@@ -215,7 +259,7 @@ export function DockGlass() {
         element.style.clipPath = `path('${path}')`;
         element.dataset.shape = path;
       }
-      if (dock.querySelector('[data-pill-motion]')) schedule();
+      if (!dock.hasAttribute('data-pointer-held') && dock.querySelector('[data-pill-motion]')) schedule();
     };
     const schedule = () => {
       if (!frame && !disposed) frame = requestAnimationFrame(draw);
@@ -225,6 +269,7 @@ export function DockGlass() {
       draw();
     };
     dock.addEventListener(shapeEvent, redraw);
+    dock.addEventListener('scroll', schedule, true);
     const sizes = new ResizeObserver(schedule);
     const observe = () => {
       sizes.disconnect();
@@ -241,7 +286,13 @@ export function DockGlass() {
       cancelAnimationFrame(frame);
       sizes.disconnect();
       changes.disconnect();
+      releaseTargets();
+      dock.removeEventListener('pointerdown', holdTargets, true);
+      window.removeEventListener('pointerup', releaseTargets, true);
+      window.removeEventListener('pointercancel', releaseTargets, true);
+      window.removeEventListener('blur', releaseTargets);
       dock.removeEventListener(shapeEvent, redraw);
+      dock.removeEventListener('scroll', schedule, true);
     };
   }, []);
   return <div ref={glass} className="desktop-dock-glass" aria-hidden="true" />;

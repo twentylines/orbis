@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 import { expect, test } from 'bun:test';
 import type { ContainerReading, ContainerTelemetry } from '@runtipi/common/schemas';
-import { appDockerHealth, appHealthSnapshot, sameAppHealth } from './container-health';
+import { appDockerHealth, appHealthSnapshot, sameAppHealth, containerHealthReason, displayedAppStatus } from './container-health';
 const container = (health: ContainerReading['health'], state = 'running') => ({ health, state }) as ContainerReading;
 test('shares per-app health work across tiles without retaining old CPU samples or masking health changes', () => {
   const sample = {
@@ -19,6 +19,30 @@ test('shares per-app health work across tiles without retaining old CPU samples 
   const failed = { ...sample, containers: [{ ...sample.containers[0], health: 'unhealthy' }] } as ContainerTelemetry;
   expect(sameAppHealth(first, appHealthSnapshot(failed, 'one:store'))).toBe(false);
   expect(appHealthSnapshot(sample, 'one:store', true).label).toBe('Docker unavailable');
+});
+
+test('exited containers cannot inherit stale starting or unhealthy check states', () => {
+  for (const health of ['healthy', 'starting', 'unhealthy', 'unknown', 'not-configured'] as const) {
+    expect(appDockerHealth([container(health, 'exited')]).state).toBe('stopped');
+    expect(appDockerHealth([container('healthy'), container(health, 'exited')]).state).toBe('partial');
+  }
+  expect(appDockerHealth([container('starting')]).label).toBe('Readiness pending');
+  expect(appDockerHealth([container('starting', 'restarting')]).label).toBe('Restarting');
+});
+
+test('live process state overrides an obsolete running app record without confusing readiness with lifecycle', () => {
+  expect(displayedAppStatus('running', appDockerHealth([container('not-configured', 'restarting')]))).toBe('restarting');
+  expect(displayedAppStatus('running', appDockerHealth([container('unhealthy', 'exited')]))).toBe('stopped');
+  expect(displayedAppStatus('running', appDockerHealth([container('starting')]))).toBe('running');
+  expect(displayedAppStatus('installing', appDockerHealth([container('healthy')]))).toBe('installing');
+});
+
+test('health explanations use safe structured evidence and distinguish readiness from process state', () => {
+  const item = { ...container('unhealthy'), readiness: { failingStreak: 3, lastCheckExitCode: 1, intervalSeconds: 30 } } as ContainerReading;
+  expect(containerHealthReason(item)).toContain('3 consecutive failed checks');
+  expect(containerHealthReason(item)).toContain('last exit code 1');
+  expect(containerHealthReason(container('starting'))).toContain('process is running');
+  expect(containerHealthReason(container('unhealthy', 'exited'))).toBe('Container state: exited.');
 });
 test('counts configured checks without treating unchecked auxiliary containers as failed coverage', () => {
   const result = appDockerHealth([container('healthy'), ...Array.from({ length: 4 }, () => container('not-configured'))]);

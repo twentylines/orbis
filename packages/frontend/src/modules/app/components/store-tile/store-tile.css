@@ -22,3 +22,11 @@
   min-width: 0;
   max-width: 100%;
 }
+.catalogue-tile-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: 3em;
+  overflow: hidden;
+  line-height: 1.5;
+}

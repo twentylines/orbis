@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import type { AppPreviewHistory } from './store-preview-navigation';
 
 export type StorePreview = {
@@ -8,6 +8,8 @@ export type StorePreview = {
   previewId: string;
   close: () => void;
   nextHistory: () => AppPreviewHistory;
+  openPanel?: (title: string, content: ReactNode) => void;
+  closePanel?: () => void;
 };
 export const StorePreviewContext = createContext<StorePreview | null>(null);
 export const useStorePreview = () => useContext(StorePreviewContext);

@@ -15,6 +15,7 @@ import { desktopNavigation as navigation } from '@/desktop/navigation';
 import { useSectionMotion } from '@/desktop/section-motion';
 import { RouteSurface } from '@/desktop/route-surface';
 import { DelayedRouteLoading } from '@/desktop/route-loading';
+import { clearNavigation, rememberNavigation } from '@/components/startup/navigation-recovery';
 import { AppLauncherProvider, MinimizedApps } from '@/desktop/app-launcher';
 import { HostUpdateProvider, useHostUpdateWatch } from '@/desktop/host-update-watch';
 import { coreWatchIsActive, coreUpdateTitle } from '@/desktop/core-update-state';
@@ -53,6 +54,21 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const location = useLocation();
   const matches = useMatches();
   const routeNavigation = useNavigation();
+  const pendingDestination = routeNavigation.location;
+  useLayoutEffect(() => {
+    try {
+      if (pendingDestination && (!routeNavigation.formMethod || routeNavigation.formMethod.toLowerCase() === 'get')) {
+        rememberNavigation(
+          window.sessionStorage,
+          location.pathname + location.search + location.hash,
+          pendingDestination.pathname + pendingDestination.search + pendingDestination.hash,
+          Date.now(),
+        );
+      } else if (routeNavigation.state === 'idle') clearNavigation(window.sessionStorage);
+    } catch {
+      // The workspace remains usable when this browser disables session storage.
+    }
+  }, [pendingDestination, routeNavigation.state, routeNavigation.formMethod, location.pathname, location.search, location.hash]);
   const [loggingOff, setLoggingOff] = useState(false);
   const leaving = useRef(false);
   const desktop = useRef<HTMLDivElement>(null);
@@ -108,7 +124,16 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     };
   }, [requiresOnboarding]);
   const hasPageHeading = matches.some((match) =>
-    ['app-details', 'app-details-store', 'custom-app', 'cluster-app-preview', 'app-update', 'app-store-app-update'].includes(match.id),
+    [
+      'app-details',
+      'app-details-store',
+      'custom-app',
+      'cluster-app-preview',
+      'app-update',
+      'app-store-app-update',
+      'app-edit',
+      'app-edit-custom',
+    ].includes(match.id),
   );
   useSectionMotion(!requiresOnboarding);
   const handleLogout = async () => {
@@ -141,7 +166,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const current = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
   const pendingPath = routeNavigation.location?.pathname;
   const pendingSection = pendingPath ? navigation.find((item) => pendingPath === item.path || pendingPath.startsWith(`${item.path}/`)) : undefined;
-  const dockSection = pendingSection ?? current;
+  const dockSection = current;
   const isTool = current && current.path !== '/dashboard';
   const sectionLabel = current?.label ?? 'Application';
   const routeContent = <DesktopRouteContent label={sectionLabel}>{children}</DesktopRouteContent>;

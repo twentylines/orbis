@@ -563,7 +563,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
         {unhealthy > 0 ? (
           <p>
             {unhealthy} application{unhealthy === 1 ? '' : 's'} with an unhealthy Docker check.{' '}
-            <Link to="/monitor#containers">Inspect containers</Link>
+            <Link to="/monitor?section=usage&health=attention#containers">Inspect containers</Link>
           </p>
         ) : null}
         {apps.data ? (

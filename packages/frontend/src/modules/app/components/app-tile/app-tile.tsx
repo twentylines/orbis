@@ -3,7 +3,7 @@ import { WrapWords } from '@/components/wrap-words/wrap-words';
 import type { AppInfo, AppStatus as AppStatusType } from '@/types/app.types';
 import { IconAlertCircle, IconDownload, IconRotateClockwise, IconSparkles } from '@tabler/icons-react';
 import { memo } from 'react';
-import { appHealthSnapshot, sameAppHealth } from '@/desktop/container-health';
+import { appHealthSnapshot, sameAppHealth, displayedAppStatus } from '@/desktop/container-health';
 import { useTranslation } from 'react-i18next';
 import { AppStatus } from '../app-status/app-status';
 import './app-tile.css';
@@ -26,6 +26,7 @@ type AppTileProps = {
 export const AppTile = memo(
   function AppTile({ info, status, updateAvailable, pendingRestart, recentlyInstalled, opensInTab, docker }: AppTileProps) {
     const { t } = useTranslation();
+    const health = appHealthSnapshot(docker?.data, info.urn, docker?.stale);
 
     const notice = pendingRestart
       ? { Icon: IconRotateClockwise, label: t('MY_APPS_PENDING_RESTART') }
@@ -47,14 +48,20 @@ export const AppTile = memo(
                 <WrapWords text={info.name} />
               </span>
               {opensInTab ? <AppTabIndicator /> : null}
-              {!docker || !['running', 'stopped'].includes(status) ? <AppStatus lite status={status} /> : null}
             </div>
             {info.short_desc ? (
-              <div className="text-muted">
+              <div className="text-muted app-tile-description" title={info.short_desc}>
                 <WrapWords text={info.short_desc} />
               </div>
             ) : null}
-            {docker ? <DockerHealth appUrn={info.urn} telemetry={docker.data} stale={docker.stale} /> : null}
+            <div className="app-tile-health">
+              <AppStatus status={displayedAppStatus(status, health)} />
+              {docker && !['running', 'stopped'].includes(health.state) ? (
+                <span className="app-tile-docker">
+                  Docker <DockerHealth appUrn={info.urn} telemetry={docker.data} stale={docker.stale} />
+                </span>
+              ) : null}
+            </div>
             {notice ? (
               <span className="app-tile-notice">
                 <notice.Icon size={13} aria-hidden="true" />

@@ -2,6 +2,7 @@ import { useStorePreview } from '../../pages/store-preview-context';
 import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { DockerHealth } from '@/components/docker-health/docker-health';
+import { appHealthSnapshot, displayedAppStatus } from '@/desktop/container-health';
 import { useAppContext } from '@/context/app-context';
 import { useContainerTelemetry } from '@/desktop/containers';
 import { taskIsActive, useTasks } from '@/desktop/tasks';
@@ -55,7 +56,13 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
           <h2>{info.name}</h2>
           <p>{info.short_desc}</p>
           <div className="app-workspace-state">
-            <span className="app-workspace-lifecycle">{app && app.status !== 'missing' ? <AppStatus status={app.status} /> : 'Not installed'}</span>
+            <span className="app-workspace-lifecycle">
+              {app && app.status !== 'missing' ? (
+                <AppStatus status={displayedAppStatus(app.status, appHealthSnapshot(containers.data, info.urn, containers.isError))} />
+              ) : (
+                'Not installed'
+              )}
+            </span>
             {app && app.status !== 'missing' ? (
               <span className="app-workspace-docker">
                 Docker <DockerHealth appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />

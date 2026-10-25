@@ -1,3 +1,22 @@
+.desktop-activity-rail {
+  container-type: inline-size;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+  overflow: auto hidden;
+  scrollbar-width: none;
+  scroll-padding-inline: 4px;
+}
+.desktop-activity-rail::-webkit-scrollbar {
+  display: none;
+}
+.desktop-activity-rail > .desktop-dock-companion {
+  overflow: hidden;
+}
+.desktop-activity-rail .desktop-dock-companion-content {
+  width: max(64px, calc((100cqw - (var(--activity-count, 1) - 1) * 12px) / var(--activity-count, 1)));
+}
 .desktop-activity {
   display: none;
 }
@@ -5,7 +24,8 @@
   .desktop-activity {
     position: relative;
     display: block;
-    flex: none;
+    width: 100%;
+    container-type: inline-size;
     min-width: 0;
     align-self: stretch;
     color: var(--desktop-chrome-ink);
@@ -16,12 +36,12 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  width: clamp(230px, calc(250px * var(--orbis-text-scale, 1)), 320px);
+  width: 100%;
   height: 100%;
   min-height: 68px;
   padding: 10px 14px;
   border: 1px solid transparent;
-  border-radius: 24px;
+  border-radius: var(--orbis-dock-radius, 20px);
   color: var(--desktop-chrome-ink);
   background: var(--desktop-chrome);
   font: inherit;
@@ -61,10 +81,20 @@
 .desktop-activity-summary {
   flex: 1;
 }
+@container (max-width: 150px) {
+  .desktop-activity-trigger {
+    padding-inline: 10px;
+  }
+  .desktop-activity-summary,
+  .desktop-activity-trigger > svg {
+    display: none;
+  }
+}
 .desktop-activity-summary strong,
 .desktop-activity-summary small {
-  white-space: normal;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .desktop-activity-summary strong,
 .desktop-activity-list strong {
@@ -79,7 +109,7 @@
   line-height: 1.4;
 }
 .desktop-activity-flyover {
-  position: absolute;
+  position: fixed;
   z-index: 55;
   left: 0;
   bottom: calc(100% + 12px);

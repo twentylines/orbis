@@ -45,6 +45,42 @@ describe('appearance before hydration', () => {
     ).toBe('sandstone');
   });
 
+  test('remembers only bounded image identity and layout for this browser’s local wallpaper', () => {
+    const saved = {
+      preset: 'blush',
+      wallpaper: 'sandstone',
+      wallpaperMode: 'custom',
+      appearance: {
+        wallpaperImage: 'a'.repeat(64),
+        wallpaperFit: 'contain' as const,
+        wallpaperX: 37,
+        wallpaperY: 42,
+        wallpaperDim: 12,
+        wallpaperBlur: 4,
+      },
+    };
+    expect(appearanceFromStored(saved).appearance).toEqual(saved.appearance);
+    expect(firstPaint(JSON.stringify(saved))).toEqual({
+      desktopPreset: 'blush',
+      desktopMode: 'light',
+      desktopWallpaper: 'sandstone',
+      desktopLocalWallpaper: 'true',
+    });
+    expect(
+      appearanceFromStored({
+        appearance: {
+          wallpaperImage: 'https://example.test/private',
+          wallpaperFit: 'unsafe',
+          wallpaperX: -1,
+          wallpaperY: 101,
+          wallpaperDim: 100,
+          wallpaperBlur: 25,
+        },
+      }).appearance,
+    ).toBeUndefined();
+    expect(appearanceBootstrap).not.toContain('/api/desktop-preferences/wallpaper');
+  });
+
   test('honours saved Light over an OS Dark preference', () => {
     expect(firstPaint(JSON.stringify({ preset: 'stone', mode: 'light', wallpaper: 'tidal' }), { dark: true })).toEqual({
       desktopPreset: 'stone',

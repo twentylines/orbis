@@ -35,6 +35,20 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   const outlet = useOutlet();
   const currentOutlet = useRef(outlet);
   const [retained, setRetained] = useState<ReactNode>(null);
+  const [panelView, setPanelView] = useState<{ title: string; content: ReactNode; path: string } | null>(null);
+  const panelOpener = useRef<HTMLElement | null>(null);
+  const closePanel = useCallback(() => {
+    setPanelView(null);
+    requestAnimationFrame(() => {
+      if (panelOpener.current?.isConnected && !panelOpener.current.closest('[inert],[hidden]')) panelOpener.current.focus({ preventScroll: true });
+    });
+  }, []);
+  useLayoutEffect(() => {
+    if (panelView && panelView.path !== location.pathname) setPanelView(null);
+  }, [location.pathname, panelView]);
+  useLayoutEffect(() => {
+    if (panelView) pane.current?.querySelector<HTMLElement>('.app-settings-preview > h2')?.focus({ preventScroll: true });
+  }, [panelView]);
   const snapshot = useRef<PreviewSnapshot>([]);
   const paneBounds = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const tileMotion = useRef<Animation[]>([]);
@@ -152,7 +166,26 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   }, [selected, split]);
 
   return (
-    <StorePreviewContext.Provider value={{ closePath, split, selectedUrn: selected, previewId, close, nextHistory }}>
+    <StorePreviewContext.Provider
+      value={{
+        closePath,
+        split,
+        selectedUrn: selected,
+        previewId,
+        close,
+        nextHistory,
+        closePanel,
+        openPanel:
+          installed && split
+            ? (title, content) => {
+                const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+                const triggerId = active?.closest('[role="menu"]')?.getAttribute('aria-labelledby');
+                panelOpener.current = triggerId ? document.getElementById(triggerId) : active;
+                setPanelView({ title, content, path: location.pathname });
+              }
+            : undefined,
+      }}
+    >
       <div
         onClickCapture={(event) => {
           if ((event.target as Element).closest('[data-store-app]')) capture();
@@ -183,8 +216,13 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
           <div className="store-preview-surface" aria-hidden="true" />
           {selected || (split && retained) ? (
             <div ref={content} className="store-preview-content">
-              {split ? (
-                <button type="button" className="store-preview-close" aria-label="Close app preview" onClick={close}>
+              {split || panelView ? (
+                <button
+                  type="button"
+                  className="store-preview-close"
+                  aria-label={panelView ? 'Back to app details' : 'Close app preview'}
+                  onClick={panelView ? closePanel : close}
+                >
                   <IconX size={20} aria-hidden="true" />
                 </button>
               ) : null}
@@ -207,7 +245,15 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
                       </div>
                     )}
                   >
-                    <Suspense fallback={<DelayedRouteLoading label="Loading app…" />}>{selected ? outlet : retained}</Suspense>
+                    <div hidden={Boolean(panelView)} inert={Boolean(panelView)}>
+                      <Suspense fallback={<DelayedRouteLoading label="Loading app…" />}>{selected ? outlet : retained}</Suspense>
+                    </div>
+                    {panelView ? (
+                      <section className="app-settings-preview">
+                        <h2 tabIndex={-1}>{panelView.title}</h2>
+                        {panelView.content}
+                      </section>
+                    ) : null}
                   </ErrorBoundary>
                 )}
               </QueryErrorResetBoundary>

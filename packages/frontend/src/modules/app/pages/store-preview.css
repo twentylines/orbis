@@ -85,6 +85,8 @@
   scrollbar-gutter: stable;
   container-type: inline-size;
   padding: 6px 12px 14px 6px;
+  scroll-padding: 6px 12px 14px 6px;
+  margin: -6px -12px -14px -6px;
 }
 .store-catalogue-pane .app-link {
   border-radius: 14px;

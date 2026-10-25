@@ -65,6 +65,18 @@
 .app-window-layout-menu {
   z-index: 1100;
 }
+.app-window-layout-menu .dropdown-header {
+  padding: 10px 12px;
+  margin: 0;
+}
+.app-window-layout-menu .dropdown-item {
+  gap: 12px;
+}
+.app-window-layout-menu .dropdown-item > svg {
+  display: block;
+  flex: none;
+  margin: 0;
+}
 .app-launcher-bar > span {
   min-width: 0;
   overflow: hidden;

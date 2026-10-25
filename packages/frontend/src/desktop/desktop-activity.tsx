@@ -1,5 +1,5 @@
 /* biome-ignore-all lint/a11y/noNoninteractiveTabindex: The bounded activity list needs native keyboard scrolling. */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useMutationState } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -12,11 +12,11 @@ import { prefersReducedMotion } from './motion-setting';
 import { useHostUpdateWatch } from './host-update-watch';
 import { useTasks } from './tasks';
 import { useDesktopWindows } from './window-viewport';
-import { desktopActivity, type DesktopActivityItem } from './desktop-activity-state';
+import { desktopActivityGroups, type DesktopActivity, type DesktopActivityItem } from './desktop-activity-state';
 import { DockCompanion } from './dock-companion';
 import './desktop-activity.css';
 
-const activityMotionDuration = 320;
+const activityMotionDuration = 260;
 
 function focusDock() {
   const target =
@@ -34,7 +34,6 @@ export function DockActivity() {
   const { apps } = useAppContext();
   const tasks = useTasks();
   const { watch, packageJob } = useHostUpdateWatch();
-  const reduced = useReducedMotion();
   const desktop = useDesktopWindows();
   const names = useMemo(() => new Map(apps.map((app) => [app.urn, app.name])), [apps]);
   const checks = useMutationState({
@@ -54,7 +53,50 @@ export function DockActivity() {
       };
     },
   });
-  const activity = desktopActivity(tasks.data?.tasks ?? [], names, watch, packageJob, checks);
+  const groups = desktopActivityGroups(tasks.data?.tasks ?? [], names, watch, packageJob, checks);
+  const retainedGroups = useRef(new Map<string, (typeof groups)[number]>());
+  for (const group of groups) retainedGroups.current.set(group.category, group);
+  const activeCategories = new Set(groups.map((group) => group.category));
+  const signature = [...activeCategories].sort().join('|');
+  const clock = useRef<{ signature: string; at: number | null }>({ signature: '', at: null });
+  if (clock.current.signature !== signature) {
+    const time = typeof document === 'undefined' ? null : document.timeline.currentTime;
+    clock.current = { signature, at: typeof time === 'number' ? time : null };
+  }
+  return (
+    <DockCompanion visible={desktop && groups.length > 0} side="left" duration={activityMotionDuration} motionStart={clock.current.at} retainOnExit>
+      <div
+        className="desktop-activity-rail"
+        data-activity-count={groups.length}
+        style={
+          {
+            '--activity-count': Math.max(1, groups.length),
+            width: `min(calc(${groups.length} * clamp(164px, calc(174px * var(--orbis-text-scale, 1)), 230px) + ${Math.max(0, groups.length - 1) * 12}px), var(--orbis-activity-space, 230px))`,
+          } as CSSProperties
+        }
+      >
+        {[...retainedGroups.current.values()].map((activity) => {
+          const active = activeCategories.has(activity.category);
+          return (
+            <DockCompanion
+              key={activity.category}
+              visible={active}
+              side="right"
+              duration={activityMotionDuration}
+              motionStart={clock.current.at}
+              fluidWidth
+            >
+              <ActivityPill activity={activity} desktop={desktop && active} />
+            </DockCompanion>
+          );
+        })}
+      </div>
+    </DockCompanion>
+  );
+}
+
+function ActivityPill({ activity, desktop }: { activity: DesktopActivity; desktop: boolean }) {
+  const reduced = useReducedMotion();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -64,7 +106,16 @@ export function DockActivity() {
     if (element) element.style.clipPath = prefersReducedMotion() ? 'none' : 'inset(0 0 100% 0)';
   }, []);
   const focusWithin = useRef(false);
-  const [shape, setShape] = useState({ width: 360, height: 280, triggerWidth: 210, triggerHeight: 68 });
+  useLayoutEffect(
+    () => () => {
+      if (focusWithin.current)
+        requestAnimationFrame(() => {
+          if (document.activeElement === document.body) focusDock();
+        });
+    },
+    [],
+  );
+  const [shape, setShape] = useState({ width: 360, height: 280, triggerWidth: 210, triggerHeight: 68, left: 24, bottom: 110 });
   const hasActivity = Boolean(activity) && desktop;
   const lastActivity = useRef(activity);
   if (activity) lastActivity.current = activity;
@@ -88,6 +139,8 @@ export function DockActivity() {
         height: Math.ceil(content.getBoundingClientRect().height) + 2,
         triggerWidth: anchor.width,
         triggerHeight: anchor.height,
+        left: Math.max(16, Math.min(anchor.left, window.innerWidth - 416)),
+        bottom: window.innerHeight - anchor.top + 12,
       });
     };
     measure();
@@ -101,13 +154,14 @@ export function DockActivity() {
   }, [open]);
   const transition = { duration: reduced ? 0 : activityMotionDuration / 1000, ease: [0.32, 0.08, 0.24, 1] as [number, number, number, number] };
   return (
-    <DockCompanion visible={hasActivity} side="left" duration={activityMotionDuration}>
+    <>
       {displayed ? (
         <div
           className="desktop-activity"
           key="desktop-activity"
           onFocusCapture={() => {
             focusWithin.current = true;
+            trigger.current?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
           }}
           onBlurCapture={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget)) focusWithin.current = false;
@@ -118,7 +172,14 @@ export function DockActivity() {
             onOpenChange={(next) => {
               if (next) {
                 const anchor = trigger.current?.getBoundingClientRect();
-                if (anchor) setShape((previous) => ({ ...previous, triggerWidth: anchor.width, triggerHeight: anchor.height }));
+                if (anchor)
+                  setShape((previous) => ({
+                    ...previous,
+                    triggerWidth: anchor.width,
+                    triggerHeight: anchor.height,
+                    left: Math.max(16, Math.min(anchor.left, window.innerWidth - 416)),
+                    bottom: window.innerHeight - anchor.top + 12,
+                  }));
               }
               setOpen(next);
             }}
@@ -142,79 +203,82 @@ export function DockActivity() {
                 <IconChevronUp size={16} aria-hidden="true" />
               </button>
             </Dialog.Trigger>
-            <AnimatePresence>
-              {open && hasActivity ? (
-                <Dialog.Content
-                  asChild
-                  forceMount
-                  onCloseAutoFocus={(event) => {
-                    if (!trigger.current?.isConnected || trigger.current.getClientRects().length === 0) {
-                      event.preventDefault();
-                      focusDock();
-                    }
-                  }}
-                >
-                  <motion.section
-                    ref={bindFlyover}
-                    onUpdate={(latest) => {
-                      const element = flyover.current;
-                      const height = Number(latest.height);
-                      const overlap = Math.max(0, Number(latest.y) - 12);
-                      if (!element || !Number.isFinite(height) || height <= 0 || !Number.isFinite(overlap)) return;
-                      const visible = Math.max(0, 1 - overlap / height);
-                      element.style.clipPath =
-                        overlap < 0.01 ? 'none' : visible < 0.001 ? 'inset(0 0 100% 0)' : `inset(-60px -60px ${overlap}px -60px)`;
-                      element.style.setProperty('--activity-shadow-opacity', `${0.2 * visible}`);
+            <Dialog.Portal forceMount>
+              <AnimatePresence>
+                {open && hasActivity ? (
+                  <Dialog.Content
+                    asChild
+                    forceMount
+                    onCloseAutoFocus={(event) => {
+                      if (!trigger.current?.isConnected || trigger.current.getClientRects().length === 0) {
+                        event.preventDefault();
+                        focusDock();
+                      }
                     }}
-                    className="desktop-activity-flyover"
-                    initial={{ width: shape.triggerWidth, height: shape.triggerHeight, y: shape.triggerHeight + 12, borderRadius: 24 }}
-                    animate={{ width: shape.width, height: shape.height, y: 0, borderRadius: 22 }}
-                    exit={{ width: shape.triggerWidth, height: shape.triggerHeight, y: shape.triggerHeight + 12, borderRadius: 24 }}
-                    transition={transition}
                   >
-                    <div ref={panel} className="desktop-activity-panel">
-                      <div className="desktop-activity-heading">
-                        <Dialog.Title>Activity</Dialog.Title>
-                        <Dialog.Close asChild>
-                          <button type="button" aria-label="Collapse activity details">
-                            <IconChevronDown size={20} aria-hidden="true" />
-                          </button>
-                        </Dialog.Close>
-                      </div>
-                      <Dialog.Description className="desktop-activity-description">
-                        {displayed.count} ongoing operation{displayed.count === 1 ? '' : 's'}
-                      </Dialog.Description>
-                      <ul className="desktop-activity-list" tabIndex={0} aria-label="Ongoing operations">
-                        {displayed.items.slice(0, 50).map((item) => (
-                          <li key={`${item.kind}-${item.id}`}>
-                            <span className="desktop-activity-icon">
-                              <ActivityIcon kind={item.kind} appUrn={item.appUrn} />
-                            </span>
-                            <span>
-                              <strong>{item.title}</strong>
-                              <small>{item.detail}</small>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="desktop-activity-links">
-                        <Link to="/tasks" onClick={() => setOpen(false)}>
-                          Task centre
-                        </Link>
-                        {displayed.items.some((item) => item.kind !== 'app') ? (
-                          <Link to="/updates" onClick={() => setOpen(false)}>
-                            Updates
+                    <motion.section
+                      ref={bindFlyover}
+                      onUpdate={(latest) => {
+                        const element = flyover.current;
+                        const height = Number(latest.height);
+                        const overlap = Math.max(0, Number(latest.y) - 12);
+                        if (!element || !Number.isFinite(height) || height <= 0 || !Number.isFinite(overlap)) return;
+                        const visible = Math.max(0, 1 - overlap / height);
+                        element.style.clipPath =
+                          overlap < 0.01 ? 'none' : visible < 0.001 ? 'inset(0 0 100% 0)' : `inset(-60px -60px ${overlap}px -60px)`;
+                        element.style.setProperty('--activity-shadow-opacity', `${0.2 * visible}`);
+                      }}
+                      className="desktop-activity-flyover"
+                      style={{ left: shape.left, bottom: shape.bottom }}
+                      initial={{ width: shape.triggerWidth, height: shape.triggerHeight, y: shape.triggerHeight + 12, borderRadius: 20 }}
+                      animate={{ width: shape.width, height: shape.height, y: 0, borderRadius: 22 }}
+                      exit={{ width: shape.triggerWidth, height: shape.triggerHeight, y: shape.triggerHeight + 12, borderRadius: 20 }}
+                      transition={transition}
+                    >
+                      <div ref={panel} className="desktop-activity-panel">
+                        <div className="desktop-activity-heading">
+                          <Dialog.Title>Activity</Dialog.Title>
+                          <Dialog.Close asChild>
+                            <button type="button" aria-label="Collapse activity details">
+                              <IconChevronDown size={20} aria-hidden="true" />
+                            </button>
+                          </Dialog.Close>
+                        </div>
+                        <Dialog.Description className="desktop-activity-description">
+                          {displayed.count} ongoing operation{displayed.count === 1 ? '' : 's'}
+                        </Dialog.Description>
+                        <ul className="desktop-activity-list" tabIndex={0} aria-label="Ongoing operations">
+                          {displayed.items.slice(0, 50).map((item) => (
+                            <li key={`${item.kind}-${item.id}`}>
+                              <span className="desktop-activity-icon">
+                                <ActivityIcon kind={item.kind} appUrn={item.appUrn} />
+                              </span>
+                              <span>
+                                <strong>{item.title}</strong>
+                                <small>{item.detail}</small>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="desktop-activity-links">
+                          <Link to="/tasks" onClick={() => setOpen(false)}>
+                            Task centre
                           </Link>
-                        ) : null}
+                          {displayed.items.some((item) => item.kind !== 'app') ? (
+                            <Link to="/updates" onClick={() => setOpen(false)}>
+                              Updates
+                            </Link>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  </motion.section>
-                </Dialog.Content>
-              ) : null}
-            </AnimatePresence>
+                    </motion.section>
+                  </Dialog.Content>
+                ) : null}
+              </AnimatePresence>
+            </Dialog.Portal>
           </Dialog.Root>
         </div>
       ) : null}
-    </DockCompanion>
+    </>
   );
 }

@@ -1,9 +1,12 @@
 import { useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { useContainerTelemetry } from '@/desktop/containers';
-import { appDockerHealth } from '@/desktop/container-health';
+import { appDockerHealth, containerHealthReason } from '@/desktop/container-health';
+import { useAppContext } from '@/context/app-context';
+import { useServerPath } from '@/desktop/cluster-data';
+import { RestartDialog } from '@/modules/app/components/dialogs/restart-dialog/restart-dialog';
 import { IconBrandDocker, IconChevronRight } from '@tabler/icons-react';
 import { ContainerResourceFocus } from './container-resource-focus';
 import './container-resources.css';
@@ -19,14 +22,33 @@ export const resourceBytes = (value: number | null) => {
 export function ContainerResources({ compact = false, appUrn }: { compact?: boolean; appUrn?: string }) {
   const telemetry = useContainerTelemetry();
   const apps = useQuery(getInstalledAppsOptions());
+  const { user } = useAppContext();
+  const local = useServerPath()('/api/system/containers') === '/api/system/containers';
+  const location = useLocation();
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState(new URLSearchParams(location.search).get('health') === 'attention' ? 'attention' : 'all');
+  const [limit, setLimit] = useState(12);
+  const [restartUrn, setRestartUrn] = useState<string | null>(null);
+  const restartApp = apps.data?.installed.find(({ info }) => info.urn === restartUrn);
   const [sort, setSort] = useState<'cpuPercent' | 'memoryBytes'>('cpuPercent');
   const list = useRef<HTMLOListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const names = new Map(apps.data?.installed.map(({ info }) => [info.urn, info.name]));
   const ordered = (telemetry.data?.containers ?? [])
     .filter((item) => !appUrn || item.appUrn === appUrn)
+    .filter(
+      (item) =>
+        compact ||
+        ((filter === 'all' ||
+          (filter === 'attention'
+            ? ['unhealthy', 'starting', 'partial'].includes(appDockerHealth([item]).state)
+            : filter === 'running'
+              ? item.state === 'running'
+              : item.state !== 'running')) &&
+          `${item.name} ${item.appUrn ? (names.get(item.appUrn) ?? '') : ''}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())),
+    )
     .sort((left, right) => (right[sort] ?? -1) - (left[sort] ?? -1) || left.name.localeCompare(right.name));
-  const visible = compact ? ordered.filter((item) => item.state === 'running').slice(0, 4) : ordered;
+  const visible = compact ? ordered.filter((item) => item.state === 'running').slice(0, 4) : ordered.slice(0, limit);
   const maximum = Math.max(1, ...visible.map((item) => item[sort] ?? 0));
   const unavailable = telemetry.isError || telemetry.data?.available === false;
 
@@ -39,7 +61,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
       <div className="container-resources-heading">
         <h2 ref={heading} tabIndex={-1}>
           <IconBrandDocker size={20} aria-hidden="true" />
-          Usage
+          {compact ? 'Usage' : 'Container health and usage'}
         </h2>
       </div>
       <fieldset className="container-resources-sort">
@@ -51,6 +73,35 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
           Memory
         </button>
       </fieldset>
+      {compact ? null : (
+        <div className="container-resource-filters">
+          <input
+            type="search"
+            className="form-control"
+            aria-label="Find a container"
+            placeholder="Find a container"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setLimit(12);
+            }}
+          />
+          <select
+            className="form-select"
+            aria-label="Container status"
+            value={filter}
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setLimit(12);
+            }}
+          >
+            <option value="all">All containers</option>
+            <option value="attention">Needs attention</option>
+            <option value="running">Running</option>
+            <option value="stopped">Stopped</option>
+          </select>
+        </div>
+      )}
       {compact ? null : (
         <p className="container-resources-note">
           CPU: 100% is one core. Memory excludes reclaimable file cache. Bars compare containers within this list. These readings cover Docker
@@ -118,6 +169,13 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
                       <IconChevronRight size={16} aria-hidden="true" />
                       <span>Container details</span>
                     </summary>
+                    <p>{containerHealthReason(item)}</p>
+                    {item.readiness?.lastCheckAt ? (
+                      <p>
+                        Last healthcheck:{' '}
+                        <time dateTime={item.readiness.lastCheckAt}>{new Date(item.readiness.lastCheckAt).toLocaleTimeString()}</time>
+                      </p>
+                    ) : null}
                     <dl>
                       <div>
                         <dt>State</dt>
@@ -151,6 +209,11 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
                         Open application
                       </Link>
                     ) : null}
+                    {local && user.operator && item.appUrn && names.has(item.appUrn) && ['unhealthy', 'starting'].includes(health.state) ? (
+                      <button type="button" className="container-retry" onClick={() => setRestartUrn(item.appUrn)}>
+                        Restart app…
+                      </button>
+                    ) : null}
                   </details>
                 )}
               </li>
@@ -158,9 +221,15 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
           })}
         </ol>
       </ContainerResourceFocus>
+      {!compact && ordered.length > visible.length ? (
+        <button type="button" className="container-retry" onClick={() => setLimit((value) => value + 12)}>
+          Show 12 more · {ordered.length - visible.length} remaining
+        </button>
+      ) : null}
+      {restartApp ? <RestartDialog info={restartApp.info} isOpen onClose={() => setRestartUrn(null)} /> : null}
       {!compact && telemetry.data ? (
         <p className="container-resources-note">
-          Sampled {new Date(telemetry.data.sampledAt).toLocaleTimeString()}
+          {visible.length} of {ordered.length} matching containers · Sampled {new Date(telemetry.data.sampledAt).toLocaleTimeString()}
           {telemetry.data.omitted > 0 ? ` · Showing 200 containers; ${telemetry.data.omitted} omitted` : ''}
           {unavailable ? ' · Stale' : ''}
         </p>

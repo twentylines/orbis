@@ -67,6 +67,26 @@
   line-height: 1.6;
   color: var(--desktop-muted);
 }
+.container-resource-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-block: 16px;
+}
+.container-resource-filters > input {
+  flex: 2 1 200px;
+  min-width: 0;
+}
+.container-resource-filters > select {
+  flex: 1 1 160px;
+  width: auto;
+}
+.container-resource-details > p {
+  margin-block: 12px;
+}
+.container-resource-details > button {
+  margin-inline-start: 16px;
+}
 .container-resource-list {
   list-style: none;
   margin: 0;

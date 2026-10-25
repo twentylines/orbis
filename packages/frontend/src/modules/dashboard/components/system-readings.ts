@@ -1,5 +1,25 @@
-import type { HostTelemetry } from '@runtipi/common/schemas';
+import type { HostTelemetry, HostSensors } from '@runtipi/common/schemas';
 import type { Telemetry } from '@/desktop/telemetry';
+
+export const sensorRefreshInterval = (data?: HostSensors) =>
+  !data || (data.available ? data.stale : data.reason === 'Collecting sensor readings.') ? 2000 : 30_000;
+
+export function cpuTemperature(data?: HostSensors) {
+  if (!data?.available) return null;
+  const readings = data.temperatures.filter(
+    (sensor) =>
+      sensor.status === 'available' &&
+      sensor.celsius !== null &&
+      Number.isFinite(sensor.celsius) &&
+      /(?:coretemp|k10temp|zenpower|cpu[_ -]?thermal|\bcpu\b|package id|\btctl\b|\btdie\b)/i.test(`${sensor.chip} ${sensor.label}`),
+  );
+  return (
+    readings.sort((left, right) => {
+      const packageSensor = (label: string) => /package|\btctl\b|\btdie\b/i.test(label);
+      return Number(packageSensor(right.label)) - Number(packageSensor(left.label)) || (right.celsius ?? 0) - (left.celsius ?? 0);
+    })[0] ?? null
+  );
+}
 
 export const statusBytes = (value: number | null) => {
   if (value === null || !Number.isFinite(value) || value < 0) return 'Unavailable';

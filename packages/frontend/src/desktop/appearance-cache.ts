@@ -14,9 +14,20 @@ export type CachedAppearance = {
   wallpaper: (typeof appearanceOptions.wallpapers)[number];
   wallpaperMode: 'theme' | 'custom';
   wallpaperPreset: ThemePreset | null;
+  appearance?: {
+    wallpaperImage?: string | null;
+    wallpaperFit?: 'cover' | 'contain';
+    wallpaperX?: number;
+    wallpaperY?: number;
+    wallpaperDim?: number;
+    wallpaperBlur?: number;
+    motion?: 'system' | 'reduced';
+    lowEffects?: boolean;
+  };
 };
 
 export const preferenceStorageKey = 'server-desktop-preferences-v1';
+export const appearanceCacheEvent = 'orbis-browser-appearance-changed';
 export const preferenceChangeEvent = 'orbis-desktop-preferences-changed';
 export const preferenceCacheLimit = 256 * 1024;
 
@@ -26,8 +37,22 @@ export function appearanceFromStored(value: unknown, options = appearanceOptions
   const wallpaper = options.wallpapers.includes(stored.wallpaper as CachedAppearance['wallpaper'])
     ? (stored.wallpaper as CachedAppearance['wallpaper'])
     : 'sandstone';
-  const image =
-    stored.appearance && typeof stored.appearance === 'object' && 'wallpaperImage' in stored.appearance && stored.appearance.wallpaperImage;
+  const appearance = stored.appearance && typeof stored.appearance === 'object' ? (stored.appearance as Record<string, unknown>) : null;
+  const image = appearance?.wallpaperImage;
+  const safeAppearance: NonNullable<CachedAppearance['appearance']> = {};
+  if (typeof image === 'string' && /^[a-f0-9]{64}$/.test(image)) safeAppearance.wallpaperImage = image;
+  if (appearance?.wallpaperFit === 'cover' || appearance?.wallpaperFit === 'contain') safeAppearance.wallpaperFit = appearance.wallpaperFit;
+  if (appearance?.motion === 'system' || appearance?.motion === 'reduced') safeAppearance.motion = appearance.motion;
+  if (typeof appearance?.lowEffects === 'boolean') safeAppearance.lowEffects = appearance.lowEffects;
+  for (const [name, max] of [
+    ['wallpaperX', 100],
+    ['wallpaperY', 100],
+    ['wallpaperDim', 70],
+    ['wallpaperBlur', 24],
+  ] as const) {
+    const number = appearance?.[name];
+    if (typeof number === 'number' && Number.isInteger(number) && number >= 0 && number <= max) safeAppearance[name] = number;
+  }
   return {
     preset,
     mode: options.modes.includes(stored.mode as CachedAppearance['mode'])
@@ -42,6 +67,7 @@ export function appearanceFromStored(value: unknown, options = appearanceOptions
         : wallpaper !== 'sandstone' || (typeof image === 'string' && /^[a-f0-9]{64}$/.test(image))
           ? 'custom'
           : 'theme',
+    ...(Object.keys(safeAppearance).length ? { appearance: safeAppearance } : {}),
     wallpaperPreset: options.presets.includes(stored.wallpaperPreset as ThemePreset) ? (stored.wallpaperPreset as ThemePreset) : null,
   };
 }
@@ -77,6 +103,7 @@ export const appearanceBootstrap = `(()=>{
   root.dataset.desktopMode=mode;
   const cached=(${appearanceFromStored.toString()})(stored,options);
   root.dataset.desktopWallpaper=(${resolveWallpaperKey.toString()})(cached);
+  if(cached.wallpaperMode==='custom'&&cached.appearance?.wallpaperImage)root.dataset.desktopLocalWallpaper='true';
   const apply=()=>{
     if(root.dataset.orbisAppearanceReady==='true'){
       if(typeof document.removeEventListener==='function')document.removeEventListener('load',apply,true);

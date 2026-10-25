@@ -31,7 +31,7 @@ export function MonitorUsage() {
         <>
           <ContainerResources compact={!allContainers} />
           <button className="monitor-detail-action" type="button" aria-expanded={allContainers} onClick={() => setAllContainers((value) => !value)}>
-            {allContainers ? 'Show top running containers' : 'Show all containers and details'}
+            {allContainers ? 'Show top running containers' : 'Browse containers and health'}
           </button>
           {allContainers ? null : <p className="monitor-usage-scope">Top four running containers, ordered by the selected metric.</p>}
         </>

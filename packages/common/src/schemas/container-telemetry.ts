@@ -5,6 +5,15 @@ export type ContainerReading = {
   service: string | null;
   state: string;
   health: 'healthy' | 'unhealthy' | 'starting' | 'not-configured' | 'unknown';
+  readiness?: {
+    failingStreak: number | null;
+    lastCheckExitCode: number | null;
+    lastCheckAt: string | null;
+    intervalSeconds: number | null;
+    startPeriodSeconds: number | null;
+    oomKilled: boolean | null;
+    restartCount: number | null;
+  } | null;
   cpuPercent: number | null;
   memoryBytes: number | null;
   memoryLimitBytes: number | null;

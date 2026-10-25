@@ -4,9 +4,13 @@ import {
   IconArrowsMove,
   IconExternalLink,
   IconLayoutColumns,
+  IconLayoutSidebar,
+  IconLayoutSidebarRight,
   IconMinus,
   IconResize,
   IconSettings,
+  IconWindow,
+  IconHelp,
   IconX,
 } from '@tabler/icons-react';
 import { lazy, memo, Suspense, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -20,9 +24,9 @@ import type { AppWindow as WindowState } from './app-window-state';
 import type { WindowArea } from './window-geometry';
 import { prefersReducedMotion } from './motion-setting';
 import { dockMotionDuration, sectionMotionTiming } from './section-motion-geometry';
-import { useAppEmbedding, useBlockedAppEmbeds } from './app-embedding';
+import { useAppEmbedding } from './app-embedding';
 import { useDesktopPreferences } from './preferences';
-import { appEmbeddingWarning } from './app-opening';
+import { appEmbeddingBoundary, appEmbeddingWarning, type AppEmbeddingCheck } from './app-opening';
 
 const WindowSettings = lazy(() => import('./app-window-settings'));
 const edges: ResizeEdge[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
@@ -71,18 +75,21 @@ export function AppWindow({
   onSave: (bounds: DesktopWindowBounds) => void;
 }) {
   const { request, status, mode } = item;
-  const blockedEmbeds = useBlockedAppEmbeds();
-  const blocked = blockedEmbeds[request.urn]?.url === request.launchUrl;
+  const boundary = appEmbeddingBoundary(request.launchUrl, window.location.origin);
+  const blocked = Boolean(boundary);
   const titleId = useId();
   const helpId = useId();
   const panel = useRef<HTMLDialogElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const settingsButton = useRef<HTMLButtonElement>(null);
+  const layoutButton = useRef<HTMLButtonElement>(null);
   const settingsClose = useRef<HTMLButtonElement>(null);
   const placementFrom = useRef<DOMRect | null>(null);
   const flightAnimation = useRef<Animation | null>(null);
   const departure = useRef<{ box: DOMRect; opacity: number } | null>(null);
   const [settings, setSettings] = useState(false);
+  const [help, setHelp] = useState(false);
+  const openingHelp = useRef(false);
   const keyboardWindow = useRef(false);
   const capturePlacement = (next: AppWindowMode) => {
     placementFrom.current = panel.current?.getBoundingClientRect() ?? null;
@@ -264,6 +271,10 @@ export function AppWindow({
     setSettings(false);
     settingsButton.current?.focus({ preventScroll: true });
   };
+  const closeHelp = () => {
+    setHelp(false);
+    layoutButton.current?.focus({ preventScroll: true });
+  };
   const depart = (action: () => void) => {
     const element = panel.current;
     departure.current = element ? { box: element.getBoundingClientRect(), opacity: Number(getComputedStyle(element).opacity) } : null;
@@ -302,6 +313,7 @@ export function AppWindow({
           if ((event.target as Element).closest('[role="menu"],[role="listbox"],.react-tooltip')) return;
           event.stopPropagation();
           if (settings) closeSettings();
+          else if (help) closeHelp();
           else depart(onClose);
         }}
       >
@@ -342,7 +354,7 @@ export function AppWindow({
             </Button>
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
-                <Button className="app-launcher-close" size="icon" aria-label="Window layout" title="Window layout">
+                <Button ref={layoutButton} className="app-launcher-close" size="icon" aria-label="Window layout" title="Window layout">
                   <IconLayoutColumns size={19} aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
@@ -350,7 +362,11 @@ export function AppWindow({
                 className="app-window-layout-menu"
                 align="end"
                 onCloseAutoFocus={(event) => {
-                  if (keyboardWindow.current) {
+                  if (openingHelp.current) {
+                    event.preventDefault();
+                    openingHelp.current = false;
+                    panel.current?.querySelector<HTMLElement>('.app-window-compatibility h3')?.focus({ preventScroll: true });
+                  } else if (keyboardWindow.current) {
                     event.preventDefault();
                     keyboardWindow.current = false;
                     bar.current?.focus({ preventScroll: true });
@@ -359,12 +375,17 @@ export function AppWindow({
               >
                 <DropdownMenuLabel>Window layout</DropdownMenuLabel>
                 <DropdownMenuItem disabled={blocked || !canSplitAppWindows(area)} onSelect={() => place('left')}>
+                  <IconLayoutSidebar size={18} aria-hidden="true" />
                   Snap left
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={blocked || !canSplitAppWindows(area)} onSelect={() => place('right')}>
+                  <IconLayoutSidebarRight size={18} aria-hidden="true" />
                   Snap right
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => place('floating')}>Floating window</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => place('floating')}>
+                  <IconWindow size={18} aria-hidden="true" />
+                  Floating window
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() => {
                     keyboardWindow.current = true;
@@ -382,6 +403,16 @@ export function AppWindow({
                 >
                   <IconResize size={18} aria-hidden="true" />
                   Resize with keyboard
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    openingHelp.current = true;
+                    setSettings(false);
+                    setHelp(true);
+                  }}
+                >
+                  <IconHelp size={18} aria-hidden="true" />
+                  App not loading?
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -412,7 +443,15 @@ export function AppWindow({
         </div>
         <div className="app-launcher-body">
           <div className="app-window-document" inert={settings || geometry.gestureKind !== null || undefined} aria-hidden={settings || undefined}>
-            <AppFrame request={request} enabled={desktop && status === 'visible'} active={active} onTab={onTab} />
+            <AppFrame
+              request={request}
+              enabled={desktop && status === 'visible'}
+              active={active}
+              boundary={boundary}
+              help={help}
+              onHelpClose={closeHelp}
+              onTab={onTab}
+            />
           </div>
           {settings ? (
             <section className="app-window-settings" aria-label={`${request.name} settings`}>
@@ -456,65 +495,50 @@ const AppFrame = memo(function AppFrame({
   request,
   enabled,
   active,
+  boundary,
+  help,
+  onHelpClose,
   onTab,
 }: {
   request: WindowState['request'];
   enabled: boolean;
   active: boolean;
+  boundary?: AppEmbeddingCheck;
+  help: boolean;
+  onHelpClose: () => void;
   onTab: () => void;
 }) {
-  const [loadObserved, setLoadObserved] = useState(false);
-  const [tryWindow, setTryWindow] = useState(false);
-  const [help, setHelp] = useState(false);
+  const [observedUrl, setObservedUrl] = useState<string>();
   const noticeHeading = useRef<HTMLHeadingElement>(null);
-  const recoveryButton = useRef<HTMLButtonElement>(null);
-  const noticeWasOpen = useRef(false);
-  // A cross-origin iframe fires load for browser error pages too; it only stops automatic rechecks.
-  const check = useAppEmbedding(request, enabled && !loadObserved);
-  const knownBlocked = useBlockedAppEmbeds()[request.urn]?.url === request.launchUrl;
+  // Load also fires for browser error pages; it only stops automatic rechecks.
+  const check = useAppEmbedding(request, enabled && !boundary && observedUrl !== request.launchUrl);
   const { preferences, update } = useDesktopPreferences();
-  const warning = appEmbeddingWarning(check.data, knownBlocked);
-  const showWarning = Boolean(warning?.blocked || help || (warning && !tryWindow && !loadObserved));
-  const showFrame = !warning?.blocked && (!warning || tryWindow || loadObserved);
-  const notice = warning ?? {
+  const showWarning = Boolean(boundary || help);
+  const notice = appEmbeddingWarning(boundary ?? check.data) ?? {
     blocked: false,
     title: 'App not loading?',
     description:
       'If the page is blank or refuses to connect, its browser security or connection may prevent it opening here. Try a browser tab. You can remember that choice for this app.',
   };
   useLayoutEffect(() => {
-    if (!enabled || !active) return;
-    if (showWarning) {
-      noticeHeading.current?.focus({ preventScroll: true });
-      noticeWasOpen.current = true;
-    } else if (noticeWasOpen.current) {
-      recoveryButton.current?.focus({ preventScroll: true });
-      noticeWasOpen.current = false;
-    }
+    if (enabled && active && showWarning) noticeHeading.current?.focus({ preventScroll: true });
   }, [enabled, active, showWarning]);
-  if (check.isPending)
-    return (
-      <output className="app-window-compatibility">
-        <span className="app-window-compatibility-content">Checking window compatibility…</span>
-      </output>
-    );
   return (
     <>
-      {showFrame ? (
+      {boundary ? null : (
         <iframe
           className="app-window-frame"
           title={`${request.name} app`}
           src={request.launchUrl}
           hidden={!!showWarning}
-          onLoad={() => setLoadObserved(true)}
-          onError={() => setHelp(true)}
+          onLoad={() => setObservedUrl(request.launchUrl)}
           referrerPolicy="no-referrer"
           allow="fullscreen; clipboard-read; clipboard-write; camera; microphone; geolocation; display-capture"
           sandbox="allow-forms allow-scripts allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation"
         />
-      ) : null}
+      )}
       {showWarning ? (
-        <section className="app-window-compatibility" aria-label="App window compatibility">
+        <section className="app-window-compatibility" aria-label="App window help">
           <div className="app-window-compatibility-content">
             <IconExternalLink size={30} aria-hidden="true" />
             <h3 ref={noticeHeading} tabIndex={-1}>
@@ -522,16 +546,7 @@ const AppFrame = memo(function AppFrame({
             </h3>
             <p>{notice.description}</p>
             <div className="app-window-compatibility-actions">
-              {notice.blocked ? null : (
-                <Button
-                  onClick={() => {
-                    setTryWindow(true);
-                    setHelp(false);
-                  }}
-                >
-                  {loadObserved ? 'Back to app' : 'Try window'}
-                </Button>
-              )}
+              {boundary ? null : <Button onClick={onHelpClose}>Back to app</Button>}
               <Button onClick={onTab}>Open in new tab</Button>
               <Button
                 intent="primary"
@@ -548,18 +563,14 @@ const AppFrame = memo(function AppFrame({
                 Always open in new tab
               </Button>
             </div>
-            <Button variant="ghost" disabled={check.isFetching} onClick={() => void check.refetch()}>
-              {check.isFetching ? 'Checking…' : 'Check again'}
-            </Button>
+            {boundary ? null : (
+              <Button variant="ghost" disabled={check.isFetching} onClick={() => void check.refetch()}>
+                {check.isFetching ? 'Checking…' : 'Check again'}
+              </Button>
+            )}
           </div>
         </section>
-      ) : (
-        <footer className="app-window-recovery">
-          <Button ref={recoveryButton} variant="ghost" onClick={() => setHelp(true)}>
-            App not loading?
-          </Button>
-        </footer>
-      )}
+      ) : null}
     </>
   );
 });

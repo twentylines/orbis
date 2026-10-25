@@ -99,3 +99,25 @@ export function desktopActivity(
   }
   return summary ? { ...summary, count: items.length, items } : null;
 }
+
+export function desktopActivityGroups(...[tasks, names, watch, packages, checks = []]: Parameters<typeof desktopActivity>) {
+  const groups: (DesktopActivity & { category: string })[] = [];
+  const add = (category: string, activity: DesktopActivity | null) => {
+    if (activity) groups.push({ ...activity, category });
+  };
+  add('orbis', desktopActivity([], names, watch, null));
+  add('system', desktopActivity([], names, null, packages));
+  add('compatibility', desktopActivity([], names, null, null, checks));
+  const actions = new Set(tasks.filter((task) => ['queued', 'running'].includes(task.status)).map((task) => task.action));
+  for (const action of actions)
+    add(
+      `app:${action}`,
+      desktopActivity(
+        tasks.filter((task) => task.action === action),
+        names,
+        null,
+        null,
+      ),
+    );
+  return groups;
+}

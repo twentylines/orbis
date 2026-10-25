@@ -252,6 +252,27 @@ describe('read-only sensors socket and shared cache', () => {
     vi.setSystemTime(start + 1001);
     expect(await service.read()).toHaveProperty('stale', true);
     expect(calls).toEqual(['GET /v1/sensors']);
+    body = sample();
+    vi.setSystemTime(start + 3001);
+    expect(await service.read()).toHaveProperty('stale', false);
+    expect(calls).toEqual(['GET /v1/sensors', 'GET /v1/sensors']);
+  });
+
+  it.each(['helper', 'age'])('rechecks a %s-stale snapshot after two seconds while preserving its actual readings', async (kind) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const start = Date.now();
+    const sampledAt = new Date(start - (kind === 'age' ? 100_000 : 1000)).toISOString();
+    body = { ...sample(), sampledAt, stale: kind === 'helper' };
+    const service = new HostSensorsService();
+    const previous = await service.read();
+    expect(previous).toMatchObject({ available: true, stale: true, sampledAt, temperatures: [{ celsius: 52.5 }] });
+    body = { ...sample(), temperatures: [{ ...temperature(), celsius: 53 }] };
+    vi.setSystemTime(start + 1999);
+    expect(await service.read()).toEqual(previous);
+    expect(calls).toHaveLength(1);
+    vi.setSystemTime(start + 2000);
+    expect(await service.read()).toMatchObject({ available: true, stale: false, temperatures: [{ celsius: 53 }] });
+    expect(calls).toEqual(['GET /v1/sensors', 'GET /v1/sensors']);
   });
 
   it.each([404, 500])('keeps safe %i unavailable responses for two seconds after completion', async (code) => {

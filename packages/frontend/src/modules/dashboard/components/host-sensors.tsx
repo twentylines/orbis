@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { resourceBytes } from '@/components/container-resources/container-resources';
 import './host-sensors.css';
+import { sensorRefreshInterval } from './system-readings';
 
 async function loadSensors(signal: AbortSignal, path: string): Promise<HostSensors> {
   const response = await fetch(path, { credentials: 'include', signal });
@@ -37,7 +38,7 @@ export function HostSensorsView() {
     queryKey: ['host-sensors', path],
     queryFn: ({ signal }) => loadSensors(signal, path),
     enabled: visible,
-    refetchInterval: (query) => (query.state.data?.available === false && query.state.data.reason === 'Collecting sensor readings.' ? 2000 : 30_000),
+    refetchInterval: (query) => sensorRefreshInterval(query.state.data),
     refetchIntervalInBackground: false,
   });
   const data = query.data;

@@ -6,7 +6,9 @@ import clsx from 'clsx';
 import type * as React from 'react';
 import '../dropdown.css';
 
-const DropdownMenu = DropdownMenuPrimitive.Root;
+const DropdownMenu = ({ modal = false, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) => (
+  <DropdownMenuPrimitive.Root modal={modal} {...props} />
+);
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 

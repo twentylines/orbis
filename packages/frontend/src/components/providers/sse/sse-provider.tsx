@@ -10,6 +10,8 @@ import { useConnectionStore } from '@/stores/connection-store';
 import { preferenceChangeEvent } from '@/desktop/appearance-cache';
 import { appEventAffectsQuery } from '@/desktop/app-event-cache';
 import { useBrowserPresence } from '@/desktop/browser-presence';
+import { useAppContext } from '@/context/app-context';
+import { AppNotification } from '@/components/notifications/app-notification';
 
 const announcePreferences = () => window.dispatchEvent(new Event(preferenceChangeEvent));
 
@@ -18,6 +20,7 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
+  const { userSettings } = useAppContext();
   const setConnectionStatus = useConnectionStore((state) => state.setStatus);
   const pending = useRef({
     urns: new Set<string>(),
@@ -59,6 +62,22 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
       }
 
       const { appName, appStoreId } = extractAppUrn(appUrn as AppUrn);
+      const path =
+        appStoreId === '_user' ? `/apps/${encodeURIComponent(appName)}` : `/apps/${encodeURIComponent(appStoreId)}/${encodeURIComponent(appName)}`;
+      const notify = (kind: 'success' | 'error', key: string) =>
+        toast[kind](
+          (item) => (
+            <AppNotification
+              message={t(key, { id: appName })}
+              event={event}
+              urn={appUrn}
+              path={path}
+              addresses={userSettings}
+              onDismiss={() => toast.dismiss(item.id)}
+            />
+          ),
+          { duration: kind === 'error' ? 10_000 : 7000 },
+        );
 
       refresh(appUrn, event !== 'status_change');
 
@@ -70,58 +89,58 @@ export const SSEProvider = ({ children }: PropsWithChildren) => {
         case 'status_change':
           break;
         case 'install_success':
-          toast.success(t('APP_INSTALL_SUCCESS', { id: appName }));
+          notify('success', 'APP_INSTALL_SUCCESS');
           break;
         case 'install_error':
-          toast.error(t('APP_ERROR_APP_FAILED_TO_INSTALL', { id: appName }));
+          notify('error', 'APP_ERROR_APP_FAILED_TO_INSTALL');
           break;
         case 'start_success':
-          toast.success(t('APP_START_SUCCESS', { id: appName }));
+          notify('success', 'APP_START_SUCCESS');
           break;
         case 'start_error':
-          toast.error(t('APP_ERROR_APP_FAILED_TO_START', { id: appName }));
+          notify('error', 'APP_ERROR_APP_FAILED_TO_START');
           break;
         case 'stop_success':
-          toast.success(t('APP_STOP_SUCCESS', { id: appName }));
+          notify('success', 'APP_STOP_SUCCESS');
           break;
         case 'stop_error':
-          toast.error(t('APP_ERROR_APP_FAILED_TO_STOP', { id: appName }));
+          notify('error', 'APP_ERROR_APP_FAILED_TO_STOP');
           break;
         case 'uninstall_success':
-          toast.success(t('APP_UNINSTALL_SUCCESS', { id: appName }));
+          notify('success', 'APP_UNINSTALL_SUCCESS');
           break;
         case 'uninstall_error':
-          toast.error(t('APP_ERROR_APP_FAILED_TO_UNINSTALL', { id: appName }));
+          notify('error', 'APP_ERROR_APP_FAILED_TO_UNINSTALL');
           break;
         case 'update_success':
-          toast.success(t('APP_UPDATE_SUCCESS', { id: appName }));
+          notify('success', 'APP_UPDATE_SUCCESS');
           break;
         case 'update_error':
-          toast.error(t('APP_ERROR_APP_FAILED_TO_UPDATE', { id: appName }));
+          notify('error', 'APP_ERROR_APP_FAILED_TO_UPDATE');
           break;
         case 'reset_success':
-          toast.success(t('APP_RESET_SUCCESS', { id: appName }));
+          notify('success', 'APP_RESET_SUCCESS');
           break;
         case 'reset_error':
-          toast.error(t('APP_ERROR_APP_FAILED_TO_RESET', { id: appName }));
+          notify('error', 'APP_ERROR_APP_FAILED_TO_RESET');
           break;
         case 'restart_success':
-          toast.success(t('APP_RESTART_SUCCESS', { id: appName }));
+          notify('success', 'APP_RESTART_SUCCESS');
           break;
         case 'restart_error':
-          toast.error(t('APP_ERROR_APP_FAILED_TO_RESTART', { id: appName }));
+          notify('error', 'APP_ERROR_APP_FAILED_TO_RESTART');
           break;
         case 'backup_success':
-          toast.success(t('APP_BACKUP_SUCCESS', { id: appName }));
+          notify('success', 'APP_BACKUP_SUCCESS');
           break;
         case 'backup_error':
-          toast.error(t('APP_BACKUP_ERROR', { id: appName }));
+          notify('error', 'APP_BACKUP_ERROR');
           break;
         case 'restore_success':
-          toast.success(t('APP_RESTORE_SUCCESS', { id: appName }));
+          notify('success', 'APP_RESTORE_SUCCESS');
           break;
         case 'restore_error':
-          toast.error(t('APP_RESTORE_ERROR', { id: appName }));
+          notify('error', 'APP_RESTORE_ERROR');
           break;
         default:
           break;

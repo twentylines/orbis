@@ -23,7 +23,7 @@
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--orbis-font-ui);
 }
 .orbis-notifications:empty {
   display: none;
@@ -34,7 +34,7 @@ body:not(:has(.desktop)) .orbis-notifications {
 .orbis-notification {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) 32px;
-  align-items: center;
+  align-items: start;
   flex-shrink: 0;
   gap: 12px;
   min-height: 68px;
@@ -83,11 +83,44 @@ body:not(:has(.desktop)) .orbis-notifications {
 .orbis-notification-message :last-child {
   margin-bottom: 0;
 }
+.orbis-notification-message > p {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  margin: 0;
+}
+.orbis-notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.orbis-notification-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-ink) 10%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+.orbis-notification-action:hover {
+  background: color-mix(in srgb, var(--desktop-ink) 16%, var(--desktop-surface));
+}
 .orbis-notification-dismiss {
   display: grid;
   place-items: center;
   width: 32px;
-  height: 32px;
+  height: 36px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 10px;

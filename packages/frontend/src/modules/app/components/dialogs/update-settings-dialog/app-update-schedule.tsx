@@ -30,7 +30,7 @@ export function AppUpdateSchedule({ urn, name }: { urn: string; name: string }) 
       {status.isError ? (
         <p role="alert">
           The schedule could not be loaded.{' '}
-          <button type="button" onClick={() => void status.refetch()}>
+          <button type="button" className="btn btn-secondary" onClick={() => void status.refetch()}>
             Retry
           </button>
         </p>

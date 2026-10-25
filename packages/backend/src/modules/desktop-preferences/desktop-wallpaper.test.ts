@@ -139,7 +139,7 @@ describe('private desktop wallpaper HTTP and storage', () => {
 
   it('rejects excessive pixel counts and invalid or excessive side lengths', async () => {
     for (const [width, height] of [
-      [8000, 5000],
+      [10000, 6500],
       [16385, 1],
       [1, 16385],
       [0, 2],

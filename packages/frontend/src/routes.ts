@@ -32,10 +32,10 @@ export default [
         route('servers/:serverId/:storeId/:appId', './modules/app/pages/cluster-app-preview.tsx', { id: 'cluster-app-preview' }),
         route(':appId', './modules/app/pages/custom-app-details-page.tsx', { id: 'custom-app' }),
         route(':storeId/:appId', './modules/app/pages/app-details-page.tsx', { id: 'app-details' }),
+        route(':storeId/:appId/edit', './modules/app/pages/app-edit-page.tsx', { id: 'app-edit' }),
+        route(':appId/edit', './modules/app/pages/app-edit-page.tsx', { id: 'app-edit-custom' }),
       ]),
       route('create', './modules/app/pages/custom-app-create-page.tsx', { id: 'custom-app-create' }),
-      route(':storeId/:appId/edit', './modules/app/pages/app-edit-page.tsx', { id: 'app-edit' }),
-      route(':appId/edit', './modules/app/pages/app-edit-page.tsx', { id: 'app-edit-custom' }),
       route(':storeId/:appId/update', './modules/app/pages/app-update-page.tsx', { id: 'app-update' }),
     ]),
 

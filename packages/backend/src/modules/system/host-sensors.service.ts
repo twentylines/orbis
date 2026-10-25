@@ -120,7 +120,10 @@ export class HostSensorsService {
   read(): Promise<HostSensors> {
     if (this.cached && this.cached.expiresAt > Date.now()) {
       const result = this.cached.result;
-      return Promise.resolve(result.available ? { ...result, stale: result.stale || Date.now() - Date.parse(result.sampledAt) > 90_000 } : result);
+      if (!result.available) return Promise.resolve(result);
+      const stale = result.stale || Date.now() - Date.parse(result.sampledAt) > 90_000;
+      if (stale) this.cached.expiresAt = Math.min(this.cached.expiresAt, Date.now() + 2000);
+      return Promise.resolve({ ...result, stale });
     }
     if (!this.pending) {
       const startedAt = Date.now();
@@ -135,7 +138,10 @@ export class HostSensorsService {
       )
         .catch(() => unavailable())
         .then((result) => {
-          this.cached = { expiresAt: result.available ? startedAt + 25_000 : Date.now() + 2000, result };
+          this.cached = {
+            expiresAt: result.available ? startedAt + (result.stale ? 2000 : 25_000) : Date.now() + 2000,
+            result,
+          };
           return result;
         })
         .finally(() => {

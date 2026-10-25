@@ -6,7 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { DesktopPreferencesService } from './desktop-preferences.service';
 
-export const WALLPAPER_LIMIT = 8 * 1024 * 1024;
+export const WALLPAPER_LIMIT = 32 * 1024 * 1024;
 const TYPES = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' } as const;
 
 function metadata(data: Buffer, hash = createHash('sha256').update(data).digest('hex')) {
@@ -17,10 +17,10 @@ function metadata(data: Buffer, hash = createHash('sha256').update(data).digest(
     throw new BadRequestException('Choose a readable PNG, JPEG or WebP image.');
   }
   if (!data.length || data.length > WALLPAPER_LIMIT || !size || !(size.type in TYPES)) {
-    throw new BadRequestException('Choose a PNG, JPEG or WebP image up to 8 MB.');
+    throw new BadRequestException('Choose a PNG, JPEG or WebP image up to 32 MB.');
   }
-  if (![size.width, size.height].every((value) => Number.isInteger(value) && value > 0 && value <= 16384) || size.width * size.height > 32_000_000) {
-    throw new BadRequestException('Use an image up to 32 megapixels, with neither side larger than 16,384 pixels.');
+  if (![size.width, size.height].every((value) => Number.isInteger(value) && value > 0 && value <= 16384) || size.width * size.height > 64_000_000) {
+    throw new BadRequestException('Use an image up to 64 megapixels, with neither side larger than 16,384 pixels.');
   }
   return {
     hash,

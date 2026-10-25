@@ -5,6 +5,31 @@ import { AppsRepository } from '../apps/apps.repository';
 import { DOCKERODE } from '../docker/docker.module';
 
 const safe = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null);
+const safeInteger = (value: unknown, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum && value <= maximum ? value : null;
+
+function checkTime(value: unknown) {
+  if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(value))
+    return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && timestamp > 0 && timestamp <= Date.now() + 5000 ? new Date(timestamp).toISOString() : null;
+}
+
+export function containerReadiness(inspection: Dockerode.ContainerInspectInfo): NonNullable<ContainerReading['readiness']> {
+  const health = inspection.State.Health;
+  const lastCheck = Array.isArray(health?.Log) ? health.Log.at(-1) : undefined;
+  const interval = safeInteger(inspection.Config?.Healthcheck?.Interval, 1);
+  const startPeriod = safeInteger(inspection.Config?.Healthcheck?.StartPeriod);
+  return {
+    failingStreak: safeInteger(health?.FailingStreak),
+    lastCheckExitCode: safeInteger(lastCheck?.ExitCode, -2147483648, 2147483647),
+    lastCheckAt: checkTime(lastCheck?.End),
+    intervalSeconds: interval === null ? null : interval / 1_000_000_000,
+    startPeriodSeconds: startPeriod === null ? null : startPeriod / 1_000_000_000,
+    oomKilled: typeof inspection.State.OOMKilled === 'boolean' ? inspection.State.OOMKilled : null,
+    restartCount: safeInteger(inspection.RestartCount),
+  };
+}
 
 export function containerUsage(stats: Dockerode.ContainerStats, previous?: Pick<Dockerode.ContainerStats, 'cpu_stats'>) {
   const current = stats.cpu_stats;
@@ -108,6 +133,7 @@ export class ContainerTelemetryService {
               service: info.Labels['com.docker.compose.service'] ?? null,
               state,
               health,
+              readiness: inspection.status === 'fulfilled' ? containerReadiness(inspection.value) : null,
               ...metrics,
               statsAvailable: stats !== null,
             });
