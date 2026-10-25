@@ -26,7 +26,7 @@ if (NODE_ENV === 'production') {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ isSsrBuild }) => ({
   plugins,
   resolve: {
     alias,
@@ -44,5 +44,13 @@ export default defineConfig({
   },
   build: {
     sourcemap: false,
+    rollupOptions: isSsrBuild
+      ? undefined
+      : {
+          output: {
+            // Keep configuration ahead of schema modules instead of merging it into the root chunk.
+            manualChunks: (id) => (id === path.resolve(__dirname, './src/lib/validation-runtime.ts') ? 'validation-runtime' : undefined),
+          },
+        },
   },
-});
+}));

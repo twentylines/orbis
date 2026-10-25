@@ -1,3 +1,4 @@
+import './lib/validation-runtime';
 import { useEffect } from 'react';
 import { OrbisToaster } from './components/notifications/orbis-toaster';
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, redirect } from 'react-router';
