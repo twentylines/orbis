@@ -33,6 +33,17 @@ CURRENT = manifest("v0.1.0-beta.6", "b")
 TARGET = manifest("v0.1.0-beta.7", "c")
 
 
+class PlanReviewTimeTests(unittest.TestCase):
+    def test_review_window_includes_its_boundaries_and_rejects_invalid_timestamps(self):
+        with mock.patch.object(SERVICE.time, "time", return_value=900):
+            for timestamp in (0, 450, 900):
+                with self.subTest(timestamp=timestamp):
+                    self.assertTrue(SERVICE.plan_is_current(timestamp, 900))
+            for timestamp in (-0.01, 900.01, True, False, None, "900", float("nan"), float("inf"), -float("inf"), 10 ** 1000):
+                with self.subTest(timestamp=timestamp):
+                    self.assertFalse(SERVICE.plan_is_current(timestamp, 900))
+
+
 class InstalledManifestTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -462,6 +473,37 @@ class HostServiceTests(unittest.TestCase):
         self.state.chmod(0o755)
         with self.assertRaisesRegex(ValueError, "private"):
             SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
+
+    def test_core_review_rejects_clock_rollback_and_nonfinite_creation_times(self):
+        planned = self.service.plan(TARGET["tag"])
+        file = self.state / f"plan-{planned['planId']}.json"
+        record = SERVICE.read_private(file)
+        created = record["createdAt"]
+        for timestamp in (created + 60, float("nan"), float("inf")):
+            with self.subTest(timestamp=timestamp):
+                SERVICE.write_private(file, {**record, "createdAt": timestamp})
+                with mock.patch.object(SERVICE.time, "time", return_value=created):
+                    with self.assertRaisesRegex(ValueError, "expired"):
+                        self.service._read_plan(planned["planId"])
+                self.assertIsNone(SERVICE.read_private(self.service.job_file))
+
+    def test_package_review_rejects_clock_rollback_before_dispatching_a_worker(self):
+        simulation = {"selected": [{"name": "base-files"}], "operations": []}
+        with mock.patch.object(SERVICE.PACKAGES, "simulate_upgrades", return_value=simulation), mock.patch.object(
+            self.service, "start_package_worker"
+        ) as worker:
+            planned = self.service.package_plan(["base-files"])
+            file = self.state / f"package-plan-{planned['planId']}.json"
+            record = SERVICE.read_private(file)
+            created = record["createdAt"]
+            for timestamp in (created + 60, float("nan"), float("inf")):
+                with self.subTest(timestamp=timestamp):
+                    SERVICE.write_private(file, {**record, "createdAt": timestamp})
+                    with mock.patch.object(SERVICE.time, "time", return_value=created):
+                        with self.assertRaisesRegex(ValueError, "expired"):
+                            self.service.package_apply(planned["planId"])
+                    worker.assert_not_called()
+                    self.assertIsNone(SERVICE.read_private(self.service.package_job_file))
 
     def test_snapshot_failure_keeps_safe_diagnostics_after_rollback(self):
         planned = self.service.plan(TARGET["tag"])

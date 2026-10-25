@@ -48,6 +48,11 @@ PACKAGE_OUTPUT_BYTES = 8192
 RESTART_PLAN_TTL_SECONDS = 120
 
 
+def plan_is_current(created_at: object, lifetime: int) -> bool:
+    now = time.time()
+    return type(created_at) in (int, float) and now - lifetime <= created_at <= now
+
+
 def boot_id() -> str:
     value = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip()
     return str(uuid.UUID(value))
@@ -311,8 +316,7 @@ class HostService:
                 not plan or plan.get("schema") != "orbis.restart-plan.v1" or plan.get("id") != plan_id
                 or plan.get("root") != str(self.root) or plan.get("dockerContext") != self.context
                 or plan.get("bootId") != boot_id() or "consumedAt" in plan
-                or not isinstance(plan.get("createdAt"), (int, float))
-                or not 0 <= time.time() - plan["createdAt"] <= RESTART_PLAN_TTL_SECONDS
+                or not plan_is_current(plan.get("createdAt"), RESTART_PLAN_TTL_SECONDS)
             ):
                 raise ValueError("restart plan is missing, changed, expired, or already used; review a new restart")
             plan["consumedAt"] = time.time()
@@ -475,8 +479,7 @@ class HostService:
                 or plan.get("schema") != "orbis.package-plan.v1"
                 or plan.get("id") != plan_id
                 or plan.get("root") != str(self.root)
-                or not isinstance(plan.get("createdAt"), (int, float))
-                or time.time() - plan["createdAt"] > PLAN_TTL_SECONDS
+                or not plan_is_current(plan.get("createdAt"), PLAN_TTL_SECONDS)
                 or not isinstance(plan.get("selected"), list)
                 or not isinstance(plan.get("operations"), list)
             ):
@@ -608,8 +611,7 @@ class HostService:
             not record
             or record.get("schema") != "orbis.host-service-plan.v1"
             or record.get("id") != plan_id
-            or not isinstance(record.get("createdAt"), (int, float))
-            or time.time() - record["createdAt"] > PLAN_TTL_SECONDS
+            or not plan_is_current(record.get("createdAt"), PLAN_TTL_SECONDS)
         ):
             raise ValueError("update plan is missing or expired; create a new plan")
         return record

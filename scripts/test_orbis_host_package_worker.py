@@ -105,6 +105,35 @@ class HostPackageWorkerTests(unittest.TestCase):
                 WORKER.run(self.job_id)
         apt.assert_not_called()
 
+    def test_install_and_refresh_reject_clock_rollback_before_reading_candidates_or_running_apt(self):
+        created = time.time()
+        for refresh in (False, True):
+            for timestamp in (created + 60, float("nan"), float("inf")):
+                with self.subTest(refresh=refresh, timestamp=timestamp):
+                    (self.state / f"package-job-{self.job_id}.log").unlink(missing_ok=True)
+                    plan = {
+                        "schema": "orbis.package-refresh.v1" if refresh else "orbis.package-plan.v1",
+                        "id": self.job_id, "root": str(self.root), "createdAt": timestamp,
+                        **({} if refresh else self.simulation),
+                    }
+                    job = {
+                        "schema": "orbis.package-job.v1", "id": self.job_id, "state": "queued", "createdAt": created,
+                        **({"kind": "refresh"} if refresh else {}),
+                    }
+                    WORKER.SERVICE.write_private(self.state / f"package-plan-{self.job_id}.json", plan)
+                    WORKER.SERVICE.write_private(self.state / "package-job.json", job)
+                    with mock.patch.object(WORKER, "STATE_DIR", self.state), mock.patch.object(
+                        WORKER.time, "time", return_value=created
+                    ), mock.patch.object(WORKER.PACKAGES, "simulate_upgrades", return_value=self.simulation) as simulate, mock.patch.object(
+                        WORKER.PACKAGES, "apt_refresh_command", return_value=["/usr/bin/apt-get", "update"]
+                    ) as refresh_command, mock.patch.object(WORKER.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as apt:
+                        with self.assertRaisesRegex(ValueError, "expired"):
+                            WORKER.run(self.job_id)
+                    simulate.assert_not_called()
+                    refresh_command.assert_not_called()
+                    apt.assert_not_called()
+                    self.assertEqual(WORKER.SERVICE.read_private(self.state / "package-job.json"), job)
+
 
 if __name__ == "__main__":
     unittest.main()

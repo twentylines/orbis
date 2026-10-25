@@ -49,8 +49,7 @@ def run(job_id: str) -> None:
         or job.get("schema") != "orbis.package-job.v1"
         or job.get("id") != job_id
         or job.get("state") != "queued"
-        or not isinstance(plan.get("createdAt"), (int, float))
-        or time.time() - plan["createdAt"] > SERVICE.PLAN_TTL_SECONDS
+        or not SERVICE.plan_is_current(plan.get("createdAt"), SERVICE.PLAN_TTL_SECONDS)
         or not isinstance(plan.get("root"), str)
         or refresh != (job.get("kind") == "refresh")
         or (refresh and set(plan) != {"schema", "id", "root", "createdAt"})
