@@ -405,9 +405,11 @@ def main():
                     raise ValueError("Stop native and remote storage writers before replacing the installation")
             if not args.yes and ask(f"Type {chosen} to confirm installation: ").strip() != str(chosen):
                 raise ValueError("Installation cancelled; no controller was replaced")
-            prepare_backup_tools(display)
+            if not selected:
+                prepare_backup_tools(display)
 
         if selected:
+            prepare_backup_tools(display)
             result = replacement(root, reader, manifest, state, mode, confirm, display, backup_scope=args.backup_scope)
         else:
             result = new.install(root, reader, manifest, state, args, confirm, display=display)

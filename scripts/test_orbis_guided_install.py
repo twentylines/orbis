@@ -91,6 +91,29 @@ class GuidedTests(unittest.TestCase):
                 verify.assert_not_called()
                 execute.assert_not_called()
 
+    def test_backup_tools_are_ready_before_keep_review_or_new_installation(self):
+        for existing in (True, False):
+            with self.subTest(existing=existing), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder).resolve()
+                state = root / "private"; state.mkdir()
+                manifest = root / "manifest.json"; manifest.write_text(json.dumps(MANIFEST))
+                selected = {"installRoot": str(root), "product": "runtipi", "version": "4.10.1", "reviewRequired": []}
+                argv = ["installer", "--manifest", str(manifest), "--state-dir", str(state), "--yes", "--root", str(root), "--without-host-service", "--host-writers-stopped"]
+                if existing:
+                    argv.extend(["--mode", "keep"])
+                ready = []
+
+                def install(*args, **kwargs):
+                    if not existing:
+                        args[5](root)
+                    self.assertEqual(ready, ["rsync"], "Compatibility review cannot run until the missing backup tool is installed")
+                    return {"result": "orbis-installed"}
+
+                new = SimpleNamespace(IMAGES={}, choose_ports=lambda *args: (80, 443), install=mock.Mock(side_effect=install))
+                modules = {"orbis-install-new.py": new, "orbis-host-service-enable.py": SimpleNamespace(require_scoped_cleanup=mock.Mock()), "install-orbis.py": SimpleNamespace(private_directory=lambda path: path)}
+                with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value={"installations": [selected] if existing else [], "unassignedManagedContainers": []}), mock.patch.object(GUIDE.APPS, "require_assigned"), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: modules[name]), mock.patch.object(GUIDE, "prepare_backup_tools", side_effect=lambda _: ready.append("rsync")), mock.patch.object(GUIDE, "replacement", side_effect=install), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(GUIDE.main(), 0)
+
     def test_real_controlling_terminal_answers_are_independent_of_piped_stdin(self):
         import fcntl
         import termios
