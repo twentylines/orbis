@@ -1,4 +1,4 @@
-body:has(.orbis-theme) :is(.form-control, .form-select, .btn) {
+body:has(.orbis-theme) :is(.form-control, .form-select) {
   border-width: 2px;
   border-style: solid;
 }

@@ -310,9 +310,15 @@
   border-radius: calc(var(--orbis-dock-item-radius, 14px) - 5px);
 }
 .desktop .orbis-app-tray .btn:focus-visible {
-  outline: 2px solid var(--desktop-chrome-ink);
-  outline-offset: -3px;
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-accent) 28%, var(--desktop-chrome));
   box-shadow: none;
+}
+@media (forced-colors: active) {
+  .desktop .orbis-app-tray .btn:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+  }
 }
 .app-tray-restore[data-flying="true"] .app-logo {
   visibility: hidden;
