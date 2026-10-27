@@ -6,7 +6,7 @@ Run this in your server's terminal:
 curl -fsSL https://twentylines.github.io/orbis/install | sudo python3
 ```
 
-The address serves the verified installer from the newest published Orbis release, including betas. It updates after release publication; no version number is needed. On an existing Orbis installation, rerunning this command upgrades the host helper and updates Orbis automatically, retaining accounts, settings and apps. An already current installation is reported as up to date. For an existing Runtipi installation, the installer offers Keep or Fresh. Requirements and recovery details are below.
+The address serves the verified installer from the newest published Stable release. It updates after release publication; no version number is needed. On an existing Orbis installation, rerunning this command upgrades the host helper and installs a newer compatible Stable release, retaining accounts, settings and apps. It never downgrades an installed build or leaves Nightly automatically. Nightly installers are attached to their individual releases and require explicit risk acknowledgement. For an existing Runtipi installation, the installer offers Keep or Fresh. Requirements and recovery details are below.
 
 ## Inspect an existing installation
 
