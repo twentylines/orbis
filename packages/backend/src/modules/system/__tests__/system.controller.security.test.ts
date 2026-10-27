@@ -1,6 +1,6 @@
 import { LoggerService } from '@/core/logger/logger.service';
 import { Test } from '@nestjs/testing';
-import { type INestApplication, type NestMiddleware } from '@nestjs/common';
+import { type INestApplication, type NestMiddleware, NotFoundException } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { mock } from 'vitest-mock-extended';
@@ -15,6 +15,7 @@ import { HostTelemetryService } from '../host-telemetry.service';
 import { HostProcessesService } from '../host-processes.service';
 import { HostSensorsService } from '../host-sensors.service';
 import { HostDeviceHistoryService } from '../host-device-history.service';
+import { DriveHealthService } from '../drive-health.service';
 
 describe('SystemController certificate security', () => {
   let app: INestApplication;
@@ -28,6 +29,7 @@ describe('SystemController certificate security', () => {
   const processes = mock<HostProcessesService>();
   const sensors = mock<HostSensorsService>();
   const hostHistory = mock<HostDeviceHistoryService>();
+  const drives = mock<DriveHealthService>();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -40,6 +42,7 @@ describe('SystemController certificate security', () => {
         { provide: HostProcessesService, useValue: processes },
         { provide: HostSensorsService, useValue: sensors },
         { provide: HostDeviceHistoryService, useValue: hostHistory },
+        { provide: DriveHealthService, useValue: drives },
         { provide: OrbisReleaseService, useValue: orbisReleases },
         { provide: OrbisReleaseChannelsService, useValue: releaseChannels },
         {
@@ -64,11 +67,12 @@ describe('SystemController certificate security', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
   });
 
   beforeEach(() => {
     systemService.getLocalCertificate.mockReset();
+    drives.read.mockReset();
     releaseChannels.read.mockReset().mockResolvedValue({ version: 1, channel: 'stable', revision: 'a65a9a64-f57e-4c73-9dc8-8d35d0b5b5a1' });
     releaseChannels.status.mockReset().mockResolvedValue({
       phase: 'development',
@@ -103,6 +107,24 @@ describe('SystemController certificate security', () => {
     expect(response.headers['content-type']).toContain('application/x-pem-file');
     expect(response.headers['content-disposition']).toBe('attachment; filename=cert.pem');
     expect(response.text).toBe('test-certificate');
+  });
+
+  it('returns a clear unavailable response when no public certificate is configured', async () => {
+    systemService.getLocalCertificate.mockRejectedValue(new NotFoundException('The local HTTPS certificate is not available.'));
+    const response = await request(app.getHttpServer()).get('/system/certificate');
+    expect(response.status).toBe(404);
+    expect(response.body.message).toBe('The local HTTPS certificate is not available.');
+    expect(response.headers['content-disposition']).toBeUndefined();
+  });
+
+  it('does not read physical drive health for unauthenticated requests', async () => {
+    expect((await request(app.getHttpServer()).get('/system/drives')).status).toBe(401);
+    expect(drives.read).not.toHaveBeenCalled();
+    drives.read.mockResolvedValue({ available: false, reason: 'Host service is unavailable.' });
+    const response = await request(app.getHttpServer()).get('/system/drives').set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ available: false, reason: 'Host service is unavailable.' });
+    expect(drives.read).toHaveBeenCalledOnce();
   });
 
   it('requires authentication for telemetry', async () => {

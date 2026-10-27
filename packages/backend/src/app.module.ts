@@ -4,8 +4,8 @@ import { ConfigurationModule } from '@/core/config/configuration.module';
 import { DatabaseModule } from '@/core/database/database.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { I18nModule } from '@/modules/i18n/i18n.module';
-import { type DynamicModule, type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
+import { type MiddlewareConsumer, Module, type NestModule, type ModuleMetadata } from '@nestjs/common';
+import { APP_FILTER, APP_GUARD, APP_PIPE, APP_INTERCEPTOR } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { SentryModule } from '@sentry/nestjs/setup';
@@ -23,7 +23,6 @@ import { AppStoreModule } from './modules/app-stores/app-store.module';
 import { AppsModule } from './modules/apps/apps.module';
 import { AuthMiddleware } from './modules/auth/auth.middleware';
 import { BackupsModule } from './modules/backups/backups.module';
-import { DebugModule } from './modules/debug/debug.module';
 import { LinksModule } from './modules/links/links.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { NetworkModule } from './modules/network/network.module';
@@ -42,11 +41,13 @@ import { HostUpdatesModule } from './modules/host-updates/host-updates.module';
 import { installationMiddleware } from './common/installation.middleware';
 import { DockerAppsModule } from './modules/docker-apps/docker-apps.module';
 import { ClusterModule } from './modules/cluster/cluster.module';
+import { SystemBackupsModule } from './modules/system-backups/system-backups.module';
+import { BackupMaintenanceInterceptor, backupMaintenanceMiddleware } from './common/backup-maintenance';
 
 const DEFAULT_THROTTLE_TTL = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 300;
 
-const imports: (DynamicModule | typeof I18nModule)[] = [
+const imports: NonNullable<ModuleMetadata['imports']> = [
   SentryModule.forRoot(),
   ThrottlerModule.forRoot([{ ttl: DEFAULT_THROTTLE_TTL, limit: DEFAULT_THROTTLE_LIMIT }]),
   SystemModule,
@@ -78,10 +79,10 @@ const imports: (DynamicModule | typeof I18nModule)[] = [
   HostUpdatesModule,
   DockerAppsModule,
   ClusterModule,
+  SystemBackupsModule,
 ];
 
-const { NODE_ENV } = process.env;
-if (NODE_ENV === 'production') {
+if (process.env.NODE_ENV === 'production') {
   imports.push(
     ServeStaticModule.forRoot({
       rootPath: path.join(APP_DIR, 'assets', 'frontend'),
@@ -89,13 +90,14 @@ if (NODE_ENV === 'production') {
     }),
   );
 } else {
-  imports.push(DebugModule);
+  imports.push(import('./modules/debug/debug.module').then(({ DebugModule }) => ({ module: DebugModule })));
 }
 
 @Module({
   imports,
   providers: [
     AppService,
+    { provide: APP_INTERCEPTOR, useClass: BackupMaintenanceInterceptor },
     {
       provide: APP_PIPE,
       useClass: ArkValidationPipe,
@@ -114,6 +116,6 @@ if (NODE_ENV === 'production') {
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(installationMiddleware, AuthMiddleware).forRoutes('*all');
+    consumer.apply(installationMiddleware, backupMaintenanceMiddleware, AuthMiddleware).forRoutes('*all');
   }
 }

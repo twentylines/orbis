@@ -7,22 +7,64 @@
 }
 
 .orbis-switch > .switch-root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
   float: none;
   flex: none;
   margin: 0;
+  width: 42px;
+  min-width: 42px;
+  height: 26px;
+  min-height: 26px;
+  padding: 3px;
+  border: 1px solid var(--desktop-line, var(--tblr-border-color));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--desktop-ink, #20252b) 12%, var(--desktop-surface, #f5f6f7));
+  background-image: none;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
 }
 
 .orbis-switch > .form-check-label {
   min-width: 0;
 }
 
-.switch-root[data-state="checked"] {
-  background-color: var(--tblr-primary);
-  background-position: right center;
-  --tblr-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ffffff'/%3e%3c/svg%3e");
+.orbis-switch > .switch-root[data-state="checked"] {
+  background-color: var(--desktop-action, var(--tblr-primary));
+  border-color: transparent;
 }
 
-.switch-root[data-state="checked"]:focus,
-.switch-root[data-state="checked"]:hover {
-  --tblr-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ffffff'/%3e%3c/svg%3e");
+.switch-thumb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--desktop-muted, #70757e);
+  transform: translateX(0);
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms ease;
+}
+.switch-root[data-state="checked"] > .switch-thumb {
+  transform: translateX(16px);
+  background: var(--desktop-action-ink, #fff);
+}
+.switch-root:focus-visible {
+  outline: 2px solid var(--desktop-focus, var(--tblr-primary));
+  outline-offset: 4px;
+}
+.switch-root:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-switch > .switch-root,
+  .switch-root > .switch-thumb {
+    transition: none;
+  }
 }

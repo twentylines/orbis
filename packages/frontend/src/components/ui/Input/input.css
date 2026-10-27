@@ -7,6 +7,63 @@
   min-width: 0;
   container-type: inline-size;
 }
+.orbis-input-character-motion {
+  position: relative;
+  min-width: 0;
+}
+.orbis-character-clip {
+  position: absolute;
+  overflow: clip;
+  pointer-events: none;
+  user-select: none;
+}
+.orbis-character-glyph {
+  display: inline-block;
+  animation: orbis-character-in 160ms cubic-bezier(0.2, 0.65, 0.3, 1);
+}
+.orbis-character-run {
+  position: absolute;
+  white-space: pre;
+  font-kerning: none;
+  font-variant-ligatures: none;
+}
+.orbis-input-character-motion[data-character-ready="true"] > input {
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--desktop-ink);
+  font-kerning: none;
+  font-variant-ligatures: none;
+}
+.orbis-input-character-motion[data-character-ready="true"] > input::placeholder {
+  -webkit-text-fill-color: var(--desktop-muted);
+}
+.orbis-input-character-motion[data-character-ready="true"] > input:is(:autofill, :-webkit-autofill) {
+  -webkit-text-fill-color: var(--desktop-ink);
+}
+.orbis-input-character-motion > input:is(:autofill, :-webkit-autofill) + .orbis-character-clip {
+  display: none;
+}
+@keyframes orbis-character-in {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+html[data-orbis-motion="reduced"] .orbis-character-clip {
+  display: none;
+}
+html[data-orbis-motion="reduced"] .orbis-input-character-motion[data-character-ready="true"] > input {
+  -webkit-text-fill-color: currentColor;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-character-clip {
+    display: none;
+  }
+  .orbis-input-character-motion[data-character-ready="true"] > input {
+    -webkit-text-fill-color: currentColor;
+  }
+}
 .orbis-input-group {
   min-width: 0;
   gap: 8px;

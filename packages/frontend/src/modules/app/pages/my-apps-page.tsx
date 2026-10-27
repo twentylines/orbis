@@ -123,6 +123,7 @@ function LocalApps() {
     return (
       <Link
         key={app.id}
+        ref={preview?.onCardMount}
         to={`/apps/${storeId === '_user' ? '' : `${encodeURIComponent(storeId ?? '')}/`}${encodeURIComponent(appName ?? '')}${appsReturnPath(null, location.search).slice('/apps'.length)}`}
         state={preview?.nextHistory()}
         preventScrollReset
@@ -160,6 +161,18 @@ function LocalApps() {
         <output className="app-library-results">
           {matching.length} of {installed.length} apps{matchingLinks.length ? ` · ${matchingLinks.length} links` : ''}
         </output>
+        {installed.length || customLinks.length ? (
+          <section className="app-library-add-actions" aria-label="Add to your library">
+            <button type="button" className="btn" onClick={() => navigate('/apps/create')}>
+              <IconLayoutGridAdd size={18} aria-hidden="true" />
+              Add custom app
+            </button>
+            <button type="button" className="btn" onClick={() => addLinkDisclosure.open()}>
+              <IconLinkPlus size={18} aria-hidden="true" />
+              Add external link
+            </button>
+          </section>
+        ) : null}
         <div ref={batchAnchor} className={clsx('desktop-batch-controls', { 'd-none': installed.length <= 1 })} data-open={batchActions.isOpen}>
           <button type="button" aria-expanded={batchActions.isOpen} aria-controls={batchActionsId} onClick={() => batchActions.toggle()}>
             <IconAdjustmentsHorizontal size={17} aria-hidden="true" />
@@ -188,44 +201,37 @@ function LocalApps() {
           redirectPath="/app-store"
           actionLabel="MY_APPS_EMPTY_ACTION"
           extraContent={
-            <div className="d-flex flex-column flex-sm-row gap-2 justify-content-center">
+            <div className="app-library-empty-actions">
               <ButtonTile
                 title={t('CUSTOM_APP_ADD_TITLE')}
-                subtitle={t('CUSTOM_APP_ADD_SUBTITLE')}
+                subtitle="Configure Docker services"
                 action={() => navigate('/apps/create')}
-                icon={<IconLayoutGridAdd size={50} stroke={1.5} color="#A4A4A4" />}
-                className="col-12 col-sm-6 col-lg-6 col-lg-6"
+                icon={<IconLayoutGridAdd size={32} stroke={1.5} />}
               />
               <ButtonTile
                 title={t('LINKS_ADD_TITLE')}
-                subtitle={t('LINKS_ADD_SUBTITLE')}
+                subtitle="Link to a website"
                 action={() => addLinkDisclosure.open()}
-                icon={<IconLinkPlus size={50} stroke={1.5} color="#A4A4A4" />}
-                className="col-12 col-sm-6 col-md-6 col-lg-6"
+                icon={<IconLinkPlus size={32} stroke={1.5} />}
               />
             </div>
           }
         />
       ) : (
-        <div className="row row-cards desktop-installed-grid" data-testid="apps-list">
-          {matching.map(({ entry }) => renderApp(entry))}
-          {matchingLinks.map(({ entry }) => renderLink(entry))}
-          {matching.length + matchingLinks.length === 0 ? (
-            <p className="app-library-empty">No apps match these filters. Clear the search or choose another category.</p>
+        <>
+          <div className="row row-cards desktop-installed-grid" data-testid="apps-list">
+            {matching.map(({ entry }) => renderApp(entry))}
+            {matching.length === 0 ? (
+              <p className="app-library-empty">No apps match these filters. Clear the search or choose another category.</p>
+            ) : null}
+          </div>
+          {matchingLinks.length ? (
+            <section className="app-library-links" aria-label="External links">
+              <h2>External links</h2>
+              <div className="row row-cards desktop-installed-grid">{matchingLinks.map(({ entry }) => renderLink(entry))}</div>
+            </section>
           ) : null}
-          <ButtonTile
-            title={t('CUSTOM_APP_ADD_TITLE')}
-            subtitle={t('CUSTOM_APP_ADD_SUBTITLE')}
-            action={() => navigate('/apps/create')}
-            icon={<IconLayoutGridAdd size={50} stroke={1.5} />}
-          />
-          <ButtonTile
-            title={t('LINKS_ADD_TITLE')}
-            subtitle={t('LINKS_ADD_SUBTITLE')}
-            action={() => addLinkDisclosure.open()}
-            icon={<IconLinkPlus size={50} stroke={1.5} />}
-          />
-        </div>
+        </>
       )}
     </div>
   );

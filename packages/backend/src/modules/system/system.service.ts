@@ -1,7 +1,8 @@
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { X509Certificate } from 'node:crypto';
 import si from 'systeminformation';
 import fs from 'node:fs/promises';
 import { cpuUsage, parseHostCpuStat, reportedCpuClockGHz, reportedCpuModel, type CpuSnapshot } from './host-cpu';
@@ -193,9 +194,17 @@ export class SystemService {
     const { dataDir } = this.config.get('directories');
     const filePath = `${dataDir}/traefik/tls/cert.pem`;
 
-    if (await this.filesystem.isFile(filePath)) {
-      const file = await this.filesystem.readTextFile(filePath);
-      return file;
+    try {
+      if (await this.filesystem.isFile(filePath)) {
+        const file = await this.filesystem.readTextFile(filePath);
+        if (file && file.length <= 65536) {
+          const blocks = file.match(/-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----/g);
+          if (blocks?.length && blocks.length <= 16) return blocks.map((block) => new X509Certificate(block).toString()).join('\n');
+        }
+      }
+    } catch {
+      // Certificate parse and read failures must not expose file contents or server paths.
     }
+    throw new NotFoundException('The local HTTPS certificate is not available. Finish certificate setup on the server, then try again.');
   }
 }

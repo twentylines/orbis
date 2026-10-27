@@ -120,7 +120,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
             ref={ref}
             checked={value}
             onCheckedChange={onChange}
-            disabled={info.force_expose}
+            disabled={loading || info.force_expose}
             label={t('APP_INSTALL_FORM_EXPOSE_APP')}
           />
         )}
@@ -155,6 +155,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
                   ref={ref}
                   checked={value}
                   onCheckedChange={onChange}
+                  disabled={loading}
                   label={
                     <>
                       {t('APP_INSTALL_FORM_EXPOSE_LOCAL')}
@@ -193,6 +194,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
                   ref={ref}
                   checked={value}
                   onCheckedChange={onChange}
+                  disabled={loading}
                   label={
                     <>
                       {t('APP_INSTALL_FORM_ENABLE_AUTH')}
@@ -213,10 +215,12 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
 
   const validate = (values: FormValues) => {
     const validationErrors = validateAppConfig(values, formFields);
+    let focusFirst = true;
 
     for (const [key, value] of Object.entries(validationErrors)) {
       if (value) {
-        setError(key, { message: t(value.messageKey, value.params) });
+        setError(key, { message: t(value.messageKey, value.params) }, { shouldFocus: focusFirst });
+        focusFirst = false;
       }
     }
 
@@ -226,7 +230,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
   };
 
   return (
-    <form className="flex flex-col" onSubmit={handleSubmit(validate)} id={formId}>
+    <form className="flex flex-col" onSubmit={handleSubmit(validate)} id={formId} aria-busy={loading}>
       {(guestDashboard || formFields.filter(typeFilter).length !== 0) && <h3>{t('APP_INSTALL_FORM_GENERAL')}</h3>}
       {formFields.filter(typeFilter).map(renderField)}
       {guestDashboard && (
@@ -241,6 +245,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
               checked={value}
               onCheckedChange={onChange}
               {...props}
+              disabled={loading}
               label={t('APP_INSTALL_FORM_DISPLAY_ON_GUEST_DASHBOARD')}
             />
           )}
@@ -260,7 +265,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
                 ref={ref}
                 checked={value}
                 onCheckedChange={onChange}
-                disabled={info.force_expose}
+                disabled={loading || info.force_expose}
                 label={
                   <>
                     {t('APP_INSTALL_FORM_OPEN_PORT')}
@@ -325,6 +330,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
           })}
           label={t('APP_INSTALL_FORM_MAX_BACKUPS')}
           error={errors.maxBackups?.message}
+          disabled={loading}
           placeholder={globalMaxBackups === 0 ? undefined : globalMaxBackups.toString()}
         />
         <p className="form-text text-muted">{t('APP_INSTALL_FORM_MAX_BACKUPS_HINT', { value: globalMaxBackups })}</p>
@@ -343,6 +349,7 @@ export const InstallForm: React.FC<IProps> = ({ formFields = [], info, onSubmit,
                 ref={ref}
                 checked={checkedValue}
                 onCheckedChange={onChange}
+                disabled={loading}
                 label={
                   <>
                     {t('APP_INSTALL_FORM_FORCE_PULL')}

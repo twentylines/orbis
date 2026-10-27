@@ -36,6 +36,14 @@
 .store-preview-content {
   min-width: 0;
 }
+.app-configuration-heading {
+  margin: 0 0 20px;
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+.app-configuration-heading:focus {
+  outline: none;
+}
 .store-preview-error {
   display: flex;
   flex-wrap: wrap;
@@ -60,14 +68,30 @@
   z-index: 3;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   margin: 0 0 16px auto;
   border: 1px solid var(--desktop-line);
   border-radius: 12px;
   color: var(--desktop-ink);
   background: var(--desktop-surface);
+}
+.store-preview-back {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  min-height: 44px;
+  margin: 0 0 20px;
+  padding: 10px 12px;
+  text-align: start;
+}
+.store-preview-back svg {
+  flex: none;
 }
 .store-split-desktop {
   display: grid;
@@ -81,6 +105,7 @@
 }
 .store-split-desktop .store-catalogue-pane {
   overflow-y: auto;
+  overflow-anchor: none;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   container-type: inline-size;
@@ -107,6 +132,7 @@
   scrollbar-gutter: stable;
   container-type: inline-size;
   padding: 20px;
+  scroll-padding: 20px;
 }
 .store-split-desktop .store-app-preview .app-workspace-back {
   display: none;
@@ -115,15 +141,15 @@
   padding-top: 2px;
 }
 .store-catalogue-pane .app-tile[aria-expanded="true"] {
-  border-color: var(--desktop-accent);
+  border-color: color-mix(in srgb, var(--desktop-accent) 30%, var(--desktop-line));
   background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
 }
 .store-catalogue-pane .app-link[aria-expanded="true"] .app-tile {
-  border-color: var(--desktop-accent);
+  border-color: color-mix(in srgb, var(--desktop-accent) 30%, var(--desktop-line));
   background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
 }
 .store-catalogue-pane .cluster-app-card[data-preview-selected="true"] {
-  border-color: var(--desktop-accent);
+  border-color: color-mix(in srgb, var(--desktop-accent) 30%, var(--desktop-line));
   background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
 }
 .installed-app-split .desktop-installed-grid {
@@ -160,5 +186,23 @@
   .store-split-desktop,
   .store-preview-surface {
     transition: none;
+  }
+}
+.store-preview-page:not([hidden]) {
+  animation: orbis-preview-page-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes orbis-preview-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .store-preview-page:not([hidden]) {
+    animation: none;
   }
 }

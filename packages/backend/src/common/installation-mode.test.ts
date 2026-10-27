@@ -49,4 +49,34 @@ describe('installer process mode', () => {
     expect(fresh.installationMode()).toEqual({ phase: 'hold', transactionId: transaction });
     expect(fresh.installationHeld()).toBe(true);
   });
+
+  it.each([
+    ['different transaction', { ORBIS_INSTALLER_TRANSACTION: transaction, ORBIS_INSTALLER_PHASE: 'resume' }, 'f92e8862-38b5-4e81-bc84-f9131944872e'],
+    ['hold mode', { ORBIS_INSTALLER_TRANSACTION: transaction, ORBIS_INSTALLER_PHASE: 'hold' }, transaction],
+    ['normal mode', {}, transaction],
+  ] as const)('cannot release restore startup for %s', async (_name, environment, releaseId) => {
+    vi.resetModules();
+    const fresh = await import('./installation-mode');
+    fresh.captureInstallationMode(environment);
+
+    expect(fresh.releaseRestoreInstallationMode(releaseId)).toBe(false);
+    const phase = (environment as { ORBIS_INSTALLER_PHASE?: string }).ORBIS_INSTALLER_PHASE;
+    expect(fresh.installationMode()).toEqual(
+      phase === 'resume'
+        ? { phase: 'resume', transactionId: transaction }
+        : phase === 'hold'
+          ? { phase: 'hold', transactionId: transaction }
+          : { phase: 'normal', transactionId: null },
+    );
+  });
+
+  it('releases only the matching captured resume transaction and only once', async () => {
+    vi.resetModules();
+    const fresh = await import('./installation-mode');
+    fresh.captureInstallationMode({ ORBIS_INSTALLER_TRANSACTION: transaction, ORBIS_INSTALLER_PHASE: 'resume' });
+
+    expect(fresh.releaseRestoreInstallationMode(transaction)).toBe(true);
+    expect(fresh.installationMode()).toEqual({ phase: 'normal', transactionId: null });
+    expect(fresh.releaseRestoreInstallationMode(transaction)).toBe(false);
+  });
 });

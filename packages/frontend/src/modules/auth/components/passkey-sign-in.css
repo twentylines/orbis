@@ -1,0 +1,55 @@
+.desktop-passkey-sign-in {
+  min-height: 44px;
+}
+
+.desktop-passkey-sign-in-unavailable {
+  opacity: var(--bs-btn-disabled-opacity, 0.65);
+  cursor: help;
+}
+
+.desktop-passkey-tooltip {
+  position: fixed;
+  z-index: 1200;
+  width: min(23rem, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.22);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 0s linear 140ms;
+}
+
+.desktop-passkey-tooltip[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: none;
+  transform: translateY(0);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-passkey-tooltip {
+    transform: none;
+    transition: none;
+  }
+}
+
+html[data-orbis-motion="reduced"] .desktop-passkey-tooltip {
+  transform: none;
+  transition: none;
+}

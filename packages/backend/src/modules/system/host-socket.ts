@@ -3,7 +3,7 @@ import path from 'node:path';
 
 export async function readHostSocket<T>(
   socketPath: string | undefined,
-  endpoint: '/v1/telemetry' | '/v1/processes' | '/v1/sensors',
+  endpoint: '/v1/telemetry' | '/v1/processes' | '/v1/sensors' | '/v1/drives',
   parse: (value: unknown) => T,
   unavailable: (reason?: 'missing' | 'older') => T,
 ): Promise<T> {
@@ -20,7 +20,7 @@ export async function readHostSocket<T>(
       const chunks: Buffer[] = [];
       response.on('data', (chunk: Buffer) => {
         size += chunk.length;
-        if (size > 256 * 1024) response.destroy(new Error('Host sample exceeds limit'));
+        if (size > (endpoint === '/v1/drives' ? 2 * 1024 * 1024 : 256 * 1024)) response.destroy(new Error('Host sample exceeds limit'));
         else chunks.push(chunk);
       });
       response.on('end', () => {

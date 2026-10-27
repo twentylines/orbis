@@ -6,6 +6,14 @@ html[data-desktop-local-wallpaper="true"] .orbis-startup {
   isolation: isolate;
   background-image: none;
 }
+.orbis-theme[data-desktop-wallpaper]:has(> .desktop-wallpaper-layer):is(
+    .orbis-startup-overlay,
+    .orbis-update-surface,
+    .orbis-login-surface,
+    .orbis-logout-surface
+  ) {
+  position: fixed;
+}
 @supports (-webkit-touch-callout: none) {
   html[data-desktop-mode]:has(.orbis-theme > .desktop-wallpaper-layer),
   html[data-desktop-mode] body:has(.orbis-theme > .desktop-wallpaper-layer) {
@@ -39,11 +47,6 @@ html[data-desktop-local-wallpaper="true"] .orbis-startup {
   transition: opacity 240ms ease;
 }
 .desktop-wallpaper-shade,
-.orbis-startup > .desktop-wallpaper-layer .desktop-wallpaper-shade {
-  background:
-    linear-gradient(135deg, var(--desktop-surface), color-mix(in srgb, var(--desktop-surface) 76%, transparent)), var(--desktop-wallpaper-shade);
-}
-.desktop-wallpaper-shade,
 .desktop-wallpaper-dim {
   position: absolute;
   inset: 0;
@@ -52,8 +55,7 @@ html[data-desktop-local-wallpaper="true"] .orbis-startup {
   background: var(--desktop-wallpaper-tint);
 }
 .orbis-startup > .desktop-wallpaper-layer .desktop-wallpaper-shade {
-  background:
-    linear-gradient(135deg, var(--desktop-surface), color-mix(in srgb, var(--desktop-surface) 76%, transparent)), var(--desktop-wallpaper-shade);
+  background: var(--orbis-startup-shade);
 }
 .desktop-wallpaper-dim {
   background: rgb(0 0 0 / var(--wallpaper-dim, 0));

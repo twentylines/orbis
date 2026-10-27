@@ -1,0 +1,289 @@
+.custom-app-create-page {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--desktop-ink);
+}
+
+.custom-app-name-panel {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--desktop-line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  box-shadow: none;
+}
+
+.custom-app-name-panel > .card-body {
+  padding: 20px;
+}
+
+.custom-app-name-field {
+  width: min(100%, 40rem);
+  min-width: 0;
+}
+
+.custom-app-name-input {
+  min-width: 0;
+}
+
+.custom-app-create-page .form-label {
+  margin-bottom: 8px;
+  color: var(--desktop-ink);
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.custom-app-create-page .form-control {
+  min-height: 46px;
+  padding: 10px 13px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--desktop-surface) 88%, var(--desktop-ink));
+  color: var(--desktop-ink);
+  line-height: 1.4;
+}
+
+body:has(.orbis-theme) .custom-app-create-page .form-control:focus-visible {
+  outline: none;
+  background-color: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
+  box-shadow: none;
+}
+
+.custom-app-create-page .form-control::placeholder {
+  color: var(--desktop-muted);
+  opacity: 1;
+}
+
+.custom-app-name-help {
+  margin: 8px 0 0;
+  color: var(--desktop-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.custom-app-create-page .service-compose-panel {
+  min-width: 0;
+  border: 1px solid var(--desktop-line);
+  border-radius: 18px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  box-shadow: none;
+}
+
+.custom-app-create-page .service-form-layout,
+.custom-app-create-page .service-form-sidebar,
+.custom-app-create-page .service-form-content,
+.custom-app-create-page .service-config-fields {
+  min-width: 0;
+}
+
+.custom-app-create-page .service-form-sidebar {
+  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
+  border-color: var(--desktop-line);
+}
+
+.custom-app-create-page .service-form-sidebar-header {
+  padding: 18px 20px;
+  color: var(--desktop-ink);
+}
+
+.custom-app-create-page .service-form-sidebar-header > .fw-bold {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.custom-app-create-page .service-form-sidebar .border-top {
+  /* biome-ignore lint/complexity/noImportantStyles: The existing border-top utility is important. */
+  border-color: var(--desktop-line) !important;
+}
+
+.custom-app-create-page .service-form-sidebar .list-group-item {
+  min-width: 0;
+  border-color: var(--desktop-line);
+  background: transparent;
+  color: var(--desktop-ink);
+}
+
+.custom-app-create-page .service-form-sidebar .list-group-item.active {
+  border-color: color-mix(in srgb, var(--desktop-accent) 34%, var(--desktop-line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
+  color: var(--desktop-ink);
+}
+
+.custom-app-create-page .service-selector {
+  gap: 8px;
+  padding: 5px 8px;
+}
+
+.custom-app-create-page .service-selector-name {
+  min-width: 0;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+  color: var(--desktop-ink);
+  line-height: 1.4;
+}
+
+.custom-app-create-page .service-icon-button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-surface) 90%, var(--desktop-ink));
+  color: var(--desktop-ink);
+}
+
+.custom-app-create-page .service-icon-button:hover {
+  border-color: color-mix(in srgb, var(--desktop-accent) 46%, var(--desktop-line));
+  background: color-mix(in srgb, var(--desktop-accent) 10%, var(--desktop-surface));
+}
+
+.custom-app-create-page .service-form-content {
+  padding: 0 20px;
+}
+
+.custom-app-create-page .service-config-tabs {
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px 0;
+  border-color: var(--desktop-line);
+}
+
+.custom-app-create-page .service-config-tabs > .nav-item-c {
+  flex: 1 1 7.5rem;
+  min-width: 0;
+}
+
+.custom-app-create-page .service-config-tabs .nav-item-c .nav-link {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: var(--desktop-muted);
+  line-height: 1.35;
+}
+
+.custom-app-create-page .service-config-tabs .nav-item-c .nav-link.active {
+  border-color: color-mix(in srgb, var(--desktop-accent) 24%, var(--desktop-line));
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
+  color: var(--desktop-ink);
+}
+
+.custom-app-create-page .service-config-tabs .nav-item-c .nav-link:hover {
+  background: color-mix(in srgb, var(--desktop-accent) 8%, var(--desktop-surface));
+  color: var(--desktop-ink);
+}
+
+.custom-app-create-page .service-config-tabs .nav-link :is(.nav-link-icon-c, .nav-link-title-c) {
+  color: inherit;
+}
+
+.custom-app-create-page .service-config-tabs .nav-link-icon-c {
+  flex: none;
+}
+
+.custom-app-create-page .service-config-tabs .nav-link-title-c {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.custom-app-create-page .service-config-fields {
+  padding-top: 18px;
+  padding-bottom: 24px;
+}
+
+.custom-app-create-page .service-config-fields :is(.form-label, h3) {
+  color: var(--desktop-ink);
+}
+
+.custom-app-create-page .service-config-fields .form-text {
+  color: var(--desktop-muted);
+  line-height: 1.5;
+}
+
+.custom-app-create-page .service-form-footer {
+  gap: 10px;
+  padding: 14px 20px;
+  border-color: var(--desktop-line);
+  border-radius: 0 0 17px 17px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
+}
+
+.custom-app-create-page .service-form-footer > .btn {
+  min-width: min(100%, 10rem);
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  line-height: 1.35;
+}
+
+body:has(.orbis-theme) .custom-app-create-page :is(button, .nav-link):focus-visible {
+  outline: none;
+  box-shadow: none;
+  background-color: color-mix(in srgb, var(--desktop-accent) 18%, var(--desktop-surface));
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+body:has(.orbis-theme) .custom-app-create-page .btn {
+  min-height: 44px;
+}
+
+@container (max-width: 46em) {
+  .custom-app-create-page .service-config-tabs > .nav-item-c {
+    flex: 1 1 8rem;
+  }
+}
+
+@container (max-width: 34em) {
+  .custom-app-create-page .service-form-content {
+    padding-inline: 20px;
+  }
+
+  .custom-app-create-page .service-config-tabs > .nav-item-c {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .custom-app-create-page .service-config-tabs .nav-item-c .nav-link {
+    justify-content: flex-start;
+    padding-inline: 9px;
+    text-align: start;
+  }
+
+  .custom-app-create-page .service-form-footer {
+    padding-inline: 20px;
+  }
+}
+
+@media (max-width: 450px) {
+  .custom-app-name-panel > .card-body {
+    padding: 16px 20px;
+  }
+
+  .custom-app-create-page .service-form-sidebar-header {
+    padding: 16px 20px;
+  }
+
+  .custom-app-create-page .service-form-footer > .btn {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-app-create-page .service-icon-button,
+  .custom-app-create-page .service-config-tabs .nav-link {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  body:has(.orbis-theme) .custom-app-create-page :is(button, input, .nav-link):focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -4px;
+  }
+}

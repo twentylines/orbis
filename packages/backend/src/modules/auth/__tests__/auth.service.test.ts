@@ -59,6 +59,50 @@ describe('AuthService', () => {
     expect(authService).toBeDefined();
   });
 
+  it.each(['unknown-account', 'wrong-password', 'invalid-stored-hash'] as const)(
+    'returns the same credential failure without creating a session or challenge for %s',
+    async (failure) => {
+      userRepository.getUserByUsername.mockResolvedValue(failure === 'unknown-account' ? undefined : totpUser);
+      passwordService.loginFallbackHash.mockResolvedValue('dummy-encoded-hash');
+      passwordService.verify.mockResolvedValue(false);
+      if (failure === 'invalid-stored-hash') passwordService.verify.mockRejectedValueOnce(new Error('Malformed stored hash'));
+      await expect(authService.login({ username: 'fixture@example.invalid', password: 'wrong-password' })).rejects.toMatchObject({
+        response: { message: 'AUTH_ERROR_INVALID_CREDENTIALS', intlParams: {} },
+        status: 400,
+      });
+      expect(passwordService.verify).toHaveBeenCalledWith('wrong-password', failure === 'unknown-account' ? 'dummy-encoded-hash' : totpUser.password);
+      if (failure === 'invalid-stored-hash') expect(passwordService.verify).toHaveBeenLastCalledWith('wrong-password', 'dummy-encoded-hash');
+      expect(sessionManager.createSession).not.toHaveBeenCalled();
+      expect(cacheService.set).not.toHaveBeenCalled();
+    },
+  );
+
+  it('never grants an unknown account a session even if the fallback verification were to match', async () => {
+    userRepository.getUserByUsername.mockResolvedValue(undefined);
+    passwordService.loginFallbackHash.mockResolvedValue('dummy-encoded-hash');
+    passwordService.verify.mockResolvedValue(true);
+    await expect(authService.login({ username: 'fixture@example.invalid', password: 'fixture-password' })).rejects.toMatchObject({
+      response: { message: 'AUTH_ERROR_INVALID_CREDENTIALS', intlParams: {} },
+      status: 400,
+    });
+    expect(sessionManager.createSession).not.toHaveBeenCalled();
+    expect(cacheService.set).not.toHaveBeenCalled();
+  });
+
+  it.each(['operator@example.com', 'absent@example.invalid'])(
+    'blocks configured-server registration before any identifier lookup for %s',
+    async (username) => {
+      userRepository.getFirstOperator.mockResolvedValue(totpUser);
+      await expect(authService.register({ username, password: 'fixture-password' })).rejects.toMatchObject({
+        response: { message: 'AUTH_ERROR_ADMIN_ALREADY_EXISTS', intlParams: {} },
+        status: 403,
+      });
+      expect(userRepository.getUserByUsername).not.toHaveBeenCalled();
+      expect(passwordService.hash).not.toHaveBeenCalled();
+      expect(userRepository.createFirstOperator).not.toHaveBeenCalled();
+    },
+  );
+
   it('preserves reserved legacy account login while rejecting the same identifier for new registration or changes', async () => {
     userRepository.getUserByUsername.mockResolvedValue({ ...totpUser, username: 'admin', totpEnabled: false });
     passwordService.verify.mockResolvedValue(true);

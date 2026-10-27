@@ -6,8 +6,7 @@ import { HostProcessesView } from './host-processes';
 export function MonitorUsage() {
   const location = useLocation();
   const [source, setSource] = useState<'containers' | 'processes'>(() => (location.hash === '#processes' ? 'processes' : 'containers'));
-  const [allContainers, setAllContainers] = useState(location.hash === '#containers');
-  const [allProcesses, setAllProcesses] = useState(false);
+  const [allContainers, setAllContainers] = useState(true);
   useEffect(() => {
     if (location.hash === '#processes') setSource('processes');
     if (location.hash === '#containers') {
@@ -26,7 +25,7 @@ export function MonitorUsage() {
           Host processes
         </button>
       </fieldset>
-      <p className="monitor-usage-scope">CPU: 100% is one core. Host process and container readings overlap.</p>
+      {source === 'processes' ? <p className="monitor-usage-scope">CPU: 100% is one core. Host process and container readings overlap.</p> : null}
       {source === 'containers' ? (
         <>
           <ContainerResources compact={!allContainers} />
@@ -36,12 +35,7 @@ export function MonitorUsage() {
           {allContainers ? null : <p className="monitor-usage-scope">Top four running containers, ordered by the selected metric.</p>}
         </>
       ) : (
-        <>
-          <HostProcessesView limit={allProcesses ? undefined : 6} />
-          <button className="monitor-detail-action" type="button" aria-expanded={allProcesses} onClick={() => setAllProcesses((value) => !value)}>
-            {allProcesses ? 'Show top six processes' : 'Show full process ranking'}
-          </button>
-        </>
+        <HostProcessesView limit={6} />
       )}
     </div>
   );

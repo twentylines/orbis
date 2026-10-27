@@ -9,6 +9,7 @@ import { MetricHistoryService } from './metric-history.service';
 import { HostTelemetryService } from './host-telemetry.service';
 import { HostProcessesService } from './host-processes.service';
 import { HostSensorsService } from './host-sensors.service';
+import { DriveHealthService } from './drive-health.service';
 import { HostDeviceHistoryService } from './host-device-history.service';
 import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.module';
 import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
@@ -25,6 +26,7 @@ import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
     HostTelemetryService,
     HostProcessesService,
     HostSensorsService,
+    DriveHealthService,
     HostDeviceHistoryService,
   ],
   exports: [
@@ -36,6 +38,7 @@ import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
     HostTelemetryService,
     HostProcessesService,
     HostSensorsService,
+    DriveHealthService,
     HostDeviceHistoryService,
   ],
 })

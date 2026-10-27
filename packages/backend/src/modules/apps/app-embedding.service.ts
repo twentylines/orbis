@@ -163,7 +163,7 @@ export class AppEmbeddingService {
     private readonly configuration: ConfigurationService,
   ) {}
 
-  public async check(urn: AppUrn, target: URL, parent: URL): Promise<EmbeddingCompatibility> {
+  public async check(urn: AppUrn, target: URL, parent: URL, refresh = false): Promise<EmbeddingCompatibility> {
     const app = await this.repository.getAppByUrn(urn);
     if (!app || app.status !== 'running') throw new NotFoundException('A running installed app is required.');
     const info = await this.files.getInstalledAppInfo(urn);
@@ -197,7 +197,7 @@ export class AppEmbeddingService {
     if (target.origin === parent.origin) return result('blocked', 'same-origin');
     const key = JSON.stringify([urn, target.href, parent.origin]);
     const cached = this.cache.get(key);
-    if (cached && cached.expiresAt > Date.now()) return cached;
+    if (!refresh && cached && cached.expiresAt > Date.now()) return cached;
     const pending = this.pending.get(key);
     if (pending) return pending;
     if (this.pending.size >= MAX_PENDING) return result('unknown', 'busy');

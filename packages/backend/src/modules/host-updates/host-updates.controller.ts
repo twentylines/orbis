@@ -102,6 +102,15 @@ export class HostUpdatesController {
     return this.hostUpdates.packages();
   }
 
+  @Post('drives/test')
+  @HttpCode(202)
+  driveTest(@Body() body: Record<string, unknown>) {
+    if (!body || Array.isArray(body) || Object.keys(body).length !== 2 || !('id' in body) || !('kind' in body)) {
+      throw new BadRequestException('Choose one drive and a supported self-test.');
+    }
+    return this.hostUpdates.driveTest(body.id, body.kind);
+  }
+
   @Get('restart')
   restartStatus() {
     return this.hostUpdates.restartStatus();

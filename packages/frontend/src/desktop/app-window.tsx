@@ -13,7 +13,7 @@ import {
   IconHelp,
   IconX,
 } from '@tabler/icons-react';
-import { lazy, memo, Suspense, useId, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Button } from '@/components/ui/Button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
@@ -27,6 +27,7 @@ import { dockMotionDuration, sectionMotionTiming } from './section-motion-geomet
 import { useAppEmbedding } from './app-embedding';
 import { useDesktopPreferences } from './preferences';
 import { appEmbeddingBoundary, appEmbeddingWarning, type AppEmbeddingCheck } from './app-opening';
+import { useWindowVisible } from './window-visibility';
 
 const WindowSettings = lazy(() => import('./app-window-settings'));
 const edges: ResizeEdge[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
@@ -83,13 +84,14 @@ export function AppWindow({
   const bar = useRef<HTMLDivElement>(null);
   const settingsButton = useRef<HTMLButtonElement>(null);
   const layoutButton = useRef<HTMLButtonElement>(null);
+  const helpButton = useRef<HTMLButtonElement>(null);
   const settingsClose = useRef<HTMLButtonElement>(null);
   const placementFrom = useRef<DOMRect | null>(null);
   const flightAnimation = useRef<Animation | null>(null);
   const departure = useRef<{ box: DOMRect; opacity: number } | null>(null);
   const [settings, setSettings] = useState(false);
   const [help, setHelp] = useState(false);
-  const openingHelp = useRef(false);
+  const openingSplit = useRef(false);
   const keyboardWindow = useRef(false);
   const capturePlacement = (next: AppWindowMode) => {
     placementFrom.current = panel.current?.getBoundingClientRect() ?? null;
@@ -273,7 +275,11 @@ export function AppWindow({
   };
   const closeHelp = () => {
     setHelp(false);
-    layoutButton.current?.focus({ preventScroll: true });
+    helpButton.current?.focus({ preventScroll: true });
+  };
+  const openHelp = () => {
+    setSettings(false);
+    setHelp(true);
   };
   const depart = (action: () => void) => {
     const element = panel.current;
@@ -342,6 +348,17 @@ export function AppWindow({
           </div>
           <div className="app-launcher-controls">
             <Button
+              ref={helpButton}
+              className="app-launcher-close app-window-help-button"
+              aria-label="Page not working?"
+              title="Page not working?"
+              aria-expanded={help}
+              onClick={() => (help ? closeHelp() : openHelp())}
+            >
+              <IconHelp size={20} aria-hidden="true" />
+              <span>Page not working?</span>
+            </Button>
+            <Button
               ref={settingsButton}
               className="app-launcher-close"
               size="icon"
@@ -362,23 +379,36 @@ export function AppWindow({
                 className="app-window-layout-menu"
                 align="end"
                 onCloseAutoFocus={(event) => {
-                  if (openingHelp.current) {
-                    event.preventDefault();
-                    openingHelp.current = false;
-                    panel.current?.querySelector<HTMLElement>('.app-window-compatibility h3')?.focus({ preventScroll: true });
-                  } else if (keyboardWindow.current) {
+                  if (keyboardWindow.current) {
                     event.preventDefault();
                     keyboardWindow.current = false;
                     bar.current?.focus({ preventScroll: true });
+                  } else if (openingSplit.current) {
+                    event.preventDefault();
+                    openingSplit.current = false;
+                    const target = document.querySelector<HTMLElement>('.app-split-picker input') ?? layoutButton.current;
+                    target?.focus({ preventScroll: true });
                   }
                 }}
               >
                 <DropdownMenuLabel>Window layout</DropdownMenuLabel>
-                <DropdownMenuItem disabled={blocked || !canSplitAppWindows(area)} onSelect={() => place('left')}>
+                <DropdownMenuItem
+                  disabled={blocked || !canSplitAppWindows(area)}
+                  onSelect={() => {
+                    openingSplit.current = true;
+                    place('left');
+                  }}
+                >
                   <IconLayoutSidebar size={18} aria-hidden="true" />
                   Snap left
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={blocked || !canSplitAppWindows(area)} onSelect={() => place('right')}>
+                <DropdownMenuItem
+                  disabled={blocked || !canSplitAppWindows(area)}
+                  onSelect={() => {
+                    openingSplit.current = true;
+                    place('right');
+                  }}
+                >
                   <IconLayoutSidebarRight size={18} aria-hidden="true" />
                   Snap right
                 </DropdownMenuItem>
@@ -403,16 +433,6 @@ export function AppWindow({
                 >
                   <IconResize size={18} aria-hidden="true" />
                   Resize with keyboard
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => {
-                    openingHelp.current = true;
-                    setSettings(false);
-                    setHelp(true);
-                  }}
-                >
-                  <IconHelp size={18} aria-hidden="true" />
-                  App not loading?
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -508,63 +528,99 @@ const AppFrame = memo(function AppFrame({
   onHelpClose: () => void;
   onTab: () => void;
 }) {
-  const [observedUrl, setObservedUrl] = useState<string>();
+  const [attempt, setAttempt] = useState(0);
+  const loadKey = `${request.launchUrl}:${attempt}`;
+  const [observedLoad, setObservedLoad] = useState<string>();
+  const [slowLoad, setSlowLoad] = useState<string>();
+  const [rememberTab, setRememberTab] = useState(false);
+  const visible = useWindowVisible();
   const noticeHeading = useRef<HTMLHeadingElement>(null);
   // Load also fires for browser error pages; it only stops automatic rechecks.
-  const check = useAppEmbedding(request, enabled && !boundary && observedUrl !== request.launchUrl);
+  const awaitingLoad = observedLoad !== loadKey;
+  const check = useAppEmbedding(request, enabled && visible && !boundary && (awaitingLoad || help));
   const { preferences, update } = useDesktopPreferences();
   const showWarning = Boolean(boundary || help);
   const notice = appEmbeddingWarning(boundary ?? check.data) ?? {
     blocked: false,
-    title: 'App not loading?',
+    title: 'Connection options',
     description:
-      'If the page is blank or refuses to connect, its browser security or connection may prevent it opening here. Try a browser tab. You can remember that choice for this app.',
+      check.data?.status === 'not-blocked-by-headers'
+        ? 'The server permits embedding. Reload the app or try a browser tab.'
+        : 'Reload the app, or try it in a browser tab.',
   };
   useLayoutEffect(() => {
     if (enabled && active && showWarning) noticeHeading.current?.focus({ preventScroll: true });
   }, [enabled, active, showWarning]);
+  useEffect(() => {
+    if (!enabled || !visible || boundary || !awaitingLoad) return;
+    const timer = window.setTimeout(() => setSlowLoad(loadKey), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [enabled, visible, boundary, awaitingLoad, loadKey]);
+  const reload = () => {
+    setAttempt((value) => value + 1);
+    onHelpClose();
+  };
   return (
     <>
+      {!showWarning && awaitingLoad && slowLoad === loadKey ? (
+        <output className="app-window-loading-note" aria-live="polite">
+          Still opening this app…
+        </output>
+      ) : null}
       {boundary ? null : (
         <iframe
+          key={loadKey}
           className="app-window-frame"
           title={`${request.name} app`}
           src={request.launchUrl}
-          hidden={!!showWarning}
-          onLoad={() => setObservedUrl(request.launchUrl)}
+          onLoad={() => setObservedLoad(loadKey)}
           referrerPolicy="no-referrer"
           allow="fullscreen; clipboard-read; clipboard-write; camera; microphone; geolocation; display-capture"
           sandbox="allow-forms allow-scripts allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation"
         />
       )}
       {showWarning ? (
-        <section className="app-window-compatibility" aria-label="App window help">
-          <div className="app-window-compatibility-content">
-            <IconExternalLink size={30} aria-hidden="true" />
+        <section
+          className={boundary ? 'app-window-compatibility' : 'app-window-recovery-panel'}
+          role={boundary ? undefined : 'dialog'}
+          aria-label="App window help"
+          aria-busy={check.isFetching}
+        >
+          <div className={boundary ? 'app-window-compatibility-content' : 'app-window-recovery-content'}>
+            {boundary ? <IconExternalLink size={30} aria-hidden="true" /> : null}
             <h3 ref={noticeHeading} tabIndex={-1}>
               {notice.title}
             </h3>
+            {boundary ? null : (
+              <Button className="app-window-recovery-close" size="icon" aria-label="Close page help" onClick={onHelpClose}>
+                <IconX size={18} aria-hidden="true" />
+              </Button>
+            )}
             <p>{notice.description}</p>
+            <label className="app-window-remember-tab">
+              <input type="checkbox" checked={rememberTab} onChange={(event) => setRememberTab(event.target.checked)} />
+              <span>Always open this app in a new tab</span>
+            </label>
             <div className="app-window-compatibility-actions">
-              {boundary ? null : <Button onClick={onHelpClose}>Back to app</Button>}
-              <Button onClick={onTab}>Open in new tab</Button>
+              {boundary ? null : <Button onClick={reload}>Reload app</Button>}
               <Button
                 intent="primary"
                 onClick={() => {
-                  update({
-                    appLaunch: {
-                      ...preferences.appLaunch,
-                      apps: { ...preferences.appLaunch.apps, [request.urn]: { ...preferences.appLaunch.apps[request.urn], mode: 'tab' } },
-                    },
-                  });
+                  if (rememberTab)
+                    update({
+                      appLaunch: {
+                        ...preferences.appLaunch,
+                        apps: { ...preferences.appLaunch.apps, [request.urn]: { ...preferences.appLaunch.apps[request.urn], mode: 'tab' } },
+                      },
+                    });
                   onTab();
                 }}
               >
-                Always open in new tab
+                Open tab
               </Button>
             </div>
             {boundary ? null : (
-              <Button variant="ghost" disabled={check.isFetching} onClick={() => void check.refetch()}>
+              <Button variant="ghost" disabled={check.isFetching} onClick={() => void check.recheck()}>
                 {check.isFetching ? 'Checking…' : 'Check again'}
               </Button>
             )}

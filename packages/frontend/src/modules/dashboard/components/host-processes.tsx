@@ -1,7 +1,7 @@
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import type { HostProcesses } from '@runtipi/common/schemas';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { resourceBytes } from '@/components/container-resources/container-resources';
 import './host-processes.css';
@@ -12,10 +12,12 @@ async function loadProcesses(signal: AbortSignal, path: string): Promise<HostPro
   return response.json();
 }
 
-export function HostProcessesView({ limit }: { limit?: number } = {}) {
+export const HostProcessesView = memo(function HostProcessesView({ limit }: { limit?: number } = {}) {
   const visible = useWindowVisible();
   const path = useServerPath()('/api/system/host-processes');
   const [sort, setSort] = useState<'cpuPercent' | 'memoryBytes'>('cpuPercent');
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState(false);
   const query = useQuery({
     queryKey: ['host-processes', path],
     queryFn: ({ signal }) => loadProcesses(signal, path),
@@ -39,8 +41,10 @@ export function HostProcessesView({ limit }: { limit?: number } = {}) {
   const showingPreviousCpu = waitingForCpu && Boolean(lastCpuSample);
   const displayed = showingPreviousCpu ? lastCpuSample : ready;
   const stale = query.isError || Boolean(ready?.stale) || showingPreviousCpu;
-  const rows = displayed ? (sort === 'cpuPercent' ? displayed.byCpu : displayed.byMemory) : [];
-  const visibleRows = limit ? rows.slice(0, limit) : rows;
+  const ranked = displayed ? (sort === 'cpuPercent' ? displayed.byCpu : displayed.byMemory) : [];
+  const term = search.trim().toLocaleLowerCase();
+  const rows = term ? ranked.filter((row) => `${row.name} ${row.pid}`.toLocaleLowerCase().includes(term)) : ranked;
+  const visibleRows = limit && !expanded ? rows.slice(0, limit) : rows;
   const maximum = Math.max(1, ...rows.map((row) => row[sort] ?? 0));
   const heading = useRef<HTMLHeadingElement>(null);
   const retry = useRef<HTMLButtonElement>(null);
@@ -62,15 +66,29 @@ export function HostProcessesView({ limit }: { limit?: number } = {}) {
           {ready ? (stale ? 'Readings delayed' : 'Updates every 10 seconds') : 'CPU and resident memory'}
         </span>
       </header>
-      <fieldset className="container-resources-sort host-processes-sort">
-        <legend>Sort by</legend>
-        <button type="button" aria-pressed={sort === 'cpuPercent'} onClick={() => setSort('cpuPercent')}>
-          CPU
-        </button>
-        <button type="button" aria-pressed={sort === 'memoryBytes'} onClick={() => setSort('memoryBytes')}>
-          Memory
-        </button>
-      </fieldset>
+      <div className="host-processes-toolbar">
+        <input
+          type="search"
+          className="form-control"
+          placeholder="Find a process by name or PID"
+          aria-label="Find a process in the returned ranking"
+          value={search}
+          maxLength={100}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <fieldset className="container-resources-sort host-processes-sort">
+          <legend className="visually-hidden">Sort by</legend>
+          <span className="container-resources-sort-label" aria-hidden="true">
+            Sort by
+          </span>
+          <button type="button" aria-pressed={sort === 'cpuPercent'} onClick={() => setSort('cpuPercent')}>
+            CPU
+          </button>
+          <button type="button" aria-pressed={sort === 'memoryBytes'} onClick={() => setSort('memoryBytes')}>
+            Memory
+          </button>
+        </fieldset>
+      </div>
       {query.isPending ? <output>Loading host processes…</output> : null}
       {query.isError || data?.available === false ? (
         <div className="host-processes-notice" role={query.isError ? 'alert' : 'status'}>
@@ -102,8 +120,10 @@ export function HostProcessesView({ limit }: { limit?: number } = {}) {
           ) : null}
           {displayed.readable === 0 ? (
             <p>No readable host processes.</p>
-          ) : rows.length === 0 ? (
+          ) : ranked.length === 0 ? (
             <output>Collecting CPU comparisons… Select Memory to see current readings.</output>
+          ) : rows.length === 0 ? (
+            <p className="host-processes-empty">No returned processes match “{search.trim()}”. Try another name or PID, or switch the ranking.</p>
           ) : null}
           {displayed.limited || displayed.unreadable > 0 ? (
             <p className="host-processes-coverage">
@@ -113,7 +133,25 @@ export function HostProcessesView({ limit }: { limit?: number } = {}) {
                 : ''}
             </p>
           ) : null}
-          <ol className="host-process-list">
+          <div className="host-processes-results-heading">
+            <p className="host-processes-coverage">
+              {visibleRows.length.toLocaleString()} of {rows.length.toLocaleString()} {term ? 'matches' : 'returned'}
+              {term ? ` · ${ranked.length.toLocaleString()} ranked` : ''} · {displayed.readable.toLocaleString()} readable
+              {sort === 'cpuPercent' ? ` · ${displayed.compared.toLocaleString()} CPU comparisons` : ''}
+            </p>
+            {limit && rows.length > limit ? (
+              <button
+                className="monitor-detail-action host-processes-expand"
+                type="button"
+                aria-expanded={expanded}
+                aria-controls="host-process-list"
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {expanded ? 'Show fewer processes' : 'Show more processes'}
+              </button>
+            ) : null}
+          </div>
+          <ol className="host-process-list" id="host-process-list">
             {visibleRows.map((row) => (
               <li key={row.pid} data-process-pid={row.pid}>
                 <div className="host-process-identity">
@@ -138,15 +176,12 @@ export function HostProcessesView({ limit }: { limit?: number } = {}) {
               </li>
             ))}
           </ol>
-          <p className="host-processes-coverage">
-            {visibleRows.length.toLocaleString()} shown · {displayed.readable.toLocaleString()} readable processes
-            {sort === 'cpuPercent' ? ` · ${displayed.compared.toLocaleString()} CPU comparisons` : ''}
-          </p>
         </>
       ) : null}
       <details className="host-processes-about">
         <summary>About these readings</summary>
         <p>CPU: 100% is one core. Rankings need two recent samples of the same process.</p>
+        <p>The host returns up to 20 processes for each ranking. Search applies to the selected ranking, not every process on the host.</p>
         <p>
           Memory is resident memory (RSS). It is approximate and can include shared pages. Processes inside containers also appear here, so their
           readings overlap the Docker list.
@@ -154,4 +189,4 @@ export function HostProcessesView({ limit }: { limit?: number } = {}) {
       </details>
     </section>
   );
-}
+});

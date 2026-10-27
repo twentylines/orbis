@@ -1,4 +1,5 @@
 import { StartupSurface } from '@/components/startup/startup-surface';
+import { useStartupSession } from '@/components/startup/startup-boundary';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { animateSessionExit, rememberLogout } from '@/desktop/session-motion';
 import toast from 'react-hot-toast';
@@ -30,9 +31,9 @@ import { OrbisUpdateNotice } from '@/desktop/orbis-update-notice';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
 import { IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
-import { useIsMutating, QueryErrorResetBoundary } from '@tanstack/react-query';
+import { QueryErrorResetBoundary } from '@tanstack/react-query';
 import { lazy, Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
-import { Link, useLocation, useMatches, useNavigation } from 'react-router';
+import { Link, useLocation, useMatches, useNavigation, useNavigate } from 'react-router';
 import './layout.css';
 import '@/desktop/density.css';
 
@@ -49,7 +50,9 @@ export const DashboardLayoutSuspense = () => {
 
 export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const { userSettings, apps } = useAppContext();
-  const { isLoggedIn } = useUserContext();
+  const { isLoggedIn, endSession } = useUserContext();
+  const startupSession = useStartupSession();
+  const navigate = useNavigate();
   const { preferences, resolvedMode, update, requiresOnboarding } = useDesktopPreferences();
   const location = useLocation();
   const matches = useMatches();
@@ -142,16 +145,19 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     toast.dismiss();
     setLoggingOff(true);
     rememberLogout(true);
+    startupSession.begin('logging-out');
     const exit = animateSessionExit(desktop.current, Boolean(reduceMotion));
     try {
       await Promise.all([logout({ throwOnError: true }), exit.finished]);
-      rememberLogout(true);
-      window.location.replace('/login');
+      await endSession();
+      void navigate('/login', { replace: true });
+      void startupSession.finish();
     } catch {
       exit.cancel();
       rememberLogout(false);
       leaving.current = false;
       setLoggingOff(false);
+      await startupSession.finish();
       toast.error('Unable to log out. Try again.');
     }
   };
@@ -274,7 +280,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               </div>
               <MinimizedApps />
             </nav>
-            {loggingOff ? <StartupSurface loggingOff /> : null}
             {loggingOff ? null : <RestartUpdateCover />}
           </div>
         </AppLauncherProvider>
@@ -300,9 +305,8 @@ function DesktopTaskLink() {
 }
 
 function DesktopLogoutButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
-  const busy = useIsMutating();
   return (
-    <button type="button" className="desktop-icon-button" aria-label="Log out" disabled={disabled || busy > 0} onClick={onClick}>
+    <button type="button" className="desktop-icon-button" aria-label="Log out" disabled={disabled} onClick={onClick}>
       <IconLogout size={20} aria-hidden="true" />
     </button>
   );
@@ -332,9 +336,7 @@ function RestartUpdateCover() {
         appearance={preferences}
         status={{
           title: finished ? (restart?.job?.state === 'failed' ? 'Restart could not start' : 'Server reconnected') : 'Restarting the server',
-          message: finished
-            ? restart?.job?.message || 'The server is ready.'
-            : 'Applications will return when the server is ready. Reconnecting automatically.',
+          message: finished ? restart?.job?.message || 'The server is ready.' : 'The page will reload automatically when the server is ready.',
         }}
         completing={finished}
         revealing={finished}
@@ -359,7 +361,7 @@ function RestartUpdateCover() {
     return (
       <StartupSurface
         appearance={preferences}
-        status={{ title: 'Restarting the server', message: 'The system update is restarting services. Reconnecting automatically.' }}
+        status={{ title: 'Restarting the server', message: 'Services are restarting. The page will reload automatically when they are ready.' }}
         overlay
       />
     );

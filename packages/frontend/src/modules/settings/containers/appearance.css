@@ -37,9 +37,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: 9px;
+  align-items: stretch;
 }
 .appearance-name input {
-  min-height: 42px;
+  min-height: 44px;
   min-width: min(100%, 180px);
   flex: 1 1 180px;
   max-width: 100%;
@@ -48,9 +49,24 @@
   padding: 0 12px;
   background: var(--desktop-surface);
   color: var(--desktop-ink);
+  font: inherit;
+  line-height: 1.5;
 }
-.appearance button {
-  min-height: 42px;
+.appearance .appearance-name > div > :is(input, button) {
+  height: auto;
+  min-height: 44px;
+  padding: 8px 14px;
+  font: inherit;
+  line-height: 1.5;
+}
+.appearance-name > div > button {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.appearance button:not(.switch-root) {
+  min-height: 44px;
   border: 1px solid var(--desktop-line);
   border-radius: 9px;
   padding: 8px 14px;
@@ -58,12 +74,13 @@
   background: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
   font-weight: 600;
 }
-.appearance button:hover {
+.appearance button:not(.switch-root):hover {
   border-color: var(--desktop-accent);
 }
 .appearance button[aria-pressed="true"] {
-  outline: 2px solid var(--desktop-accent);
-  outline-offset: -2px;
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-ink) 13%, var(--desktop-surface));
+  border-color: color-mix(in srgb, var(--desktop-accent) 40%, var(--desktop-line));
 }
 .appearance button:focus-visible {
   outline: 3px solid var(--desktop-focus);
@@ -264,14 +281,6 @@
   margin: 0;
   gap: 12px;
 }
-.appearance .appearance-wallpaper-settings .switch-root {
-  width: 40px;
-  min-width: 40px;
-  height: 24px;
-  min-height: 24px;
-  padding: 0;
-  border-radius: 999px;
-}
 .appearance-wallpaper-settings .appearance-actions button {
   min-height: 44px;
 }
@@ -283,7 +292,7 @@
 }
 .appearance button:disabled {
   opacity: 0.6;
-  cursor: wait;
+  cursor: not-allowed;
 }
 .appearance-upload-preview {
   overflow: hidden;
@@ -319,7 +328,7 @@
   padding: 0;
   font-size: 0.9375rem;
   font-weight: 650;
-  margin-bottom: 0;
+  margin-bottom: 16px;
 }
 .appearance-range-grid {
   display: grid;
@@ -442,7 +451,7 @@
   outline-offset: 3px;
   border-radius: 6px;
 }
-.appearance-wallpaper-controls > button {
+.appearance .appearance-wallpaper-controls > button {
   justify-self: start;
 }
 .appearance-upload-status {
@@ -510,21 +519,15 @@
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   gap: 9px;
 }
 .appearance-accent-controls input {
-  min-height: 42px;
+  min-height: 44px;
   border: 1px solid var(--desktop-line);
   border-radius: 9px;
   background: var(--desktop-surface);
   color: var(--desktop-ink);
-}
-.appearance-accent-controls input[type="color"] {
-  width: 48px;
-  height: 42px;
-  padding: 6px;
-  flex: none;
 }
 .appearance-accent-controls .appearance-colour-value {
   min-width: 0;
@@ -535,8 +538,15 @@
   font-family: ui-monospace, monospace;
 }
 .appearance-accent-controls input:focus-visible {
-  outline: 3px solid var(--desktop-focus);
-  outline-offset: 3px;
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-accent) 15%, var(--desktop-surface));
+}
+.appearance .appearance-accent-controls > :is(button, input) {
+  line-height: 1.5;
+}
+.appearance .appearance-accent-controls button:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-accent) 15%, var(--desktop-surface));
 }
 .appearance-range-slider:has(input:disabled) {
   opacity: 0.6;
@@ -554,21 +564,6 @@ fieldset.appearance-choice {
   margin: 0;
   padding: 0;
   border: 0;
-}
-.appearance .appearance-low-effects .switch-root {
-  width: 2.5rem;
-  height: 1.5rem;
-  min-height: 1.5rem;
-  padding: 0;
-  border-radius: 999px;
-  background-image: var(--tblr-form-switch-bg);
-  background-repeat: no-repeat;
-  background-origin: border-box;
-  background-size: 1.5rem 1.5rem;
-  background-position: left center;
-}
-.appearance .appearance-low-effects .switch-root[data-state="checked"] {
-  background-position: right center;
 }
 .appearance-low-effects .orbis-switch {
   min-height: 44px;

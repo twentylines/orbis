@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appUpdateScheduleOptions, saveAppUpdateSchedule, type AppUpdateRule } from '@/desktop/automatic-updates-api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import './app-update-schedule.css';
 
 export function AppUpdateSchedule({ urn, name }: { urn: string; name: string }) {
@@ -37,28 +38,27 @@ export function AppUpdateSchedule({ urn, name }: { urn: string; name: string }) 
       ) : null}
       {status.data ? (
         <>
-          <label htmlFor={`${id}-mode`}>Update schedule</label>
-          <select
-            className="form-select"
-            id={`${id}-mode`}
+          <Select
             value={rule.mode}
             disabled={save.isPending}
-            onChange={(event) =>
-              change(
-                event.target.value === 'custom'
-                  ? { mode: 'custom', time: status.data?.shared.time ?? '03:00' }
-                  : { mode: event.target.value as 'disabled' | 'global' },
-              )
-            }
+            onValueChange={(mode) => {
+              if (mode === 'custom') change({ mode, time: status.data?.shared.time ?? '03:00' });
+              else if (mode === 'disabled' || mode === 'global') change({ mode });
+            }}
           >
-            <option value="disabled">Disabled</option>
-            <option value="global" disabled={!status.data.available}>
-              Shared
-            </option>
-            <option value="custom" disabled={!status.data.available}>
-              Custom
-            </option>
-          </select>
+            <SelectTrigger id={`${id}-mode`} label="Update schedule">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="disabled">Disabled</SelectItem>
+              <SelectItem value="global" disabled={!status.data.available}>
+                Shared schedule
+              </SelectItem>
+              <SelectItem value="custom" disabled={!status.data.available}>
+                Custom time
+              </SelectItem>
+            </SelectContent>
+          </Select>
           {rule.mode === 'disabled' ? (
             <p>This app updates only when you request it.</p>
           ) : (

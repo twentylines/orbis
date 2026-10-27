@@ -1,6 +1,7 @@
 /// <reference types="bun" />
 import { expect, test } from 'bun:test';
-import { saveSetupSteps } from './setup-save';
+import { saveSetupSteps, setupAppUpdateSteps, type SetupAppChoices } from './setup-save';
+import type { AppUpdateRule } from '@/desktop/automatic-updates-api';
 
 test('retries only requests that did not succeed and keeps completion last', async () => {
   const receipts = new Map<string, string>();
@@ -64,4 +65,42 @@ test('apps with the same visible name retain separate save receipts', async () =
   await saveSetupSteps(steps, receipts, () => {});
   await saveSetupSteps(steps, receipts, () => {});
   expect(calls).toEqual(['reader:store-one', 'reader:store-two']);
+});
+
+test('deselecting an app after a partial save restores its previous custom schedule', async () => {
+  const touched: SetupAppChoices = new Map();
+  const receipts = new Map<string, string>();
+  const rules = new Map<string, AppUpdateRule>([['reader:store', { mode: 'custom', time: '05:30' }]]);
+  const api = {
+    read: async (urn: string) => ({ rule: rules.get(urn) ?? { mode: 'disabled' as const } }),
+    save: async (urn: string, rule: AppUpdateRule) => {
+      rules.set(urn, rule);
+    },
+  };
+  const steps = setupAppUpdateSteps([{ urn: 'reader:store', name: 'Reader' }], touched, api);
+  await saveSetupSteps(steps, receipts, () => {});
+  expect(rules.get('reader:store')).toEqual({ mode: 'global' });
+  await saveSetupSteps(setupAppUpdateSteps([], touched, api), receipts, () => {});
+  expect(rules.get('reader:store')).toEqual({ mode: 'custom', time: '05:30' });
+});
+
+test('a lost save response still permits restoring the prior app policy', async () => {
+  const touched: SetupAppChoices = new Map();
+  const receipts = new Map<string, string>();
+  let rule: AppUpdateRule = { mode: 'disabled' };
+  let loseResponse = true;
+  const api = {
+    read: async () => ({ rule }),
+    save: async (_urn: string, next: AppUpdateRule) => {
+      rule = next;
+      if (loseResponse) throw new Error('Response lost after saving');
+    },
+  };
+  await expect(saveSetupSteps(setupAppUpdateSteps([{ urn: 'reader:store', name: 'Reader' }], touched, api), receipts, () => {})).rejects.toThrow(
+    'Response lost after saving',
+  );
+  expect(rule).toEqual({ mode: 'global' });
+  loseResponse = false;
+  await saveSetupSteps(setupAppUpdateSteps([], touched, api), receipts, () => {});
+  expect(rule).toEqual({ mode: 'disabled' });
 });

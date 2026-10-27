@@ -27,6 +27,7 @@ const schema = type({
   version: '1',
   users: type({ '[string]': userKeys }).narrow((v) => Object.keys(v).length <= 256 && Object.keys(v).every((k) => /^[1-9][0-9]{0,9}$/.test(k))),
 }).onUndeclaredKey('reject');
+export { schema as passkeyStateSchema };
 export type PasskeyState = typeof schema.infer;
 export type StoredPasskey = typeof credentialSchema.infer;
 

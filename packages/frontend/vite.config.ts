@@ -9,21 +9,22 @@ const alias = {
 };
 const plugins: PluginOption[] = [reactRouter(), tsconfigPaths()];
 
-const { NODE_ENV } = process.env;
+const { NODE_ENV, SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT } = process.env;
 if (NODE_ENV === 'production') {
   // @ts-expect-error
   alias['react-dom/server'] = 'react-dom/server.node';
-  plugins.push(
-    sentryVitePlugin({
-      telemetry: false,
-      authToken: process.env.SENTRY_AUTH_TOKEN,
-      release: {
-        name: process.env.TIPI_VERSION,
-      },
-      org: 'runtipi',
-      project: 'runtipi-frontend',
-    }) as PluginOption,
-  );
+  if (SENTRY_AUTH_TOKEN && SENTRY_ORG && SENTRY_PROJECT)
+    plugins.push(
+      sentryVitePlugin({
+        authToken: SENTRY_AUTH_TOKEN,
+        telemetry: false,
+        release: {
+          name: process.env.TIPI_VERSION,
+        },
+        org: SENTRY_ORG,
+        project: SENTRY_PROJECT,
+      }) as PluginOption,
+    );
 }
 
 // https://vitejs.dev/config/

@@ -362,6 +362,7 @@ class HostServiceTests(unittest.TestCase):
             SERVICE.subprocess, "run", return_value=mock.Mock(returncode=0)
         ) as launched:
             plan = self.service.package_plan(["base-files:arm64"])
+            self.assertEqual(plan["expiresAt"], plan["createdAt"] + SERVICE.PLAN_TTL_SECONDS)
             accepted = self.service.package_apply(plan["planId"])
         self.assertEqual(accepted, {"jobId": plan["planId"], "state": "queued"})
         self.assertEqual(SERVICE.read_private(self.service.package_job_file)["state"], "queued")
@@ -397,6 +398,26 @@ class HostServiceTests(unittest.TestCase):
         self.assertEqual(launch.call_args.args[0][-1], result["jobId"])
         with self.assertRaisesRegex(ValueError, "host package transaction"):
             self.service.package_refresh()
+
+    def test_only_stopped_index_refreshes_are_retryable_not_failed_installations(self):
+        job = {"id": str(uuid.uuid4()), "state": "failed", "kind": "refresh"}
+        with mock.patch.object(SERVICE.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="inactive\n")) as probe:
+            self.assertTrue(self.service.refresh_retryable(job))
+            self.assertFalse(self.service.refresh_retryable({**job, "kind": "install"}))
+            self.assertFalse(self.service.refresh_retryable({**job, "state": "running"}))
+            self.assertFalse(self.service.refresh_retryable({**job, "id": "not-an-id; shell"}))
+            self.assertEqual(probe.call_count, 1)
+        for state in ("active", "activating", "unknown"):
+            with mock.patch.object(SERVICE.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=state)):
+                self.assertFalse(self.service.refresh_retryable(job))
+
+    def test_failed_refresh_can_be_rechecked_but_does_not_enable_an_install(self):
+        job = {"id": str(uuid.uuid4()), "state": "failed", "kind": "refresh"}
+        with mock.patch.object(self.service, "require_healthy_core"), mock.patch.object(self.service, "package_job_status", return_value={"job": job}), \
+             mock.patch.object(SERVICE.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="inactive\n")):
+            self.assertEqual(self.service.require_package_ready(allow_refresh_retry=True), job)
+            with self.assertRaisesRegex(ValueError, "previous host package transaction"):
+                self.service.require_package_ready()
 
     def test_lost_worker_launch_response_cannot_overwrite_a_completed_transaction(self):
         simulation = {"selected": [{"name": "base-files:arm64", "candidateVersion": "2"}], "operations": [{"name": "base-files", "candidateVersion": "2"}]}
@@ -626,6 +647,14 @@ class HostServiceTests(unittest.TestCase):
             return int(header.split(b" ")[1]), json.loads(payload)
 
         self.assertEqual(request("GET", "/v1/unknown")[0], 404)
+        with mock.patch.object(self.service.drives, "read", return_value={"available": False, "reason": "Collecting drive health readings."}) as drives, \
+             mock.patch.object(self.service.drives, "start_test", return_value={"accepted": True}) as start_test:
+            self.assertEqual(request("GET", "/v1/drives")[1]["reason"], "Collecting drive health readings.")
+            self.assertEqual(request("GET", "/v1/drives?path=/etc/shadow")[0], 404)
+            self.assertEqual(request("POST", "/v1/drives/test", {"id": "drive:" + "a" * 24, "kind": "short", "command": "shell"})[0], 409)
+            self.assertEqual(request("POST", "/v1/drives/test", {"id": "drive:" + "a" * 24, "kind": "short"})[0], 202)
+            drives.assert_called_once_with()
+            start_test.assert_called_once_with("drive:" + "a" * 24, "short")
         with mock.patch.object(SERVICE.SENSORS, "read", return_value={"available": False, "reason": "Collecting sensor readings."}) as sensors:
             self.assertEqual(request("GET", "/v1/sensors")[1]["reason"], "Collecting sensor readings.")
             self.assertEqual(request("GET", "/v1/sensors?path=/etc/shadow")[0], 404)

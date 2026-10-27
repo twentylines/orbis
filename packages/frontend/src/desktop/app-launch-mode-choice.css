@@ -42,8 +42,7 @@
   background: color-mix(in srgb, var(--desktop-accent) 7%, var(--desktop-surface));
 }
 .app-launch-mode-option:has(input:focus-visible) {
-  outline: 2px solid var(--desktop-accent);
-  outline-offset: 3px;
+  background: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
 }
 .app-launch-mode-option:has(input:disabled) {
   opacity: 0.65;
@@ -68,6 +67,19 @@
   width: 100%;
   max-width: 230px;
   height: 76px;
+}
+.app-launch-mode-icon {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: center;
+  display: grid;
+  width: 100%;
+  max-width: 230px;
+  height: 76px;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
+  color: var(--desktop-accent);
 }
 .app-launch-preview-screen {
   fill: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
@@ -99,6 +111,11 @@
   font-size: 1rem;
   line-height: 1.4;
 }
+.app-launch-mode-option:has(input:focus-visible) strong {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
 .app-launch-mode-copy > span,
 .app-launch-mode-help {
   color: var(--desktop-muted);
@@ -118,6 +135,7 @@
   .app-launch-mode-option:has(input:checked),
   .app-launch-mode-option:has(input:focus-visible) {
     border-color: Highlight;
-    outline-color: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
   }
 }

@@ -48,6 +48,17 @@ export function appDockerHealth(containers: ContainerReading[]) {
   return { state: 'running', label: 'Running', ...coverage };
 }
 
+const checkExplanations = {
+  connection: 'The latest check could not connect to its target.',
+  timeout: 'The latest check timed out.',
+  dns: 'The latest check could not resolve its target address.',
+  permission: 'The latest check was denied permission.',
+  'http-auth': 'The latest check was refused by authentication or access rules.',
+  'http-error': 'The latest check received an HTTP error.',
+  'command-missing': 'The latest check could not find its command.',
+};
+const validPort = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 65535;
+
 export function containerHealthReason(item: ContainerReading) {
   if (item.readiness?.oomKilled) return 'Docker stopped this container after it exceeded its memory limit.';
   if (item.state === 'restarting')
@@ -58,6 +69,13 @@ export function containerHealthReason(item: ContainerReading) {
   if (item.health === 'healthy') return 'The configured Docker healthcheck is passing.';
   if (item.health === 'unknown') return 'Docker did not return a healthcheck result.';
   const readiness = item.readiness;
+  const issue = readiness?.lastCheckIssue;
+  const port = readiness?.healthcheckPort;
+  const configured = readiness?.configuredPort;
+  const portDetail =
+    issue === 'connection' && validPort(port) && validPort(configured) && port !== configured
+      ? `This check targets port ${port}; the app's PORT setting is ${configured}.`
+      : null;
   const details = [
     readiness?.failingStreak ? `${readiness.failingStreak} consecutive failed checks` : null,
     readiness?.lastCheckExitCode !== null && readiness?.lastCheckExitCode !== undefined ? `last exit code ${readiness.lastCheckExitCode}` : null,
@@ -66,5 +84,12 @@ export function containerHealthReason(item: ContainerReading) {
   ].filter(Boolean);
   const summary =
     item.health === 'starting' ? 'The process is running; Docker has not confirmed readiness yet.' : 'The configured Docker healthcheck is failing.';
-  return `${summary}${details.length ? ` ${details.join(' · ')}.` : ''}`;
+  return [
+    summary,
+    issue && Object.hasOwn(checkExplanations, issue) ? checkExplanations[issue] : null,
+    portDetail,
+    details.length ? `${details.join(' · ')}.` : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }

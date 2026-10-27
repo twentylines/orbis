@@ -1,6 +1,7 @@
 .desktop-host-devices {
   --host-device-muted: var(--desktop-status-muted);
   grid-column: 1 / -1;
+  container: host-inventory / inline-size;
 }
 .host-devices-heading,
 .host-device-heading {
@@ -14,9 +15,10 @@
   margin: 0;
 }
 .host-devices-heading h2:focus-visible {
-  outline: 3px solid var(--desktop-focus);
-  outline-offset: 5px;
-  border-radius: 4px;
+  outline: none;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
 }
 .host-devices-heading {
   margin-bottom: 24px;
@@ -41,11 +43,42 @@
 }
 .host-device-sections {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 23em), 1fr));
   gap: 24px;
+}
+.host-device-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.host-device-controls > input {
+  flex: 1 1 14rem;
+  width: auto;
+}
+.host-device-controls > .host-device-select {
+  flex: 0 1 14rem;
+  width: auto;
+  max-width: 100%;
+}
+.host-device-select button {
+  width: 100%;
+}
+.host-device-controls :is(input, button) {
+  min-height: 44px;
+}
+.host-device-count {
+  color: var(--host-device-muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+.host-device-empty {
+  margin: 0;
+  line-height: 1.7;
 }
 .host-device-sections > section,
 .host-device,
+.host-device-identity,
 .host-device-facts > div {
   min-width: 0;
 }
@@ -57,12 +90,17 @@
   margin: 0 0 16px;
   line-height: 1.5;
 }
+.host-device-sections h3 > span {
+  color: var(--host-device-muted);
+  font-weight: 400;
+}
 .host-device-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 .host-device {
-  padding: 18px;
+  container: host-device / inline-size;
+  padding: 16px;
   border: 1px solid var(--desktop-line);
   border-radius: 12px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 7%, transparent);
@@ -121,6 +159,9 @@
   gap: 16px 20px;
   margin: 18px 0 0;
 }
+.host-device-facts:has(> div:nth-child(4)) {
+  grid-template-columns: minmax(0, 1fr);
+}
 .host-device-facts dt {
   color: var(--host-device-muted);
   font-size: 0.875em;
@@ -156,4 +197,52 @@
 }
 .host-devices-notice .btn {
   flex: none;
+}
+body:has(.orbis-theme) .host-device-history-action:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: var(--desktop-line);
+  background: color-mix(in srgb, var(--desktop-ink) 14%, var(--desktop-surface));
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+@container host-inventory (min-width: 52em) {
+  .host-device {
+    display: grid;
+    grid-template-columns: minmax(12em, 1fr) minmax(0, 2.4fr) auto;
+    align-items: center;
+    gap: 12px 24px;
+  }
+  .host-device-facts {
+    margin: 0;
+  }
+  .host-device[data-kind="filesystem"] .host-device-facts {
+    grid-column: 2 / -1;
+  }
+  .host-device-history-action {
+    margin: 0;
+    min-height: 44px;
+  }
+  .host-device > .workspace-meter {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+}
+@container host-device (min-width: 24em) {
+  .host-device-facts:has(> div:nth-child(4)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container host-device (min-width: 60em) {
+  .host-device-facts:has(> div:nth-child(4)) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (forced-colors: active) {
+  .host-devices-heading h2:focus-visible,
+  body:has(.orbis-theme) .host-device-history-action:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }

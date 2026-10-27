@@ -49,7 +49,7 @@ export const InstallFormField = (props: IProps) => {
         name={field.env_variable}
         defaultValue={(field.default as boolean) || false}
         render={({ field: { onChange, value, ref, ...rest } }) => (
-          <Switch className="mb-3" ref={ref} checked={Boolean(value)} onCheckedChange={onChange} {...rest} label={label} />
+          <Switch className="mb-3" ref={ref} checked={Boolean(value)} onCheckedChange={onChange} {...rest} disabled={loading} label={label} />
         )}
       />
     );
@@ -62,7 +62,7 @@ export const InstallFormField = (props: IProps) => {
         name={field.env_variable}
         defaultValue={field.default as string}
         render={({ field: { onChange, value, ...rest } }) => (
-          <Select value={value as string} defaultValue={initialValue} onValueChange={onChange} {...rest}>
+          <Select value={value as string} defaultValue={initialValue} onValueChange={onChange} {...rest} disabled={loading}>
             <SelectTrigger className="mb-3" error={error} label={label}>
               <SelectValue placeholder={t('APP_INSTALL_FORM_CHOOSE_OPTION')} />
             </SelectTrigger>

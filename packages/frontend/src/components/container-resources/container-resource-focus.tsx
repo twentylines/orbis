@@ -3,6 +3,7 @@ import { Component, type ReactNode, type RefObject } from 'react';
 type Props = {
   list: RefObject<HTMLOListElement | null>;
   fallback: RefObject<HTMLHeadingElement | null>;
+  scope?: RefObject<HTMLElement | null>;
   children: ReactNode;
 };
 type Snapshot = { control: HTMLElement; top: number; scroller: HTMLElement | Window };
@@ -32,7 +33,8 @@ function reveal(control: HTMLElement, scroller: HTMLElement | Window) {
 export class ContainerResourceFocus extends Component<Props, Record<string, never>, Snapshot | null> {
   override getSnapshotBeforeUpdate(): Snapshot | null {
     const control = document.activeElement;
-    if (!(control instanceof HTMLElement) || !this.props.list.current?.contains(control)) return null;
+    const scope = this.props.scope?.current ?? this.props.list.current;
+    if (!(control instanceof HTMLElement) || !scope?.contains(control)) return null;
     return { control, top: control.getBoundingClientRect().top, scroller: scrollContainer(control) };
   }
 
@@ -40,7 +42,9 @@ export class ContainerResourceFocus extends Component<Props, Record<string, neve
     if (!snapshot) return;
     const active = document.activeElement;
     if (active !== snapshot.control && active !== document.body) return;
-    const surviving = snapshot.control.isConnected && this.props.list.current?.contains(snapshot.control);
+    const scope = this.props.scope?.current ?? this.props.list.current;
+    const surviving =
+      snapshot.control.isConnected && scope?.contains(snapshot.control) && !snapshot.control.matches(':disabled,[aria-disabled="true"]');
     const control = surviving ? snapshot.control : this.props.fallback.current;
     if (!control) return;
     if (active !== control) control.focus({ preventScroll: true });

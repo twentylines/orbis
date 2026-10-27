@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readTarMetadata } from '@/core/archive/tar-metadata';
+import { readTarArchive, readTarMetadata } from '@/core/archive/tar-metadata';
 
 const header = (name: string, type = '0', data = Buffer.alloc(0), target = '') => {
   const block = Buffer.alloc(512);
@@ -52,6 +52,55 @@ describe('bounded structured tar metadata', () => {
     const target = `${'target '.repeat(20)}é`;
     const file = await save([header('PaxHeader', 'x', Buffer.concat([pax('path', name), pax('linkpath', target)])), header('short', '2')]);
     expect(await readTarMetadata(file, false)).toEqual([{ path: name, type: 'l', linkTarget: target }]);
+  });
+  it.each([
+    ['x', false, '1793059722.974771293'],
+    ['x', true, '0'],
+    ['g', false, '-1.25'],
+    ['g', true, '1793059722.974771293'],
+  ] as const)('ignores bounded BSD creation-time metadata in strict mode (kind=%s, gzip=%s)', async (kind, compressed, timestamp) => {
+    const attributes = Buffer.concat([pax('LIBARCHIVE.creationtime', timestamp), pax('mtime', '1793059723.037067031')]);
+    const file = await save([header('PaxHeader', kind, attributes), header('app-data/file', '0', Buffer.from('fixture content'))], compressed);
+    expect(await readTarArchive(file, compressed, undefined, { strict: true })).toEqual([{ path: 'app-data/file', type: '-' }]);
+  });
+  it.each([
+    ['empty', ''],
+    ['non-numeric', 'not-a-time'],
+    ['exponent', '1e3'],
+    ['nonfinite', 'Infinity'],
+    ['leading space', ' 1'],
+    ['trailing line feed', '1\n'],
+    ['trailing carriage return', '1\r'],
+    ['missing fractional digits', '1.'],
+    ['missing integer digits', '.25'],
+    ['oversized', '1'.repeat(65)],
+  ])('rejects unsupported BSD creation-time values in strict mode: %s', async (_name, timestamp) => {
+    const file = await save([header('PaxHeader', 'x', pax('LIBARCHIVE.creationtime', timestamp)), header('app-data/file')], true);
+    await expect(readTarArchive(file, true, undefined, { strict: true })).rejects.toThrow('Invalid backup archive');
+  });
+  it.each(['vendor.unknown', 'GNU.sparse.size', 'LIBARCHIVE.creationtime.extra'])(
+    'keeps unrelated PAX keys rejected in strict mode: %s',
+    async (key) => {
+      const file = await save([
+        header('PaxHeader', 'x', Buffer.concat([pax('LIBARCHIVE.creationtime', '1.25'), pax(key, '1')])),
+        header('app-data/file'),
+      ]);
+      await expect(readTarArchive(file, false, undefined, { strict: true })).rejects.toThrow('Invalid backup archive');
+    },
+  );
+  it('preserves duplicate-path and overlong-path rejection alongside BSD creation-time metadata', async () => {
+    const attributes = [
+      Buffer.concat([pax('LIBARCHIVE.creationtime', '1.25'), pax('path', 'app-data/first'), pax('path', 'app-data/second')]),
+      Buffer.concat([pax('LIBARCHIVE.creationtime', '1.25'), pax('path', 'x'.repeat(4097))]),
+    ];
+    for (const fields of attributes) {
+      const file = await save([header('PaxHeader', 'x', fields), header('app-data/file')]);
+      await expect(readTarArchive(file, false, undefined, { strict: true })).rejects.toThrow('Invalid backup archive');
+    }
+  });
+  it('keeps ignoring unrelated creation-time values in the legacy metadata reader', async () => {
+    const file = await save([header('PaxHeader', 'x', pax('LIBARCHIVE.creationtime', 'legacy-uninterpreted-value')), header('app-data/file')]);
+    expect(await readTarMetadata(file, false)).toEqual([{ path: 'app-data/file', type: '-' }]);
   });
   it('reads GNU long names and link names', async () => {
     const name = `app-data/${'x'.repeat(120)}`;

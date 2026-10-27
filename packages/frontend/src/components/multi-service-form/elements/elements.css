@@ -8,10 +8,20 @@
 }
 
 .service-config-toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   flex: 1 1 12em;
   min-width: 0;
   overflow-wrap: normal;
   word-break: normal;
+}
+.service-config-toolbar .form-help {
+  flex: none;
+}
+.service-config-table .service-config-check-cell {
+  text-align: center;
+  vertical-align: middle;
 }
 
 .service-config-toolbar > .btn {

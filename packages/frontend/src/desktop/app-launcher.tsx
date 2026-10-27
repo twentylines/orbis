@@ -130,8 +130,8 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     requestAnimationFrame(() => {
       const surviving = document.querySelector<HTMLElement>('.orbis-app-launcher:not([hidden]):not([inert]) .app-launcher-close');
       const target =
-        (preferTray ? trayButton(urn) : null) ??
         document.querySelector<HTMLElement>('.app-split-picker input') ??
+        (preferTray ? trayButton(urn) : null) ??
         surviving ??
         (opener?.isConnected && !opener.closest('[hidden],[inert]') ? opener : null) ??
         dockFocusTarget();
@@ -301,7 +301,23 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                         trayReady={Boolean(tray)}
                         trayTarget={() => flightTarget(item.request.urn)}
                         onPlace={(mode) => {
-                          dispatch({ type: 'place', urn: item.request.urn, mode });
+                          const partner = [...state.windows]
+                            .reverse()
+                            .find(
+                              (candidate) =>
+                                candidate.request.urn !== item.request.urn &&
+                                candidate.section === item.section &&
+                                candidate.status === 'visible' &&
+                                candidate.request.launchUrl &&
+                                appOpeningMode(
+                                  preferences.appLaunch,
+                                  candidate.request.urn,
+                                  candidate.request.launchUrl,
+                                  window.location.origin,
+                                  desktop,
+                                ) === 'window',
+                            );
+                          dispatch({ type: 'place', urn: item.request.urn, mode, partner: partner?.request.urn });
                         }}
                         onFocus={() => dispatch({ type: 'focus', urn: item.request.urn })}
                         onMinimize={() => dispatch({ type: 'minimize', urn: item.request.urn })}

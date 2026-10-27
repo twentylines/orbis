@@ -11,6 +11,7 @@ import type { TranslatableError } from '@/types/error.types';
 import { useEffect, useState } from 'react';
 import { type } from 'arktype';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
+import './custom-app-create-page.css';
 
 const RESERVED_APP_NAMES = ['create'];
 
@@ -56,29 +57,32 @@ export default () => {
   };
 
   return (
-    <>
-      <div className="card">
+    <div className="custom-app-create-page">
+      <section className="custom-app-name-panel card" aria-label={t('CUSTOM_APP_NAME_LABEL')}>
         <div className="card-body">
-          <div className="row">
-            <div className="col-md-6">
-              <Input
-                label={
-                  <>
-                    {t('CUSTOM_APP_NAME_LABEL')} <span className="text-danger">*</span>
-                  </>
-                }
-                onChange={(e) => setAppName(e.target.value)}
-                error={appNameError}
-                placeholder={t('CUSTOM_APP_NAME_PLACEHOLDER')}
-                title={t('CUSTOM_APP_NAME_VALIDATION_HELP')}
-                disabled={createCustomApp.isPending}
-              />
-              <div className="form-text">{t('CUSTOM_APP_NAME_HELP')}</div>
-            </div>
+          <div className="custom-app-name-field">
+            <Input
+              id="custom-app-name"
+              className="custom-app-name-input"
+              aria-describedby="custom-app-name-help"
+              label={
+                <>
+                  {t('CUSTOM_APP_NAME_LABEL')} <span className="text-danger">*</span>
+                </>
+              }
+              onChange={(e) => setAppName(e.target.value)}
+              error={appNameError}
+              placeholder={t('CUSTOM_APP_NAME_PLACEHOLDER')}
+              title={t('CUSTOM_APP_NAME_VALIDATION_HELP')}
+              disabled={createCustomApp.isPending}
+            />
+            <p className="custom-app-name-help form-text" id="custom-app-name-help">
+              {t('CUSTOM_APP_NAME_HELP')}
+            </p>
           </div>
         </div>
-      </div>
+      </section>
       <MultiServiceForm onSubmit={(d) => onSubmit({ ...convertLegacyToYaml(d), ...composeExtras })} />
-    </>
+    </div>
   );
 };

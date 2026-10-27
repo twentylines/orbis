@@ -57,8 +57,12 @@ export default function Tasks() {
         </div>
       ) : null}
       <div className="task-summary">
-        <span className={`task-summary-orbit ${active.length ? 'is-busy' : ''}`} aria-hidden="true">
-          <IconActivity size={30} stroke={1.3} />
+        <span
+          className={`task-summary-orbit ${active.length ? 'is-busy' : ''}`}
+          data-attention={tasks.isError || review.length > 0}
+          aria-hidden="true"
+        >
+          {tasks.isError || review.length > 0 ? <IconAlertTriangle size={30} stroke={1.5} /> : <IconActivity size={30} stroke={1.3} />}
         </span>
         <div>
           <h2>

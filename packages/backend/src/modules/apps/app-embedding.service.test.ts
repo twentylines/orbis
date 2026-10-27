@@ -314,6 +314,20 @@ describe('installed app authorization and bounded caching', () => {
     expect(network.http).toHaveBeenCalledTimes(4);
   });
 
+  it('refreshes an advisory result on request while coalescing concurrent fresh checks', async () => {
+    rawHeaders = ['X-Frame-Options', 'DENY'];
+    expect((await service.check(urn, target, parent)).status).toBe('blocked');
+    rawHeaders = [];
+    expect((await service.check(urn, target, parent)).status).toBe('blocked');
+    const results = await Promise.all([service.check(urn, target, parent, true), service.check(urn, target, parent, true)]);
+    expect(results.map((result) => result.status)).toEqual(['not-blocked-by-headers', 'not-blocked-by-headers']);
+    expect(network.http).toHaveBeenCalledTimes(2);
+    expect((await service.check(urn, target, parent)).status).toBe('not-blocked-by-headers');
+    expect(network.http).toHaveBeenCalledTimes(2);
+    expect((await service.check(urn, new URL('http://169.254.169.254/'), parent, true)).reason).toBe('unverified-destination');
+    expect(network.http).toHaveBeenCalledTimes(2);
+  });
+
   it('evicts old results after 128 entries and sanitizes transport failures', async () => {
     for (let index = 0; index < 129; index++) await service.check(urn, target, new URL(`http://parent${index}.example.com`));
     expect(network.http).toHaveBeenCalledTimes(129);

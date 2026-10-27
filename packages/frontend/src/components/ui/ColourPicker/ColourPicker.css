@@ -1,0 +1,194 @@
+body:has(.orbis-theme) .colour-picker-trigger {
+  gap: 10px;
+  min-height: 44px;
+}
+.colour-picker-trigger > span {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 1px solid var(--desktop-line);
+  border-radius: 7px;
+}
+.colour-picker-popover {
+  position: fixed;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px));
+  min-width: 0;
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+  border: 1px solid var(--desktop-line);
+  border-radius: 18px;
+  background: var(--desktop-menu, var(--desktop-surface));
+  color: var(--desktop-ink);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 20%);
+  animation: colour-picker-enter 160ms ease-out;
+}
+.colour-picker-header,
+.colour-picker-footer {
+  flex: none;
+  padding: 8px 12px;
+}
+.colour-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.colour-picker-header h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.colour-picker-popover .colour-picker-header .btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border-radius: 10px;
+}
+.colour-picker-body {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+  scroll-padding: 16px;
+  overscroll-behavior: contain;
+}
+.colour-picker-preview {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+.colour-picker-sample {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+}
+.colour-picker-preview label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.75rem;
+}
+.colour-picker-preview input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  color: var(--desktop-ink);
+  background: var(--desktop-code-background);
+  font: inherit;
+}
+.colour-picker-channels {
+  display: grid;
+  gap: 4px;
+}
+.colour-picker-channel {
+  display: grid;
+  grid-template-columns: minmax(0, 5.5em) minmax(50px, 1fr) minmax(4.5ch, max-content);
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8125rem;
+}
+.colour-picker-channel > span {
+  line-height: 1.5;
+}
+.colour-picker-channel output {
+  color: var(--desktop-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.colour-picker-channel input {
+  appearance: none;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.colour-picker-channel input::-webkit-slider-runnable-track {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--colour-track);
+}
+.colour-picker-channel input::-moz-range-track {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--colour-track);
+}
+.colour-picker-channel input::-webkit-slider-thumb {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -6px;
+  border-radius: 50%;
+  border: 3px solid var(--desktop-ink);
+  background: var(--colour-thumb);
+}
+.colour-picker-channel input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid var(--desktop-ink);
+  background: var(--colour-thumb);
+}
+body:has(.orbis-theme) .colour-picker-popover :is(input, button):focus-visible {
+  outline: none;
+  box-shadow: none;
+  background-color: color-mix(in srgb, var(--desktop-accent) 15%, var(--desktop-surface));
+}
+.colour-picker-body .colour-picker-error {
+  color: var(--desktop-negative);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.colour-picker-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
+  border-top: 1px solid var(--desktop-line);
+}
+.colour-picker-popover .colour-picker-footer .btn {
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 12px;
+  white-space: normal;
+}
+@keyframes colour-picker-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .colour-picker-popover {
+    animation: none;
+  }
+}
+:root[data-orbis-motion="reduced"] .colour-picker-popover {
+  animation: none;
+}
+@media (forced-colors: active) {
+  body:has(.orbis-theme) .colour-picker-popover :is(input, button):focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

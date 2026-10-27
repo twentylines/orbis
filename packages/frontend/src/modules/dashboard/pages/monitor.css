@@ -40,7 +40,8 @@
   background: color-mix(in srgb, var(--desktop-preset-tint) 7%, transparent);
 }
 .monitor-history-ranges button {
-  min-height: 38px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 8px 14px;
   border: 0;
   border-radius: 8px;
@@ -48,11 +49,12 @@
   color: var(--desktop-muted);
   font-size: 0.75rem;
   font-weight: 650;
+  line-height: 1.5;
 }
 .monitor-history-ranges button[aria-pressed="true"] {
   background: var(--desktop-surface);
   color: var(--desktop-ink);
-  box-shadow: 0 2px 7px rgba(19, 43, 27, 0.12);
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--desktop-ink) 12%, transparent);
 }
 .monitor-history-info {
   max-width: 450px;
@@ -79,6 +81,12 @@
 }
 .monitor-history-info p {
   margin: 10px 0 0;
+}
+.monitor-history-caption {
+  margin: 12px 0 20px;
+  color: var(--desktop-status-muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
 }
 .desktop-monitor {
   min-width: 0;
@@ -306,6 +314,7 @@
   color: var(--desktop-muted);
 }
 .desktop-telemetry-lead {
+  --monitor-reading-size: min(var(--orbis-compact-reading, 2.375rem), clamp(1.6875rem, calc(3vw * var(--orbis-text-scale, 1)), 2.375rem));
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -313,7 +322,7 @@
   margin-bottom: 19px;
 }
 .desktop-telemetry-lead strong {
-  font-size: min(var(--orbis-compact-reading, 2.375rem), clamp(1.6875rem, calc(3vw * var(--orbis-text-scale, 1)), 2.375rem));
+  font-size: var(--monitor-reading-size);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
 }
@@ -466,6 +475,12 @@
   font: inherit;
   white-space: nowrap;
 }
+@container (min-width: 901px) {
+  .desktop-telemetry-lead .desktop-memory-total {
+    font-size: var(--monitor-reading-size);
+    line-height: inherit;
+  }
+}
 
 .monitor-history-toolbar > h2 {
   flex: 1 0 100%;
@@ -485,6 +500,9 @@
   background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
 }
 .monitor-temperature-strip dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+  gap: 16px 24px;
   flex: 0 1 auto;
   min-width: 0;
   margin: 0;
@@ -510,6 +528,16 @@
   font-size: 0.8125rem;
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+.monitor-temperature-strip dd[data-critical="true"] {
+  color: var(--desktop-negative);
+}
+.monitor-temperature-critical {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.6;
 }
 .monitor-temperature-description {
   grid-column: 1;
@@ -554,9 +582,22 @@
 }
 .monitor-sections {
   min-width: 0;
+  container: monitor-sections / inline-size;
   border: 1px solid var(--desktop-line);
   border-radius: 15px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 4%, var(--desktop-surface));
+}
+.monitor-section-compact {
+  display: none;
+  padding: var(--orbis-compact-panel-space, 24px);
+  border-bottom: 1px solid var(--desktop-line);
+}
+.monitor-section-select,
+.monitor-section-select button {
+  width: 100%;
+}
+.monitor-section-select button {
+  min-height: 44px;
 }
 .monitor-section-tabs {
   display: flex;
@@ -589,12 +630,25 @@
   background: color-mix(in srgb, var(--desktop-preset-tint) 15%, var(--desktop-surface));
   color: var(--desktop-ink);
 }
+@container monitor-sections (max-width: 36rem) {
+  .monitor-section-compact {
+    display: block;
+  }
+  .monitor-section-tabs {
+    display: none;
+  }
+}
 .monitor-section-panel {
   min-width: 0;
   padding: var(--orbis-compact-panel-space, 24px);
 }
 .monitor-section-panel:focus-visible {
-  outline-offset: -5px;
+  outline: none;
+}
+.monitor-section-panel:focus-visible h2 {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
 }
 .monitor-section-panel .monitor-history-toolbar {
   margin-top: 0;
@@ -636,14 +690,8 @@
 .monitor-usage-panel > .monitor-detail-action {
   margin-top: 16px;
 }
-.monitor-usage-panel .container-resources-heading h2 {
-  font-size: 1rem;
-}
-.monitor-usage-panel .container-resources-sort {
-  margin-block: 16px 6px;
-}
-.monitor-usage-panel .container-resources-sort button {
-  min-height: 44px;
+.monitor-usage-panel .container-resources-note {
+  margin-block: 0 8px;
 }
 .monitor-usage-panel .host-process-list {
   margin-block: 8px 12px;
@@ -654,8 +702,23 @@
   gap: 10px 24px;
   padding-block: 14px;
 }
-.monitor-usage-panel :is(.host-process-bar, .container-resource-bar, .container-resource-details) {
+.monitor-usage-panel :is(.host-process-bar, .container-resource-bar) {
   grid-column: 1 / -1;
+}
+.desktop .desktop-monitor .monitor-usage-panel .host-process-list > li {
+  row-gap: 6px;
+  padding-block: 12px;
+}
+.monitor-usage-panel .host-process-identity {
+  grid-row: 1 / span 2;
+}
+.monitor-usage-panel .host-process-bar {
+  grid-column: 2;
+  grid-row: 2;
+}
+.desktop .desktop-monitor .monitor-usage-panel .container-resource-list > .container-resource-entry {
+  display: block;
+  padding-block: 0;
 }
 .monitor-usage-panel :is(.host-process-identity, .container-resource-name) {
   gap: 2px;
@@ -707,7 +770,15 @@
     text-align: left;
   }
   .monitor-usage-panel .host-process-values {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 7em), 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 16px;
+  }
+  .monitor-usage-panel .host-process-identity {
+    grid-row: auto;
+  }
+  .monitor-usage-panel .host-process-bar {
+    grid-column: 1;
+    grid-row: auto;
   }
 }
 @container (max-width: 650px) {
@@ -716,5 +787,11 @@
   }
   .monitor-section-tab {
     padding-inline: 12px;
+  }
+}
+@media (forced-colors: active) {
+  .monitor-section-panel:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -5px;
   }
 }

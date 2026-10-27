@@ -39,6 +39,7 @@ PACKAGES = load_script("orbis-host-packages.py", "orbis_packages_for_service")
 TELEMETRY = load_script("orbis-host-telemetry.py", "orbis_telemetry_for_service").HostTelemetry()
 PROCESSES = load_script("orbis-host-processes.py", "orbis_processes_for_service").HostProcesses()
 SENSORS = load_script("orbis-host-sensors.py", "orbis_sensors_for_service").HostSensors()
+DRIVES = load_script("orbis-host-drives.py", "orbis_drives_for_service")
 HOST = UPDATE.HOST
 PLAN = HOST.PLAN
 CHECK = UPDATE.CHECK
@@ -278,6 +279,7 @@ class HostService:
         self.package_job_file = self.state_dir / "package-job.json"
         self.restart_job_file = self.state_dir / "restart-job.json"
         self.maintenance_file = self.state_dir / "helper-maintenance.json"
+        self.drives = DRIVES.DriveHealth(self.state_dir)
         previous = read_private(self.job_file)
         if previous and previous.get("state") in {"running", "recovering"}:
             previous["state"] = "interrupted"
@@ -454,8 +456,20 @@ class HostService:
 
     def require_package_clear(self) -> None:
         job = read_private(self.package_job_file)
-        if job and job.get("state") in {"queued", "running", "failed", "interrupted"}:
+        if job and job.get("state") in {"queued", "running", "failed", "interrupted"} and not self.refresh_retryable(job):
             raise ValueError("resolve the host package transaction before changing the Orbis core")
+
+    def refresh_retryable(self, job: dict) -> bool:
+        if job.get("kind") != "refresh" or job.get("state") not in {"failed", "interrupted"}:
+            return False
+        identifier = job.get("id")
+        try:
+            uuid.UUID(identifier)
+            state = subprocess.run(["/usr/bin/systemctl", "show", "-p", "ActiveState", "--value", f"orbis-package-{identifier}.service"],
+                                   capture_output=True, text=True, timeout=3, check=False)
+            return state.returncode == 0 and state.stdout.strip() in {"inactive", "failed"}
+        except (ValueError, TypeError, AttributeError, OSError, subprocess.SubprocessError):
+            return False
 
     def require_healthy_core(self) -> None:
         current = self.status()
@@ -516,7 +530,7 @@ class HostService:
             "output": terminal_tail(self.state_dir / f"package-job-{identifier}.log"),
         }
 
-    def require_package_ready(self) -> dict | None:
+    def require_package_ready(self, allow_refresh_retry: bool = False) -> dict | None:
         self.require_restart_clear()
         self.require_healthy_core()
         if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
@@ -527,13 +541,13 @@ class HostService:
         if core_job and core_job.get("state") in {"running", "recovering", "interrupted"}:
             raise ValueError("resolve the Orbis core update before changing host packages")
         package_job = self.package_job_status()["job"]
-        if package_job and package_job.get("state") in {"queued", "running", "failed", "interrupted"}:
+        if package_job and package_job.get("state") in {"queued", "running", "failed", "interrupted"} and not (allow_refresh_retry and self.refresh_retryable(package_job)):
             raise ValueError("resolve the previous host package transaction first")
         return package_job
 
     def package_refresh(self) -> dict:
         with self.lock:
-            self.require_package_ready()
+            self.require_package_ready(allow_refresh_retry=True)
             PACKAGES.require_ubuntu()
             identifier = str(uuid.uuid4())
             created = time.time()
@@ -558,7 +572,10 @@ class HostService:
                 **simulation,
             }
             write_private(self.state_dir / f"package-plan-{plan_id}.json", record)
-            return {"planId": plan_id, "createdAt": record["createdAt"], **simulation}
+            return {
+                "planId": plan_id, "createdAt": record["createdAt"],
+                "expiresAt": record["createdAt"] + PLAN_TTL_SECONDS, **simulation,
+            }
 
     def package_apply(self, plan_id: str) -> dict:
         with self.lock:
@@ -870,6 +887,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self) -> None:
+        if self.path == "/v1/drives":
+            self.send_json(200, self.server.service.drives.read())
+            return
         if self.path == "/v1/sensors":
             self.send_json(200, SENSORS.read())
             return
@@ -920,12 +940,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
-        if self.path not in {"/v1/channel", "/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply", "/v1/packages/refresh", "/v1/restart/plan", "/v1/restart/apply"}:
+        if self.path not in {"/v1/channel", "/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply", "/v1/packages/refresh", "/v1/restart/plan", "/v1/restart/apply", "/v1/drives/test"}:
             self.send_json(404, {"error": "not found"})
             return
         try:
             data = self.body()
-            if self.path == "/v1/channel":
+            if self.path == "/v1/drives/test":
+                if set(data) != {"id", "kind"}:
+                    raise ValueError("Choose one drive and self-test.")
+                self.server.service.require_restart_clear()
+                self.send_json(202, self.server.service.drives.start_test(data["id"], data["kind"]))
+            elif self.path == "/v1/channel":
                 if not {"channel", "revision"}.issubset(data) or set(data) - {"channel", "revision", "acknowledgeNightly"} or not isinstance(data["channel"], str) or not isinstance(data["revision"], str) or type(data.get("acknowledgeNightly", False)) is not bool:
                     raise ValueError("confirm one release channel and its displayed revision")
                 self.send_json(200, self.server.service.select_channel(data["channel"], data["revision"], data.get("acknowledgeNightly", False)))

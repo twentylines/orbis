@@ -53,21 +53,51 @@
 .settings-about-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 24px;
+  align-items: center;
+  gap: 8px 20px;
   border-top: 1px solid var(--desktop-line);
-  padding-top: 20px;
+  padding: 16px 0 0;
 }
 .settings-about-links a {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
   max-width: 100%;
-  min-height: 36px;
+  min-height: 44px;
+  padding: 4px 0;
   color: var(--desktop-accent);
   text-underline-offset: 4px;
+  overflow-wrap: anywhere;
 }
-.settings-about-links svg {
+.settings-about-link-icon {
+  display: grid;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+}
+.settings-about .settings-about-links a:focus-visible {
+  outline: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--desktop-accent) 15%, var(--desktop-surface));
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+@media (forced-colors: active) {
+  .settings-about .settings-about-links a:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+.settings-about-link-icon svg,
+.settings-about-link-icon img {
+  display: block;
   flex: none;
+}
+.settings-about-link-icon img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 @container (max-width: 46rem) {
   .settings-about-sections {

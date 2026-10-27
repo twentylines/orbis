@@ -1,8 +1,8 @@
 import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
-import { useDesktopWindows } from '@/desktop/window-viewport';
+import { revealPageFocus, useDesktopWindows } from '@/desktop/window-viewport';
 import { useWindowVisible, WindowVisibilityContext } from '@/desktop/window-visibility';
-import { IconX } from '@tabler/icons-react';
+import { IconArrowLeft, IconX } from '@tabler/icons-react';
 import { QueryErrorResetBoundary } from '@tanstack/react-query';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -20,6 +20,14 @@ import {
 import { animatePreviewTiles, capturePreviewTiles, previewPaneMotion, type PreviewSnapshot } from './preview-motion';
 import './store-preview.css';
 
+function alignCatalogueCard(catalogue: HTMLElement, card: HTMLElement, previousTop?: number) {
+  const viewport = catalogue.getBoundingClientRect();
+  const box = card.getBoundingClientRect();
+  const top = box.top - viewport.top;
+  const wanted = Math.max(8, Math.min(previousTop ?? top, viewport.height - box.height - 8));
+  catalogue.scrollTop += top - wanted;
+}
+
 export function AppPreviewLayout({ source, selected, children }: { source: 'store' | 'installed'; selected: string | null; children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -27,6 +35,8 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   const visible = useWindowVisible();
   const state = location.state as AppPreviewHistory | null;
   const installed = source === 'installed';
+  const editing = installed && /\/edit(?:\/|$)/.test(location.pathname);
+  const detailsPath = editing ? `${location.pathname.split('/edit')[0]}${location.search}` : null;
   const closePath = installed ? appsReturnPath(state, location.search) : storeReturnPath(state, location.search);
   const previewId = installed ? 'installed-app-preview' : 'store-app-preview';
   const catalogue = useRef<HTMLDivElement>(null);
@@ -37,6 +47,15 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
   const [retained, setRetained] = useState<ReactNode>(null);
   const [panelView, setPanelView] = useState<{ title: string; content: ReactNode; path: string } | null>(null);
   const panelOpener = useRef<HTMLElement | null>(null);
+  const returningToDetails = useRef(false);
+  const onDetailsMount = useCallback((element: HTMLDivElement | null) => {
+    if (!returningToDetails.current || !element || element.closest('[hidden],[inert]')) return;
+    const trigger = element.querySelector<HTMLButtonElement>('button.more-button');
+    if (trigger) {
+      returningToDetails.current = false;
+      trigger.focus();
+    }
+  }, []);
   const closePanel = useCallback(() => {
     setPanelView(null);
     requestAnimationFrame(() => {
@@ -50,18 +69,33 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
     if (panelView) pane.current?.querySelector<HTMLElement>('.app-settings-preview > h2')?.focus({ preventScroll: true });
   }, [panelView]);
   const snapshot = useRef<PreviewSnapshot>([]);
+  const anchor = useRef<{ urn: string; top: number } | null>(null);
   const paneBounds = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const tileMotion = useRef<Animation[]>([]);
-  const capture = useCallback(() => {
-    if (!split || !catalogue.current || !pane.current) return;
-    snapshot.current = capturePreviewTiles(catalogue.current);
-    paneBounds.current = {
-      left: pane.current.offsetLeft,
-      top: pane.current.offsetTop,
-      width: pane.current.offsetWidth,
-      height: pane.current.offsetHeight,
-    };
-  }, [split]);
+  const onCardMount = useCallback(
+    (card: HTMLAnchorElement | null) => {
+      if (!split || !selected || anchor.current || card?.dataset.storeApp !== selected) return;
+      const catalogue = card.closest<HTMLElement>('.store-catalogue-pane');
+      if (catalogue) alignCatalogueCard(catalogue, card);
+    },
+    [selected, split],
+  );
+  const capture = useCallback(
+    (target?: Element | null) => {
+      if (!split || !catalogue.current || !pane.current) return;
+      const link = target?.closest<HTMLElement>('[data-store-app]') ?? catalogue.current.querySelector<HTMLElement>('[aria-expanded="true"]');
+      const urn = link?.dataset.storeApp;
+      anchor.current = link && urn ? { urn, top: link.getBoundingClientRect().top - catalogue.current.getBoundingClientRect().top } : null;
+      snapshot.current = capturePreviewTiles(catalogue.current);
+      paneBounds.current = {
+        left: pane.current.offsetLeft,
+        top: pane.current.offsetTop,
+        width: pane.current.offsetWidth,
+        height: pane.current.offsetHeight,
+      };
+    },
+    [split],
+  );
   const previous = useRef<string | null>(null);
   const scroll = useRef(0);
   const motion = useRef<Animation | null>(null);
@@ -79,8 +113,9 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
       : nextStorePreviewHistory(state, location.search, Boolean(selected));
 
   useEffect(() => {
-    window.addEventListener('popstate', capture);
-    return () => window.removeEventListener('popstate', capture);
+    const captureHistory = () => capture();
+    window.addEventListener('popstate', captureHistory);
+    return () => window.removeEventListener('popstate', captureHistory);
   }, [capture]);
 
   useLayoutEffect(() => {
@@ -101,11 +136,19 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
 
   useLayoutEffect(() => {
     if (split && catalogue.current) catalogue.current.scrollTop = scroll.current;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && pane.current?.contains(active)) {
+      const frame = requestAnimationFrame(() => {
+        if (active === document.activeElement && !active.closest('[hidden],[inert]')) revealPageFocus(active);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
   }, [split]);
 
   useLayoutEffect(() => {
     const last = previous.current;
     previous.current = selected;
+    if (last !== selected) returningToDetails.current = false;
     const movingPane =
       motion.current?.playState === 'running' && motion.current.effect instanceof KeyframeEffect && motion.current.effect.target === pane.current;
     const visual =
@@ -116,6 +159,13 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
     motion.current = null;
     for (const animation of tileMotion.current) animation.cancel();
     tileMotion.current = [];
+    if (split && catalogue.current) {
+      const reference = anchor.current;
+      const urn = reference?.urn ?? selected;
+      const target = urn ? catalogue.current.querySelector<HTMLElement>(`[data-store-app="${CSS.escape(urn)}"]`) : null;
+      if (target) alignCatalogueCard(catalogue.current, target, reference?.top);
+    }
+    anchor.current = null;
     if (split && snapshot.current.length && !prefersReducedMotion()) {
       const animations = animatePreviewTiles(snapshot.current);
       tileMotion.current = animations;
@@ -171,6 +221,8 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
         closePath,
         split,
         selectedUrn: selected,
+        onCardMount,
+        onDetailsMount,
         previewId,
         close,
         nextHistory,
@@ -188,7 +240,8 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
     >
       <div
         onClickCapture={(event) => {
-          if ((event.target as Element).closest('[data-store-app]')) capture();
+          const target = (event.target as Element).closest('[data-store-app]');
+          if (target) capture(target);
         }}
         className={`store-split-layout${split ? ' store-split-desktop' : ''}${installed ? ' installed-app-split' : ''}`}
         data-preview-open={selected ? 'true' : 'false'}
@@ -216,14 +269,30 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
           <div className="store-preview-surface" aria-hidden="true" />
           {selected || (split && retained) ? (
             <div ref={content} className="store-preview-content">
-              {split || panelView ? (
+              {split || editing || panelView ? (
                 <button
                   type="button"
-                  className="store-preview-close"
-                  aria-label={panelView ? 'Back to app details' : 'Close app preview'}
-                  onClick={panelView ? closePanel : close}
+                  className={`store-preview-close${!split && editing ? ' store-preview-back' : ''}`}
+                  aria-label={panelView || editing ? 'Back to app details' : 'Close app preview'}
+                  onClick={
+                    panelView
+                      ? closePanel
+                      : detailsPath
+                        ? () => {
+                            returningToDetails.current = true;
+                            void navigate(detailsPath, { replace: true, preventScrollReset: true, state: location.state });
+                          }
+                        : close
+                  }
                 >
-                  <IconX size={20} aria-hidden="true" />
+                  {!split && editing ? (
+                    <>
+                      <IconArrowLeft size={20} aria-hidden="true" />
+                      <span>App details</span>
+                    </>
+                  ) : (
+                    <IconX size={20} aria-hidden="true" />
+                  )}
                 </button>
               ) : null}
               <QueryErrorResetBoundary>
@@ -245,11 +314,16 @@ export function AppPreviewLayout({ source, selected, children }: { source: 'stor
                       </div>
                     )}
                   >
-                    <div hidden={Boolean(panelView)} inert={Boolean(panelView)}>
+                    <div
+                      key={editing ? 'configuration' : 'details'}
+                      className="store-preview-page"
+                      hidden={Boolean(panelView)}
+                      inert={Boolean(panelView)}
+                    >
                       <Suspense fallback={<DelayedRouteLoading label="Loading app…" />}>{selected ? outlet : retained}</Suspense>
                     </div>
                     {panelView ? (
-                      <section className="app-settings-preview">
+                      <section className="app-settings-preview store-preview-page">
                         <h2 tabIndex={-1}>{panelView.title}</h2>
                         {panelView.content}
                       </section>

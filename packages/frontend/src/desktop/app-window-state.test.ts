@@ -125,3 +125,12 @@ test('disabling windows keeps automatically minimized apps hidden when their sec
   expect(returned.windows[0]?.status).toBe('minimized');
   expect(returned.windows[0]?.automatic).toBe(false);
 });
+test('snapping two visible windows places the partner on the other side and restores the picker when one minimizes', () => {
+  let state = open(open({ windows: [], section: '/dashboard' }), second);
+  state = reduce(state, { type: 'place', urn: first.urn, mode: 'right', partner: second.urn });
+  expect(appWorkspace(state).split).toEqual({ anchor: first.urn, side: 'right', partner: second.urn });
+  expect(state.windows.map(({ mode }) => mode)).toEqual(['right', 'left']);
+  state = reduce(state, { type: 'minimize', urn: first.urn });
+  expect(appWorkspace(state).split).toEqual({ anchor: second.urn, side: 'left' });
+  expect(appWorkspace(state).pickerDismissed).toBe(false);
+});

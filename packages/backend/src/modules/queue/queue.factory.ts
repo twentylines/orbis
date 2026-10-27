@@ -8,6 +8,7 @@ import { Connection } from 'rabbitmq-client';
 import { EventPublisher } from './event.publisher';
 import { type ArkTypeSchema, Queue, type QueueObserver } from './queue.entity';
 import { installationMode } from '@/common/installation-mode';
+import { restoreStartupRole } from '../system-backups/backup-restore-startup';
 
 @Injectable()
 export class QueueFactory {
@@ -22,7 +23,7 @@ export class QueueFactory {
   private async requireIdleApplicationQueue() {
     if (!this.queues.has('app-events-queue')) throw new Error('Application queue is not initialized.');
     const state = await this.rabbit.queueDeclare({ queue: 'app-events-queue', durable: true, autoDelete: false });
-    if (state.messageCount !== 0 || state.consumerCount !== 0) {
+    if ((state.messageCount !== 0 && restoreStartupRole() !== 'candidate') || state.consumerCount !== 0) {
       throw new Error('Installation cannot resume while app commands or another app consumer remain in the queue.');
     }
   }

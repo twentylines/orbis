@@ -5,17 +5,20 @@ import { type } from 'arktype';
 import type React from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
-import { IconFingerprint } from '@tabler/icons-react';
+import { Link, useLocation } from 'react-router';
+import { AuthError } from './auth-stages';
+import { signInAccountIdentifier, signInIdentifierMessage, signInPassword, signInPasswordMessage } from '../account-identifier';
+import { PasskeySignIn } from './passkey-sign-in';
 
 type FormValues = { username: string; password: string };
 
 const schema = type({
-  username: type('string').narrow((value) => value.trim().length > 0),
-  password: 'string',
+  username: signInAccountIdentifier,
+  password: signInPassword,
 });
 
 interface IProps {
+  active?: boolean;
   onSubmit: (values: FormValues) => void;
   loading: boolean;
   showProgress?: boolean;
@@ -24,9 +27,12 @@ interface IProps {
   warmPasskey: () => void;
   passkeyAvailable: boolean;
   passkeyReason?: string;
+  error?: string;
+  onEdit: () => void;
 }
 
 export const LoginForm: React.FC<IProps> = ({
+  active = true,
   loading,
   showProgress = false,
   onSubmit,
@@ -35,8 +41,11 @@ export const LoginForm: React.FC<IProps> = ({
   warmPasskey,
   passkeyAvailable,
   passkeyReason,
+  error,
+  onEdit,
 }) => {
   const { t } = useTranslation();
+  const location = useLocation();
   const {
     register,
     handleSubmit,
@@ -54,12 +63,15 @@ export const LoginForm: React.FC<IProps> = ({
   return (
     <>
       <h2 className="desktop-auth-heading">{t('AUTH_LOGIN_TITLE', { type: loginType })}</h2>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit)} onChange={onEdit}>
         <Input
           {...register('username')}
+          animateCharacters
           name="username"
           label="Username or email"
-          error={errors.username?.message}
+          error={errors.username ? signInIdentifierMessage : undefined}
+          isInvalid={Boolean(error)}
+          aria-describedby={error ? 'credentials-feedback' : undefined}
           disabled={loading}
           type="text"
           autoCapitalize="none"
@@ -69,9 +81,12 @@ export const LoginForm: React.FC<IProps> = ({
         />
         <Input
           {...register('password')}
+          animateCharacters
           name="password"
           label={t('AUTH_FORM_PASSWORD')}
-          error={errors.password?.message}
+          error={errors.password ? signInPasswordMessage : undefined}
+          isInvalid={Boolean(error)}
+          aria-describedby={error ? 'credentials-feedback' : undefined}
           disabled={loading}
           type="password"
           className="mb-3 password-input"
@@ -82,21 +97,18 @@ export const LoginForm: React.FC<IProps> = ({
             {showProgress ? 'Signing in…' : t('AUTH_LOGIN_SUBMIT')}
           </Button>
           <div className="desktop-login-passkey">
-            <Button
-              type="button"
-              disabled={loading || !passkeyAvailable}
-              onClick={onPasskey}
-              onPointerEnter={warmPasskey}
-              onFocus={warmPasskey}
-              className="w-100"
-            >
-              <IconFingerprint size={20} aria-hidden="true" />
-              Sign in with a passkey
-            </Button>
-            {passkeyReason && <p className="desktop-auth-help">{passkeyReason}</p>}
+            <PasskeySignIn
+              active={active}
+              available={passkeyAvailable}
+              loading={loading}
+              reason={passkeyReason}
+              onPasskey={onPasskey}
+              warmPasskey={warmPasskey}
+            />
           </div>
+          <AuthError id="credentials-feedback" message={error} />
           <div className="form-text desktop-login-recovery">
-            <Link to="/reset-password">{t('AUTH_FORM_FORGOT')}</Link>
+            <Link to={`/reset-password${location.search}`}>{t('AUTH_FORM_FORGOT')}</Link>
           </div>
         </div>
       </form>

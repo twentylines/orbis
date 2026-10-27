@@ -1,11 +1,13 @@
 import { runtimeDependencies } from './scripts/package-runtime-dependencies';
+import { assertNoPrivateBuildPaths } from './scripts/production-artifact-privacy';
 
-await Bun.build({
-  entrypoints: ['./src/main.ts'],
+const result = await Bun.build({
+  entrypoints: ['./src/main.ts', './src/restore-worker.ts'],
   outdir: './dist',
   format: 'esm',
   target: 'node',
   env: 'disable',
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
   sourcemap: true,
   minify: {
     keepNames: true,
@@ -25,3 +27,15 @@ await Bun.build({
     '@nestjs/websockets',
   ],
 });
+
+if (!result.success) throw new AggregateError(result.logs, 'Production server build failed');
+await assertNoPrivateBuildPaths(result.outputs);
+const sourceMaps = result.outputs.filter((output) => output.path.endsWith('.map'));
+if (sourceMaps.length !== 2) throw new Error('Production server or restore worker source map is missing');
+for (const sourceMap of sourceMaps) {
+  const { sources } = JSON.parse(await sourceMap.text());
+  if (!Array.isArray(sources) || sources.length === 0 || sources.some((source) => typeof source !== 'string'))
+    throw new Error('Production server source map is invalid');
+  if (sources.some((source: string) => /(?:^|\/)@faker-js\/|(?:^|\/)src\/(?:tests|modules\/debug)(?:\/|$)/.test(source)))
+    throw new Error('Production server includes development-only modules');
+}

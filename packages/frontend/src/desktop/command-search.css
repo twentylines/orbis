@@ -90,6 +90,7 @@
 body:has(.orbis-theme) .desktop-search-surface .desktop-search-input input:is(:focus, :focus-visible) {
   outline: none;
   box-shadow: none;
+  background-color: transparent;
   caret-color: var(--desktop-accent);
 }
 .desktop-search-input:focus-within > svg {
@@ -120,6 +121,72 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input input:is(:f
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   padding: 24px;
+}
+.desktop-search-discovery {
+  flex: none;
+  padding: 20px 24px 0;
+}
+.desktop-search-discovery > p {
+  margin: 0 0 14px;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.desktop-search-discovery fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+.desktop-search-discovery button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--desktop-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+.desktop-search-discovery button[aria-pressed="true"] {
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-ink) 12%, transparent);
+}
+.desktop-search-dropdown[data-compact="true"] .desktop-search-discovery > p {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.desktop-search-dropdown[data-compact="true"] .desktop-search-discovery fieldset {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 4px;
+  margin: -4px;
+  scroll-padding: 8px;
+}
+.desktop-search-dropdown[data-compact="true"] .desktop-search-discovery button {
+  flex: none;
+}
+.desktop-search-dropdown[data-compact="true"] .desktop-search-footer {
+  display: none;
+}
+.desktop-search-group .desktop-search-browse {
+  margin-left: auto;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--desktop-ink);
+  padding: 7px 10px;
+  min-height: 36px;
+  font-size: 0.75rem;
 }
 .desktop-search-group {
   margin-bottom: 24px;
@@ -246,6 +313,9 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input input:is(:f
   }
   .desktop-search-results {
     padding: 18px 14px;
+  }
+  .desktop-search-discovery {
+    padding: 16px 14px 0;
   }
   .desktop-search-grid button {
     padding: 14px;

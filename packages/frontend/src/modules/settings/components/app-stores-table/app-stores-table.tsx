@@ -1,4 +1,3 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import type { AppStore } from '@/types/app.types';
 import { AddAppStoreDialog } from '../add-app-store-dialog/add-app-store-dialog';
@@ -12,55 +11,45 @@ type Props = {
 };
 
 const EnabledBadge = ({ enabled }: { enabled: boolean }) => (
-  <div className="app-store-state">
+  <span className="app-store-state">
     <span className="app-store-state-dot" data-enabled={enabled} aria-hidden="true" />
     <span>{enabled ? 'Enabled' : 'Disabled'}</span>
-  </div>
+  </span>
 );
 
 export const AppStoresTable = ({ appStores }: Props) => {
-  const table = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: List changes can move a focused control after dialog restoration.
   useLayoutEffect(() => {
     const active = document.activeElement;
-    if (active instanceof HTMLElement && active !== table.current && table.current?.contains(active))
+    if (active instanceof HTMLElement && active !== list.current && list.current?.contains(active))
       active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
   }, [appStores]);
+
   return (
-    <div ref={table} className="app-stores d-flex flex-column" data-dialog-focus-fallback="" tabIndex={-1}>
-      <Table className="app-stores-table">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="app-store-name">Name</TableHead>
-            <TableHead className="app-store-status">Status</TableHead>
-            <TableHead className="app-store-repository">URL</TableHead>
-            <TableHead className="app-store-actions-cell">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {appStores.map((appStore) => (
-            <TableRow key={appStore.slug}>
-              <TableCell className="app-store-name" title={appStore.name}>
+    <div ref={list} className="app-stores d-flex flex-column" data-dialog-focus-fallback="" tabIndex={-1}>
+      <ul className="app-stores-list" aria-label="App stores">
+        {appStores.map((appStore) => (
+          <li className="app-store-card" key={appStore.slug}>
+            <div className="app-store-identity">
+              <h3 className="app-store-name" title={appStore.name}>
                 <WrapWords text={appStore.name} />
-              </TableCell>
-              <TableCell className="app-store-status">
-                <EnabledBadge enabled={appStore.enabled} />
-              </TableCell>
-              <TableCell className="app-store-repository">
-                <a className="app-store-url" title={appStore.url} href={appStore.url} target="_blank" rel="noreferrer noopener nofollow">
-                  {appStore.url}
-                </a>
-              </TableCell>
-              <TableCell className="app-store-actions-cell">
-                <div className="app-store-actions">
-                  <EditAppStoreDialog appStore={appStore} />
-                  <DeleteAppStoreDialog appStore={appStore} />
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+              </h3>
+              <a className="app-store-url" title={appStore.url} href={appStore.url} target="_blank" rel="noreferrer noopener nofollow">
+                {appStore.url}
+              </a>
+            </div>
+            <div className="app-store-status">
+              <span className="app-store-field-label">Status</span>
+              <EnabledBadge enabled={appStore.enabled} />
+            </div>
+            <div className="app-store-actions">
+              <EditAppStoreDialog appStore={appStore} />
+              <DeleteAppStoreDialog appStore={appStore} />
+            </div>
+          </li>
+        ))}
+      </ul>
       <AddAppStoreDialog />
     </div>
   );

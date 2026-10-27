@@ -7,7 +7,6 @@ import { appHealthSnapshot, sameAppHealth, displayedAppStatus } from '@/desktop/
 import { useTranslation } from 'react-i18next';
 import { AppStatus } from '../app-status/app-status';
 import './app-tile.css';
-import { DockerHealth } from '@/components/docker-health/docker-health';
 import type { ContainerTelemetry } from '@runtipi/common/schemas';
 import { AppTabIndicator } from '@/desktop/app-tab-indicator';
 
@@ -55,12 +54,14 @@ export const AppTile = memo(
               </div>
             ) : null}
             <div className="app-tile-health">
-              <AppStatus status={displayedAppStatus(status, health)} />
-              {docker && !['running', 'stopped'].includes(health.state) ? (
-                <span className="app-tile-docker">
-                  Docker <DockerHealth appUrn={info.urn} telemetry={docker.data} stale={docker.stale} />
+              {status === 'running' && ['unhealthy', 'partial'].includes(health.state) ? (
+                <span className="app-tile-health-warning">
+                  <span className="status-dot bg-danger" aria-hidden="true" />
+                  {health.label}
                 </span>
-              ) : null}
+              ) : (
+                <AppStatus status={displayedAppStatus(status, health)} />
+              )}
             </div>
             {notice ? (
               <span className="app-tile-notice">

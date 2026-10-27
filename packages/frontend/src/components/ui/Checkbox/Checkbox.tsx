@@ -1,34 +1,35 @@
-import type * as CheckboxPrimitive from '@radix-ui/react-checkbox';
+import './Checkbox.css';
 import clsx from 'clsx';
-import { useId } from 'react';
+import { useId, type ComponentProps, type ReactNode } from 'react';
 
-type RootProps = typeof CheckboxPrimitive.Root;
-
-type CheckboxProps = React.ComponentPropsWithoutRef<RootProps> & {
-  label?: string | React.ReactNode;
-  ref?: React.Ref<React.ElementRef<RootProps>>;
+type CheckboxProps = Omit<ComponentProps<'input'>, 'type' | 'onChange'> & {
+  label?: ReactNode;
+  onCheckedChange?: (checked: boolean) => void;
 };
 
-function Checkbox({ className, label, ...props }: CheckboxProps) {
+function Checkbox({ className, label, checked, onCheckedChange, 'aria-labelledby': labelledBy, ...props }: CheckboxProps) {
   const generatedId = useId();
   const baseId = props.name ? `${props.name}-${generatedId}` : generatedId;
   const inputId = props.id || baseId;
   const labelId = `${baseId}-label`;
 
   return (
-    <label htmlFor={inputId} className={clsx('form-check', className)}>
+    <label htmlFor={inputId} className={clsx('form-check orbis-checkbox', className)}>
       <input
+        {...props}
         type="checkbox"
         className="form-check-input"
-        checked={props.checked as boolean}
-        onChange={(e) => props.onCheckedChange?.(e.target.checked)}
+        checked={checked}
+        onChange={(e) => onCheckedChange?.(e.target.checked)}
         name={props.name}
         id={inputId}
-        aria-labelledby={labelId}
+        aria-labelledby={labelledBy ?? (label != null ? labelId : undefined)}
       />
-      <span id={labelId} className="form-check-label text-muted">
-        {label}
-      </span>
+      {label != null ? (
+        <span id={labelId} className="form-check-label text-muted">
+          {label}
+        </span>
+      ) : null}
     </label>
   );
 }

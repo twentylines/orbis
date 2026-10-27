@@ -1,5 +1,39 @@
-import { describe, expect, it } from 'vitest';
-import { isValidIpOrCidr, parseTrustedProxyIps } from './configuration.service';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EnvUtils } from '@/modules/env/env.utils';
+import { ConfigurationService, isValidIpOrCidr, parseTrustedProxyIps } from './configuration.service';
+
+const { errorLog, warnLog } = vi.hoisted(() => ({ errorLog: vi.fn(), warnLog: vi.fn() }));
+vi.mock('../logger/logger.service', () => ({
+  LOG_LEVEL_ENUM: { debug: 'debug', info: 'info', warn: 'warn', error: 'error' },
+  LoggerService: class {
+    error = errorLog;
+    warn = warnLog;
+  },
+}));
+
+describe('configuration diagnostics', () => {
+  beforeEach(() => {
+    errorLog.mockClear();
+    warnLog.mockClear();
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('reports invalid field names without exposing their values in logs or exceptions', () => {
+    const input = 'do-not-log';
+    vi.stubEnv('POSTGRES_PORT', input);
+    let failure: unknown;
+    try {
+      new ConfigurationService(new EnvUtils());
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain('POSTGRES_PORT');
+    expect((failure as Error).message).not.toContain(input);
+    expect(errorLog).toHaveBeenCalled();
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(input);
+  });
+});
 
 describe('isValidIpOrCidr', () => {
   it('accepts valid IPv4 and IPv6 addresses', () => {

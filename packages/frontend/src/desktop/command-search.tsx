@@ -21,6 +21,30 @@ import { commandSearchEvent } from './command-search-event';
 import './command-search.css';
 
 type SearchResult = { id: string; path: string; label: string; detail: string; icon: ReactNode };
+const searchScopes = [
+  ['all', 'All'],
+  ['apps', 'Apps'],
+  ['settings', 'Settings'],
+  ['monitor', 'Monitor'],
+  ['store', 'Store'],
+] as const;
+type SearchScope = (typeof searchScopes)[number][0];
+const destinationDetails: Record<string, string> = {
+  Workspace: 'Launch apps and see current server status',
+  Apps: 'Manage installed apps, settings and external links',
+  'App Store': 'Find and install server apps',
+  Monitor: 'CPU, memory, containers and host processes',
+  Updates: 'Orbis, apps and operating system updates',
+  Settings: 'Appearance, account and server preferences',
+  'Task centre': 'Active operations and task history',
+  'Device history': 'Storage activity and network history',
+  'Drive health': 'SMART warnings, drive wear and disk self-tests',
+  Appearance: 'Themes, wallpapers, text size and motion',
+  Security: 'Password, passkeys and two-factor authentication',
+  'Server settings': 'Server name, domain and network preferences',
+  'App stores': 'Manage app repositories and sources',
+  'System logs': 'Read Orbis and server diagnostics',
+};
 const appPath = (urn: string, catalogue = false) => {
   const [appId = '', storeId = ''] = urn.split(':');
   return `/${catalogue ? 'app-store' : 'apps'}/${encodeURIComponent(storeId)}/${encodeURIComponent(appId)}`;
@@ -32,6 +56,7 @@ export function CommandSearch() {
   const [closing, setClosing] = useState(false);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
+  const [scope, setScope] = useState<SearchScope>('all');
   const [bar, setBar] = useState({ left: 24, top: 24, width: 600, height: 64, available: 600 });
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -53,7 +78,7 @@ export function CommandSearch() {
   const installed = useQuery({ ...getInstalledAppsOptions(), enabled: open && !closing, staleTime: 15000 });
   const catalogue = useQuery({
     ...searchAppsOptions({ query: { search: debounced, pageSize: 24 } }),
-    enabled: open && !closing && debounced.length > 0,
+    enabled: open && !closing && debounced.length > 0 && (scope === 'all' || scope === 'store'),
     staleTime: 30000,
   });
   useEffect(() => {
@@ -90,6 +115,7 @@ export function CommandSearch() {
     setClosing(false);
     setSearch('');
     setDebounced('');
+    setScope('all');
     const path = pendingPath.current;
     pendingPath.current = null;
     if (path) void navigate(path);
@@ -255,10 +281,25 @@ export function CommandSearch() {
   const terms = needle.split(/\s+/).filter(Boolean);
   const sections: SearchResult[] = desktopSearchSections
     .filter((section) => terms.every((term) => `${section.label} ${section.keywords}`.toLocaleLowerCase().includes(term)))
-    .map(({ path, label, Icon }) => ({ id: path, path, label, detail: '', icon: <Icon size={22} aria-hidden="true" /> }));
+    .filter(
+      ({ path }) =>
+        scope === 'all' ||
+        (scope === 'settings' && path.startsWith('/settings')) ||
+        (scope === 'monitor' && (path.startsWith('/monitor') || path === '/tasks')) ||
+        (scope === 'apps' && path === '/apps') ||
+        (scope === 'store' && path === '/app-store'),
+    )
+    .filter(({ path }) => query || scope !== 'all' || ['/dashboard', '/apps', '/app-store', '/monitor', '/updates', '/settings'].includes(path))
+    .map(({ path, label, Icon }) => ({
+      id: path,
+      path,
+      label,
+      detail: destinationDetails[label] ?? '',
+      icon: <Icon size={22} aria-hidden="true" />,
+    }));
   const installedResults: SearchResult[] = (installed.data?.installed ?? [])
     .filter(({ info }) => info.available && `${info.name} ${info.short_desc} ${info.urn}`.toLocaleLowerCase().includes(needle))
-    .slice(0, 24)
+    .slice(0, query || scope === 'apps' ? 24 : 6)
     .map(({ info }) => ({
       id: info.urn,
       path: appPath(info.urn),
@@ -279,12 +320,13 @@ export function CommandSearch() {
           }))
       : [];
   const groups = [
-    { name: 'Sections', items: sections },
-    { name: 'Installed apps', items: installedResults },
-    { name: 'App Store', items: storeResults },
+    { name: query ? 'Pages and tools' : scope === 'all' ? 'Quick destinations' : 'Pages and tools', items: sections },
+    { name: 'Installed apps', items: scope === 'all' || scope === 'apps' ? installedResults : [] },
+    { name: 'App Store', items: scope === 'all' || scope === 'store' ? storeResults : [] },
   ];
   const firstResult = groups.flatMap((group) => group.items)[0];
-  const loadingStore = query.length > 0 && (debounced !== query || catalogue.isPending);
+  const searchingStore = scope === 'all' || scope === 'store';
+  const loadingStore = searchingStore && query.length > 0 && (debounced !== query || catalogue.isPending);
 
   const handleResultKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
@@ -306,7 +348,7 @@ export function CommandSearch() {
       }}
     >
       <Dialog.Trigger asChild>
-        <button ref={trigger} type="button" className="desktop-search-trigger" aria-label="Search apps and settings" data-search-open={open}>
+        <button ref={trigger} type="button" className="desktop-search-trigger" aria-label="Search Orbis" data-search-open={open}>
           <IconSearch size={20} aria-hidden="true" />
           <span>Search</span>
           <kbd>⌘/Ctrl K</kbd>
@@ -328,7 +370,6 @@ export function CommandSearch() {
               } as CSSProperties
             }
             data-closing={closing}
-            aria-describedby={undefined}
             onOpenAutoFocus={(event) => {
               event.preventDefault();
               input.current?.focus({ preventScroll: true });
@@ -359,8 +400,8 @@ export function CommandSearch() {
                   value={closing ? '' : search}
                   type="search"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search"
-                  aria-label="Search apps and settings"
+                  placeholder="Search apps, settings and server tools"
+                  aria-label="Search Orbis"
                   aria-controls="desktop-search-results"
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && firstResult) {
@@ -377,7 +418,26 @@ export function CommandSearch() {
                   <IconX size={22} aria-hidden="true" />
                 </button>
               </div>
-              <div ref={dropdown} className="desktop-search-dropdown">
+              <div ref={dropdown} className="desktop-search-dropdown" data-compact={bar.available < 340}>
+                <div className="desktop-search-discovery">
+                  <Dialog.Description>Find apps, change settings, review updates and check your server.</Dialog.Description>
+                  <fieldset aria-label="Search in">
+                    <legend className="visually-hidden">Search in</legend>
+                    {searchScopes.map(([value, label]) => (
+                      <button
+                        type="button"
+                        key={value}
+                        aria-pressed={scope === value}
+                        onClick={() => {
+                          setScope(value);
+                          input.current?.focus({ preventScroll: true });
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </fieldset>
+                </div>
                 <div id="desktop-search-results" className="desktop-search-results" aria-busy={loadingStore || installed.isPending}>
                   {groups
                     .filter((group) => group.items.length)
@@ -386,6 +446,11 @@ export function CommandSearch() {
                         <h3>
                           {name}
                           <span>{items.length}</span>
+                          {name === 'Installed apps' && !query && (installed.data?.installed.length ?? 0) > items.length ? (
+                            <button type="button" className="desktop-search-browse" onClick={() => close('/apps')}>
+                              Browse all apps
+                            </button>
+                          ) : null}
                         </h3>
                         <div className="desktop-search-grid">
                           {items.map((result) => (
@@ -420,7 +485,7 @@ export function CommandSearch() {
                       </p>
                     ) : null}
                     {loadingStore ? <p>Searching the App Store…</p> : null}
-                    {query && debounced === query && catalogue.isError ? (
+                    {searchingStore && query && debounced === query && catalogue.isError ? (
                       <p>
                         The App Store could not be searched.{' '}
                         <button type="button" onClick={() => void catalogue.refetch()}>

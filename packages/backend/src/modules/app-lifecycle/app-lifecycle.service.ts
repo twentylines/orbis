@@ -4,7 +4,7 @@ import { BackupManager } from '@/modules/backups/backup.manager';
 import { DOCKERODE } from '@/modules/docker/docker.module';
 import { APP_ASYNC_MUTEX } from '@/utils/mutex/mutex.module';
 import type { AsyncMutex } from '@/utils/mutex/async-mutex';
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import type { AppUrn } from '@runtipi/common/types';
 import type Dockerode from 'dockerode';
 import { AppsRepository } from '../apps/apps.repository';
@@ -23,6 +23,7 @@ import { BackupAppHandler } from './handlers/backup-app.handler';
 import { RestoreAppHandler } from './handlers/restore-app.handler';
 import { TasksService } from '../tasks/tasks.service';
 import { INSTALLATION_MESSAGE, installationHeld } from '@/common/installation-mode';
+import { enterBackupMutation } from '@/common/backup-maintenance';
 
 @Injectable()
 export class AppLifecycleService {
@@ -197,83 +198,36 @@ export class AppLifecycleService {
     }
   }
 
-  async restartRunningApps() {
-    const apps = await this.appRepository.getApps();
-    const runningApps = apps.filter((app) => app.status === 'running');
-
-    (async () => {
-      for (const app of runningApps) {
+  private async forApps(status: 'running' | 'stopped', operation: (appUrn: AppUrn) => Promise<unknown>) {
+    const release = enterBackupMutation();
+    if (!release) throw new ConflictException('A full backup or app recovery is in progress. Retry when it finishes.');
+    try {
+      const apps = (await this.appRepository.getApps()).filter((app) => app.status === status);
+      for (const app of apps) {
         try {
-          const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-          await this.startApp({ appUrn, skipPull: true });
-        } catch (e) {
-          this.logger.error(`Failed to start app ${app.id}`, e);
+          await operation(createAppUrn(app.appName, app.appStoreSlug));
+        } catch {
+          this.logger.warn('A bulk app action failed. Review its app task before retrying.');
         }
       }
-    })();
+    } finally {
+      release();
+    }
   }
 
-  async startAllApps() {
-    const apps = await this.appRepository.getApps();
-    const stoppedApps = apps.filter((app) => app.status === 'stopped');
-
-    (async () => {
-      for (const app of stoppedApps) {
-        try {
-          const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-          await this.startApp({ appUrn, skipPull: true });
-        } catch (e) {
-          this.logger.error(`Failed to start app ${app.id}`, e);
-        }
-      }
-    })();
+  restartRunningApps() {
+    return this.forApps('running', (appUrn) => this.startApp({ appUrn, skipPull: true }));
   }
-
-  async stopAllApps() {
-    const apps = await this.appRepository.getApps();
-    const runningApps = apps.filter((app) => app.status === 'running');
-
-    (async () => {
-      for (const app of runningApps) {
-        try {
-          const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-          await this.stopApp({ appUrn });
-        } catch (e) {
-          this.logger.error(`Failed to stop app ${app.id}`, e);
-        }
-      }
-    })();
+  startAllApps() {
+    return this.forApps('stopped', (appUrn) => this.startApp({ appUrn, skipPull: true }));
   }
-
-  async backupAllApps() {
-    const apps = await this.appRepository.getApps();
-    const runningApps = apps.filter((app) => app.status === 'running');
-
-    (async () => {
-      for (const app of runningApps) {
-        try {
-          const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-          await this.backupApp({ appUrn });
-        } catch (e) {
-          this.logger.error(`Failed to backup app ${app.id}`, e);
-        }
-      }
-    })();
+  stopAllApps() {
+    return this.forApps('running', (appUrn) => this.stopApp({ appUrn }));
   }
-
-  async restartAllApps() {
-    const apps = await this.appRepository.getApps();
-    const runningApps = apps.filter((app) => app.status === 'running');
-
-    (async () => {
-      for (const app of runningApps) {
-        try {
-          const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-          await this.restartApp({ appUrn });
-        } catch (e) {
-          this.logger.error(`Failed to restart app ${app.id}`, e);
-        }
-      }
-    })();
+  backupAllApps() {
+    return this.forApps('running', (appUrn) => this.backupApp({ appUrn }));
+  }
+  restartAllApps() {
+    return this.forApps('running', (appUrn) => this.restartApp({ appUrn }));
   }
 }

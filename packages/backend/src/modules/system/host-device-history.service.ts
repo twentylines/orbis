@@ -9,6 +9,7 @@ import { LoggerService } from '@/core/logger/logger.service';
 import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { HostTelemetryService } from './host-telemetry.service';
 import { installationHeld } from '@/common/installation-mode';
+import { enterBackupMutation } from '@/common/backup-maintenance';
 import {
   decodeHostHistory,
   encodeHostHistory,
@@ -209,54 +210,60 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async drain() {
-    while (this.queued.size) {
-      const batch = new Map(this.queued);
-      const temporary = `${this.file()}.${randomUUID()}.tmp`;
-      try {
-        await this.privateDirectory(true);
-        let bytes = 0;
+    const release = enterBackupMutation();
+    if (!release) return;
+    try {
+      while (this.queued.size) {
+        const batch = new Map(this.queued);
+        const temporary = `${this.file()}.${randomUUID()}.tmp`;
         try {
-          const stat = await fs.lstat(this.file());
-          if (!stat.isFile() || stat.isSymbolicLink() || stat.mode & 0o077 || stat.size > fileLimit)
-            throw new Error('History file is not a bounded private file');
-          bytes = stat.size;
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        }
-        let written = [...batch.values()];
-        let contents = written.map((bucket) => `${encodeHostHistory(bucket, this.evictedDevices)}\n`).join('');
-        const compact = this.needsCompact || this.writesSinceCompact >= 60 || bytes + Buffer.byteLength(contents) > fileLimit;
-        if (compact) {
-          written = this.allBuckets().sort((a, b) => a.seconds - b.seconds || a.bucketAt - b.bucketAt);
-          contents = written.map((bucket) => `${encodeHostHistory(bucket, this.evictedDevices)}\n`).join('');
-        }
-        if (Buffer.byteLength(contents) > fileLimit) throw new Error('History retention exceeds its storage bound');
-        const through = written.length ? Math.max(...written.map((bucket) => bucket.lastAt)) : null;
-        if (compact) {
-          await fs.writeFile(temporary, contents, { mode: 0o600, flag: 'wx' });
-          await fs.rename(temporary, this.file());
-          this.writesSinceCompact = 0;
-          this.needsCompact = false;
-        } else {
-          const handle = await fs.open(this.file(), constants.O_CREAT | constants.O_APPEND | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+          await this.privateDirectory(true);
+          let bytes = 0;
           try {
-            await handle.writeFile(contents);
-          } finally {
-            await handle.close();
+            const stat = await fs.lstat(this.file());
+            if (!stat.isFile() || stat.isSymbolicLink() || stat.mode & 0o077 || stat.size > fileLimit)
+              throw new Error('History file is not a bounded private file');
+            bytes = stat.size;
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
           }
-          this.writesSinceCompact++;
+          let written = [...batch.values()];
+          let contents = written.map((bucket) => `${encodeHostHistory(bucket, this.evictedDevices)}\n`).join('');
+          const compact = this.needsCompact || this.writesSinceCompact >= 60 || bytes + Buffer.byteLength(contents) > fileLimit;
+          if (compact) {
+            written = this.allBuckets().sort((a, b) => a.seconds - b.seconds || a.bucketAt - b.bucketAt);
+            contents = written.map((bucket) => `${encodeHostHistory(bucket, this.evictedDevices)}\n`).join('');
+          }
+          if (Buffer.byteLength(contents) > fileLimit) throw new Error('History retention exceeds its storage bound');
+          const through = written.length ? Math.max(...written.map((bucket) => bucket.lastAt)) : null;
+          if (compact) {
+            await fs.writeFile(temporary, contents, { mode: 0o600, flag: 'wx' });
+            await fs.rename(temporary, this.file());
+            this.writesSinceCompact = 0;
+            this.needsCompact = false;
+          } else {
+            const handle = await fs.open(this.file(), constants.O_CREAT | constants.O_APPEND | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+            try {
+              await handle.writeFile(contents);
+            } finally {
+              await handle.close();
+            }
+            this.writesSinceCompact++;
+          }
+          if (through !== null) this.persistedThrough = Math.max(this.persistedThrough ?? 0, through);
+          this.storage = 'persistent';
+          for (const [key, bucket] of batch) if (this.queued.get(key) === bucket) this.queued.delete(key);
+        } catch {
+          if (this.storage !== 'unavailable') this.logger.warn('Host device history could not be saved. Recent readings remain in memory.');
+          this.storage = 'unavailable';
+          this.needsCompact = true;
+          return;
+        } finally {
+          await fs.rm(temporary, { force: true }).catch(() => undefined);
         }
-        if (through !== null) this.persistedThrough = Math.max(this.persistedThrough ?? 0, through);
-        this.storage = 'persistent';
-        for (const [key, bucket] of batch) if (this.queued.get(key) === bucket) this.queued.delete(key);
-      } catch {
-        if (this.storage !== 'unavailable') this.logger.warn('Host device history could not be saved. Recent readings remain in memory.');
-        this.storage = 'unavailable';
-        this.needsCompact = true;
-        return;
-      } finally {
-        await fs.rm(temporary, { force: true }).catch(() => undefined);
       }
+    } finally {
+      release();
     }
   }
 

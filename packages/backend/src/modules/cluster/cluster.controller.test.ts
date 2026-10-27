@@ -90,4 +90,37 @@ describe('cluster installation authorization', () => {
     expect(response.status).toBe(400);
     expect(cluster.command).not.toHaveBeenCalled();
   });
+
+  it('requires an operator browser session and matching origin for a drive self-test', async () => {
+    const command = { action: 'drive-self-test', payload: { id: `drive:${'a'.repeat(24)}`, kind: 'short' } };
+    const base = request(app.getHttpServer());
+    expect((await base.post('/cluster/servers/target/command').send(command)).status).toBe(401);
+    for (const credential of ['guest', 'cli']) {
+      const response = await base
+        .post('/cluster/servers/target/command')
+        .set('Authorization', `Bearer ${credential}`)
+        .set('Host', 'orbis.example')
+        .set('Origin', 'http://orbis.example')
+        .send(command);
+      expect(response.status).toBe(403);
+    }
+    const crossOrigin = await base
+      .post('/cluster/servers/target/command')
+      .set('Authorization', 'Bearer operator')
+      .set('Host', 'orbis.example')
+      .set('Origin', 'https://another.example')
+      .send(command);
+    expect(crossOrigin.status).toBe(403);
+    expect(cluster.command).not.toHaveBeenCalled();
+    cluster.command.mockResolvedValue({ accepted: true, message: 'Test requested.' });
+    const accepted = await base
+      .post('/cluster/servers/target/command')
+      .set('Authorization', 'Bearer operator')
+      .set('Host', 'orbis.example')
+      .set('Origin', 'http://orbis.example')
+      .send(command);
+    expect(accepted.status).toBe(201);
+    expect(accepted.body.accepted).toBe(true);
+    expect(cluster.command).toHaveBeenCalledExactlyOnceWith('target', 'drive-self-test', command.payload);
+  });
 });

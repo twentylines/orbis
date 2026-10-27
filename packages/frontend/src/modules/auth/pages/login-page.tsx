@@ -1,4 +1,5 @@
 import { useSignInBoot } from '@/components/startup/use-sign-in-boot';
+import { safeReturnTo } from '@/desktop/secure-access';
 import { userContext } from '@/api-client';
 import { loginMutation, verifyTotpMutation } from '@/api-client/@tanstack/react-query.gen';
 import { useUserContext } from '@/context/user-context';
@@ -7,9 +8,12 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
-import { Navigate, redirect, useNavigate, useSearchParams } from 'react-router';
+import { Navigate, redirect, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { LoginForm } from '../components/login-form';
 import { TotpForm } from '../components/totp-form/totp-form';
+import { AuthBack, AuthStages, type AuthStage } from '../components/auth-stages';
+import { IconFingerprint } from '@tabler/icons-react';
+import ResetPasswordPage from './reset-password-page';
 import {
   browserPasskeyReason,
   passkeyAvailabilityOptions,
@@ -61,7 +65,7 @@ export async function clientLoader() {
       return;
     }
 
-    return redirect('/dashboard');
+    return redirect(safeReturnTo(new URL(window.location.href).searchParams.get('return_to')) ?? '/dashboard');
   }
 }
 
@@ -70,8 +74,11 @@ export default () => {
   const boot = useSignInBoot();
   const [totpSessionId, setTotpSessionId] = useState<string | null>(null);
   const [passkeyPending, setPasskeyPending] = useState(false);
-  const [passkeyError, setPasskeyError] = useState('');
+  const [authError, setAuthError] = useState<{ stage: AuthStage; message: string } | null>(null);
   const passkeyActive = useRef(false);
+  const passkeyAttempt = useRef(0);
+  const challenge = useRef<string | null>(null);
+  const lastChallenge = useRef<string | null>(null);
   const [browserReason] = useState(browserPasskeyReason);
   const passkeyAvailability = useQuery({ ...passkeyAvailabilityOptions(), enabled: !browserReason });
   useEffect(
@@ -82,7 +89,9 @@ export default () => {
   );
 
   const [searchParams] = useSearchParams();
+  const { pathname } = useLocation();
   const redirect_url = searchParams.get('redirect_url');
+  const returnTo = safeReturnTo(searchParams.get('return_to')) ?? '/dashboard';
   const app = searchParams.get('app');
 
   const { t } = useTranslation();
@@ -116,6 +125,7 @@ export default () => {
 
   const completeSignIn = async (redirectUrl?: string) => {
     if (!boot.isActive()) return;
+    boot.begin();
     setUserContext({ isLoggedIn: true });
     void refreshUserContext();
     await boot.finish();
@@ -126,80 +136,110 @@ export default () => {
       } catch {
         void navigate('/dashboard', { replace: true });
       }
-    } else void navigate('/dashboard', { replace: true });
+    } else void navigate(returnTo, { replace: true });
   };
-  const failedSignIn = async (error: TranslatableError) => {
+  const failedSignIn = async (error: TranslatableError, stage: AuthStage) => {
     if (!boot.isActive()) return;
     await boot.finish(true);
     if (!boot.isActive()) return;
-    toast.error(t(error.message, error.intlParams), { id: 'orbis-sign-in-error' });
+    const message = stage === 'credentials' && error.message === 'AUTH_ERROR_USER_NOT_FOUND' ? 'AUTH_ERROR_INVALID_CREDENTIALS' : error.message;
+    setAuthError({ stage, message: t(message, error.intlParams) });
   };
   const beginSignIn = () => {
     toast.dismiss('orbis-sign-in-error');
-    setPasskeyError('');
-    boot.begin();
+    setAuthError(null);
   };
   const acceptSignIn = async (data: { success: boolean; totpSessionId?: string; redirectUrl?: string }) => {
+    if (!boot.isActive()) return;
     if (!data.success) throw new Error('Sign-in was not verified.');
     if (data.totpSessionId) {
+      challenge.current = data.totpSessionId;
+      lastChallenge.current = data.totpSessionId;
       setTotpSessionId(data.totpSessionId);
-      await boot.finish(true);
-      if (!boot.isActive()) return;
     } else await completeSignIn(data.redirectUrl);
   };
   const beginPasskey = async () => {
     if (passkeyActive.current || passkeyPending || !passkeyAvailability.data?.available || browserReason) return;
     passkeyActive.current = true;
+    const attempt = ++passkeyAttempt.current;
     setPasskeyPending(true);
-    setPasskeyError('');
     beginSignIn();
+    const active = () => boot.isActive() && passkeyActive.current && passkeyAttempt.current === attempt;
     try {
-      await acceptSignIn(await signInWithPasskey(boot.isActive, redirect_url ?? undefined));
+      const data = await signInWithPasskey(active, redirect_url ?? undefined);
+      if (active()) await acceptSignIn(data);
     } catch (error) {
-      if (boot.isActive()) {
+      if (active()) {
         await boot.finish(true);
-        if (boot.isActive()) setPasskeyError(passkeyErrorMessage(error));
+        if (active()) setAuthError({ stage: 'credentials', message: passkeyErrorMessage(error) });
       }
     } finally {
-      passkeyActive.current = false;
-      if (boot.isActive()) setPasskeyPending(false);
+      if (passkeyAttempt.current === attempt) {
+        passkeyActive.current = false;
+        if (boot.isActive()) setPasskeyPending(false);
+      }
     }
   };
   const login = useMutation({
     ...loginMutation(),
     onMutate: beginSignIn,
     onSuccess: acceptSignIn,
-    onError: failedSignIn,
+    onError: (error) => failedSignIn(error, 'credentials'),
   });
   const verifyTotp = useMutation({
     ...verifyTotpMutation(),
     onMutate: beginSignIn,
-    onError: failedSignIn,
-    onSuccess: async (data) => completeSignIn(data.redirectUrl),
+    onError: async (error, variables) => {
+      if (challenge.current === variables.body.totpSessionId) await failedSignIn(error, 'authenticator');
+    },
+    onSuccess: async (data, variables) => {
+      if (challenge.current === variables.body.totpSessionId) await completeSignIn(data.redirectUrl);
+    },
   });
 
   if (isLoggedIn && !boot.signingIn) {
     if (redirect_url && isSafeRedirect(redirect_url)) {
       return null;
     }
-    return <Navigate to="/dashboard" />;
+    return <Navigate to={returnTo} replace />;
   }
 
   if (!isConfigured) {
     return <Navigate to="/register" />;
   }
 
-  const form = totpSessionId ? (
+  const backToSignIn = () => {
+    challenge.current = null;
+    setTotpSessionId(null);
+    setAuthError(null);
+    verifyTotp.reset();
+    ++passkeyAttempt.current;
+    passkeyActive.current = false;
+    cancelPasskeyCeremony();
+    setPasskeyPending(false);
+  };
+  const stage: AuthStage = pathname === '/reset-password' ? 'recovery' : totpSessionId ? 'authenticator' : passkeyPending ? 'passkey' : 'credentials';
+  const authenticator = lastChallenge.current ? (
     <TotpForm
+      key={lastChallenge.current}
       loading={verifyTotp.isPending}
-      onSubmit={(totpCode) => verifyTotp.mutate({ body: { redirectUrl: redirect_url ?? undefined, totpCode, totpSessionId } })}
+      error={authError?.stage === 'authenticator' ? authError.message : undefined}
+      onEdit={() => setAuthError(null)}
+      onBack={backToSignIn}
+      onSubmit={(totpCode) => {
+        if (totpSessionId) verifyTotp.mutate({ body: { redirectUrl: redirect_url ?? undefined, totpCode, totpSessionId } });
+      }}
     />
-  ) : (
+  ) : null;
+  const credentials = (
     <LoginForm
+      active={stage === 'credentials'}
       onSubmit={(values) =>
         login.mutate({ body: { password: values.password, redirectUrl: redirect_url ?? undefined, username: values.username.trim() } })
       }
       loading={login.isPending || passkeyPending}
+      error={authError?.stage === 'credentials' ? authError.message : undefined}
+      onEdit={() => setAuthError(null)}
       showProgress={boot.visible}
       loginType={loginType}
       onPasskey={() => void beginPasskey()}
@@ -213,13 +253,24 @@ export default () => {
     />
   );
   return (
-    <>
-      {form}
-      {passkeyError && (
-        <p className="desktop-auth-error" role="alert">
-          {passkeyError}
-        </p>
-      )}
-    </>
+    <AuthStages stage={stage}>
+      {{
+        credentials,
+        authenticator,
+        recovery: <ResetPasswordPage />,
+        passkey: (
+          <div className="desktop-auth-passkey" aria-busy={passkeyPending}>
+            <div className="desktop-auth-passkey-symbol">
+              <IconFingerprint size={36} aria-hidden="true" />
+            </div>
+            <h2 className="desktop-auth-heading" data-auth-focus="" tabIndex={-1}>
+              Use your passkey
+            </h2>
+            <p>Continue in your device’s passkey prompt. You can use your fingerprint, face or device PIN.</p>
+            <AuthBack onBack={backToSignIn} />
+          </div>
+        ),
+      }}
+    </AuthStages>
   );
 };

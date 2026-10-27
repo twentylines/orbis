@@ -51,13 +51,28 @@ describe('installed app embedding endpoint security', () => {
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('private, no-store');
     expect(response.body).toEqual({ status: 'unknown', reason: 'unreachable', targetUrl: query.destination, checkedAt: 1, expiresAt: 30001 });
-    expect(embedding.check).toHaveBeenCalledExactlyOnceWith('beszel:store', new URL(query.destination), new URL(query.parentOrigin));
+    expect(embedding.check).toHaveBeenCalledExactlyOnceWith('beszel:store', new URL(query.destination), new URL(query.parentOrigin), false);
+  });
+
+  it('allows an explicit fresh check with the same authentication boundary', async () => {
+    const anonymous = await request(app.getHttpServer())
+      .get(path)
+      .query({ ...query, refresh: 'true' });
+    const authenticated = await request(app.getHttpServer())
+      .get(path)
+      .query({ ...query, refresh: 'true' })
+      .set('Authorization', 'Bearer user');
+    expect(anonymous.status).toBe(401);
+    expect(authenticated.status).toBe(200);
+    expect(embedding.check).toHaveBeenCalledExactlyOnceWith('beszel:store', new URL(query.destination), new URL(query.parentOrigin), true);
   });
 
   it.each([
     {},
     { destination: query.destination },
     { ...query, arbitraryUrl: 'http://169.254.169.254/' },
+    { ...query, refresh: 'false' },
+    { ...query, refresh: ['true', 'false'] },
     { ...query, destination: ['http://10.0.0.2:8090', 'http://169.254.169.254'] },
     { ...query, parentOrigin: [query.parentOrigin, 'https://other.example.com'] },
     { ...query, destination: 'http://user:secret@10.0.0.2:8090/' },

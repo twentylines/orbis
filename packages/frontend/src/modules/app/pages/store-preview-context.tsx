@@ -5,6 +5,8 @@ export type StorePreview = {
   closePath: string;
   split: boolean;
   selectedUrn: string | null;
+  onCardMount: (card: HTMLAnchorElement | null) => void;
+  onDetailsMount: (element: HTMLDivElement | null) => void;
   previewId: string;
   close: () => void;
   nextHistory: () => AppPreviewHistory;

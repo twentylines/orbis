@@ -23,9 +23,10 @@
   letter-spacing: -0.035em;
 }
 .host-sensors-heading h2:focus-visible {
-  outline: 3px solid var(--desktop-focus);
-  outline-offset: 5px;
-  border-radius: 4px;
+  outline: none;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
 }
 .host-sensors-state,
 .host-sensors .host-sensor-coverage,
@@ -39,9 +40,11 @@
   line-height: 1.6;
 }
 .host-sensors-state[data-stale="true"],
-.host-sensors-stale,
-.host-sensor-reading[data-warning="true"] {
+.host-sensors-stale {
   color: var(--host-sensor-warning);
+}
+.host-sensor-reading[data-warning="true"] {
+  color: var(--desktop-negative);
 }
 .host-sensors-stale {
   display: block;
@@ -66,7 +69,6 @@
 }
 .host-sensor-groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17em), 1fr));
   gap: 24px;
 }
 .host-sensor-groups > section,
@@ -81,6 +83,7 @@
 }
 .host-sensor-list {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18em), 1fr));
   gap: 12px;
 }
 .host-sensor-card {
@@ -124,6 +127,7 @@
   margin: 12px 0 0;
 }
 .host-gpu-facts {
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 8em), 1fr));
   gap: 18px 24px;
@@ -171,6 +175,13 @@
 .host-sensors-about summary:hover {
   background: color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent);
 }
+body:has(.orbis-theme) .host-sensors-about summary:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
 .host-sensors .host-sensors-about p {
   color: var(--desktop-status-muted);
   line-height: 1.7;
@@ -184,5 +195,69 @@
 @container (max-width: 20em) {
   .host-sensor-reading {
     font-size: 1em;
+  }
+}
+@container (min-width: 32em) {
+  .host-sensor-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 20px;
+  }
+  .host-sensor-card h4,
+  .host-sensors .host-sensor-chip {
+    grid-column: 1;
+  }
+  .host-sensor-reading {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    margin: 0;
+    text-align: end;
+  }
+  .host-sensors .host-sensor-threshold {
+    grid-column: 1 / -1;
+  }
+}
+@container (min-width: 36em) {
+  .host-sensor-list:has(> :nth-child(4):last-child) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (min-width: 48em) {
+  .host-sensor-groups > section {
+    display: grid;
+    grid-template-columns: 9em minmax(0, 1fr);
+    column-gap: 24px;
+    align-items: start;
+  }
+  .host-sensor-groups h3 {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    margin: 0;
+    padding-top: 18px;
+  }
+  .host-sensor-list,
+  .host-sensors .host-sensor-coverage,
+  .host-sensors .host-sensor-empty {
+    grid-column: 2;
+  }
+  .host-sensor-list:empty {
+    display: none;
+  }
+  .host-sensors .host-sensor-empty {
+    margin-block: 18px 0;
+  }
+  .host-sensors .host-sensor-coverage {
+    margin-block: 12px 0;
+  }
+}
+@media (forced-colors: active) {
+  .host-sensors-heading h2:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+  body:has(.orbis-theme) .host-sensors-about summary:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 }

@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import type { HostSensors, HostTelemetry } from '@runtipi/common/schemas';
-import { IconArrowUpRight } from '@tabler/icons-react';
+import { IconBrandGithub } from '@tabler/icons-react';
 import { InstalledVersions } from '@/components/installed-versions/installed-versions';
+import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { useAppContext } from '@/context/app-context';
 import { installedOrbisBuildOptions } from '@/desktop/orbis-release';
 import { loadTelemetry, telemetryQueryKey } from '@/desktop/telemetry';
@@ -90,13 +91,22 @@ export function About() {
       </div>
       <footer className="settings-about-links">
         <a href="https://github.com/twentylines" target="_blank" rel="noreferrer">
-          twentylines <IconArrowUpRight size={16} aria-hidden="true" />
+          <span className="settings-about-link-icon" aria-hidden="true">
+            <IconBrandGithub size={21} stroke={1.8} />
+          </span>
+          <span>twentylines</span>
         </a>
         <a href="https://github.com/twentylines/orbis" target="_blank" rel="noreferrer">
-          Orbis repository <IconArrowUpRight size={16} aria-hidden="true" />
+          <span className="settings-about-link-icon" aria-hidden="true">
+            <OrbisLogo size={24} plain />
+          </span>
+          <span>Orbis repository</span>
         </a>
         <a href="https://github.com/runtipi/runtipi" target="_blank" rel="noreferrer">
-          Built on Runtipi <IconArrowUpRight size={16} aria-hidden="true" />
+          <span className="settings-about-link-icon" aria-hidden="true">
+            <img src="/tipi.png" alt="" />
+          </span>
+          <span>Runtipi repository</span>
         </a>
       </footer>
     </div>

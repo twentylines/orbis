@@ -88,6 +88,16 @@
     height: auto;
     min-height: 0;
   }
+  .desktop .desktop-route-page[data-route-section="apps"]:not(:has(.store-split-desktop, .desktop-route-placeholder)) .desktop-window-content {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block: 24px;
+  }
+  .desktop
+    .desktop-route-page[data-route-section="apps"]:not(:has(.store-split-desktop, .desktop-route-placeholder))
+    :is(.desktop-route-content, .desktop-route-children) {
+    flex: none;
+  }
 }
 @media (max-width: 760px) {
   .desktop .desktop-route-page {

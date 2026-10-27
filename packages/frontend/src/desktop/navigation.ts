@@ -18,6 +18,12 @@ export const desktopSearchSections = [
     Icon: IconDeviceDesktopAnalytics,
     keywords: 'host network interface disk activity charts',
   },
+  {
+    path: '/monitor?section=drives#drive-health-title',
+    label: 'Drive health',
+    Icon: IconDeviceDesktopAnalytics,
+    keywords: 'disk smart nvme temperature wear health self test storage scrutiny',
+  },
   { path: '/settings?tab=appearance', label: 'Appearance', Icon: IconSettings, keywords: 'theme wallpaper light dark mode personalisation' },
   { path: '/settings?tab=security', label: 'Security', Icon: IconSettings, keywords: 'password account authentication two factor totp' },
   { path: '/settings?tab=settings', label: 'Server settings', Icon: IconSettings, keywords: 'hostname domain network configuration' },

@@ -1,6 +1,6 @@
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
 import './elements.css';
-import { revealTableAction } from './reveal-table-action';
+import { removeTableRow, revealTableAction } from './reveal-table-action';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
@@ -27,7 +27,7 @@ export const PortsConfig = ({ errors, serviceIndex, control, register }: Props) 
 
   return (
     <div className="row g-4">
-      <div className="col-12">
+      <div className="col-12 service-config-group">
         <div className="service-config-toolbar mb-3">
           <div>
             <Tooltip className="tooltip" anchorSelect=".my-ports">
@@ -44,8 +44,8 @@ export const PortsConfig = ({ errors, serviceIndex, control, register }: Props) 
             <TableRow>
               <TableHead>{t('MULTI_SERVICE_PORTS_HOST_PORT')}</TableHead>
               <TableHead>{t('MULTI_SERVICE_PORTS_CONTAINER_PORT')}</TableHead>
-              <TableHead>{t('MULTI_SERVICE_PORTS_TCP')}</TableHead>
-              <TableHead>{t('MULTI_SERVICE_PORTS_UDP')}</TableHead>
+              <TableHead className="service-config-check-cell">{t('MULTI_SERVICE_PORTS_TCP')}</TableHead>
+              <TableHead className="service-config-check-cell">{t('MULTI_SERVICE_PORTS_UDP')}</TableHead>
               <TableHead>{t('MULTI_SERVICE_PORTS_INTERFACE')}</TableHead>
               <TableHead className="service-config-actions-cell" />
             </TableRow>
@@ -56,6 +56,7 @@ export const PortsConfig = ({ errors, serviceIndex, control, register }: Props) 
                 <TableCell scope="row" className="w-30">
                   <Input
                     {...register(`services.${serviceIndex}.addPorts.${index}.hostPort`)}
+                    aria-label={`${t('MULTI_SERVICE_PORTS_HOST_PORT')} ${index + 1}`}
                     error={t(errors?.services?.[serviceIndex]?.addPorts?.[index]?.hostPort?.message as string)}
                     placeholder="8080"
                     className="table-row-input"
@@ -64,34 +65,36 @@ export const PortsConfig = ({ errors, serviceIndex, control, register }: Props) 
                 <TableCell className="w-30">
                   <Input
                     {...register(`services.${serviceIndex}.addPorts.${index}.containerPort`)}
+                    aria-label={`${t('MULTI_SERVICE_PORTS_CONTAINER_PORT')} ${index + 1}`}
                     error={t(errors?.services?.[serviceIndex]?.addPorts?.[index]?.containerPort?.message as string)}
                     placeholder="8080"
                     className="table-row-input"
                   />
                 </TableCell>
-                <TableCell className="w-10">
+                <TableCell className="w-10 service-config-check-cell">
                   <Controller
                     control={control}
                     name={`services.${serviceIndex}.addPorts.${index}.tcp`}
                     defaultValue={true}
                     render={({ field: { onChange, value, ref, ...rest } }) => (
-                      <Checkbox ref={ref} checked={value} onCheckedChange={onChange} {...rest} className="mb-0" />
+                      <Checkbox ref={ref} checked={value} onCheckedChange={onChange} {...rest} className="mb-0" aria-label={`TCP ${index + 1}`} />
                     )}
                   />
                 </TableCell>
-                <TableCell className="w-10">
+                <TableCell className="w-10 service-config-check-cell">
                   <Controller
                     control={control}
                     name={`services.${serviceIndex}.addPorts.${index}.udp`}
                     defaultValue={true}
                     render={({ field: { onChange, value, ref, ...rest } }) => (
-                      <Checkbox ref={ref} checked={value} onCheckedChange={onChange} {...rest} className="mb-0" />
+                      <Checkbox ref={ref} checked={value} onCheckedChange={onChange} {...rest} className="mb-0" aria-label={`UDP ${index + 1}`} />
                     )}
                   />
                 </TableCell>
                 <TableCell className="w-30">
                   <Input
                     {...register(`services.${serviceIndex}.addPorts.${index}.interface`, { setValueAs: (v) => v.trim() || undefined })}
+                    aria-label={`${t('MULTI_SERVICE_PORTS_INTERFACE')} ${index + 1}`}
                     error={errors?.services?.[serviceIndex]?.addPorts?.[index]?.interface?.message}
                     placeholder="eth0"
                   />
@@ -100,7 +103,7 @@ export const PortsConfig = ({ errors, serviceIndex, control, register }: Props) 
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => remove(index)}
+                    onClick={(event) => removeTableRow(event, () => remove(index))}
                     onFocus={revealTableAction}
                     className="btn-action service-config-remove"
                     aria-label={`${t('APP_ACTION_REMOVE')}: ${t('MULTI_SERVICE_PORTS_TITLE')} ${index + 1}`}

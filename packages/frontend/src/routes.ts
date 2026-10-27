@@ -5,7 +5,7 @@ export default [
   layout('./components/routes/unauthenticated-route.tsx', [
     route('login', './modules/auth/pages/login-page.tsx', { id: 'login' }),
     route('register', './modules/auth/pages/register-page.tsx', { id: 'register' }),
-    route('reset-password', './modules/auth/pages/reset-password-page.tsx', { id: 'reset-password' }),
+    route('reset-password', './modules/auth/pages/login-page.tsx', { id: 'reset-password' }),
   ]),
   route('playground', './modules/playground/pages/playground-page.tsx', { id: 'playground' }),
   // Authenticated routes

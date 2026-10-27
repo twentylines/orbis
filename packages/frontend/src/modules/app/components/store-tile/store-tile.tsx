@@ -21,6 +21,7 @@ export const StoreTile: React.FC<{ app: AppInfoSimple; isLoading: boolean }> = (
 
   return (
     <Link
+      ref={preview?.onCardMount}
       aria-label={app.name}
       className="app-tile"
       to={`/app-store/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}${location.search}`}

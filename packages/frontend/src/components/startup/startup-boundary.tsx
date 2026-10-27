@@ -4,7 +4,11 @@ import { StartupSurface } from './startup-surface';
 import { startupCycleRemaining } from './startup-timing';
 
 const ReadyContext = createContext<(ready: boolean) => void>(() => undefined);
-const SessionContext = createContext<{ begin: () => void; finish: () => Promise<void> }>({ begin: () => undefined, finish: async () => undefined });
+type SessionTransition = 'signing-in' | 'logging-out';
+const SessionContext = createContext<{ begin: (transition?: SessionTransition) => void; finish: () => Promise<void> }>({
+  begin: () => undefined,
+  finish: async () => undefined,
+});
 export const useStartupSession = () => useContext(SessionContext);
 
 export function useStartupReady(ready: boolean) {
@@ -16,13 +20,13 @@ export function StartupBoundary({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
   const [phase, setPhase] = useState<'loading' | 'finishing' | 'revealing' | 'complete'>('loading');
   const surface = useRef<HTMLDivElement>(null);
-  const [signingIn, setSigningIn] = useState(false);
+  const [sessionTransition, setSessionTransition] = useState<SessionTransition | null>(null);
   const [sessionPending, setSessionPending] = useState(false);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const finished = useRef<Array<() => void>>([]);
-  const begin = useCallback(() => {
-    setSigningIn(true);
+  const begin = useCallback((transition: SessionTransition = 'signing-in') => {
+    setSessionTransition(transition);
     setSessionPending(true);
     setPhase('loading');
   }, []);
@@ -61,7 +65,7 @@ export function StartupBoundary({ children }: PropsWithChildren) {
   useLayoutEffect(() => {
     if (phase === 'revealing') window.dispatchEvent(new Event('orbis-startup-reveal'));
     if (phase === 'complete') {
-      setSigningIn(false);
+      setSessionTransition(null);
       for (const resolve of finished.current.splice(0)) resolve();
     }
   }, [phase]);
@@ -71,7 +75,15 @@ export function StartupBoundary({ children }: PropsWithChildren) {
       <ReadyContext.Provider value={setReady}>
         {children}
         {phase === 'complete' ? null : (
-          <StartupSurface ref={surface} overlay initial signingIn={signingIn} completing={phase !== 'loading'} revealing={phase === 'revealing'} />
+          <StartupSurface
+            ref={surface}
+            overlay
+            initial
+            signingIn={sessionTransition === 'signing-in'}
+            loggingOff={sessionTransition === 'logging-out'}
+            completing={phase !== 'loading'}
+            revealing={phase === 'revealing'}
+          />
         )}
       </ReadyContext.Provider>
     </SessionContext.Provider>

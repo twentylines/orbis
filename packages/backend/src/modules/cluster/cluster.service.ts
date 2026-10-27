@@ -10,6 +10,7 @@ import { MetricHistoryService } from '../system/metric-history.service';
 import { HostTelemetryService } from '../system/host-telemetry.service';
 import { HostProcessesService } from '../system/host-processes.service';
 import { HostSensorsService } from '../system/host-sensors.service';
+import { DriveHealthService } from '../system/drive-health.service';
 import { HostDeviceHistoryService } from '../system/host-device-history.service';
 import { parseHostHistorySelection } from '../system/host-device-history.model';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
@@ -42,6 +43,7 @@ export class ClusterService {
     private readonly marketplace: MarketplaceService,
     private readonly installs: ClusterInstallService,
     private readonly activity: MonitoringActivityService,
+    private readonly drives: DriveHealthService,
   ) {}
 
   async pair(body: Record<string, unknown>) {
@@ -189,6 +191,8 @@ export class ClusterService {
         return this.processes.read();
       case 'host-sensors':
         return this.sensors.read();
+      case 'drives':
+        return this.drives.read();
       case 'host-history':
         return this.hostHistory.read(range, selection);
       case 'apps': {
@@ -257,6 +261,11 @@ export class ClusterService {
         return this.updates.plan(payload.tag);
       case 'apply-orbis':
         return this.updates.apply(payload.planId);
+      case 'drive-self-test':
+        if (Object.keys(payload).length !== 2 || !Object.hasOwn(payload, 'id') || !Object.hasOwn(payload, 'kind')) {
+          throw new BadRequestException('Choose one drive and a supported self-test.');
+        }
+        return this.updates.driveTest(payload.id, payload.kind);
       default:
         throw new BadRequestException('Unsupported cluster command.');
     }

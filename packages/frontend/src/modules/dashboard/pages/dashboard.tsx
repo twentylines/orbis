@@ -326,16 +326,16 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
           </div>
         ) : null}
         {apps.data && apps.data.installed.length === 0 && !hasStarted && !usedHome && tasks.isSuccess ? (
-          <Link to="/app-store" className="workspace-get-started">
+          <div className="workspace-get-started">
             <IconDownload size={44} stroke={1.5} aria-hidden="true" />
             <div>
               <h3>Get started</h3>
               <p>Download apps from the store</p>
-              <span>
+              <Link to="/app-store" className="workspace-store-link">
                 Open Store <IconArrowRight size={18} aria-hidden="true" />
-              </span>
+              </Link>
             </div>
-          </Link>
+          </div>
         ) : apps.data && installed.length === 0 && !checkingFirstHome ? (
           <div className="workspace-empty">
             <IconApps size={28} stroke={1.5} aria-hidden="true" />

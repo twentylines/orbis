@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { prefersReducedMotion } from './motion-setting';
 
 export const DESKTOP_WINDOW_QUERY = '(min-width: 1100px) and (min-height: 640px)';
 
@@ -13,6 +14,10 @@ export const useDesktopWindows = () => useSyncExternalStore(subscribe, snapshot,
 
 export function revealPageFocus(element: HTMLElement) {
   if (!element.closest('#desktop-content')) return;
+  if (element.dataset.pageFocusAlign === 'start') {
+    element.scrollIntoView({ block: 'start', inline: 'nearest', behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
+    return;
+  }
   element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
   const top = (document.querySelector('.desktop-system-bar')?.getBoundingClientRect().bottom ?? 0) + 8;
   const bottom = (document.querySelector('.desktop-dock')?.getBoundingClientRect().top ?? window.innerHeight) - 8;

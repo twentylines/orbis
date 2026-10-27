@@ -41,6 +41,11 @@ body:has(.orbis-startup),
   color: var(--desktop-ink);
 }
 .orbis-startup {
+  --orbis-startup-shade: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--desktop-surface) 62%, transparent),
+    color-mix(in srgb, var(--desktop-surface) 44%, transparent)
+  );
   position: relative;
   isolation: isolate;
   min-height: 100svh;
@@ -51,8 +56,7 @@ body:has(.orbis-startup),
   overflow: auto;
   overscroll-behavior: contain;
   font-family: var(--orbis-font-ui);
-  background-image:
-    linear-gradient(135deg, var(--desktop-surface), color-mix(in srgb, var(--desktop-surface) 76%, transparent)), var(--desktop-wallpaper);
+  background-image: var(--orbis-startup-shade), var(--desktop-wallpaper);
   background-position: center;
   background-size: cover;
 }
@@ -228,11 +232,9 @@ html[data-orbis-session-state="logging-out"] .orbis-startup-message-logout,
 @keyframes orbis-session-brand {
   from {
     opacity: 0;
-    transform: translateY(-12px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 html:has(.desktop),
@@ -250,9 +252,9 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   --auth-gutter: clamp(24px, 4vw, 36px);
   position: relative;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   justify-content: stretch;
-  padding-block: 24px 40px;
+  padding-block: 24px;
   min-height: 100dvh;
   background: var(--desktop-wallpaper-base) var(--desktop-wallpaper) center center / cover fixed;
   color: var(--desktop-ink);
@@ -305,6 +307,12 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 .desktop-auth .card-body {
   padding: 28px var(--auth-gutter) var(--auth-gutter);
 }
+body:has(.orbis-theme) .desktop-auth :is(.btn, .form-control) {
+  min-height: 44px;
+}
+.desktop-auth .btn-icon {
+  min-width: 44px;
+}
 .desktop-auth-heading {
   margin: 0 0 28px;
   text-align: left;
@@ -342,7 +350,10 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   overflow-wrap: anywhere;
 }
 .desktop-login-recovery a {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
   max-width: 100%;
   padding: 4px 8px;
 }
@@ -353,7 +364,8 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 @media (max-width: 640px) {
   .desktop-auth {
     background-attachment: scroll;
-    padding-block: 16px 24px;
+    grid-template-rows: auto 1fr;
+    padding-block: 16px;
   }
   .desktop-auth .container-tight {
     width: min(100%, 480px);
@@ -376,20 +388,29 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 }
 
 .desktop-auth-toolbar {
+  position: absolute;
+  top: 24px;
+  right: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  width: 100%;
+  width: auto;
   padding-inline: 24px;
-  margin-bottom: 24px;
+  margin: 0;
 }
 .desktop-auth-toolbar > .btn {
   flex: 0 0 auto;
   color: var(--desktop-ink);
   background: var(--desktop-code-background);
   border-color: var(--desktop-line);
+}
+@media (max-width: 640px) {
+  .desktop-auth-toolbar {
+    position: static;
+    width: 100%;
+  }
 }
 @media (max-width: 480px) {
   .desktop-auth-toolbar {
@@ -546,7 +567,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
   left: -12%;
   top: -18%;
   border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--desktop-accent) 16%, transparent), transparent 68%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--desktop-accent) 8%, transparent), transparent 68%);
   animation: orbis-startup-drift 12s ease-in-out infinite alternate;
 }
 .orbis-startup-scene span + span {
@@ -589,7 +610,7 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 .orbis-startup-detail {
   display: grid;
   align-content: center;
-  min-height: 3.2em;
+  min-height: 4.8em;
   margin: 0;
   color: var(--desktop-muted);
   line-height: 1.6;
@@ -652,7 +673,6 @@ body:has(.desktop[data-desktop-mode="dark"]) {
 @keyframes orbis-startup-brand-exit {
   to {
     opacity: 0;
-    transform: translateY(-18px) scale(0.96);
   }
 }
 :root[data-orbis-motion="reduced"] .orbis-startup-progress > span {

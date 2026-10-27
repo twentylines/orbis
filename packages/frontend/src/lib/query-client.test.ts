@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { QueryObserver } from '@tanstack/react-query';
-import { createAppQueryClient } from './query-client';
+import { clearAccountQueries, createAppQueryClient } from './query-client';
 
 function watchedQueries() {
   const client = createAppQueryClient();
@@ -93,4 +93,46 @@ test('failed reviews do not disturb unrelated caches', async () => {
   } finally {
     scope.close();
   }
+});
+
+test('signing out clears account queries and mutation data while retaining the signed-out session', async () => {
+  const client = createAppQueryClient();
+  const key = ['session'];
+  client.setQueryData(key, { isLoggedIn: true });
+  client.setQueryData(['app-settings'], { draft: 'private account data' });
+  client.setQueryData(['passkeys'], ['account credential metadata']);
+  await client
+    .getMutationCache()
+    .build(client, { meta: { invalidates: false }, mutationFn: async () => 'saved account result' })
+    .execute(undefined);
+
+  await clearAccountQueries(client, key, { isLoggedIn: false });
+
+  expect(client.getQueryData<{ isLoggedIn: boolean }>(key)).toEqual({ isLoggedIn: false });
+  expect(client.getQueryCache().getAll()).toHaveLength(1);
+  expect(client.getMutationCache().getAll()).toHaveLength(0);
+  client.clear();
+});
+
+test('a late account response cannot repopulate the cache after sign-out', async () => {
+  const client = createAppQueryClient();
+  let completeRequest: (value: string) => void = () => undefined;
+  const request = client.fetchQuery({
+    queryKey: ['private-account'],
+    queryFn: () =>
+      new Promise<string>((resolve) => {
+        completeRequest = resolve;
+      }),
+  });
+  const cancelled = request.catch(() => undefined);
+
+  await clearAccountQueries(client, ['session'], { isLoggedIn: false });
+  completeRequest('late private response');
+  await cancelled;
+  await Bun.sleep(0);
+
+  expect(client.getQueryData(['private-account'])).toBeUndefined();
+  expect(client.getQueryCache().getAll()).toHaveLength(1);
+  expect(client.getQueryData<{ isLoggedIn: boolean }>(['session'])).toEqual({ isLoggedIn: false });
+  client.clear();
 });

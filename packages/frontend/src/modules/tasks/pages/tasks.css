@@ -5,7 +5,7 @@
   padding: 28px;
   border: 1px solid var(--desktop-line);
   border-radius: 20px;
-  background: linear-gradient(130deg, rgba(104, 149, 119, 0.18), rgba(196, 160, 114, 0.1));
+  background: color-mix(in srgb, var(--desktop-accent) 6%, transparent);
 }
 .task-summary h2 {
   font-size: var(--orbis-compact-page-title, 1.5625rem);
@@ -25,9 +25,7 @@
   flex: none;
   border: 1px solid var(--desktop-line);
   border-radius: 50%;
-  box-shadow:
-    inset 0 2px rgba(255, 255, 255, 0.24),
-    0 10px 24px rgba(17, 43, 35, 0.1);
+  background: color-mix(in srgb, var(--desktop-accent) 10%, transparent);
   color: var(--desktop-accent);
 }
 .task-summary-orbit.is-busy {
@@ -100,7 +98,7 @@
   place-items: center;
   flex: none;
   border-radius: 12px;
-  background: rgba(132, 159, 131, 0.13);
+  background: color-mix(in srgb, var(--desktop-accent) 12%, transparent);
   color: var(--desktop-accent);
 }
 .task-identity {
@@ -234,4 +232,20 @@
   border-radius: 9px;
   color: var(--desktop-ink);
   background: transparent;
+}
+.task-list > li:is([data-status="failed"], [data-status="interrupted"], [data-status="unconfirmed"]) .task-symbol {
+  color: var(--desktop-negative);
+  background: color-mix(in srgb, var(--desktop-negative) 12%, transparent);
+}
+.task-list > li[data-status="failed"] .task-state {
+  color: var(--desktop-negative);
+}
+.task-list > li[data-status="succeeded"] .task-symbol {
+  color: var(--desktop-positive);
+  background: color-mix(in srgb, var(--desktop-positive) 12%, transparent);
+}
+.task-summary-orbit[data-attention="true"] {
+  color: var(--desktop-negative);
+  background: color-mix(in srgb, var(--desktop-negative) 10%, transparent);
+  box-shadow: none;
 }

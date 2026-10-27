@@ -1,89 +1,83 @@
-# Orbis host service preview
+# Orbis host service
 
-The browser can now request a reviewed Orbis core update through an authenticated API and a separate host process. The host process listens on a Unix socket only. It accepts fixed core operations for status, planning, applying, and recovering a release. It also serves Ubuntu 24.04 APT upgrade inventory and one exact candidate's distribution changelog. The current source adds a separate reviewed package install path. It has no shell endpoint.
+The host service connects Orbis to its Linux host for system readings, reviewed Orbis updates, package updates and server restarts. It runs separately from the Orbis container and accepts fixed requests over a private Unix socket.
 
-Beta42 also adds zero-argument `GET /v1/telemetry` for bounded host storage, interface and disk counters. It accepts no path, device or command from the browser. The authenticated system API validates selected fields and Monitor keeps these host readings separate from core-container readings. Install/upgrade must include the new `orbis-host-telemetry.py` sibling; an older helper remains usable for its existing operations and the new Monitor section reports the missing capability. [MONITORING.md](MONITORING.md) describes collection and failure limits. The installed-helper upgrade and actual host/core Unix reads now pass in the owned arm64 VM, with a dated private backup and unchanged environment/unit bytes. The subsequent reviewed beta42 core OTA and independent snapshot/data verification pass; the separate read-only beta42 published-core API/render audit also passes five native/enlarged Monitor layouts, actual device rows, 401/200 access, native focus and exact refresh-scroll preservation. Released evidence records the isolated boundary.
+**Orbis and the host service update separately.** A newer Orbis interface can connect to an older host service, but features added since that service was installed remain unavailable. Updates → System explains which capabilities need a host service upgrade.
 
-Source after beta42 adds zero-argument `GET /v1/processes` through the sibling `orbis-host-processes.py`. It reads bounded selected host process counters with no PID argument, command, environment or signal operation. The backend authenticates, validates and coalesces the process API separately. The reviewed installed-helper upgrade now passes with a dated private backup, unchanged unit/environment bytes, actual CPU/RSS attribution and matching host/core socket reads; the subsequent beta43 core OTA and separate actual Monitor/API inspection now also pass. See [MONITORING.md](MONITORING.md) and installed proof.
+## Requirements
 
-This is currently a **disposable-host test path**. It has unit and socket transport tests, published beta 7 → beta 9 updates through the Linux VM's native socket, and browser-clicked updates from beta 9 through beta 13 from the real Update Center. Its systemd unit survived a service restart and VM stop/start, and the beta 12 → beta 13 update passed after upgrading the installed helper. Do not attach it to Hades or another production installation. See [DEPLOYMENT.md](DEPLOYMENT.md) for the transaction evidence and limits.
+- Linux with systemd, Python 3.10 or newer, Docker with Compose, `rsync` and `git`.
+- An enrolled Orbis installation running its published, digest-pinned image.
+- A private `/run/orbis` directory mounted read-only into the Orbis core, with `ORBIS_HOST_SOCKET` set to `/run/orbis/host.sock` in that core's configuration.
+- An operator account for update, package and restart actions.
 
-## Boundaries
+Host package management currently supports **Ubuntu 24.04 only** and requires `python3-apt`. Other supported readings remain available when package management is unavailable. Drive health additionally requires `smartmontools` on the host.
 
-- The host service uses the explicit installation root and Docker context supplied at startup. A browser request can contain only a release tag or a server-issued plan/job ID.
-- A plan verifies the target GitHub tag, release manifest, GHCR index digest and supported platforms, existing enrollment, healthy running image, Compose delta, stopped managed apps, and snapshot capacity. The installed release is identified by its enrolled digest, local image source/version/revision labels and exact saved configuration. Plans expire after 15 minutes.
-- Apply rechecks those conditions, pulls before downtime, captures a stopped-state snapshot, starts the digest-pinned release, and uses the existing automatic rollback transaction. The host service keeps running while the Orbis container restarts. A job record is saved outside the installation.
-- Failed updates retain their failure stage and a fixed diagnostic code after rollback. Snapshot failures distinguish inconsistent source reads, failed copies, changing source files, mismatched copies and verification-record failures. The browser receives a safe explanation; raw exception messages, command output and installation file contents are not returned. An incomplete snapshot without a valid sidecar is never restored.
-- The backend update routes require an authenticated operator session. The inherited `AuthGuard` checks same-origin POST requests; a second guard rejects non-operators and CLI tokens. Host telemetry uses the existing authenticated session/CLI guard for system readings and exposes no mutation. Only the Orbis backend should receive the Unix socket mount; keep the socket directory and service state private.
-- External app mounts, named volumes, and real homelab data still require a copied-data rehearsal and independent backup. The existing updater leaves managed apps stopped. The stock Runtipi CLI `start` and `update` commands are incompatible with an adopted Orbis installation.
+Use the [guided installation process](INSTALLATION.md) for a new installation or Runtipi adoption. The manual commands below assume enrollment and the socket mount already exist. Changing Compose files after enrollment invalidates their saved fingerprint; do not edit them to bypass a failed check.
 
-## Isolated Linux setup used for beta 8
+## Install the host service
 
-Use a disposable Linux host with its own Docker daemon and an already enrolled Orbis CLI v4.10.1 copy. Choose actual absolute paths for `ROOT` and `SOURCE` on that host. The host process needs Python 3, Docker Compose, `rsync`, `git` for rate-limit fallback, and access to the Docker daemon. The source revision must contain `scripts/orbis-host-service.py` and its sibling host transaction scripts.
-
-```sh
-sudo install -d -m 0700 /run/orbis /var/lib/orbis/state /var/lib/orbis/snapshots
-sudo python3 SOURCE/scripts/orbis-host-service.py \
-  --root ROOT \
-  --docker-context default \
-  --socket /run/orbis/host.sock \
-  --snapshots /var/lib/orbis/snapshots \
-  --state-dir /var/lib/orbis/state
-```
-
-In the copied installation's existing `user-config/tipi-compose.yml`, merge the following under the existing `runtipi` service, preserving every existing user setting:
-
-```yaml
-services:
-  runtipi:
-    volumes:
-      - /run/orbis:/run/orbis:ro
-    environment:
-      ORBIS_HOST_SOCKET: /run/orbis/host.sock
-```
-
-The helper's socket is owned by the host process with mode `0600`. The container needs permission to connect through the mounted directory. A Compose change invalidates Orbis's saved enrollment fingerprint; a controlled core recreation and fresh enrollment are required before the host service can plan an update. The socket mount, host transaction, and systemd restart passed in the isolated VM. A mounted socket is a privileged control channel; never mount it into application containers or expose it through a TCP port.
-
-## Linux service setup
-
-`scripts/orbis-host-service-setup.py` installs the helper on an **already enrolled** Linux systemd host whose running Orbis core has the read-only socket mount above. The socket directory must exist before that core container starts. The plan verifies the installed image digest and build identity, saved enrollment, Docker context, merged Compose mount and environment, and host/container mount device and inode. A stale bind mount is rejected; recreate only the core under the reviewed Compose model before retrying. It does not edit Compose or adopt stock Runtipi.
+Use a reviewed checkout of the release you intend to install. Run these commands on the Linux Docker host, from that checkout. Replace `ROOT` with the canonical absolute installation directory and `CONTEXT` with its Docker context name. Use the same values in both commands.
 
 ```sh
 python3 scripts/orbis-host-service-setup.py plan ROOT --docker-context CONTEXT
 sudo python3 scripts/orbis-host-service-setup.py install ROOT --docker-context CONTEXT --confirm-root ROOT
 ```
 
-Replace both `ROOT` values with the same canonical absolute installation path and choose the enrolled Docker context. `install` takes the host-operation lock, copies the fixed helper script set to root-owned `/opt/orbis/host-service`, writes a private `/etc/orbis/host-service.env`, installs [packaging/systemd/orbis-host.service](packaging/systemd/orbis-host.service), verifies and enables the unit, then checks the socket both on the host and inside the Orbis core. It refuses an existing installation or an incorrect confirmation path. On a setup failure it disables the new unit and removes files it created. A later helper upgrade uses the separate command below; do not replace its scripts during a running core update.
+The plan checks enrollment, the running image, Compose configuration and the live host/container socket mount. Installation creates root-owned helper files and the `orbis-host.service` systemd unit, then verifies access from both the host and the Orbis core. It refuses to replace an existing helper installation.
 
-The unit keeps `/run/orbis` across service restarts, so a running container does not retain an orphaned bind mount. In the isolated VM, the corrected installer returned an active service with mode `0700` script, state, and snapshot directories and mode `0600` environment and socket; the core reached the socket after a unit restart and a full VM stop/start. It still requires an external-data rehearsal and independent backup before any production cutover.
+The socket mount belongs only in the Orbis core. Never expose it through a public port or mount it into application containers. Keep service state, snapshots and configuration private.
 
 ## Upgrade an installed helper
 
-The Orbis container image does not replace files under `/opt/orbis/host-service`. Run [scripts/orbis-host-service-upgrade.py](scripts/orbis-host-service-upgrade.py) from a reviewed checkout on the Linux host after the first-install setup has succeeded:
+Updating the Orbis container does not replace the host files under `/opt/orbis/host-service`. Use the helper upgrade command from a reviewed checkout of the required release:
 
 ```sh
 python3 scripts/orbis-host-service-upgrade.py plan ROOT --docker-context CONTEXT
 sudo python3 scripts/orbis-host-service-upgrade.py upgrade ROOT --docker-context CONTEXT --confirm-root ROOT
 ```
 
-The plan checks the enrolled image, Compose socket mount, live host/container mount identity, root-owned helper files, systemd unit and environment, and absence of a running or interrupted core update. It reports hashes of the installed and candidate scripts and unit. Identical hashes return without a service restart. Otherwise upgrade takes the host-operation lock, marks maintenance so the newer helper refuses new core operations, stops the old unit, replaces scripts and unit from a same-filesystem staging area, starts the unit, then checks the socket from both the host and core and checks the bind-mount identity. If startup or verification fails, it restores the previous scripts and unit. The environment and installation data tree are unchanged.
+Review the plan before applying it. It verifies the existing installation, root ownership, systemd unit, enrollment and live socket mount. It also checks for unresolved core, package or restart operations. The plan reports the installed and candidate file hashes.
 
-An installed release remains identifiable after its remote release assets are archived. Current helpers verify its local digest, original build labels and enrolled configuration without downloading its old manifest. Every new update target still requires fresh GitHub and GHCR verification. If an older helper reports a missing manifest for the installed release, upgrade the helper from a reviewed current checkout using the commands above, then prepare the core update again. Keep the installed release's original build identity; do not substitute a newer tag or manifest for it.
+The upgrade replaces helper scripts and the systemd unit, restarts only the host service and verifies the host/core connection. It leaves the Orbis container, application containers, installation data and existing helper configuration in place. Identical source hashes require no restart. The transaction keeps the previous helper until replacement verification succeeds and restores it if activation fails.
 
-If the upgrade command is interrupted, use the same checkout and exact root/context to recover the recorded helper transaction:
+If an upgrade is interrupted, keep its checkout and recovery files. Recover with the same installation root and Docker context:
 
 ```sh
 sudo python3 scripts/orbis-host-service-upgrade.py recover ROOT --docker-context CONTEXT --confirm-root ROOT
 ```
 
-Recovery restores the previous helper when replacement did not finish, or finalizes a verified replacement. A failed rollback leaves its private maintenance record and staging directory in place for local inspection. The isolated VM passed an upgrade from the beta 11 installed helper, a deliberately broken replacement that restored the previous helper, a simulated interrupted setup, and finalization of an already verified replacement. The core stayed healthy at beta 12 and the saved core-update job remained complete. This is still a disposable-host result; do not apply it to Hades before the copied-data rehearsal and phase-two approval.
+Do not remove a maintenance record or transaction lock to force another update. Inspect a failed recovery locally before continuing.
 
-The UI remains read-only for core updates when `ORBIS_HOST_SOCKET` is absent, the socket cannot be reached, the running image differs from enrollment, or the host reports an interrupted job. An interrupted job exposes a specific recovery action. Host package inventory and changelogs use the same socket and operator guard. The beta 13 installed helper was upgraded in the isolated Ubuntu 24.04.4 VM; it returned 110 candidates and a real `base-files:arm64` changelog. It did not run `apt update`, install packages, or reboot the host. The published beta 14 image reached this helper after a browser-clicked beta 13 → beta 14 core update. Chrome showed the real inventory and changelog at 1440px and 390px without page errors or horizontal overflow. Host package installation remains unimplemented in beta 14.
+## System updates and restarts
 
-## Reviewed Ubuntu package installation: beta 14–15 rehearsals
+In **Updates → System**, **Check for updates** refreshes the host's package indexes. Orbis then reads available upgrade candidates from those indexes. Viewing the page alone does not refresh indexes or install packages.
 
-The package helper revision added `POST /v1/packages/plan`, `POST /v1/packages/apply`, and `GET /v1/packages/job` to the private Unix socket. The Nest routes require the same operator session and same-origin POST protection as core updates. The browser selects explicit package names. The helper accepts only installed upgrade candidates from trusted APT sources, pins their exact versions, runs `apt-get --simulate --no-remove --no-install-recommends`, and records every upgrade or new dependency in a 15-minute plan. Apply repeats the simulation and rejects changed candidates or operations.
+Select packages and review their proposed versions and dependencies before applying them. The host service accepts trusted installed upgrade candidates, pins their versions and repeats its dependency simulation before starting installation. Its systemd worker continues if the browser closes or the Orbis container restarts.
 
-Apply starts a fixed Python worker with `systemd-run`; it does not run dpkg in the web container or a daemon thread. The worker rechecks the plan under the Orbis host-operation lock, then invokes a fixed `apt-get` argument list with noninteractive configuration handling. Its job and log are private host files. A browser or Orbis core restart does not kill the worker. A failed or interrupted APT job blocks another core or package operation until local inspection. The helper does not refresh package indexes, remove packages, automatically roll back APT, or reboot the host.
+Package reviews expire after 15 minutes. Their creation and expiry timestamps use Unix seconds. Orbis requires a fresh review after expiry or a failed attempt, and dismisses pending reviews when you change the selection or update category.
 
-The disposable Ubuntu 24.04.4 VM upgraded its installed helper, reviewed a one-package `base-files:arm64` plan, and applied it through the private socket. The systemd worker completed, `dpkg-query` reported `13ubuntu10.5`, `dpkg --audit` was clean, the candidate count fell from 110 to 109, and the beta 14 core stayed healthy. The subsequent published beta 15 browser completed a reviewed one-package `distro-info-data:arm64` upgrade through the systemd worker, with the expected installed version and a clean `dpkg --audit`; see `DEPLOYMENT.md` for the exact job and image records. No host package command has been run on Hades.
+Package installation may restart services. It does not remove packages, automatically reboot the host or provide automatic package rollback. A failed or interrupted installation blocks conflicting host operations until the package state is inspected and repaired. The System page shows its terminal output. A failed package-list refresh can be retried once its worker has stopped.
+
+**Restart server** first opens a confirmation. The service checks for conflicting operations before requesting a restart. Applications become unavailable during the restart; the page reloads automatically when Orbis returns.
+
+## Drive health
+
+Monitor → Drive health reads supported SMART and NVMe data through `smartctl`. Install `smartmontools` through your host's normal package-management process if it is missing, then refresh the section.
+
+The service collects readings on demand and caches them for one minute. It uses standby-aware reads where the device supports power detection. Sleeping, unsupported or inaccessible disks retain an explicit unavailable state. Some RAID controllers, USB bridges and manufacturer-specific attributes need additional support; a missing reading is never a healthy result.
+
+Orbis shows available health warnings, temperatures, lifetime counters, device-reported test results and a bounded local history. Short and extended self-tests require an operator's explicit confirmation. A test can wake a disk and affect I/O performance. Keep an independent backup; a passing SMART result cannot guarantee that a drive will not fail.
+
+## Troubleshooting
+
+| Symptom | Next step |
+| --- | --- |
+| Host service update needed | Upgrade the helper from the matching reviewed release. Updating only the web container does not add host capabilities. |
+| Host service disconnected | Check `systemctl status orbis-host.service` on the host and verify its private socket mount. |
+| Stale socket mount | Review the enrolled Compose model before recreating only the Orbis core. Do not replace `/run/orbis` underneath a running bind mount. |
+| Missing installed-release manifest | Upgrade the helper so it can verify the installed digest and local image labels. Preserve the original release identity. |
+| Package download or refresh failure | Read the System page's job output. Check repository connectivity and package-manager state locally before retrying. |
+| Drive health unavailable | Check helper support, `smartmontools` availability and device/controller support. |
+
+Keep raw logs and configuration private. Remove credentials, tokens, cookies and personal paths before sharing diagnostic information.

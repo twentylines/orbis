@@ -8,7 +8,7 @@ import { useAppContext } from '@/context/app-context';
 import { IconAlertTriangle, IconArrowRight, IconBrandGithub, IconPackage, IconRefresh, IconServerCog } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { Fragment, useEffect, useId, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import './updates.css';
 import { useCluster } from '@/desktop/cluster';
@@ -25,6 +25,7 @@ import {
 } from '@/desktop/host-update-watch';
 import { coreWatchIsActive } from '@/desktop/core-update-state';
 import { installedOrbisBuildOptions, orbisReleasesOptions, newerOrbisRelease } from '@/desktop/orbis-release';
+import { useReviewExpired } from '@/desktop/use-review-expired';
 import { orbisReleaseChannelsOptions } from '@/desktop/release-channels';
 import { formatOrbisVersion } from '@/desktop/orbis-version';
 
@@ -88,6 +89,7 @@ type HostPackageChangelog = {
 type HostPackagePlan = {
   planId: string;
   createdAt: number;
+  expiresAt?: number;
   selected: HostPackage[];
   operations: Array<{ name: string; installedVersion: string | null; candidateVersion: string; action: 'install' | 'upgrade' }>;
 };
@@ -124,11 +126,19 @@ async function hostRequest<T>(path: string, body?: object, signal?: AbortSignal)
     signal: AbortSignal.any([
       ...(signal ? [signal] : []),
       AbortSignal.timeout(
-        path === 'plan' || path.startsWith('downgrade/') ? 110_000 : path === 'packages/plan' || path === 'packages/apply' ? 70_000 : 20_000,
+        path === 'plan' || path.startsWith('downgrade/')
+          ? 110_000
+          : path === 'packages/plan' || path === 'packages/apply' || path === 'packages/refresh'
+            ? 70_000
+            : path === 'packages'
+              ? 40_000
+              : 20_000,
       ),
     ]),
   });
-  const result: unknown = await response.json();
+  const result: unknown = await response.json().catch(() => null);
+  if (response.ok && (!result || typeof result !== 'object'))
+    throw new Error('The host returned an incomplete response. Check its status before retrying.');
   if (!response.ok) {
     const message =
       typeof result === 'object' && result !== null && 'message' in result && typeof result.message === 'string' ? result.message : null;
@@ -150,6 +160,8 @@ function LocalUpdates() {
   const tabsId = useId();
   const [section, setSection] = useState<'orbis' | 'apps' | 'system'>('orbis');
   const [coreReview, setCoreReview] = useState<ReleaseCompatibility | null>(null);
+  const coreReviewIntent = useRef(0);
+  const coreReviewButton = useRef<HTMLButtonElement>(null);
   const entry = useLocation().key;
   const lastEntry = useRef(entry);
   const visible = useWindowVisible();
@@ -158,10 +170,25 @@ function LocalUpdates() {
   const queryClient = useQueryClient();
   const restarting = coreWatchIsActive(watch) && watch?.phase === 'offline';
   const [restartPlan, setRestartPlan] = useState<{ planId: string; expiresAt: number; rebootRequired: boolean } | null>(null);
+  const restartReviewIntent = useRef(0);
+  const restartReviewButton = useRef<HTMLButtonElement>(null);
+  // The host restart protocol timestamps are Unix seconds.
+  const restartReviewExpired = useReviewExpired(restartPlan ? restartPlan.expiresAt * 1000 : undefined);
+  const closeRestartReview = () => {
+    restartReviewIntent.current += 1;
+    setRestartPlan(null);
+  };
+  const systemActionFocus = useRef<{ control: HTMLButtonElement; kind: 'refresh' | 'restart' } | null>(null);
   const reviewRestart = useMutation({
     meta: { invalidates: false },
     mutationFn: () => hostRequest<NonNullable<typeof restartPlan>>('restart/plan', {}),
-    onSuccess: setRestartPlan,
+    onMutate: () => ({ intent: ++restartReviewIntent.current }),
+    onSuccess: (value, _variables, context) => {
+      if (context?.intent === restartReviewIntent.current) {
+        applyRestart.reset();
+        setRestartPlan(value);
+      }
+    },
   });
   const applyRestart = useMutation({
     mutationFn: (planId: string) => hostRequest<{ jobId: string; state: 'restarting' }>('restart/apply', { planId }),
@@ -173,7 +200,7 @@ function LocalUpdates() {
           id: result.jobId,
           state: 'restarting',
           createdAt: Date.now() / 1000,
-          message: 'The server is restarting. Reconnecting automatically.',
+          message: 'The page will reload automatically when the server is ready.',
         },
       });
       void queryClient.invalidateQueries({ queryKey: serverRestartQueryKey });
@@ -189,6 +216,36 @@ function LocalUpdates() {
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [selectedPackages, setSelectedPackages] = useState<string[]>([]);
   const [reviewPackagePlan, setReviewPackagePlan] = useState<HostPackagePlan | null>(null);
+  const packageReviewIntent = useRef(0);
+  const packageReviewButton = useRef<HTMLButtonElement>(null);
+  const packageSelectionKey = useMemo(() => [...selectedPackages].sort().join('\0'), [selectedPackages]);
+  const previousPackageSelection = useRef(packageSelectionKey);
+  const packageReviewExpired = useReviewExpired(reviewPackagePlan?.expiresAt === undefined ? undefined : reviewPackagePlan.expiresAt * 1000);
+  const closePackageReview = () => {
+    packageReviewIntent.current += 1;
+    setReviewPackagePlan(null);
+  };
+  const lastReviewScope = useRef({ section, entry });
+  useLayoutEffect(() => {
+    const previous = lastReviewScope.current;
+    if (previous.section !== section || previous.entry !== entry) {
+      lastReviewScope.current = { section, entry };
+      setCoreReview(null);
+      setRestartPlan(null);
+      setReviewPackagePlan(null);
+    }
+    return () => {
+      coreReviewIntent.current += 1;
+      restartReviewIntent.current += 1;
+      packageReviewIntent.current += 1;
+    };
+  }, [section, entry]);
+  useLayoutEffect(() => {
+    if (previousPackageSelection.current === packageSelectionKey) return;
+    previousPackageSelection.current = packageSelectionKey;
+    packageReviewIntent.current += 1;
+    setReviewPackagePlan(null);
+  }, [packageSelectionKey]);
   const lastRefreshedCoreJob = useRef<string | null>(null);
   const lastRefreshedPackageJob = useRef<string | null>(null);
   const apps = useQuery({
@@ -204,9 +261,9 @@ function LocalUpdates() {
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   });
+  const channels = useQuery({ ...orbisReleaseChannelsOptions(), enabled: visible });
   const lastCoreReview = useCompatibilityResult<ReleaseCompatibility>('update', user.id, build.data?.version ?? '');
   const checkingCore = lastCoreReview?.status === 'pending';
-  const channels = useQuery({ ...orbisReleaseChannelsOptions(), enabled: visible });
   const releases = useQuery({
     ...orbisReleasesOptions(channels.data?.current),
     enabled: visible && Boolean(channels.data),
@@ -268,10 +325,28 @@ function LocalUpdates() {
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['orbis-host-package-job'] }),
   });
+  useEffect(() => {
+    const previous = systemActionFocus.current;
+    if (!previous) return;
+    const pending = previous.kind === 'refresh' ? refreshPackages.isPending : reviewRestart.isPending;
+    if (pending) return;
+    const failed = previous.kind === 'refresh' ? refreshPackages.isError : reviewRestart.isError;
+    systemActionFocus.current = null;
+    if (failed && section === 'system' && document.activeElement === document.body && previous.control.isConnected && !previous.control.disabled) {
+      previous.control.focus();
+    }
+  }, [section, refreshPackages.isPending, refreshPackages.isError, reviewRestart.isPending, reviewRestart.isError]);
   const planPackages = useMutation({
     meta: { invalidates: false },
     mutationFn: (names: string[]) => hostRequest<HostPackagePlan>('packages/plan', { names }),
-    onSuccess: (result) => setReviewPackagePlan(result),
+    onMutate: () => ({ intent: ++packageReviewIntent.current }),
+    onSuccess: (result, _variables, context) => {
+      if (context?.intent === packageReviewIntent.current) {
+        applyPackages.reset();
+        setReviewPackagePlan(result);
+      }
+    },
+    retry: false,
   });
   const applyPackages = useMutation({
     mutationFn: (planId: string) => hostRequest<{ jobId: string; state: string }>('packages/apply', { planId }),
@@ -282,10 +357,12 @@ function LocalUpdates() {
       void packageJob.refetch();
     },
   });
+  const packageNeedsReview = packageReviewExpired || applyPackages.isError || planPackages.isError;
   const reviewCore = useMutation({
     meta: { invalidates: false },
     mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? ''],
     gcTime: compatibilityReviewTime,
+    onMutate: () => ({ intent: ++coreReviewIntent.current }),
     mutationFn: async (tag: string) => {
       const result = await hostRequest<ReleaseCompatibility>(`release-compatibility?tag=${encodeURIComponent(tag)}`);
       if (
@@ -301,7 +378,9 @@ function LocalUpdates() {
         throw new Error('The release compatibility check could not be verified. Try again before updating.');
       return result;
     },
-    onSuccess: setCoreReview,
+    onSuccess: (result, _variables, context) => {
+      if (context?.intent === coreReviewIntent.current) setCoreReview(result);
+    },
     retry: false,
   });
   const updateCore = useMutation({
@@ -362,7 +441,8 @@ function LocalUpdates() {
   const visiblePackages = showAllPackages ? matchingPackages : matchingPackages.slice(0, 12);
   const packageJobState = packageJob.data?.job?.state;
   const packageJobBusy = packageJobState === 'queued' || packageJobState === 'running';
-  const packageJobNeedsInspection = packageJobState === 'failed' || packageJobState === 'interrupted';
+  const failedRefresh = packageJob.data?.job?.kind === 'refresh' && (packageJobState === 'failed' || packageJobState === 'interrupted');
+  const packageJobNeedsInspection = !failedRefresh && (packageJobState === 'failed' || packageJobState === 'interrupted');
   const packageControlsBlocked =
     refreshPackages.isPending ||
     packageJob.isPending ||
@@ -372,6 +452,11 @@ function LocalUpdates() {
     jobBusy ||
     job?.state === 'interrupted';
   const refreshSupported = host.data?.capabilities?.includes('packages.refresh.v1') === true;
+  const missingHostFeatures = host.data?.available
+    ? [refreshSupported ? null : 'checking for system updates', host.data.capabilities?.includes('restart.v1') ? null : 'server restarts'].filter(
+        (feature): feature is string => feature !== null,
+      )
+    : [];
   const matchingSelection =
     matchingPackages.length > 0 && matchingPackages.length <= 250 && matchingPackages.every((item) => selectedPackages.includes(item.name));
   const matchingSelectionExceedsLimit = new Set([...selectedPackages, ...matchingPackages.map((item) => item.name)]).size > 250;
@@ -499,19 +584,6 @@ function LocalUpdates() {
               <h2 id="orbis-updates-title">Orbis</h2>
               <p>Release notes from the Orbis GitHub repository</p>
             </div>
-            {canPlan && latest ? (
-              <button
-                className="desktop-update-action"
-                type="button"
-                disabled={checkingCore || updateCore.isPending}
-                onClick={() => {
-                  updateCore.reset();
-                  reviewCore.mutate(latest.tag);
-                }}
-              >
-                {checkingCore ? 'Checking compatibility…' : updateCore.isPending ? 'Updating…' : 'Update'}
-              </button>
-            ) : null}
           </div>
           <Dialog
             open={coreReview !== null}
@@ -519,11 +591,12 @@ function LocalUpdates() {
               if (!open && !updateCore.isPending) setCoreReview(null);
             }}
           >
-            <DialogContent className="desktop-update-review-dialog" closeDisabled={updateCore.isPending}>
+            <DialogContent className="desktop-update-review-dialog" closeDisabled={updateCore.isPending} restoreFocusTo={coreReviewButton}>
               <DialogHeader>
                 <DialogTitle>{coreReview?.crossesRuntipiBoundary ? 'Runtipi version changes' : 'Update Orbis?'}</DialogTitle>
                 <DialogDescription>
-                  {build.data?.version} → {coreReview?.tag}
+                  {build.data?.version ? formatOrbisVersion(build.data.version) : 'Installed version'} →{' '}
+                  {coreReview?.tag ? formatOrbisVersion(coreReview.tag) : 'Selected release'}
                 </DialogDescription>
               </DialogHeader>
               {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The update details scroll independently and need native keyboard access. */}
@@ -579,60 +652,78 @@ function LocalUpdates() {
               Open last update review
             </button>
           ) : null}
-          <div className="desktop-update-build">
-            {build.isPending ? 'Reading installed Orbis build…' : null}
-            {build.isError ? 'Installed Orbis build metadata is unavailable.' : null}
-            {build.data ? (
-              <>
-                <InstalledVersions
-                  orbis={build.data.version}
-                  runtipi={build.data.runtipiCompatibility || version.current}
-                  channel={channels.data?.current ?? (channels.isPending ? 'loading' : 'unavailable')}
-                />
-                <details className="desktop-update-build-details">
-                  <summary>Build details</summary>
-                  {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
-                  {build.data.imageDigest ? (
-                    <div className="desktop-update-image">
-                      <span>Image</span>
-                      <code title={build.data.imageDigest}>{build.data.imageDigest}</code>
+          <div className="desktop-orbis-release-layout">
+            <div className="desktop-orbis-release-notes">
+              {releases.isPending ? <p>Checking published Orbis releases…</p> : null}
+              {releases.isError ? <p role="alert">GitHub releases are unavailable right now. You can check the repository directly.</p> : null}
+              {releases.data?.length === 0 ? <p>No published Orbis releases.</p> : null}
+              {latest ? (
+                <div className="desktop-update-release">
+                  {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
+                  {latest.priority === 'critical' && newerOrbisRelease(latest, build.data?.version) ? (
+                    <div className="desktop-critical-update" role="note" aria-label="Critical update">
+                      <IconAlertTriangle size={24} aria-hidden="true" />
+                      <div>
+                        <strong>Critical update</strong>
+                        <p>This release includes security fixes that need prompt attention. Review the changelog and install the update.</p>
+                      </div>
                     </div>
-                  ) : (
-                    <span>Image digest unavailable.</span>
-                  )}
-                </details>
-              </>
-            ) : null}
-          </div>
-          {releases.isPending ? <p>Checking published Orbis releases…</p> : null}
-          {releases.isError ? <p role="alert">GitHub releases are unavailable right now. You can check the repository directly.</p> : null}
-          {releases.data?.length === 0 ? <p>No published Orbis releases.</p> : null}
-          {latest ? (
-            <div className="desktop-update-release">
-              <div className="desktop-update-release-title">
-                <strong>{latest.tag === build.data?.version ? 'Current release' : formatOrbisVersion(latest.tag)}</strong>
-                <time>{latest.publishedAt ? new Date(latest.publishedAt).toLocaleDateString() : 'Date unavailable'}</time>
-              </div>
-              {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
-              {latest.priority === 'critical' && newerOrbisRelease(latest, build.data?.version) ? (
-                <div className="desktop-critical-update" role="note" aria-label="Critical update">
-                  <IconAlertTriangle size={24} aria-hidden="true" />
-                  <div>
-                    <strong>Critical update</strong>
-                    <p>This release includes security fixes that need prompt attention. Review the changelog and install the update.</p>
-                  </div>
+                  ) : null}
+                  <OrbisReleaseNotes latest={latest} installed={build.data?.version} channel={channels.data?.current} />
+                  <a href={latest.url} target="_blank" rel="noreferrer">
+                    View release on GitHub <IconArrowRight size={16} aria-hidden="true" />
+                  </a>
                 </div>
               ) : null}
-              <OrbisReleaseNotes latest={latest} installed={build.data?.version} channel={channels.data?.current} />
-              <a href={latest.url} target="_blank" rel="noreferrer">
-                View release on GitHub <IconArrowRight size={16} aria-hidden="true" />
-              </a>
             </div>
-          ) : null}
+            <aside className="desktop-orbis-release-summary" aria-label="Installed versions and update">
+              <h3>Installed on this server</h3>
+              <div className="desktop-update-build">
+                {build.isPending ? 'Reading installed Orbis build…' : null}
+                {build.isError ? 'Installed Orbis build metadata is unavailable.' : null}
+                {build.data ? (
+                  <>
+                    <InstalledVersions
+                      orbis={build.data.version}
+                      runtipi={build.data.runtipiCompatibility || version.current}
+                      channel={channels.data?.current ?? (channels.isPending ? 'loading' : 'unavailable')}
+                    />
+                    <details className="desktop-update-build-details">
+                      <summary>Build details</summary>
+                      {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
+                      {build.data.imageDigest ? (
+                        <div className="desktop-update-image">
+                          <span>Image</span>
+                          <code title={build.data.imageDigest}>{build.data.imageDigest}</code>
+                        </div>
+                      ) : (
+                        <span>Image digest unavailable.</span>
+                      )}
+                    </details>
+                  </>
+                ) : null}
+              </div>
+              {canPlan && latest ? (
+                <button
+                  className="desktop-update-action"
+                  type="button"
+                  disabled={checkingCore || updateCore.isPending}
+                  onClick={(event) => {
+                    updateCore.reset();
+                    coreReviewButton.current = event.currentTarget;
+                    reviewCore.mutate(latest.tag);
+                  }}
+                >
+                  {checkingCore ? 'Checking compatibility…' : updateCore.isPending ? 'Updating…' : 'Update'}
+                </button>
+              ) : null}
+            </aside>
+          </div>
           {user?.operator === true && build.data ? (
             <OrbisDowngrade
               channel={channels.data?.current}
               installed={build.data.version}
+              active={section === 'orbis'}
               enabled={Boolean(
                 host.data?.available &&
                   host.data.enrolled &&
@@ -673,7 +764,7 @@ function LocalUpdates() {
           {job ? (
             <output className={`desktop-update-job ${jobBusy ? 'is-busy' : ''}`} aria-live="polite">
               <strong>{job.state === 'running' ? 'Installing Orbis' : job.state === 'recovering' ? 'Recovering Orbis' : 'Last update'}</strong>
-              <span>{job.message || corePhase || (jobBusy ? 'The server will reconnect automatically after restart.' : job.state)}</span>
+              <span>{job.message || corePhase || (jobBusy ? 'The page will reload automatically when the server is ready.' : job.state)}</span>
               {job.state === 'interrupted' ? (
                 <button type="button" disabled={recover.isPending} onClick={() => recover.mutate(job.id)}>
                   {recover.isPending ? 'Starting recovery…' : 'Restore previous release'}
@@ -711,14 +802,14 @@ function LocalUpdates() {
             <IconServerCog size={22} aria-hidden="true" />
             <div>
               <h2 id="host-updates-title">System updates</h2>
-              <p>Install operating system updates and follow the live terminal output.</p>
+              <p>Review package updates, installation progress and restart status.</p>
             </div>
             {user.operator ? (
               <div className="desktop-update-actions desktop-host-update-actions">
                 <button
                   type="button"
                   className="desktop-update-action desktop-update-check"
-                  aria-describedby={host.data?.available && !refreshSupported ? `${tabsId}-refresh-help` : undefined}
+                  aria-describedby={missingHostFeatures.length ? `${tabsId}-host-help` : undefined}
                   disabled={
                     !refreshSupported ||
                     !host.data?.enrolled ||
@@ -732,7 +823,11 @@ function LocalUpdates() {
                     applyRestart.isPending ||
                     coreWatchIsActive(watch)
                   }
-                  onClick={() => refreshPackages.mutate()}
+                  onClick={(event) => {
+                    systemActionFocus.current =
+                      document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'refresh' } : null;
+                    refreshPackages.mutate();
+                  }}
                 >
                   <span className="desktop-update-check-reserve" aria-hidden="true">
                     Check for updates
@@ -744,6 +839,7 @@ function LocalUpdates() {
                 <button
                   type="button"
                   className="desktop-update-action"
+                  aria-describedby={missingHostFeatures.length ? `${tabsId}-host-help` : undefined}
                   disabled={
                     !restart?.available ||
                     restartError ||
@@ -753,48 +849,84 @@ function LocalUpdates() {
                     packageControlsBlocked ||
                     coreWatchIsActive(watch)
                   }
-                  onClick={() => reviewRestart.mutate()}
+                  onClick={(event) => {
+                    systemActionFocus.current =
+                      document.activeElement === event.currentTarget ? { control: event.currentTarget, kind: 'restart' } : null;
+                    restartReviewButton.current = event.currentTarget;
+                    reviewRestart.mutate();
+                  }}
                 >
                   {reviewRestart.isPending ? 'Reviewing restart…' : 'Restart server'}
                 </button>
               </div>
             ) : null}
           </div>
-          {user.operator && host.data?.available && !refreshSupported ? (
-            <p className="desktop-update-note" id={`${tabsId}-refresh-help`}>
-              Update the Orbis host service to check for new system updates.
-            </p>
+          {user.operator && missingHostFeatures.length ? (
+            <aside className="desktop-host-integration" aria-labelledby={`${tabsId}-host-help-title`}>
+              <div id={`${tabsId}-host-help`}>
+                <h3 id={`${tabsId}-host-help-title`}>Host service update needed</h3>
+                <p>Orbis and its host service update separately. Update the host service to enable {missingHostFeatures.join(' and ')}.</p>
+              </div>
+              <a
+                className="desktop-update-action"
+                href="https://github.com/twentylines/orbis/blob/main/HOST-SERVICE.md#upgrade-an-installed-helper"
+                target="_blank"
+                rel="noreferrer"
+              >
+                View setup guide
+              </a>
+            </aside>
           ) : null}
           {refreshPackages.isError ? <p role="alert">{refreshPackages.error.message} Check the package job status before trying again.</p> : null}
-          {user.operator && restart?.available === false ? <p className="desktop-update-note">{restart.reason}</p> : null}
+          {user.operator && restart?.available === false && !missingHostFeatures.length ? (
+            <p className="desktop-update-note">{restart.reason}</p>
+          ) : null}
           {restartError ? <p role="alert">Restart status could not be checked. Reconnecting to the server.</p> : null}
           {restart?.job?.state === 'failed' ? <p role="alert">{restart.job.message}</p> : null}
           {reviewRestart.isError || applyRestart.isError ? <p role="alert">{reviewRestart.error?.message || applyRestart.error?.message}</p> : null}
           <Dialog
             open={Boolean(restartPlan)}
             onOpenChange={(open) => {
-              if (!open && !applyRestart.isPending) setRestartPlan(null);
+              if (!open && !applyRestart.isPending) closeRestartReview();
             }}
           >
-            <DialogContent closeDisabled={applyRestart.isPending}>
+            <DialogContent closeDisabled={applyRestart.isPending} restoreFocusTo={restartReviewButton}>
               <DialogHeader>
                 <DialogTitle>Restart this server?</DialogTitle>
                 <DialogDescription>
-                  Applications will stop while the server restarts. Orbis reconnects automatically when it is ready.
+                  Applications will stop while the server restarts. This page reloads automatically when the server is ready.
                 </DialogDescription>
               </DialogHeader>
+              {restartReviewExpired || reviewRestart.isError || applyRestart.isError ? (
+                <div className="modal-body">
+                  {restartReviewExpired ? <output>This review expired. Review the restart again before continuing.</output> : null}
+                  {reviewRestart.isError || applyRestart.isError ? (
+                    <p role="alert">{reviewRestart.error?.message || applyRestart.error?.message}</p>
+                  ) : null}
+                </div>
+              ) : null}
               <DialogFooter className="desktop-update-plan-actions">
-                <button type="button" disabled={applyRestart.isPending} onClick={() => setRestartPlan(null)}>
+                <button type="button" disabled={applyRestart.isPending} onClick={closeRestartReview}>
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={applyRestart.isPending || !restartPlan}
+                  disabled={applyRestart.isPending || reviewRestart.isPending || !restartPlan}
                   onClick={() => {
-                    if (restartPlan) applyRestart.mutate(restartPlan.planId);
+                    if (!restartPlan) return;
+                    if (restartReviewExpired || reviewRestart.isError || applyRestart.isError || restartPlan.expiresAt * 1000 <= Date.now()) {
+                      applyRestart.reset();
+                      reviewRestart.mutate();
+                    } else applyRestart.mutate(restartPlan.planId);
                   }}
                 >
-                  {applyRestart.isPending ? 'Restarting…' : 'Restart server'}
+                  {applyRestart.isPending
+                    ? 'Restarting…'
+                    : reviewRestart.isPending
+                      ? 'Reviewing restart…'
+                      : restartReviewExpired || reviewRestart.isError || applyRestart.isError
+                        ? 'Review again'
+                        : 'Restart server'}
                 </button>
               </DialogFooter>
             </DialogContent>
@@ -813,6 +945,17 @@ function LocalUpdates() {
             <p>{systemPackages.data.reason || 'This host does not have a supported package manager.'}</p>
           ) : null}
           {packageJob.isError ? <p role="alert">The host package job status is unavailable. Check it again before starting an update.</p> : null}
+          {packageJobNeedsInspection ? (
+            <p role="alert" className="desktop-update-note">
+              A previous package installation needs attention. Review its terminal output and repair APT on the host before updating or restarting.
+            </p>
+          ) : null}
+          {failedRefresh ? (
+            <output className="desktop-update-note">
+              The package list check failed. Review the terminal output, then use Check for updates to retry. Installed packages were not changed by
+              this check.
+            </output>
+          ) : null}
           {packageJob.data?.job ? (
             <output className={`desktop-host-package-job ${packageJobBusy ? 'is-busy' : ''}`} aria-live="polite">
               <strong>
@@ -887,7 +1030,10 @@ function LocalUpdates() {
                         <button
                           type="button"
                           disabled={selectedPackages.length === 0 || planPackages.isPending || packageControlsBlocked}
-                          onClick={() => planPackages.mutate(selectedPackages)}
+                          onClick={(event) => {
+                            packageReviewButton.current = event.currentTarget;
+                            planPackages.mutate(selectedPackages);
+                          }}
                         >
                           {planPackages.isPending ? 'Checking updates…' : 'Update selected'}
                         </button>
@@ -899,20 +1045,27 @@ function LocalUpdates() {
                   <Dialog
                     open={Boolean(reviewPackagePlan)}
                     onOpenChange={(open) => {
-                      if (!open && !applyPackages.isPending) setReviewPackagePlan(null);
+                      if (!open && !applyPackages.isPending) closePackageReview();
                     }}
                   >
-                    <DialogContent size="lg" className="desktop-package-review" closeDisabled={applyPackages.isPending}>
+                    <DialogContent
+                      size="lg"
+                      className="desktop-package-review"
+                      closeDisabled={applyPackages.isPending}
+                      restoreFocusTo={packageReviewButton}
+                    >
                       <DialogHeader>
                         <DialogTitle>Update system packages</DialogTitle>
                         <DialogDescription>
-                          {reviewPackagePlan?.selected.length ?? 0} selected updates · {reviewPackagePlan?.operations.length ?? 0} package changes
+                          {reviewPackagePlan?.selected.length ?? 0} selected {reviewPackagePlan?.selected.length === 1 ? 'update' : 'updates'} ·{' '}
+                          {reviewPackagePlan?.operations.length ?? 0} package {reviewPackagePlan?.operations.length === 1 ? 'change' : 'changes'}
                         </DialogDescription>
                       </DialogHeader>
                       <div className="desktop-host-package-plan">
                         <textarea
                           readOnly
                           spellCheck={false}
+                          rows={Math.min(8, Math.max(3, (reviewPackagePlan?.operations.length ?? 0) * 2))}
                           aria-label="Planned package changes"
                           value={
                             reviewPackagePlan?.operations
@@ -927,19 +1080,38 @@ function LocalUpdates() {
                           Services may restart during installation. The host will not reboot automatically. Package changes have no automatic
                           rollback.
                         </p>
+                        {packageReviewExpired && !applyPackages.isPending ? (
+                          <output>This review expired. Check the package changes again before installing.</output>
+                        ) : null}
+                        {planPackages.isError || applyPackages.isError ? (
+                          <p role="alert">{planPackages.error?.message || applyPackages.error?.message}</p>
+                        ) : null}
                       </div>
                       <DialogFooter className="desktop-update-plan-actions">
-                        <button type="button" disabled={applyPackages.isPending} onClick={() => setReviewPackagePlan(null)}>
+                        <button type="button" disabled={applyPackages.isPending} onClick={closePackageReview}>
                           Cancel
                         </button>
                         <button
                           type="button"
-                          disabled={applyPackages.isPending || !reviewPackagePlan}
+                          disabled={applyPackages.isPending || planPackages.isPending || !reviewPackagePlan || packageControlsBlocked}
                           onClick={() => {
-                            if (reviewPackagePlan) applyPackages.mutate(reviewPackagePlan.planId);
+                            if (!reviewPackagePlan) return;
+                            if (
+                              packageNeedsReview ||
+                              (reviewPackagePlan.expiresAt !== undefined && reviewPackagePlan.expiresAt * 1000 <= Date.now())
+                            ) {
+                              applyPackages.reset();
+                              planPackages.mutate(reviewPackagePlan.selected.map((item) => item.name));
+                            } else applyPackages.mutate(reviewPackagePlan.planId);
                           }}
                         >
-                          {applyPackages.isPending ? 'Starting update…' : 'Install updates'}
+                          {applyPackages.isPending
+                            ? 'Starting update…'
+                            : planPackages.isPending
+                              ? 'Checking updates…'
+                              : packageNeedsReview
+                                ? 'Review again'
+                                : 'Install updates'}
                         </button>
                       </DialogFooter>
                     </DialogContent>

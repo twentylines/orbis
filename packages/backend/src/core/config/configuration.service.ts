@@ -9,6 +9,7 @@ import * as Sentry from '@sentry/nestjs';
 import { type } from 'arktype';
 import dotenv from 'dotenv';
 import validator from 'validator';
+import { validationDiagnostic } from '@/common/helpers/validation-diagnostics';
 import { LOG_LEVEL_ENUM, type LogLevel, LoggerService } from '../logger/logger.service';
 
 const envSchema = type({
@@ -105,8 +106,9 @@ export class ConfigurationService {
 
     const env = envSchema(conf);
     if (env instanceof type.errors) {
-      this.logger.error(env);
-      throw new Error(`❌ Invalid environment variables ${JSON.stringify(env, null, 2)}`);
+      const message = validationDiagnostic('Invalid server configuration', env, (field) => envSchema.keyof().allows(field));
+      this.logger.error(message);
+      throw new Error(message);
     }
 
     const logLevel = (Object.values(LOG_LEVEL_ENUM) as string[]).includes(env.LOG_LEVEL) ? (env.LOG_LEVEL as LogLevel) : 'info';
@@ -115,7 +117,7 @@ export class ConfigurationService {
     const { NODE_ENV } = process.env;
     const { trustedProxyIps, invalidProxyIps } = parseTrustedProxyIps(env.RUNTIPI_TRUSTED_PROXY_IPS);
     if (invalidProxyIps.length) {
-      this.logger.warn('Dropped invalid RUNTIPI_TRUSTED_PROXY_IPS entries', invalidProxyIps);
+      this.logger.warn('Dropped invalid RUNTIPI_TRUSTED_PROXY_IPS entries', { count: invalidProxyIps.length });
     }
 
     return {
@@ -210,8 +212,8 @@ export class ConfigurationService {
 
       await fs.promises.writeFile(settingsPath, `${JSON.stringify({ ...currentSettings, ...settings }, null, 2)}`, 'utf8');
       this.config.userSettings = { ...this.config.userSettings, ...settings };
-    } catch (error) {
-      this.logger.error('Failed to set user settings', error);
+    } catch {
+      this.logger.error('Failed to set user settings');
       throw new InternalServerErrorException('Failed to set user settings');
     }
   }

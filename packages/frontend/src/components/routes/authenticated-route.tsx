@@ -9,13 +9,15 @@ import { ErrorPage } from '../error/error-page';
 import { DashboardLayout, DashboardLayoutSuspense } from '../layouts/dashboard/layout';
 import { SSEProvider } from '../providers/sse/sse-provider';
 import { RouteWrapper } from './route-wrapper';
+import { safeReturnTo } from '@/desktop/secure-access';
 
 export default () => {
   const { isLoggedIn, isGuestDashboardEnabled } = useUserContext();
-  const { pathname } = useLocation();
+  const { pathname, search, hash } = useLocation();
 
   if (!isLoggedIn && !isGuestDashboardEnabled) {
-    return <Navigate to="/login" replace />;
+    const target = safeReturnTo(pathname + search + hash);
+    return <Navigate to={target ? `/login?${new URLSearchParams({ return_to: target })}` : '/login'} replace />;
   }
 
   if (isGuestDashboardEnabled && !isLoggedIn) {

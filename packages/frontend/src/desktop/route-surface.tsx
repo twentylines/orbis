@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, type CSSProperties, type PropsWithChildren, type ReactNode } from 'react';
-import { revealPageFocus } from './window-viewport';
+import { revealPageFocus, useDesktopWindows } from './window-viewport';
 import { prefersReducedMotion } from './motion-setting';
 import { sectionMotionEasing, sectionMotionTiming, visibleSectionBounds } from './section-motion-geometry';
 import { useDesktopPreferences } from './preferences';
@@ -14,11 +14,14 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
   const measured = useRef<{ key: string; height: number } | null>(null);
   const reveal = useRef<{ animation: Animation; target: number } | null>(null);
   const { preferences } = useDesktopPreferences();
+  const desktop = useDesktopWindows();
+  const fixedCatalogue = desktop && /^\/(?:apps|app-store)(?:\/|$)/.test(section);
   const sizeKey = `${section}:${window.innerWidth}:${preferences.appearance.textScale}`;
   const reserve = useMemo(() => sizes.get(sizeKey) ?? Math.max(280, window.innerHeight - 210), [sizeKey]);
   useLayoutEffect(() => {
     const view = surface.current;
-    if (!view) return;
+    // These catalogues size their scrolling panes from the viewport, not their contents.
+    if (!view || fixedCatalogue) return;
     const animateTo = (from: number, height: number, duration = sectionMotionTiming.surface as number) => {
       reveal.current?.animation.cancel();
       view.dataset.cardRevealing = 'true';
@@ -33,6 +36,8 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
           if (reveal.current?.animation !== animation) return;
           reveal.current = null;
           delete view.dataset.cardRevealing;
+          const active = document.activeElement;
+          if (active instanceof HTMLElement && view.contains(active)) revealPageFocus(active);
         },
         () => undefined,
       );
@@ -101,7 +106,7 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
       reveal.current = null;
       delete view.dataset.cardRevealing;
     };
-  }, [sizeKey]);
+  }, [fixedCatalogue, sizeKey]);
   useLayoutEffect(
     () => () => {
       if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);

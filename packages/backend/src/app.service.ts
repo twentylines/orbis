@@ -19,6 +19,7 @@ import { GithubService } from './utils/github/github.service';
 import YAML from 'yaml';
 import { installationMode } from './common/installation-mode';
 import { QueueFactory } from './modules/queue/queue.factory';
+import { backupMaintenanceActive } from './common/backup-maintenance';
 
 @Injectable()
 export class AppService {
@@ -39,11 +40,16 @@ export class AppService {
     @Inject(DOCKERODE) private docker: Dockerode,
   ) {}
 
-  public async bootstrap() {
+  public async bootstrap(prepareRecovery: () => Promise<void> = async () => undefined) {
     const installation = installationMode();
     await this.databaseService.migrate();
+    await prepareRecovery();
     if (installation.phase === 'hold') {
       this.logger.info('Installation mode: database prepared; app services remain held.');
+      return;
+    }
+    if (backupMaintenanceActive()) {
+      this.logger.warn('Full backup recovery needs review. App startup changes remain held.');
       return;
     }
     if (installation.phase === 'resume') {
@@ -53,10 +59,9 @@ export class AppService {
     try {
       if (installation.phase === 'normal') await this.docker.pruneNetworks({ filters: { label: ['orbis.managed=true'] } });
 
-      const { version, userSettings, __prod__ } = this.configuration.getConfig();
-      const config = this.configuration.getConfig();
-      this.logger.info('Log level', config.userSettings.logLevel);
-      this.logger.debug('Starting with configuration', config);
+      const { version, userSettings, __prod__, architecture } = this.configuration.getConfig();
+      this.logger.info('Log level', userSettings.logLevel);
+      this.logger.debug('Starting server', { version, architecture, logLevel: userSettings.logLevel });
 
       this.configuration.initSentry({ release: version, allowSentry: userSettings.allowErrorMonitoring });
 

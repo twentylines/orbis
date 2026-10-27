@@ -17,7 +17,7 @@
     "test:db": "docker compose -f ./src/tests/db.compose.yml up -d",
     "studio": "drizzle-kit studio",
     "gen:migrations": "drizzle-kit generate",
-    "test:runtime": "bun test scripts/package-runtime-dependencies.test.ts"
+    "test:runtime": "bun test scripts/package-runtime-dependencies.test.ts scripts/production-artifact-privacy.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",

@@ -12,6 +12,9 @@ FROM bun_base AS builder_base
 
 WORKDIR /deps
 
+ENV DO_NOT_TRACK=1 \
+    TURBO_TELEMETRY_DISABLED=1
+
 ARG TARGETARCH
 ARG DOCKER_COMPOSE_VERSION="v2.40.0"
 ENV TARGETARCH=${TARGETARCH}
@@ -35,11 +38,6 @@ RUN apk add --no-cache curl openssl git file tar coreutils
 # ---- BUILDER ----
 FROM builder_base AS builder
 
-ARG TIPI_VERSION
-ARG LOCAL
-
-ENV SENTRY_RELEASE=${TIPI_VERSION}
-
 WORKDIR /app
 
 COPY ./bun.lock ./
@@ -57,15 +55,8 @@ COPY ./turbo.json ./turbo.json
 COPY ./packages ./packages
 RUN bun run build
 
-RUN echo "TIPI_VERSION: ${SENTRY_RELEASE}"
-RUN echo "LOCAL: ${LOCAL}"
-
 RUN bun run bundle
 RUN bun packages/backend/scripts/package-runtime-dependencies.ts /app/packages/backend /app/runtime-node-modules /app/bun.lock
-RUN --mount=type=secret,id=sentry_token,env=SENTRY_AUTH_TOKEN if [ "${LOCAL}" != "true" ]; then \
-  cd ./packages/backend && \
-  bun run sentry:sourcemaps; \
-  fi
 
 # ---- RUNNER ----
 FROM runner_base AS runner
@@ -97,6 +88,6 @@ COPY --from=builder /app/packages/frontend/dist/client ./assets/frontend
 
 EXPOSE 3000
 
-RUN mv main.js main.mjs
+RUN mv main.js main.mjs && mv restore-worker.js restore-worker.mjs
 
 CMD ["node", "./main.mjs"]

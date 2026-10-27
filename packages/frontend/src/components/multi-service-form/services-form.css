@@ -1,5 +1,10 @@
 .service-compose-panel {
   container-type: inline-size;
+  margin-top: 16px;
+  overflow: clip;
+  border: 1px solid var(--desktop-line);
+  border-radius: 18px;
+  background: var(--desktop-surface);
 }
 .service-form-layout {
   display: grid;
@@ -17,15 +22,29 @@
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
-  padding: 16px;
+  padding: 16px 20px;
 }
 .service-form-sidebar-header > .fw-bold {
-  flex: 1 1 8em;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .service-form-content {
+  container: service-options / inline-size;
   min-width: 0;
-  padding-inline: 0.5rem;
+  padding-inline: 20px;
+}
+.service-config-fields {
+  padding-inline: 0;
+  padding-block: 18px 24px;
+}
+.service-form-sidebar .list-group {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+.service-form-sidebar .list-group-item {
+  border: 0;
+  border-radius: 12px;
 }
 @container (min-width: 42em) {
   .service-form-layout {
@@ -42,6 +61,38 @@
   gap: 8px;
   min-width: 0;
   margin: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.service-config-compact {
+  display: none;
+}
+.service-config-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.service-config-option > svg {
+  flex: none;
+}
+.service-config-option > span {
+  min-width: 0;
+  line-height: 1.5;
+}
+@container service-options (max-width: 48em) {
+  .service-form-content .service-config-tabs {
+    display: none;
+  }
+  .service-config-compact {
+    display: block;
+    padding-block: 12px;
+    border-bottom: 1px solid var(--desktop-line);
+  }
+  .service-config-compact .service-config-select {
+    width: 100%;
+    min-height: 44px;
+  }
 }
 .service-config-tabs > .nav-item-c {
   flex: 0 1 auto;
@@ -59,7 +110,23 @@
   min-height: 44px;
   margin: 0;
   padding: 10px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--desktop-muted);
+  font-weight: 600;
   white-space: normal;
+}
+.service-config-tabs .nav-item-c .nav-link.active {
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  font-weight: 600;
+}
+.service-config-tabs .nav-item-c .nav-link:hover {
+  background: color-mix(in srgb, var(--desktop-accent) 8%, var(--desktop-surface));
+}
+.service-config-tabs .nav-link :is(.nav-link-icon-c, .nav-link-title-c) {
+  color: inherit;
 }
 .service-config-tabs .nav-link-icon-c {
   flex: none;
@@ -127,9 +194,11 @@
 
 .service-selector {
   gap: 8px;
+  padding: 4px 8px;
 }
 .service-selector-name {
   min-width: 0;
+  min-height: 44px;
   flex: 1;
   padding: 8px 0;
   border: 0;
@@ -142,8 +211,8 @@
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid var(--desktop-line);
   border-radius: 10px;
@@ -160,11 +229,22 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 20px;
+  border-top: 1px solid var(--desktop-line);
 }
 .service-form-footer > .btn {
-  flex: 1 1 140px;
-  min-width: min(100%, 140px);
+  flex: 0 1 auto;
+  min-width: min(100%, 8em);
   white-space: normal;
+}
+body:has(.orbis-theme) .service-form-footer > .btn {
+  min-height: 44px;
+}
+@media (max-width: 450px) {
+  .service-form-footer > .btn {
+    flex: 1 1 8em;
+  }
 }
 .service-form-footer > div {
   order: 3;

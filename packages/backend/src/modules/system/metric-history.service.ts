@@ -8,6 +8,7 @@ import { LoggerService } from '@/core/logger/logger.service';
 import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { SystemService } from './system.service';
 import { installationHeld } from '@/common/installation-mode';
+import { enterBackupMutation } from '@/common/backup-maintenance';
 import { decodeBucket, encodeBucket, historyPoint, mergeBuckets, metricSample, type MetricBucket } from './metric-history.model';
 
 const retentionMs = 7 * 86400000;
@@ -120,6 +121,11 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
     if (this.unreadable) return;
     const line = `${encodeBucket(bucket)}\n`;
     this.writes = this.writes.then(async () => {
+      const release = enterBackupMutation();
+      if (!release) {
+        this.needsCompact = true;
+        return;
+      }
       const file = this.file();
       const temporary = `${file}.${randomUUID()}.tmp`;
       try {
@@ -143,6 +149,7 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
         this.needsCompact = true;
       } finally {
         await fs.rm(temporary, { force: true }).catch(() => undefined);
+        release();
       }
     });
   }

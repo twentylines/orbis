@@ -1,8 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
 import * as argon2 from 'argon2';
+import { randomBytes } from 'node:crypto';
 
 @Injectable()
-export class PasswordService {
+export class PasswordService implements OnModuleInit {
+  private fallback?: Promise<string>;
+
+  onModuleInit() {
+    return this.loginFallbackHash().then(() => undefined);
+  }
+
+  public loginFallbackHash() {
+    // Unknown accounts still perform a real password check using the current hashing cost.
+    this.fallback ??= this.hash(randomBytes(32).toString('hex'));
+    return this.fallback;
+  }
   /**
    * Hash a password asynchronously
    * @param password - The plain text password to hash

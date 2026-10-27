@@ -1,0 +1,51 @@
+.orbis-checkbox.form-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border-radius: 10px;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+.orbis-checkbox:has(.form-check-label) {
+  justify-content: flex-start;
+}
+.orbis-checkbox.form-check > .form-check-input {
+  float: none;
+  flex: none;
+  width: 1.25rem;
+  min-width: 1.25rem;
+  max-width: none;
+  height: 1.25rem;
+  margin: 0;
+  border: 1px solid var(--desktop-line);
+  border-radius: 6px;
+  background-color: var(--desktop-surface);
+  cursor: inherit;
+}
+.orbis-checkbox:has(.form-check-input:focus-visible) {
+  background-color: color-mix(in srgb, var(--desktop-accent) 18%, var(--desktop-surface));
+}
+body:has(.orbis-theme) .orbis-checkbox .form-check-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.orbis-checkbox:has(.form-check-input:disabled) {
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-checkbox.form-check {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  body:has(.orbis-theme) .orbis-checkbox .form-check-input:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

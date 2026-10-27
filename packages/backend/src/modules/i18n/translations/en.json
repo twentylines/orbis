@@ -336,7 +336,7 @@
   "APP_RESTORE_ERROR": "Failed to restore {{id}}, see logs for more details",
   "AUTH_ERROR_ADMIN_ALREADY_EXISTS": "An administrator account already exists. Log in.",
   "AUTH_ERROR_ERROR_CREATING_USER": "Could not create the account.",
-  "AUTH_ERROR_INVALID_CREDENTIALS": "Incorrect email address or password.",
+  "AUTH_ERROR_INVALID_CREDENTIALS": "Incorrect username or password.",
   "AUTH_ERROR_INVALID_PASSWORD": "Incorrect password.",
   "AUTH_ERROR_INVALID_PASSWORD_LENGTH": "Password must be at least 8 characters long",
   "AUTH_ERROR_INVALID_USERNAME": "Invalid username",

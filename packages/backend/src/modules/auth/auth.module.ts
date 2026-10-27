@@ -12,5 +12,6 @@ import { PasskeyService } from './passkey.service';
   imports: [UserModule, EncryptionModule, PasswordModule],
   controllers: [AuthController],
   providers: [AuthService, SessionManager, PasskeyStore, PasskeyService],
+  exports: [AuthService],
 })
 export class AuthModule {}

@@ -1,0 +1,153 @@
+.desktop-auth-stages {
+  margin: -8px;
+}
+.desktop-auth-stage-frame {
+  position: relative;
+  overflow: clip;
+}
+.desktop-auth-stage {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  padding: 8px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.desktop-auth-stage[data-active="true"] {
+  position: relative;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.desktop-auth-feedback {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--desktop-negative) 46%, var(--desktop-line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-negative) 9%, var(--desktop-surface));
+  color: var(--desktop-negative);
+  text-align: start;
+}
+.desktop-auth-feedback svg {
+  flex: none;
+}
+.desktop-auth-feedback p {
+  min-width: 0;
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+body:has(.orbis-theme) .desktop-auth .desktop-auth-stage input[aria-invalid="true"] {
+  border-color: var(--desktop-negative);
+  box-shadow: none;
+  background: color-mix(in srgb, var(--desktop-negative) 5%, var(--desktop-surface));
+  background-image: none;
+}
+.desktop-auth-code-controls {
+  display: grid;
+  gap: 24px;
+  width: 100%;
+  margin-top: 24px;
+}
+.desktop-auth-code-controls .desktop-auth-feedback,
+.desktop-login-actions .desktop-auth-feedback {
+  margin-top: 0;
+}
+.desktop-auth-verifying {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.5;
+}
+.desktop-auth-code-controls .otp-group {
+  max-width: none;
+}
+.desktop-auth-back {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+.desktop-auth-passkey {
+  display: grid;
+  gap: 24px;
+}
+.desktop-auth-passkey-symbol {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
+  color: var(--desktop-accent);
+}
+.desktop-auth-passkey .desktop-auth-heading {
+  margin: 0;
+}
+.desktop-auth-passkey p {
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.6;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-orbis-motion="reduced"]) .desktop-auth-stage[data-active="true"] .desktop-auth-passkey-symbol svg {
+    animation: orbis-passkey-breathe 2s ease-in-out infinite alternate;
+  }
+  html:not([data-orbis-motion="reduced"]) .desktop-auth-feedback {
+    animation: orbis-auth-feedback-in 180ms cubic-bezier(0.22, 0.8, 0.24, 1);
+  }
+  html:not([data-orbis-motion="reduced"]) .desktop-auth-verifying svg {
+    animation: orbis-code-verifying 0.8s linear infinite;
+  }
+}
+@keyframes orbis-code-verifying {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes orbis-auth-feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes orbis-passkey-breathe {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.desktop-auth-recovery {
+  display: grid;
+  gap: 24px;
+}
+.desktop-auth-recovery .desktop-auth-heading,
+.desktop-auth-recovery .desktop-auth-back,
+.desktop-auth-recovery-command {
+  margin: 0;
+}
+.desktop-auth-recovery-command {
+  padding: 16px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-code-background);
+  color: var(--desktop-ink);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}

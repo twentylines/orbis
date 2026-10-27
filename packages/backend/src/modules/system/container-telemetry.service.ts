@@ -15,19 +15,59 @@ function checkTime(value: unknown) {
   return Number.isFinite(timestamp) && timestamp > 0 && timestamp <= Date.now() + 5000 ? new Date(timestamp).toISOString() : null;
 }
 
+function healthcheckIssue(output: unknown): NonNullable<ContainerReading['readiness']>['lastCheckIssue'] {
+  if (typeof output !== 'string') return null;
+  const text = output.slice(0, 4096);
+  if (/curl: \(6\)|could not resolve|name or service not known|EAI_AGAIN/i.test(text)) return 'dns';
+  if (/curl: \(28\)|timed? out|healthcheck exceeded timeout/i.test(text)) return 'timeout';
+  if (/curl: \(7\)|connection refused|ECONNREFUSED|failed to connect|could not connect to server/i.test(text)) return 'connection';
+  if (/permission denied|operation not permitted/i.test(text)) return 'permission';
+  if (/HTTP\/\S+\s+(?:401|403)\b|\bUnauthorized\b|\bForbidden\b/i.test(text)) return 'http-auth';
+  if (/curl: \(22\)|HTTP\/\S+\s+[45]\d\d\b/i.test(text)) return 'http-error';
+  if (/command not found|executable (?:file )?not found/i.test(text)) return 'command-missing';
+  return null;
+}
+
+function healthcheckPort(test: string[] | undefined) {
+  if (!Array.isArray(test) || test.length > 16 || test.some((part) => typeof part !== 'string' || part.length > 4096)) return null;
+  const ports = new Set<number>();
+  for (const match of test.join('\n').matchAll(/(?:^|[\s/'"])(?:localhost|127\.0\.0\.1|\[::1\]):([^/\s'"?&#;|)]+)/g)) {
+    if (!match[1] || !/^\d{1,5}$/.test(match[1])) return null;
+    const port = safeInteger(Number(match[1]), 1, 65535);
+    if (port === null) return null;
+    ports.add(port);
+  }
+  return ports.size === 1 ? [...ports][0] : null;
+}
+
+function configuredPort(environment: string[] | undefined) {
+  for (let index = (environment?.length ?? 0) - 1; index >= 0; index--) {
+    const entry = environment?.[index];
+    if (typeof entry !== 'string' || !entry.startsWith('PORT=')) continue;
+    const setting = entry.slice(5);
+    return /^\d{1,5}$/.test(setting) ? safeInteger(Number(setting), 1, 65535) : null;
+  }
+  return null;
+}
+
 export function containerReadiness(inspection: Dockerode.ContainerInspectInfo): NonNullable<ContainerReading['readiness']> {
   const health = inspection.State.Health;
   const lastCheck = Array.isArray(health?.Log) ? health.Log.at(-1) : undefined;
   const interval = safeInteger(inspection.Config?.Healthcheck?.Interval, 1);
   const startPeriod = safeInteger(inspection.Config?.Healthcheck?.StartPeriod);
+  const exitCode = safeInteger(lastCheck?.ExitCode, -2147483648, 2147483647);
+  const failed = (health?.Status === 'unhealthy' || health?.Status === 'starting') && exitCode !== null && exitCode !== 0;
   return {
     failingStreak: safeInteger(health?.FailingStreak),
-    lastCheckExitCode: safeInteger(lastCheck?.ExitCode, -2147483648, 2147483647),
+    lastCheckExitCode: exitCode,
     lastCheckAt: checkTime(lastCheck?.End),
     intervalSeconds: interval === null ? null : interval / 1_000_000_000,
     startPeriodSeconds: startPeriod === null ? null : startPeriod / 1_000_000_000,
     oomKilled: typeof inspection.State.OOMKilled === 'boolean' ? inspection.State.OOMKilled : null,
     restartCount: safeInteger(inspection.RestartCount),
+    lastCheckIssue: failed ? healthcheckIssue(lastCheck?.Output) : null,
+    healthcheckPort: failed ? healthcheckPort(inspection.Config?.Healthcheck?.Test) : null,
+    configuredPort: failed ? configuredPort(inspection.Config?.Env) : null,
   };
 }
 

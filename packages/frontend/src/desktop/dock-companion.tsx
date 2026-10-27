@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { prefersReducedMotion } from './motion-setting';
 import { dockMotionDuration, sectionMotionEasing } from './section-motion-geometry';
+import { canJoinDockPills } from './dock-motion-geometry';
 
 const shapeEvent = 'orbis-dock-shape';
 
@@ -166,9 +167,9 @@ const rounded = (box: Box) => {
   return `M${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h - r}Q${x + w},${y + h} ${x + w - r},${y + h}H${x + r}Q${x},${y + h} ${x},${y + h - r}V${y + r}Q${x},${y} ${x + r},${y}Z`;
 };
 
-function bridge(left: Box, right: Box) {
+function bridge(left: Box, right: Box, moving: boolean) {
   const gap = right.left - left.right;
-  if (gap >= 12 || gap < -16) return '';
+  if (!canJoinDockPills(gap, moving)) return '';
   const middle = (Math.max(left.top, right.top) + Math.min(left.bottom, right.bottom)) / 2;
   const end = Math.min(left.height, right.height) * 0.38;
   const neck = end * Math.min(1, Math.max(0, (12 - gap) / 12));
@@ -226,6 +227,7 @@ export function DockGlass() {
       const primary = dock.querySelector<HTMLElement>('.desktop-dock-main');
       if (!primary) return;
       const main = read(primary);
+      const moving = Boolean(dock.querySelector('[data-pill-motion]'));
       const trayWidth = dock.querySelector<HTMLElement>('.orbis-app-tray')?.offsetWidth ?? 0;
       const activitySpace = `${Math.min(400, Math.max(64, (Number.parseFloat(style.maxWidth) || innerWidth - 48) - main.width - trayWidth - 24))}px`;
       if (dock.style.getPropertyValue('--orbis-activity-space') !== activitySpace) dock.style.setProperty('--orbis-activity-space', activitySpace);
@@ -246,8 +248,8 @@ export function DockGlass() {
             if (shape.width > 0) shapes.push(shape);
           }
           shapes.sort((a, b) => a.left - b.left);
-          for (const [index, shape] of shapes.entries()) path += rounded(shape) + bridge(shape, shapes[index + 1] ?? main);
-        } else path += rounded(box) + (side === 'left' ? bridge(box, main) : '');
+          for (const [index, shape] of shapes.entries()) path += rounded(shape) + bridge(shape, shapes[index + 1] ?? main, moving);
+        } else path += rounded(box) + (side === 'left' ? bridge(box, main, moving) : '');
         const covered = side === 'right' ? Math.max(0, main.right - box.left) : Math.max(0, box.right - main.left);
         const controls = inner.querySelector<HTMLElement>('.orbis-app-tray, .desktop-activity-rail, .desktop-activity-trigger');
         if (controls) {

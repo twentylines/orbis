@@ -9,6 +9,8 @@ import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { installationMode } from '@/common/installation-mode';
+import { enterBackupMutation } from '@/common/backup-maintenance';
+import { backupDiskActive } from '@/common/backup-disk';
 import { castAppUrn } from '@/common/helpers/app-helpers';
 import { AppsRepository } from '../apps/apps.repository';
 import { MarketplaceService } from '../marketplace/marketplace.service';
@@ -547,12 +549,17 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
   tick() {
-    if (!this.pending)
+    if (backupDiskActive() && !this.pending) return Promise.resolve();
+    if (!this.pending) {
+      const release = enterBackupMutation();
+      if (!release) return Promise.resolve();
       this.pending = this.run()
         .catch(() => this.logger.warn('An automatic update check failed. No operation will be replayed.'))
         .finally(() => {
           this.pending = undefined;
+          release();
         });
+    }
     return this.pending;
   }
   private healthy(status: HostUpdateStatus) {
@@ -570,6 +577,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private quiet(revision: number) {
     return (
       !this.stopped &&
+      !backupDiskActive() &&
       !this.storageError &&
       this.state.revision === revision &&
       this.state.settings.orbis.enabled &&

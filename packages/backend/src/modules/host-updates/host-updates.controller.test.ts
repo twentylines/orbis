@@ -16,6 +16,42 @@ describe('host update authorization', () => {
   const downgrades = mock<OrbisDowngradeService>();
   const logger = mock<LoggerService>();
 
+  it('restricts physical drive tests to an operator session and exact action fields', async () => {
+    const route = '/host-updates/drives/test';
+    const body = { id: `drive:${'a'.repeat(24)}`, kind: 'short' };
+    for (const authorization of ['Bearer guest-session', 'Bearer fixture-cli']) {
+      expect(
+        (
+          await request(app.getHttpServer())
+            .post(route)
+            .set({ Authorization: authorization, Host: 'orbis.example', Origin: 'http://orbis.example' })
+            .send(body)
+        ).status,
+      ).toBe(403);
+    }
+    const headers = { Authorization: 'Bearer fixture-session', Host: 'orbis.example', Origin: 'http://orbis.example' };
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(route)
+          .set({ ...headers, Origin: 'https://other.example' })
+          .send(body)
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post(route)
+          .set(headers)
+          .send({ ...body, command: 'shell' })
+      ).status,
+    ).toBe(400);
+    expect(hostUpdates.driveTest).not.toHaveBeenCalled();
+    hostUpdates.driveTest.mockResolvedValue({ accepted: true, message: 'Self-test started.' });
+    expect((await request(app.getHttpServer()).post(route).set(headers).send(body)).status).toBe(202);
+    expect(hostUpdates.driveTest).toHaveBeenCalledExactlyOnceWith(body.id, 'short');
+  });
+
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       controllers: [HostUpdatesController],
@@ -292,6 +328,7 @@ describe('host update authorization', () => {
     hostUpdates.packagePlan.mockResolvedValue({
       planId: '00000000-0000-4000-8000-000000000000',
       createdAt: 1,
+      expiresAt: 901,
       selected: [],
       operations: [],
     });

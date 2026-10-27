@@ -674,15 +674,18 @@
   margin: 0;
   color: var(--desktop-muted);
 }
-.workspace-get-started span {
-  display: flex;
+.workspace-get-started .workspace-store-link {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 20px;
+  min-height: 44px;
+  margin-top: 12px;
   color: var(--desktop-accent);
   font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
-.workspace-get-started span svg {
+.workspace-get-started .workspace-store-link svg {
   flex: none;
 }
 @media (max-width: 760px) {
@@ -1349,8 +1352,9 @@
   font-weight: 600;
 }
 .workspace-recent-tasks b[data-status="failed"],
-.workspace-recent-tasks b[data-status="interrupted"] {
-  color: var(--desktop-accent);
+.workspace-recent-tasks b[data-status="interrupted"],
+.workspace-recent-tasks b[data-status="unconfirmed"] {
+  color: var(--desktop-negative);
 }
 .desktop .workspace-apps .workspace-section-heading a {
   color: var(--workspace-heading-ink);

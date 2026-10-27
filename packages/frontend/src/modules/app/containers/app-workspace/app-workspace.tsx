@@ -32,7 +32,7 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
   const updateAvailable = app && app.version < metadata.latestVersion && app.ignoredVersion !== metadata.latestVersion;
 
   return (
-    <div className="app-workspace" data-testid="app-details">
+    <div ref={preview?.onDetailsMount} className="app-workspace" data-testid="app-details">
       <Link
         className="app-workspace-back"
         to={preview?.closePath ?? (fromStore ? `/app-store/${encodeURIComponent(storeId ?? '')}` : '/apps')}

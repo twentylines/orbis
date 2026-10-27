@@ -71,17 +71,15 @@ export function appEmbeddingWarning(check?: AppEmbeddingCheck) {
       };
     return {
       blocked: false,
-      title: 'Embedding may be restricted',
-      description:
-        'The server check found an embedding restriction. Your signed-in browser may receive a different page. Keep using the window if it works, or open a browser tab.',
+      title: 'Server restriction',
+      description: 'The server reports an embedding restriction. Your signed-in browser may differ.',
     };
   }
   if (check?.status === 'unknown' && check.reason === 'unreachable')
     return {
       blocked: false,
-      title: 'Server check unavailable',
-      description:
-        'The server could not complete its compatibility check. This does not mean the app failed in your browser. Keep using the window if it works, or open a browser tab.',
+      title: 'Check unavailable',
+      description: 'The server could not verify this app. Your browser may still connect.',
     };
   return undefined;
 }

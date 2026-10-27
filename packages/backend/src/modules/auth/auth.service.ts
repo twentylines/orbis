@@ -59,13 +59,14 @@ export class AuthService {
 
     const user = await this.userRepository.getUserByUsername(username);
 
-    if (!user) {
-      throw new TranslatableError('AUTH_ERROR_USER_NOT_FOUND', {}, HttpStatus.BAD_REQUEST);
+    let isPasswordValid = false;
+    try {
+      isPasswordValid = await this.passwordService.verify(password, user?.password ?? (await this.passwordService.loginFallbackHash()));
+    } catch {
+      await this.passwordService.verify(password, await this.passwordService.loginFallbackHash()).catch(() => false);
     }
 
-    const isPasswordValid = await this.passwordService.verify(password, user.password);
-
-    if (!isPasswordValid) {
+    if (!user || !isPasswordValid) {
       throw new TranslatableError('AUTH_ERROR_INVALID_CREDENTIALS', {}, HttpStatus.BAD_REQUEST);
     }
 
@@ -147,6 +148,9 @@ export class AuthService {
    * @param {LoginBody} input - An object containing the email and password fields
    */
   public register = async (input: RegisterBody) => {
+    if (await this.userRepository.getFirstOperator()) {
+      throw new TranslatableError('AUTH_ERROR_ADMIN_ALREADY_EXISTS', {}, HttpStatus.FORBIDDEN);
+    }
     const { password, username } = input;
     const identifier = normalizeNewUsername(username);
 

@@ -44,7 +44,7 @@ export const AddAppStoreDialog = () => {
   const formId = useId();
 
   return (
-    <div className="mt-3 align-self-end">
+    <div className="mt-3">
       <Button
         onClick={() => {
           if (createAppStore.isError) createAppStore.reset();

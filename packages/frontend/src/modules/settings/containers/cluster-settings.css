@@ -27,6 +27,10 @@
   padding: 25px 0;
   border-top: 1px solid var(--desktop-line);
 }
+.cluster-settings-section:first-child {
+  border-top: 0;
+  padding-top: 8px;
+}
 .cluster-settings-section > * {
   min-width: 0;
 }
@@ -72,7 +76,7 @@
 .cluster-settings-input-action {
   display: flex;
   flex-wrap: wrap;
-  align-items: start;
+  align-items: stretch;
   gap: 10px;
   width: 100%;
 }
@@ -81,6 +85,7 @@
 }
 .cluster-settings-input-action > button {
   flex: 0 1 auto;
+  align-self: stretch;
 }
 .cluster-settings-form > .cluster-settings-checkbox {
   display: flex;

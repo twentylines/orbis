@@ -27,8 +27,8 @@ const Switch = ({ className, label, id, ...props }: SwitchProps) => {
         if (event.target instanceof Element && event.target.closest('.form-help') && !event.target.closest('button,a')) event.preventDefault();
       }}
     >
-      <SwitchPrimitives.Root id={controlId} aria-labelledby={labelId} className="form-check-input switch-root" {...props}>
-        <SwitchPrimitives.Thumb />
+      <SwitchPrimitives.Root id={controlId} aria-labelledby={labelId} className="switch-root" {...props}>
+        <SwitchPrimitives.Thumb className="switch-thumb" />
       </SwitchPrimitives.Root>
       <span id={labelId} className="form-check-label text-muted">
         {label}

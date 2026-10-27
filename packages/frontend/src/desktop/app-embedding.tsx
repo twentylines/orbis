@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { AppLaunchRequest } from './app-window-state';
 import { appEmbeddingBoundary, type AppEmbeddingCheck } from './app-opening';
@@ -34,6 +34,7 @@ export const useBlockedAppEmbeds = () => useContext(EmbeddingContext).blocked;
 export function useAppEmbedding(request: AppLaunchRequest, enabled: boolean) {
   const { report } = useContext(EmbeddingContext);
   const url = request.launchUrl ?? '';
+  const refreshNext = useRef(false);
   const check = useQuery({
     queryKey: ['app-embedding', request.urn, url, window.location.origin],
     enabled,
@@ -44,6 +45,10 @@ export function useAppEmbedding(request: AppLaunchRequest, enabled: boolean) {
     queryFn: async ({ signal }): Promise<AppEmbeddingCheck> => {
       if (!url || request.urn.includes('/')) return { status: 'unknown', reason: 'unverified-destination' };
       const params = new URLSearchParams({ destination: url, parentOrigin: window.location.origin });
+      if (refreshNext.current) {
+        params.set('refresh', 'true');
+        refreshNext.current = false;
+      }
       try {
         const response = await fetch(`/api/apps/${encodeURIComponent(request.urn)}/embedding-compatibility?${params}`, {
           signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
@@ -64,5 +69,11 @@ export function useAppEmbedding(request: AppLaunchRequest, enabled: boolean) {
   useEffect(() => {
     report(request.urn, url);
   }, [request.urn, url, report]);
-  return check;
+  return {
+    ...check,
+    recheck: () => {
+      refreshNext.current = true;
+      return check.refetch();
+    },
+  };
 }

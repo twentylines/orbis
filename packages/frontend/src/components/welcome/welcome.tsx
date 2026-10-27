@@ -4,22 +4,34 @@ import { AuthLayout } from '@/components/layouts/auth/layout';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { useAppContext } from '@/context/app-context';
 import {
   automaticUpdateSettingsOptions,
+  readAppUpdateSchedule,
   saveAutomaticUpdateSettings,
   saveAppUpdateSchedule,
   type AutomaticUpdateSettings,
 } from '@/desktop/automatic-updates-api';
 import { DesktopPreferencesPreview, useDesktopPreferences } from '@/desktop/preferences';
 import { AppLaunchModeChoice } from '@/desktop/app-launch-mode-choice';
-import { useReducedMotion } from '@/desktop/motion-preferences';
+import { useReducedMotion, useReducedTransparency } from '@/desktop/motion-preferences';
 import { themePresets, presetLabels, presetWallpaperPreviews } from '@/desktop/wallpaper-presets';
-import { IconArrowLeft, IconArrowRight, IconCheck, IconDeviceDesktop, IconLeaf, IconMoon, IconSparkles, IconSun } from '@tabler/icons-react';
+import {
+  IconArrowLeft,
+  IconArrowRight,
+  IconCheck,
+  IconChevronDown,
+  IconDeviceDesktop,
+  IconLeaf,
+  IconMoon,
+  IconSparkles,
+  IconSun,
+} from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { saveSetupSteps, type SetupSaveStep } from './setup-save';
+import { saveSetupSteps, setupAppUpdateSteps, type SetupAppChoices, type SetupSaveStep } from './setup-save';
 import './welcome.css';
 
 const steps = ['Your server', 'Colour', 'Wallpaper', 'Performance', 'Updates', 'Ready'] as const;
@@ -32,6 +44,7 @@ const descriptions = [
   'Your workspace is ready. Review your choices and make it yours.',
 ];
 const defaultAutomatic: AutomaticUpdateSettings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
+const validScheduleTime = (time: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
 
 export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolean }) => {
   const { preferences, completeOnboarding, syncState } = useDesktopPreferences();
@@ -50,11 +63,20 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const [error, setError] = useState('');
   const savingLock = useRef(false);
   const receipts = useRef(new Map<string, string>());
-  const acceptedApps = useRef(new Map<string, string>());
+  const touchedApps = useRef<SetupAppChoices>(new Map());
+  const lastValidTime = useRef(defaultAutomatic.schedule.time);
   const heading = useRef<HTMLHeadingElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
+  const [stageScroll, setStageScroll] = useState({ overflow: false, below: false });
   const firstStep = useRef(true);
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
+  const reduceTransparency = useReducedTransparency();
+  const reduceSetupMotion = reduceMotion || draft.appearance.motion === 'reduced' || draft.appearance.lowEffects;
+  const glassEnabled =
+    !draft.appearance.lowEffects &&
+    draft.appearance.glassBlur !== 0 &&
+    (draft.appearance.transparency === 'glass' || (draft.appearance.transparency === 'system' && !reduceTransparency));
   const canManageUpdates = user.operator;
   const updateSettings = useQuery({ ...automaticUpdateSettingsOptions(), enabled: canManageUpdates && step >= 4 });
   const installed = useQuery({
@@ -66,10 +88,15 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const eligibleApps = installed.data?.installed.filter(({ info }) => !info.urn.endsWith(':_user')) ?? [];
   const selectedApps = eligibleApps.filter(({ info }) => appChoices.includes(info.urn));
   const nameValid = name.trim().length > 0 && name.trim().length <= 40;
-  const scheduleValid = (!automaticEdited && appChoices.length === 0) || /^([01]\d|2[0-3]):[0-5]\d$/.test(automatic.schedule.time);
+  const sharedScheduleNeeded = (automatic.orbis.enabled && automatic.orbis.mode === 'scheduled') || appChoices.length > 0;
+  const timeValid = validScheduleTime(automatic.schedule.time);
+  const scheduleValid = !sharedScheduleNeeded || timeValid;
 
   useEffect(() => {
-    if (updateSettings.data && !automaticEdited) setAutomatic(updateSettings.data.settings);
+    if (updateSettings.data && !automaticEdited) {
+      setAutomatic(updateSettings.data.settings);
+      if (validScheduleTime(updateSettings.data.settings.schedule.time)) lastValidTime.current = updateSettings.data.settings.schedule.time;
+    }
   }, [updateSettings.data, automaticEdited]);
   useLayoutEffect(() => {
     if (firstStep.current && step === 0) {
@@ -78,6 +105,25 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     }
     heading.current?.focus({ preventScroll: true });
     heading.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }, [step]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Each step replaces the observed section.
+  useLayoutEffect(() => {
+    const element = stage.current;
+    if (!element) return;
+    const measure = () => {
+      const overflow = element.scrollHeight > element.clientHeight + 2;
+      const below = overflow && element.scrollTop + element.clientHeight < element.scrollHeight - 2;
+      setStageScroll((current) => (current.overflow === overflow && current.below === below ? current : { overflow, below }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    element.addEventListener('scroll', measure, { passive: true });
+    return () => {
+      observer.disconnect();
+      element.removeEventListener('scroll', measure);
+    };
   }, [step]);
 
   const go = (next: number) => {
@@ -92,6 +138,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     setSaving(true);
     setError('');
     const completedDraft = { ...draft, serverName: name.trim() };
+    const automaticToSave = timeValid ? automatic : { ...automatic, schedule: { ...automatic.schedule, time: lastValidTime.current } };
     const tasks: SetupSaveStep[] = [
       {
         id: 'Saving reporting preference',
@@ -100,21 +147,14 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       },
     ];
     if (canManageUpdates && automaticEdited)
-      tasks.push({ id: 'Saving Orbis update schedule', value: automatic, save: () => saveAutomaticUpdateSettings(automatic) });
-    const appUpdates = new Map(acceptedApps.current);
-    for (const { info } of selectedApps) appUpdates.set(info.urn, info.name);
-    for (const [urn, appName] of appUpdates) {
-      const mode = appChoices.includes(urn) ? 'global' : 'disabled';
-      tasks.push({
-        id: `app:${urn}`,
-        label: `Saving updates for ${appName}`,
-        value: { urn, mode },
-        save: async () => {
-          await saveAppUpdateSchedule(urn, { mode });
-          acceptedApps.current.set(urn, appName);
-        },
-      });
-    }
+      tasks.push({ id: 'Saving Orbis update schedule', value: automaticToSave, save: () => saveAutomaticUpdateSettings(automaticToSave) });
+    tasks.push(
+      ...setupAppUpdateSteps(
+        selectedApps.map(({ info }) => ({ urn: info.urn, name: info.name })),
+        touchedApps.current,
+        { read: readAppUpdateSchedule, save: saveAppUpdateSchedule },
+      ),
+    );
     tasks.push({ id: 'Opening your workspace', value: completedDraft, save: () => completeOnboarding(name, completedDraft) });
     try {
       await saveSetupSteps(tasks, receipts.current, setSavingStep);
@@ -129,6 +169,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     }
   };
   const setAutomaticDraft = (value: AutomaticUpdateSettings) => {
+    if (validScheduleTime(value.schedule.time)) lastValidTime.current = value.schedule.time;
     setAutomaticEdited(true);
     setAutomatic(value);
   };
@@ -140,7 +181,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
           className="orbis-setup"
           aria-labelledby="setup-heading"
           aria-busy={saving}
-          data-reduced={reduceMotion || draft.appearance.motion === 'reduced' || draft.appearance.lowEffects}
+          data-reduced={reduceSetupMotion}
           onSubmit={(event) => {
             event.preventDefault();
             if (step === steps.length - 1) void save();
@@ -150,7 +191,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
           <header className="orbis-setup-header">
             <span className="orbis-setup-eyebrow">Make yourself at home</span>
             <div className="orbis-setup-progress-label">
-              <span>{steps[step]}</span>
+              <span>Customisation</span>
               <span>
                 {step + 1} / {steps.length}
               </span>
@@ -167,7 +208,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
               <span style={{ transform: `scaleX(${(step + 1) / steps.length})` }} />
             </div>
           </header>
-          <div className="orbis-setup-stage" data-direction={direction}>
+          <div ref={stage} id="setup-choices" className="orbis-setup-stage" data-direction={direction}>
             <section key={step} className="orbis-setup-step" aria-labelledby="setup-heading">
               <div className="orbis-setup-intro">
                 <h2 ref={heading} id="setup-heading" tabIndex={-1}>
@@ -289,7 +330,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                     <div className="orbis-setup-performance">
                       {(
                         [
-                          { low: false, title: 'Full experience', text: 'Glass, depth and fluid motion.', Icon: IconSparkles },
+                          { low: false, title: 'Full experience', text: 'Backdrop blur, depth and fluid motion.', Icon: IconSparkles },
                           { low: true, title: 'Save resources', text: 'Solid surfaces and less movement for lighter browsing.', Icon: IconLeaf },
                         ] as const
                       ).map(({ low, title, text, Icon }) => (
@@ -305,6 +346,30 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                           {draft.appearance.lowEffects === low ? <IconCheck size={18} aria-hidden="true" /> : null}
                         </button>
                       ))}
+                    </div>
+                    <div className="orbis-setup-choice-group">
+                      <Switch
+                        label="Background blur"
+                        checked={glassEnabled}
+                        disabled={draft.appearance.lowEffects}
+                        aria-describedby="setup-glass-help"
+                        onCheckedChange={(enabled) =>
+                          setDraft({
+                            ...draft,
+                            appearance: {
+                              ...draft.appearance,
+                              transparency: enabled ? 'glass' : 'solid',
+                              glassBlur: enabled && draft.appearance.glassBlur === 0 ? null : draft.appearance.glassBlur,
+                              chromeBlur: enabled && draft.appearance.chromeBlur === 0 ? null : draft.appearance.chromeBlur,
+                            },
+                          })
+                        }
+                      />
+                      <p id="setup-glass-help" className="orbis-setup-help">
+                        {draft.appearance.lowEffects
+                          ? 'Save resources uses solid panels with no blur.'
+                          : 'Softens the wallpaper behind panels during setup, sign-in and in your workspace. Turn off for solid panels.'}
+                      </p>
                     </div>
                     <Switch
                       label="Reduce movement"
@@ -346,21 +411,21 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                           )}
                           {automatic.orbis.enabled ? (
                             <div className="orbis-setup-schedule">
-                              <label htmlFor="setup-update-mode">When to update</label>
-                              <select
-                                id="setup-update-mode"
-                                className="form-select"
+                              <Select
                                 value={automatic.orbis.mode}
-                                onChange={(event) =>
-                                  setAutomaticDraft({
-                                    ...automatic,
-                                    orbis: { ...automatic.orbis, mode: event.target.value as 'idle' | 'scheduled' },
-                                  })
-                                }
+                                onValueChange={(mode) => {
+                                  if (mode === 'idle' || mode === 'scheduled')
+                                    setAutomaticDraft({ ...automatic, orbis: { ...automatic.orbis, mode } });
+                                }}
                               >
-                                <option value="idle">When Orbis is idle</option>
-                                <option value="scheduled">At a scheduled time</option>
-                              </select>
+                                <SelectTrigger id="setup-update-mode" label="When to update" value={automatic.orbis.mode}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="idle">When Orbis is idle</SelectItem>
+                                  <SelectItem value="scheduled">At a scheduled time</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                           ) : null}
                         </>
@@ -405,10 +470,12 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                       </details>
                       {updateSettings.data ? (
                         <p className="orbis-setup-help">
-                          Shared daily app time: {automatic.schedule.time} ({automatic.schedule.timezone}). Custom apps stay manual.
+                          {timeValid || !sharedScheduleNeeded
+                            ? `Shared daily app time: ${timeValid ? automatic.schedule.time : lastValidTime.current} (${automatic.schedule.timezone}). Custom apps stay manual.`
+                            : 'Choose a daily update time below. Custom apps stay manual.'}
                         </p>
                       ) : null}
-                      {(automatic.orbis.enabled && automatic.orbis.mode === 'scheduled') || appChoices.length > 0 ? (
+                      {sharedScheduleNeeded ? (
                         <div className="orbis-setup-schedule">
                           <Input
                             label="Update time"
@@ -416,6 +483,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                             type="time"
                             required
                             value={automatic.schedule.time}
+                            error={timeValid ? undefined : 'Choose a valid daily update time.'}
                             onChange={(event) => setAutomaticDraft({ ...automatic, schedule: { ...automatic.schedule, time: event.target.value } })}
                           />
                           <p className="orbis-setup-help">
@@ -457,6 +525,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                         <dt>Performance</dt>
                         <dd>
                           {draft.appearance.lowEffects ? 'Save resources' : 'Full experience'}
+                          {!draft.appearance.lowEffects && !glassEnabled ? ' · Solid panels' : ''}
                           {draft.appearance.motion === 'reduced' ? ' · Reduced movement' : ''}
                         </dd>
                       </div>
@@ -468,9 +537,17 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                         <dt>Automatic updates</dt>
                         <dd>
                           {automaticEdited ? (automatic.orbis.enabled ? 'Orbis enabled' : 'Orbis manual') : 'Existing preferences kept'} ·{' '}
-                          {appChoices.length ? `${appChoices.length} apps selected` : 'No app changes'}
+                          {appChoices.length ? `${appChoices.length} ${appChoices.length === 1 ? 'app' : 'apps'} selected` : 'No apps selected'}
                         </dd>
                       </div>
+                      {sharedScheduleNeeded ? (
+                        <div>
+                          <dt>Daily schedule</dt>
+                          <dd>
+                            {automatic.schedule.time} · {automatic.schedule.timezone}
+                          </dd>
+                        </div>
+                      ) : null}
                     </dl>
                     <div className="orbis-setup-reporting">
                       <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Send error reports" />
@@ -492,7 +569,28 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
               <IconArrowLeft size={18} aria-hidden="true" />
               Back
             </Button>
-            <output aria-live="polite">{saving ? savingStep : 'Your choices are saved when you finish.'}</output>
+            <div className="orbis-setup-footer-status">
+              {!saving && stageScroll.overflow ? (
+                <button
+                  type="button"
+                  className="orbis-setup-scroll-hint"
+                  aria-controls="setup-choices"
+                  data-below={stageScroll.below}
+                  onClick={() => {
+                    const element = stage.current;
+                    if (!element) return;
+                    const behavior = reduceSetupMotion ? 'instant' : 'smooth';
+                    if (stageScroll.below) element.scrollBy({ top: Math.max(120, element.clientHeight * 0.75), behavior });
+                    else element.scrollTo({ top: 0, behavior });
+                  }}
+                >
+                  {stageScroll.below ? 'More below' : 'Back to top'}
+                  <IconChevronDown size={18} aria-hidden="true" />
+                </button>
+              ) : (
+                <output aria-live="polite">{saving ? savingStep : 'Your choices are saved when you finish.'}</output>
+              )}
+            </div>
             <Button
               type="submit"
               intent="primary"

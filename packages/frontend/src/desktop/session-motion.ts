@@ -70,7 +70,7 @@ export function animateAuthExit(reduced: boolean) {
       ? element.animate(
           [
             { opacity: current?.opacity ?? '1', transform: current?.transform ?? 'none' },
-            { opacity: 0, transform: 'translateY(-16px) scale(.985)' },
+            { opacity: 0, transform: current?.transform ?? 'none' },
           ],
           { duration: 360, easing: 'cubic-bezier(.22, .7, .24, 1)', fill: 'forwards' },
         )

@@ -5,6 +5,7 @@ import { useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode,
 import { readCachedAppearance, appearanceCacheEvent, type CachedAppearance } from '@/desktop/appearance-cache';
 import { isLoggingOff } from '@/desktop/session-motion';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
+import { createPortal } from 'react-dom';
 
 const viewportGutterProperty = '--orbis-startup-viewport-gutter';
 export const startupViewportBootstrap = `requestAnimationFrame(()=>document.documentElement.style.setProperty('${viewportGutterProperty}',Math.max(0,window.innerWidth-document.documentElement.clientWidth)+'px'));
@@ -64,7 +65,7 @@ export function StartupSurface({
   }, []);
   const current = appearance ?? cached;
   const mode = useResolvedColourMode(current?.mode ?? 'light');
-  return (
+  const content = (
     <div
       ref={surface}
       className={`orbis-startup${current ? ' orbis-theme' : ''}${loggingOff ? ' orbis-logout-surface' : signingIn ? ' orbis-login-surface' : status ? ' orbis-update-surface' : ''}${overlay ? ' orbis-startup-overlay' : ''}`}
@@ -125,4 +126,5 @@ export function StartupSurface({
       </div>
     </div>
   );
+  return overlay && !initial && typeof document !== 'undefined' ? createPortal(content, document.body) : content;
 }

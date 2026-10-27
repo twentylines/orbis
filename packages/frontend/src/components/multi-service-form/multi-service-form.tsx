@@ -1,5 +1,6 @@
 import './services-form.css';
 import { Button } from '@/components/ui/Button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { arktypeResolver } from '@hookform/resolvers/arktype';
 import { dynamicComposeSchemaArk } from '@runtipi/common/schemas/dynamic-compose-ark';
 import { IconArrowsDownUp, IconCloudDataConnection, IconPlus, IconServer, IconSettings, IconVariable, IconX } from '@tabler/icons-react';
@@ -183,7 +184,7 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
 
   return (
     <form className="flex flex-col" onSubmit={form.handleSubmit(handleSubmit)}>
-      <div className="main-container service-compose-panel bg-card border rounded-3 mt-4 m-0">
+      <div className="service-compose-panel">
         {composeEditorOpen && (
           <ComposeEditor initialFormat={composeData.format} onChange={(value, format, error) => setComposeData({ value, format, error })} />
         )}
@@ -241,11 +242,33 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
             </div>
             <div className="service-form-content">
               <div className="col">
-                <ul className="service-config-tabs nav nav-underline pt-2">
+                {activeService !== 'json' && services[activeService] ? (
+                  <div className="service-config-compact">
+                    <Select value={activeTab} onValueChange={setActiveTab}>
+                      <SelectTrigger className="service-config-select" aria-label="Configuration section" value={activeTab}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tabs.map(({ id, label, icon: Icon }) => (
+                          <SelectItem key={id} value={id}>
+                            <span className="service-config-option">
+                              <Icon size={20} aria-hidden="true" />
+                              <span>
+                                {label}
+                                {hasSectionErrors(id, activeService) ? <span className="text-danger"> (needs attention)</span> : null}
+                              </span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+                <ul className="service-config-tabs nav">
                   {activeService !== 'json' && services[activeService] && tabs.map((tab) => renderTab(tab.id, tab.label, tab.icon, activeService))}
                 </ul>
               </div>
-              <div className="col pt-4 px-3 pb-5">
+              <div className="service-config-fields">
                 {services.map((service, index) => {
                   return (
                     <div key={service._id} className={clsx({ 'd-none': index !== activeService })}>
@@ -279,7 +302,7 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
             </div>
           </div>
         )}
-        <div className="service-form-footer p-3 rounded-bottom border-top">
+        <div className="service-form-footer">
           <Button disabled={composeEditorOpen} type="submit" className={clsx({ 'd-none': composeEditorOpen })}>
             {t('MULTI_SERVICE_VALIDATE_ALL_SERVICES')}
           </Button>
@@ -321,13 +344,7 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
               saveBeforeAction(setComposeEditorOpen)((v) => !v);
             }}
           >
-            <span className="d-flex align-items-center">
-              {composeEditorOpen
-                ? t('MULTI_SERVICE_BACK_TO_FORM')
-                : composeData.format === 'yaml'
-                  ? t('MULTI_SERVICE_YAML_EDITOR')
-                  : t('MULTI_SERVICE_JSON_EDITOR')}
-            </span>
+            <span className="d-flex align-items-center">{composeEditorOpen ? t('MULTI_SERVICE_BACK_TO_FORM') : 'Compose editor'}</span>
           </Button>
         </div>
       </div>

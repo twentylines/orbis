@@ -7,6 +7,7 @@ import type { HostSensors } from '@runtipi/common/schemas/host-sensors';
 import { IconActivity, IconArrowDown, IconArrowUp, IconCpu, IconDatabase, IconDeviceDesktopAnalytics, IconNetwork } from '@tabler/icons-react';
 import { useMetricHistory } from '@/desktop/metric-history';
 import { MetricChart } from '@/components/metric-chart/metric-chart';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { telemetryOptions } from '@/desktop/telemetry';
 import { formatUptime } from '@/desktop/uptime';
 import './monitor.css';
@@ -20,15 +21,18 @@ import { ClusterOverview } from '@/desktop/cluster-views';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { statusNetwork, usagePercent, cpuTemperature, sensorRefreshInterval } from '../components/system-readings';
 import { MonitorDisclosure, MonitorUsage } from '../components/monitor-usage';
+import { DriveHealthView } from '../components/drive-health';
 
 const monitorSections = [
   ['usage', 'Usage'],
   ['performance', 'Performance'],
   ['devices', 'Devices'],
+  ['drives', 'Drive health'],
   ['sensors', 'Sensors'],
 ] as const;
 type MonitorSection = (typeof monitorSections)[number][0];
 const sectionForHash = (hash: string): MonitorSection | null => {
+  if (hash === '#drive-health-title') return 'drives';
   if (['#telemetry-cpu-title', '#telemetry-memory-title'].includes(hash)) return 'performance';
   if (
     [
@@ -61,6 +65,27 @@ const bytes = (value: number | null) => {
 const percent = (value: number | null) => (value === null || !Number.isFinite(value) ? 'Unavailable' : `${value.toFixed(1)}%`);
 const width = (value: number | null) => `${Math.min(100, Math.max(0, value ?? 0))}%`;
 const rate = (value: number | null | undefined) => (value === null || value === undefined ? 'Unavailable' : `${bytes(value)}/s`);
+
+function TemperatureReading({
+  sensor,
+  stale,
+}: {
+  sensor: { celsius: number | null; criticalCelsius: number | null } | null | undefined;
+  stale: boolean;
+}) {
+  const critical = sensor?.celsius != null && sensor.criticalCelsius !== null && sensor.celsius >= sensor.criticalCelsius;
+  return (
+    <dd data-critical={critical}>
+      {sensor?.celsius != null ? `${sensor.celsius.toFixed(1)} °C` : 'Unavailable'}
+      {critical ? (
+        <span className="monitor-temperature-critical">
+          {stale ? 'Critical in last sample' : 'Critical'} · {sensor.criticalCelsius?.toFixed(0)} °C threshold
+        </span>
+      ) : null}
+    </dd>
+  );
+}
+
 export default function Monitor() {
   const { merged } = useCluster();
   return merged ? <ClusterOverview /> : <ServerMonitor />;
@@ -111,6 +136,15 @@ function ServerMonitor() {
     refetchIntervalInBackground: false,
   });
   const cpuSensor = cpuTemperature(sensors.data);
+  const thermalReadings = sensors.data?.available
+    ? sensors.data.temperatures.filter((sensor) => sensor.status === 'available' && sensor.celsius !== null)
+    : [];
+  const hottest = (pattern: RegExp) =>
+    thermalReadings
+      .filter((sensor) => pattern.test(`${sensor.chip} ${sensor.label}`))
+      .sort((left, right) => (right.celsius ?? 0) - (left.celsius ?? 0))[0];
+  const gpuTemperature = hottest(/amdgpu|nouveau|nvidia|radeon/i);
+  const storageTemperature = hottest(/nvme|drivetemp|sata|disk/i);
   const delayedTemperature = sensors.isError || Boolean(sensors.data?.available && sensors.data.stale);
   const host = useHostReadings();
   const currentHost = host.data?.available && !host.data.stale && !host.isError ? host.data : null;
@@ -250,8 +284,20 @@ function ServerMonitor() {
         <dl>
           <div>
             <dt>CPU temperature</dt>
-            <dd>{cpuSensor?.celsius !== null && cpuSensor?.celsius !== undefined ? `${cpuSensor.celsius.toFixed(1)} °C` : 'Unavailable'}</dd>
+            <TemperatureReading sensor={cpuSensor} stale={delayedTemperature} />
           </div>
+          {gpuTemperature ? (
+            <div>
+              <dt>GPU temperature</dt>
+              <TemperatureReading sensor={gpuTemperature} stale={delayedTemperature} />
+            </div>
+          ) : null}
+          {storageTemperature ? (
+            <div>
+              <dt>Warmest drive</dt>
+              <TemperatureReading sensor={storageTemperature} stale={delayedTemperature} />
+            </div>
+          ) : null}
         </dl>
         <p className="monitor-temperature-description">
           {sensors.isPending
@@ -261,7 +307,7 @@ function ServerMonitor() {
               : sensors.data?.available === false
                 ? sensors.data.reason
                 : cpuSensor
-                  ? `${/package id|tctl|tdie/i.test(cpuSensor.label) ? 'CPU package' : cpuSensor.label} · ${cpuSensor.chip}`
+                  ? `${/package id|tctl|tdie/i.test(cpuSensor.label) ? 'CPU package' : cpuSensor.label}${cpuSensor.criticalCelsius !== null ? ` · Critical at ${cpuSensor.criticalCelsius.toFixed(0)} °C` : ''}`
                   : 'No CPU temperature sensor is reported by this host.'}
         </p>
         {delayedTemperature && cpuSensor ? <span className="monitor-temperature-age">Readings delayed</span> : null}
@@ -270,6 +316,20 @@ function ServerMonitor() {
         </button>
       </div>
       <Tabs.Root className="monitor-sections" value={section} onValueChange={changeSection}>
+        <div className="monitor-section-compact">
+          <Select value={section} onValueChange={changeSection}>
+            <SelectTrigger fitContent className="monitor-section-select" aria-label="Monitor section" value={section}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monitorSections.map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Tabs.List className="monitor-section-tabs" aria-label="Monitor sections">
           {monitorSections.map(([value, label]) => (
             <Tabs.Trigger className="monitor-section-tab" key={value} value={value}>
@@ -279,6 +339,9 @@ function ServerMonitor() {
         </Tabs.List>
         <Tabs.Content className="monitor-section-panel" value="usage">
           <MonitorUsage key={telemetryPath} />
+        </Tabs.Content>
+        <Tabs.Content className="monitor-section-panel" value="drives">
+          <DriveHealthView key={selectedServer && !selectedServer.local ? selectedServer.id : 'local'} />
         </Tabs.Content>
         <Tabs.Content className="monitor-section-panel" value="performance">
           {sample ? (
@@ -325,6 +388,7 @@ function ServerMonitor() {
                   )}
                 </details>
               </div>
+              <p className="monitor-history-caption">Gaps indicate missing readings or a change in source.</p>
               {history.isError ? (
                 <p className="workspace-message" role="alert">
                   History could not be refreshed. Previous chart samples may be stale.{' '}
@@ -411,7 +475,7 @@ function ServerMonitor() {
         <Tabs.Content className="monitor-section-panel monitor-devices-panel" value="devices">
           <HostDevices />
           <MonitorDisclosure title="Recorded device history" openRequest={location.hash === '#device-history' ? location.key : undefined}>
-            <HostDeviceHistoryView section="devices" />
+            <HostDeviceHistoryView section="devices" layoutReady={!host.isPending} />
           </MonitorDisclosure>
           <MonitorDisclosure
             title="Orbis core storage and network"

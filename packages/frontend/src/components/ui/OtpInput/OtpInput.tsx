@@ -2,17 +2,21 @@ import clsx from 'clsx';
 import type React from 'react';
 import { useMemo } from 'react';
 import './OtpInput.css';
+import { CharacterInput } from '../Input/use-character-motion';
 
 type Props = {
   value: string;
   valueLength: number;
   onChange: (value: string) => void;
   className?: string;
+  invalid?: boolean;
+  describedBy?: string;
+  disabled?: boolean;
 };
 
 const RE_DIGIT = /^\d+$/;
 
-export const OtpInput = ({ value, valueLength, onChange, className }: Props) => {
+export const OtpInput = ({ value, valueLength, onChange, className, invalid, describedBy, disabled }: Props) => {
   const valueItems = useMemo(() => {
     const valueArray = value.split('');
     const items: string[] = [];
@@ -31,14 +35,16 @@ export const OtpInput = ({ value, valueLength, onChange, className }: Props) => 
   }, [value, valueLength]);
 
   const focusToNextInput = (target: HTMLElement) => {
-    const nextElementSibling = target.nextElementSibling as HTMLInputElement | null;
+    const inputs = [...(target.closest('fieldset')?.querySelectorAll('input') ?? [])];
+    const nextElementSibling = inputs[inputs.indexOf(target as HTMLInputElement) + 1];
 
     if (nextElementSibling) {
       nextElementSibling.focus();
     }
   };
   const focusToPrevInput = (target: HTMLElement) => {
-    const previousElementSibling = target.previousElementSibling as HTMLInputElement | null;
+    const inputs = [...(target.closest('fieldset')?.querySelectorAll('input') ?? [])];
+    const previousElementSibling = inputs[inputs.indexOf(target as HTMLInputElement) - 1];
 
     if (previousElementSibling) {
       previousElementSibling.focus();
@@ -54,7 +60,7 @@ export const OtpInput = ({ value, valueLength, onChange, className }: Props) => 
       return;
     }
 
-    const nextInputEl = target.nextElementSibling as HTMLInputElement | null;
+    const nextInputEl = target.closest('fieldset')?.querySelectorAll('input')[idx + 1];
 
     // only delete digit if next input element has no value
     if (!isTargetValueDigit && nextInputEl && nextInputEl.value !== '') {
@@ -75,23 +81,16 @@ export const OtpInput = ({ value, valueLength, onChange, className }: Props) => 
       }
 
       focusToNextInput(target);
-
-      const nextElementSibling = target.nextElementSibling as HTMLInputElement | null;
-
-      if (nextElementSibling) {
-        nextElementSibling.focus();
-      }
     } else if (targetValueLength === valueLength) {
       onChange(targetValue);
-
-      target.blur();
     }
   };
 
   const inputOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     const { target } = e;
 
-    const prevInputEl = target.previousElementSibling as HTMLInputElement | null;
+    const inputs = [...(target.closest('fieldset')?.querySelectorAll('input') ?? [])];
+    const prevInputEl = inputs[inputs.indexOf(target) - 1];
 
     if (prevInputEl && prevInputEl.value === '') {
       return prevInputEl.focus();
@@ -125,35 +124,33 @@ export const OtpInput = ({ value, valueLength, onChange, className }: Props) => 
 
     focusToPrevInput(target);
 
-    const previousElementSibling = target.previousElementSibling as HTMLInputElement | null;
-
-    if (previousElementSibling) {
-      previousElementSibling.focus();
-    }
-
     return null;
   };
 
   return (
-    // biome-ignore lint/a11y/noAutofocus: Required for better UX
-    <div className="otp-group" autoFocus>
-      {valueItems.map((digit, idx) => (
-        <input
-          aria-label={`digit-${idx}`}
-          onChange={(e) => inputOnChange(e, idx)}
-          onKeyDown={inputOnKeyDown}
-          onFocus={inputOnFocus}
-          // biome-ignore lint/suspicious/noArrayIndexKey: The index is used as a key because the array is static
-          key={idx}
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern="\d{1}"
-          maxLength={valueLength}
-          className={clsx('form-control otp-input', className)}
-          value={digit}
-        />
-      ))}
+    <div className="otp-control">
+      <fieldset className="otp-group" aria-label="Authentication code" aria-describedby={describedBy} disabled={disabled}>
+        {valueItems.map((digit, idx) => (
+          <CharacterInput
+            aria-label={`Digit ${idx + 1} of ${valueLength}`}
+            aria-invalid={invalid || undefined}
+            aria-describedby={describedBy}
+            disabled={disabled}
+            onChange={(e) => inputOnChange(e, idx)}
+            onKeyDown={inputOnKeyDown}
+            onFocus={inputOnFocus}
+            // biome-ignore lint/suspicious/noArrayIndexKey: The index is used as a key because the array is static
+            key={idx}
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="\d{1}"
+            maxLength={valueLength}
+            className={clsx('form-control otp-input', className)}
+            value={digit}
+          />
+        ))}
+      </fieldset>
     </div>
   );
 };

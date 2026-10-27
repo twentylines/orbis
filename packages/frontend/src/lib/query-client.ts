@@ -1,4 +1,12 @@
-import { MutationCache, QueryClient } from '@tanstack/react-query';
+import { hashKey, MutationCache, QueryClient, type QueryKey } from '@tanstack/react-query';
+
+export async function clearAccountQueries(client: QueryClient, sessionKey: QueryKey, signedOutSession: unknown) {
+  await client.cancelQueries();
+  const sessionHash = hashKey(sessionKey);
+  client.removeQueries({ predicate: (query) => query.queryHash !== sessionHash });
+  client.getMutationCache().clear();
+  client.setQueryData(sessionKey, signedOutSession);
+}
 
 export function createAppQueryClient() {
   const queryClient = new QueryClient({

@@ -13,9 +13,32 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 export const runtimeDependencies = ['argon2', 'class-transformer'] as const;
+
+const privateConfigurationNames = new Set([
+  '.envrc',
+  '.npmrc',
+  '.netrc',
+  '.pypirc',
+  '.yarnrc',
+  '.yarnrc.yml',
+  'id_rsa',
+  'id_rsa.pub',
+  'id_ed25519',
+  'id_ed25519.pub',
+]);
+const isPrivateConfiguration = (file: string) => {
+  const name = basename(file).toLowerCase();
+  return (
+    name === '.env' ||
+    name.startsWith('.env.') ||
+    name.endsWith('.env') ||
+    privateConfigurationNames.has(name) ||
+    /(?:^|[._-])(?:env|environment)[._-](?:example|sample|template|dist|defaults?)(?:[._-]|$)/.test(name)
+  );
+};
 
 type Package = {
   name: string;
@@ -82,7 +105,10 @@ export function packageRuntimeDependencies(workspace: string, output: string, lo
       dereference: true,
       filter: (file) => {
         if (relative(root, file).split(sep)[0] === 'node_modules') return false;
-        if (lstatSync(file).isSymbolicLink() && !inside(root, realpathSync(file))) throw new Error('Runtime package contains an escaping symlink');
+        const resolved = lstatSync(file).isSymbolicLink() ? realpathSync(file) : file;
+        if (!inside(root, resolved)) throw new Error('Runtime package contains an escaping symlink');
+        if (isPrivateConfiguration(file) || isPrivateConfiguration(resolved))
+          throw new Error('Runtime package contains a prohibited configuration file');
         return true;
       },
     });

@@ -64,9 +64,9 @@ export function desktopActivity(
       count: items.length,
     };
   }
-  for (const check of checks) {
-    const title = 'Checking compatibility';
-    const detail = `${check.operation === 'downgrade' ? 'Downgrade' : 'Update'} to ${check.target}`;
+  for (const check of checks.filter((check) => check.operation === 'downgrade')) {
+    const title = 'Reviewing downgrade';
+    const detail = check.target.replace(/^v?0\.1\.0-beta\./, 'Beta ');
     items.unshift({ id: check.id, kind: 'core', title, detail, state: 'checking' });
     summary = { title, detail, kind: 'core', count: items.length };
   }
@@ -95,7 +95,12 @@ export function desktopActivity(
   if (watch && coreWatchIsActive(watch)) {
     const title = coreUpdateTitle(watch.phase, watch.operation);
     items.unshift({ id: watch.id, kind: 'core', title, detail: watch.message, state: watch.phase });
-    summary = { title, detail: watch.message, kind: 'core', count: items.length };
+    summary = {
+      title: title.replace(/ Orbis$/, ''),
+      detail: `Orbis ${watch.targetTag.replace(/^v?0\.1\.0-beta\./, 'Beta ')}`,
+      kind: 'core',
+      count: items.length,
+    };
   }
   return summary ? { ...summary, count: items.length, items } : null;
 }

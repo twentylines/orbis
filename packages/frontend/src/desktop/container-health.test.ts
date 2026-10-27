@@ -48,6 +48,35 @@ test('counts configured checks without treating unchecked auxiliary containers a
   const result = appDockerHealth([container('healthy'), ...Array.from({ length: 4 }, () => container('not-configured'))]);
   expect(result).toEqual({ state: 'healthy', label: 'Healthy', checked: 1, total: 5 });
 });
+
+test('explains classified connection failures and literal port settings without claiming a repair', () => {
+  const item = {
+    ...container('unhealthy'),
+    readiness: { lastCheckIssue: 'connection', healthcheckPort: 5797, configuredPort: 8015 },
+  } as ContainerReading;
+  const reason = containerHealthReason(item);
+  expect(reason).toContain('could not connect');
+  expect(reason).toContain("targets port 5797; the app's PORT setting is 8015");
+  for (const readiness of [
+    { ...item.readiness, configuredPort: 5797 },
+    { ...item.readiness, configuredPort: 0 },
+    { ...item.readiness, healthcheckPort: 65536 },
+    { ...item.readiness, lastCheckIssue: 'timeout' },
+  ])
+    expect(containerHealthReason({ ...item, readiness } as ContainerReading)).not.toContain('PORT setting');
+  expect(containerHealthReason({ ...item, health: 'healthy' })).not.toContain('could not connect');
+  expect(containerHealthReason({ ...item, state: 'exited' })).not.toContain('PORT setting');
+});
+
+test('keeps missing or unsupported health diagnostics neutral for older servers', () => {
+  for (const lastCheckIssue of [undefined, null, 'unknown', '__proto__']) {
+    const reason = containerHealthReason({ ...container('unhealthy'), readiness: { lastCheckIssue } } as ContainerReading);
+    expect(reason).toBe('The configured Docker healthcheck is failing.');
+  }
+  expect(containerHealthReason({ ...container('starting'), readiness: { lastCheckIssue: 'timeout' } } as ContainerReading)).toContain(
+    'latest check timed out',
+  );
+});
 test('keeps apps with no configured checks distinct from healthy checks', () => {
   expect(appDockerHealth([container('not-configured')])).toMatchObject({ state: 'running', label: 'Running', checked: 0 });
   expect(appDockerHealth([container('healthy')])).toMatchObject({ state: 'healthy', checked: 1 });

@@ -163,7 +163,8 @@ class GuidedTests(unittest.TestCase):
                 execute.assert_not_called()
 
     def test_backup_tools_are_ready_before_keep_review_or_new_installation(self):
-        for existing in (True, False):
+        for mode in (None, "keep", "fresh"):
+            existing = mode is not None
             with self.subTest(existing=existing), tempfile.TemporaryDirectory() as folder:
                 root = Path(folder).resolve()
                 state = root / "private"; state.mkdir()
@@ -171,19 +172,23 @@ class GuidedTests(unittest.TestCase):
                 selected = {"installRoot": str(root), "product": "runtipi", "version": "4.10.1", "reviewRequired": []}
                 argv = ["installer", "--manifest", str(manifest), "--state-dir", str(state), "--yes", "--root", str(root), "--without-host-service", "--host-writers-stopped"]
                 if existing:
-                    argv.extend(["--mode", "keep"])
+                    argv.extend(["--mode", mode])
                 ready = []
 
                 def install(*args, **kwargs):
                     if not existing:
                         args[5](root)
                     self.assertEqual(ready, ["rsync"], "Compatibility review cannot run until the missing backup tool is installed")
+                    (root / ".env").write_text("INTERNAL_IP=192.0.2.40\nNGINX_PORT=80\n")
                     return {"result": "orbis-installed"}
 
                 new = SimpleNamespace(IMAGES={}, choose_ports=lambda *args: (80, 443), install=mock.Mock(side_effect=install))
                 modules = {"orbis-install-new.py": new, "orbis-host-service-enable.py": SimpleNamespace(require_scoped_cleanup=mock.Mock()), "install-orbis.py": SimpleNamespace(private_directory=lambda path: path)}
-                with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value={"installations": [selected] if existing else [], "unassignedManagedContainers": []}), mock.patch.object(GUIDE.APPS, "require_assigned"), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: modules[name]), mock.patch.object(GUIDE, "prepare_backup_tools", side_effect=lambda _: ready.append("rsync")), mock.patch.object(GUIDE, "replacement", side_effect=install), contextlib.redirect_stdout(io.StringIO()):
+                output = io.StringIO()
+                with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value={"installations": [selected] if existing else [], "unassignedManagedContainers": []}), mock.patch.object(GUIDE.APPS, "require_assigned"), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: modules[name]), mock.patch.object(GUIDE, "prepare_backup_tools", side_effect=lambda _: ready.append("rsync")), mock.patch.object(GUIDE, "replacement", side_effect=install), contextlib.redirect_stdout(output):
                     self.assertEqual(GUIDE.main(), 0)
+                self.assertIn("Open Orbis in your browser:\n  http://192.0.2.40\n", output.getvalue())
+                self.assertNotIn("http://192.0.2.40:80", output.getvalue())
 
     def test_real_controlling_terminal_answers_are_independent_of_piped_stdin(self):
         import fcntl
@@ -516,6 +521,67 @@ class HostEnableTests(unittest.TestCase):
             ENABLE.enable(self.root, "test", self.parent)
         docker.assert_not_called()
         self.assertEqual(self.app.read_bytes(), b"accepted app data")
+
+
+class CompletionAddressTests(unittest.TestCase):
+    def test_default_port_quoted_values_and_custom_ipv4_ipv6_ports(self):
+        for content, expected in [
+            ('INTERNAL_IP="192.0.2.40"\nexport NGINX_PORT=80 # standard\n', 'http://192.0.2.40'),
+            ('INTERNAL_IP=192.0.2.40\n', 'http://192.0.2.40'),
+            ('INTERNAL_IP=192.0.2.40\nNGINX_PORT=8080\n', 'http://192.0.2.40:8080'),
+            ('INTERNAL_IP=2001:db8::40\nNGINX_PORT=80\n', 'http://[2001:db8::40]'),
+            ('INTERNAL_IP=2001:db8::40\nNGINX_PORT=8080\n', 'http://[2001:db8::40]:8080'),
+        ]:
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder); (root / '.env').write_text(content)
+                self.assertEqual(GUIDE.browser_address(root), expected)
+
+    def test_never_evaluates_configuration_or_prints_other_fields(self):
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(GUIDE.subprocess, 'run') as execute:
+            root = Path(folder)
+            (root / '.env').write_text('UNRELATED=private-test-marker\nINTERNAL_IP=192.0.2.40\nNGINX_PORT=8080\n')
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output): GUIDE.show_browser_address(root)
+            self.assertIn('http://192.0.2.40:8080', output.getvalue())
+            self.assertNotIn('private-test-marker', output.getvalue())
+            for value in ['$(touch marker)', '0.0.0.0', '127.0.0.1', '::', '224.0.0.1', 'fe80::1%eth0', 'https://user:private-test-marker@example.com']:
+                (root / '.env').write_text('INTERNAL_IP=' + value + '\nNGINX_PORT=80\n')
+                self.assertIsNone(GUIDE.browser_address(root))
+            for value in ['0', '65536', '${OTHER_PORT}', '80 81', 'broken"quote']:
+                (root / '.env').write_text('INTERNAL_IP=192.0.2.40\nNGINX_PORT=' + value + '\n')
+                self.assertIsNone(GUIDE.browser_address(root))
+            execute.assert_not_called()
+            self.assertFalse((root / 'marker').exists())
+
+    def test_missing_unsafe_or_oversized_configuration_cannot_turn_success_into_failure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); config = root / '.env'
+            self.assertIsNone(GUIDE.browser_address(root))
+            target = root / 'private'; target.write_text('INTERNAL_IP=192.0.2.40\n')
+            config.symlink_to(target)
+            self.assertIsNone(GUIDE.browser_address(root))
+            config.unlink(); os.mkfifo(config)
+            self.assertIsNone(GUIDE.browser_address(root))
+            config.unlink(); config.write_bytes(b'x' * (1024 * 1024 + 1))
+            self.assertIsNone(GUIDE.browser_address(root))
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output): GUIDE.show_browser_address(root)
+            self.assertIn('could not be determined', output.getvalue())
+            self.assertNotIn('http://', output.getvalue())
+
+    def test_already_installed_path_shows_address_only_after_success(self):
+        for failure in [False, True]:
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder).resolve(); manifest = root / 'manifest.json'; manifest.write_text(json.dumps(MANIFEST))
+                (root / '.env').write_text('INTERNAL_IP=192.0.2.40\nNGINX_PORT=8080\n')
+                selected = {'installRoot': str(root), 'product': 'orbis', 'reviewRequired': []}
+                argv = ['installer', '--manifest', str(manifest), '--state-dir', str(root / 'private'), '--yes', '--root', str(root), '--without-host-service']
+                output = io.StringIO()
+                with mock.patch.object(sys, 'argv', argv), mock.patch.object(GUIDE.sys, 'platform', 'linux'), mock.patch.object(GUIDE.os, 'geteuid', return_value=0), mock.patch.object(GUIDE.APPS, 'Docker'), mock.patch.object(GUIDE.REPLACE, 'Engine'), mock.patch.object(GUIDE.APPS.DETECT, 'discover', return_value={'installations': [selected]}), mock.patch.object(GUIDE, 'update_existing', side_effect=RuntimeError('Declared failure') if failure else None, return_value={'result': 'up-to-date'}), contextlib.redirect_stdout(output):
+                    if failure:
+                        with self.assertRaisesRegex(RuntimeError, 'Declared failure'): GUIDE.main()
+                    else: self.assertEqual(GUIDE.main(), 0)
+                self.assertEqual('http://192.0.2.40:8080' in output.getvalue(), not failure)
 
 
 if __name__ == "__main__":

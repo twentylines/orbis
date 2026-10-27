@@ -24,7 +24,7 @@ export type AppWindowState = { windows: AppWindow[]; section?: string; workspace
 type Action =
   | { type: 'open'; request: AppLaunchRequest }
   | { type: 'focus' | 'minimize' | 'minimized' | 'close' | 'closed' | 'remove'; urn: string }
-  | { type: 'place'; urn: string; mode: AppWindowMode }
+  | { type: 'place'; urn: string; mode: AppWindowMode; partner?: string }
   | { type: 'pair'; request: AppLaunchRequest }
   | { type: 'visit'; section: string }
   | { type: 'ratio'; value: number }
@@ -80,12 +80,22 @@ export function appWindowReducer(state: AppWindowState, action: Action): AppWind
     case 'focus':
       return workspace.active === action.urn ? state : { ...state, workspaces: updateWorkspace({ ...workspace, active: action.urn }) };
     case 'place': {
-      const split = action.mode === 'left' || action.mode === 'right' ? { anchor: action.urn, side: action.mode } : undefined;
+      const partner = state.windows.find(
+        (item) => item.request.urn === action.partner && item.request.urn !== action.urn && item.section === section && item.status === 'visible',
+      );
+      const split =
+        action.mode === 'left' || action.mode === 'right'
+          ? { anchor: action.urn, side: action.mode, ...(partner ? { partner: partner.request.urn } : {}) }
+          : undefined;
       return {
         ...state,
         workspaces: updateWorkspace({ active: action.urn, split, pickerDismissed: false, ratio: split ? 0.5 : workspace.ratio }),
         windows: state.windows.map((item) =>
-          item.request.urn === action.urn ? { ...item, mode: action.mode, status: 'visible', automatic: false } : item,
+          item.request.urn === action.urn
+            ? { ...item, mode: action.mode, status: 'visible', automatic: false }
+            : split && item === partner
+              ? { ...item, mode: split.side === 'left' ? 'right' : 'left' }
+              : item,
         ),
       };
     }

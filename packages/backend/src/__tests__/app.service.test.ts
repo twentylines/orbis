@@ -10,6 +10,7 @@ import { faker } from '@faker-js/faker';
 import { Test } from '@nestjs/testing';
 import { fromPartial } from '@total-typescript/shoehorn';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setBackupRecoveryRequired } from '@/common/backup-maintenance';
 import { mock } from 'vitest-mock-extended';
 import { DOCKERODE } from '@/modules/docker/docker.module';
 import { AppStatusSyncService } from '@/modules/app-lifecycle/app-status-sync.service';
@@ -17,6 +18,7 @@ import { AppLifecycleService } from '@/modules/app-lifecycle/app-lifecycle.servi
 import YAML from 'yaml';
 import { DatabaseService } from '@/core/database/database.service';
 import { QueueFactory } from '@/modules/queue/queue.factory';
+import { LoggerService } from '@/core/logger/logger.service';
 
 const TRAEFIK_CONFIG = `api:
   dashboard: true
@@ -48,16 +50,22 @@ describe('AppService', () => {
   let databaseService = mock<DatabaseService>();
   let queueFactory = mock<QueueFactory>();
   let pruneNetworks = vi.fn();
+  let loggerService = mock<LoggerService>();
 
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    setBackupRecoveryRequired(false);
+  });
 
   beforeEach(async () => {
     pruneNetworks = vi.fn();
+    loggerService = mock<LoggerService>();
     const docker = { pruneNetworks };
     const moduleRef = await Test.createTestingModule({
       providers: [
         AppService,
         FilesystemService,
+        { provide: LoggerService, useValue: loggerService },
         {
           provide: DOCKERODE,
           useFactory: () => docker,
@@ -76,6 +84,27 @@ describe('AppService', () => {
     appLifecycleService = moduleRef.get(AppLifecycleService);
     databaseService = moduleRef.get(DatabaseService);
     queueFactory = moduleRef.get(QueueFactory);
+    loggerService = moduleRef.get(LoggerService);
+  });
+
+  it('keeps account secrets and private configuration out of startup diagnostics', async () => {
+    const privateValue = 'do-not-log';
+    configurationService.getConfig.mockReturnValue(
+      fromPartial({
+        version: '4.10.1',
+        architecture: 'arm64',
+        userSettings: { logLevel: 'debug', allowErrorMonitoring: false, localDomain: 'local.test' },
+        database: { password: privateValue },
+        jwtSecret: privateValue,
+        rootFolderHost: privateValue,
+        __prod__: false,
+      }),
+    );
+    vi.spyOn(appService, 'copyAssets').mockResolvedValue();
+    vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
+    await appService.bootstrap();
+    expect(loggerService.debug).toHaveBeenCalled();
+    expect(JSON.stringify(loggerService.debug.mock.calls)).not.toContain(privateValue);
   });
 
   it('reconciles persisted application states before serving the dashboard', async () => {
@@ -98,6 +127,21 @@ describe('AppService', () => {
     await expect(appService.bootstrap()).rejects.toThrow('Restore recovery requires available storage');
     expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
     expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
+  });
+
+  it('validates backup recovery after database preparation and holds direct startup mutations when needed', async () => {
+    const prepareRecovery = vi.fn(async () => {
+      expect(databaseService.migrate).toHaveBeenCalledOnce();
+      setBackupRecoveryRequired(true);
+    });
+    const copy = vi.spyOn(appService, 'copyAssets');
+    await appService.bootstrap(prepareRecovery);
+    expect(prepareRecovery).toHaveBeenCalledOnce();
+    expect(appLifecycleService.recoverInterruptedRestores).not.toHaveBeenCalled();
+    expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+    expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
+    expect(copy).not.toHaveBeenCalled();
+    expect(pruneNetworks).not.toHaveBeenCalled();
   });
 
   it('prepares the database while holding all app bootstrap work during installation', async () => {

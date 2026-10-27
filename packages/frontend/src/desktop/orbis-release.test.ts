@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { QueryObserver } from '@tanstack/react-query';
 import type { OrbisReleaseChannel } from '@runtipi/common/schemas/orbis-release-channel';
 import { createAppQueryClient } from '@/lib/query-client';
+import { formatOrbisVersion } from './orbis-version';
 import {
   newerOrbisRelease,
   includedOrbisReleases,
@@ -18,6 +19,16 @@ const release = (tag: string, imageManifestUrl: string | null = 'https://example
   publishedAt: null,
   body: '',
   url: '',
+});
+test('uses spaced beta numbers for display while retaining release identities for comparisons', () => {
+  expect(formatOrbisVersion('v1.0.1-beta.1')).toBe('1.0.1 beta 1');
+  expect(formatOrbisVersion('v1.1.0-beta.12')).toBe('1.1.0 beta 12');
+  expect(formatOrbisVersion('1.0.1-beta.2+abc123')).toBe('1.0.1 beta 2');
+  expect(formatOrbisVersion('v0.1.0-beta.112')).toBe('0.1.0 beta 112');
+  expect(formatOrbisVersion('v1.0.0')).toBe('1.0.0');
+  expect(formatOrbisVersion('1.1.0')).toBe('1.1.0');
+  expect(formatOrbisVersion('development')).toBe('development');
+  expect(newerOrbisRelease(release('v1.0.1-beta.10'), 'v1.0.1-beta.9')).toBe(true);
 });
 test('offers only a complete newer Orbis release with numeric prerelease ordering', () => {
   expect(newerOrbisRelease(release('v0.1.0-beta.82'), 'v0.1.0-beta.9')).toBe(true);

@@ -111,6 +111,7 @@
   color: var(--desktop-accent);
 }
 .orbis-setup-name-mark span {
+  min-width: 0;
   font-size: 1.4rem;
   font-weight: 650;
   overflow-wrap: anywhere;
@@ -118,10 +119,19 @@
 .orbis-setup button {
   -webkit-tap-highlight-color: transparent;
 }
-.orbis-setup button:focus-visible,
-.orbis-setup summary:focus-visible {
-  outline: 2px solid var(--desktop-accent);
-  outline-offset: 4px;
+.orbis-setup .orbis-switch {
+  min-height: 44px;
+  margin: 0;
+}
+body:has(.orbis-theme) .orbis-setup :is(button, summary, h2):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
+  background-color: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 .orbis-setup :is(.orbis-setup-palette, .orbis-setup-mode > button, .orbis-setup-wallpapers > button, .orbis-setup-performance > button) {
   border: 1px solid var(--desktop-line);
@@ -394,25 +404,60 @@
   min-height: 48px;
   white-space: normal;
 }
-.orbis-setup-footer > output {
+.orbis-setup-footer > .btn svg {
+  flex: none;
+}
+.orbis-setup-footer-status {
+  display: grid;
+  place-items: center;
   flex: 1;
   min-width: 100px;
+  min-height: 44px;
   font-size: 0.75rem;
   color: var(--desktop-muted);
   line-height: 1.5;
   text-align: center;
 }
-.orbis-setup-error {
+.orbis-setup-scroll-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--desktop-muted);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+.orbis-setup-scroll-hint:hover {
   color: var(--desktop-ink);
-  border-inline-start: 3px solid var(--desktop-accent);
+  background: color-mix(in srgb, var(--desktop-ink) 7%, transparent);
+}
+.orbis-setup-scroll-hint svg {
+  flex: none;
+  transition: transform 180ms ease;
+}
+.orbis-setup-scroll-hint[data-below="false"] svg {
+  transform: rotate(180deg);
+}
+.orbis-setup-error {
+  color: var(--desktop-negative);
+  border-inline-start: 3px solid var(--desktop-negative);
   padding: 12px 16px;
-  background: var(--desktop-code-background);
+  background: color-mix(in srgb, var(--desktop-negative) 7%, var(--desktop-surface));
   line-height: 1.6;
 }
 .orbis-setup[data-reduced="true"] .orbis-setup-step {
   animation: none;
 }
 .orbis-setup[data-reduced="true"] .orbis-setup-progress > span {
+  transition: none;
+}
+.orbis-setup[data-reduced="true"] .orbis-setup-scroll-hint svg {
   transition: none;
 }
 @keyframes orbis-setup-enter {
@@ -423,6 +468,66 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+@media (min-width: 900px) and (min-height: 640px) {
+  .desktop-auth.desktop-auth-setup {
+    height: 100dvh;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    padding-block: 16px;
+  }
+  .desktop-auth-setup .desktop-auth-toolbar {
+    margin-bottom: 16px;
+  }
+  .desktop-auth.desktop-auth-setup .desktop-auth-container {
+    align-self: stretch;
+    min-height: 0;
+    padding-block: 0;
+  }
+  .desktop-auth-setup .card {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .desktop-auth-setup .desktop-auth-identity {
+    padding-top: 24px;
+  }
+  .desktop-auth-setup .card-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding-top: 20px;
+    padding-bottom: 24px;
+  }
+  .orbis-setup {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 20px;
+  }
+  .orbis-setup-stage {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding-block: 4px;
+    scroll-padding-block: 8px;
+  }
+  .orbis-setup-header,
+  .orbis-setup-error,
+  .orbis-setup-footer {
+    flex-shrink: 0;
+  }
+  .orbis-setup-footer {
+    padding-top: 16px;
+  }
+  .orbis-setup-name-mark {
+    min-height: 96px;
+    padding-block: 20px;
   }
 }
 @media (max-width: 600px) {
@@ -447,6 +552,16 @@
   .orbis-setup-performance > button {
     padding: 20px;
   }
+  .orbis-setup-name-mark {
+    display: grid;
+    justify-items: start;
+    gap: 14px;
+    padding: 20px;
+  }
+  .orbis-setup-name-mark span {
+    font-size: 1.1rem;
+    text-wrap: balance;
+  }
   .orbis-setup-review > div {
     grid-template-columns: minmax(0, 1fr);
     gap: 7px;
@@ -455,15 +570,16 @@
     text-align: left;
   }
   .orbis-setup-footer {
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
     gap: 16px;
   }
-  .orbis-setup-footer > output {
-    flex-basis: 100%;
+  .orbis-setup-footer-status {
+    grid-column: 1 / -1;
     order: 3;
   }
   .orbis-setup-footer > .btn {
-    flex: 1 1 105px;
+    min-width: 0;
     padding-inline: 12px;
   }
 }
@@ -473,5 +589,14 @@
   }
   .orbis-setup-progress > span {
     transition: none;
+  }
+  .orbis-setup-scroll-hint svg {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  body:has(.orbis-theme) .orbis-setup :is(button, summary, h2):focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
   }
 }

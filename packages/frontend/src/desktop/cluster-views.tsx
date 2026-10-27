@@ -374,6 +374,7 @@ export function ClusterApps({ compact = false }: { compact?: boolean } = {}) {
                         state={compact ? undefined : preview?.nextHistory()}
                         preventScrollReset={!compact}
                         data-store-app={compact ? undefined : `${server.id}/${entry.info.urn}`}
+                        ref={compact ? undefined : preview?.onCardMount}
                         aria-controls={!compact && preview?.split ? preview.previewId : undefined}
                         aria-expanded={!compact && preview?.split ? preview.selectedUrn === `${server.id}/${entry.info.urn}` : undefined}
                       >

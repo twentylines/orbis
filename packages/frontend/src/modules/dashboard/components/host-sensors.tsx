@@ -2,7 +2,7 @@ import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import { IconChevronRight } from '@tabler/icons-react';
 import type { HostSensors, HostSensorStatus } from '@runtipi/common/schemas';
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { resourceBytes } from '@/components/container-resources/container-resources';
 import './host-sensors.css';
@@ -31,7 +31,7 @@ function SensorCoverage({ omitted, unavailable }: { omitted: number; unavailable
   ) : null;
 }
 
-export function HostSensorsView() {
+export const HostSensorsView = memo(function HostSensorsView() {
   const visible = useWindowVisible();
   const path = useServerPath()('/api/system/host-sensors');
   const query = useQuery({
@@ -198,4 +198,4 @@ export function HostSensorsView() {
       </details>
     </section>
   );
-}
+});

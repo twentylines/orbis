@@ -1,6 +1,6 @@
 import http from 'node:http';
 import path from 'node:path';
-import { BadRequestException, HttpException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, HttpException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { gt, valid } from 'semver';
 import {
   isPublishedOrbisReleaseTag,
@@ -10,10 +10,12 @@ import {
   type OrbisReleaseChannel,
 } from '@runtipi/common/schemas/orbis-release-channel';
 import { OrbisReleaseChannelsService } from '../system/orbis-release-channels.service';
+import { DriveHealthService } from '../system/drive-health.service';
 
 const PLAN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PACKAGE_NAME = /^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?$/;
 const MAX_RESPONSE_BYTES = 64 * 1024;
+const PACKAGE_PLAN_TTL_SECONDS = 15 * 60;
 
 export type HostUpdateStatus = {
   available: boolean;
@@ -79,6 +81,7 @@ export type HostPackageOperation = {
 export type HostPackagePlan = {
   planId: string;
   createdAt: number;
+  expiresAt: number;
   selected: HostPackage[];
   operations: HostPackageOperation[];
 };
@@ -120,7 +123,10 @@ export class HostUpdatesService {
   private readonly socketPath = process.env.ORBIS_HOST_SOCKET;
   private readonly plans = new Map<string, { downgrade: boolean; returnToStable: boolean; revision: string; expiresAt: number }>();
 
-  constructor(private readonly channels: OrbisReleaseChannelsService) {}
+  constructor(
+    private readonly channels: OrbisReleaseChannelsService,
+    @Inject(DriveHealthService) private readonly drives: DriveHealthService,
+  ) {}
 
   private requireSocket(): string {
     if (!this.socketPath || !path.isAbsolute(this.socketPath) || this.socketPath.includes('\0')) {
@@ -144,6 +150,7 @@ export class HostUpdatesService {
       | '/v1/restart'
       | '/v1/restart/plan'
       | '/v1/restart/apply'
+      | '/v1/drives/test'
       | `/v1/packages/changelog?name=${string}`,
     body?: object,
   ): Promise<T> {
@@ -162,7 +169,11 @@ export class HostUpdatesService {
                 ? 60_000
                 : endpoint.startsWith('/v1/packages/changelog')
                   ? 25_000
-                  : 10_000,
+                  : endpoint === '/v1/drives/test'
+                    ? 35_000
+                    : endpoint === '/v1/packages'
+                      ? 30_000
+                      : 10_000,
           headers: payload === undefined ? {} : { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
         },
         (res) => {
@@ -237,6 +248,16 @@ export class HostUpdatesService {
     return this.call<HostPackageInventory>('/v1/packages');
   }
 
+  driveTest(id: unknown, kind: unknown): Promise<{ accepted: boolean; message: string }> {
+    if (typeof id !== 'string' || !/^drive:[a-f0-9]{24}$/.test(id) || typeof kind !== 'string' || !['short', 'extended', 'abort'].includes(kind)) {
+      throw new BadRequestException('Choose one drive and a supported self-test.');
+    }
+    return this.call<{ accepted: boolean; message: string }>('/v1/drives/test', { id, kind }).then((result) => {
+      if (result.accepted === true) this.drives.invalidate();
+      return result;
+    });
+  }
+
   async restartStatus(): Promise<HostRestartStatus> {
     try {
       return await this.call<HostRestartStatus>('/v1/restart');
@@ -285,7 +306,28 @@ export class HostUpdatesService {
     ) {
       throw new BadRequestException('Choose 1 to 250 distinct host packages.');
     }
-    return this.call<HostPackagePlan>('/v1/packages/plan', { names });
+    return this.call<Omit<HostPackagePlan, 'expiresAt'> & { expiresAt?: number }>('/v1/packages/plan', { names }).then((plan) => {
+      // Earlier v1 helpers omit the deadline but use the same fifteen-minute lifetime.
+      const expiresAt = plan.expiresAt === undefined ? plan.createdAt + PACKAGE_PLAN_TTL_SECONDS : plan.expiresAt;
+      if (
+        !PLAN_ID.test(plan.planId) ||
+        typeof plan.createdAt !== 'number' ||
+        !Number.isFinite(plan.createdAt) ||
+        plan.createdAt <= 0 ||
+        typeof expiresAt !== 'number' ||
+        !Number.isFinite(expiresAt) ||
+        expiresAt <= plan.createdAt ||
+        expiresAt - plan.createdAt > PACKAGE_PLAN_TTL_SECONDS ||
+        !Array.isArray(plan.selected) ||
+        plan.selected.length !== names.length ||
+        new Set(plan.selected.map((item) => item?.name)).size !== names.length ||
+        !plan.selected.every((item) => typeof item?.name === 'string' && names.includes(item.name)) ||
+        !Array.isArray(plan.operations)
+      ) {
+        throw new ServiceUnavailableException('The host returned an invalid package review. No packages were changed.');
+      }
+      return { ...plan, expiresAt };
+    });
   }
 
   packageApply(planId: unknown): Promise<{ jobId: string; state: string }> {

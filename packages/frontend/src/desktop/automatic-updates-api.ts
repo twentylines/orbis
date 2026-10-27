@@ -30,8 +30,16 @@ async function automaticRequest<T>(suffix = '', body?: object, signal?: AbortSig
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20_000)]),
   });
-  const value = await response.json();
-  if (!response.ok) throw new Error(typeof value?.message === 'string' ? value.message : 'The update schedule could not be saved.');
+  const value = await response.json().catch(() => null);
+  if (!response.ok)
+    throw new Error(
+      typeof value?.message === 'string'
+        ? value.message
+        : body === undefined
+          ? 'Update preferences could not be read. Try again.'
+          : 'The update schedule could not be saved. Try again.',
+    );
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Update preferences could not be read. Try again.');
   return value as T;
 }
 const scheduleQuery = { staleTime: 60_000, refetchOnMount: 'always', refetchOnWindowFocus: false, refetchOnReconnect: false, retry: false } as const;
@@ -47,6 +55,7 @@ export const appUpdateScheduleOptions = (urn: string) =>
     queryFn: ({ signal }) => automaticRequest<AppUpdateSchedule>(`/apps/${encodeURIComponent(urn)}`, undefined, signal),
     ...scheduleQuery,
   });
+export const readAppUpdateSchedule = (urn: string) => automaticRequest<AppUpdateSchedule>(`/apps/${encodeURIComponent(urn)}`);
 export const saveAutomaticUpdateSettings = (settings: AutomaticUpdateSettings) => automaticRequest<AutomaticUpdateStatus>('', settings);
 export const saveAppUpdateSchedule = (urn: string, rule: AppUpdateRule) =>
   automaticRequest<AppUpdateSchedule>(`/apps/${encodeURIComponent(urn)}`, rule);

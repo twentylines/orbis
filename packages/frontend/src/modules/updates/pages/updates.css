@@ -189,6 +189,42 @@
 .desktop-updates-host > .desktop-update-note {
   margin-block: 16px;
 }
+.desktop-host-integration {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 14px;
+  background: var(--desktop-surface);
+}
+.desktop-host-integration > div {
+  flex: 1 1 22em;
+  min-width: 0;
+}
+.desktop-host-integration h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.desktop-host-integration p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.desktop-host-integration > a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  max-width: 100%;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+}
 .desktop-host-package-error {
   display: flex;
   align-items: center;
@@ -310,6 +346,7 @@
   line-height: 1.4;
   text-wrap: balance;
   cursor: pointer;
+  transition: background-color 160ms ease;
 }
 .desktop-host-package-selection button:last-child {
   border-color: var(--desktop-action);
@@ -325,6 +362,25 @@
 .desktop-host-package-plan textarea:focus-visible {
   outline: 3px solid var(--desktop-accent);
   outline-offset: 3px;
+}
+body:has(.orbis-theme) .desktop-host-package-selection button:focus-visible {
+  outline: none;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--desktop-ink) 14%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+body:has(.orbis-theme) .desktop-host-package-selection button:last-child:focus-visible {
+  background: color-mix(in srgb, var(--desktop-action-ink) 14%, var(--desktop-action));
+  color: var(--desktop-action-ink);
+}
+@media (forced-colors: active) {
+  body:has(.orbis-theme) .desktop-host-package-selection button:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 .desktop-host-package-list {
   display: grid;
@@ -375,15 +431,14 @@
   line-height: 1.45;
 }
 p.desktop-host-package-versions {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 8px;
+  display: flex;
+  gap: 8px;
   align-items: baseline;
 }
 .desktop-host-package-versions code {
-  grid-column: 2;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: calc(50% - 16px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -393,8 +448,7 @@ p.desktop-host-package-versions {
   font-size: 0.8125rem;
 }
 .desktop-host-package-versions > span {
-  grid-column: 1;
-  grid-row: 2;
+  flex: none;
 }
 .desktop-host-package small,
 .desktop-host-package-foot span {
@@ -476,7 +530,9 @@ p.desktop-host-package-versions {
 .desktop-host-package-plan textarea {
   display: block;
   width: 100%;
-  height: 220px;
+  height: auto;
+  max-height: 30dvh;
+  min-height: 6rem;
   padding: 13px;
   border: 1px solid var(--desktop-line);
   border-radius: 9px;
@@ -485,7 +541,7 @@ p.desktop-host-package-versions {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.75rem;
   line-height: 1.5;
-  resize: vertical;
+  resize: none;
 }
 @container (max-width: 720px) {
   .desktop-host-package-toolbar {
@@ -652,7 +708,7 @@ p.desktop-host-package-versions {
 .desktop-update-job button:disabled,
 .desktop-update-plan-actions button:disabled {
   opacity: 0.6;
-  cursor: progress;
+  cursor: not-allowed;
 }
 .desktop-update-action:focus-visible,
 .desktop-update-job button:focus-visible,
@@ -682,10 +738,21 @@ p.desktop-host-package-versions {
   justify-self: start;
 }
 .desktop-update-plan-actions {
+  container-type: inline-size;
   display: flex;
   flex-wrap: wrap;
-  gap: 9px;
-  margin-top: 7px;
+  gap: 12px;
+  margin: 0;
+  padding: 1rem var(--tblr-modal-padding, 1.5rem);
+}
+.desktop-update-plan-actions > button {
+  margin: 0;
+}
+@container (max-width: 26rem) {
+  .desktop-update-plan-actions > button {
+    flex: 1 1 100%;
+    width: 100%;
+  }
 }
 .desktop-update-plan-actions button:last-child {
   background: transparent;
@@ -747,7 +814,8 @@ p.desktop-host-package-versions {
 }
 .modal-content .desktop-host-package-plan {
   margin: 0;
-  padding: 0 24px 24px;
+  padding: 0 var(--tblr-modal-padding, 1.5rem) var(--tblr-modal-padding, 1.5rem);
+  gap: 12px;
   border: 0;
   background: transparent;
 }
@@ -778,9 +846,16 @@ p.desktop-host-package-versions {
 .desktop-package-review .orbis-dialog-header .modal-body {
   color: var(--desktop-muted);
 }
-.modal-content.desktop-package-review .desktop-host-package-plan textarea:focus-visible {
-  outline: 2px solid var(--desktop-accent);
-  outline-offset: -3px;
+body:has(.orbis-theme) .desktop-package-review .desktop-host-package-plan textarea:is(:focus, :focus-visible) {
+  outline: none;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
+}
+@media (forced-colors: active) {
+  body:has(.orbis-theme) .desktop-package-review .desktop-host-package-plan textarea:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+  }
 }
 .desktop-downgrade {
   margin-top: 1.25rem;
@@ -820,7 +895,7 @@ p.desktop-host-package-versions {
   flex: 1 1 14rem;
   min-width: 0;
 }
-.desktop-downgrade-controls select {
+body:has(.orbis-theme) .desktop-downgrade-field .form-select {
   width: 100%;
   min-width: 0;
   min-height: 2.75rem;
@@ -836,6 +911,17 @@ p.desktop-host-package-versions {
 }
 :is(.desktop-downgrade-dialog, .desktop-update-review-dialog) {
   max-height: calc(100dvh - 32px);
+}
+.desktop-package-review {
+  max-height: calc(100dvh - 32px);
+}
+.desktop-package-review > .desktop-host-package-plan {
+  min-height: 0;
+  overflow-y: auto;
+  scroll-padding-block: 20px;
+}
+.desktop-package-review > :is(.orbis-dialog-header, .modal-footer) {
+  flex-shrink: 0;
 }
 :is(.desktop-downgrade-dialog, .desktop-update-review-dialog) > .modal-body {
   min-height: 0;
@@ -935,6 +1021,74 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
   }
   .desktop-downgrade-controls > button {
     flex: 1 1 100%;
+  }
+}
+.desktop-orbis-release-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(240px, 0.8fr);
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+.desktop-orbis-release-notes,
+.desktop-orbis-release-summary {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
+}
+.desktop-orbis-release-summary h3,
+.desktop-orbis-release-notes .desktop-release-history h3 {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+.desktop-orbis-release-notes .desktop-update-release {
+  margin-top: 0;
+}
+.desktop-orbis-release-notes .desktop-release-history {
+  margin: 0 0 20px;
+}
+.desktop-orbis-release-summary .desktop-update-build {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  margin: 0 0 18px;
+}
+.desktop-orbis-release-summary > .desktop-update-action {
+  width: 100%;
+}
+@container (max-width: 32rem) {
+  .desktop-orbis-release-notes,
+  .desktop-orbis-release-summary {
+    padding: 16px;
+  }
+  .desktop-orbis-release-notes .desktop-release-note {
+    border: 0;
+    border-top: 1px solid var(--desktop-line);
+    border-radius: 0;
+    background: transparent;
+  }
+  .desktop-orbis-release-notes .desktop-release-note > summary {
+    padding-inline: 0;
+  }
+  .desktop-orbis-release-notes .desktop-release-note-content {
+    padding-inline: 0;
+  }
+  .desktop-orbis-release-notes .desktop-update-markdown {
+    line-height: 1.65;
+  }
+  .desktop-orbis-release-notes .desktop-update-markdown :is(ul, ol) {
+    padding-inline-start: 1.15em;
+  }
+}
+@container (max-width: 58rem) {
+  .desktop-orbis-release-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .desktop-orbis-release-summary {
+    grid-row: 1;
   }
 }
 .desktop-critical-update {

@@ -15,7 +15,14 @@ function validateInProcess(browser: boolean) {
         const { desktopWindowsSchema } = await import('@runtipi/common/schemas/desktop-windows');
         const { appLaunchSchema } = await import('@runtipi/common/schemas/app-launch');
         const { dynamicComposeSchemaArk } = await import('@runtipi/common/schemas/dynamic-compose-ark');
-        const { newAccountIdentifier } = await import(${JSON.stringify(new URL('../modules/auth/account-identifier.ts', import.meta.url).href)});
+        const { type } = await import('arktype');
+        const {
+          newAccountIdentifier,
+          signInAccountIdentifier,
+          signInIdentifierMessage,
+          signInPassword,
+          signInPasswordMessage,
+        } = await import(${JSON.stringify(new URL('../modules/auth/account-identifier.ts', import.meta.url).href)});
         const bounds = { x: 24, y: 24, width: 800, height: 600 };
         const cases = [
           [desktopAppearanceSchema, {}],
@@ -39,19 +46,45 @@ function validateInProcess(browser: boolean) {
           [newAccountIdentifier, 'administrator'],
           [newAccountIdentifier, 'bad name'],
         ];
+        const signInCases = [
+          [signInAccountIdentifier, '', signInIdentifierMessage],
+          [signInAccountIdentifier, '  \t ', signInIdentifierMessage],
+          [signInPassword, '', signInPasswordMessage],
+          [signInPassword, ' \t ', signInPasswordMessage],
+          [signInAccountIdentifier, 'admin', signInIdentifierMessage],
+          [signInAccountIdentifier, 'owner@example.com', signInIdentifierMessage],
+          [signInAccountIdentifier, 'legacy id!', signInIdentifierMessage],
+          [signInPassword, ' secret ', signInPasswordMessage],
+        ];
+        const signIn = signInCases.map(([schema, input, fieldMessage]) => {
+          const result = schema(input);
+          const invalid = result instanceof type.errors;
+          const firstIssue = invalid ? Object.values(result.byPath ?? {})[0] : null;
+          return {
+            allowed: !invalid,
+            output: invalid ? null : result,
+            message: firstIssue?.message ?? null,
+            fieldMessage: invalid ? fieldMessage : null,
+          };
+        });
         console.log(JSON.stringify({
           results: cases.map(([schema, input]) => {
             const before = JSON.stringify(input);
             const allowed = schema.allows(input);
             return { allowed, output: allowed ? schema(input) : null, mutated: before !== JSON.stringify(input) };
           }),
+          signIn,
           normalised: [normaliseDesktopAppearance({}), normaliseDesktopAppearance({ chromeBlur: NaN })],
         }));
         `,
       ],
       { cwd: new URL('../../', import.meta.url), encoding: 'utf8', timeout: 10_000 },
     ),
-  ) as { results: { allowed: boolean; output: unknown; mutated: boolean }[]; normalised: unknown[] };
+  ) as {
+    results: { allowed: boolean; output: unknown; mutated: boolean }[];
+    signIn: { allowed: boolean; output: unknown; message: string | null; fieldMessage: string | null }[];
+    normalised: unknown[];
+  };
 }
 
 test('browser validation preserves preference, window, compose and account contracts', () => {
@@ -81,5 +114,19 @@ test('browser validation preserves preference, window, compose and account contr
     false,
   ]);
   expect(browser.results.every((result) => !result.mutated)).toBe(true);
+  expect(browser.signIn).toEqual(compiled.signIn);
+  expect(browser.signIn.map(({ allowed }) => allowed)).toEqual([false, false, false, true, true, true, true, true]);
+  expect(browser.signIn.slice(0, 2).map(({ message }) => message)).toEqual(['Enter your username or email.', 'Enter your username or email.']);
+  expect(browser.signIn.slice(2, 4).map(({ message }) => message)).toEqual(['Enter your password.', null]);
+  expect(browser.signIn.slice(0, 4).map(({ fieldMessage }) => fieldMessage)).toEqual([
+    'Enter your username or email.',
+    'Enter your username or email.',
+    'Enter your password.',
+    null,
+  ]);
+  expect(browser.signIn[4]?.output).toBe('admin');
+  expect(browser.signIn[6]?.output).toBe('legacy id!');
+  expect(browser.signIn[3]?.output).toBe(' \t ');
+  expect(browser.signIn[7]?.output).toBe(' secret ');
   expect(browser.normalised[0]).toEqual(browser.normalised[1]);
 });

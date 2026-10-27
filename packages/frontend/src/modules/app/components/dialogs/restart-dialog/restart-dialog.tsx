@@ -6,6 +6,7 @@ import type { AppInfo } from '@/types/app.types';
 import type { TranslatableError } from '@/types/error.types';
 import { useMutation } from '@tanstack/react-query';
 import type React from 'react';
+import { useRef } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 
@@ -17,6 +18,7 @@ interface IProps {
 export const RestartDialog: React.FC<IProps> = ({ info, isOpen, onClose }) => {
   const { t } = useTranslation();
   const { setOptimisticStatus } = useAppStatus();
+  const cancel = useRef<HTMLButtonElement>(null);
 
   const restartMutation = useMutation({
     ...restartAppMutation(),
@@ -31,14 +33,23 @@ export const RestartDialog: React.FC<IProps> = ({ info, isOpen, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent size="sm">
+      <DialogContent
+        size="sm"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          cancel.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t('APP_RESTART_FORM_TITLE', { name: info.name })}</DialogTitle>
         </DialogHeader>
         <DialogDescription>
-          <span className="text-muted">{t('APP_RESTART_FORM_SUBTITLE')}</span>
+          <span className="text-muted">{`${t('APP_RESTART_FORM_SUBTITLE')}. The app will be briefly unavailable while it restarts.`}</span>
         </DialogDescription>
         <DialogFooter>
+          <Button ref={cancel} intent="secondary" onClick={onClose}>
+            Cancel
+          </Button>
           <Button onClick={() => restartMutation.mutate({ path: { urn: info.urn } })} intent="danger">
             {t('APP_RESTART_FORM_SUBMIT')}
           </Button>

@@ -1,9 +1,11 @@
-import http from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { BadRequestException } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { mock } from 'vitest-mock-extended';
+import type { DriveHealthService } from '../system/drive-health.service';
 import { HostUpdatesService } from './host-updates.service';
 
 describe('host update Unix socket transport', () => {
@@ -19,6 +21,14 @@ describe('host update Unix socket transport', () => {
     status: vi.fn(),
   };
   let restartSupported = true;
+  let packageReview: Record<string, unknown> = {
+    planId: '00000000-0000-4000-8000-000000000000',
+    createdAt: 1_700_000_000,
+    selected: [{ name: 'base-files:arm64' }],
+    operations: [],
+  };
+  let driveResponse: 'accepted' | 'declined' | 'failed' = 'accepted';
+  const drives = mock<DriveHealthService>();
 
   beforeAll(async () => {
     directory = await mkdtemp(path.join(os.tmpdir(), 'orbis-host-transport-'));
@@ -30,6 +40,11 @@ describe('host update Unix socket transport', () => {
         const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null;
         requests.push({ method: request.method || '', path: request.url || '', body });
         response.setHeader('Content-Type', 'application/json');
+        if (request.url === '/v1/drives/test') {
+          response.statusCode = driveResponse === 'failed' ? 503 : 202;
+          response.end(JSON.stringify({ accepted: driveResponse === 'accepted', message: 'Self-test request result.' }));
+          return;
+        }
         if (request.url?.startsWith('/v1/restart')) {
           response.statusCode = restartSupported ? 200 : 404;
           response.end(
@@ -54,7 +69,7 @@ describe('host update Unix socket transport', () => {
                 : request.url === '/v1/packages/job'
                   ? { available: true, job: null }
                   : request.url === '/v1/packages/plan'
-                    ? { planId: '00000000-0000-4000-8000-000000000000', selected: [], operations: [] }
+                    ? packageReview
                     : request.url === '/v1/packages/apply' || request.url === '/v1/packages/refresh'
                       ? { jobId: '00000000-0000-4000-8000-000000000000', state: 'queued' }
                       : request.url?.startsWith('/v1/packages/changelog?')
@@ -67,7 +82,7 @@ describe('host update Unix socket transport', () => {
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
     process.env.ORBIS_HOST_SOCKET = socketPath;
     process.env.ORBIS_VERSION = 'v0.1.0-beta.7';
-    service = new HostUpdatesService(channels as never);
+    service = new HostUpdatesService(channels as never, drives);
   });
 
   afterAll(async () => {
@@ -96,7 +111,7 @@ describe('host update Unix socket transport', () => {
     }
     const count = requests.length;
     await expect(service.apply(id)).rejects.toThrow('new update or downgrade review');
-    await expect(new HostUpdatesService(channels as never).apply(id)).rejects.toThrow('new update or downgrade review');
+    await expect(new HostUpdatesService(channels as never, drives).apply(id)).rejects.toThrow('new update or downgrade review');
     expect(requests).toHaveLength(count);
     await service.apply(id, true);
     expect(requests.at(-1)).toEqual({ method: 'POST', path: '/v1/apply', body: { planId: id } });
@@ -122,6 +137,31 @@ describe('host update Unix socket transport', () => {
     const count = requests.length;
     await expect(service.plan('v0.1.0-beta.8; rm -rf /')).rejects.toThrow(BadRequestException);
     expect(requests).toHaveLength(count);
+  });
+
+  it('refreshes drive readings after accepted start and stop requests', async () => {
+    const before = drives.invalidate.mock.calls.length;
+    for (const kind of ['short', 'extended', 'abort']) {
+      expect(await service.driveTest(`drive:${'a'.repeat(24)}`, kind)).toMatchObject({ accepted: true });
+      expect(requests.at(-1)).toEqual({ method: 'POST', path: '/v1/drives/test', body: { id: `drive:${'a'.repeat(24)}`, kind } });
+    }
+    expect(drives.invalidate).toHaveBeenCalledTimes(before + 3);
+  });
+
+  it('preserves cached readings when a self-test is rejected or fails', async () => {
+    const before = drives.invalidate.mock.calls.length;
+    try {
+      driveResponse = 'declined';
+      expect(await service.driveTest(`drive:${'a'.repeat(24)}`, 'short')).toMatchObject({ accepted: false });
+      driveResponse = 'failed';
+      await expect(service.driveTest(`drive:${'a'.repeat(24)}`, 'short')).rejects.toThrow();
+      const count = requests.length;
+      expect(() => service.driveTest('/dev/sda', 'short')).toThrow(BadRequestException);
+      expect(requests).toHaveLength(count);
+      expect(drives.invalidate).toHaveBeenCalledTimes(before);
+    } finally {
+      driveResponse = 'accepted';
+    }
   });
 
   it('rejects tags outside the published channel grammar before contacting the host service', async () => {
@@ -169,6 +209,43 @@ describe('host update Unix socket transport', () => {
       path: '/v1/packages/apply',
       body: { planId: '00000000-0000-4000-8000-000000000000' },
     });
+  });
+
+  it('adds the existing expiry contract for older package helpers', async () => {
+    const plan = await service.packagePlan(['base-files:arm64']);
+    expect(plan.createdAt).toBe(1_700_000_000);
+    expect(plan.expiresAt).toBe(1_700_000_900);
+  });
+
+  it('preserves an explicit earlier package-review deadline in Unix seconds', async () => {
+    const previous = packageReview;
+    try {
+      packageReview = { ...previous, expiresAt: 1_700_000_120 };
+      expect((await service.packagePlan(['base-files:arm64'])).expiresAt).toBe(1_700_000_120);
+    } finally {
+      packageReview = previous;
+    }
+  });
+
+  it('rejects invalid package reviews or a different selection before any apply request', async () => {
+    const previous = packageReview;
+    const count = requests.length;
+    try {
+      for (const change of [
+        { createdAt: '1700000000' },
+        { expiresAt: null },
+        { expiresAt: 1_700_000_000 },
+        { expiresAt: 1_700_001_000 },
+        { selected: [{ name: 'other-package:arm64' }] },
+        { operations: null },
+      ]) {
+        packageReview = { ...previous, ...change };
+        await expect(service.packagePlan(['base-files:arm64'])).rejects.toThrow('invalid package review');
+      }
+      expect(requests.slice(count).every((item) => item.path === '/v1/packages/plan')).toBe(true);
+    } finally {
+      packageReview = previous;
+    }
   });
 
   it('refreshes through the fixed host endpoint with no command or package options', async () => {

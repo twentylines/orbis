@@ -23,9 +23,15 @@ export const installationMode = (environment?: InstallerEnvironment): Installati
   return { phase, transactionId };
 };
 
-export const captureInstallationMode = () => {
-  startupMode ??= Object.freeze(installationMode());
+export const captureInstallationMode = (environment?: InstallerEnvironment) => {
+  startupMode ??= Object.freeze(installationMode(environment));
   return startupMode;
+};
+
+export const releaseRestoreInstallationMode = (transactionId: string) => {
+  if (startupMode?.phase !== 'resume' || startupMode.transactionId !== transactionId) return false;
+  startupMode = Object.freeze({ phase: 'normal', transactionId: null });
+  return true;
 };
 
 export const installationHeld = () => installationMode().phase === 'hold';

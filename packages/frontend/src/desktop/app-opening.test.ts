@@ -81,8 +81,8 @@ describe('general app window compatibility warnings', () => {
   test('distinguishes a server probe failure from the browser app connection', () => {
     const warning = appEmbeddingWarning({ status: 'unknown', reason: 'unreachable' });
     expect(warning?.blocked).toBe(false);
-    expect(warning?.title).toBe('Server check unavailable');
-    expect(warning?.description).toContain('does not mean the app failed in your browser');
+    expect(warning?.title).toBe('Check unavailable');
+    expect(warning?.description).toContain('Your browser may still connect');
   });
   test('allows ordinary redirects, sign-in, unsupported HEAD and failed checks to open normally', () => {
     for (const reason of [
@@ -100,7 +100,7 @@ describe('general app window compatibility warnings', () => {
   });
   test('treats anonymous server header restrictions as advisory for the signed-in browser', () => {
     for (const reason of ['x-frame-options-deny', 'x-frame-options-sameorigin', 'csp-frame-ancestors'])
-      expect(appEmbeddingWarning({ status: 'blocked', reason })).toMatchObject({ blocked: false, title: 'Embedding may be restricted' });
+      expect(appEmbeddingWarning({ status: 'blocked', reason })).toMatchObject({ blocked: false, title: 'Server restriction' });
   });
   test('enforces browser-local safety independently of anonymous or stale probe results', () => {
     expect(appEmbeddingBoundary('http://app.local', 'https://orbis.local')).toEqual({ status: 'blocked', reason: 'mixed-content' });

@@ -1,8 +1,10 @@
 import { useLayoutEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import type { LibraryFilters, LibrarySort } from './app-library';
-import { IconChevronDown, IconSearch, IconX } from '@tabler/icons-react';
+import type { LibraryFilters } from './app-library';
+import { IconApps, IconSearch, IconX } from '@tabler/icons-react';
+import { iconForCategory } from '@/modules/app/helpers/table-helpers';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { openCommandSearch } from './command-search-event';
 import './app-library.css';
 
@@ -52,39 +54,40 @@ export function AppLibraryControls({
         <IconSearch size={17} aria-hidden="true" />
         Find an app
       </button>
-      <label>
-        <span className="visually-hidden">Category</span>
-        <span className="app-library-select">
-          <select className="form-select" aria-label="Category" value={filters.category} onChange={(event) => change('category', event.target.value)}>
-            <option value="">All categories</option>
-            {[...new Set([...categories, 'uncategorized', ...(filters.category ? [filters.category] : [])])].sort().map((category) => (
-              <option key={category} value={category}>
-                {category === 'uncategorized'
-                  ? 'Uncategorized'
-                  : t(`APP_CATEGORY_${category.toUpperCase()}`, { defaultValue: category.replaceAll('-', ' ') })}
-              </option>
-            ))}
-          </select>
-          <IconChevronDown size={18} aria-hidden="true" />
-        </span>
-      </label>
-      <label>
-        <span className="visually-hidden">Sort by</span>
-        <span className="app-library-select">
-          <select
-            className="form-select"
-            aria-label="Sort by"
-            value={filters.sort}
-            onChange={(event) => change('sort', event.target.value as LibrarySort)}
-          >
-            <option value="az">A–Z</option>
-            <option value="za">Z–A</option>
-            <option value="opened">Last opened</option>
-            <option value="installed">Newest first</option>
-          </select>
-          <IconChevronDown size={18} aria-hidden="true" />
-        </span>
-      </label>
+      <Select value={filters.category || '__all__'} onValueChange={(value) => change('category', value === '__all__' ? '' : value)}>
+        <SelectTrigger fitContent className="app-library-select" aria-label="Category" value={filters.category || '__all__'}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__all__">All categories</SelectItem>
+          {[...new Set([...categories, 'uncategorized', ...(filters.category ? [filters.category] : [])])].sort().map((category) => {
+            const CategoryIcon = iconForCategory.find(({ id }) => id === category)?.icon ?? IconApps;
+            const label =
+              category === 'uncategorized'
+                ? 'Uncategorized'
+                : t(`APP_CATEGORY_${category.toUpperCase()}`, { defaultValue: category.replaceAll('-', ' ') });
+            return (
+              <SelectItem key={category} value={category} textValue={label}>
+                <span className="d-flex align-items-center gap-2">
+                  <CategoryIcon size={20} aria-hidden="true" />
+                  {label}
+                </span>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+      <Select value={filters.sort} onValueChange={(value) => change('sort', value)}>
+        <SelectTrigger fitContent className="app-library-select" aria-label="Sort by" value={filters.sort}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="az">A–Z</SelectItem>
+          <SelectItem value="za">Z–A</SelectItem>
+          <SelectItem value="opened">Last opened</SelectItem>
+          <SelectItem value="installed">Newest first</SelectItem>
+        </SelectContent>
+      </Select>
       {filters.search ? (
         <button
           type="button"

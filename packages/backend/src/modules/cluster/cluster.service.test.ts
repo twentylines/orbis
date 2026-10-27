@@ -37,6 +37,7 @@ it('keeps paired app library fields while excluding private saved configuration'
     mock<Dependencies[14]>(),
     mock<Dependencies[15]>(),
     mock<Dependencies[16]>(),
+    mock<Dependencies[17]>(),
   );
 
   const result = await service.read('local-server', 'apps');
@@ -52,6 +53,8 @@ it('keeps paired app library fields while excluding private saved configuration'
 const peerFixture = () => {
   const state = mock<Dependencies[0]>();
   const activity = mock<Dependencies[16]>();
+  const drives = mock<Dependencies[17]>();
+  const updates = mock<Dependencies[12]>();
   const service = new ClusterService(
     state,
     mock<Dependencies[1]>(),
@@ -65,13 +68,14 @@ const peerFixture = () => {
     mock<Dependencies[9]>(),
     mock<Dependencies[10]>(),
     mock<Dependencies[11]>(),
-    mock<Dependencies[12]>(),
+    updates,
     mock<Dependencies[13]>(),
     mock<Dependencies[14]>(),
     mock<Dependencies[15]>(),
     activity,
+    drives,
   );
-  return { state, activity, service };
+  return { state, activity, drives, updates, service };
 };
 
 it('renews remote sampling only after peer authentication and valid monitoring parameters', async () => {
@@ -101,4 +105,35 @@ it('does not keep collectors alive for release checks or local reads with their 
   await service.read('local-server', 'telemetry');
   await service.peer({}, { action: 'read', resource: 'build' });
   expect(activity.touchPeer).not.toHaveBeenCalled();
+});
+
+it('reads drive health through authenticated peers without starting unrelated telemetry collectors', async () => {
+  const { state, activity, drives, service } = peerFixture();
+  state.authorize.mockRejectedValueOnce(new Error('Invalid signature'));
+  await expect(service.peer({}, { action: 'read', resource: 'drives' })).rejects.toThrow('Invalid signature');
+  expect(drives.read).not.toHaveBeenCalled();
+  state.authorize.mockResolvedValue(true);
+  const sample = { available: false as const, reason: 'Drive is sleeping.' };
+  drives.read.mockResolvedValue(sample);
+  expect(await service.peer({}, { action: 'read', resource: 'drives' })).toEqual(sample);
+  expect(drives.read).toHaveBeenCalledOnce();
+  expect(activity.touchPeer).not.toHaveBeenCalled();
+});
+
+it('dispatches a signed drive self-test and rejects additional or missing parameters', async () => {
+  const { state, updates, service } = peerFixture();
+  const payload = { id: `drive:${'a'.repeat(24)}`, kind: 'short' };
+  state.authorize.mockRejectedValueOnce(new Error('Invalid signature'));
+  await expect(service.peer({}, { action: 'command', command: 'drive-self-test', payload })).rejects.toThrow('Invalid signature');
+  expect(updates.driveTest).not.toHaveBeenCalled();
+  state.authorize.mockResolvedValue(true);
+  for (const invalid of [{}, { id: payload.id }, { ...payload, force: true }, { ...payload, path: '/dev/sda' }]) {
+    await expect(service.peer({}, { action: 'command', command: 'drive-self-test', payload: invalid })).rejects.toThrow(
+      'Choose one drive and a supported self-test.',
+    );
+  }
+  expect(updates.driveTest).not.toHaveBeenCalled();
+  updates.driveTest.mockResolvedValue({ accepted: true, message: 'Test requested.' });
+  expect(await service.peer({}, { action: 'command', command: 'drive-self-test', payload })).toEqual({ accepted: true, message: 'Test requested.' });
+  expect(updates.driveTest).toHaveBeenCalledExactlyOnceWith(payload.id, payload.kind);
 });

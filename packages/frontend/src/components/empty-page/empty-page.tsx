@@ -18,20 +18,20 @@ export const EmptyPage: React.FC<IProps> = ({ title, subtitle, redirectPath, act
   const navigate = useNavigate();
 
   return (
-    <div className="card empty">
+    <div className="card empty orbis-empty-page">
       <span className="empty-page-glyph" aria-hidden="true">
         <IconInbox size={38} stroke={1.5} />
       </span>
       <p className="empty-title">{t(title)}</p>
       {subtitle && <p className="empty-subtitle text-muted">{t(subtitle)}</p>}
-      {extraContent && <div className="mt-3">{extraContent}</div>}
-      <div className="empty-action">
-        {redirectPath && actionLabel && (
+      {redirectPath && actionLabel && (
+        <div className="empty-action">
           <Button data-testid="empty-page-action" onClick={() => navigate(redirectPath)} intent="primary">
             {t(actionLabel)}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
+      {extraContent && <div className="empty-page-extra">{extraContent}</div>}
     </div>
   );
 };

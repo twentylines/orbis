@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppearanceRange } from './appearance-controls';
 import { applyAppearanceRuntime } from '@/desktop/appearance-runtime';
 import type { DesktopAppearance } from '@runtipi/common/schemas';
+import { ColourPicker } from '@/components/ui/ColourPicker/ColourPicker';
 
 export function MaterialSettings() {
   const { preferences, resolvedMode, updateAppearance } = useDesktopPreferences();
@@ -52,12 +53,7 @@ export function MaterialSettings() {
         </div>
         <div className="appearance-material-controls">
           <div className="appearance-accent-controls">
-            <input
-              type="color"
-              aria-label="Choose accent colour"
-              value={/^#[a-f0-9]{6}$/i.test(colour) ? colour : '#914725'}
-              onChange={(event) => setAccent(event.target.value)}
-            />
+            <ColourPicker value={/^#[a-f0-9]{6}$/i.test(colour) ? colour : '#914725'} onChange={setAccent} />
             <input
               type="text"
               className="appearance-colour-value"
@@ -94,7 +90,7 @@ export function MaterialSettings() {
       </section>
       <section className="appearance-section" aria-labelledby="appearance-glass">
         <div>
-          <h2 id="appearance-glass">Glass</h2>
+          <h2 id="appearance-glass">Transparency &amp; blur</h2>
           <p>Adjust panels, the system bar, dock, menus and notifications.</p>
         </div>
         <div className="appearance-material-controls">
@@ -136,20 +132,20 @@ export function MaterialSettings() {
               onChange={(chromeBlur) => updateAppearance({ chromeBlur })}
             />
             <AppearanceRange
-              label="Glass tint"
+              label="Panel tint"
               max={30}
               value={value.glassTint ?? 0}
               onPreview={preview('glassTint')}
               onChange={(glassTint) => updateAppearance({ glassTint })}
             />
           </div>
-          {opaque ? <p>Solid surfaces are enabled. Opacity and blur will apply when glass is enabled.</p> : null}
+          {opaque ? <p>Solid surfaces are enabled. Opacity and blur will apply when transparency is enabled.</p> : null}
           <div className="appearance-actions">
             <button
               type="button"
               onClick={() => updateAppearance({ surfaceOpacity: null, chromeOpacity: null, glassBlur: null, chromeBlur: null, glassTint: null })}
             >
-              Reset glass
+              Reset transparency &amp; blur
             </button>
           </div>
         </div>
@@ -187,7 +183,7 @@ export function MaterialSettings() {
             aria-pressed={value.transparency === 'glass' || (!systemTransparency && value.transparency === 'system')}
             onClick={() => updateAppearance({ transparency: 'glass' })}
           >
-            Glass
+            Transparent
           </button>
           <button type="button" aria-pressed={value.transparency === 'solid'} onClick={() => updateAppearance({ transparency: 'solid' })}>
             Solid

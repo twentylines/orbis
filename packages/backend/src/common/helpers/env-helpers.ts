@@ -8,9 +8,33 @@ import { EnvUtils } from '@/modules/env/env.utils';
 import dotenv from 'dotenv';
 import { DATA_DIR } from '../constants';
 import { type } from 'arktype';
+import { validationDiagnostic } from './validation-diagnostics';
 
 const OLD_DEFAULT_REPO_URL = 'https://github.com/meienberger/runtipi-appstore';
 export const DEFAULT_REPO_URL = 'https://github.com/runtipi/runtipi-appstore';
+
+type PostgresConnectionField = 'POSTGRES_HOST' | 'POSTGRES_DBNAME' | 'POSTGRES_USERNAME' | 'POSTGRES_PORT';
+const postgresConnectionValue = (field: PostgresConnectionField, existing: string | undefined, fallback: string, fileValue?: string): string => {
+  const invalid = () => new Error(`Invalid ${field} configuration.`);
+  const unsafe = (value: string) => /[\r\n\0]/.test(value);
+  const decoded = (encoded: string) => {
+    const parsed = dotenv.parse(`${field}=${encoded}`);
+    return Object.keys(parsed).length === 1 ? parsed[field] : undefined;
+  };
+  if (fileValue && unsafe(fileValue)) throw invalid();
+  if (existing) {
+    if (unsafe(existing)) throw invalid();
+    const value = decoded(existing);
+    if (value === undefined || unsafe(value)) throw invalid();
+    if (value) return existing;
+  }
+  const value = process.env[field] || fallback;
+  if (unsafe(value)) throw invalid();
+  for (const encoded of [value, `'${value}'`, `"${value}"`, `\`${value}\``]) {
+    if (decoded(encoded) === value) return encoded;
+  }
+  throw invalid();
+};
 
 /**
  * Generates a random seed if it does not exist yet
@@ -36,16 +60,23 @@ const getArchitecture = () => {
   throw new Error(`Unsupported architecture: ${arch}`);
 };
 
-export const generateSystemEnvFile = async (): Promise<Map<string, string>> => {
+export const generateSystemEnvFile = async (options: { readOnly?: boolean } = {}): Promise<Map<string, string>> => {
   const logger = new LoggerService('backend', path.join(path.join(DATA_DIR, 'logs')), process.env.LOG_LEVEL as LogLevel);
   logger.info('Generating system env file');
 
   const envUtils = new EnvUtils();
 
-  await fs.promises.mkdir(path.join(DATA_DIR, 'state'), { recursive: true });
+  if (!options.readOnly) await fs.promises.mkdir(path.join(DATA_DIR, 'state'), { recursive: true });
 
   const settingsFilePath = path.join(DATA_DIR, 'state', 'settings.json');
   const envFilePath = path.join(DATA_DIR, '.env');
+
+  if (options.readOnly) {
+    for (const file of [settingsFilePath, envFilePath, path.join(DATA_DIR, 'state', 'seed')]) {
+      const stat = await fs.promises.lstat(file);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Restore verification requires existing configuration files.');
+    }
+  }
 
   if (!fs.existsSync(envFilePath)) {
     await fs.promises.writeFile(envFilePath, '');
@@ -67,10 +98,10 @@ export const generateSystemEnvFile = async (): Promise<Map<string, string>> => {
   const settings = settingsSchema.partial()(JSON.parse(settingsFile));
 
   if (settings instanceof type.errors) {
-    throw new Error(`Invalid settings.json file: ${settings.summary}`);
+    throw new Error(validationDiagnostic('Invalid settings.json file', settings, (field) => settingsSchema.keyof().allows(field)));
   }
 
-  await generateSeed();
+  if (!options.readOnly) await generateSeed();
 
   if (settings.appsRepoUrl === OLD_DEFAULT_REPO_URL) {
     settings.appsRepoUrl = DEFAULT_REPO_URL;
@@ -112,10 +143,17 @@ export const generateSystemEnvFile = async (): Promise<Map<string, string>> => {
   envMap.set('DOMAIN', settings.domain || envMap.get('DOMAIN') || 'example.com');
   envMap.set('RUNTIPI_APP_DATA_PATH', appDataPath || rootFolderHost);
   envMap.set('RUNTIPI_FORWARD_AUTH_URL', settings.forwardAuthUrl || envMap.get('RUNTIPI_FORWARD_AUTH_URL') || 'http://runtipi:3000/api/auth/traefik');
-  envMap.set('POSTGRES_HOST', 'runtipi-db');
-  envMap.set('POSTGRES_DBNAME', 'tipi');
-  envMap.set('POSTGRES_USERNAME', 'tipi');
-  envMap.set('POSTGRES_PORT', String(5432));
+  const postgresFileValues = dotenv.parse(envFile);
+  envMap.set('POSTGRES_HOST', postgresConnectionValue('POSTGRES_HOST', envMap.get('POSTGRES_HOST'), 'runtipi-db', postgresFileValues.POSTGRES_HOST));
+  envMap.set(
+    'POSTGRES_DBNAME',
+    postgresConnectionValue('POSTGRES_DBNAME', envMap.get('POSTGRES_DBNAME'), 'tipi', postgresFileValues.POSTGRES_DBNAME),
+  );
+  envMap.set(
+    'POSTGRES_USERNAME',
+    postgresConnectionValue('POSTGRES_USERNAME', envMap.get('POSTGRES_USERNAME'), 'tipi', postgresFileValues.POSTGRES_USERNAME),
+  );
+  envMap.set('POSTGRES_PORT', postgresConnectionValue('POSTGRES_PORT', envMap.get('POSTGRES_PORT'), String(5432), postgresFileValues.POSTGRES_PORT));
   envMap.set('DEMO_MODE', typeof settings.demoMode === 'boolean' ? String(settings.demoMode) : envMap.get('DEMO_MODE') || 'false');
   envMap.set(
     'GUEST_DASHBOARD',
@@ -152,9 +190,12 @@ export const generateSystemEnvFile = async (): Promise<Map<string, string>> => {
   envMap.set('THEME_BASE', settings.themeBase || envMap.get('THEME_BASE') || 'gray');
   envMap.set('THEME_COLOR', settings.themeColor || envMap.get('THEME_COLOR') || 'blue');
 
-  await fs.promises.writeFile(envFilePath, envUtils.envMapToString(envMap));
-
-  dotenv.config({ path: envFilePath, override: true, quiet: true });
+  const generated = envUtils.envMapToString(envMap);
+  if (options.readOnly) dotenv.populate(process.env as Record<string, string>, dotenv.parse(generated), { override: true });
+  else {
+    await fs.promises.writeFile(envFilePath, generated);
+    dotenv.config({ path: envFilePath, override: true, quiet: true });
+  }
 
   return envMap;
 };

@@ -1,9 +1,10 @@
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, memo, useEffect, useRef, useState } from 'react';
 import type { HostTelemetry } from '@runtipi/common/schemas';
 import { Link, useSearchParams } from 'react-router';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import './host-devices.css';
 
 function bytes(value: number | null) {
@@ -94,11 +95,22 @@ export function useHostReadings() {
   });
 }
 
-export function HostDevices() {
+export const HostDevices = memo(function HostDevices() {
   const query = useHostReadings();
   const data = query.data;
   const ready = data?.available ? data : null;
   const stale = query.isError || ready?.stale;
+  const [search, setSearch] = useState('');
+  const [kind, setKind] = useState<'all' | 'filesystems' | 'network' | 'disks'>('all');
+  const term = search.trim().toLocaleLowerCase();
+  const filesystems = ready?.filesystems.filter((disk) => `${disk.mount} ${disk.filesystem}`.toLocaleLowerCase().includes(term)) ?? [];
+  const network = ready?.network.filter((item) => item.interface.toLocaleLowerCase().includes(term)) ?? [];
+  const disks = ready?.disks.filter((disk) => disk.device.toLocaleLowerCase().includes(term)) ?? [];
+  const matching =
+    (kind === 'all' || kind === 'filesystems' ? filesystems.length : 0) +
+    (kind === 'all' || kind === 'network' ? network.length : 0) +
+    (kind === 'all' || kind === 'disks' ? disks.length : 0);
+  const returned = ready ? (kind === 'all' ? ready.filesystems.length + ready.network.length + ready.disks.length : ready[kind].length) : 0;
   const heading = useRef<HTMLHeadingElement>(null);
   const retry = useRef<HTMLButtonElement>(null);
   const retryFocus = useRef(false);
@@ -146,94 +158,144 @@ export function HostDevices() {
               Last host sample: <time dateTime={ready.sampledAt}>{new Date(ready.sampledAt).toLocaleString()}</time>. Values may be stale.
             </output>
           ) : null}
+          <div className="host-device-controls">
+            <input
+              type="search"
+              className="form-control"
+              aria-label="Find a device"
+              placeholder="Find a device"
+              value={search}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+            />
+            <Select
+              value={kind}
+              onValueChange={(value) => {
+                if (value === 'all' || value === 'filesystems' || value === 'network' || value === 'disks') setKind(value);
+              }}
+            >
+              <SelectTrigger fitContent className="host-device-select" aria-label="Device type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All devices</SelectItem>
+                <SelectItem value="filesystems">Filesystems</SelectItem>
+                <SelectItem value="network">Network interfaces</SelectItem>
+                <SelectItem value="disks">Disks</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="host-device-count">
+              {matching} of {returned} returned devices
+            </span>
+          </div>
+          {term && !matching ? <p className="host-device-empty">No matching devices. Try another name or device type.</p> : null}
           <div className="host-device-sections">
-            <section aria-labelledby="host-storage-title">
-              <h3 id="host-storage-title">Mounted filesystems</h3>
-              <div className="host-device-list">
-                {ready.filesystems.map((disk) => {
-                  const used = disk.sizeBytes ? (disk.usedBytes / disk.sizeBytes) * 100 : null;
-                  return (
-                    <article className="host-device" key={disk.mount}>
-                      <MountPath mount={disk.mount} />
-                      <p className="host-device-kind">
-                        {disk.filesystem}
-                        {disk.readOnly ? ' · Read only' : ''}
-                      </p>
+            {(kind === 'all' || kind === 'filesystems') && (!term || filesystems.length > 0) ? (
+              <section aria-labelledby="host-storage-title">
+                <h3 id="host-storage-title">
+                  Mounted filesystems <span>({filesystems.length})</span>
+                </h3>
+                <div className="host-device-list">
+                  {filesystems.map((disk) => {
+                    const used = disk.sizeBytes ? (disk.usedBytes / disk.sizeBytes) * 100 : null;
+                    return (
+                      <article className="host-device" data-kind="filesystem" key={disk.mount}>
+                        <div className="host-device-identity">
+                          <MountPath mount={disk.mount} />
+                          <p className="host-device-kind">
+                            {disk.filesystem}
+                            {disk.readOnly ? ' · Read only' : ''}
+                          </p>
+                        </div>
+                        <Facts
+                          values={[
+                            ['Used', bytes(disk.usedBytes)],
+                            ['Capacity', bytes(disk.sizeBytes)],
+                            ['Available', bytes(disk.availableBytes)],
+                          ]}
+                        />
+                        {used !== null ? (
+                          <div className="workspace-meter" aria-hidden="true">
+                            <span style={{ width: `${Math.min(100, Math.max(0, used))}%` }} />
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+                {ready.filesystems.length ? null : <p>No mounted filesystem readings available.</p>}
+                <Coverage omitted={ready.omitted.filesystems} unavailable={ready.unavailable.includes('filesystems')} />
+              </section>
+            ) : null}
+            {(kind === 'all' || kind === 'network') && (!term || network.length > 0) ? (
+              <section aria-labelledby="host-network-title">
+                <h3 id="host-network-title">
+                  Network interfaces <span>({network.length})</span>
+                </h3>
+                <div className="host-device-list">
+                  {network.map((item) => (
+                    <article className="host-device" data-kind="network" key={item.interface}>
+                      <div className="host-device-identity">
+                        <div className="host-device-heading">
+                          <h4 className="host-device-identifier" title={item.interface}>
+                            {item.interface}
+                          </h4>
+                          <span className="host-device-link" data-state={item.state}>
+                            {item.state === 'up' ? 'Link up' : item.state === 'down' ? 'Link down' : 'Link unknown'}
+                          </span>
+                        </div>
+                        {item.speedMbps !== null ? <p className="host-device-kind">Link speed {item.speedMbps.toLocaleString()} Mb/s</p> : null}
+                      </div>
                       <Facts
                         values={[
-                          ['Used', bytes(disk.usedBytes)],
-                          ['Capacity', bytes(disk.sizeBytes)],
-                          ['Available', bytes(disk.availableBytes)],
+                          ['Download', rate(item.rxBytesPerSecond)],
+                          ['Upload', rate(item.txBytesPerSecond)],
+                          ['Received', bytes(item.receivedBytes)],
+                          ['Sent', bytes(item.transmittedBytes)],
                         ]}
                       />
-                      {used !== null ? (
-                        <div className="workspace-meter" aria-hidden="true">
-                          <span style={{ width: `${used}%` }} />
-                        </div>
-                      ) : null}
+                      <HistoryLink kind="network" name={item.interface} />
                     </article>
-                  );
-                })}
-              </div>
-              {ready.filesystems.length ? null : <p>No mounted filesystem readings available.</p>}
-              <Coverage omitted={ready.omitted.filesystems} unavailable={ready.unavailable.includes('filesystems')} />
-            </section>
-            <section aria-labelledby="host-network-title">
-              <h3 id="host-network-title">Network interfaces</h3>
-              <div className="host-device-list">
-                {ready.network.map((item) => (
-                  <article className="host-device" key={item.interface}>
-                    <div className="host-device-heading">
-                      <h4 className="host-device-identifier" title={item.interface}>
-                        {item.interface}
-                      </h4>
-                      <span className="host-device-link" data-state={item.state}>
-                        {item.state === 'up' ? 'Link up' : item.state === 'down' ? 'Link down' : 'Link unknown'}
-                      </span>
-                    </div>
-                    {item.speedMbps !== null ? <p className="host-device-kind">Link speed {item.speedMbps.toLocaleString()} Mb/s</p> : null}
-                    <Facts
-                      values={[
-                        ['Download', rate(item.rxBytesPerSecond)],
-                        ['Upload', rate(item.txBytesPerSecond)],
-                        ['Received', bytes(item.receivedBytes)],
-                        ['Sent', bytes(item.transmittedBytes)],
-                      ]}
-                    />
-                    <HistoryLink kind="network" name={item.interface} />
-                  </article>
-                ))}
-              </div>
-              {ready.network.length ? null : <p>No network interface readings available.</p>}
-              <Coverage omitted={ready.omitted.network} unavailable={ready.unavailable.includes('network')} />
-            </section>
-            <section aria-labelledby="host-disk-activity-title">
-              <h3 id="host-disk-activity-title">Disk activity</h3>
-              <div className="host-device-list">
-                {ready.disks.map((disk) => (
-                  <article className="host-device" key={disk.device}>
-                    <h4 className="host-device-identifier" title={disk.device}>
-                      {disk.device}
-                    </h4>
-                    <Facts
-                      values={[
-                        ['Read', rate(disk.readBytesPerSecond)],
-                        ['Write', rate(disk.writeBytesPerSecond)],
-                        ['Active time', disk.busyPercent === null ? 'Unavailable' : `${disk.busyPercent.toFixed(1)}%`],
-                        ['In progress', disk.inFlight === null ? 'Unavailable' : disk.inFlight.toLocaleString()],
-                      ]}
-                    />
-                    <HistoryLink kind="disk" name={disk.device} />
-                  </article>
-                ))}
-              </div>
-              {ready.disks.length ? null : <p>No disk activity readings available.</p>}
-              <p className="host-device-footnote">Rates need two recent samples. Partitions are excluded; layered devices can share the same I/O.</p>
-              <Coverage omitted={ready.omitted.disks} unavailable={ready.unavailable.includes('disks')} />
-            </section>
+                  ))}
+                </div>
+                {ready.network.length ? null : <p>No network interface readings available.</p>}
+                <Coverage omitted={ready.omitted.network} unavailable={ready.unavailable.includes('network')} />
+              </section>
+            ) : null}
+            {(kind === 'all' || kind === 'disks') && (!term || disks.length > 0) ? (
+              <section aria-labelledby="host-disk-activity-title">
+                <h3 id="host-disk-activity-title">
+                  Disk activity <span>({disks.length})</span>
+                </h3>
+                <div className="host-device-list">
+                  {disks.map((disk) => (
+                    <article className="host-device" data-kind="disk" key={disk.device}>
+                      <div className="host-device-identity">
+                        <h4 className="host-device-identifier" title={disk.device}>
+                          {disk.device}
+                        </h4>
+                      </div>
+                      <Facts
+                        values={[
+                          ['Read', rate(disk.readBytesPerSecond)],
+                          ['Write', rate(disk.writeBytesPerSecond)],
+                          ['Active time', disk.busyPercent === null ? 'Unavailable' : `${disk.busyPercent.toFixed(1)}%`],
+                          ['In progress', disk.inFlight === null ? 'Unavailable' : disk.inFlight.toLocaleString()],
+                        ]}
+                      />
+                      <HistoryLink kind="disk" name={disk.device} />
+                    </article>
+                  ))}
+                </div>
+                {ready.disks.length ? null : <p>No disk activity readings available.</p>}
+                <p className="host-device-footnote">
+                  Rates need two recent samples. Partitions are excluded; layered devices can share the same I/O.
+                </p>
+                <Coverage omitted={ready.omitted.disks} unavailable={ready.unavailable.includes('disks')} />
+              </section>
+            ) : null}
           </div>
         </>
       ) : null}
     </section>
   );
-}
+});

@@ -1,11 +1,40 @@
+.orbis-empty-page {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  padding: clamp(24px, 4vw, 48px) 20px;
+}
+.orbis-empty-page > :is(.empty-title, .empty-subtitle, .empty-action) {
+  margin: 0;
+}
+.orbis-empty-page .empty-title {
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+.orbis-empty-page .empty-subtitle {
+  max-width: 52ch;
+  line-height: 1.6;
+}
+.empty-page-extra {
+  width: 100%;
+  min-width: 0;
+  margin-top: 8px;
+}
 .empty-page-glyph {
   display: grid;
   place-items: center;
-  width: 72px;
-  height: 72px;
-  margin: 0 auto 18px;
+  width: 56px;
+  height: 56px;
+  margin: 0;
   border: 1px solid var(--desktop-line);
-  border-radius: 22px;
+  border-radius: 18px;
   color: var(--desktop-muted);
   background: color-mix(in srgb, var(--desktop-ink) 5%, transparent);
+}
+@media (max-width: 480px) {
+  body:has(.orbis-theme) .orbis-empty-page {
+    padding-inline: 0;
+    border: 0;
+    background: transparent;
+  }
 }

@@ -22,9 +22,10 @@
   letter-spacing: -0.035em;
 }
 .host-processes-heading h2:focus-visible {
-  outline: 3px solid var(--desktop-focus);
-  outline-offset: 5px;
-  border-radius: 4px;
+  outline: none;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
 }
 .host-processes-state,
 .host-processes .host-processes-coverage,
@@ -43,8 +44,43 @@
   display: block;
   margin-bottom: 20px;
 }
+.host-processes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin-block: 20px;
+}
+.host-processes-toolbar > input {
+  flex: 1 1 18rem;
+  min-width: 0;
+  width: auto;
+  min-height: 44px;
+}
 .host-processes .host-processes-sort {
-  gap: 10px;
+  flex: 0 1 auto;
+  align-self: stretch;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0;
+}
+.host-processes-sort > .container-resources-sort-label {
+  align-self: center;
+}
+.host-processes .host-processes-sort button {
+  min-height: 44px;
+}
+body:has(.orbis-theme) .host-processes button:focus-visible {
+  outline: none;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--desktop-ink) 14%, var(--desktop-surface));
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.host-processes-empty {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 .host-processes-notice {
   display: flex;
@@ -127,14 +163,48 @@
 }
 .host-processes-about summary {
   width: fit-content;
-  padding: 8px 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  line-height: 1.6;
   cursor: pointer;
+}
+body:has(.orbis-theme) .host-processes-about summary:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 .host-processes .host-processes-about p {
   margin: 12px 0 0;
   color: var(--process-muted);
 }
+.host-processes-results-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin-block: 16px;
+}
+.host-processes-results-heading > p {
+  flex: 1 1 18em;
+  margin: 0;
+}
+.host-processes-expand {
+  min-width: min(100%, 14em);
+}
 @container (max-width: 30em) {
+  .host-processes .host-processes-sort {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .host-processes-sort > .container-resources-sort-label {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
   .host-process-identity,
   .host-process-values {
     flex-basis: 100%;
@@ -148,5 +218,13 @@
 @media (prefers-reduced-motion: reduce) {
   .host-process-bar i {
     transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .host-processes-heading h2:focus-visible,
+  body:has(.orbis-theme) .host-processes button:focus-visible,
+  body:has(.orbis-theme) .host-processes-about summary:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 3px;
   }
 }

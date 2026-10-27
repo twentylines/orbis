@@ -11,8 +11,13 @@ export class AppEmbeddingController {
   @UseGuards(AuthGuard)
   @Header('Cache-Control', 'private, no-store')
   async check(@Param('urn') urn: string, @Query() query: Record<string, unknown>) {
-    if (Object.keys(query).length !== 2 || !Object.hasOwn(query, 'destination') || !Object.hasOwn(query, 'parentOrigin'))
-      throw new BadRequestException('Provide one destination and parentOrigin.');
+    if (
+      Object.keys(query).some((key) => !['destination', 'parentOrigin', 'refresh'].includes(key)) ||
+      !Object.hasOwn(query, 'destination') ||
+      !Object.hasOwn(query, 'parentOrigin') ||
+      (Object.hasOwn(query, 'refresh') && query.refresh !== 'true')
+    )
+      throw new BadRequestException('Provide one destination, parentOrigin and optional refresh=true.');
     const target = embeddingUrl(query.destination);
     const parent = embeddingUrl(query.parentOrigin, true);
     if (!target || !parent) throw new BadRequestException('Use complete HTTP or HTTPS addresses without credentials.');
@@ -22,6 +27,6 @@ export class AppEmbeddingController {
     } catch {
       throw new BadRequestException('Use a local installed app identifier.');
     }
-    return this.embedding.check(appUrn, target, parent);
+    return this.embedding.check(appUrn, target, parent, query.refresh === 'true');
   }
 }

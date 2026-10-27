@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { orbisPublishedReleasesOptions } from '@/desktop/orbis-release';
 import { prepareDesktopForCoreUpdate, rememberAcceptedCoreUpdate } from '@/desktop/host-update-watch';
 import { useAppContext } from '@/context/app-context';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import { useReviewExpired } from '@/desktop/use-review-expired';
 import { downgradeAllowedOnChannel, type OrbisReleaseChannel } from '@runtipi/common/schemas/orbis-release-channel';
 import { formatOrbisVersion } from '@/desktop/orbis-version';
 
@@ -29,7 +31,9 @@ export function useCompatibilityResult<T>(operation: 'update' | 'downgrade', use
       };
     },
   });
-  return results.filter((result) => result.submittedAt > Date.now() - compatibilityReviewTime).sort((a, b) => b.submittedAt - a.submittedAt)[0];
+  const latest = [...results].sort((a, b) => b.submittedAt - a.submittedAt)[0];
+  const expired = useReviewExpired(latest ? latest.submittedAt + compatibilityReviewTime : undefined);
+  return expired ? undefined : latest;
 }
 
 type Review = {
@@ -48,11 +52,13 @@ type HostRequest = <T>(path: string, body?: object, signal?: AbortSignal) => Pro
 export function OrbisDowngrade({
   installed,
   enabled,
+  active,
   request,
   channel,
 }: {
   installed: string;
   enabled: boolean;
+  active: boolean;
   request: HostRequest;
   channel?: OrbisReleaseChannel;
 }) {
@@ -64,7 +70,21 @@ export function OrbisDowngrade({
   const [confirmation, setConfirmation] = useState('');
   const errorMessage = useRef<HTMLParagraphElement>(null);
   const riskMessage = useRef<HTMLDivElement>(null);
-  const releases = useQuery({ ...orbisPublishedReleasesOptions(channel), enabled: open && enabled && Boolean(channel) });
+  const reviewIntent = useRef(0);
+  const reviewButton = useRef<HTMLButtonElement>(null);
+  const reviewExpired = useReviewExpired(review?.expiresAt);
+  const lastReviewExpired = useReviewExpired(lastPlan?.data?.expiresAt);
+  const closeReview = () => {
+    reviewIntent.current += 1;
+    setReview(null);
+  };
+  useLayoutEffect(() => {
+    if (!active) setReview(null);
+    return () => {
+      reviewIntent.current += 1;
+    };
+  }, [active]);
+  const releases = useQuery({ ...orbisPublishedReleasesOptions(channel), enabled: open && enabled && active && Boolean(channel) });
   const choices = (releases.data?.releases ?? [])
     .filter(
       (release) =>
@@ -76,6 +96,7 @@ export function OrbisDowngrade({
     meta: { invalidates: false },
     mutationKey: ['orbis-compatibility', 'downgrade', user.id, installed],
     gcTime: compatibilityReviewTime,
+    onMutate: () => ({ intent: ++reviewIntent.current }),
     mutationFn: async ({ tag: target, force = false }: { tag: string; force?: boolean }) => {
       const result = await request<Review>('downgrade/plan', { tag: target, ...(force ? { force: true } : {}) });
       if (
@@ -87,9 +108,9 @@ export function OrbisDowngrade({
         throw new Error('The downgrade review could not be verified. Check compatibility again.');
       return result;
     },
-    onSuccess: (value) => {
+    onSuccess: (value, _variables, context) => {
       setConfirmation('');
-      setReview(value);
+      if (context?.intent === reviewIntent.current) setReview(value);
     },
     retry: false,
   });
@@ -104,6 +125,7 @@ export function OrbisDowngrade({
     },
     retry: false,
   });
+  const needsReview = reviewExpired || apply.isError || plan.isError;
   useLayoutEffect(() => {
     if (review && apply.isError) errorMessage.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
   }, [review, apply.isError]);
@@ -124,26 +146,29 @@ export function OrbisDowngrade({
           {enabled && choices.length ? (
             <div className="desktop-downgrade-controls">
               <div className="desktop-downgrade-field">
-                <label htmlFor="orbis-downgrade-version">Version</label>
-                <select
-                  className="form-select"
-                  id="orbis-downgrade-version"
+                <Select
                   value={selected}
-                  onChange={(event) => {
-                    setTag(event.target.value);
+                  onValueChange={(value) => {
+                    setTag(value);
                     plan.reset();
                     apply.reset();
                   }}
                   disabled={planning || apply.isPending}
                 >
-                  {choices.map((release) => (
-                    <option key={release.tag} value={release.tag}>
-                      {formatOrbisVersion(release.tag)}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="orbis-downgrade-version" label="Version" value={selected}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {choices.map((release) => (
+                      <SelectItem key={release.tag} value={release.tag}>
+                        {formatOrbisVersion(release.tag)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <button
+                ref={reviewButton}
                 type="button"
                 className="desktop-update-action"
                 disabled={!selected || planning || apply.isPending}
@@ -162,7 +187,7 @@ export function OrbisDowngrade({
             <button
               type="button"
               className="desktop-update-action secondary"
-              disabled={!enabled || planning || apply.isPending || lastPlan.data.expiresAt <= Date.now()}
+              disabled={!enabled || planning || apply.isPending || lastReviewExpired}
               onClick={() => {
                 setConfirmation('');
                 setReview(lastPlan.data ?? null);
@@ -192,11 +217,12 @@ export function OrbisDowngrade({
           <Dialog
             open={review !== null}
             onOpenChange={(value) => {
-              if (!value && !apply.isPending) setReview(null);
+              if (!value && !apply.isPending) closeReview();
             }}
           >
             <DialogContent
               className="desktop-downgrade-dialog"
+              restoreFocusTo={reviewButton}
               closeDisabled={apply.isPending}
               onOpenAutoFocus={(event) => {
                 if (review?.forced) {
@@ -273,27 +299,40 @@ export function OrbisDowngrade({
                     {apply.error.message}
                   </p>
                 ) : null}
+                {plan.isError ? <p role="alert">{plan.error.message}</p> : null}
+                {reviewExpired && !apply.isPending ? <output>This review expired. Check compatibility again before downgrading.</output> : null}
               </div>
               <DialogFooter className="desktop-update-plan-actions">
-                <button type="button" className="desktop-update-action secondary" disabled={apply.isPending} onClick={() => setReview(null)}>
+                <button type="button" className="desktop-update-action secondary" disabled={apply.isPending} onClick={closeReview}>
                   Cancel
                 </button>
                 <button
                   type="button"
-                  className={`desktop-update-action${review?.forced ? ' is-danger' : ''}`}
+                  className={`desktop-update-action${review?.forced && !needsReview && !planning ? ' is-danger' : ''}`}
                   disabled={
                     !review ||
                     !enabled ||
+                    planning ||
                     apply.isPending ||
-                    review.expiresAt <= Date.now() ||
-                    review.appsMustBeStopped ||
-                    (review.forced && confirmation !== review.targetTag)
+                    (!needsReview && (review.appsMustBeStopped || (review.forced && confirmation !== review.targetTag)))
                   }
                   onClick={() => {
-                    if (review) apply.mutate(review);
+                    if (!review) return;
+                    if (needsReview || review.expiresAt <= Date.now()) {
+                      apply.reset();
+                      plan.mutate({ tag: review.targetTag, force: review.forced });
+                    } else apply.mutate(review);
                   }}
                 >
-                  {apply.isPending ? 'Starting downgrade…' : review?.forced ? 'Force downgrade' : 'Downgrade Orbis'}
+                  {apply.isPending
+                    ? 'Starting downgrade…'
+                    : planning
+                      ? 'Checking compatibility…'
+                      : needsReview
+                        ? 'Review again'
+                        : review?.forced
+                          ? 'Force downgrade'
+                          : 'Downgrade Orbis'}
                 </button>
               </DialogFooter>
             </DialogContent>

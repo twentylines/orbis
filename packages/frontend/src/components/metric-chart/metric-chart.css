@@ -12,11 +12,11 @@
   padding: 12px 12px 8px;
   border: 1px solid var(--desktop-line);
   border-radius: 14px;
-  background: rgba(124, 151, 132, 0.045);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
 }
-.metric-chart-plot:focus-visible {
-  outline: 3px solid var(--desktop-focus);
-  outline-offset: 3px;
+body:has(.orbis-theme) .metric-chart-plot:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
 }
 .metric-chart-plot svg {
   grid-column: 2;
@@ -141,5 +141,11 @@
   }
   .metric-chart-times span:nth-child(2) {
     display: none;
+  }
+}
+@media (forced-colors: active) {
+  body:has(.orbis-theme) .metric-chart-plot:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 }

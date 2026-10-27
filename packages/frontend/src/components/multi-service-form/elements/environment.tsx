@@ -1,5 +1,5 @@
 import './elements.css';
-import { revealTableAction } from './reveal-table-action';
+import { removeTableRow, revealTableAction } from './reveal-table-action';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
@@ -26,7 +26,7 @@ export const EnvironmentConfig = ({ errors, serviceIndex, control, register }: P
 
   return (
     <div className="row g-4">
-      <div className="col-12">
+      <div className="col-12 service-config-group">
         <div className="service-config-toolbar mb-3">
           <div>
             <Tooltip className="tooltip" anchorSelect=".my-env-vars">
@@ -52,6 +52,7 @@ export const EnvironmentConfig = ({ errors, serviceIndex, control, register }: P
                 <TableCell scope="row" className="w-50">
                   <Input
                     {...register(`services.${serviceIndex}.environment.${index}.key`, { setValueAs: (v) => v.trim() || undefined })}
+                    aria-label={`${t('MULTI_SERVICE_ENVIRONMENT_KEY')} ${index + 1}`}
                     error={t(errors?.services?.[serviceIndex]?.environment?.[index]?.key?.message as string)}
                     placeholder="KEY"
                     className="table-row-input"
@@ -60,6 +61,7 @@ export const EnvironmentConfig = ({ errors, serviceIndex, control, register }: P
                 <TableCell className="w-50">
                   <Input
                     {...register(`services.${serviceIndex}.environment.${index}.value`, { setValueAs: (v) => v.trim() || undefined })}
+                    aria-label={`${t('MULTI_SERVICE_ENVIRONMENT_VALUE')} ${index + 1}`}
                     error={t(errors?.services?.[serviceIndex]?.environment?.[index]?.value?.message as string)}
                     placeholder="value"
                     className="table-row-input"
@@ -69,7 +71,7 @@ export const EnvironmentConfig = ({ errors, serviceIndex, control, register }: P
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => remove(index)}
+                    onClick={(event) => removeTableRow(event, () => remove(index))}
                     onFocus={revealTableAction}
                     className="btn-action service-config-remove"
                     aria-label={`${t('APP_ACTION_REMOVE')}: ${t('MULTI_SERVICE_ENVIRONMENT_TITLE')} ${index + 1}`}

@@ -109,6 +109,9 @@ describe('Docker telemetry', () => {
       startPeriodSeconds: 0,
       oomKilled: true,
       restartCount: 0,
+      lastCheckIssue: null,
+      healthcheckPort: null,
+      configuredPort: null,
     });
     expect(containerReadiness({ State: {}, Config: {} } as never)).toEqual({
       failingStreak: null,
@@ -118,6 +121,9 @@ describe('Docker telemetry', () => {
       startPeriodSeconds: null,
       oomKilled: null,
       restartCount: null,
+      lastCheckIssue: null,
+      healthcheckPort: null,
+      configuredPort: null,
     });
   });
 
@@ -129,10 +135,86 @@ describe('Docker telemetry', () => {
         RestartCount: value,
         Config: { Env: ['private'], Healthcheck: { Test: ['private'], Interval: value, StartPeriod: value } },
       } as never);
-      expect(Object.values(result)).toEqual(Array(7).fill(null));
+      expect(Object.values(result)).toEqual(Array(10).fill(null));
       expect(JSON.stringify(result)).not.toContain('private');
     },
   );
+
+  it('returns only a safe failure category and literal ports from a failed healthcheck', () => {
+    const result = containerReadiness({
+      State: {
+        Health: { Status: 'unhealthy', Log: [{ ExitCode: 7, Output: 'curl: (7) Failed to connect to localhost port 5797. private-secret-value' }] },
+      },
+      Config: {
+        Env: ['PRIVATE_KEY=private-secret-value', 'PORT=8015'],
+        Healthcheck: { Test: ['CMD-SHELL', 'curl -f localhost:5797/health?token=private-secret-value'] },
+      },
+    } as never);
+    expect(result).toMatchObject({ lastCheckIssue: 'connection', healthcheckPort: 5797, configuredPort: 8015 });
+    expect(JSON.stringify(result)).not.toContain('private-secret-value');
+    expect(JSON.stringify(result)).not.toContain('localhost');
+    expect(JSON.stringify(result)).not.toContain('curl');
+  });
+
+  it.each([
+    ['curl: (28) Operation timed out', 'timeout'],
+    ['getaddrinfo EAI_AGAIN', 'dns'],
+    ['Permission denied reading application state', 'permission'],
+    ['HTTP/1.1 401 Unauthorized', 'http-auth'],
+    ['curl: (22) The requested URL returned error: 503', 'http-error'],
+    ['sh: healthcheck: command not found', 'command-missing'],
+    ['An unrecognized diagnostic', null],
+  ])('classifies the latest failed healthcheck without returning its output: %s', (Output, lastCheckIssue) => {
+    expect(containerReadiness({ State: { Health: { Status: 'starting', Log: [{ ExitCode: 1, Output }] } }, Config: {} } as never)).toMatchObject({
+      lastCheckIssue,
+    });
+  });
+
+  it('ignores old failures, successful checks, ambiguous targets and substituted ports', () => {
+    const result = containerReadiness({
+      State: {
+        Health: {
+          Status: 'healthy',
+          Log: [
+            { ExitCode: 1, Output: 'Permission denied' },
+            { ExitCode: 0, Output: 'Prior error: Connection refused' },
+          ],
+        },
+      },
+      Config: { Env: ['PORT=9000', 'PORT=${PRIVATE_PORT}'], Healthcheck: { Test: ['CMD-SHELL', 'curl localhost:9000 && curl 127.0.0.1:9001'] } },
+    } as never);
+    expect(result).toMatchObject({ lastCheckIssue: null, healthcheckPort: null, configuredPort: null });
+  });
+
+  it.each([
+    ['curl http://localhost:8015/health', 8015],
+    ['wget https://127.0.0.1:8443/status', 8443],
+    ['curl http://[::1]:8015/health', 8015],
+    ['curl localhost:8015 && curl localhost:8015', 8015],
+    ['curl localhost:8015 && curl 127.0.0.1:8016', null],
+    ['curl localhost:${PORT}/health', null],
+    ['curl localhost:8015${SUFFIX}/health', null],
+    ['curl remote.example:8015/health', null],
+    ['curl localhost:65536/health', null],
+  ])('only returns unambiguous literal loopback ports: %s', (command, port) => {
+    const result = containerReadiness({
+      State: { Health: { Status: 'unhealthy', Log: [{ ExitCode: 1, Output: 'Connection refused' }] } },
+      Config: { Env: ['PORT=9000', 'PORT=${PRIVATE_PORT}'], Healthcheck: { Test: ['CMD-SHELL', command] } },
+    } as never);
+    expect(result.healthcheckPort).toBe(port);
+    expect(result.configuredPort).toBeNull();
+  });
+
+  it('does not classify a successful latest check, unknown state or unbounded diagnostic text', () => {
+    for (const [Status, ExitCode, Output] of [
+      ['unhealthy', 0, 'Prior error: Connection refused'],
+      ['unknown', 1, 'Connection refused'],
+      ['starting', undefined, 'Connection refused'],
+      ['unhealthy', 1, `${'x'.repeat(4096)} Connection refused`],
+    ]) {
+      expect(containerReadiness({ State: { Health: { Status, Log: [{ ExitCode, Output }] } }, Config: {} } as never).lastCheckIssue).toBeNull();
+    }
+  });
 
   it.each(['0001-01-01T00:00:00Z', 'not a timestamp', new Date(Date.now() + 60_000).toISOString()])(
     'does not publish an invalid or uninitialized latest check time %s',

@@ -3,11 +3,14 @@
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import platform
 import re
 import shutil
+import shlex
+import stat
 import subprocess
 import sys
 import time
@@ -68,6 +71,46 @@ def safe_root(path):
     if path != path.resolve(strict=False) or any(ord(char) < 32 or ord(char) == 127 for char in str(path)):
         raise ValueError("Choose an absolute installation path without symlinks or control characters")
     return path
+
+
+def browser_address(root):
+    """Read only the dashboard address fields; never evaluate shell content."""
+    try:
+        descriptor = os.open(root / ".env", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+            details = os.fstat(stream.fileno())
+            if not stat.S_ISREG(details.st_mode) or details.st_nlink != 1 or details.st_size > 1024 * 1024:
+                return None
+            content = stream.read(1024 * 1024 + 1)
+        if len(content) > 1024 * 1024:
+            return None
+        values = {}
+        for line in content.splitlines():
+            match = re.fullmatch(r"\s*(?:export\s+)?(INTERNAL_IP|NGINX_PORT)\s*=(.*)", line)
+            if match:
+                value = shlex.split(match[2], comments=True)
+                if len(value) != 1:
+                    return None
+                values[match[1]] = value[0]
+        address = ipaddress.ip_address(values.get("INTERNAL_IP", ""))
+        if address.is_unspecified or address.is_multicast or address.is_loopback or "%" in str(address):
+            return None
+        port_text = values.get("NGINX_PORT", "80")
+        if not re.fullmatch(r"[0-9]{1,5}", port_text) or not 1 <= int(port_text) <= 65535:
+            return None
+        host = f"[{address}]" if address.version == 6 else str(address)
+        suffix = "" if int(port_text) == 80 else f":{int(port_text)}"
+        return f"http://{host}{suffix}"
+    except (OSError, UnicodeError, ValueError):
+        return None
+
+
+def show_browser_address(root):
+    address = browser_address(root)
+    if address:
+        print(f"\nOpen Orbis in your browser:\n  {address}\n\nSign in or create your administrator account.")
+    else:
+        print("\nThe dashboard address could not be determined. Check the server's LAN address and dashboard port.")
 
 
 def select_installation(report, root=None, ask=None):
@@ -385,6 +428,7 @@ def main():
                 raise ValueError("Orbis is already installed. Use Settings for resets or Updates for a core update")
             result = update_existing(root, reader, manifest, display, without_host_service=args.without_host_service)
             print(json.dumps(result, indent=2))
+            show_browser_address(root)
             return 0
         if selected and selected["product"] != "runtipi":
             raise ValueError("The controller cannot be replaced automatically")
@@ -447,8 +491,9 @@ def main():
         if not args.without_host_service:
             with display.step("Enabling system administration"):
                 enable.enable(root, reader.context, Path(__file__).parent)
-        print(f"\nOrbis {manifest['tag']} is installed at {root}. Open the server address in your browser to sign in or create an administrator.")
+        print(f"\nOrbis {manifest['tag']} is installed at {root}.")
         print(json.dumps(result, indent=2))
+        show_browser_address(root)
         return 0
     finally:
         if tty:

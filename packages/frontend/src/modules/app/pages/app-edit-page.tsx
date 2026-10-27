@@ -9,7 +9,7 @@ import { updateEditableAppConfigMutation } from '@/api-client/@tanstack/react-qu
 import { MultiServiceForm } from '@/components/multi-service-form/multi-service-form';
 import { Input } from '@/components/ui/Input/Input';
 import type { TranslatableError } from '@/types/error.types';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
 import type { Route } from './+types/app-edit-page';
 import { shouldRevalidateToolRoute } from '@/desktop/window-navigation';
@@ -39,6 +39,7 @@ export default function AppEditPage({ loaderData }: Route.ComponentProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
   const params = useParams<{ appId: string; storeId: string }>();
   const { composeExtras, setComposeExtras, setServices } = useMultiServiceStore();
   const id = useId();
@@ -46,6 +47,10 @@ export default function AppEditPage({ loaderData }: Route.ComponentProps) {
   const appName = params.appId ?? '';
   const storeId = params.storeId || '_user';
   const urn = `${appName}:${storeId}`;
+
+  useLayoutEffect(() => {
+    if (ready && !heading.current?.closest('[hidden],[inert]')) heading.current?.focus({ preventScroll: true });
+  }, [ready]);
 
   useEffect(() => {
     if (loaderData?.config) {
@@ -87,10 +92,13 @@ export default function AppEditPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <>
+      <h2 ref={heading} tabIndex={-1} className="app-configuration-heading">
+        {t('APP_EDIT_CONFIG')}
+      </h2>
       <div className="card">
         <div className="card-body">
           <div className="row">
-            <div className="col-md-6">
+            <div className="col-12">
               <Input
                 label={
                   <>

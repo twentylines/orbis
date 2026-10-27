@@ -7,3 +7,16 @@ export const accountIdentifierHint =
 export const newAccountIdentifier = type('string')
   .narrow((value) => email.allows(value.trim()) || isNewBareUsername(value))
   .configure({ message: accountIdentifierHint });
+
+export const signInIdentifierMessage = 'Enter your username or email.';
+export const signInPasswordMessage = 'Enter your password.';
+
+// Sign-in must continue to accept existing identifiers, including reserved or
+// legacy values that are no longer accepted for new accounts.
+export const signInAccountIdentifier = type('string')
+  .narrow((value) => value.trim().length > 0)
+  .configure({ message: signInIdentifierMessage });
+
+export const signInPassword = type('string')
+  .narrow((value) => value.length > 0)
+  .configure({ message: signInPasswordMessage });

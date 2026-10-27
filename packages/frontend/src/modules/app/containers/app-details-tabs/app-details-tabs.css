@@ -50,7 +50,10 @@
 }
 .app-detail-tabs > [role="tabpanel"] .container-resources {
   margin: 0;
-  padding: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .app-detail-tabs .markdown {
   max-width: 85ch;
@@ -203,9 +206,6 @@
   .app-detail-tabs > [role="tablist"] [role="tab"] {
     flex: 1 1 auto;
     padding: 9px 10px;
-  }
-  .app-detail-tabs > [role="tabpanel"] .container-resources {
-    padding: 18px;
   }
   .app-operations summary {
     grid-template-columns: 1fr auto;

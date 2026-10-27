@@ -4,11 +4,33 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { IconChevronRight } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type * as React from 'react';
+import { Children, createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from 'react';
 import '../dropdown.css';
 
-const DropdownMenu = ({ modal = false, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) => (
-  <DropdownMenuPrimitive.Root modal={modal} {...props} />
-);
+const MenuOpenContext = createContext(false);
+const DropdownMenu = ({
+  modal = false,
+  open,
+  defaultOpen = false,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) => {
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const expanded = open ?? internalOpen;
+  return (
+    <MenuOpenContext.Provider value={expanded}>
+      <DropdownMenuPrimitive.Root
+        {...props}
+        modal={modal}
+        open={expanded}
+        onOpenChange={(next) => {
+          if (open === undefined) setInternalOpen(next);
+          onOpenChange?.(next);
+        }}
+      />
+    </MenuOpenContext.Provider>
+  );
+};
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 
@@ -32,24 +54,73 @@ const DropdownMenuSubContent = ({ className, ...props }: React.ComponentProps<ty
   <DropdownMenuPrimitive.SubContent className={clsx('', className)} {...props} />
 );
 
-const DropdownMenuContent = ({ className, sideOffset = 4, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) => (
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content
-      collisionPadding={16}
-      sideOffset={sideOffset}
-      className={clsx('orbis-dropdown-menu d-block position-relative', className)}
-      {...props}
-    />
-  </DropdownMenuPrimitive.Portal>
-);
+const menuTrigger = (menu: HTMLDivElement | null) => {
+  const id = menu?.getAttribute('aria-labelledby');
+  return id ? document.getElementById(id) : null;
+};
+
+const DropdownMenuContent = ({
+  className,
+  sideOffset = 4,
+  onInteractOutside,
+  onEscapeKeyDown,
+  ref,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) => {
+  const content = useRef<HTMLDivElement | null>(null);
+  const open = useContext(MenuOpenContext);
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      content.current = node;
+      const cleanup = typeof ref === 'function' ? ref(node) : undefined;
+      if (ref && typeof ref !== 'function') ref.current = node;
+      return () => {
+        content.current = null;
+        if (typeof cleanup === 'function') cleanup();
+        else if (typeof ref === 'function') ref(null);
+        else if (ref) ref.current = null;
+      };
+    },
+    [ref],
+  );
+  useLayoutEffect(() => {
+    const menu = content.current;
+    if (open && document.activeElement === menuTrigger(menu)) menu?.focus({ preventScroll: true });
+  }, [open]);
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        collisionPadding={16}
+        sideOffset={sideOffset}
+        className={clsx('orbis-dropdown-menu d-block position-relative', className)}
+        {...props}
+        ref={attach}
+        onInteractOutside={(event) => {
+          onInteractOutside?.(event);
+          const trigger = menuTrigger(content.current);
+          if (event.target instanceof Node && trigger?.contains(event.target)) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          onEscapeKeyDown?.(event);
+          if (!event.defaultPrevented) menuTrigger(content.current)?.focus({ preventScroll: true });
+        }}
+      />
+    </DropdownMenuPrimitive.Portal>
+  );
+};
 
 const DropdownMenuItem = ({
   className,
   inset,
+  children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & {
   inset?: boolean;
-}) => <DropdownMenuPrimitive.Item className={clsx('dropdown-item cursor-pointer', inset && 'ps-1', className)} {...props} />;
+}) => (
+  <DropdownMenuPrimitive.Item className={clsx('dropdown-item orbis-menu-item cursor-pointer', inset && 'ps-1', className)} {...props}>
+    {Children.map(children, (child) => (typeof child === 'string' || typeof child === 'number' ? <span>{child}</span> : child))}
+  </DropdownMenuPrimitive.Item>
+);
 
 const DropdownMenuLabel = ({
   className,

@@ -5,6 +5,7 @@ import { type } from 'arktype';
 import { scheduleCron, validateCronPattern } from './cron-scheduler';
 import type { EventPublisher } from './event.publisher';
 import { INSTALLATION_MESSAGE, installationHeld, installationMode } from '@/common/installation-mode';
+import { backupMaintenanceActive, enterBackupMutation, waitForBackupMutation } from '@/common/backup-maintenance';
 
 export type ArkTypeSchema<TOut = unknown, TIn = unknown> = {
   (data: TIn): TOut | type.errors;
@@ -71,6 +72,7 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
           queueOptions: { autoDelete: false, durable: true },
         },
         async (req, reply) => {
+          const release = await waitForBackupMutation();
           let rpcSuccess = false;
           let rpcResultMessage = '';
 
@@ -94,7 +96,11 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
             };
 
             const routingKey = `rpc.${rpcSuccess ? 'processed' : 'error'}.${this.queueName}`;
-            await this.publisher.publish(routingKey, eventToPublish);
+            try {
+              await this.publisher.publish(routingKey, eventToPublish);
+            } finally {
+              release();
+            }
           }
         },
       );
@@ -107,6 +113,16 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
 
   async publish(event: unknown): Promise<{ success: boolean; message: string } | Infer<R>> {
     if (!this.enabled) return { success: false, message: INSTALLATION_MESSAGE };
+    const release = enterBackupMutation();
+    if (!release) return { success: false, message: 'A full backup or app recovery is in progress. Retry when it finishes.' };
+    try {
+      return await this.publishAdmitted(event);
+    } finally {
+      release();
+    }
+  }
+
+  private async publishAdmitted(event: unknown): Promise<{ success: boolean; message: string } | Infer<R>> {
     let accepted: Infer<T> | undefined;
     try {
       const eventData = this.eventSchema(event as never);
@@ -153,8 +169,9 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
     }
 
     scheduleCron(cronPattern, async () => {
+      if (backupMaintenanceActive()) return;
       try {
-        await this.rpcClient.send(this.queueName, eventData);
+        await this.publish(eventData);
       } catch (e) {
         Sentry.captureException(e, { tags: { queueName: this.queueName } });
         this.logger.error('Error in cron job:', e);

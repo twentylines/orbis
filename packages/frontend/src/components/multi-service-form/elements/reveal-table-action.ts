@@ -1,4 +1,14 @@
-import type { FocusEvent } from 'react';
+import type { FocusEvent, MouseEvent } from 'react';
+
+export const removeTableRow = (event: MouseEvent<HTMLButtonElement>, remove: () => void) => {
+  const button = event.currentTarget;
+  const group = button.closest<HTMLElement>('.service-config-group');
+  const actions = Array.from(group?.querySelectorAll<HTMLButtonElement>('.service-config-remove:not(:disabled)') ?? []);
+  const index = actions.indexOf(button);
+  const target = actions[index + 1] ?? actions[index - 1] ?? group?.querySelector<HTMLButtonElement>('.service-config-toolbar > button');
+  target?.focus();
+  remove();
+};
 
 export const revealTableAction = (event: FocusEvent<HTMLButtonElement>) => {
   const button = event.currentTarget;

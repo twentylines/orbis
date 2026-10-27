@@ -23,7 +23,7 @@ test('simultaneous categories retain independent summaries and exclude completed
     names,
     null,
     { id: 'apt', state: 'running' },
-    [{ id: 'review', target: 'v0.1.0-beta.110', operation: 'update' }],
+    [{ id: 'review', target: 'v0.1.0-beta.110', operation: 'downgrade' }],
   );
   expect(groups.map((group) => group.category)).toEqual(['system', 'compatibility', 'app:install', 'app:update']);
   expect(groups.map((group) => group.count)).toEqual([1, 1, 1, 1]);
@@ -78,14 +78,17 @@ describe('dock activity describes actual active work', () => {
   test('accepted Orbis restart remains visible when ordinary app task reads stop', () => {
     const id = 'd8b4a1ec-f912-4e14-8e20-58d2754a0130';
     const watch = advanceCoreUpdate(advanceCoreUpdate(null, { type: 'accepted', id, targetTag: 'v0.1.0-beta.79' }), { type: 'unavailable' });
-    expect(desktopActivity([], names, watch, null)).toMatchObject({ title: 'Restarting Orbis', kind: 'core', count: 1 });
+    const activity = desktopActivity([], names, watch, null);
+    expect(activity).toMatchObject({ title: 'Restarting', detail: 'Orbis Beta 79', kind: 'core', count: 1 });
+    expect(activity?.items[0]).toMatchObject({ title: 'Restarting Orbis', detail: watch?.message });
   });
 });
 
 test('compatibility reviews appear in the tasks pill without creating an app operation', () => {
   const result = desktopActivity([], new Map(), null, null, [{ id: 'review-1', target: 'v0.1.0-beta.91', operation: 'downgrade' }]);
-  expect(result?.title).toBe('Checking compatibility');
-  expect(result?.detail).toBe('Downgrade to v0.1.0-beta.91');
+  expect(result?.title).toBe('Reviewing downgrade');
+  expect(result?.detail).toBe('Beta 91');
   expect(result?.items[0]?.kind).toBe('core');
   expect(desktopActivity([], new Map(), null, null, [])).toBeNull();
+  expect(desktopActivity([], new Map(), null, null, [{ id: 'update-review', target: 'v0.1.0-beta.113', operation: 'update' }])).toBeNull();
 });

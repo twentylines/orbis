@@ -7,6 +7,7 @@ import type { HostDeviceHistory, HostHistorySelection } from '@runtipi/common/sc
 import { MetricPlot, formatPlotValue, type MetricPlotHistory } from '@/components/metric-chart/metric-plot';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select/Select';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { revealPageFocus } from '@/desktop/window-viewport';
 import './host-device-history.css';
 
 const keyOf = (device: HostHistorySelection) => `${device.kind}:${device.name}`;
@@ -20,7 +21,7 @@ const ranges = [
   ['7d', '7 days'],
 ] as const;
 
-export function HostDeviceHistoryView({ section }: { section?: string } = {}) {
+export function HostDeviceHistoryView({ section, layoutReady = true }: { section?: string; layoutReady?: boolean } = {}) {
   const visible = useWindowVisible();
   const serverPath = useServerPath();
   const queryClient = useQueryClient();
@@ -95,14 +96,15 @@ export function HostDeviceHistoryView({ section }: { section?: string } = {}) {
   const previousHash = useRef<string | null>(null);
   const focusedRequest = useRef<string | null>(null);
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !layoutReady) return;
     const explicit = location.state?.focusHostHistory === true && focusedRequest.current !== location.key;
     if (location.hash === '#device-history' && (previousHash.current !== location.hash || explicit)) {
-      heading.current?.focus();
+      heading.current?.focus({ preventScroll: true });
+      if (heading.current) revealPageFocus(heading.current);
       focusedRequest.current = location.key;
     }
     previousHash.current = location.hash;
-  }, [visible, location.hash, location.key, location.state]);
+  }, [visible, layoutReady, location.hash, location.key, location.state]);
   useEffect(() => {
     if (query.isFetching || !restoreFocus.current) return;
     restoreFocus.current = false;
@@ -132,7 +134,7 @@ export function HostDeviceHistoryView({ section }: { section?: string } = {}) {
   return (
     <section className="host-device-history" id="device-history" aria-labelledby="host-device-history-title" aria-busy={loading}>
       <header className="host-history-heading">
-        <h2 id="host-device-history-title" tabIndex={-1} ref={heading}>
+        <h2 id="host-device-history-title" tabIndex={-1} ref={heading} data-page-focus-align="start">
           Device history
         </h2>
         <span className="host-history-state">Recorded every 10 seconds</span>

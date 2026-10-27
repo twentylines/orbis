@@ -107,6 +107,54 @@ describe('frozen runtime dependency packaging', () => {
     expect(readFileSync(join(root, 'outside'), 'utf8')).toBe('must not be packaged');
   });
 
+  it.each([
+    '.env',
+    '.env.production',
+    '.ENV.LOCAL',
+    'service.env',
+    '.env.example',
+    'service.env.sample',
+    'env.template',
+    'environment.example',
+    '.envrc',
+    '.npmrc',
+    '.netrc',
+    'id_rsa',
+    'id_ed25519',
+  ])('rejects private configuration %s and removes incomplete output', (filename) => {
+    const { root, workspace, output, lockfile } = fixture();
+    const alpha = join(root, 'node_modules', 'alpha');
+    module(alpha, { name: 'alpha', version: '1.0.0' });
+    writeFileSync(join(alpha, filename), 'synthetic private configuration');
+    expect(() => packageRuntimeDependencies(workspace, output, lockfile, ['alpha'])).toThrow('prohibited configuration file');
+    expect(existsSync(output)).toBe(false);
+    expect(readdirSync(join(root, 'runtime')).some((name) => name.startsWith('.orbis-runtime-'))).toBe(false);
+    expect(readFileSync(join(alpha, filename), 'utf8')).toBe('synthetic private configuration');
+  });
+
+  it('rejects configuration hidden behind an otherwise permitted symlink', () => {
+    const { root, workspace, output, lockfile } = fixture();
+    const alpha = join(root, 'node_modules', 'alpha');
+    module(alpha, { name: 'alpha', version: '1.0.0' });
+    const hidden = join(alpha, 'node_modules', 'local');
+    mkdirSync(hidden, { recursive: true });
+    writeFileSync(join(hidden, '.env'), 'synthetic private configuration');
+    symlinkSync(join(hidden, '.env'), join(alpha, 'runtime-config'));
+    expect(() => packageRuntimeDependencies(workspace, output, lockfile, ['alpha'])).toThrow('prohibited configuration file');
+    expect(existsSync(output)).toBe(false);
+    expect(readdirSync(join(root, 'runtime')).some((name) => name.startsWith('.orbis-runtime-'))).toBe(false);
+  });
+
+  it('checks transitive runtime packages for private configuration too', () => {
+    const { root, workspace, output, lockfile } = fixture();
+    module(join(root, 'node_modules', 'alpha'), { name: 'alpha', version: '1.0.0', dependencies: { beta: '*' } });
+    const beta = join(root, 'node_modules', 'beta');
+    module(beta, { name: 'beta', version: '1.0.0' });
+    writeFileSync(join(beta, '.env.local'), 'synthetic private configuration');
+    expect(() => packageRuntimeDependencies(workspace, output, lockfile, ['alpha'])).toThrow('prohibited configuration file');
+    expect(existsSync(output)).toBe(false);
+  });
+
   it('loads the installed locked native hash and transformer modules from the standalone output', async () => {
     const { root, output } = fixture();
     const workspace = resolve(import.meta.dirname, '..');

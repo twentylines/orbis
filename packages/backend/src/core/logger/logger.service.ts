@@ -3,6 +3,7 @@ import path from 'node:path';
 import * as readline from 'node:readline';
 import { Injectable } from '@nestjs/common';
 import { type Logger, createLogger, format, transports } from 'winston';
+import { type } from 'arktype';
 
 export const LOG_LEVEL_ENUM = {
   debug: 'debug',
@@ -64,10 +65,12 @@ export const newLogger = (_: string, logsFolder: string, logLevel: LogLevel = LO
   });
 };
 
-const redactSensitiveData: (value: unknown, visited?: WeakSet<object>) => unknown = (value, visited = new WeakSet<object>()) => {
+export const redactSensitiveData: (value: unknown, visited?: WeakSet<object>) => unknown = (value, visited = new WeakSet<object>()) => {
   if (!value || typeof value !== 'object') {
     return value;
   }
+
+  if (value instanceof type.errors) return { validationErrors: value.length };
 
   if (Array.isArray(value)) {
     return value.map((item) => redactSensitiveData(item, visited));

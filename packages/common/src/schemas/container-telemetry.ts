@@ -13,6 +13,9 @@ export type ContainerReading = {
     startPeriodSeconds: number | null;
     oomKilled: boolean | null;
     restartCount: number | null;
+    lastCheckIssue?: 'connection' | 'timeout' | 'dns' | 'permission' | 'http-auth' | 'http-error' | 'command-missing' | null;
+    healthcheckPort?: number | null;
+    configuredPort?: number | null;
   } | null;
   cpuPercent: number | null;
   memoryBytes: number | null;
