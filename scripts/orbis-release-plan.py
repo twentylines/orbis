@@ -59,6 +59,14 @@ def validate_manifest(raw: object) -> dict[str, str]:
         or POLICY.version_order(marker, raw["tag"]) not in (-1, 0)
     ):
         raise ValueError("release manifest has an invalid critical-through marker")
+    fixes = raw.get("criticalFixes", [])
+    if (
+        not isinstance(fixes, list)
+        or len(fixes) > 128
+        or any(not isinstance(fix, str) or not POLICY.is_published_release_tag(fix) for fix in fixes)
+        or len(set(fixes)) != len(fixes)
+    ):
+        raise ValueError("release manifest has an invalid critical-fix frontier")
     if raw["runtipiCompatibility"].removeprefix("v") != "4.10.1":
         raise ValueError("release manifest does not target the 4.10.1 compatibility base")
     if "installationProtocol" in raw and raw["installationProtocol"] != INSTALLATION_PROTOCOL:

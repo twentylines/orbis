@@ -118,6 +118,7 @@ function releaseFromMetadata(value: unknown): OrbisRelease | null {
 }
 
 function releaseFromManifest(value: string, tag: string, channel: OrbisReleaseChannel): Pick<OrbisRelease, 'priority' | 'criticalThrough'> | null {
+  const releaseChannel = isStableOrbisReleaseTag(tag) ? 'stable' : 'nightly';
   let manifest: unknown;
   try {
     manifest = JSON.parse(value);
@@ -131,7 +132,8 @@ function releaseFromManifest(value: string, tag: string, channel: OrbisReleaseCh
     manifest.tag !== tag ||
     typeof manifest.commit !== 'string' ||
     !/^[0-9a-f]{40}$/.test(manifest.commit) ||
-    (manifest.releaseChannel !== undefined && manifest.releaseChannel !== channel) ||
+    !releaseAllowedOnChannel(tag, channel) ||
+    (manifest.releaseChannel !== undefined && manifest.releaseChannel !== releaseChannel) ||
     (manifest.updatePriority !== undefined && manifest.updatePriority !== 'normal' && manifest.updatePriority !== 'critical')
   ) {
     return null;
@@ -140,7 +142,7 @@ function releaseFromManifest(value: string, tag: string, channel: OrbisReleaseCh
   const validMarker =
     typeof criticalThrough === 'string' &&
     isPublishedOrbisReleaseTag(criticalThrough) &&
-    releaseAllowedOnChannel(criticalThrough, channel) &&
+    releaseAllowedOnChannel(criticalThrough, releaseChannel) &&
     valid(criticalThrough) &&
     lte(criticalThrough, tag);
   if (criticalThrough !== undefined && criticalThrough !== null && !validMarker) return null;

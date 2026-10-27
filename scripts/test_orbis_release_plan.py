@@ -70,6 +70,18 @@ class OrbisReleasePlanTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 PLAN.validate_manifest(invalid)
 
+    def test_manifest_validates_bounded_cross_channel_critical_fix_frontier(self):
+        valid = {**MANIFEST, "criticalFixes": ["v0.1.0-beta.2", "v0.1.0"]}
+        self.assertIs(PLAN.validate_manifest(valid), valid)
+        for invalid in (
+            {**MANIFEST, "criticalFixes": "v0.1.0"},
+            {**MANIFEST, "criticalFixes": ["v0.1.0-dev.1"]},
+            {**MANIFEST, "criticalFixes": ["v0.1.0", "v0.1.0"]},
+            {**MANIFEST, "criticalFixes": ["v0.1.0"] * 129},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "critical-fix frontier"):
+                PLAN.validate_manifest(invalid)
+
     def test_compose_error_does_not_expose_environment(self):
         failed = type("Result", (), {"returncode": 1, "stdout": "", "stderr": "SECRET=private-value"})()
         with patch.object(PLAN.subprocess, "run", return_value=failed):

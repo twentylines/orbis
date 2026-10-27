@@ -318,6 +318,15 @@ describe('cumulative critical release priority', () => {
     expect(withCumulativeCriticalPriority(wrongChannel, 'v1.1.0', [], 'stable')).toBe(wrongChannel);
   });
 
+  it('shows a normal future Nightly as critical only while beta 115 remains unapplied', () => {
+    const target = { ...publishedRelease('v0.1.0-beta.116'), criticalThrough: 'v0.1.0-beta.115' };
+    expect(target).not.toHaveProperty('priority');
+    expect(withCumulativeCriticalPriority(target, 'v0.1.0-beta.114', [], 'nightly')).toMatchObject({ priority: 'critical' });
+    expect(withCumulativeCriticalPriority(target, 'v0.1.0-beta.115', [], 'nightly')).toBe(target);
+    expect(withCumulativeCriticalPriority(target, 'v0.1.0-beta.116', [], 'nightly')).toBe(target);
+    expect(target).not.toHaveProperty('priority');
+  });
+
   it('retains an old Nightly critical watermark from the bounded manifest when release APIs are unavailable', async () => {
     vi.stubEnv('ORBIS_VERSION', 'v0.1.0-beta.7');
     const request = vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
@@ -354,6 +363,28 @@ describe('cumulative critical release priority', () => {
     });
 
     await expect(new OrbisReleaseService().listPublished('nightly')).rejects.toThrow('temporarily unavailable');
+  });
+
+  it('accepts a Stable manifest on Nightly when release APIs are unavailable and retains its critical fix', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'v1.1.0-beta.3');
+    const tag = 'v1.1.0';
+    vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('api.github.com')) return new Response(null, { status: 429 });
+      if (url.endsWith('/releases.atom')) return new Response(FEED.replaceAll(TAG, tag));
+      if (url.endsWith(`/${tag}.md`)) return new Response('# Stable release');
+      if (url.endsWith('/release-manifest.json')) return releaseManifestResponse(url, tag);
+      throw new Error(`unexpected release request: ${url}`);
+    });
+
+    const service = new OrbisReleaseService();
+    expect(await service.latest('nightly')).toMatchObject({
+      tag,
+      criticalThrough: tag,
+      priority: 'critical',
+      imageManifestUrl: `https://github.com/twentylines/orbis/releases/download/${tag}/release-manifest.json`,
+    });
+    expect((await service.listPublished('nightly')).releases[0]).toMatchObject({ tag, priority: 'critical' });
   });
 
   it('reads the release-body watermark without a catalogue request', async () => {

@@ -26,6 +26,7 @@ PAGE_SIZE = 100
 MAX_PAGES = 2
 MAX_RELEASES_BYTES = 2 * 1024 * 1024
 MAX_MANIFEST_BYTES = 16 * 1024
+MAX_CRITICAL_FIXES = 128
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 
@@ -42,34 +43,8 @@ def compute_critical_through(
     priority: str,
     inherited: list[dict[str, object]],
 ) -> str | None:
-    """Carry only critical markers present on the current source ancestry."""
-    if not POLICY.is_published_release_tag(tag) or channel_for(tag) != channel:
-        raise ValueError("release channel does not match the published tag")
-    if priority not in {"normal", "critical"}:
-        raise ValueError("release priority is invalid")
-
-    markers: list[str] = []
-    if priority == "critical":
-        markers.append(tag)
-    for item in inherited:
-        marker = item.get("tag")
-        source_channel = item.get("channel")
-        if item.get("ancestor") is not True or not isinstance(marker, str) or not POLICY.is_published_release_tag(marker):
-            continue
-        if POLICY.version_order(marker, tag) not in (-1, 0):
-            continue
-        if channel == "nightly":
-            if POLICY.release_allowed_on_channel(marker, "nightly"):
-                markers.append(marker)
-        elif source_channel == "stable" and POLICY.is_stable_release_tag(marker):
-            markers.append(marker)
-        elif source_channel == "nightly" and not POLICY.is_stable_release_tag(marker):
-            # A Stable release inherits a Nightly fix only when its source descends from it.
-            markers.append(tag)
-
-    if not markers:
-        return None
-    return max(markers, key=cmp_to_key(lambda first, second: POLICY.version_order(first, second) or 0))
+    """Compatibility wrapper for marker-only callers; promotion is explicit."""
+    return compute_release_state(tag, channel, priority, inherited)[0]
 
 
 def is_ancestor(tag: str, commit: str) -> bool:
@@ -200,10 +175,23 @@ def previous_manifest(
         or manifest.get("updatePriority", "normal") not in {"normal", "critical"}
     ):
         return None
+    fixes = manifest.get("criticalFixes", [])
+    if (
+        not isinstance(fixes, list)
+        or len(fixes) > MAX_CRITICAL_FIXES
+        or any(not isinstance(fix, str) or not POLICY.is_published_release_tag(fix) for fix in fixes)
+        or len(set(fixes)) != len(fixes)
+    ):
+        return None
+    has_frontier = "criticalFixes" in manifest
     if "criticalThrough" in manifest:
         marker = manifest.get("criticalThrough")
         if marker is None:
-            return manifest
+            if has_frontier:
+                return manifest
+            if manifest.get("updatePriority") == "critical" or release_body_priority(release.get("body")) == "critical":
+                return {**manifest, "criticalThrough": tag, "criticalFixes": [tag]}
+            return None
         if (
             not POLICY.is_published_release_tag(marker)
             or not POLICY.release_allowed_on_channel(marker, actual_channel)
@@ -212,7 +200,7 @@ def previous_manifest(
             return None
         return manifest
     if manifest.get("updatePriority") == "critical" or release_body_priority(release.get("body")) == "critical":
-        return {**manifest, "criticalThrough": tag}
+        return {**manifest, "criticalThrough": tag, "criticalFixes": fixes or [tag]}
     # Old normal manifests cannot prove that an older critical tag is outside
     # the bounded discovery window. Keep searching until a watermark exists.
     return None
@@ -220,7 +208,7 @@ def previous_manifest(
 
 def inherited_markers(tag: str, commit: str, repository: str, token: str) -> list[dict[str, object]]:
     channel_for(tag)
-    found: dict[str, tuple[str, str | None]] = {}
+    found: dict[str, tuple[str, str, dict[str, object]]] = {}
     releases = [release for release in release_pages(repository, token) if POLICY.is_published_release_tag(release.get("tag_name"))]
     releases.sort(key=cmp_to_key(lambda first, second: POLICY.version_order(second["tag_name"], first["tag_name"]) or 0))
     for release in releases:
@@ -232,17 +220,18 @@ def inherited_markers(tag: str, commit: str, repository: str, token: str) -> lis
         if POLICY.version_order(previous_tag, tag) not in (-1, 0):
             continue
         source_channel = channel_for(previous_tag)
-        if source_channel in found:
-            continue
         if not is_ancestor(previous_tag, commit):
             continue
+        if source_channel in found:
+            continue
         if release_body_priority(release.get("body")) == "critical":
-            marker: str | None = previous_tag
+            manifest = {"criticalThrough": previous_tag, "criticalFixes": [previous_tag]}
         else:
             manifest = previous_manifest(release, repository, token, source_channel)
             if manifest is None:
-                continue
-            value = manifest.get("criticalThrough")
+                raise ValueError("latest published channel release has no verifiable critical-fix frontier")
+        value = manifest.get("criticalThrough")
+        if value is not None:
             if value is not None and (
                 not isinstance(value, str)
                 or not POLICY.is_published_release_tag(value)
@@ -251,15 +240,104 @@ def inherited_markers(tag: str, commit: str, repository: str, token: str) -> lis
                 or not is_ancestor(value, commit)
             ):
                 continue
-            marker = value if isinstance(value, str) else None
-
+        fixes = manifest.get("criticalFixes", [])
+        if not isinstance(fixes, list):
+            continue
+        checked_fixes = [
+            fix for fix in fixes
+            if isinstance(fix, str)
+            and POLICY.is_published_release_tag(fix)
+            and is_ancestor(fix, commit)
+        ]
+        # A pre-frontier manifest may have only the old marker. Preserve it as
+        # an origin during the one-time migration to criticalFixes.
+        if not checked_fixes and isinstance(value, str):
+            checked_fixes = [value]
+        source_commit = tag_commit(previous_tag)
         current = found.get(source_channel)
         if current is None or POLICY.version_order(previous_tag, current[0]) == 1:
-            found[source_channel] = (previous_tag, marker)
-    return [
-        {"tag": marker, "channel": source_channel, "ancestor": True}
-        for source_channel, (_source_tag, marker) in found.items()
+            found[source_channel] = (previous_tag, source_commit, {
+                "criticalThrough": value,
+                "criticalFixes": checked_fixes,
+            })
+
+    previous_channel = found.get(channel_for(tag))
+    previous_channel_commit = previous_channel[1] if previous_channel else None
+    inherited: list[dict[str, object]] = []
+    for source_channel, (source_tag, _source_commit, manifest) in found.items():
+        marker = manifest.get("criticalThrough")
+        if source_channel == channel_for(tag) and isinstance(marker, str):
+            inherited.append({"channel": source_channel, "criticalThrough": marker, "ancestor": True})
+        for fix in manifest["criticalFixes"]:
+            newly_introduced = False
+            if source_channel != channel_for(tag):
+                if previous_channel_commit is not None:
+                    newly_introduced = not is_ancestor(fix, previous_channel_commit)
+                else:
+                    # A new channel has no installed-version baseline. Promote
+                    # conservatively even when its first release shares the fix commit.
+                    newly_introduced = True
+            inherited.append({
+                "tag": fix,
+                "channel": source_channel,
+                "ancestor": True,
+                "newlyIntroduced": newly_introduced,
+            })
+    return inherited
+
+
+def prune_fix_frontier(fixes: list[str]) -> list[str]:
+    """Keep only source tags whose commits are not covered by a later fix tag."""
+    unique = sorted(set(fixes), key=cmp_to_key(lambda first, second: POLICY.version_order(first, second) or 0))
+    representatives: dict[str, str] = {}
+    for fix in unique:
+        representatives[tag_commit(fix)] = fix
+    commits = list(representatives)
+    frontier = [representatives[commit] for commit in commits if not any(
+        commit != other and is_ancestor(representatives[commit], tag_commit(representatives[other]))
+        for other in commits
+    )]
+    if len(frontier) > MAX_CRITICAL_FIXES:
+        raise ValueError("critical fix frontier exceeds its size limit")
+    return frontier
+
+
+def compute_release_state(
+    tag: str,
+    channel: str,
+    priority: str,
+    inherited: list[dict[str, object]],
+) -> tuple[str | None, list[str]]:
+    if not POLICY.is_published_release_tag(tag) or channel_for(tag) != channel:
+        raise ValueError("release channel does not match the published tag")
+    if priority not in {"normal", "critical"}:
+        raise ValueError("release priority is invalid")
+    fixes = [
+        item["tag"] for item in inherited
+        if item.get("ancestor") is True
+        and isinstance(item.get("tag"), str)
+        and POLICY.is_published_release_tag(item["tag"])
     ]
+    if priority == "critical":
+        fixes.append(tag)
+    if len(set(fixes)) > MAX_CRITICAL_FIXES:
+        raise ValueError("critical fix frontier exceeds its size limit")
+    marker_candidates = [
+        item["criticalThrough"] for item in inherited
+        if item.get("channel") == channel
+        and isinstance(item.get("criticalThrough"), str)
+        and POLICY.is_published_release_tag(item["criticalThrough"])
+        and POLICY.version_order(item["criticalThrough"], tag) in (-1, 0)
+        and POLICY.release_allowed_on_channel(item["criticalThrough"], channel)
+    ]
+    newly_introduced = any(item.get("newlyIntroduced") is True for item in inherited)
+    if priority == "critical" or newly_introduced:
+        marker: str | None = tag
+    elif marker_candidates:
+        marker = max(marker_candidates, key=cmp_to_key(lambda first, second: POLICY.version_order(first, second) or 0))
+    else:
+        marker = None
+    return marker, fixes
 
 
 def append_marker(notes_path: Path, output_path: Path, marker: str | None) -> None:
@@ -294,7 +372,7 @@ def append_marker(notes_path: Path, output_path: Path, marker: str | None) -> No
     output_path.write_text(notes, encoding="utf-8", newline="\n")
 
 
-def compute(tag: str, channel: str, priority: str, commit: str, repository: str, token: str) -> str | None:
+def compute(tag: str, channel: str, priority: str, commit: str, repository: str, token: str) -> tuple[str | None, list[str]]:
     if not REPOSITORY.fullmatch(repository) or not token:
         raise ValueError("release repository credentials are unavailable")
     if not COMMIT.fullmatch(commit):
@@ -302,15 +380,16 @@ def compute(tag: str, channel: str, priority: str, commit: str, repository: str,
     if tag_commit(tag) != commit:
         raise ValueError("release tag does not identify the checked-out source commit")
     if priority == "critical":
-        # The current fix is already the upper bound; older release discovery cannot raise it.
-        return compute_critical_through(tag, channel, priority, [])
+        return tag, [tag]
     inherited = inherited_markers(tag, commit, repository, token)
-    return compute_critical_through(tag, channel, priority, inherited)
+    marker, fixes = compute_release_state(tag, channel, priority, inherited)
+    return marker, prune_fix_frontier(fixes)
 
 
-def append_github_output(path: Path, marker: str | None) -> None:
+def append_github_output(path: Path, marker: str | None, fixes: list[str]) -> None:
     with path.open("a", encoding="utf-8", newline="\n") as output:
         output.write(f"criticalThrough={marker or ''}\n")
+        output.write(f"criticalFixes={json.dumps(fixes, separators=(',', ':'))}\n")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -324,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args(argv)
     try:
-        marker = compute(
+        marker, fixes = compute(
             args.tag,
             args.channel,
             args.priority,
@@ -334,11 +413,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         append_marker(args.notes, args.notes_output, marker)
         if args.github_output:
-            append_github_output(args.github_output, marker)
+            append_github_output(args.github_output, marker, fixes)
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(str(error), file=sys.stderr)
         return 2
-    print(json.dumps({"tag": args.tag, "channel": args.channel, "criticalThrough": marker}, separators=(",", ":")))
+    print(json.dumps({"tag": args.tag, "channel": args.channel, "criticalThrough": marker, "criticalFixes": fixes}, separators=(",", ":")))
     return 0
 
 

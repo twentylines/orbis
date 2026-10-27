@@ -78,6 +78,7 @@ jobs:
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           UPDATE_PRIORITY: ${{ steps.metadata.outputs.priority }}
           CRITICAL_THROUGH: ${{ steps.watermark.outputs.criticalThrough }}
+          CRITICAL_FIXES: ${{ steps.watermark.outputs.criticalFixes }}
         run: |
           jq -n \
             --arg schema 'orbis.release.v1' \
@@ -87,6 +88,7 @@ jobs:
             --arg digest "$IMAGE_DIGEST" \
             --arg updatePriority "$UPDATE_PRIORITY" \
             --arg criticalThrough "$CRITICAL_THROUGH" \
+            --argjson criticalFixes "$CRITICAL_FIXES" \
             --arg migrationFingerprint "$(python3 scripts/orbis-migration-fingerprint.py)" \
             -f scripts/release-manifest.jq \
             > release-manifest.json

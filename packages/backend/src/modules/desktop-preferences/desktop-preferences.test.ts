@@ -54,6 +54,34 @@ describe('desktop preferences', () => {
     expect((await request(app.getHttpServer()).post('/desktop-preferences/onboarding')).status).toBe(401);
   });
 
+  it('defaults old account preferences to 12-hour display and persists each account clock format independently', async () => {
+    const { timeFormat: _removed, ...appearance } = DEFAULT_DESKTOP_PREFERENCES.appearance ?? {};
+    await fs.mkdir(path.join(directory, 'state', 'desktop'), { recursive: true });
+    await fs.writeFile(path.join(directory, 'state', 'desktop', '7.json'), JSON.stringify({ ...DEFAULT_DESKTOP_PREFERENCES, appearance }));
+    const legacy = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+    expect(legacy.body.appearance.timeFormat).toBe('12h');
+    await request(app.getHttpServer())
+      .put('/desktop-preferences')
+      .set('Authorization', 'Bearer test')
+      .send({ ...DEFAULT_DESKTOP_PREFERENCES, appearance: { timeFormat: '24h' } })
+      .expect(200);
+    const saved = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
+    expect(saved.body.appearance.timeFormat).toBe('24h');
+    const other = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer other').expect(200);
+    expect(other.body.appearance.timeFormat).toBe('12h');
+    for (const timeFormat of [null, 12, '12', '24', 'auto']) {
+      await request(app.getHttpServer())
+        .put('/desktop-preferences')
+        .set('Authorization', 'Bearer test')
+        .send({ ...DEFAULT_DESKTOP_PREFERENCES, appearance: { timeFormat } })
+        .expect(400);
+    }
+    expect(
+      (await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200)).body.appearance.timeFormat,
+    ).toBe('24h');
+    await request(app.getHttpServer()).put('/desktop-preferences').set('Authorization', 'Bearer test').send(DEFAULT_DESKTOP_PREFERENCES).expect(200);
+  });
+
   it('announces saved preferences only to clients belonging to that account', async () => {
     const service = app.get(DesktopPreferencesService);
     const first: unknown[] = [];

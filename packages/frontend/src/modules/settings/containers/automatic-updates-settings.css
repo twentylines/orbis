@@ -80,23 +80,72 @@
 }
 .automatic-updates-time {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1.25fr);
   align-items: center;
-  gap: 8px;
-  width: min(100%, 12.5rem);
+  gap: 6px;
+  width: min(100%, 16.25rem);
   min-width: 0;
 }
-.automatic-updates-time .automatic-updates-time-select {
+.automatic-updates-time[data-format="24h"] {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  width: min(100%, 10.5rem);
+}
+.automatic-updates-time .automatic-updates-time-period {
   width: 100%;
   min-width: 0;
   max-width: 100%;
   margin: 0;
 }
-.automatic-updates-time-select .form-select {
+.automatic-updates-time .automatic-updates-time-input,
+.automatic-updates-time-period .form-select {
+  box-sizing: border-box;
   min-width: 0;
   min-height: 44px;
+  height: calc(1.4em + 1.25rem + 2px);
   width: 100%;
+  margin: 0;
+  padding: 0.625rem 0.5rem;
+  border: 1px solid var(--desktop-line);
+  border-radius: 9px;
+  color: var(--desktop-ink);
+  background-color: var(--desktop-surface);
+  font: inherit;
+  line-height: 1.4;
+  text-align: center;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.automatic-updates-time-period .form-select {
+  background-position: right 0.375rem center;
+  background-size: 0.5rem;
+}
+.automatic-updates-time-period .orbis-select-value {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
+.automatic-updates-settings .automatic-updates-time .automatic-updates-time-input[aria-invalid="true"] {
+  border-color: var(--desktop-negative);
+  background-color: color-mix(in srgb, var(--desktop-negative) 8%, var(--desktop-surface));
+}
+.automatic-updates-time-format {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  margin-top: 4px;
+  color: var(--desktop-muted);
+  font-size: 0.875em;
+}
+.automatic-updates-time-format .automatic-updates-format-select {
+  width: min(100%, 7.5rem);
+  min-width: 0;
+  margin: 0;
+}
+.automatic-updates-format-select .form-select {
+  min-height: 44px;
+  font: inherit;
 }
 .automatic-updates-time-separator {
   color: var(--desktop-muted);
