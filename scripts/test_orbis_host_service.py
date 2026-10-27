@@ -162,6 +162,7 @@ class HostServiceTests(unittest.TestCase):
             directory.mkdir(mode=0o700)
         for name in ("docker-compose.yml", ".env", "orbis-compose.yml"):
             (self.root / name).write_text("fixture\n")
+        SERVICE.save_channel(self.root, "nightly", str(uuid.uuid4()))
         self.service = SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
         self.current = mock.patch.object(self.service, "current_manifest", return_value=CURRENT)
         self.current.start()

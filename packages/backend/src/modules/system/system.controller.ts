@@ -13,8 +13,8 @@ import { HostSensorsService } from './host-sensors.service';
 import { HostDeviceHistoryService } from './host-device-history.service';
 import { parseHostHistorySelection } from './host-device-history.model';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas';
-import { orbisReleaseChannelStatus } from '@runtipi/common/schemas/orbis-release-channel';
-import { requireStableReleaseChannel } from './orbis-release-channel';
+import { requireReleaseChannel } from './orbis-release-channel';
+import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
 
 @Controller('system')
 export class SystemController {
@@ -27,6 +27,7 @@ export class SystemController {
     private readonly processes: HostProcessesService,
     private readonly hostHistory: HostDeviceHistoryService,
     private readonly sensors: HostSensorsService,
+    private readonly channels: OrbisReleaseChannelsService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -101,28 +102,25 @@ export class SystemController {
   @UseGuards(AuthGuard)
   @Get('/orbis-release-channels')
   orbisReleaseChannels() {
-    return orbisReleaseChannelStatus;
+    return this.channels.status();
   }
 
   @UseGuards(AuthGuard)
   @Get('/orbis-release')
-  latestOrbisRelease(@Query('channel') channel: unknown) {
-    requireStableReleaseChannel(channel);
-    return this.orbisReleases.latest();
+  async latestOrbisRelease(@Query('channel') channel: unknown) {
+    return this.orbisReleases.latest(requireReleaseChannel(channel) ?? (await this.channels.read()).channel);
   }
 
   @UseGuards(AuthGuard)
   @Get('/orbis-releases')
-  publishedOrbisReleases(@Query('channel') channel: unknown) {
-    requireStableReleaseChannel(channel);
-    return this.orbisReleases.listPublished();
+  async publishedOrbisReleases(@Query('channel') channel: unknown) {
+    return this.orbisReleases.listPublished(requireReleaseChannel(channel) ?? (await this.channels.read()).channel);
   }
 
   @UseGuards(AuthGuard)
   @Get('/orbis-release-history')
-  orbisReleaseHistory(@Query('installed') installed: unknown, @Query('target') target: unknown, @Query('channel') channel: unknown) {
-    requireStableReleaseChannel(channel);
-    return this.orbisReleases.history(installed, target);
+  async orbisReleaseHistory(@Query('installed') installed: unknown, @Query('target') target: unknown, @Query('channel') channel: unknown) {
+    return this.orbisReleases.history(installed, target, requireReleaseChannel(channel) ?? (await this.channels.read()).channel);
   }
 
   @Get('/certificate')

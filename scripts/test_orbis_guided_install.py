@@ -29,11 +29,82 @@ GUIDE = load("orbis-install")
 NEW = load("orbis-install-new")
 ENABLE = load("orbis-host-service-enable")
 SCOPED_CHECK = ENABLE.require_scoped_cleanup
-MANIFEST = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v0.1.0-beta.65", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "runtipiCompatibility": "4.10.1", "installationProtocol": "orbis.installation-state.v1"}
+MANIFEST = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v1.0.1", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "runtipiCompatibility": "4.10.1", "installationProtocol": "orbis.installation-state.v1"}
+NIGHTLY_MANIFEST = {**MANIFEST, "tag": "v1.0.1-beta.1"}
 HEALTHY = {"state": "running", "health": "healthy", "image": MANIFEST["image"] + "@" + MANIFEST["digest"]}
 
 
 class GuidedTests(unittest.TestCase):
+    def test_release_channel_acknowledgement_only_prompts_for_nightly_and_yes_does_not_imply_consent(self):
+        ask = mock.Mock(return_value="y")
+        GUIDE.acknowledge_release_channel(MANIFEST, ask=ask)
+        ask.assert_not_called()
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            GUIDE.acknowledge_release_channel(NIGHTLY_MANIFEST, accepted=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            GUIDE.acknowledge_release_channel(NIGHTLY_MANIFEST, ask=ask)
+        self.assertIn("Nightly", ask.call_args.args[0])
+
+        for accepted, answer in ((False, "n"), (False, None)):
+            prompt = mock.Mock(return_value=answer) if answer is not None else None
+            with self.subTest(accepted=accepted, answer=answer), self.assertRaisesRegex(ValueError, "not approved"):
+                GUIDE.acknowledge_release_channel(NIGHTLY_MANIFEST, accepted=accepted, ask=prompt)
+
+    def test_nightly_update_rejects_the_no_host_service_route(self):
+        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(
+            installed_manifest=mock.Mock(return_value=MANIFEST),
+            read_channel=mock.Mock(return_value={"channel": "stable", "revision": "initial"}),
+        ))
+        display = mock.Mock()
+        with mock.patch.object(GUIDE, "load", return_value=upgrade), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release") as verify:
+            with self.assertRaisesRegex(ValueError, "require the host service"):
+                GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), NIGHTLY_MANIFEST, display, without_host_service=True)
+        verify.assert_not_called()
+
+    def test_successful_nightly_install_commits_channel_only_after_installer_returns(self):
+        with tempfile.TemporaryDirectory() as folder:
+            parent = Path(folder).resolve()
+            root = parent / "server"
+            root.mkdir()
+            state = parent / "private"
+            state.mkdir()
+            manifest_file = parent / "manifest.json"
+            manifest_file.write_text(json.dumps(NIGHTLY_MANIFEST))
+            argv = ["installer", "--manifest", str(manifest_file), "--state-dir", str(state), "--yes",
+                    "--accept-nightly", "--root", str(root), "--without-host-service", "--host-writers-stopped"]
+            install = mock.Mock()
+
+            def finish_install(*_args, **_kwargs):
+                self.assertEqual(GUIDE.CHANNELS.read_channel(root)["channel"], "stable")
+                return {"result": "orbis-installed"}
+
+            install.side_effect = finish_install
+            new = SimpleNamespace(IMAGES={}, choose_ports=lambda *args: (80, 443), install=install)
+            enable = SimpleNamespace(require_scoped_cleanup=mock.Mock())
+            private = SimpleNamespace(private_directory=lambda _path: state)
+            modules = {
+                "orbis-install-new.py": new,
+                "orbis-host-service-enable.py": enable,
+                "install-orbis.py": private,
+            }
+            display = SimpleNamespace(
+                banner=mock.Mock(), set_remaining_steps=mock.Mock(),
+                step=lambda *_args, **_kwargs: contextlib.nullcontext(),
+            )
+            report = {"installations": [], "unassignedManagedContainers": []}
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), \
+                 mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), \
+                 mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value=report), \
+                 mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: modules[name]), \
+                 mock.patch.object(GUIDE.UI, "Presentation", return_value=display), mock.patch.object(GUIDE.UI, "PullProgress"), \
+                 mock.patch.object(GUIDE, "prepare_backup_tools"), mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/rsync"), \
+                 mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(GUIDE.main(), 0)
+            self.assertEqual(install.call_count, 1)
+            self.assertEqual(GUIDE.CHANNELS.read_channel(root)["channel"], "nightly")
+
     def test_present_backup_tool_does_not_touch_the_package_manager(self):
         with mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/rsync"), mock.patch.object(GUIDE.subprocess, "run") as execute:
             GUIDE.prepare_backup_tools(mock.Mock())

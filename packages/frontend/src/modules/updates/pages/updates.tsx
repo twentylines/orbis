@@ -5,7 +5,7 @@ import { InstalledVersions } from '@/components/installed-versions/installed-ver
 import { OrbisReleaseNotes } from './orbis-release-notes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { useAppContext } from '@/context/app-context';
-import { IconArrowRight, IconBrandGithub, IconPackage, IconRefresh, IconServerCog } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowRight, IconBrandGithub, IconPackage, IconRefresh, IconServerCog } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Fragment, useEffect, useId, useRef, useState } from 'react';
@@ -25,6 +25,8 @@ import {
 } from '@/desktop/host-update-watch';
 import { coreWatchIsActive } from '@/desktop/core-update-state';
 import { installedOrbisBuildOptions, orbisReleasesOptions, newerOrbisRelease } from '@/desktop/orbis-release';
+import { orbisReleaseChannelsOptions } from '@/desktop/release-channels';
+import { formatOrbisVersion } from '@/desktop/orbis-version';
 
 type HostJob = { id: string; state: string; targetTag: string; startedAt: number; finishedAt?: number; message?: string; phase?: string | null };
 type HostStatus = {
@@ -204,9 +206,10 @@ function LocalUpdates() {
   });
   const lastCoreReview = useCompatibilityResult<ReleaseCompatibility>('update', user.id, build.data?.version ?? '');
   const checkingCore = lastCoreReview?.status === 'pending';
+  const channels = useQuery({ ...orbisReleaseChannelsOptions(), enabled: visible });
   const releases = useQuery({
-    ...orbisReleasesOptions(),
-    enabled: visible,
+    ...orbisReleasesOptions(channels.data?.current),
+    enabled: visible && Boolean(channels.data),
     staleTime: 60_000,
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
@@ -581,7 +584,11 @@ function LocalUpdates() {
             {build.isError ? 'Installed Orbis build metadata is unavailable.' : null}
             {build.data ? (
               <>
-                <InstalledVersions orbis={build.data.version} runtipi={build.data.runtipiCompatibility || version.current} />
+                <InstalledVersions
+                  orbis={build.data.version}
+                  runtipi={build.data.runtipiCompatibility || version.current}
+                  channel={channels.data?.current ?? (channels.isPending ? 'loading' : 'unavailable')}
+                />
                 <details className="desktop-update-build-details">
                   <summary>Build details</summary>
                   {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
@@ -603,11 +610,20 @@ function LocalUpdates() {
           {latest ? (
             <div className="desktop-update-release">
               <div className="desktop-update-release-title">
-                <strong>{latest.tag === build.data?.version ? 'Current release' : latest.tag}</strong>
+                <strong>{latest.tag === build.data?.version ? 'Current release' : formatOrbisVersion(latest.tag)}</strong>
                 <time>{latest.publishedAt ? new Date(latest.publishedAt).toLocaleDateString() : 'Date unavailable'}</time>
               </div>
               {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
-              <OrbisReleaseNotes latest={latest} installed={build.data?.version} />
+              {latest.priority === 'critical' && newerOrbisRelease(latest, build.data?.version) ? (
+                <div className="desktop-critical-update" role="note" aria-label="Critical update">
+                  <IconAlertTriangle size={24} aria-hidden="true" />
+                  <div>
+                    <strong>Critical update</strong>
+                    <p>This release includes security fixes that need prompt attention. Review the changelog and install the update.</p>
+                  </div>
+                </div>
+              ) : null}
+              <OrbisReleaseNotes latest={latest} installed={build.data?.version} channel={channels.data?.current} />
               <a href={latest.url} target="_blank" rel="noreferrer">
                 View release on GitHub <IconArrowRight size={16} aria-hidden="true" />
               </a>
@@ -615,6 +631,7 @@ function LocalUpdates() {
           ) : null}
           {user?.operator === true && build.data ? (
             <OrbisDowngrade
+              channel={channels.data?.current}
               installed={build.data.version}
               enabled={Boolean(
                 host.data?.available &&

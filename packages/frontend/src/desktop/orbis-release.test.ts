@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test';
 import { QueryObserver } from '@tanstack/react-query';
+import type { OrbisReleaseChannel } from '@runtipi/common/schemas/orbis-release-channel';
 import { createAppQueryClient } from '@/lib/query-client';
 import {
   newerOrbisRelease,
   includedOrbisReleases,
   orbisReleaseHistoryOptions,
+  orbisReleasesOptions,
+  orbisPublishedReleasesOptions,
   orbisUpdateNoticeOptions,
   groupOrbisReleaseNotes,
   type OrbisRelease,
@@ -44,14 +47,14 @@ test('groups only the skipped releases and target with the authoritative latest 
   expect(includedOrbisReleases(latest, latest.tag, grouped)).toEqual([latest]);
 });
 test('requests history only for a valid forward update and does not poll in the background', () => {
-  const ready = orbisReleaseHistoryOptions('v0.1.0-beta.87', 'v0.1.0-beta.90');
+  const ready = orbisReleaseHistoryOptions('v0.1.0-beta.87', 'v0.1.0-beta.90', 'stable');
   expect(ready.enabled).toBe(true);
-  expect([...ready.queryKey]).toEqual(['orbis-release-history', 'v0.1.0-beta.87', 'v0.1.0-beta.90']);
+  expect([...ready.queryKey]).toEqual(['orbis-release-history', 'v0.1.0-beta.87', 'v0.1.0-beta.90', 'stable']);
   expect(ready.refetchOnWindowFocus).toBe(false);
   expect(ready.refetchOnReconnect).toBe(false);
   expect(ready.refetchOnMount).toBe(false);
   for (const installed of [undefined, 'development', 'v0.1.0-beta.90', 'v0.1.0-beta.91']) {
-    expect(orbisReleaseHistoryOptions(installed, 'v0.1.0-beta.90').enabled).toBe(false);
+    expect(orbisReleaseHistoryOptions(installed, 'v0.1.0-beta.90', 'stable').enabled).toBe(false);
   }
 });
 
@@ -81,13 +84,21 @@ test('uses current catalogue significance when an older paired server omits rele
   expect(groupOrbisReleaseNotes(included)[0]?.feature?.tag).toBe(latest.tag);
 });
 
-function noticeScope({ stale = false, failure = false } = {}) {
+function noticeScope({
+  stale = false,
+  failure = false,
+  channel = 'nightly',
+}: {
+  stale?: boolean;
+  failure?: boolean;
+  channel?: OrbisReleaseChannel;
+} = {}) {
   const client = createAppQueryClient();
-  const options = orbisUpdateNoticeOptions(false);
+  const options = orbisUpdateNoticeOptions(false, channel);
   const originalFetch = globalThis.fetch;
   let requests = 0;
   globalThis.fetch = (async (input) => {
-    expect(input).toBe('/api/system/orbis-release');
+    expect(input).toBe(`/api/system/orbis-release?channel=${channel}`);
     requests++;
     return Response.json(failure ? { message: 'Unavailable' } : release('v0.1.0-beta.91'), { status: failure ? 503 : 200 });
   }) as typeof fetch;
@@ -98,7 +109,7 @@ function noticeScope({ stale = false, failure = false } = {}) {
     client,
     requests: () => requests,
     watch(visible: boolean) {
-      const observer = new QueryObserver(client, orbisUpdateNoticeOptions(visible));
+      const observer = new QueryObserver(client, orbisUpdateNoticeOptions(visible, channel));
       subscriptions.push(observer.subscribe(() => undefined));
       return observer;
     },
@@ -116,7 +127,7 @@ test('a hidden notice does not fetch stale releases and catches up once when vis
     const observer = scope.watch(false);
     await Bun.sleep(0);
     expect(scope.requests()).toBe(0);
-    observer.setOptions(orbisUpdateNoticeOptions(true));
+    observer.setOptions(orbisUpdateNoticeOptions(true, 'nightly'));
     await Bun.sleep(0);
     expect(scope.requests()).toBe(1);
     expect(observer.getCurrentResult().data?.[0]?.tag).toBe('v0.1.0-beta.91');
@@ -130,8 +141,8 @@ test('fresh release data survives notice remounts and visibility changes without
   const scope = noticeScope();
   try {
     const observer = scope.watch(true);
-    observer.setOptions(orbisUpdateNoticeOptions(false));
-    observer.setOptions(orbisUpdateNoticeOptions(true));
+    observer.setOptions(orbisUpdateNoticeOptions(false, 'nightly'));
+    observer.setOptions(orbisUpdateNoticeOptions(true, 'nightly'));
     scope.watch(true);
     await Bun.sleep(0);
     expect(scope.requests()).toBe(0);
@@ -165,5 +176,71 @@ test('a failed automatic check retains the last known update without immediate r
     expect(scope.client.getQueryState(['apps'])?.isInvalidated).toBe(false);
   } finally {
     scope.close();
+  }
+});
+
+test('Stable and Nightly release queries use distinct keys, request URLs, and cached values', async () => {
+  const client = createAppQueryClient();
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = (async (input) => {
+    const url = String(input);
+    requests.push(url);
+    if (url === '/api/system/orbis-release?channel=stable') return Response.json(release('v1.0.0'));
+    if (url === '/api/system/orbis-release?channel=nightly') return Response.json(release('v1.1.0-beta.1'));
+    if (url === '/api/system/orbis-releases?channel=stable') return Response.json({ releases: [release('v1.0.0')], complete: true });
+    if (url === '/api/system/orbis-releases?channel=nightly') return Response.json({ releases: [release('v1.1.0-beta.1')], complete: true });
+    if (url.includes('/api/system/orbis-release-history?') && url.endsWith('channel=stable'))
+      return Response.json({ releases: [release('v1.0.0')], complete: true, truncated: false });
+    if (url.includes('/api/system/orbis-release-history?') && url.endsWith('channel=nightly'))
+      return Response.json({ releases: [release('v1.1.0-beta.1')], complete: true, truncated: false });
+    throw new Error(`unexpected release request: ${url}`);
+  }) as typeof fetch;
+  try {
+    const stableLatest = orbisReleasesOptions('stable');
+    const nightlyLatest = orbisReleasesOptions('nightly');
+    const stableCatalog = orbisPublishedReleasesOptions('stable');
+    const nightlyCatalog = orbisPublishedReleasesOptions('nightly');
+    const stableHistory = orbisReleaseHistoryOptions('v0.1.0-beta.90', 'v1.0.0', 'stable');
+    const nightlyHistory = orbisReleaseHistoryOptions('v0.1.0-beta.90', 'v1.1.0-beta.1', 'nightly');
+
+    expect(stableLatest.queryKey.join('/')).toBe('orbis-github-releases/stable');
+    expect(nightlyLatest.queryKey.join('/')).toBe('orbis-github-releases/nightly');
+    expect(stableCatalog.queryKey.join('/')).toBe('orbis-published-releases/stable');
+    expect(nightlyCatalog.queryKey.join('/')).toBe('orbis-published-releases/nightly');
+    expect(stableHistory.queryKey.join('/')).toBe('orbis-release-history/v0.1.0-beta.90/v1.0.0/stable');
+    expect(nightlyHistory.queryKey.join('/')).toBe('orbis-release-history/v0.1.0-beta.90/v1.1.0-beta.1/nightly');
+    expect(stableLatest.refetchInterval).toBeUndefined();
+    expect(nightlyLatest.refetchInterval).toBeUndefined();
+    expect(orbisUpdateNoticeOptions(true, 'nightly').refetchIntervalInBackground).toBe(false);
+
+    const [stableValue, nightlyValue, stableCatalogValue, nightlyCatalogValue, stableHistoryValue, nightlyHistoryValue] = await Promise.all([
+      client.fetchQuery(stableLatest),
+      client.fetchQuery(nightlyLatest),
+      client.fetchQuery(stableCatalog),
+      client.fetchQuery(nightlyCatalog),
+      client.fetchQuery(stableHistory),
+      client.fetchQuery(nightlyHistory),
+    ]);
+    expect(stableValue[0]?.tag).toBe('v1.0.0');
+    expect(nightlyValue[0]?.tag).toBe('v1.1.0-beta.1');
+    expect(stableCatalogValue.releases[0]?.tag).toBe('v1.0.0');
+    expect(nightlyCatalogValue.releases[0]?.tag).toBe('v1.1.0-beta.1');
+    expect(stableHistoryValue.releases[0]?.tag).toBe('v1.0.0');
+    expect(nightlyHistoryValue.releases[0]?.tag).toBe('v1.1.0-beta.1');
+    expect(requests).toHaveLength(6);
+    expect(requests).toContain('/api/system/orbis-release?channel=stable');
+    expect(requests).toContain('/api/system/orbis-release?channel=nightly');
+    expect(requests).toContain('/api/system/orbis-releases?channel=stable');
+    expect(requests).toContain('/api/system/orbis-releases?channel=nightly');
+    expect(requests.some((url) => url.includes('channel=stable'))).toBe(true);
+    expect(requests.some((url) => url.includes('channel=nightly'))).toBe(true);
+
+    await client.fetchQuery(stableLatest);
+    await client.fetchQuery(nightlyLatest);
+    expect(requests).toHaveLength(6);
+  } finally {
+    client.clear();
+    globalThis.fetch = originalFetch;
   }
 });

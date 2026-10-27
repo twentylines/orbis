@@ -22,12 +22,17 @@ MANIFEST = {
 
 
 class OrbisReleasePlanTests(unittest.TestCase):
-    def test_stable_keeps_legacy_beta_manifests_and_rejects_inactive_builds(self):
+    def test_manifest_accepts_published_stable_nightly_identity_but_stable_helper_rejects_prereleases(self):
         beta = {**MANIFEST, "tag": "v0.1.0-beta.96"}
+        rc = {**MANIFEST, "tag": "v0.1.0-rc.1"}
         self.assertIs(PLAN.validate_manifest(beta), beta)
+        self.assertIs(PLAN.validate_manifest(rc), rc)
         self.assertNotIn("releaseChannel", beta)
-        for tag in ["v0.1.0-nightly.20261025", "v0.1.0-dev.1", "v0.1.0-alpha.1"]:
-            with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, "inactive during beta"):
+        self.assertTrue(PLAN.is_stable_release_tag(MANIFEST["tag"]))
+        self.assertFalse(PLAN.is_stable_release_tag(beta["tag"]))
+        self.assertFalse(PLAN.is_stable_release_tag(rc["tag"]))
+        for tag in ["v0.1.0-nightly.20261025", "v0.1.0-dev.1", "v0.1.0-alpha.1", "v01.0.0", "v0.1.0-beta.01"]:
+            with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, "published Stable or Nightly release"):
                 PLAN.validate_manifest({**MANIFEST, "tag": tag})
 
     def test_manifest_requires_immutable_orbis_image(self):
@@ -36,6 +41,20 @@ class OrbisReleasePlanTests(unittest.TestCase):
             PLAN.validate_manifest({**MANIFEST, "digest": "latest"})
         with self.assertRaises(ValueError):
             PLAN.validate_manifest({**MANIFEST, "image": "ghcr.io/other/orbis"})
+
+    def test_manifest_validates_optional_channel_and_update_priority(self):
+        self.assertEqual(PLAN.validate_manifest({**MANIFEST, "releaseChannel": "stable", "updatePriority": "critical"})["releaseChannel"], "stable")
+        beta = {**MANIFEST, "tag": "v0.1.0-beta.1", "releaseChannel": "nightly", "updatePriority": "normal"}
+        self.assertIs(PLAN.validate_manifest(beta), beta)
+        for invalid in (
+            {**MANIFEST, "releaseChannel": "nightly"},
+            {**MANIFEST, "tag": "v0.1.0-beta.1", "releaseChannel": "stable"},
+            {**MANIFEST, "releaseChannel": "preview"},
+            {**MANIFEST, "updatePriority": "urgent"},
+            {**MANIFEST, "updatePriority": None},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                PLAN.validate_manifest(invalid)
 
     def test_compose_error_does_not_expose_environment(self):
         failed = type("Result", (), {"returncode": 1, "stdout": "", "stderr": "SECRET=private-value"})()

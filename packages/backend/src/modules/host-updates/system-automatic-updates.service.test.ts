@@ -36,6 +36,7 @@ describe('opt-in scheduled system updates', () => {
   const config = { get: vi.fn() };
   const apps = { getApps: vi.fn() };
   const releases = { latest: vi.fn() };
+  const channels = { read: vi.fn(async () => ({ version: 1 as const, channel: 'nightly' as const, revision: 'initial' })) };
   const lifecycle = { updateApp: vi.fn() };
   const create = () =>
     new AutomaticUpdatesService(
@@ -47,6 +48,7 @@ describe('opt-in scheduled system updates', () => {
       {} as never,
       lifecycle as never,
       { warn: vi.fn() } as never,
+      channels as never,
     );
   const file = (name = 'system.json') => path.join(directory, 'state/automatic-updates', name);
   const ready = async () => {

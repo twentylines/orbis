@@ -14,7 +14,7 @@ SPEC.loader.exec_module(SITE)
 
 class InstallerEndpointTests(unittest.TestCase):
     def setUp(self):
-        self.release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v0.1.0-beta.68", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
+        self.release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v1.0.0", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
         self.files = {name: b"# public source\n" for name in SITE.BUILD.REQUIRED}
         self.files["scripts/install-orbis.py"] = Path(__file__).with_name("install-orbis.py").read_bytes()
         self.files["scripts/orbis-installer-bundle.py"] = ("REQUIRED = " + repr(SITE.BUILD.REQUIRED)).encode()
@@ -25,33 +25,42 @@ class InstallerEndpointTests(unittest.TestCase):
         self.output = Path(self.temp.name) / "site"
 
     def record(self, tag, *, draft=False):
-        return {"name": "Orbis " + tag, "tag_name": tag, "draft": draft, "published_at": "2026-10-23T00:00:00Z", "html_url": SITE.BASE + "tag/" + tag, "assets": []}
+        return {"name": "Orbis release " + tag.removeprefix("v"), "tag_name": tag, "draft": draft, "published_at": "2026-10-23T00:00:00Z", "html_url": SITE.BASE + "tag/" + tag, "assets": []}
 
-    def publish(self, releases=None, assets=None, commit=None):
+    def publish(self, releases=None, assets=None, commit=None, *, channel="stable"):
         assets = self.assets if assets is None else assets
         def fetch(url, limit):
             content = assets[url.rsplit("/", 1)[1]]
             self.assertLessEqual(len(content), limit)
             return content
         with mock.patch.object(SITE, "tag_commit", return_value=commit or self.release["commit"]), mock.patch.object(SITE.BUILD, "committed_files", return_value=self.files):
-            return SITE.site(Path(self.temp.name), releases or [self.selected], self.output, fetch)
+            return SITE.site(Path(self.temp.name), releases or [self.selected], self.output, fetch, channel=channel)
 
-    def test_latest_includes_betas_and_uses_semantic_order_instead_of_list_or_date_order(self):
+    def test_default_stable_selects_final_and_nightly_orders_prereleases_semantically(self):
         rows = [self.record(tag) for tag in ["v0.1.0-beta.9", "v0.1.0-beta.68", "v0.1.0-beta.10"]]
-        rows += [self.record("v9.0.0", draft=True), {**self.record("v4.10.1"), "name": "Runtipi v4.10.1"}]
-        self.assertEqual(SITE.newest(rows)["tag_name"], "v0.1.0-beta.68")
+        rows += [self.record("v9.0.0", draft=True)]
         rows += [self.record("v0.1.0")]
-        self.assertEqual(SITE.newest(rows)["tag_name"], "v0.1.0")
         rows += [self.record("v0.2.0-beta.1")]
-        self.assertEqual(SITE.newest(rows)["tag_name"], "v0.2.0-beta.1")
+        self.assertEqual(SITE.newest(rows)["tag_name"], "v0.1.0")
+        self.assertEqual(SITE.newest(rows, "nightly")["tag_name"], "v0.2.0-beta.1")
+        betas = [self.record(tag) for tag in ["v0.1.0-beta.9", "v0.1.0-beta.68", "v0.1.0-beta.10"]]
+        self.assertEqual(SITE.newest(betas, "nightly")["tag_name"], "v0.1.0-beta.68")
+
+    def test_no_stable_release_does_not_fall_back_to_beta_and_malformed_tags_are_excluded(self):
+        rows = [self.record(tag) for tag in ["v1.0.1-beta.1", "v1.0.0-nightly.20261027", "v01.0.0", "v1.0.0-beta.01"]]
+        with self.assertRaisesRegex(ValueError, "No published Stable"):
+            SITE.newest(rows)
+        self.assertEqual(SITE.newest(rows, "nightly")["tag_name"], "v1.0.1-beta.1")
 
     def test_serves_exact_release_launcher_and_only_explicit_public_outputs(self):
         (Path(self.temp.name) / "HANDOFF.md").write_text("private notes")
         (Path(self.temp.name) / ".env").write_text("private environment")
         result = self.publish()
         self.assertEqual(result["tag"], self.release["tag"])
+        self.assertEqual(result["channel"], "stable")
         self.assertEqual((self.output / "install").read_bytes(), self.assets["install-orbis.py"])
         channel = json.loads((self.output / "latest.json").read_text())
+        self.assertEqual(channel["channel"], "stable")
         self.assertEqual(channel["commit"], self.release["commit"])
         self.assertEqual(channel["launcherSha256"], SITE.BUILD.sha((self.output / "install").read_bytes()))
         self.assertEqual({p.name for p in self.output.iterdir()}, {"install", "latest.json", "index.html", ".nojekyll"})
@@ -69,9 +78,9 @@ class InstallerEndpointTests(unittest.TestCase):
         self.assertEqual((self.output / "install").read_bytes(), assets["install-orbis.py"])
 
     def test_incomplete_newest_release_never_falls_back_to_an_older_installer(self):
-        newer = self.record("v0.1.0-beta.69")
+        newer = self.record("v1.0.1-beta.69")
         with self.assertRaisesRegex(ValueError, "missing a unique"):
-            self.publish([self.selected, newer])
+            self.publish([self.selected, newer], channel="nightly")
         self.assertFalse(self.output.exists())
 
     def test_corrupt_asset_or_digest_is_rejected_before_public_output(self):
@@ -116,7 +125,7 @@ class InstallerEndpointTests(unittest.TestCase):
     def test_tag_source_mismatch_and_foreign_repository_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "published Git tag"):
             self.publish(commit="f" * 40)
-        selected = {**self.selected, "html_url": "https://github.com/other/orbis/releases/tag/v0.1.0-beta.68"}
+        selected = {**self.selected, "html_url": "https://github.com/other/orbis/releases/tag/v1.0.0"}
         with self.assertRaisesRegex(ValueError, "different repository"):
             self.publish([selected])
         self.assertFalse(self.output.exists())

@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { gt, lte, rcompare, valid } from 'semver';
+import type { OrbisReleaseChannel } from '@runtipi/common/schemas/orbis-release-channel';
 
 export type OrbisRelease = {
   tag: string;
@@ -8,6 +9,7 @@ export type OrbisRelease = {
   url: string;
   imageManifestUrl: string | null;
   kind?: 'feature' | 'maintenance';
+  priority?: 'critical';
 };
 export type OrbisReleaseCatalog = { releases: OrbisRelease[]; complete: boolean };
 export type OrbisReleaseHistory = OrbisReleaseCatalog & { truncated: boolean; context?: OrbisRelease | null };
@@ -34,18 +36,18 @@ export const installedOrbisBuildOptions = () =>
     queryFn: ({ signal }) => readSystem<OrbisBuild>('build', signal),
     ...checkOnEntry,
   });
-export const orbisReleasesOptions = () =>
+export const orbisReleasesOptions = (channel?: OrbisReleaseChannel) =>
   queryOptions({
-    queryKey: ['orbis-github-releases'],
+    queryKey: ['orbis-github-releases', channel ?? 'selected'],
     queryFn: async ({ signal }) => {
-      const release = await readSystem<OrbisRelease | null>('orbis-release', signal);
+      const release = await readSystem<OrbisRelease | null>(`orbis-release${channel ? `?channel=${channel}` : ''}`, signal);
       return release ? [release] : [];
     },
     ...checkOnEntry,
   });
-export const orbisUpdateNoticeOptions = (visible: boolean) =>
+export const orbisUpdateNoticeOptions = (visible: boolean, channel?: OrbisReleaseChannel) =>
   queryOptions({
-    ...orbisReleasesOptions(),
+    ...orbisReleasesOptions(channel),
     enabled: visible,
     staleTime: 10 * 60_000,
     refetchInterval: 10 * 60_000,
@@ -58,17 +60,20 @@ export function newerOrbisRelease(release: OrbisRelease | undefined, installed: 
   return Boolean(release?.imageManifestUrl && valid(release.tag) && installed && valid(installed) && gt(release.tag, installed));
 }
 
-export const orbisPublishedReleasesOptions = () =>
+export const orbisPublishedReleasesOptions = (channel?: OrbisReleaseChannel) =>
   queryOptions({
-    queryKey: ['orbis-published-releases'],
-    queryFn: ({ signal }) => readSystem<OrbisReleaseCatalog>('orbis-releases', signal),
+    queryKey: ['orbis-published-releases', channel ?? 'selected'],
+    queryFn: ({ signal }) => readSystem<OrbisReleaseCatalog>(`orbis-releases${channel ? `?channel=${channel}` : ''}`, signal),
     ...checkOnEntry,
   });
-export const orbisReleaseHistoryOptions = (installed: string | undefined, target: string) =>
+export const orbisReleaseHistoryOptions = (installed: string | undefined, target: string, channel?: OrbisReleaseChannel) =>
   queryOptions({
-    queryKey: ['orbis-release-history', installed, target],
+    queryKey: ['orbis-release-history', installed, target, channel ?? 'selected'],
     queryFn: ({ signal }) =>
-      readSystem<OrbisReleaseHistory>(`orbis-release-history?${new URLSearchParams({ installed: installed ?? '', target })}`, signal),
+      readSystem<OrbisReleaseHistory>(
+        `orbis-release-history?${new URLSearchParams({ installed: installed ?? '', target, ...(channel ? { channel } : {}) })}`,
+        signal,
+      ),
     ...checkOnEntry,
     enabled: Boolean(installed && valid(installed) && valid(target) && gt(target, installed)),
   });

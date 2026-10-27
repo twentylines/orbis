@@ -1,10 +1,12 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useMutation, useMutationState, useQuery } from '@tanstack/react-query';
-import { gte, lt, rcompare, valid } from 'semver';
+import { gte, rcompare } from 'semver';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { orbisPublishedReleasesOptions } from '@/desktop/orbis-release';
 import { prepareDesktopForCoreUpdate, rememberAcceptedCoreUpdate } from '@/desktop/host-update-watch';
 import { useAppContext } from '@/context/app-context';
+import { downgradeAllowedOnChannel, type OrbisReleaseChannel } from '@runtipi/common/schemas/orbis-release-channel';
+import { formatOrbisVersion } from '@/desktop/orbis-version';
 
 export const compatibilityReviewTime = 15 * 60_000;
 export function useCompatibilityResult<T>(operation: 'update' | 'downgrade', userId: number, installed: string) {
@@ -43,7 +45,17 @@ type Review = {
 };
 type HostRequest = <T>(path: string, body?: object, signal?: AbortSignal) => Promise<T>;
 
-export function OrbisDowngrade({ installed, enabled, request }: { installed: string; enabled: boolean; request: HostRequest }) {
+export function OrbisDowngrade({
+  installed,
+  enabled,
+  request,
+  channel,
+}: {
+  installed: string;
+  enabled: boolean;
+  request: HostRequest;
+  channel?: OrbisReleaseChannel;
+}) {
   const { user } = useAppContext();
   const lastPlan = useCompatibilityResult<Review>('downgrade', user.id, installed);
   const [open, setOpen] = useState(Boolean(lastPlan));
@@ -52,11 +64,11 @@ export function OrbisDowngrade({ installed, enabled, request }: { installed: str
   const [confirmation, setConfirmation] = useState('');
   const errorMessage = useRef<HTMLParagraphElement>(null);
   const riskMessage = useRef<HTMLDivElement>(null);
-  const releases = useQuery({ ...orbisPublishedReleasesOptions(), enabled: open && enabled });
+  const releases = useQuery({ ...orbisPublishedReleasesOptions(channel), enabled: open && enabled && Boolean(channel) });
   const choices = (releases.data?.releases ?? [])
     .filter(
       (release) =>
-        release.imageManifestUrl && valid(release.tag) && valid(installed) && lt(release.tag, installed) && gte(release.tag, 'v0.1.0-beta.90'),
+        release.imageManifestUrl && channel && downgradeAllowedOnChannel(release.tag, installed, channel) && gte(release.tag, 'v0.1.0-beta.90'),
     )
     .sort((a, b) => rcompare(a.tag, b.tag));
   const selected = choices.some((release) => release.tag === tag) ? tag : (choices[0]?.tag ?? '');
@@ -126,7 +138,7 @@ export function OrbisDowngrade({ installed, enabled, request }: { installed: str
                 >
                   {choices.map((release) => (
                     <option key={release.tag} value={release.tag}>
-                      {release.tag}
+                      {formatOrbisVersion(release.tag)}
                     </option>
                   ))}
                 </select>

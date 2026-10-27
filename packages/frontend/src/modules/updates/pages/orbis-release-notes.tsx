@@ -5,6 +5,8 @@ import { useLocation } from 'react-router';
 import { Markdown } from '@/components/markdown/markdown';
 import { includedOrbisReleases, groupOrbisReleaseNotes, orbisReleaseHistoryOptions, type OrbisRelease } from '@/desktop/orbis-release';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import type { OrbisReleaseChannel } from '@runtipi/common/schemas/orbis-release-channel';
+import { formatOrbisVersion } from '@/desktop/orbis-version';
 import './orbis-release-notes.css';
 
 function ReleaseNote({ release, expanded, children }: { release: OrbisRelease; expanded: boolean; children?: ReactNode }) {
@@ -12,7 +14,7 @@ function ReleaseNote({ release, expanded, children }: { release: OrbisRelease; e
   return (
     <details className="desktop-release-note" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>
-        <span title={release.tag}>{release.tag}</span>
+        <span title={release.tag}>{formatOrbisVersion(release.tag)}</span>
         {release.publishedAt ? <time dateTime={release.publishedAt}>{new Date(release.publishedAt).toLocaleDateString()}</time> : null}
         <IconChevronDown size={18} aria-hidden="true" />
       </summary>
@@ -23,7 +25,7 @@ function ReleaseNote({ release, expanded, children }: { release: OrbisRelease; e
               content={release.body.trimStart().replace(/^#\s+Orbis[^\n]*\r?\n(?:\r?\n)*/i, '')}
               className="desktop-update-markdown"
               tabIndex={0}
-              label={`${release.tag} changelog`}
+              label={`${formatOrbisVersion(release.tag)} changelog`}
             />
           ) : (
             <p>
@@ -53,12 +55,20 @@ function IncludedNotes({ releases }: { releases: OrbisRelease[] }) {
   );
 }
 
-export function OrbisReleaseNotes({ latest, installed }: { latest: OrbisRelease; installed: string | undefined }) {
+export function OrbisReleaseNotes({
+  latest,
+  installed,
+  channel,
+}: {
+  latest: OrbisRelease;
+  installed: string | undefined;
+  channel?: OrbisReleaseChannel;
+}) {
   const titleId = useId();
   const visible = useWindowVisible();
   const entry = useLocation().key;
   const lastEntry = useRef(entry);
-  const options = orbisReleaseHistoryOptions(installed, latest.tag);
+  const options = orbisReleaseHistoryOptions(installed, latest.tag, channel);
   const history = useQuery({ ...options, enabled: visible && options.enabled, staleTime: 60_000, refetchOnMount: 'always' });
   useEffect(() => {
     if (lastEntry.current === entry) return;
@@ -72,7 +82,9 @@ export function OrbisReleaseNotes({ latest, installed }: { latest: OrbisRelease;
     <section className="desktop-release-history" aria-labelledby={titleId}>
       <h3 id={titleId}>Changelog</h3>
       {options.enabled ? (
-        <p className="desktop-release-history-intro">This update includes all changes since {installed}, including any updates you skipped.</p>
+        <p className="desktop-release-history-intro">
+          This update includes all changes since {formatOrbisVersion(installed ?? '')}, including any updates you skipped.
+        </p>
       ) : null}
       {options.enabled && history.isPending ? <output>Reading included release notes…</output> : null}
       {history.isError || (history.data && !history.data.complete) ? (

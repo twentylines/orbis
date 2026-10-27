@@ -42,6 +42,7 @@ SENSORS = load_script("orbis-host-sensors.py", "orbis_sensors_for_service").Host
 HOST = UPDATE.HOST
 PLAN = HOST.PLAN
 CHECK = UPDATE.CHECK
+POLICY = PLAN.POLICY
 PLAN_TTL_SECONDS = 15 * 60
 BODY_LIMIT = 64 * 1024
 PACKAGE_OUTPUT_BYTES = 8192
@@ -135,6 +136,49 @@ def read_private(path: Path) -> dict | None:
     if not isinstance(data, dict):
         raise ValueError("host service state is invalid")
     return data
+
+
+def channel_file(root: Path) -> Path:
+    directory = root / "state"
+    if directory.is_symlink() or (directory.exists() and (not directory.is_dir() or stat.S_IMODE(directory.stat().st_mode) & 0o022)):
+        raise ValueError("the update channel directory is invalid")
+    return directory / "orbis-release-channel.json"
+
+
+def read_channel(root: Path) -> dict:
+    file = channel_file(root)
+    try:
+        descriptor = os.open(file, os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return {"version": 1, "channel": "stable", "revision": "initial"}
+    with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+        details = os.fstat(stream.fileno())
+        if not stat.S_ISREG(details.st_mode) or details.st_nlink != 1 or details.st_size > 4096 or stat.S_IMODE(details.st_mode) & 0o077 or details.st_uid != os.getuid():
+            raise ValueError("the saved update channel is not a private regular file")
+        value = json.load(stream)
+    if not isinstance(value, dict) or set(value) != {"version", "channel", "revision"} or type(value["version"]) is not int or value["version"] != 1 or not isinstance(value["channel"], str) or value["channel"] not in {"stable", "nightly"} or not isinstance(value["revision"], str):
+        raise ValueError("the saved update channel is invalid")
+    try:
+        identifier = uuid.UUID(value["revision"], version=4)
+    except ValueError as error:
+        raise ValueError("the update channel revision is invalid") from error
+    if str(identifier) != value["revision"]:
+        raise ValueError("the update channel revision is invalid")
+    return value
+
+
+def save_channel(root: Path, channel: str, revision: str) -> None:
+    file = channel_file(root)
+    file.parent.mkdir(mode=0o700, exist_ok=True)
+    write_private(file, {"version": 1, "channel": channel, "revision": revision})
+
+
+def latest_stable_tag() -> str:
+    metadata = CHECK.read_json("https://api.github.com/repos/twentylines/orbis/releases/latest", 1024 * 1024, {"Accept": "application/vnd.github+json"})
+    tag = metadata.get("tag_name") if isinstance(metadata, dict) else None
+    if not POLICY.is_stable_release_tag(tag) or metadata.get("draft") or metadata.get("prerelease"):
+        raise ValueError("the latest Stable release could not be verified")
+    return tag
 
 
 def manifest_for_tag(tag: str) -> dict[str, str]:
@@ -238,6 +282,58 @@ class HostService:
         if previous and previous.get("state") in {"running", "recovering"}:
             previous["state"] = "interrupted"
             write_private(self.job_file, previous)
+
+    def require_idle_core(self) -> None:
+        self.require_restart_clear()
+        self.require_package_clear()
+        if self.maintenance_file.exists() or self.maintenance_file.is_symlink():
+            raise ValueError("host helper maintenance is in progress")
+        if self.busy:
+            raise ValueError("another host update is in progress")
+        previous = read_private(self.job_file)
+        if previous and previous.get("state") in {"running", "recovering", "interrupted"}:
+            raise ValueError("finish or recover the current host update before changing release channels")
+
+    def select_channel(self, channel: str, revision: str, acknowledge_nightly: bool = False) -> dict:
+        with self.lock:
+            self.require_idle_core()
+            self.require_healthy_core()
+            record = read_channel(self.root)
+            if channel not in {"stable", "nightly"} or revision != record["revision"]:
+                raise ValueError("the release channel changed; refresh before continuing")
+            if channel == "nightly" and acknowledge_nightly is not True:
+                raise ValueError("confirm the Nightly warning before enabling it")
+            current = self.current_manifest()
+            if channel == "stable" and not POLICY.is_stable_release_tag(current["tag"]):
+                raise ValueError("install a reviewed Stable release before leaving Nightly")
+            if channel != record["channel"]:
+                save_channel(self.root, channel, str(uuid.uuid4()))
+            return {"channel": read_channel(self.root)["channel"]}
+
+    def validate_channel_plan(self, record: dict, current: dict, target: dict, return_to_stable: bool) -> None:
+        if type(return_to_stable) is not bool:
+            raise ValueError("the Stable return choice is invalid")
+        if return_to_stable:
+            if record["channel"] != "nightly" or not POLICY.is_stable_release_tag(target["tag"]) or target["tag"] != latest_stable_tag():
+                raise ValueError("review the latest Stable release before leaving Nightly")
+        elif not POLICY.release_allowed_on_channel(target["tag"], record["channel"]):
+            raise ValueError("this release is not available on the selected update channel")
+        order = POLICY.version_order(target["tag"], current["tag"])
+        if order is None or order == 0:
+            raise ValueError("choose a different published release")
+        if order < 0 and not POLICY.downgrade_allowed_on_channel(target["tag"], current["tag"], record["channel"]):
+            raise ValueError("Nightly downgrades are limited to the same version's beta revisions and earlier Stable releases")
+
+    def complete_channel_change(self, job: dict) -> None:
+        if not job.get("returnToStable"):
+            return
+        current = read_channel(self.root)
+        committed = {"version": 1, "channel": "stable", "revision": job["id"]}
+        if current == committed:
+            return
+        if current != job.get("channelState") or not POLICY.is_stable_release_tag(job["target"]["tag"]):
+            raise ValueError("the release channel changed during installation; local recovery is required")
+        save_channel(self.root, "stable", job["id"])
 
     def restart_status(self) -> dict:
         if not Path("/run/systemd/system").is_dir() or not os.access("/usr/bin/systemctl", os.X_OK):
@@ -542,6 +638,18 @@ class HostService:
                 and core.get("health") == "healthy"
             )
             if stage in {"complete", "rolled-back"} and healthy_expected:
+                if stage == "complete":
+                    try:
+                        self.complete_channel_change(job)
+                    except (OSError, ValueError, json.JSONDecodeError):
+                        job["message"] = "Stable is installed, but its channel change needs recovery. Refresh status to retry."
+                        write_private(self.job_file, job)
+                        return {
+                            "available": True, "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1"],
+                            "enrolled": enrolled, "currentTag": saved.get("tag"), "currentDigest": saved.get("digest"),
+                            "coreState": core.get("state"), "coreHealth": core.get("health"), "imageMatches": True,
+                            "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")},
+                        }
                 job["state"] = "complete" if stage == "complete" else "rolled-back"
                 job.update(UPDATE.safe_failure(journal))
                 job["message"] = "Reviewed Orbis release is healthy." if stage == "complete" else f"{UPDATE.failure_message(journal)} Previous Orbis release is healthy.".strip()
@@ -555,7 +663,7 @@ class HostService:
                 write_private(self.job_file, job)
         return {
             "available": True,
-            "capabilities": ["restart.v1", "packages.refresh.v1"],
+            "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1"],
             "enrolled": enrolled,
             "currentTag": saved.get("tag") if saved else None,
             "currentDigest": saved.get("digest") if saved else None,
@@ -567,7 +675,7 @@ class HostService:
             else None,
         }
 
-    def plan(self, tag: str) -> dict:
+    def plan(self, tag: str, return_to_stable: bool = False) -> dict:
         with self.lock:
             self.require_restart_clear()
             self.require_package_clear()
@@ -580,6 +688,8 @@ class HostService:
                 raise ValueError("resolve the previous host update before creating another plan")
         current = self.current_manifest()
         target = manifest_for_tag(tag)
+        channel = read_channel(self.root)
+        self.validate_channel_plan(channel, current, target, return_to_stable)
         plan_id = str(uuid.uuid4())
         snapshot = self.snapshots / f"orbis-{tag}-{plan_id}"
         result = UPDATE.update_plan(self.root, current, target, self.context, snapshot)
@@ -590,6 +700,8 @@ class HostService:
             "current": current,
             "target": target,
             "snapshot": str(snapshot),
+            "channelState": channel,
+            "returnToStable": return_to_stable,
         }
         write_private(self.state_dir / f"plan-{plan_id}.json", record)
         return {
@@ -632,6 +744,9 @@ class HostService:
             target = PLAN.validate_manifest(plan["target"])
             if self.current_manifest() != current:
                 raise ValueError("installed release changed since the update plan")
+            if plan.get("channelState") != read_channel(self.root):
+                raise ValueError("the release channel changed since the update plan")
+            self.validate_channel_plan(plan["channelState"], current, target, plan.get("returnToStable", False))
             snapshot = Path(plan["snapshot"])
             if snapshot.parent != self.snapshots or snapshot.name != f"orbis-{target['tag']}-{plan_id}":
                 raise ValueError("update plan has an invalid snapshot destination")
@@ -644,6 +759,8 @@ class HostService:
                 "snapshot": str(snapshot),
                 "current": current,
                 "target": target,
+                "channelState": plan["channelState"],
+                "returnToStable": plan.get("returnToStable", False),
             }
             write_private(self.job_file, job)
             self.busy = True
@@ -651,6 +768,7 @@ class HostService:
         def run() -> None:
             try:
                 UPDATE.apply_update(self.root, current, target, self.context, snapshot)
+                self.complete_channel_change(job)
                 job["state"] = "complete"
                 job["message"] = "Orbis reached the reviewed image and healthy state."
             except Exception:
@@ -802,15 +920,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
-        if self.path not in {"/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply", "/v1/packages/refresh", "/v1/restart/plan", "/v1/restart/apply"}:
+        if self.path not in {"/v1/channel", "/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply", "/v1/packages/refresh", "/v1/restart/plan", "/v1/restart/apply"}:
             self.send_json(404, {"error": "not found"})
             return
         try:
             data = self.body()
-            if self.path == "/v1/plan":
-                if set(data) != {"tag"} or not isinstance(data["tag"], str):
+            if self.path == "/v1/channel":
+                if not {"channel", "revision"}.issubset(data) or set(data) - {"channel", "revision", "acknowledgeNightly"} or not isinstance(data["channel"], str) or not isinstance(data["revision"], str) or type(data.get("acknowledgeNightly", False)) is not bool:
+                    raise ValueError("confirm one release channel and its displayed revision")
+                self.send_json(200, self.server.service.select_channel(data["channel"], data["revision"], data.get("acknowledgeNightly", False)))
+            elif self.path == "/v1/plan":
+                if not isinstance(data.get("tag"), str) or set(data) - {"tag", "returnToStable"} or type(data.get("returnToStable", False)) is not bool:
                     raise ValueError("request must contain one release tag")
-                self.send_json(200, self.server.service.plan(data["tag"]))
+                self.send_json(200, self.server.service.plan(data["tag"], data.get("returnToStable", False)))
             elif self.path == "/v1/apply":
                 if set(data) != {"planId"} or not isinstance(data["planId"], str):
                     raise ValueError("request must contain one plan ID")

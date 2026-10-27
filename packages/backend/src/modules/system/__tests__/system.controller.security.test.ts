@@ -8,6 +8,7 @@ import { AuthGuard } from '../../auth/auth.guard';
 import { SystemController } from '../system.controller';
 import { SystemService } from '../system.service';
 import { OrbisReleaseService } from '../orbis-release.service';
+import { OrbisReleaseChannelsService } from '../orbis-release-channels.service';
 import { ContainerTelemetryService } from '../container-telemetry.service';
 import { MetricHistoryService } from '../metric-history.service';
 import { HostTelemetryService } from '../host-telemetry.service';
@@ -19,6 +20,7 @@ describe('SystemController certificate security', () => {
   let app: INestApplication;
   const systemService = mock<SystemService>();
   const orbisReleases = mock<OrbisReleaseService>();
+  const releaseChannels = mock<OrbisReleaseChannelsService>();
   const logger = mock<LoggerService>();
   const containers = mock<ContainerTelemetryService>();
   const history = mock<MetricHistoryService>();
@@ -39,6 +41,7 @@ describe('SystemController certificate security', () => {
         { provide: HostSensorsService, useValue: sensors },
         { provide: HostDeviceHistoryService, useValue: hostHistory },
         { provide: OrbisReleaseService, useValue: orbisReleases },
+        { provide: OrbisReleaseChannelsService, useValue: releaseChannels },
         {
           provide: SystemService,
           useValue: systemService,
@@ -66,6 +69,18 @@ describe('SystemController certificate security', () => {
 
   beforeEach(() => {
     systemService.getLocalCertificate.mockReset();
+    releaseChannels.read.mockReset().mockResolvedValue({ version: 1, channel: 'stable', revision: 'a65a9a64-f57e-4c73-9dc8-8d35d0b5b5a1' });
+    releaseChannels.status.mockReset().mockResolvedValue({
+      phase: 'development',
+      current: 'nightly',
+      revision: 'a65a9a64-f57e-4c73-9dc8-8d35d0b5b5a1',
+      installedVersion: 'v0.1.0-beta.90',
+      requiresStableInstall: true,
+      channels: [
+        { id: 'stable', available: true },
+        { id: 'nightly', available: true },
+      ],
+    });
   });
 
   it('allows unauthenticated certificate downloads', async () => {
@@ -202,26 +217,30 @@ describe('SystemController certificate security', () => {
     expect(allowed.body.tag).toBe('v0.1.0-beta.8');
   });
 
-  it('reports Stable as current and Nightly inactive only to authenticated sessions', async () => {
+  it('reports the persisted development release channel only to authenticated sessions', async () => {
     expect((await request(app.getHttpServer()).get('/system/orbis-release-channels')).status).toBe(401);
     const result = await request(app.getHttpServer()).get('/system/orbis-release-channels').set('Authorization', 'Bearer cli-token');
     expect(result.status).toBe(200);
+    expect(releaseChannels.status).toHaveBeenCalledOnce();
     expect(result.body).toEqual({
-      phase: 'beta',
-      current: 'stable',
+      phase: 'development',
+      current: 'nightly',
+      revision: 'a65a9a64-f57e-4c73-9dc8-8d35d0b5b5a1',
+      installedVersion: 'v0.1.0-beta.90',
+      requiresStableInstall: true,
       channels: [
         { id: 'stable', available: true },
-        { id: 'nightly', available: false },
+        { id: 'nightly', available: true },
       ],
     });
   });
 
-  it('rejects inactive or malformed channel queries before release discovery', async () => {
+  it('rejects unknown or repeated channel queries before release discovery', async () => {
     orbisReleases.latest.mockReset();
     orbisReleases.listPublished.mockReset();
     orbisReleases.history.mockReset();
     for (const endpoint of ['orbis-release', 'orbis-releases', 'orbis-release-history']) {
-      for (const query of ['channel=nightly', 'channel=unknown', 'channel=stable&channel=nightly']) {
+      for (const query of ['channel=unknown', 'channel=stable&channel=nightly']) {
         expect((await request(app.getHttpServer()).get(`/system/${endpoint}?${query}`).set('Authorization', 'Bearer cli-token')).status).toBe(400);
       }
     }
@@ -229,10 +248,29 @@ describe('SystemController certificate security', () => {
     expect(orbisReleases.listPublished).not.toHaveBeenCalled();
     expect(orbisReleases.history).not.toHaveBeenCalled();
     orbisReleases.latest.mockResolvedValue(null);
-    expect((await request(app.getHttpServer()).get('/system/orbis-release?channel=stable').set('Authorization', 'Bearer cli-token')).status).toBe(
+    orbisReleases.listPublished.mockResolvedValue({ releases: [], complete: true });
+    orbisReleases.history.mockResolvedValue({ releases: [], complete: true, truncated: false });
+    expect((await request(app.getHttpServer()).get('/system/orbis-release?channel=nightly').set('Authorization', 'Bearer cli-token')).status).toBe(
       200,
     );
-    expect(orbisReleases.latest).toHaveBeenCalledOnce();
+    expect((await request(app.getHttpServer()).get('/system/orbis-releases?channel=nightly').set('Authorization', 'Bearer cli-token')).status).toBe(
+      200,
+    );
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/system/orbis-release-history?installed=v0.1.0-beta.87&target=v0.1.0-beta.90&channel=nightly')
+          .set('Authorization', 'Bearer cli-token')
+      ).status,
+    ).toBe(200);
+    expect(orbisReleases.latest).toHaveBeenCalledWith('nightly');
+    expect(orbisReleases.listPublished).toHaveBeenCalledWith('nightly');
+    expect(orbisReleases.history).toHaveBeenCalledWith('v0.1.0-beta.87', 'v0.1.0-beta.90', 'nightly');
+    expect(releaseChannels.read).not.toHaveBeenCalled();
+
+    expect((await request(app.getHttpServer()).get('/system/orbis-release').set('Authorization', 'Bearer cli-token')).status).toBe(200);
+    expect(orbisReleases.latest).toHaveBeenLastCalledWith('stable');
+    expect(releaseChannels.read).toHaveBeenCalledOnce();
   });
   it('requires authentication for the published catalogue and included changelogs', async () => {
     orbisReleases.listPublished.mockReset();
@@ -247,10 +285,10 @@ describe('SystemController certificate security', () => {
     expect(
       (
         await request(app.getHttpServer())
-          .get('/system/orbis-release-history?installed=v0.1.0-beta.87&target=v0.1.0-beta.90')
+          .get('/system/orbis-release-history?installed=v0.1.0-beta.87&target=v0.1.0-beta.90&channel=nightly')
           .set('Authorization', 'Bearer cli-token')
       ).status,
     ).toBe(200);
-    expect(orbisReleases.history).toHaveBeenCalledWith('v0.1.0-beta.87', 'v0.1.0-beta.90');
+    expect(orbisReleases.history).toHaveBeenCalledWith('v0.1.0-beta.87', 'v0.1.0-beta.90', 'nightly');
   });
 });

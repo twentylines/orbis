@@ -1,8 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-export function requireStableReleaseChannel(channel: unknown) {
-  if (channel === undefined || channel === 'stable') return;
-  throw new BadRequestException(
-    channel === 'nightly' ? 'Nightly is inactive during beta. Use the Stable channel.' : 'Choose a valid Orbis release channel.',
-  );
+export function requireReleaseChannel(channel: unknown): 'stable' | 'nightly' | undefined {
+  if (channel === undefined || channel === 'stable' || channel === 'nightly') return channel;
+  throw new BadRequestException('Choose a valid Orbis release channel.');
 }

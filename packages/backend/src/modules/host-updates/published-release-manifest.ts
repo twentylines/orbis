@@ -1,5 +1,5 @@
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
-import { isStableOrbisReleaseTag } from '@runtipi/common/schemas/orbis-release-channel';
+import { isPublishedOrbisReleaseTag, isStableOrbisReleaseTag } from '@runtipi/common/schemas/orbis-release-channel';
 import { valid } from 'semver';
 
 export const RELEASE_DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -30,6 +30,10 @@ export function publishedReleaseManifest(raw: unknown, tag: string): PublishedRe
   ) {
     throw new BadRequestException('This release does not support a verified Orbis downgrade or update review.');
   }
+  if ('releaseChannel' in value && value.releaseChannel !== (isStableOrbisReleaseTag(tag) ? 'stable' : 'nightly'))
+    throw new BadRequestException('The release channel does not match its verified version.');
+  if ('updatePriority' in value && !['normal', 'critical'].includes(value.updatePriority as string))
+    throw new BadRequestException('The published update priority is invalid.');
   if (typeof value.runtipiCompatibility !== 'string' || !valid(value.runtipiCompatibility)) {
     throw new BadRequestException('The published Runtipi version could not be verified.');
   }
@@ -45,7 +49,7 @@ export function publishedReleaseManifest(raw: unknown, tag: string): PublishedRe
 }
 
 export async function fetchPublishedReleaseManifest(tag: unknown): Promise<PublishedReleaseManifest> {
-  if (typeof tag !== 'string' || tag.length > 80 || !isStableOrbisReleaseTag(tag) || !valid(tag)) {
+  if (!isPublishedOrbisReleaseTag(tag) || !valid(tag)) {
     throw new BadRequestException('Choose a published Orbis release tag.');
   }
   let raw: unknown;

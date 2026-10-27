@@ -15,6 +15,7 @@ if (NODE_ENV === 'production') {
   alias['react-dom/server'] = 'react-dom/server.node';
   plugins.push(
     sentryVitePlugin({
+      telemetry: false,
       authToken: process.env.SENTRY_AUTH_TOKEN,
       release: {
         name: process.env.TIPI_VERSION,

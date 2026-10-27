@@ -2,7 +2,14 @@ import http from 'node:http';
 import path from 'node:path';
 import { BadRequestException, HttpException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { gt, valid } from 'semver';
-import { isStableOrbisReleaseTag } from '@runtipi/common/schemas/orbis-release-channel';
+import {
+  isPublishedOrbisReleaseTag,
+  isStableOrbisReleaseTag,
+  releaseAllowedOnChannel,
+  downgradeAllowedOnChannel,
+  type OrbisReleaseChannel,
+} from '@runtipi/common/schemas/orbis-release-channel';
+import { OrbisReleaseChannelsService } from '../system/orbis-release-channels.service';
 
 const PLAN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PACKAGE_NAME = /^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?$/;
@@ -111,7 +118,9 @@ export type HostRestartPlan = { planId: string; expiresAt: number; rebootRequire
 @Injectable()
 export class HostUpdatesService {
   private readonly socketPath = process.env.ORBIS_HOST_SOCKET;
-  private readonly plans = new Map<string, { downgrade: boolean; expiresAt: number }>();
+  private readonly plans = new Map<string, { downgrade: boolean; returnToStable: boolean; revision: string; expiresAt: number }>();
+
+  constructor(private readonly channels: OrbisReleaseChannelsService) {}
 
   private requireSocket(): string {
     if (!this.socketPath || !path.isAbsolute(this.socketPath) || this.socketPath.includes('\0')) {
@@ -123,6 +132,7 @@ export class HostUpdatesService {
   private async call<T>(
     endpoint:
       | '/v1/status'
+      | '/v1/channel'
       | '/v1/plan'
       | '/v1/apply'
       | '/v1/recover'
@@ -207,6 +217,22 @@ export class HostUpdatesService {
     }
   }
 
+  private async requireChannelSupport() {
+    const status = await this.status();
+    if (!status.available || !status.capabilities?.includes('release-channels.v1')) {
+      throw new ServiceUnavailableException('Update the Orbis host service to enable Nightly and reviewed channel changes.');
+    }
+  }
+
+  async changeReleaseChannel(channel: OrbisReleaseChannel, revision: string, acknowledgeNightly = false) {
+    await this.requireChannelSupport();
+    await this.call('/v1/channel', { channel, revision, acknowledgeNightly });
+    const result = await this.channels.status();
+    if (result.current !== channel)
+      throw new ServiceUnavailableException('The host did not confirm the selected release channel. Refresh its status.');
+    return result;
+  }
+
   packages(): Promise<HostPackageInventory> {
     return this.call<HostPackageInventory>('/v1/packages');
   }
@@ -269,11 +295,20 @@ export class HostUpdatesService {
     return this.call<{ jobId: string; state: string }>('/v1/packages/apply', { planId });
   }
 
-  plan(tag: unknown, reviewedDowngrade = false): Promise<HostUpdatePlan> {
-    if (typeof tag !== 'string' || !isStableOrbisReleaseTag(tag) || tag.length > 80) {
+  async plan(tag: unknown, reviewedDowngrade = false, returnToStable = false): Promise<HostUpdatePlan> {
+    if (!isPublishedOrbisReleaseTag(tag)) {
       throw new BadRequestException('Choose a valid Orbis release tag.');
     }
+    const channel = await this.channels.read();
     const installed = process.env.ORBIS_VERSION;
+    if (returnToStable) {
+      if (channel.channel !== 'nightly' || !isStableOrbisReleaseTag(tag))
+        throw new BadRequestException('Review a Stable installation before changing channels.');
+    } else if (!releaseAllowedOnChannel(tag, channel.channel))
+      throw new BadRequestException('Choose a release available on the selected update channel.');
+    if (reviewedDowngrade && !downgradeAllowedOnChannel(tag, installed, channel.channel))
+      throw new BadRequestException('Choose an allowed earlier release on this update channel.');
+    if (channel.channel === 'nightly' || returnToStable) await this.requireChannelSupport();
     if (!reviewedDowngrade) {
       if (!installed || !valid(installed)) {
         throw new BadRequestException('The installed Orbis version could not be verified. No update was started.');
@@ -282,23 +317,29 @@ export class HostUpdatesService {
         throw new BadRequestException('Use the downgrade review to install an earlier Orbis release.');
       }
     }
-    return this.call<HostUpdatePlan>('/v1/plan', { tag }).then((plan) => {
+    return this.call<HostUpdatePlan>('/v1/plan', { tag, ...(returnToStable ? { returnToStable: true } : {}) }).then((plan) => {
       if (typeof plan.planId !== 'string' || !PLAN_ID.test(plan.planId)) {
         throw new ServiceUnavailableException('The Orbis host service returned an invalid update plan.');
       }
       for (const [id, previous] of this.plans) if (previous.expiresAt < Date.now()) this.plans.delete(id);
       if (this.plans.size >= 32) this.plans.delete(this.plans.keys().next().value as string);
-      this.plans.set(plan.planId, { downgrade: reviewedDowngrade, expiresAt: Date.now() + 15 * 60_000 });
+      this.plans.set(plan.planId, { downgrade: reviewedDowngrade, returnToStable, revision: channel.revision, expiresAt: Date.now() + 15 * 60_000 });
       return plan;
     });
   }
 
-  apply(planId: unknown, reviewedDowngrade = false): Promise<{ jobId: string; state: string }> {
+  async apply(planId: unknown, reviewedDowngrade = false, returnToStable = false): Promise<{ jobId: string; state: string }> {
     if (typeof planId !== 'string' || !PLAN_ID.test(planId)) {
       throw new BadRequestException('Create a new update plan first.');
     }
     const plan = this.plans.get(planId);
-    if (!plan || plan.expiresAt < Date.now() || plan.downgrade !== reviewedDowngrade) {
+    if (
+      !plan ||
+      plan.expiresAt < Date.now() ||
+      plan.downgrade !== reviewedDowngrade ||
+      plan.returnToStable !== returnToStable ||
+      plan.revision !== (await this.channels.read()).revision
+    ) {
       throw new BadRequestException('Create a new update or downgrade review before continuing.');
     }
     this.plans.delete(planId);

@@ -33,16 +33,23 @@ class InstallerUpdateTests(unittest.TestCase):
             root = Path(folder).resolve()
             manifest = root / 'release.json'; manifest.write_text(json.dumps(TARGET))
             selected = {'installRoot': str(root), 'product': 'orbis', 'reviewRequired': []}
-            argv = ['installer', '--manifest', str(manifest), '--state-dir', str(root / 'private'), '--yes', '--root', str(root)]
+            argv = ['installer', '--manifest', str(manifest), '--state-dir', str(root / 'private'), '--yes', '--accept-nightly', '--root', str(root)]
             with mock.patch.object(sys, 'argv', argv), mock.patch.object(GUIDE.sys, 'platform', 'linux'), mock.patch.object(GUIDE.os, 'geteuid', return_value=0), mock.patch.object(GUIDE.APPS, 'Docker') as docker, mock.patch.object(GUIDE.REPLACE, 'Engine'), mock.patch.object(GUIDE.APPS.DETECT, 'discover', return_value={'installations': [selected]}), mock.patch.object(GUIDE, 'update_existing', return_value={'result': 'orbis-updated'}) as update, mock.patch.object(GUIDE, 'replacement') as replacement, contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(GUIDE.main(), 0)
             update.assert_called_once()
             self.assertEqual(update.call_args.args[:3], (root, docker.return_value, TARGET))
             replacement.assert_not_called()
 
-    def exercise(self, *, target=TARGET, status=None, apply_error=None):
+    def exercise(self, *, target=TARGET, status=None, apply_error=None, channel='nightly'):
         root = Path('/opt/owned-server')
-        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=mock.Mock(return_value=CURRENT)), SETUP=SimpleNamespace(SOCKET_FILE=Path('/run/orbis/host.sock')), upgrade=mock.Mock())
+        channel_reads = [
+            {'channel': channel, 'revision': 'initial'},
+            {'channel': 'nightly', 'revision': 'selected'},
+        ] if channel == 'stable' else [{'channel': channel, 'revision': 'initial'}]
+        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(
+            installed_manifest=mock.Mock(return_value=CURRENT),
+            read_channel=mock.Mock(side_effect=channel_reads),
+        ), SETUP=SimpleNamespace(SOCKET_FILE=Path('/run/orbis/host.sock')), upgrade=mock.Mock())
         enable = SimpleNamespace(enable=mock.Mock())
         planned = {'planId': 'owned-plan', 'targetTag': target['tag'], 'targetDigest': target['digest']}
         accepted = {'jobId': 'owned-plan', 'state': 'running'}
@@ -66,6 +73,12 @@ class InstallerUpdateTests(unittest.TestCase):
         self.assertEqual(result['result'], 'orbis-updated')
         self.assertEqual([x[0] for x in calls], ['/v1/plan', '/v1/apply', '/v1/status'])
         upgraded.upgrade.assert_called_once()
+
+    def test_explicit_nightly_update_from_stable_selects_channel_before_planning(self):
+        _, calls, upgrade = self.exercise(channel='stable')
+        self.assertEqual([endpoint for endpoint, _ in calls], ['/v1/channel', '/v1/plan', '/v1/apply', '/v1/status'])
+        self.assertEqual(calls[0][1], {'channel': 'nightly', 'revision': 'initial', 'acknowledgeNightly': True})
+        self.assertEqual(upgrade.SERVICE.read_channel.call_count, 2)
 
     def test_current_release_is_a_clear_noop_and_never_reapplies(self):
         result, calls, _ = self.exercise(target=CURRENT)
@@ -139,6 +152,7 @@ class UpdateServiceTests(unittest.TestCase):
             root, snapshots, state = [parent / name for name in ('root', 'snapshots', 'state')]
             for path in (root, snapshots, state): path.mkdir(mode=0o700)
             service = SERVICE.HostService(root, 'owned', snapshots, state)
+            SERVICE.save_channel(root, 'nightly', '00000000-0000-4000-8000-000000000002')
             with mock.patch.object(service, 'current_manifest', return_value=CURRENT), mock.patch.object(SERVICE, 'manifest_for_tag', return_value=TARGET), mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 1, 'runningAppsMustBeStopped': False}) as validate:
                 plan = service.plan(TARGET['tag']); validate.reset_mock()
                 self.assertFalse(plan['appsMustBeStopped'])

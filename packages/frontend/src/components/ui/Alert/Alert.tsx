@@ -1,5 +1,6 @@
 import { type VariantProps, cva } from 'class-variance-authority';
 import clsx from 'clsx';
+import { IconAlertCircle } from '@tabler/icons-react';
 
 const alertVariants = cva('alert', {
   variants: {
@@ -41,4 +42,13 @@ const AlertIcon = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>
 );
 AlertIcon.displayName = 'AlertIcon';
 
-export { Alert, AlertHeading, AlertDescription, AlertIcon };
+const InlineFeedback = ({ children, variant = 'danger', ...props }: AlertProps) => (
+  <Alert variant={variant} {...props}>
+    <AlertIcon>
+      <IconAlertCircle size={20} aria-hidden="true" />
+    </AlertIcon>
+    <AlertDescription>{children}</AlertDescription>
+  </Alert>
+);
+
+export { Alert, AlertHeading, AlertDescription, AlertIcon, InlineFeedback };

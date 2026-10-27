@@ -17,10 +17,10 @@ ASSET = f"https://github.com/twentylines/orbis/releases/download/{TAG}/release-m
 
 
 class OrbisReleaseCheckTests(unittest.TestCase):
-    def test_inactive_builds_are_rejected_before_network_discovery(self):
+    def test_unpublished_tag_families_are_rejected_before_network_discovery(self):
         with patch.object(CHECK, "published_release") as discover:
-            for tag in ["v0.1.0-nightly.20261025", "v0.1.0-dev.1", "v0.1.0-alpha.1"]:
-                with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, "inactive during beta"):
+            for tag in ["v0.1.0-nightly.20261025", "v0.1.0-dev.1", "v0.1.0-alpha.1", "v01.0.0", "v0.1.0-rc.01"]:
+                with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, "published Stable or Nightly release"):
                     CHECK.check(tag)
             discover.assert_not_called()
 

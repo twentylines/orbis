@@ -209,6 +209,13 @@ html:has(.desktop) {
   color: var(--desktop-chrome-ink);
   text-decoration: none;
 }
+.desktop .desktop-update-notice-critical {
+  border-color: color-mix(in srgb, var(--desktop-negative) 48%, transparent);
+  background: color-mix(in srgb, var(--desktop-negative) 14%, var(--desktop-chrome));
+}
+.desktop .desktop-update-notice-critical:is(:hover, :focus-visible, :active) {
+  background: color-mix(in srgb, var(--desktop-negative) 18%, var(--desktop-chrome));
+}
 .desktop-system-bar:has(.desktop-update-notice) {
   height: auto;
   min-height: 64px;

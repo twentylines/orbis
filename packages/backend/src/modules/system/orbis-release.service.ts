@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { eq, gt, lte, rcompare, valid } from 'semver';
-import { isStableOrbisReleaseTag } from '@runtipi/common/schemas/orbis-release-channel';
+import { isPublishedOrbisReleaseTag, releaseAllowedOnChannel, type OrbisReleaseChannel } from '@runtipi/common/schemas/orbis-release-channel';
 
 const REPO = 'twentylines/orbis';
 const CACHE_MS = 60 * 1000;
@@ -16,16 +16,33 @@ export type OrbisRelease = {
   url: string;
   imageManifestUrl: string | null;
   kind?: 'feature' | 'maintenance';
+  priority?: 'critical';
 };
 
 export type OrbisReleaseCatalog = { releases: OrbisRelease[]; complete: boolean };
 export type OrbisReleaseHistory = OrbisReleaseCatalog & { truncated: boolean; context?: OrbisRelease | null };
 
-export function parseOrbisReleaseNotes(notes: string): { body: string; kind: 'feature' | 'maintenance' } {
-  const metadata = notes.match(/^\uFEFF?[\t ]*<!--[\t ]*orbis-release-kind:[\t ]*(feature|maintenance)[\t ]*-->[\t ]*\r?\n*/);
+export function parseOrbisReleaseNotes(notes: string): { body: string; kind: 'feature' | 'maintenance'; priority?: 'critical' } {
+  let body = notes.replace(/^\uFEFF/, '');
+  let kind: 'feature' | 'maintenance' = 'maintenance';
+  let critical = false;
+  const seen = new Set<string>();
+  for (let index = 0; index < 2; index++) {
+    const metadata = body.match(
+      /^[\t ]*<!--[\t ]*(orbis-release-kind|orbis-update-priority):[\t ]*(feature|maintenance|critical|normal)[\t ]*-->[\t ]*\r?\n*/,
+    );
+    if (!metadata || seen.has(metadata[1] as string)) break;
+    if (metadata[1] === 'orbis-release-kind' && !['feature', 'maintenance'].includes(metadata[2] as string)) break;
+    if (metadata[1] === 'orbis-update-priority' && !['critical', 'normal'].includes(metadata[2] as string)) break;
+    seen.add(metadata[1] as string);
+    if (metadata[1] === 'orbis-release-kind') kind = metadata[2] === 'feature' ? 'feature' : 'maintenance';
+    else critical = metadata[2] === 'critical';
+    body = body.slice(metadata[0].length);
+  }
   return {
-    body: notes.slice(metadata?.[0].length ?? 0).replace(/\n\nImage: ghcr\.io\/twentylines\/orbis@sha256:[a-f0-9]{64}\s*$/, ''),
-    kind: metadata?.[1] === 'feature' ? 'feature' : 'maintenance',
+    body: body.replace(/\n\nImage: ghcr\.io\/twentylines\/orbis@sha256:[a-f0-9]{64}\s*$/, ''),
+    kind,
+    ...(critical ? { priority: 'critical' as const } : {}),
   };
 }
 
@@ -38,7 +55,7 @@ function releaseFromMetadata(value: unknown): OrbisRelease | null {
     !isRecord(value) ||
     value.draft === true ||
     typeof value.tag_name !== 'string' ||
-    !isStableOrbisReleaseTag(value.tag_name) ||
+    !isPublishedOrbisReleaseTag(value.tag_name) ||
     !valid(value.tag_name)
   ) {
     return null;
@@ -61,7 +78,7 @@ function tagsFromAtom(feed: string): Array<{ tag: string; publishedAt: string | 
   const entries = feed.match(/<entry>[\s\S]*?<\/entry>/g) ?? [];
   for (const entry of entries) {
     const tag = entry.match(/<id>tag:github\.com,2008:Repository\/[0-9]+\/([^<]+)<\/id>/)?.[1];
-    if (!tag || !isStableOrbisReleaseTag(tag) || tags.some((entry) => entry.tag === tag)) continue;
+    if (!tag || !isPublishedOrbisReleaseTag(tag) || tags.some((entry) => entry.tag === tag)) continue;
     const publishedAt = entry.match(/<updated>([^<]+)<\/updated>/)?.[1] ?? null;
     tags.push({ tag, publishedAt });
     if (tags.length === 10) break;
@@ -69,8 +86,12 @@ function tagsFromAtom(feed: string): Array<{ tag: string; publishedAt: string | 
   return tags;
 }
 
-export function latestTagFromAtom(feed: string): { tag: string; publishedAt: string | null } | null {
-  return tagsFromAtom(feed)[0] ?? null;
+export function latestTagFromAtom(feed: string, channel: OrbisReleaseChannel = 'stable'): { tag: string; publishedAt: string | null } | null {
+  return (
+    tagsFromAtom(feed)
+      .filter((entry) => releaseAllowedOnChannel(entry.tag, channel))
+      .sort((a, b) => rcompare(a.tag, b.tag))[0] ?? null
+  );
 }
 
 class ReleaseResourceError extends Error {
@@ -81,8 +102,8 @@ class ReleaseResourceError extends Error {
 
 @Injectable()
 export class OrbisReleaseService {
-  private cached: { value: OrbisRelease | null; expiresAt: number } | null = null;
-  private pending: Promise<OrbisRelease | null> | null = null;
+  private cached = new Map<OrbisReleaseChannel, { value: OrbisRelease | null; expiresAt: number }>();
+  private pending = new Map<OrbisReleaseChannel, Promise<OrbisRelease | null>>();
   private catalog: { value: OrbisReleaseCatalog; expiresAt: number } | null = null;
   private catalogPending: Promise<OrbisReleaseCatalog> | null = null;
 
@@ -99,11 +120,23 @@ export class OrbisReleaseService {
     return body;
   }
 
-  private async load(): Promise<OrbisRelease | null> {
+  private async load(channel: OrbisReleaseChannel): Promise<OrbisRelease | null> {
+    const cached = this.cached.get(channel);
+    if (channel === 'stable') {
+      try {
+        const metadata = JSON.parse(await this.request(`https://api.github.com/repos/${REPO}/releases/latest`, 'GET', 1024 * 1024, 3_000));
+        const release = releaseFromMetadata(metadata);
+        if (release && releaseAllowedOnChannel(release.tag, channel) && release.imageManifestUrl) return release;
+      } catch (error) {
+        if (error instanceof ReleaseResourceError && error.status === 404) return null;
+      }
+    }
     const feed = await this.request(`https://github.com/${REPO}/releases.atom`, 'GET', 512 * 1024);
     let unfinished: OrbisRelease | null = null;
-    for (const latest of tagsFromAtom(feed)) {
-      if (this.cached?.value?.tag === latest.tag && this.cached.value.imageManifestUrl) return this.cached.value;
+    for (const latest of tagsFromAtom(feed)
+      .filter((entry) => releaseAllowedOnChannel(entry.tag, channel))
+      .sort((a, b) => rcompare(a.tag, b.tag))) {
+      if (cached?.value?.tag === latest.tag && cached.value.imageManifestUrl) return cached.value;
       const { tag, publishedAt } = latest;
       const manifestUrl = `https://github.com/${REPO}/releases/download/${tag}/release-manifest.json`;
       const notesUrl = `https://raw.githubusercontent.com/${REPO}/${tag}/releases/${tag}.md`;
@@ -127,7 +160,7 @@ export class OrbisReleaseService {
       if (manifest) return release;
       unfinished ??= release;
     }
-    return this.cached?.value?.imageManifestUrl ? this.cached.value : unfinished;
+    return cached?.value?.imageManifestUrl ? cached.value : unfinished;
   }
 
   private async loadCatalog(): Promise<OrbisReleaseCatalog> {
@@ -164,8 +197,9 @@ export class OrbisReleaseService {
         while (next < tags.length) {
           const entry = tags[next++];
           if (!entry || !valid(entry.tag)) continue;
-          if (this.cached?.value?.tag === entry.tag && this.cached.value.imageManifestUrl) {
-            releases.push(this.cached.value);
+          const cached = [...this.cached.values()].find((item) => item.value?.tag === entry.tag)?.value;
+          if (cached?.imageManifestUrl) {
+            releases.push(cached);
             continue;
           }
           const manifestUrl = `https://github.com/${REPO}/releases/download/${entry.tag}/release-manifest.json`;
@@ -192,7 +226,7 @@ export class OrbisReleaseService {
     return { releases: releases.sort((a, b) => rcompare(a.tag, b.tag)), complete: false };
   }
 
-  async listPublished(): Promise<OrbisReleaseCatalog> {
+  private async catalogUnfiltered(): Promise<OrbisReleaseCatalog> {
     if (this.catalog && this.catalog.expiresAt > Date.now()) return this.catalog.value;
     if (!this.catalogPending) {
       this.catalogPending = this.loadCatalog()
@@ -211,7 +245,12 @@ export class OrbisReleaseService {
     return this.catalogPending;
   }
 
-  async history(installed: unknown, target: unknown): Promise<OrbisReleaseHistory> {
+  async listPublished(channel: OrbisReleaseChannel = 'stable'): Promise<OrbisReleaseCatalog> {
+    const catalog = await this.catalogUnfiltered();
+    return { ...catalog, releases: catalog.releases.filter((release) => releaseAllowedOnChannel(release.tag, channel)) };
+  }
+
+  async history(installed: unknown, target: unknown, channel: OrbisReleaseChannel = 'stable'): Promise<OrbisReleaseHistory> {
     if (
       typeof installed !== 'string' ||
       typeof target !== 'string' ||
@@ -223,11 +262,11 @@ export class OrbisReleaseService {
     ) {
       throw new BadRequestException('Provide valid installed and target Orbis versions.');
     }
-    if (!isStableOrbisReleaseTag(`v${valid(target)}`)) {
-      throw new BadRequestException('Nightly is inactive during beta. Choose a Stable release.');
+    if (!releaseAllowedOnChannel(`v${valid(target)}`, channel)) {
+      throw new BadRequestException('Choose a release available on this update channel.');
     }
     if (!gt(target, installed)) return { releases: [], complete: true, truncated: false, context: null };
-    const catalog = await this.listPublished();
+    const catalog = await this.listPublished(channel);
     const included = catalog.releases.filter((release) => gt(release.tag, installed) && lte(release.tag, target));
     const truncated = included.length > HISTORY_LIMIT;
     const covered = catalog.complete || catalog.releases.some((release) => lte(release.tag, installed));
@@ -245,23 +284,25 @@ export class OrbisReleaseService {
     };
   }
 
-  async latest(): Promise<OrbisRelease | null> {
-    if (this.cached && this.cached.expiresAt > Date.now()) return this.cached.value;
-    if (!this.pending) {
-      this.pending = this.load()
+  async latest(channel: OrbisReleaseChannel = 'stable'): Promise<OrbisRelease | null> {
+    const cached = this.cached.get(channel);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    if (!this.pending.has(channel)) {
+      const pending = this.load(channel)
         .then((value) => {
           const cacheMs = value?.imageManifestUrl ? CACHE_MS : PENDING_RELEASE_CACHE_MS;
-          this.cached = { value, expiresAt: Date.now() + cacheMs };
+          this.cached.set(channel, { value, expiresAt: Date.now() + cacheMs });
           return value;
         })
         .catch(() => {
-          if (this.cached) return this.cached.value;
+          if (cached) return cached.value;
           throw new ServiceUnavailableException('Orbis releases are temporarily unavailable.');
         })
         .finally(() => {
-          this.pending = null;
+          this.pending.delete(channel);
         });
+      this.pending.set(channel, pending);
     }
-    return this.pending;
+    return this.pending.get(channel) as Promise<OrbisRelease | null>;
   }
 }

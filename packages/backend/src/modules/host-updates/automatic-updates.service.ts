@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { type } from 'arktype';
 import { gt, valid } from 'semver';
+import { releaseAllowedOnChannel } from '@runtipi/common/schemas/orbis-release-channel';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
@@ -13,6 +14,7 @@ import { AppsRepository } from '../apps/apps.repository';
 import { MarketplaceService } from '../marketplace/marketplace.service';
 import { AppLifecycleService } from '../app-lifecycle/app-lifecycle.service';
 import { OrbisReleaseService } from '../system/orbis-release.service';
+import { OrbisReleaseChannelsService } from '../system/orbis-release-channels.service';
 import { HostUpdatesService, type HostUpdateStatus } from './host-updates.service';
 import {
   automaticUpdateStateSchema,
@@ -62,6 +64,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     private readonly marketplace: MarketplaceService,
     private readonly lifecycle: AppLifecycleService,
     private readonly logger: LoggerService,
+    private readonly channels: OrbisReleaseChannelsService,
   ) {
     let timezone = this.config.get('userSettings').timeZone || 'UTC';
     try {
@@ -590,9 +593,11 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     let stage: AutomaticUpdateAttempt['state'] = 'checking';
     let targetTag = this.state.orbis?.slot === slot && this.state.orbis.state === 'deferred' ? this.state.orbis.targetTag : undefined;
     try {
+      const channel = (await this.channels.read()).channel;
+      if (targetTag && !releaseAllowedOnChannel(targetTag, channel)) targetTag = undefined;
       if (!targetTag) {
         await record({ slot, state: 'checking', at: Date.now(), message: 'Checking for a newer Orbis release.' });
-        const latest = await this.releases.latest();
+        const latest = await this.releases.latest(channel);
         const installed = process.env.ORBIS_VERSION;
         if (!latest?.imageManifestUrl || !installed || !valid(installed) || !valid(latest.tag) || !gt(latest.tag, installed)) {
           await record({ slot, state: 'no-update', at: Date.now(), message: 'Orbis is up to date.' });

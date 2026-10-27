@@ -537,17 +537,65 @@ body:has(.orbis-theme) .btn-ghost-danger {
 body:has(.orbis-theme) .alert {
   --orbis-alert-color: var(--desktop-muted);
   color: var(--desktop-ink);
-  border: 1px solid color-mix(in srgb, var(--orbis-alert-color) 32%, var(--desktop-line));
+  border: 1px solid color-mix(in srgb, var(--orbis-alert-color) 46%, var(--desktop-line));
   background: color-mix(in srgb, var(--orbis-alert-color) 9%, var(--desktop-surface));
-  padding: 18px;
-  border-radius: 16px;
-  box-shadow: inset 0 1px var(--desktop-highlight);
+  padding: 14px 16px;
+  border-radius: 12px;
+  box-shadow: none;
+  line-height: 1.5;
+  text-align: start;
+}
+body:has(.orbis-theme) .alert:has(> .alert-icon) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 8px;
+}
+body:has(.orbis-theme) .alert:has(> .alert-icon) > :not(.alert-icon) {
+  grid-column: 2;
+  min-width: 0;
+  margin: 0;
+}
+body:has(.orbis-theme) .alert .alert-icon {
+  color: var(--orbis-alert-color);
+  display: grid;
+  place-items: center;
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+}
+body:has(.orbis-theme) .alert:has(> .alert-heading) > .alert-icon {
+  grid-row: 1 / span 2;
+}
+body:has(.orbis-theme) .alert-icon > svg {
+  display: block;
+}
+body:has(.orbis-theme) .alert-description > p {
+  margin: 0;
+}
+body:has(.orbis-theme) .alert-description > p + p {
+  margin-top: 8px;
+}
+body:has(.orbis-theme) .alert-description:has(> .btn) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+body:has(.orbis-theme) .alert-description:has(> .btn) > p {
+  flex: 1 1 12rem;
+}
+body:has(.orbis-theme) .alert-description > .btn {
+  flex: none;
+  margin: 0;
 }
 body:has(.orbis-theme) .alert-success {
   --orbis-alert-color: var(--desktop-positive);
 }
 body:has(.orbis-theme) .alert-danger {
   --orbis-alert-color: var(--desktop-negative);
+  color: var(--desktop-negative);
 }
 body:has(.orbis-theme) .alert-warning {
   --orbis-alert-color: var(--desktop-warning);
@@ -555,8 +603,40 @@ body:has(.orbis-theme) .alert-warning {
 body:has(.orbis-theme) .alert-info {
   --orbis-alert-color: var(--desktop-info);
 }
-body:has(.orbis-theme) .alert-icon {
-  color: var(--orbis-alert-color);
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-orbis-motion="reduced"]) body:has(.orbis-theme) .alert {
+    animation: orbis-feedback-enter 180ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+  }
+}
+@keyframes orbis-feedback-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+body:has(.orbis-theme) .btn {
+  align-items: center;
+  justify-content: center;
+  column-gap: 8px;
+  text-align: center;
+}
+body:has(.orbis-theme) .btn > svg {
+  display: block;
+  flex: none;
+}
+body:has(.orbis-theme) .btn:focus-visible {
+  outline: none;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 2px;
+}
+body:has(.orbis-theme) .btn-icon:focus-visible {
+  box-shadow: inset 0 -2px var(--desktop-focus);
 }
 body:has(.orbis-theme) .react-tooltip {
   --rt-color-dark: var(--desktop-panel-dark);

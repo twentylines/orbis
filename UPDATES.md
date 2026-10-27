@@ -18,6 +18,20 @@ For an existing Orbis installation, this upgrades the host helper and updates Or
 
 An interrupted update must be inspected or recovered before another update starts. A request timing out does not mean the update stopped; check the recorded job before trying again. Keep the server's private backup and recovery journals until the updated server is healthy. The upstream Runtipi installer and CLI update command do not apply the Orbis release protocol.
 
+### Release channels
+
+Settings shows the server's **Stable** or **Nightly** channel. Stable receives final releases. Nightly also receives beta and release-candidate builds, which may contain unfinished features or regressions. Selecting Nightly opens a warning and requires confirmation; it does not immediately install an update. Channel changes require an operator and a current host service.
+
+To leave Nightly while running a prerelease, choose **Review stable install**. Orbis reviews the latest Stable release and asks for confirmation before installing it. The channel changes only after that release is healthy. Cancelling or a failed installation keeps Nightly selected. Runtipi and data compatibility checks still apply. A server already running a final release can switch channels without reinstalling it.
+
+The downgrade list on Stable contains final releases only. On Nightly, it also contains older beta or release-candidate builds of the currently installed version, but never prereleases of an earlier version. For example, `1.2.0 beta 3` can offer `1.2.0 beta 2` and older final releases, but not `1.1.0 beta 4`.
+
+A Nightly installer asks for the same risk acknowledgement. Unattended installation requires `--accept-nightly` in addition to the usual installation options. Nightly updates and returning to Stable require the host service.
+
+### Critical security updates
+
+A release explicitly marked critical shows a red **Critical update** action and a caution message above its changelog. This applies to both channels and does not enable automatic updates, change channels or skip verification. Release maintainers mark an urgent security release with `<!-- orbis-update-priority: critical -->` at the start of its release notes, before the changelog; ordinary releases omit it. The release manifest records the same priority.
+
 ## Applications
 
 Available app updates use each app's configured store and existing installation identity. Open an app update to review its configuration and store release notes, or choose **Update all** to update the available apps. The interface reports when a store supplies no changelog. Refreshing app stores does not update Orbis.

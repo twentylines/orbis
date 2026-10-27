@@ -6,6 +6,7 @@ import { DatabaseService } from '@/core/database/database.service';
 import { HostUpdatesService } from './host-updates.service';
 import { downgradeManifest, migrationFingerprint, OrbisDowngradeService, requireLegacyDesktopCompatibility } from './orbis-downgrade.service';
 import { AutomaticUpdatesService } from './automatic-updates.service';
+import { publishedReleaseManifest } from './published-release-manifest';
 import { DEFAULT_DESKTOP_PREFERENCES, DesktopPreferencesService, type DesktopPreferences } from '../desktop-preferences/desktop-preferences.service';
 
 const { readFileSync } = await vi.importActual<typeof import('node:fs')>('node:fs');
@@ -46,6 +47,21 @@ const legacyRows = legacyLedger.map((entry) => ({
     .digest('hex'),
 }));
 
+describe('published release manifest channel and update priority', () => {
+  it('accepts channel-matched stable/nightly manifests and supported priorities', () => {
+    expect(() => publishedReleaseManifest({ ...manifest, releaseChannel: 'nightly', updatePriority: 'critical' }, target)).not.toThrow();
+    expect(() =>
+      publishedReleaseManifest({ ...manifest, tag: 'v1.0.0', releaseChannel: 'stable', updatePriority: 'normal' }, 'v1.0.0'),
+    ).not.toThrow();
+  });
+
+  it('rejects channel mismatches and unsupported update priority values', () => {
+    expect(() => publishedReleaseManifest({ ...manifest, releaseChannel: 'stable' }, target)).toThrow('release channel');
+    expect(() => publishedReleaseManifest({ ...manifest, tag: 'v1.0.0', releaseChannel: 'nightly' }, 'v1.0.0')).toThrow('release channel');
+    expect(() => publishedReleaseManifest({ ...manifest, updatePriority: 'urgent' }, target)).toThrow('update priority');
+  });
+});
+
 describe('beta90 desktop preference compatibility', () => {
   it('matches the immutable beta90 migration ledger', () => {
     expect(migrationFingerprint(legacyRows)).toBe('sha256:ed90c4f22eb28f9c594d4fa56f27eb7447dbd39962659f4a8657cf2a47cca5ae');
@@ -77,6 +93,11 @@ describe('reviewed Orbis downgrades', () => {
   const host = mock<HostUpdatesService>();
   const automaticUpdates = mock<AutomaticUpdatesService>();
   const preferences = mock<DesktopPreferencesService>();
+  const channels = {
+    read: vi.fn(async () => ({ version: 1 as const, channel: 'nightly' as const, revision: 'initial' })),
+    status: vi.fn(),
+  };
+  const releases = { latest: vi.fn() };
   const execute = vi.fn();
   const database = { db: { execute } } as unknown as DatabaseService;
   let service: OrbisDowngradeService;
@@ -92,6 +113,8 @@ describe('reviewed Orbis downgrades', () => {
     automaticUpdates.pauseForDowngrade.mockResolvedValue(undefined);
     preferences.read.mockReset();
     preferences.read.mockResolvedValue(DEFAULT_DESKTOP_PREFERENCES);
+    channels.read.mockReset().mockResolvedValue({ version: 1, channel: 'nightly', revision: 'initial' });
+    releases.latest.mockReset();
     host.status.mockResolvedValue(status);
     host.plan.mockResolvedValue({
       planId: id,
@@ -107,7 +130,7 @@ describe('reviewed Orbis downgrades', () => {
       'fetch',
       vi.fn().mockImplementation(async () => Response.json(manifest)),
     );
-    service = new OrbisDowngradeService(host, database, automaticUpdates, preferences);
+    service = new OrbisDowngradeService(host, database, automaticUpdates, preferences, channels as never, releases as never);
   });
 
   function legacyTarget() {
@@ -170,7 +193,7 @@ describe('reviewed Orbis downgrades', () => {
     await service.plan(tag);
     await expect(service.apply(id)).resolves.toEqual({ jobId: id, state: 'running' });
     expect(preferences.read).toHaveBeenCalledTimes(2);
-    expect(host.apply).toHaveBeenCalledWith(id, true);
+    expect(host.apply).toHaveBeenCalledWith(id, true, false);
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -203,11 +226,11 @@ describe('reviewed Orbis downgrades', () => {
     expect(plan.compatibility).toContain('Same Runtipi');
     expect(plan.forced).toBe(false);
     expect(plan.warnings).toEqual([]);
-    expect(host.plan).toHaveBeenCalledWith(target, true);
+    expect(host.plan).toHaveBeenCalledWith(target, true, false);
     expect(await service.apply(id)).toEqual({ jobId: id, state: 'running' });
     expect(execute).toHaveBeenCalledTimes(2);
     expect(host.apply).toHaveBeenCalledTimes(1);
-    expect(host.apply).toHaveBeenCalledWith(id, true);
+    expect(host.apply).toHaveBeenCalledWith(id, true, false);
     expect(automaticUpdates.pauseForDowngrade).toHaveBeenCalledTimes(1);
     expect(preferences.read).not.toHaveBeenCalled();
     await expect(service.apply(id)).rejects.toThrow('new downgrade review');
@@ -254,7 +277,8 @@ describe('reviewed Orbis downgrades', () => {
     expect(host.apply).not.toHaveBeenCalled();
   });
   it('rejects invalid direction, pending jobs, expired reviews and oversize remote responses without downtime', async () => {
-    for (const tag of ['v0.1.0-beta.93', status.currentTag, 'https://bad.invalid', null]) await expect(service.plan(tag)).rejects.toThrow('older');
+    await expect(service.plan('v0.1.0-beta.93')).rejects.toThrow('earlier release');
+    for (const tag of [status.currentTag, 'https://bad.invalid', null]) await expect(service.plan(tag)).rejects.toThrow('older');
     expect(host.plan).not.toHaveBeenCalled();
     host.status.mockResolvedValueOnce({ ...status, job: { id, state: 'running', targetTag: target, startedAt: Date.now() } });
     await expect(service.plan(target)).rejects.toThrow('current host update');
@@ -289,14 +313,14 @@ describe('reviewed Orbis downgrades', () => {
     expect(review.warnings.join(' ')).toContain('requires email sign-in');
     expect(review.warnings.join(' ')).toContain('cannot preserve');
     expect(review.snapshotBytes).toBe(1024);
-    await expect(service.apply(id)).rejects.toThrow('same force choice');
-    await expect(service.apply(id, false)).rejects.toThrow('same force choice');
+    await expect(service.apply(id)).rejects.toThrow('same channel and force choices');
+    await expect(service.apply(id, false)).rejects.toThrow('same channel and force choices');
     expect(automaticUpdates.pauseForDowngrade).not.toHaveBeenCalled();
     expect(host.apply).not.toHaveBeenCalled();
     await expect(service.apply(id, true)).resolves.toEqual({ jobId: id, state: 'running' });
     expect(automaticUpdates.pauseForDowngrade).toHaveBeenCalledTimes(1);
-    expect(host.plan).toHaveBeenCalledWith(tag, true);
-    expect(host.apply).toHaveBeenCalledWith(id, true);
+    expect(host.plan).toHaveBeenCalledWith(tag, true, false);
+    expect(host.apply).toHaveBeenCalledWith(id, true, false);
     await expect(service.apply(id, true)).rejects.toThrow('new downgrade review');
   });
 
@@ -333,7 +357,7 @@ describe('reviewed Orbis downgrades', () => {
 
   it('does not escalate a normal review at confirmation or accept a truthy force flag', async () => {
     await service.plan(target);
-    await expect(service.apply(id, true)).rejects.toThrow('same force choice');
+    await expect(service.apply(id, true)).rejects.toThrow('same channel and force choices');
     await expect(service.plan(target, 'true' as never)).rejects.toThrow('whether to force');
     await expect(service.apply(id, 1 as never)).rejects.toThrow('whether to force');
     expect(host.apply).not.toHaveBeenCalled();

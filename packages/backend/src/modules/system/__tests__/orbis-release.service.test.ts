@@ -20,7 +20,7 @@ describe('Orbis release feed', () => {
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
-    expect(await service.latest()).toEqual({
+    expect(await service.latest('nightly')).toEqual({
       tag: TAG,
       publishedAt: '2026-10-15T03:00:00Z',
       body: '# Verified release notes',
@@ -28,7 +28,7 @@ describe('Orbis release feed', () => {
       url: `https://github.com/twentylines/orbis/releases/tag/${TAG}`,
       imageManifestUrl: `https://github.com/twentylines/orbis/releases/download/${TAG}/release-manifest.json`,
     });
-    await service.latest();
+    await service.latest('nightly');
     expect(request).toHaveBeenCalledTimes(3);
   });
 
@@ -49,7 +49,7 @@ describe('Orbis release feed', () => {
       if (url.includes(`/${TAG}/release-manifest.json`)) return new Response(null);
       throw new Error(`unexpected release request: ${url}`);
     });
-    expect((await new OrbisReleaseService().latest())?.tag).toBe(TAG);
+    expect((await new OrbisReleaseService().latest('nightly'))?.tag).toBe(TAG);
     expect(request).toHaveBeenCalledTimes(3);
     expect(request.mock.calls.every(([url]) => !excluded.some((tag) => String(url).includes(tag)))).toBe(true);
   });
@@ -65,17 +65,17 @@ describe('Orbis release feed', () => {
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
-    expect((await service.latest())?.imageManifestUrl).toBeNull();
+    expect((await service.latest('nightly'))?.imageManifestUrl).toBeNull();
     manifestReady = true;
     vi.advanceTimersByTime(29_999);
-    expect((await service.latest())?.imageManifestUrl).toBeNull();
+    expect((await service.latest('nightly'))?.imageManifestUrl).toBeNull();
     expect(request).toHaveBeenCalledTimes(3);
     vi.advanceTimersByTime(1);
-    const refreshed = await Promise.all(Array.from({ length: 8 }, () => service.latest()));
+    const refreshed = await Promise.all(Array.from({ length: 8 }, () => service.latest('nightly')));
     expect(refreshed.every((value) => value?.imageManifestUrl?.endsWith('/release-manifest.json'))).toBe(true);
     expect(request).toHaveBeenCalledTimes(6);
     vi.advanceTimersByTime(60_000);
-    expect((await service.latest())?.imageManifestUrl).not.toBeNull();
+    expect((await service.latest('nightly'))?.imageManifestUrl).not.toBeNull();
     expect(request).toHaveBeenCalledTimes(7);
   });
 
@@ -90,17 +90,17 @@ describe('Orbis release feed', () => {
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
-    expect((await service.latest())?.tag).toBe(TAG);
+    expect((await service.latest('nightly'))?.tag).toBe(TAG);
     vi.advanceTimersByTime(59_999);
-    await service.latest();
+    await service.latest('nightly');
     expect(request).toHaveBeenCalledTimes(3);
     vi.advanceTimersByTime(1);
-    await Promise.all(Array.from({ length: 8 }, () => service.latest()));
+    await Promise.all(Array.from({ length: 8 }, () => service.latest('nightly')));
     expect(request).toHaveBeenCalledTimes(4);
 
     tag = 'v0.1.0-beta.10';
     vi.advanceTimersByTime(60_000);
-    const refreshed = await Promise.all(Array.from({ length: 8 }, () => service.latest()));
+    const refreshed = await Promise.all(Array.from({ length: 8 }, () => service.latest('nightly')));
     expect(refreshed.every((release) => release?.tag === tag && release.body === `# ${tag}`)).toBe(true);
     expect(request).toHaveBeenCalledTimes(7);
   });
@@ -117,10 +117,10 @@ describe('Orbis release feed', () => {
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
-    const previous = await service.latest();
+    const previous = await service.latest('nightly');
     offline = true;
     vi.advanceTimersByTime(60_000);
-    const results = await Promise.all(Array.from({ length: 8 }, () => service.latest()));
+    const results = await Promise.all(Array.from({ length: 8 }, () => service.latest('nightly')));
     expect(results.every((release) => release === previous)).toBe(true);
     expect(request).toHaveBeenCalledTimes(4);
   });
@@ -140,16 +140,16 @@ describe('Orbis release feed', () => {
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
-    expect((await service.latest())?.tag).toBe(TAG);
-    expect((await service.latest())?.imageManifestUrl).toContain(`/${TAG}/`);
+    expect((await service.latest('nightly'))?.tag).toBe(TAG);
+    expect((await service.latest('nightly'))?.imageManifestUrl).toContain(`/${TAG}/`);
     expect(request).toHaveBeenCalledTimes(5);
 
     vi.advanceTimersByTime(60_000);
-    expect((await service.latest())?.tag).toBe(TAG);
+    expect((await service.latest('nightly'))?.tag).toBe(TAG);
     expect(request).toHaveBeenCalledTimes(8);
     ready = true;
     vi.advanceTimersByTime(60_000);
-    const updated = await Promise.all(Array.from({ length: 8 }, () => service.latest()));
+    const updated = await Promise.all(Array.from({ length: 8 }, () => service.latest('nightly')));
     expect(updated.every((release) => release?.tag === next && release.imageManifestUrl?.includes(`/${next}/`))).toBe(true);
     expect(request).toHaveBeenCalledTimes(11);
   });
@@ -165,7 +165,7 @@ describe('Orbis release feed', () => {
       if (url.endsWith('/release-manifest.json')) return new Response(null);
       throw new Error(`unexpected release request: ${url}`);
     });
-    expect((await new OrbisReleaseService().latest())?.tag).toBe(TAG);
+    expect((await new OrbisReleaseService().latest('nightly'))?.tag).toBe(TAG);
   });
 
   it('retains a known installable release on a manifest outage instead of treating the outage as an unpublished tag', async () => {
@@ -180,10 +180,10 @@ describe('Orbis release feed', () => {
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
-    const previous = await service.latest();
+    const previous = await service.latest('nightly');
     outage = true;
     vi.advanceTimersByTime(60_000);
-    expect(await service.latest()).toBe(previous);
+    expect(await service.latest('nightly')).toBe(previous);
     expect(request).toHaveBeenCalledTimes(6);
   });
 });
@@ -214,13 +214,13 @@ describe('Orbis included release history', () => {
         metadata(97, { tag_name: 'v0.1.0-alpha.1', prerelease: true }),
       ]),
     );
-    expect((await new OrbisReleaseService().listPublished()).releases.map((release) => release.tag)).toEqual(['v0.1.0-beta.96']);
+    expect((await new OrbisReleaseService().listPublished('nightly')).releases.map((release) => release.tag)).toEqual(['v0.1.0-beta.96']);
   });
 
   it('rejects inactive history targets before requesting the published catalogue', async () => {
     const request = vi.spyOn(global, 'fetch');
     for (const target of ['v0.1.0-nightly.20261025', '1.0.0-dev.1', 'v1.0.0-alpha.1']) {
-      await expect(new OrbisReleaseService().history(TAG, target)).rejects.toThrow('inactive during beta');
+      await expect(new OrbisReleaseService().history(TAG, target, 'nightly')).rejects.toThrow('available on this update channel');
     }
     expect(request).not.toHaveBeenCalled();
   });
@@ -230,13 +230,13 @@ describe('Orbis included release history', () => {
       .spyOn(global, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify([metadata(90), metadata(87), metadata(89), metadata(91), metadata(88)])));
     const service = new OrbisReleaseService();
-    const results = await Promise.all(Array.from({ length: 8 }, () => service.history('v0.1.0-beta.87', 'v0.1.0-beta.90')));
+    const results = await Promise.all(Array.from({ length: 8 }, () => service.history('v0.1.0-beta.87', 'v0.1.0-beta.90', 'nightly')));
     expect(results[0]?.releases.map((release) => release.tag)).toEqual(['v0.1.0-beta.90', 'v0.1.0-beta.89', 'v0.1.0-beta.88']);
     expect(results.every((result) => result.complete && !result.truncated)).toBe(true);
     expect(request).toHaveBeenCalledTimes(1);
     expect(request.mock.calls[0]?.[0]).toBe('https://api.github.com/repos/twentylines/orbis/releases?per_page=100&page=1');
     expect(request.mock.calls[0]?.[1]?.headers).not.toHaveProperty('Authorization');
-    await service.listPublished();
+    await service.listPublished('nightly');
     expect(request).toHaveBeenCalledTimes(1);
   });
 
@@ -255,7 +255,7 @@ describe('Orbis included release history', () => {
         ]),
       ),
     );
-    const result = await new OrbisReleaseService().history('0.1.0-beta.8', '0.1.0-beta.10');
+    const result = await new OrbisReleaseService().history('0.1.0-beta.8', '0.1.0-beta.10', 'nightly');
     expect(result.complete).toBe(true);
     expect(result.releases.map((release) => release.tag)).toEqual(['v0.1.0-beta.10', 'v0.1.0-beta.9']);
     expect(result.releases[0]?.url).toBe('https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.10');
@@ -268,12 +268,12 @@ describe('Orbis included release history', () => {
       return new Response(JSON.stringify(Array.from({ length: 100 }, (_, index) => metadata(201 - (page - 1) * 100 - index))));
     });
     const service = new OrbisReleaseService();
-    const result = await service.history('v0.1.0-beta.1', 'v0.1.0-beta.201');
+    const result = await service.history('v0.1.0-beta.1', 'v0.1.0-beta.201', 'nightly');
     expect(request).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({ complete: false, truncated: true });
     expect(result.releases).toHaveLength(100);
     expect(result.releases.at(-1)?.tag).toBe('v0.1.0-beta.102');
-    const recent = await service.history('v0.1.0-beta.198', 'v0.1.0-beta.201');
+    const recent = await service.history('v0.1.0-beta.198', 'v0.1.0-beta.201', 'nightly');
     expect(recent.complete).toBe(true);
     expect(recent.releases).toHaveLength(3);
   });
@@ -287,7 +287,7 @@ describe('Orbis included release history', () => {
       if (init?.method === 'HEAD') return new Response(null);
       throw new Error(`unexpected release request: ${url}`);
     });
-    const result = await new OrbisReleaseService().history('v0.1.0-beta.87', 'v0.1.0-beta.90');
+    const result = await new OrbisReleaseService().history('v0.1.0-beta.87', 'v0.1.0-beta.90', 'nightly');
     expect(result.complete).toBe(true);
     expect(result.releases.map((release) => release.tag)).toEqual(['v0.1.0-beta.90', 'v0.1.0-beta.89', 'v0.1.0-beta.88']);
     expect(result.releases.every((release) => release.imageManifestUrl && release.body)).toBe(true);
@@ -303,10 +303,10 @@ describe('Orbis included release history', () => {
       return init?.method === 'HEAD' ? new Response(null) : new Response('- Change');
     });
     const service = new OrbisReleaseService();
-    const incomplete = await service.history('v0.1.0-beta.87', 'v0.1.0-beta.90');
+    const incomplete = await service.history('v0.1.0-beta.87', 'v0.1.0-beta.90', 'nightly');
     expect(incomplete.complete).toBe(false);
     expect(incomplete.releases.find((release) => release.tag === 'v0.1.0-beta.89')?.body).toBe('');
-    expect((await service.history('v0.1.0-beta.1', 'v0.1.0-beta.90')).complete).toBe(false);
+    expect((await service.history('v0.1.0-beta.1', 'v0.1.0-beta.90', 'nightly')).complete).toBe(false);
   });
 
   it('expires the shared catalogue after one minute and retains known metadata during an outage', async () => {
@@ -317,11 +317,11 @@ describe('Orbis included release history', () => {
       return new Response(JSON.stringify([metadata(90), metadata(89)]));
     });
     const service = new OrbisReleaseService();
-    const previous = await service.listPublished();
+    const previous = await service.listPublished('nightly');
     offline = true;
     vi.advanceTimersByTime(60_000);
-    const repeated = await Promise.all(Array.from({ length: 8 }, () => service.listPublished()));
-    expect(repeated.every((result) => result === previous)).toBe(true);
+    const repeated = await Promise.all(Array.from({ length: 8 }, () => service.listPublished('nightly')));
+    expect(repeated.every((result) => JSON.stringify(result) === JSON.stringify(previous))).toBe(true);
     expect(request).toHaveBeenCalledTimes(2);
   });
 
@@ -335,17 +335,17 @@ describe('Orbis included release history', () => {
       [TAG, 'v0.1.0-beta.8'],
       [`v${'1'.repeat(150)}`, TAG],
     ]) {
-      await expect(service.history(installed, target)).rejects.toThrow('Provide valid installed and target');
+      await expect(service.history(installed, target, 'nightly')).rejects.toThrow('Provide valid installed and target');
     }
-    expect(await service.history(TAG, TAG)).toEqual({ releases: [], complete: true, truncated: false, context: null });
+    expect(await service.history(TAG, TAG, 'nightly')).toEqual({ releases: [], complete: true, truncated: false, context: null });
     expect(request).not.toHaveBeenCalled();
   });
 
   it('reports missing targets and oversized notes without claiming that all notes were read', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify([metadata(89), metadata(88, { body: 'x'.repeat(65 * 1024) })])));
     const service = new OrbisReleaseService();
-    expect((await service.history('v0.1.0-beta.87', 'v0.1.0-beta.90')).complete).toBe(false);
-    const result = await service.history('v0.1.0-beta.87', 'v0.1.0-beta.89');
+    expect((await service.history('v0.1.0-beta.87', 'v0.1.0-beta.90', 'nightly')).complete).toBe(false);
+    const result = await service.history('v0.1.0-beta.87', 'v0.1.0-beta.89', 'nightly');
     expect(result.complete).toBe(false);
     expect(result.releases[1]?.body).toBe('');
   });
@@ -356,7 +356,7 @@ describe('Orbis included release history', () => {
       { ...metadata(2), tag_name: 'v1.1.0-beta.2' },
     ];
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify(rows)));
-    const result = await new OrbisReleaseService().history('v1.1.0-beta.1', 'v1.1.0-beta.2');
+    const result = await new OrbisReleaseService().history('v1.1.0-beta.1', 'v1.1.0-beta.2', 'nightly');
     expect(result.complete).toBe(true);
     expect(result.releases.map((release) => release.tag)).toEqual(['v1.1.0-beta.2']);
     expect(result.context).toMatchObject({ tag: 'v1.1.0-beta.0', kind: 'feature', body: '# Orbis v1.1.0-beta.0\n\n- New feature' });
@@ -370,5 +370,76 @@ describe('Orbis included release history', () => {
     expect(parseOrbisReleaseNotes('<!-- orbis-release-kind: maintenance -->\n- Repair')).toEqual({ kind: 'maintenance', body: '- Repair' });
     expect(parseOrbisReleaseNotes('# New feature with no explicit metadata').kind).toBe('maintenance');
     expect(parseOrbisReleaseNotes(`- Repair\n\nImage: ghcr.io/twentylines/orbis@sha256:${'a'.repeat(64)}\n`).body).toBe('- Repair');
+  });
+
+  it('keeps release caches channel-specific while filtering the shared catalog for each channel', async () => {
+    const stable = metadata(1, { tag_name: 'v1.0.0', body: '# Stable release' });
+    const rc = metadata(1, { tag_name: 'v1.1.0-rc.1', body: '# Release candidate' });
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/releases/latest')) return Response.json(stable);
+      if (url.endsWith('/releases.atom')) return new Response(atom([90]));
+      if (url.endsWith('/v0.1.0-beta.90.md')) return new Response('# Nightly beta');
+      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') return new Response(null, { status: 200 });
+      if (url.endsWith('/releases?per_page=100&page=1')) return Response.json([stable, metadata(90), rc]);
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+
+    expect((await service.latest())?.tag).toBe('v1.0.0');
+    expect((await service.latest('nightly'))?.tag).toBe('v0.1.0-beta.90');
+    expect((await service.latest())?.tag).toBe('v1.0.0');
+    expect((await service.latest('nightly'))?.tag).toBe('v0.1.0-beta.90');
+    expect(request.mock.calls.filter(([url]) => String(url).endsWith('/releases/latest'))).toHaveLength(1);
+    expect(request.mock.calls.filter(([url]) => String(url).endsWith('/releases.atom'))).toHaveLength(1);
+
+    expect((await service.listPublished('stable')).releases.map((release) => release.tag)).toEqual(['v1.0.0']);
+    expect((await service.listPublished('nightly')).releases.map((release) => release.tag)).toEqual(['v1.1.0-rc.1', 'v1.0.0', 'v0.1.0-beta.90']);
+    expect((await service.listPublished()).releases.map((release) => release.tag)).toEqual(['v1.0.0']);
+    expect(request.mock.calls.filter(([url]) => String(url).includes('/releases?per_page=100&page=1'))).toHaveLength(1);
+  });
+
+  it('never returns Beta or RC tags from the default Stable latest endpoint', async () => {
+    const feed = `${atom([90])}<entry><id>tag:github.com,2008:Repository/1419897175/v1.0.0-rc.1</id></entry>`;
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases/latest')) return Response.json(metadata(90));
+      if (url.endsWith('/releases.atom')) return new Response(feed);
+      throw new Error(`unexpected release request: ${url}`);
+    });
+
+    expect(await new OrbisReleaseService().latest()).toBeNull();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls.every(([url]) => !String(url).endsWith('.md'))).toBe(true);
+  });
+
+  it('rejects Beta and RC targets from default Stable history before network access', async () => {
+    const request = vi.spyOn(global, 'fetch');
+    const service = new OrbisReleaseService();
+    for (const target of ['v0.1.0-beta.90', 'v1.0.0-rc.1']) {
+      await expect(service.history('v0.1.0-beta.8', target)).rejects.toThrow('available on this update channel');
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('strips an explicit Normal priority header without changing the default priority', () => {
+    expect(parseOrbisReleaseNotes('<!-- orbis-update-priority: normal -->\n- Routine fix')).toEqual({
+      kind: 'maintenance',
+      body: '- Routine fix',
+    });
+    expect(parseOrbisReleaseNotes('- Critical issue mentioned in body')).toEqual({ kind: 'maintenance', body: '- Critical issue mentioned in body' });
+  });
+
+  it('preserves critical priority and release kind with metadata headers in either order', () => {
+    expect(parseOrbisReleaseNotes('<!-- orbis-release-kind: feature -->\n<!-- orbis-update-priority: critical -->\n# Feature')).toEqual({
+      kind: 'feature',
+      priority: 'critical',
+      body: '# Feature',
+    });
+    expect(parseOrbisReleaseNotes('<!-- orbis-update-priority: critical -->\n<!-- orbis-release-kind: maintenance -->\n- Urgent repair')).toEqual({
+      kind: 'maintenance',
+      priority: 'critical',
+      body: '- Urgent repair',
+    });
   });
 });

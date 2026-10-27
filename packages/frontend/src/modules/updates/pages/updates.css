@@ -937,3 +937,30 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
     flex: 1 1 100%;
   }
 }
+.desktop-critical-update {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin-block: 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--desktop-negative) 38%, var(--desktop-line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--desktop-negative) 6%, var(--desktop-surface));
+  color: var(--desktop-ink);
+}
+.desktop-critical-update > svg {
+  flex: none;
+  color: var(--desktop-negative);
+}
+.desktop-critical-update > div {
+  min-width: 0;
+}
+.desktop-critical-update strong {
+  display: block;
+  line-height: 1.4;
+}
+.desktop-critical-update p {
+  margin: 4px 0 0;
+  line-height: 1.5;
+}

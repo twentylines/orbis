@@ -31,6 +31,9 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      - name: Check release labels
+        run: bun test packages/frontend/src/desktop/orbis-version.test.ts
+
       - name: Check Docker network cleanup ownership
         run: node --test packages/backend/scripts/verify-network-prune.test.cjs
 

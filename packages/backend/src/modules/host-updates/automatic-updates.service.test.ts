@@ -34,6 +34,7 @@ describe('server automatic update scheduling', () => {
   let automatic: AutomaticUpdatesService;
   const host = { status: vi.fn(), plan: vi.fn(), apply: vi.fn() };
   const releases = { latest: vi.fn() };
+  const channels = { read: vi.fn(async () => ({ version: 1 as const, channel: 'nightly' as const, revision: 'initial' })) };
   const apps = { getApps: vi.fn(), getAppByUrn: vi.fn() };
   const marketplace = { getAppUpdateInfo: vi.fn() };
   const lifecycle = { updateApp: vi.fn() };
@@ -50,6 +51,7 @@ describe('server automatic update scheduling', () => {
       marketplace as never,
       lifecycle as never,
       logger as never,
+      channels as never,
     );
 
   beforeEach(async () => {
@@ -67,6 +69,7 @@ describe('server automatic update scheduling', () => {
       tag: 'v0.1.0-beta.92',
       imageManifestUrl: 'https://github.com/twentylines/orbis/releases/download/v0.1.0-beta.92/release-manifest.json',
     });
+    channels.read.mockReset().mockResolvedValue({ version: 1, channel: 'nightly', revision: 'initial' });
     apps.getApps.mockReset().mockResolvedValue([]);
     apps.getAppByUrn.mockReset().mockResolvedValue({ version: 1, ignoredVersion: null, status: 'running', appStoreSlug: 'tipi' });
     marketplace.getAppUpdateInfo.mockReset().mockResolvedValue({ latestVersion: 2 });
@@ -95,14 +98,14 @@ describe('server automatic update scheduling', () => {
     expect(lifecycle.updateApp).not.toHaveBeenCalled();
   });
 
-  it('uses one daily check and pinned host plan/apply across concurrent ticks and persists the accepted attempt', async () => {
+  it('reads the selected channel and uses one daily check and pinned host plan/apply across concurrent ticks', async () => {
     await automatic.update(settings());
     await automatic.tick();
     expect(releases.latest).not.toHaveBeenCalled();
     quiet();
     await Promise.all(Array.from({ length: 8 }, () => automatic.tick()));
     await automatic.tick();
-    expect(releases.latest).toHaveBeenCalledTimes(1);
+    expect(releases.latest).toHaveBeenCalledExactlyOnceWith('nightly');
     expect(host.plan).toHaveBeenCalledExactlyOnceWith('v0.1.0-beta.92');
     expect(host.apply).toHaveBeenCalledExactlyOnceWith('reviewed');
     expect((await automatic.read()).lastAttempt).toMatchObject({ state: 'accepted', jobId: 'accepted-job' });

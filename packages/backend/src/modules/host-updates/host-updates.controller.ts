@@ -1,5 +1,5 @@
 import { AuthGuard } from '@/modules/auth/auth.guard';
-import { BadRequestException, Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { HostUpdatesGuard } from './host-updates.guard';
 import { HostUpdatesService } from './host-updates.service';
 import { OrbisDowngradeService } from './orbis-downgrade.service';
@@ -11,6 +11,46 @@ export class HostUpdatesController {
     private readonly hostUpdates: HostUpdatesService,
     private readonly downgrades: OrbisDowngradeService,
   ) {}
+
+  @Put('channel')
+  changeChannel(@Body() body: Record<string, unknown>) {
+    if (
+      !body ||
+      Array.isArray(body) ||
+      !['stable', 'nightly'].includes(String(body.channel)) ||
+      typeof body.channel !== 'string' ||
+      typeof body.revision !== 'string' ||
+      body.revision.length > 64 ||
+      Object.keys(body).some((key) => !['channel', 'revision', 'acknowledgeNightly'].includes(key)) ||
+      ('acknowledgeNightly' in body && typeof body.acknowledgeNightly !== 'boolean')
+    )
+      throw new BadRequestException('Confirm one update channel and its displayed revision.');
+    if (body.channel === 'nightly' && body.acknowledgeNightly !== true)
+      throw new BadRequestException('Confirm the Nightly warning before enabling it.');
+    return this.hostUpdates.changeReleaseChannel(body.channel as 'stable' | 'nightly', body.revision, body.acknowledgeNightly === true);
+  }
+
+  @Post('channel/stable/plan')
+  @HttpCode(200)
+  stableChannelPlan(@Body() body: Record<string, unknown>) {
+    if (!body || Array.isArray(body) || Object.keys(body).some((key) => key !== 'force') || ('force' in body && typeof body.force !== 'boolean'))
+      throw new BadRequestException('Review one Stable installation.');
+    return this.downgrades.planStable(body.force === true);
+  }
+
+  @Post('channel/stable/apply')
+  @HttpCode(202)
+  stableChannelApply(@Body() body: Record<string, unknown>) {
+    if (
+      !body ||
+      Array.isArray(body) ||
+      typeof body.planId !== 'string' ||
+      Object.keys(body).some((key) => !['planId', 'force'].includes(key)) ||
+      ('force' in body && typeof body.force !== 'boolean')
+    )
+      throw new BadRequestException('Confirm one reviewed Stable installation.');
+    return this.downgrades.apply(body.planId, body.force === true, true);
+  }
 
   @Post('downgrade/plan')
   @HttpCode(200)

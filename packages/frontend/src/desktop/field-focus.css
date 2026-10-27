@@ -1,25 +1,26 @@
+body:has(.orbis-theme) :is(.form-control, .form-select, .btn) {
+  border-width: 2px;
+  border-style: solid;
+}
 body:has(.orbis-theme) :is(.form-control, .form-select) {
+  box-shadow: none;
   transition:
     border-color 160ms ease,
     box-shadow 180ms ease,
     background-color 180ms ease;
 }
 body:has(.orbis-theme) :is(.form-control, .form-select):is(:focus, :focus-visible) {
-  outline: 2px solid transparent;
-  outline-offset: 0;
+  outline: none;
   border-color: var(--desktop-accent);
-  background-color: color-mix(in srgb, var(--desktop-accent) 5%, var(--desktop-surface));
-  box-shadow:
-    inset 0 0 0 1px var(--desktop-accent),
-    0 0 0 3px color-mix(in srgb, var(--desktop-accent) 15%, transparent);
+  background-color: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
+  box-shadow: none;
 }
 :root[data-orbis-effects="low"] body:has(.orbis-theme) :is(.form-control, .form-select):is(:focus, :focus-visible) {
-  outline-color: var(--desktop-accent);
-  outline-offset: -2px;
+  background-color: color-mix(in srgb, var(--desktop-ink) 16%, var(--desktop-surface));
 }
 @media (forced-colors: active) {
   body:has(.orbis-theme) :is(.form-control, .form-select):is(:focus, :focus-visible) {
-    outline-color: Highlight;
+    outline: 2px solid Highlight;
     outline-offset: 2px;
   }
 }

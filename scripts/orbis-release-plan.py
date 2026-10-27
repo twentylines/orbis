@@ -18,6 +18,10 @@ SPEC = importlib.util.spec_from_file_location("migration_preflight", Path(__file
 assert SPEC and SPEC.loader
 PREFLIGHT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREFLIGHT)
+POLICY_SPEC = importlib.util.spec_from_file_location("orbis_release_policy", Path(__file__).with_name("orbis-release-policy.py"))
+assert POLICY_SPEC and POLICY_SPEC.loader
+POLICY = importlib.util.module_from_spec(POLICY_SPEC)
+POLICY_SPEC.loader.exec_module(POLICY)
 
 IMAGE = "ghcr.io/twentylines/orbis"
 INSTALLATION_PROTOCOL = "orbis.installation-state.v1"
@@ -28,7 +32,7 @@ ORBIS_ENV = {"ORBIS_VERSION", "ORBIS_COMMIT", "ORBIS_IMAGE_DIGEST"}
 
 
 def is_stable_release_tag(tag: str) -> bool:
-    return bool(TAG.fullmatch(tag) and not re.search(r"(?:^|[.-])(?:nightly|dev|alpha)(?:[.-]|$)", tag, re.IGNORECASE))
+    return POLICY.is_stable_release_tag(tag)
 
 
 def validate_manifest(raw: object) -> dict[str, str]:
@@ -41,8 +45,12 @@ def validate_manifest(raw: object) -> dict[str, str]:
         raise ValueError("release manifest is not an Orbis v1 release")
     if not TAG.fullmatch(raw["tag"]) or not COMMIT.fullmatch(raw["commit"]) or not DIGEST.fullmatch(raw["digest"]):
         raise ValueError("release manifest has an invalid tag, commit, or digest")
-    if not is_stable_release_tag(raw["tag"]):
-        raise ValueError("Nightly is inactive during beta; choose a Stable release")
+    if not POLICY.is_published_release_tag(raw["tag"]):
+        raise ValueError("choose a published Stable or Nightly release")
+    if "releaseChannel" in raw and raw["releaseChannel"] != ("stable" if is_stable_release_tag(raw["tag"]) else "nightly"):
+        raise ValueError("release channel does not match the published version")
+    if "updatePriority" in raw and raw["updatePriority"] not in ("normal", "critical"):
+        raise ValueError("release update priority is invalid")
     if raw["runtipiCompatibility"].removeprefix("v") != "4.10.1":
         raise ValueError("release manifest does not target the 4.10.1 compatibility base")
     if "installationProtocol" in raw and raw["installationProtocol"] != INSTALLATION_PROTOCOL:

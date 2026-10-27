@@ -1,0 +1,86 @@
+{
+  "versions": [
+    {
+      "version": "v1.0.1",
+      "parsed": { "base": "1.0.1", "numbers": [1, 0, 1], "prerelease": null, "iteration": null },
+      "published": true,
+      "stable": true,
+      "nightly": true
+    },
+    {
+      "version": "v1.0.1-beta.1",
+      "parsed": { "base": "1.0.1", "numbers": [1, 0, 1], "prerelease": "beta", "iteration": 1 },
+      "published": true,
+      "stable": false,
+      "nightly": true
+    },
+    {
+      "version": "v1.0.1-beta.9",
+      "parsed": { "base": "1.0.1", "numbers": [1, 0, 1], "prerelease": "beta", "iteration": 9 },
+      "published": true,
+      "stable": false,
+      "nightly": true
+    },
+    {
+      "version": "v1.0.1-beta.10",
+      "parsed": { "base": "1.0.1", "numbers": [1, 0, 1], "prerelease": "beta", "iteration": 10 },
+      "published": true,
+      "stable": false,
+      "nightly": true
+    },
+    {
+      "version": "v1.0.1-rc.1",
+      "parsed": { "base": "1.0.1", "numbers": [1, 0, 1], "prerelease": "rc", "iteration": 1 },
+      "published": true,
+      "stable": false,
+      "nightly": true
+    },
+    {
+      "version": "v9007199254740991.0.0",
+      "parsed": { "base": "9007199254740991.0.0", "numbers": [9007199254740991, 0, 0], "prerelease": null, "iteration": null },
+      "published": true,
+      "stable": true,
+      "nightly": true
+    },
+    {
+      "version": "v1.0.1-beta.9007199254740991",
+      "parsed": { "base": "1.0.1", "numbers": [1, 0, 1], "prerelease": "beta", "iteration": 9007199254740991 },
+      "published": true,
+      "stable": false,
+      "nightly": true
+    },
+    { "version": "v01.0.1", "parsed": null, "published": false, "stable": false, "nightly": false },
+    {
+      "version": "1.0.1",
+      "parsed": { "base": "1.0.1", "numbers": [1, 0, 1], "prerelease": null, "iteration": null },
+      "published": false,
+      "stable": false,
+      "nightly": false
+    },
+    { "version": "v1.0.1-beta.01", "parsed": null, "published": false, "stable": false, "nightly": false },
+    { "version": "v1.0.1-alpha.1", "parsed": null, "published": false, "stable": false, "nightly": false },
+    { "version": "v1.0.1-beta.1-rc.2", "parsed": null, "published": false, "stable": false, "nightly": false },
+    { "version": "v9007199254740992.0.0", "parsed": null, "published": false, "stable": false, "nightly": false },
+    { "version": "v1.0.1-beta.9007199254740992", "parsed": null, "published": false, "stable": false, "nightly": false }
+  ],
+  "order": [
+    { "first": "v1.0.1-beta.9", "second": "v1.0.1-beta.10", "result": -1 },
+    { "first": "v1.0.1-rc.1", "second": "v1.0.1", "result": -1 },
+    { "first": "v1.0.1-beta.10", "second": "v1.0.1-rc.1", "result": -1 },
+    { "first": "v1.0.0", "second": "v1.0.1-beta.1", "result": -1 },
+    { "first": "invalid", "second": "v1.0.1", "result": null }
+  ],
+  "downgrades": [
+    { "target": "v1.0.1-beta.9", "installed": "v1.0.1-beta.10", "channel": "nightly", "allowed": true },
+    { "target": "v1.0.1-beta.10", "installed": "v1.0.1-beta.9", "channel": "nightly", "allowed": false },
+    { "target": "v1.0.1-rc.1", "installed": "v1.0.1-rc.2", "channel": "nightly", "allowed": true },
+    { "target": "v1.0.1-beta.9", "installed": "v1.0.1-rc.1", "channel": "nightly", "allowed": true },
+    { "target": "v1.0.0-beta.12", "installed": "v1.0.1-beta.1", "channel": "nightly", "allowed": false },
+    { "target": "v1.0.0", "installed": "v1.0.1-beta.1", "channel": "nightly", "allowed": true },
+    { "target": "v1.0.0", "installed": "v1.0.1", "channel": "stable", "allowed": true },
+    { "target": "v1.0.0-beta.12", "installed": "v1.0.1-beta.1", "channel": "stable", "allowed": false },
+    { "target": "v1.0.1-beta.1", "installed": "v1.0.1-beta.2", "channel": "stable", "allowed": false },
+    { "target": "v1.0.0", "installed": "v1.0.1", "channel": "nightly", "allowed": true },
+    { "target": "v1.0.1-beta.9", "installed": "v1.0.1-beta.10", "channel": "unknown", "allowed": false }
+  ]
+}

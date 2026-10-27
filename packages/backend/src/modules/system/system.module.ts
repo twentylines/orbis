@@ -11,6 +11,7 @@ import { HostProcessesService } from './host-processes.service';
 import { HostSensorsService } from './host-sensors.service';
 import { HostDeviceHistoryService } from './host-device-history.service';
 import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.module';
+import { OrbisReleaseChannelsService } from './orbis-release-channels.service';
 
 @Module({
   imports: [DockerModule, AppsModule, MonitoringActivityModule],
@@ -18,6 +19,7 @@ import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.
   providers: [
     SystemService,
     OrbisReleaseService,
+    OrbisReleaseChannelsService,
     ContainerTelemetryService,
     MetricHistoryService,
     HostTelemetryService,
@@ -28,6 +30,7 @@ import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.
   exports: [
     SystemService,
     OrbisReleaseService,
+    OrbisReleaseChannelsService,
     ContainerTelemetryService,
     MetricHistoryService,
     HostTelemetryService,

@@ -4,6 +4,8 @@
   tag: $tag,
   commit: $commit,
   digest: $digest,
+  releaseChannel: (if ($tag | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) then "stable" else "nightly" end),
+  updatePriority: ($ARGS.named.updatePriority // "normal"),
   platforms: ["linux/amd64", "linux/arm64"],
   runtipiCompatibility: "4.10.1",
   installationProtocol: "orbis.installation-state.v1",

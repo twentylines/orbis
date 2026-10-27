@@ -15,9 +15,10 @@ export class DatabaseService {
     private logger: LoggerService,
   ) {
     const { username, port, database, host, password } = this.configurationService.get('database');
-    const connectionString = `postgresql://${username}:${password}@${host}:${port}/${database}?connect_timeout=300`;
-
-    this.db = drizzle(connectionString, { schema });
+    this.db = drizzle({
+      connection: { host, port, user: username, password, database, connectionTimeoutMillis: 300_000 },
+      schema,
+    });
   }
 
   private getMigrationsPath(): string {

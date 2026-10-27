@@ -34,6 +34,7 @@ PLAN = SERVICE.PLAN
 SCRIPTS = (
     "migration-preflight.py",
     "orbis-release-plan.py",
+    "orbis-release-policy.py",
     "orbis-stage-release.py",
     "orbis-host.py",
     "orbis-release-check.py",

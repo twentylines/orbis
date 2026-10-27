@@ -24,10 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Require release notes for this tag
+      - name: Validate release identity and metadata
+        id: metadata
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: test -s "releases/${RELEASE_TAG}.md"
+        run: python3 scripts/orbis-release-metadata.py --tag "$RELEASE_TAG" --notes "releases/${RELEASE_TAG}.md" --github-output "$GITHUB_OUTPUT"
 
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
@@ -63,6 +64,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_SHA: ${{ github.sha }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          UPDATE_PRIORITY: ${{ steps.metadata.outputs.priority }}
         run: |
           jq -n \
             --arg schema 'orbis.release.v1' \
@@ -70,6 +72,7 @@ jobs:
             --arg tag "$RELEASE_TAG" \
             --arg commit "$RELEASE_SHA" \
             --arg digest "$IMAGE_DIGEST" \
+            --arg updatePriority "$UPDATE_PRIORITY" \
             --arg migrationFingerprint "$(python3 scripts/orbis-migration-fingerprint.py)" \
             -f scripts/release-manifest.jq \
             > release-manifest.json
@@ -83,4 +86,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" release-manifest.json installer-assets/install-orbis.py installer-assets/orbis-installer-manifest.json installer-assets/orbis-installer.tar.gz --title "Orbis $RELEASE_TAG" --notes-file release-notes.md --prerelease --verify-tag
+          DISPLAY_VERSION: ${{ steps.metadata.outputs.displayVersion }}
+          IS_PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
+        run: |
+          flags=(--verify-tag --title "Orbis $DISPLAY_VERSION" --notes-file release-notes.md)
+          if [[ "$IS_PRERELEASE" == true ]]; then
+            flags+=(--prerelease --latest=false)
+          else
+            flags+=(--latest)
+          fi
+          gh release create "$RELEASE_TAG" release-manifest.json installer-assets/install-orbis.py installer-assets/orbis-installer-manifest.json installer-assets/orbis-installer.tar.gz "${flags[@]}"

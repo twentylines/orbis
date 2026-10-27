@@ -27,6 +27,18 @@ REPLACE = load("orbis-install-replace.py", "orbis_guided_replace")
 HOST = REPLACE.HOST
 APPS = REPLACE.APPS
 UI = load("orbis-install-ui.py", "orbis_guided_ui")
+CHANNELS = load("orbis-host-service.py", "orbis_guided_channels")
+
+
+def acknowledge_release_channel(manifest, accepted=False, ask=None):
+    if HOST.PLAN.POLICY.is_stable_release_tag(manifest["tag"]):
+        return
+    warning = "Nightly builds can contain incomplete features or regressions. Returning to Stable requires a compatible Stable installation."
+    if accepted:
+        print(warning)
+        return
+    if ask is None or ask(warning + "\nInstall this Nightly build and follow Nightly updates? [y/N]: ").strip().lower() != "y":
+        raise ValueError("Nightly installation was not approved. Use --accept-nightly only after reviewing this warning")
 
 
 class Terminal:
@@ -239,6 +251,10 @@ def host_request(socket_path, endpoint, body=None):
 def update_existing(root, reader, target, display, *, without_host_service=False):
     upgrade = load("orbis-host-service-upgrade.py", "orbis_guided_helper_upgrade")
     current = upgrade.SERVICE.installed_manifest(root, reader.context)
+    channel = upgrade.SERVICE.read_channel(root)
+    target_nightly = not HOST.PLAN.POLICY.is_stable_release_tag(target["tag"])
+    if without_host_service and (channel["channel"] == "nightly" or target_nightly):
+        raise ValueError("Nightly updates and returning to Stable require the host service; no update was made")
     if release_order(target["tag"]) < release_order(current["tag"]):
         raise ValueError(f"Installed {current['tag']} is newer than this installer. Use the latest installer; no downgrade was made")
     display.set_remaining_steps((2 if without_host_service else 4) + (0 if shutil.which("rsync") else 1))
@@ -250,7 +266,13 @@ def update_existing(root, reader, target, display, *, without_host_service=False
             enable = load("orbis-host-service-enable.py", "orbis_guided_update_enable")
             enable.enable(root, reader.context, Path(__file__).parent)
             upgrade.upgrade(root, reader.context, Path(__file__).parent, str(root))
+    socket_path = upgrade.SETUP.SOCKET_FILE
+    if target_nightly and channel["channel"] != "nightly":
+        host_request(socket_path, "/v1/channel", {"channel": "nightly", "revision": channel["revision"], "acknowledgeNightly": True})
+        channel = upgrade.SERVICE.read_channel(root)
     if current["digest"] == target["digest"]:
+        if channel["channel"] == "nightly" and not target_nightly:
+            host_request(socket_path, "/v1/channel", {"channel": "stable", "revision": channel["revision"]})
         print(f"Orbis {current['tag']} is up to date at {root}.")
         return {"result": "up-to-date", "releaseTag": current["tag"]}
     if current["tag"] == target["tag"]:
@@ -261,9 +283,11 @@ def update_existing(root, reader, target, display, *, without_host_service=False
         snapshot = snapshots / ("orbis-" + target["tag"] + "-" + str(uuid.uuid4()))
         with display.step("Updating Orbis and verifying server health"):
             return REPLACE.UPDATE.apply_update(root, current, target, reader.context, snapshot)
-    socket_path = upgrade.SETUP.SOCKET_FILE
     with display.step("Checking the release and backup storage"):
-        checked = host_request(socket_path, "/v1/plan", {"tag": target["tag"]})
+        request = {"tag": target["tag"]}
+        if channel["channel"] == "nightly" and not target_nightly:
+            request["returnToStable"] = True
+        checked = host_request(socket_path, "/v1/plan", request)
         if checked.get("targetTag") != target["tag"] or checked.get("targetDigest") != target["digest"]:
             raise ValueError("The checked update does not match the verified installer release")
     with display.step("Updating Orbis and verifying server health"):
@@ -304,6 +328,7 @@ def main():
     parser.add_argument("--backup-scope", choices=("controller", "full"), default="controller", help="back up control services while apps run (default), or pause apps for a full backup")
     parser.add_argument("--inspect", action="store_true")
     parser.add_argument("--yes", action="store_true")
+    parser.add_argument("--accept-nightly", action="store_true", help="acknowledge Nightly risks and follow Nightly updates")
     parser.add_argument("--host-writers-stopped", action="store_true")
     parser.add_argument("--without-host-service", action="store_true")
     parser.add_argument("--no-animation", action="store_true", help="show static installation progress")
@@ -339,6 +364,8 @@ def main():
             if tty is None:
                 raise ValueError("An interactive terminal is required")
             return tty.ask(question)
+
+        acknowledge_release_channel(manifest, args.accept_nightly, None if args.yes else ask)
 
         supplied_root = safe_root(args.root) if args.root else None
         roots = {item["installRoot"] for item in report["installations"] if item.get("installRoot")}
@@ -413,6 +440,10 @@ def main():
             result = replacement(root, reader, manifest, state, mode, confirm, display, backup_scope=args.backup_scope)
         else:
             result = new.install(root, reader, manifest, state, args, confirm, display=display)
+        if not HOST.PLAN.POLICY.is_stable_release_tag(manifest["tag"]):
+            channel = CHANNELS.read_channel(root)
+            if channel["channel"] != "nightly":
+                CHANNELS.save_channel(root, "nightly", str(uuid.uuid4()))
         if not args.without_host_service:
             with display.step("Enabling system administration"):
                 enable.enable(root, reader.context, Path(__file__).parent)

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { BadRequestException } from '@nestjs/common';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { HostUpdatesService } from './host-updates.service';
 
 describe('host update Unix socket transport', () => {
@@ -13,6 +13,11 @@ describe('host update Unix socket transport', () => {
   const originalSocket = process.env.ORBIS_HOST_SOCKET;
   const originalVersion = process.env.ORBIS_VERSION;
   const requests: Array<{ method: string; path: string; body: unknown }> = [];
+  let selectedChannel: { version: 1; channel: 'stable' | 'nightly'; revision: string } = { version: 1, channel: 'nightly', revision: 'initial' };
+  const channels = {
+    read: vi.fn(async () => selectedChannel),
+    status: vi.fn(),
+  };
   let restartSupported = true;
 
   beforeAll(async () => {
@@ -43,7 +48,7 @@ describe('host update Unix socket transport', () => {
         response.end(
           JSON.stringify(
             request.url === '/v1/status'
-              ? { available: true, enrolled: true }
+              ? { available: true, enrolled: true, capabilities: ['release-channels.v1'] }
               : request.url === '/v1/packages'
                 ? { available: true, packageCount: 1, packages: [] }
                 : request.url === '/v1/packages/job'
@@ -62,7 +67,7 @@ describe('host update Unix socket transport', () => {
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
     process.env.ORBIS_HOST_SOCKET = socketPath;
     process.env.ORBIS_VERSION = 'v0.1.0-beta.7';
-    service = new HostUpdatesService();
+    service = new HostUpdatesService(channels as never);
   });
 
   afterAll(async () => {
@@ -82,26 +87,32 @@ describe('host update Unix socket transport', () => {
 
   it('prevents generic apply from bypassing downgrade revalidation, including after a core restart', async () => {
     const id = '00000000-0000-4000-8000-000000000000';
-    await service.plan('v0.1.0-beta.90', true);
+    const installed = process.env.ORBIS_VERSION;
+    process.env.ORBIS_VERSION = 'v0.1.0-beta.92';
+    try {
+      await service.plan('v0.1.0-beta.90', true);
+    } finally {
+      process.env.ORBIS_VERSION = installed;
+    }
     const count = requests.length;
-    expect(() => service.apply(id)).toThrow('new update or downgrade review');
-    expect(() => new HostUpdatesService().apply(id)).toThrow('new update or downgrade review');
+    await expect(service.apply(id)).rejects.toThrow('new update or downgrade review');
+    await expect(new HostUpdatesService(channels as never).apply(id)).rejects.toThrow('new update or downgrade review');
     expect(requests).toHaveLength(count);
     await service.apply(id, true);
     expect(requests.at(-1)).toEqual({ method: 'POST', path: '/v1/apply', body: { planId: id } });
-    expect(() => service.apply(id, true)).toThrow('new update or downgrade review');
+    await expect(service.apply(id, true)).rejects.toThrow('new update or downgrade review');
   });
 
-  it('rejects ordinary downgrade plans and unverifiable installed versions before contacting the host', () => {
-    const count = requests.length;
+  it('rejects ordinary downgrade plans and unverifiable installed versions before contacting the host', async () => {
+    const planCount = requests.filter((request) => request.path === '/v1/plan').length;
     try {
       for (const version of ['', 'development', 'not-a-version']) {
         process.env.ORBIS_VERSION = version;
-        expect(() => service.plan('v0.1.0-beta.8')).toThrow('could not be verified');
+        await expect(service.plan('v0.1.0-beta.8')).rejects.toThrow('could not be verified');
       }
       process.env.ORBIS_VERSION = 'v0.1.0-beta.7';
-      for (const target of ['v0.1.0-beta.7', 'v0.1.0-beta.6']) expect(() => service.plan(target)).toThrow('downgrade review');
-      expect(requests).toHaveLength(count);
+      for (const target of ['v0.1.0-beta.7', 'v0.1.0-beta.6']) await expect(service.plan(target)).rejects.toThrow('downgrade review');
+      expect(requests.filter((request) => request.path === '/v1/plan')).toHaveLength(planCount);
     } finally {
       process.env.ORBIS_VERSION = 'v0.1.0-beta.7';
     }
@@ -109,17 +120,30 @@ describe('host update Unix socket transport', () => {
 
   it('rejects untrusted tags before contacting the host service', async () => {
     const count = requests.length;
-    expect(() => service.plan('v0.1.0-beta.8; rm -rf /')).toThrow(BadRequestException);
+    await expect(service.plan('v0.1.0-beta.8; rm -rf /')).rejects.toThrow(BadRequestException);
     expect(requests).toHaveLength(count);
   });
 
-  it('rejects inactive Nightly, dev and alpha targets before contacting the host service', () => {
+  it('rejects tags outside the published channel grammar before contacting the host service', async () => {
     const count = requests.length;
     for (const tag of ['v0.1.0-nightly.20261025', 'v0.1.0-dev.1', 'v0.1.0-alpha.1']) {
-      expect(() => service.plan(tag)).toThrow(BadRequestException);
-      expect(() => service.plan(tag, true)).toThrow(BadRequestException);
+      await expect(service.plan(tag)).rejects.toThrow(BadRequestException);
+      await expect(service.plan(tag, true)).rejects.toThrow(BadRequestException);
     }
     expect(requests).toHaveLength(count);
+  });
+
+  it('rejects a beta target on Stable and invalidates a reviewed apply after the channel revision changes', async () => {
+    const count = requests.length;
+    selectedChannel = { version: 1, channel: 'stable', revision: 'stable-revision' };
+    await expect(service.plan('v1.0.1-beta.2')).rejects.toThrow('selected update channel');
+    expect(requests).toHaveLength(count);
+
+    selectedChannel = { version: 1, channel: 'nightly', revision: 'nightly-before' };
+    await service.plan('v1.0.1-beta.2');
+    selectedChannel = { version: 1, channel: 'nightly', revision: 'nightly-after' };
+    await expect(service.apply('00000000-0000-4000-8000-000000000000')).rejects.toThrow('new update or downgrade review');
+    expect(requests.at(-1)).toEqual({ method: 'POST', path: '/v1/plan', body: { tag: 'v1.0.1-beta.2' } });
   });
 
   it('reads packages and a fixed candidate changelog through the socket', async () => {

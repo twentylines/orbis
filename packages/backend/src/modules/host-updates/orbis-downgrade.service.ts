@@ -3,12 +3,14 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { lt, valid } from 'semver';
 import validator from 'validator';
-import { isStableOrbisReleaseTag } from '@runtipi/common/schemas/orbis-release-channel';
+import { isPublishedOrbisReleaseTag, isStableOrbisReleaseTag, downgradeAllowedOnChannel } from '@runtipi/common/schemas/orbis-release-channel';
 import { DatabaseService } from '@/core/database/database.service';
 import { HostUpdatesService, type HostUpdatePlan } from './host-updates.service';
 import { AutomaticUpdatesService } from './automatic-updates.service';
 import { DesktopPreferencesService, type DesktopPreferences } from '../desktop-preferences/desktop-preferences.service';
 import { fetchPublishedReleaseManifest, publishedReleaseManifest, RELEASE_DIGEST, type PublishedReleaseManifest } from './published-release-manifest';
+import { OrbisReleaseChannelsService } from '../system/orbis-release-channels.service';
+import { OrbisReleaseService } from '../system/orbis-release.service';
 
 // Bump this contract when persisted non-database state becomes incompatible.
 const DATA_CONTRACT = 'orbis.data.v1';
@@ -18,7 +20,15 @@ const LEGACY_90 = {
   digest: 'sha256:e6fc6d1bd23d97994c780a560fc5ae72133975739831c65a7f54487ffbdf62ef',
   migrations: 'sha256:ed90c4f22eb28f9c594d4fa56f27eb7447dbd39962659f4a8657cf2a47cca5ae',
 };
-type Review = HostUpdatePlan & { expiresAt: number; migrationFingerprint: string; compatibility: string; forced: boolean; warnings: string[] };
+type Review = HostUpdatePlan & {
+  expiresAt: number;
+  migrationFingerprint: string;
+  compatibility: string;
+  forced: boolean;
+  warnings: string[];
+  returnToStable: boolean;
+  operation: 'update' | 'downgrade';
+};
 type StoredReview = Review & { riskFingerprint: string; hostBinding: string };
 const FORCE_WARNING =
   'Forcing a downgrade can make current data unreadable, prevent sign-in, or reset settings. A recovery snapshot is still required.';
@@ -90,6 +100,8 @@ export class OrbisDowngradeService {
     private readonly database: DatabaseService,
     private readonly automaticUpdates: AutomaticUpdatesService,
     private readonly preferences: DesktopPreferencesService,
+    private readonly channels: OrbisReleaseChannelsService,
+    private readonly releases: OrbisReleaseService,
   ) {}
 
   private async fingerprint() {
@@ -121,20 +133,21 @@ export class OrbisDowngradeService {
     };
   }
 
-  private async check(tag: unknown, forced: boolean) {
+  private async check(tag: unknown, forced: boolean, returnToStable = false) {
     const installed = process.env.ORBIS_VERSION;
     const runtime = process.env.TIPI_VERSION;
-    if (
-      typeof tag !== 'string' ||
-      tag.length > 80 ||
-      !isStableOrbisReleaseTag(tag) ||
-      !valid(tag) ||
-      !installed ||
-      !valid(installed) ||
-      !lt(tag, installed)
-    ) {
+    if (!isPublishedOrbisReleaseTag(tag) || !valid(tag) || !installed || !valid(installed) || tag === installed) {
       throw new BadRequestException('Choose an older published Orbis version.');
     }
+    const channel = await this.channels.read();
+    const downgrading = lt(tag, installed);
+    if (returnToStable) {
+      const latest = await this.releases.latest('stable');
+      if (channel.channel !== 'nightly' || !isStableOrbisReleaseTag(tag) || latest?.tag !== tag || !latest.imageManifestUrl)
+        throw new BadRequestException('Review the latest published Stable release before leaving Nightly.');
+      if (!downgrading && forced) throw new BadRequestException('A Stable update does not require a forced downgrade.');
+    } else if (!downgradeAllowedOnChannel(tag, installed, channel.channel))
+      throw new BadRequestException('Choose an allowed earlier release on this update channel.');
     if (!runtime) throw new BadRequestException('The installed Runtipi version is unavailable.');
     const status = await this.host.status();
     if (
@@ -154,12 +167,12 @@ export class OrbisDowngradeService {
     const manifest = manifestCompatibility(published, runtime, forced);
     const warnings = forced ? [FORCE_WARNING, ...manifest.warnings] : [];
     const fingerprint = await this.fingerprint();
-    if (fingerprint !== manifest.migrations) {
+    if (downgrading && fingerprint !== manifest.migrations) {
       if (!forced) throw incompatibleDowngrade('This release cannot read the installed database schema. No data or services were changed.');
       warnings.push('The target database schema does not match the installed schema. Data may be unreadable or damaged after this downgrade.');
     }
     const accountState: unknown[] = [];
-    if (!manifest.usernames) {
+    if (downgrading && !manifest.usernames) {
       const accounts = await this.database.db.execute<{ id: number; username: unknown }>(sql`SELECT id, username FROM "user" ORDER BY id LIMIT 4097`);
       if (accounts.rows.length > 4096 || accounts.rows.some(({ username }) => typeof username !== 'string' || !validator.isEmail(username))) {
         if (!forced) {
@@ -189,15 +202,22 @@ export class OrbisDowngradeService {
       manifest,
       fingerprint,
       warnings,
-      riskFingerprint: stateFingerprint({ published, fingerprint, accountState, warnings }),
+      operation: downgrading ? ('downgrade' as const) : ('update' as const),
+      riskFingerprint: stateFingerprint({ published, fingerprint, accountState, warnings, channel, returnToStable }),
       hostBinding: stateFingerprint({ tag: status.currentTag, digest: status.currentDigest ?? null }),
     };
   }
 
-  async plan(tag: unknown, forced = false): Promise<Review> {
+  async planStable(forced = false): Promise<Review> {
+    const latest = await this.releases.latest('stable');
+    if (!latest?.imageManifestUrl) throw new BadRequestException('No verified Stable release is available for this server yet.');
+    return this.plan(latest.tag, forced, true);
+  }
+
+  async plan(tag: unknown, forced = false, returnToStable = false): Promise<Review> {
     if (typeof forced !== 'boolean') throw new BadRequestException('Choose whether to force this downgrade.');
-    const checked = await this.check(tag, forced);
-    const plan = await this.host.plan(checked.tag, true);
+    const checked = await this.check(tag, forced, returnToStable);
+    const plan = await this.host.plan(checked.tag, checked.operation === 'downgrade', returnToStable);
     if (plan.currentTag !== checked.installed || plan.targetTag !== checked.tag || plan.targetDigest !== checked.manifest.digest) {
       throw new BadRequestException('The checked release changed. Create a new downgrade review.');
     }
@@ -210,19 +230,26 @@ export class OrbisDowngradeService {
         : 'Same Runtipi version and database schema. Applications and current data are retained.',
       forced,
       warnings: checked.warnings,
+      returnToStable,
+      operation: checked.operation,
     };
+    if (returnToStable && checked.operation === 'update')
+      review.compatibility = 'Installs the reviewed Stable release on the same Runtipi version. The channel changes only after healthy verification.';
+    if (returnToStable && checked.operation === 'downgrade')
+      review.warnings.push('Automatic Orbis and system updates are paused for a downgrade. Your schedules and per-app rules are retained.');
     for (const [id, previous] of this.reviews) if (previous.expiresAt < Date.now()) this.reviews.delete(id);
     if (this.reviews.size >= 16) this.reviews.delete(this.reviews.keys().next().value as string);
     this.reviews.set(plan.planId, { ...review, riskFingerprint: checked.riskFingerprint, hostBinding: checked.hostBinding });
     return review;
   }
 
-  async apply(planId: unknown, forced = false) {
+  async apply(planId: unknown, forced = false, returnToStable = false) {
     if (typeof forced !== 'boolean') throw new BadRequestException('Confirm whether to force this downgrade.');
     const review = typeof planId === 'string' ? this.reviews.get(planId) : undefined;
     if (!review || review.expiresAt < Date.now()) throw new BadRequestException('Create a new downgrade review before continuing.');
-    if (review.forced !== forced) throw new BadRequestException('Confirm the same force choice shown in the downgrade review.');
-    const checked = await this.check(review.targetTag, forced);
+    if (review.forced !== forced || review.returnToStable !== returnToStable)
+      throw new BadRequestException('Confirm the same channel and force choices shown in the installation review.');
+    const checked = await this.check(review.targetTag, forced, returnToStable);
     if (
       checked.installed !== review.currentTag ||
       checked.manifest.digest !== review.targetDigest ||
@@ -233,7 +260,7 @@ export class OrbisDowngradeService {
       throw new BadRequestException('The installation changed. Create a new downgrade review.');
     }
     this.reviews.delete(review.planId);
-    await this.automaticUpdates.pauseForDowngrade();
-    return this.host.apply(review.planId, true);
+    if (review.operation === 'downgrade') await this.automaticUpdates.pauseForDowngrade();
+    return this.host.apply(review.planId, review.operation === 'downgrade', returnToStable);
   }
 }
