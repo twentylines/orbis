@@ -25,6 +25,10 @@ BASE = "https://github.com/twentylines/orbis/releases/"
 LIMITS = {"install-orbis.py": 1024 * 1024, "release-manifest.json": 16 * 1024, BUILD.MANIFEST: 64 * 1024, BUILD.ARCHIVE: 8 * 1024 * 1024}
 
 
+class NoPublishedRelease(ValueError):
+    pass
+
+
 def compare_releases(first, second):
     order = POLICY.version_order(first["tag_name"], second["tag_name"])
     if order is None:
@@ -45,7 +49,7 @@ def newest(releases, channel="stable"):
         and POLICY.release_allowed_on_channel(item.get("tag_name"), channel)
     ]
     if not candidates:
-        raise ValueError(f"No published {channel.title()} Orbis release is available")
+        raise NoPublishedRelease(f"No published {channel.title()} Orbis release is available")
     return max(candidates, key=cmp_to_key(compare_releases))
 
 
@@ -105,13 +109,24 @@ def site(repository, releases, output, fetch=BOOT.fetch, *, channel="stable"):
     return {"channel": channel, "tag": tag, "commit": release["commit"], "launcherSha256": BUILD.sha(downloaded[BUILD.LAUNCHER])}
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("releases", type=Path, help="GitHub release-list JSON, fetched with repository read access")
     parser.add_argument("output", type=Path, help="new directory containing only the public installer endpoint")
     parser.add_argument("--channel", choices=("stable", "nightly"), default="stable", help="select Stable (default) or Nightly")
-    args = parser.parse_args()
-    print(json.dumps(site(Path(__file__).resolve().parent.parent, json.loads(args.releases.read_text()), args.output, channel=args.channel), indent=2))
+    parser.add_argument("--if-available", action="store_true", help="preserve the deployed endpoint when this channel has no release yet")
+    parser.add_argument("--github-output", type=Path, help="append the verified availability flag to a workflow output file")
+    args = parser.parse_args(argv)
+    try:
+        result = {"available": True, **site(Path(__file__).resolve().parent.parent, json.loads(args.releases.read_text()), args.output, channel=args.channel)}
+    except NoPublishedRelease:
+        if not args.if_available:
+            raise
+        result = {"available": False, "channel": args.channel, "reason": "No published release in this channel; the existing endpoint is unchanged."}
+    if args.github_output:
+        with args.github_output.open("a") as output:
+            output.write("available=" + str(result["available"]).lower() + "\n")
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

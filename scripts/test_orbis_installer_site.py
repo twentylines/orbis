@@ -1,5 +1,7 @@
 import copy
+from contextlib import redirect_stdout
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -51,6 +53,47 @@ class InstallerEndpointTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No published Stable"):
             SITE.newest(rows)
         self.assertEqual(SITE.newest(rows, "nightly")["tag_name"], "v1.0.1-beta.1")
+
+    def run_cli(self, releases, *options):
+        source = Path(self.temp.name) / "releases.json"
+        source.write_text(json.dumps(releases))
+        log = io.StringIO()
+        with redirect_stdout(log):
+            SITE.main([str(source), str(self.output), *options])
+        return json.loads(log.getvalue())
+
+    def test_optional_missing_stable_preserves_existing_endpoint_without_fetching_beta(self):
+        self.output.mkdir()
+        launcher = self.output / "install"
+        launcher.write_bytes(b"previous verified launcher")
+        outputs = Path(self.temp.name) / "workflow-output"
+        with mock.patch.object(SITE.BOOT, "fetch", side_effect=AssertionError("must not fetch a beta")):
+            result = self.run_cli([self.record("v1.0.0-beta.1")], "--if-available", "--github-output", str(outputs))
+        self.assertEqual(result["available"], False)
+        self.assertEqual(outputs.read_text(), "available=false\n")
+        self.assertEqual(launcher.read_bytes(), b"previous verified launcher")
+        self.assertEqual({p.name for p in self.output.iterdir()}, {"install"})
+
+    def test_missing_channel_still_fails_without_explicit_optional_flag(self):
+        with self.assertRaises(SITE.NoPublishedRelease):
+            self.run_cli([self.record("v1.0.0-beta.1")])
+        self.assertFalse(self.output.exists())
+
+    def test_optional_missing_channel_never_hides_invalid_data_or_unverified_assets(self):
+        outputs = Path(self.temp.name) / "workflow-output"
+        for rows in [{}, [self.record("v1.0.0")]]:
+            with self.subTest(rows=type(rows).__name__), self.assertRaises(ValueError):
+                self.run_cli(rows, "--if-available", "--github-output", str(outputs))
+            self.assertFalse(outputs.exists())
+            self.assertFalse(self.output.exists())
+
+    def test_workflow_availability_is_true_only_after_verification_finishes(self):
+        outputs = Path(self.temp.name) / "workflow-output"
+        with mock.patch.object(SITE, "site", return_value={"channel": "stable", "tag": "v1.0.0"}) as publish:
+            result = self.run_cli([self.selected], "--if-available", "--github-output", str(outputs))
+        publish.assert_called_once()
+        self.assertTrue(result["available"])
+        self.assertEqual(outputs.read_text(), "available=true\n")
 
     def test_serves_exact_release_launcher_and_only_explicit_public_outputs(self):
         (Path(self.temp.name) / "HANDOFF.md").write_text("private notes")

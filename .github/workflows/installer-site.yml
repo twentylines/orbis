@@ -38,15 +38,19 @@ jobs:
       - name: Check endpoint selection and verification
         run: python3 -m unittest discover -s scripts -p 'test_orbis_installer_site.py' -v
       - name: Verify the newest published installer
+        id: installer
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api 'repos/twentylines/orbis/releases?per_page=100' > "$RUNNER_TEMP/orbis-releases.json"
-          python3 scripts/publish-installer-site.py "$RUNNER_TEMP/orbis-releases.json" "$RUNNER_TEMP/orbis-installer-site"
+          python3 scripts/publish-installer-site.py "$RUNNER_TEMP/orbis-releases.json" "$RUNNER_TEMP/orbis-installer-site" --if-available --github-output "$GITHUB_OUTPUT"
       - uses: actions/configure-pages@v6
+        if: steps.installer.outputs.available == 'true'
       - uses: actions/upload-pages-artifact@v5
+        if: steps.installer.outputs.available == 'true'
         with:
           path: ${{ runner.temp }}/orbis-installer-site
       - name: Publish installer endpoint
+        if: steps.installer.outputs.available == 'true'
         id: deployment
         uses: actions/deploy-pages@v5
