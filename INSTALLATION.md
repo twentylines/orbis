@@ -8,6 +8,8 @@ curl -fsSL https://twentylines.github.io/orbis/install | sudo python3
 
 The address serves the verified installer from the newest published Stable release. It updates after release publication; no version number is needed. On an existing Orbis installation, rerunning this command upgrades the host helper and installs a newer compatible Stable release, retaining accounts, settings and apps. It never downgrades an installed build or leaves Nightly automatically. Nightly installers are attached to their individual releases and require explicit risk acknowledgement. For an existing Runtipi installation, the installer offers Keep or Fresh. Requirements and recovery details are below.
 
+During pre-v1 development, the default endpoint remains on the last verified legacy installer until a Stable release is approved. To enable Nightly now, download `install-orbis.py` from [beta 113](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.113) and run it on the server. Review the Nightly warning before confirming; unattended installation additionally requires `--accept-nightly`.
+
 ## Inspect an existing installation
 
 With Python 3.10+ and Docker access, run this from an Orbis source checkout on the Docker host you want to inspect:

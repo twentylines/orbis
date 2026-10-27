@@ -16,6 +16,8 @@ curl -fsSL https://twentylines.github.io/orbis/install | sudo python3
 
 For an existing Orbis installation, this upgrades the host helper and updates Orbis automatically. It retains accounts, settings and apps. An already current release is reported as up to date; an older pinned installer cannot downgrade it. See [installation requirements](INSTALLATION.md) and [host service setup and recovery](HOST-SERVICE.md).
 
+Before the first approved Stable release, use the installer attached to the selected Nightly release to upgrade its host helper. The default endpoint keeps the last verified legacy installer until Stable is available; it does not silently enrol servers in Nightly.
+
 An interrupted update must be inspected or recovered before another update starts. A request timing out does not mean the update stopped; check the recorded job before trying again. Keep the server's private backup and recovery journals until the updated server is healthy. The upstream Runtipi installer and CLI update command do not apply the Orbis release protocol.
 
 ### Release channels
@@ -50,4 +52,4 @@ A live terminal shows APT output while installation runs. Scroll or use the keyb
 
 The helper accepts trusted installed upgrade candidates, pins exact versions and rejects package removals or changed plans. Services may restart during package installation. APT changes have no automatic rollback; retain an independent host backup. Failed or interrupted jobs require local inspection before another package or core update.
 
-Orbis reports a requested reboot but does not reboot the server. Reloading the package list reads the existing APT cache; repository refresh, failed APT repair and reboot controls are not provided by this interface.
+Repository refresh and server restarts require an up-to-date host service. A restart needs a separate review and confirmation. Failed or interrupted package operations require inspection before continuing.
