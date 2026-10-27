@@ -27,7 +27,7 @@ import { DockActivity } from '@/desktop/desktop-activity';
 import { DockGlass } from '@/desktop/dock-companion';
 import { DockSelection } from '@/desktop/dock-selection';
 import { useNavigationWarmup } from '@/desktop/navigation-warmup';
-import { OrbisUpdateNotice } from '@/desktop/orbis-update-notice';
+import { OrbisUpdateIcon, OrbisUpdateNotice } from '@/desktop/orbis-update-notice';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
 import { IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
@@ -271,7 +271,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                     >
                       <span className="desktop-dock-content">
                         <span className="desktop-dock-icon">
-                          <Icon size={22} stroke={1.7} aria-hidden="true" />
+                          {path === '/updates' ? <OrbisUpdateIcon /> : <Icon size={22} stroke={1.7} aria-hidden="true" />}
                         </span>
                         <span className="desktop-dock-label">{'dockLabel' in item ? item.dockLabel : label}</span>
                       </span>

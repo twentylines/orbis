@@ -24,9 +24,9 @@ import {
   type ServerRestartStatus,
 } from '@/desktop/host-update-watch';
 import { coreWatchIsActive } from '@/desktop/core-update-state';
-import { installedOrbisBuildOptions, orbisReleasesOptions, newerOrbisRelease } from '@/desktop/orbis-release';
+import { installedOrbisBuildOptions, orbisReleaseErrorMessage, orbisReleasesOptions, newerOrbisRelease } from '@/desktop/orbis-release';
 import { useReviewExpired } from '@/desktop/use-review-expired';
-import { orbisReleaseChannelsOptions } from '@/desktop/release-channels';
+import { orbisReleaseChannelsOptions, releaseChannelErrorMessage } from '@/desktop/release-channels';
 import { formatOrbisVersion } from '@/desktop/orbis-version';
 
 type HostJob = { id: string; state: string; targetTag: string; startedAt: number; finishedAt?: number; message?: string; phase?: string | null };
@@ -266,7 +266,7 @@ function LocalUpdates() {
   const checkingCore = lastCoreReview?.status === 'pending';
   const releases = useQuery({
     ...orbisReleasesOptions(channels.data?.current),
-    enabled: visible && Boolean(channels.data),
+    enabled: visible && Boolean(channels.data) && !channels.isError,
     staleTime: 60_000,
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
@@ -275,7 +275,7 @@ function LocalUpdates() {
     apps.data?.installed.filter(
       ({ app, metadata }) => Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion,
     ) ?? [];
-  const latest = releases.data?.[0];
+  const latest = channels.isError || releases.isError ? undefined : releases.data?.[0];
   const host = useQuery({
     queryKey: ['orbis-host-update-status'],
     queryFn: ({ signal }) => hostRequest<HostStatus>('status', undefined, signal),
@@ -306,9 +306,9 @@ function LocalUpdates() {
     lastEntry.current = entry;
     void apps.refetch();
     void build.refetch();
-    void releases.refetch();
+    if (channels.data && !channels.isError) void releases.refetch();
     if (user?.operator === true) void systemPackages.refetch();
-  }, [entry, apps.refetch, build.refetch, releases.refetch, systemPackages.refetch, user?.operator]);
+  }, [entry, apps.refetch, build.refetch, channels.data, channels.isError, releases.refetch, systemPackages.refetch, user?.operator]);
   const packageJob = useQuery({
     queryKey: ['orbis-host-package-job'],
     queryFn: ({ signal }) => hostRequest<HostPackageJobStatus>('packages/job', undefined, signal),
@@ -386,6 +386,7 @@ function LocalUpdates() {
   const updateCore = useMutation({
     mutationKey: ['orbis-compatibility', 'update', user.id, build.data?.version ?? '', 'apply'],
     gcTime: compatibilityReviewTime,
+    onMutate: () => setCoreReview(null),
     mutationFn: async (tag: string) => {
       setCoreRequestStage('checking');
       const checked = await hostRequest<HostPlan>('plan', { tag });
@@ -578,7 +579,7 @@ function LocalUpdates() {
           aria-labelledby={`${tabsId}-orbis-tab`}
           hidden={section !== 'orbis'}
         >
-          <div className="desktop-updates-card-head">
+          <div className="desktop-updates-card-head desktop-orbis-release-head">
             <IconBrandGithub size={22} aria-hidden="true" />
             <div>
               <h2 id="orbis-updates-title">Orbis</h2>
@@ -654,27 +655,63 @@ function LocalUpdates() {
           ) : null}
           <div className="desktop-orbis-release-layout">
             <div className="desktop-orbis-release-notes">
-              {releases.isPending ? <p>Checking published Orbis releases…</p> : null}
-              {releases.isError ? <p role="alert">GitHub releases are unavailable right now. You can check the repository directly.</p> : null}
-              {releases.data?.length === 0 ? <p>No published Orbis releases.</p> : null}
-              {latest ? (
-                <div className="desktop-update-release">
-                  {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
-                  {latest.priority === 'critical' && newerOrbisRelease(latest, build.data?.version) ? (
-                    <div className="desktop-critical-update" role="note" aria-label="Critical update">
-                      <IconAlertTriangle size={24} aria-hidden="true" />
-                      <div>
-                        <strong>Critical update</strong>
-                        <p>This release includes security fixes that need prompt attention. Review the changelog and install the update.</p>
+              <div className="desktop-orbis-release-state" aria-live="polite" aria-busy={channels.isFetching || releases.isFetching}>
+                {channels.isPending ? <output>Checking the selected release channel…</output> : null}
+                {channels.isError ? (
+                  <>
+                    <p role="alert">
+                      {releaseChannelErrorMessage(channels.error, 'The selected release channel could not be checked.')} Latest release information is
+                      hidden until status recovers.
+                    </p>
+                    <button
+                      className="desktop-update-action secondary desktop-orbis-release-retry"
+                      type="button"
+                      onClick={() => void channels.refetch()}
+                      disabled={channels.isFetching}
+                    >
+                      {channels.isFetching ? 'Checking channel…' : 'Retry channel check'}
+                    </button>
+                  </>
+                ) : null}
+                {channels.data && !channels.isError && releases.isPending ? <output>Checking published Orbis releases…</output> : null}
+                {channels.data && !channels.isError && releases.isError ? (
+                  <>
+                    <p role="alert">
+                      {orbisReleaseErrorMessage(
+                        releases.error,
+                        'Published Orbis releases could not be checked. No current or latest release is shown.',
+                      )}
+                    </p>
+                    <button
+                      className="desktop-update-action secondary desktop-orbis-release-retry"
+                      type="button"
+                      onClick={() => void releases.refetch()}
+                      disabled={releases.isFetching}
+                    >
+                      {releases.isFetching ? 'Checking releases…' : 'Retry release check'}
+                    </button>
+                  </>
+                ) : null}
+                {channels.data && !channels.isError && releases.data?.length === 0 ? <p>No published Orbis releases.</p> : null}
+                {latest ? (
+                  <div className="desktop-update-release">
+                    {latest.imageManifestUrl ? null : <p>No Orbis image manifest is attached to this release.</p>}
+                    {latest.priority === 'critical' && newerOrbisRelease(latest, build.data?.version) ? (
+                      <div className="desktop-critical-update" role="note" aria-label="Critical update">
+                        <IconAlertTriangle size={24} aria-hidden="true" />
+                        <div>
+                          <strong>Critical update</strong>
+                          <p>This release includes security fixes that need prompt attention. Review the changelog and install the update.</p>
+                        </div>
                       </div>
-                    </div>
-                  ) : null}
-                  <OrbisReleaseNotes latest={latest} installed={build.data?.version} channel={channels.data?.current} />
-                  <a href={latest.url} target="_blank" rel="noreferrer">
-                    View release on GitHub <IconArrowRight size={16} aria-hidden="true" />
-                  </a>
-                </div>
-              ) : null}
+                    ) : null}
+                    <OrbisReleaseNotes latest={latest} installed={build.data?.version} channel={channels.data?.current} />
+                    <a href={latest.url} target="_blank" rel="noreferrer">
+                      View release on GitHub <IconArrowRight size={16} aria-hidden="true" />
+                    </a>
+                  </div>
+                ) : null}
+              </div>
             </div>
             <aside className="desktop-orbis-release-summary" aria-label="Installed versions and update">
               <h3>Installed on this server</h3>
@@ -686,7 +723,7 @@ function LocalUpdates() {
                     <InstalledVersions
                       orbis={build.data.version}
                       runtipi={build.data.runtipiCompatibility || version.current}
-                      channel={channels.data?.current ?? (channels.isPending ? 'loading' : 'unavailable')}
+                      channel={channels.isError ? 'unavailable' : (channels.data?.current ?? (channels.isPending ? 'loading' : 'unavailable'))}
                     />
                     <details className="desktop-update-build-details">
                       <summary>Build details</summary>
@@ -776,7 +813,7 @@ function LocalUpdates() {
             <output className="desktop-update-note" aria-live="polite">
               {coreRequestStage === 'checking'
                 ? 'Checking the release and backup storage…'
-                : 'Starting the update. The server will reconnect automatically.'}
+                : 'Starting the update. The page will reload automatically when Orbis is ready.'}
             </output>
           ) : null}
           {updateCore.isError ? (

@@ -139,11 +139,28 @@ def read_private(path: Path) -> dict | None:
     return data
 
 
-def channel_file(root: Path) -> Path:
-    directory = root / "state"
-    if directory.is_symlink() or (directory.exists() and (not directory.is_dir() or stat.S_IMODE(directory.stat().st_mode) & 0o022)):
-        raise ValueError("the update channel directory is invalid")
-    return directory / "orbis-release-channel.json"
+def channel_file(root: Path, *, create: bool = False) -> Path:
+    state = root / "state"
+    if create:
+        state.mkdir(mode=0o700, exist_ok=True)
+    if state.is_symlink() or (state.exists() and (not state.is_dir() or state.resolve() != state)):
+        raise ValueError("the update channel state directory is invalid")
+    directory = state / "orbis-update-policy"
+    if create:
+        directory.mkdir(mode=0o700, exist_ok=True)
+    if directory.exists() or directory.is_symlink():
+        details = directory.lstat()
+        if not stat.S_ISDIR(details.st_mode) or directory.is_symlink() or details.st_uid != os.getuid() or stat.S_IMODE(details.st_mode) & 0o077 or directory.resolve() != directory:
+            raise ValueError("the private update policy directory is invalid")
+    file = directory / "channel.json"
+    if create or file.exists() or file.is_symlink():
+        return file
+    legacy = state / "orbis-release-channel.json"
+    if legacy.exists() or legacy.is_symlink():
+        if stat.S_IMODE(state.stat().st_mode) & 0o022:
+            raise ValueError("the legacy update channel directory is not protected")
+        return legacy
+    return file
 
 
 def read_channel(root: Path) -> dict:
@@ -169,8 +186,7 @@ def read_channel(root: Path) -> dict:
 
 
 def save_channel(root: Path, channel: str, revision: str) -> None:
-    file = channel_file(root)
-    file.parent.mkdir(mode=0o700, exist_ok=True)
+    file = channel_file(root, create=True)
     write_private(file, {"version": 1, "channel": channel, "revision": revision})
 
 

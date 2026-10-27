@@ -204,6 +204,23 @@ html:has(.desktop) {
   white-space: nowrap;
   animation: orbis-update-notice-enter 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
+.orbis-update-spinning {
+  transform-origin: center;
+  animation: orbis-update-spin 1.15s linear infinite;
+}
+@keyframes orbis-update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+html[data-orbis-motion="reduced"] .orbis-update-spinning {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-update-spinning {
+    animation: none;
+  }
+}
 .desktop .desktop-update-notice,
 .desktop .desktop-update-notice:is(:hover, :focus-visible, :active) {
   color: var(--desktop-chrome-ink);

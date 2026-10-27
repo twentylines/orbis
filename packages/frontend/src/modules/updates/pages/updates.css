@@ -1026,9 +1026,12 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
 .desktop-orbis-release-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(240px, 0.8fr);
-  gap: 24px;
+  gap: 16px;
   align-items: start;
   margin-bottom: 24px;
+}
+.desktop-orbis-release-head {
+  margin-bottom: 16px;
 }
 .desktop-orbis-release-notes,
 .desktop-orbis-release-summary {
@@ -1037,6 +1040,23 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
   border: 1px solid var(--desktop-line);
   border-radius: 16px;
   background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
+}
+.desktop-orbis-release-state {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.desktop-orbis-release-state > :is(p, output) {
+  min-width: 0;
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.desktop-orbis-release-retry {
+  justify-self: start;
+  min-height: 44px;
+  margin: 0;
+  text-align: center;
 }
 .desktop-orbis-release-summary h3,
 .desktop-orbis-release-notes .desktop-release-history h3 {
@@ -1063,6 +1083,10 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
   .desktop-orbis-release-notes,
   .desktop-orbis-release-summary {
     padding: 16px;
+  }
+  .desktop-orbis-release-retry {
+    width: 100%;
+    justify-self: stretch;
   }
   .desktop-orbis-release-notes .desktop-release-note {
     border: 0;

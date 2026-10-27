@@ -11,7 +11,42 @@ import {
 } from '@runtipi/common/schemas/orbis-release-channel';
 
 export type StoredReleaseChannel = { version: 1; channel: OrbisReleaseChannel; revision: string };
-const invalid = () => new ServiceUnavailableException('The saved update channel could not be verified. Check the private server configuration.');
+const invalid = () =>
+  new ServiceUnavailableException({
+    code: 'channel-storage-invalid',
+    message: 'The private update-channel settings could not be verified. Use the Orbis installer to review this server’s update setup.',
+  });
+
+async function channelFile(state: string) {
+  const parent = await fs.lstat(state);
+  if (!parent.isDirectory() || parent.isSymbolicLink() || (await fs.realpath(state)) !== state) throw invalid();
+  const directory = path.join(state, 'orbis-update-policy');
+  const file = path.join(directory, 'channel.json');
+  try {
+    const policy = await fs.lstat(directory);
+    if (
+      !policy.isDirectory() ||
+      policy.isSymbolicLink() ||
+      policy.mode & 0o077 ||
+      (process.getuid && policy.uid !== process.getuid()) ||
+      (await fs.realpath(directory)) !== directory
+    )
+      throw invalid();
+    await fs.lstat(file);
+    return file;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const legacy = path.join(state, 'orbis-release-channel.json');
+  try {
+    await fs.lstat(legacy);
+    if (parent.mode & 0o022) throw invalid();
+    return legacy;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  return file;
+}
 
 @Injectable()
 export class OrbisReleaseChannelsService {
@@ -19,12 +54,9 @@ export class OrbisReleaseChannelsService {
 
   async read(): Promise<StoredReleaseChannel> {
     const directory = path.join(this.config.get('directories').dataDir, 'state');
-    const file = path.join(directory, 'orbis-release-channel.json');
     let handle: FileHandle | undefined;
     try {
-      const parent = await fs.lstat(directory);
-      if (!parent.isDirectory() || parent.isSymbolicLink() || parent.mode & 0o022) throw invalid();
-      if ((await fs.realpath(directory)) !== directory) throw invalid();
+      const file = await channelFile(directory);
       handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
       const before = await handle.stat();
       if (!before.isFile() || before.nlink !== 1 || before.size > 4096 || before.mode & 0o077 || (process.getuid && before.uid !== process.getuid()))

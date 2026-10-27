@@ -79,16 +79,23 @@ describe('dock activity describes actual active work', () => {
     const id = 'd8b4a1ec-f912-4e14-8e20-58d2754a0130';
     const watch = advanceCoreUpdate(advanceCoreUpdate(null, { type: 'accepted', id, targetTag: 'v0.1.0-beta.79' }), { type: 'unavailable' });
     const activity = desktopActivity([], names, watch, null);
-    expect(activity).toMatchObject({ title: 'Restarting', detail: 'Orbis Beta 79', kind: 'core', count: 1 });
-    expect(activity?.items[0]).toMatchObject({ title: 'Restarting Orbis', detail: watch?.message });
+    expect(activity).toMatchObject({ title: 'Restarting', detail: 'Orbis beta 79', kind: 'core', count: 1 });
+    expect(activity?.items[0]).toMatchObject({ title: 'Restarting Orbis', detail: `0.1.0 beta 79 · ${watch?.message}` });
   });
 });
 
 test('compatibility reviews appear in the tasks pill without creating an app operation', () => {
   const result = desktopActivity([], new Map(), null, null, [{ id: 'review-1', target: 'v0.1.0-beta.91', operation: 'downgrade' }]);
-  expect(result?.title).toBe('Reviewing downgrade');
+  expect(result?.title).toBe('Checking');
   expect(result?.detail).toBe('Beta 91');
   expect(result?.items[0]?.kind).toBe('core');
   expect(desktopActivity([], new Map(), null, null, [])).toBeNull();
   expect(desktopActivity([], new Map(), null, null, [{ id: 'update-review', target: 'v0.1.0-beta.113', operation: 'update' }])).toBeNull();
+});
+
+test('the compact Orbis pill keeps the exact target release while the flyout retains progress', () => {
+  const watch = advanceCoreUpdate(null, { type: 'accepted', id: 'd8b4a1ec-f912-4e14-8e20-58d2754a0130', targetTag: 'v1.1.3' });
+  const activity = desktopActivity([], names, watch, null);
+  expect(activity).toMatchObject({ title: 'Updating', detail: 'Orbis 1.1.3' });
+  expect(activity?.items[0]?.detail).toBe('1.1.3 · Starting the Orbis update.');
 });

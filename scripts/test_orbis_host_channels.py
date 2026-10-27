@@ -32,7 +32,7 @@ class ReleaseChannelFileTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / "install"
+        self.root = (Path(self.temp.name) / "install").resolve()
         self.root.mkdir(mode=0o700)
 
     def test_absent_channel_defaults_to_stable_and_saved_file_is_private(self):
@@ -40,7 +40,7 @@ class ReleaseChannelFileTests(unittest.TestCase):
         revision = str(uuid.uuid4())
         SERVICE.save_channel(self.root, "nightly", revision)
         channel = SERVICE.read_channel(self.root)
-        file = self.root / "state" / "orbis-release-channel.json"
+        file = self.root / "state" / "orbis-update-policy" / "channel.json"
         self.assertEqual(channel, {"version": 1, "channel": "nightly", "revision": revision})
         self.assertEqual(stat.S_IMODE(file.stat().st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(file.parent.stat().st_mode), 0o700)
@@ -69,8 +69,46 @@ class ReleaseChannelFileTests(unittest.TestCase):
         channel.chmod(0o600)
 
         state.chmod(0o777)
-        with self.assertRaisesRegex(ValueError, "channel directory is invalid"):
+        with self.assertRaisesRegex(ValueError, "legacy update channel directory is not protected"):
             SERVICE.read_channel(self.root)
+
+    def test_fresh_and_migrated_directory_modes_support_private_channel_selection(self):
+        for mode in (0o700, 0o755, 0o775, 0o777):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                state = root / "state"
+                state.mkdir(mode=mode)
+                state.chmod(mode)
+                self.assertEqual(SERVICE.read_channel(root)["channel"], "stable")
+                revision = str(uuid.uuid4())
+                SERVICE.save_channel(root, "nightly", revision)
+                self.assertEqual(SERVICE.read_channel(root), {"version": 1, "channel": "nightly", "revision": revision})
+                self.assertEqual(stat.S_IMODE(state.stat().st_mode), mode)
+                self.assertEqual(stat.S_IMODE((state / "orbis-update-policy").stat().st_mode), 0o700)
+
+    def test_migrates_a_protected_legacy_record_without_removing_it(self):
+        state = self.root / "state"
+        state.mkdir(mode=0o700)
+        legacy = state / "orbis-release-channel.json"
+        previous = {"version": 1, "channel": "stable", "revision": str(uuid.uuid4())}
+        legacy.write_text(json.dumps(previous))
+        legacy.chmod(0o600)
+        self.assertEqual(SERVICE.read_channel(self.root), previous)
+        revision = str(uuid.uuid4())
+        SERVICE.save_channel(self.root, "nightly", revision)
+        self.assertEqual(SERVICE.read_channel(self.root)["revision"], revision)
+        self.assertEqual(json.loads(legacy.read_text()), previous)
+
+    def test_untrusted_policy_directory_is_not_treated_as_missing_configuration(self):
+        state = self.root / "state"
+        state.mkdir(mode=0o777)
+        policy = state / "orbis-update-policy"
+        policy.mkdir(mode=0o755)
+        policy.chmod(0o755)
+        with self.assertRaisesRegex(ValueError, "private update policy directory is invalid"):
+            SERVICE.read_channel(self.root)
+        with self.assertRaisesRegex(ValueError, "private update policy directory is invalid"):
+            SERVICE.save_channel(self.root, "nightly", str(uuid.uuid4()))
 
 
 class HostReleaseChannelTests(unittest.TestCase):
@@ -133,6 +171,17 @@ class HostReleaseChannelTests(unittest.TestCase):
             SERVICE.write_private(self.service.job_file, {"state": "interrupted"})
             with self.assertRaisesRegex(ValueError, "finish or recover"):
                 self.service.select_channel("stable", nightly["revision"])
+
+    def test_confirmed_nightly_choice_works_after_an_upgrade_from_legacy_writable_state(self):
+        state = self.root / "state"
+        state.mkdir(mode=0o777)
+        state.chmod(0o777)
+        self._verified_installation(self.current)
+        with mock.patch.object(self.service, "current_manifest", return_value=self.current):
+            self.assertEqual(self.service.select_channel("nightly", "initial", True), {"channel": "nightly"})
+        self.assertEqual(SERVICE.read_channel(self.root)["channel"], "nightly")
+        self.assertEqual(stat.S_IMODE(state.stat().st_mode), 0o777)
+        self.assertEqual(stat.S_IMODE((state / "orbis-update-policy").stat().st_mode), 0o700)
 
     def test_stable_channel_rejects_a_beta_target_before_update_planning(self):
         with mock.patch.object(self.service, "current_manifest", return_value=self.current), mock.patch.object(

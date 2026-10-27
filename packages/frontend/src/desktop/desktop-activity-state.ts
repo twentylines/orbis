@@ -1,5 +1,6 @@
 import type { TaskRecord } from '@runtipi/common/schemas';
 import { coreUpdateTitle, coreWatchIsActive, type CoreUpdateWatch } from './core-update-state';
+import { formatOrbisVersion } from './orbis-version';
 
 export type PackageActivityJob = { id: string; kind?: 'refresh'; state: string; operationCount?: number; message?: string };
 export type DesktopActivityItem = {
@@ -65,7 +66,7 @@ export function desktopActivity(
     };
   }
   for (const check of checks.filter((check) => check.operation === 'downgrade')) {
-    const title = 'Reviewing downgrade';
+    const title = 'Checking';
     const detail = check.target.replace(/^v?0\.1\.0-beta\./, 'Beta ');
     items.unshift({ id: check.id, kind: 'core', title, detail, state: 'checking' });
     summary = { title, detail, kind: 'core', count: items.length };
@@ -94,10 +95,10 @@ export function desktopActivity(
   }
   if (watch && coreWatchIsActive(watch)) {
     const title = coreUpdateTitle(watch.phase, watch.operation);
-    items.unshift({ id: watch.id, kind: 'core', title, detail: watch.message, state: watch.phase });
+    items.unshift({ id: watch.id, kind: 'core', title, detail: `${formatOrbisVersion(watch.targetTag)} · ${watch.message}`, state: watch.phase });
     summary = {
       title: title.replace(/ Orbis$/, ''),
-      detail: `Orbis ${watch.targetTag.replace(/^v?0\.1\.0-beta\./, 'Beta ')}`,
+      detail: `Orbis ${formatOrbisVersion(watch.targetTag).replace(/^0\.1\.0 beta /, 'beta ')}`,
       kind: 'core',
       count: items.length,
     };

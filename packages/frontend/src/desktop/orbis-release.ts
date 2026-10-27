@@ -15,12 +15,41 @@ export type OrbisReleaseCatalog = { releases: OrbisRelease[]; complete: boolean 
 export type OrbisReleaseHistory = OrbisReleaseCatalog & { truncated: boolean; context?: OrbisRelease | null };
 type OrbisBuild = { version: string; commit: string | null; imageDigest: string | null; runtipiCompatibility: string | null };
 
+export class OrbisReleaseRequestError extends Error {
+  constructor(
+    readonly path: string,
+    readonly status: number,
+  ) {
+    super(orbisReleaseRequestMessage(path, status));
+    this.name = 'OrbisReleaseRequestError';
+  }
+}
+
+function orbisReleaseRequestMessage(path: string, status: number): string {
+  const resource = path === 'build' ? 'installed Orbis build information' : 'published Orbis releases';
+  if (status === 401 || status === 403) return `Your session could not read ${resource} (HTTP ${status}). Sign in again and retry.`;
+  const subject = `${resource[0]?.toUpperCase()}${resource.slice(1)}`;
+  const verb = path === 'build' ? 'is' : 'are';
+  if (status === 404) return `${subject} ${verb} unavailable (HTTP ${status}).`;
+  if (status >= 500) return `${subject} could not be checked right now (HTTP ${status}). Try again.`;
+  return `${subject} could not be checked (HTTP ${status}). Try again.`;
+}
+
+export function orbisReleaseErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof OrbisReleaseRequestError) return error.message;
+  if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+    return 'The request took too long. Check the server connection and try again.';
+  }
+  if (error instanceof TypeError) return 'The server could not be reached. Check the connection and try again.';
+  return fallback;
+}
+
 async function readSystem<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(`/api/system/${path}`, {
     credentials: 'same-origin',
     signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
   });
-  if (!response.ok) throw new Error(`Orbis ${path} check failed (${response.status})`);
+  if (!response.ok) throw new OrbisReleaseRequestError(path, response.status);
   return response.json();
 }
 const checkOnEntry = {

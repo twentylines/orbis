@@ -75,6 +75,46 @@ describe('OrbisReleaseChannelsService private read state', () => {
     expect(afterStat.mtimeMs).toBe(beforeStat.mtimeMs);
   });
 
+  it.each([0o755, 0o775, 0o777])('supports a fresh legacy state directory mode %o without modifying its permissions', async (mode) => {
+    await fs.chmod(state, mode);
+    await expect(service.read()).resolves.toEqual({ version: 1, channel: 'stable', revision: 'initial' });
+    expect(await fs.readdir(state)).toEqual([]);
+    expect((await fs.stat(state)).mode & 0o777).toBe(mode);
+  });
+
+  it.each([0o700, 0o755, 0o775, 0o777])('reads protected policy state inside a migrated parent mode %o', async (mode) => {
+    await fs.chmod(state, mode);
+    const policy = path.join(state, 'orbis-update-policy');
+    await fs.mkdir(policy, { mode: 0o700 });
+    await fs.writeFile(path.join(policy, 'channel.json'), JSON.stringify(record()), { mode: 0o600 });
+    await expect(service.read()).resolves.toEqual(record());
+    expect((await fs.stat(state)).mode & 0o777).toBe(mode);
+  });
+
+  it('uses the protected policy after migrating a legacy record, without deleting legacy data', async () => {
+    await writeRecord(record('stable'));
+    const policy = path.join(state, 'orbis-update-policy');
+    await fs.mkdir(policy, { mode: 0o700 });
+    await fs.writeFile(path.join(policy, 'channel.json'), JSON.stringify(record('nightly')), { mode: 0o600 });
+    await expect(service.read()).resolves.toEqual(record('nightly'));
+    expect(JSON.parse(await fs.readFile(file, 'utf8'))).toEqual(record('stable'));
+  });
+
+  it.each([0o755, 0o775, 0o777])('rejects a nonprivate policy directory mode %o', async (mode) => {
+    const policy = path.join(state, 'orbis-update-policy');
+    await fs.mkdir(policy, { mode: 0o700 });
+    await fs.chmod(policy, mode);
+    await expectUnavailable();
+  });
+
+  it('rejects a policy-directory symlink instead of treating it as an unconfigured installation', async () => {
+    const target = path.join(root, 'policy-target');
+    await fs.mkdir(target, { mode: 0o700 });
+    await fs.symlink(target, path.join(state, 'orbis-update-policy'));
+    await expectUnavailable();
+    expect(await fs.readdir(target)).toEqual([]);
+  });
+
   it('requires stable installation for a Nightly beta, but not for Stable', async () => {
     await writeRecord(record('nightly'));
     process.env.ORBIS_VERSION = 'v1.0.1-beta.1';

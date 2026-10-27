@@ -27,6 +27,37 @@
   min-width: 0;
 }
 
+.release-channel-state {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.release-channel-state:not(:empty) {
+  margin-block-start: 16px;
+}
+
+.release-channel-settings .release-channel-state .alert-description {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.release-channel-settings .release-channel-state .alert-description > p {
+  min-width: 0;
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.release-channel-settings .release-channel-state .alert-description > .btn {
+  justify-self: center;
+  min-height: 44px;
+  margin: 0;
+  text-align: center;
+}
+
 .release-channel-heading {
   min-width: 0;
   flex: 1 1 15rem;
@@ -112,24 +143,6 @@
   margin-top: 14px;
 }
 
-.release-channel-error {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
-  color: var(--desktop-negative);
-  line-height: 1.5;
-}
-
-.release-channel-settings .release-channel-error {
-  color: var(--desktop-negative);
-  margin-top: 12px;
-}
-
-.release-channel-error .btn {
-  justify-self: start;
-  min-height: 44px;
-}
-
 .modal-content.orbis-dialog-content .modal-footer.release-channel-dialog-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -153,7 +166,7 @@
   margin-top: 0;
 }
 .release-channel-settings .release-channel-page-feedback {
-  margin-top: 14px;
+  margin-top: 0;
 }
 
 .release-channel-plan dl {
@@ -235,6 +248,14 @@
 @media (max-width: 560px) {
   .release-channel-switch {
     flex-basis: 18rem;
+    width: 100%;
+  }
+
+  .release-channel-settings .release-channel-state .alert-description {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .release-channel-settings .release-channel-state .alert-description > .btn {
     width: 100%;
   }
 

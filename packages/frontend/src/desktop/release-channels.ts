@@ -20,6 +20,52 @@ export type StableChannelApply = { jobId: string; state: string };
 
 export class ReleaseChannelRequestError extends Error {
   canForce = false;
+
+  constructor(status: number, canForce = false, code?: string) {
+    super(releaseChannelRequestMessage(status, code));
+    this.name = 'ReleaseChannelRequestError';
+    this.canForce = canForce;
+  }
+}
+
+export class ReleaseChannelsStatusError extends Error {
+  constructor(
+    readonly status: number,
+    code?: string,
+  ) {
+    super(releaseChannelsStatusMessage(status, code));
+    this.name = 'ReleaseChannelsStatusError';
+  }
+}
+
+function releaseChannelRequestMessage(status: number, code?: string): string {
+  if (code === 'host-channel-support-required') {
+    return 'The host service needs an update to support release channels. Update the host service using the current installer, then retry this change.';
+  }
+  if (status === 401 || status === 403) return 'Your session cannot change the release channel. Sign in with an operator account and try again.';
+  if (status === 409) return 'Release channel status changed before this request completed. Refresh the status and try again.';
+  if (status === 400) return 'The release channel request was rejected. Refresh the status and review the request before trying again.';
+  if (status === 429) return 'Too many release channel requests were sent. Wait a moment and try again.';
+  if (status >= 500) return `The host could not complete the release channel request (HTTP ${status}). Try again.`;
+  return `The release channel request could not be completed (HTTP ${status}). Refresh the status and try again.`;
+}
+
+export function releaseChannelsStatusMessage(status: number, code?: string): string {
+  if (code === 'channel-storage-invalid') {
+    return 'The private release channel settings need repair. Review the host service with the current installer before retrying.';
+  }
+  if (status === 401 || status === 403) return 'Your session cannot read release channel status. Sign in again and retry.';
+  if (status >= 500) return `The host could not read release channel status (HTTP ${status}). Try again.`;
+  return `Release channel status could not be read (HTTP ${status}). Try again.`;
+}
+
+export function releaseChannelErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ReleaseChannelRequestError || error instanceof ReleaseChannelsStatusError) return error.message;
+  if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+    return 'The request took too long. Check the server connection and try again.';
+  }
+  if (error instanceof TypeError) return 'The server could not be reached. Check the connection and try again.';
+  return fallback;
 }
 
 async function request<T>(path: string, method: 'POST' | 'PUT', body: object, signal?: AbortSignal): Promise<T> {
@@ -31,17 +77,16 @@ async function request<T>(path: string, method: 'POST' | 'PUT', body: object, si
     signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(path.endsWith('/plan') ? 110_000 : 20_000)]),
   });
   if (!response.ok) {
-    const error = new ReleaseChannelRequestError('The release channel request could not be completed.');
+    let canForce = false;
+    let code: string | undefined;
     try {
       const payload: unknown = await response.json();
-      if (payload && typeof payload === 'object' && 'canForce' in payload && payload.canForce === true) error.canForce = true;
-      if (payload && typeof payload === 'object' && 'message' in payload && typeof payload.message === 'string') {
-        error.message = payload.message;
-      }
+      canForce = Boolean(payload && typeof payload === 'object' && 'canForce' in payload && payload.canForce === true);
+      code = payload && typeof payload === 'object' && 'code' in payload && typeof payload.code === 'string' ? payload.code : undefined;
     } catch {
-      // Keep the safe fallback when an error body is absent or malformed.
+      // The status code provides safe user-facing context when the body is absent or malformed.
     }
-    throw error;
+    throw new ReleaseChannelRequestError(response.status, canForce, code);
   }
   return response.json();
 }
@@ -54,7 +99,16 @@ export const orbisReleaseChannelsOptions = () =>
         credentials: 'same-origin',
         signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
       });
-      if (!response.ok) throw new Error('Release channels could not be read.');
+      if (!response.ok) {
+        let code: string | undefined;
+        try {
+          const payload: unknown = await response.json();
+          code = payload && typeof payload === 'object' && 'code' in payload && typeof payload.code === 'string' ? payload.code : undefined;
+        } catch {
+          // The status code provides safe user-facing context when the body is absent or malformed.
+        }
+        throw new ReleaseChannelsStatusError(response.status, code);
+      }
       return response.json();
     },
     staleTime: 30_000,

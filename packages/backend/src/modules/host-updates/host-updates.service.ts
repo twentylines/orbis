@@ -231,7 +231,10 @@ export class HostUpdatesService {
   private async requireChannelSupport() {
     const status = await this.status();
     if (!status.available || !status.capabilities?.includes('release-channels.v1')) {
-      throw new ServiceUnavailableException('Update the Orbis host service to enable Nightly and reviewed channel changes.');
+      throw new ServiceUnavailableException({
+        code: 'host-channel-support-required',
+        message: 'Connect or update the Orbis host service with the current installer to change update channels.',
+      });
     }
   }
 

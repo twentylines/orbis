@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type PropsWithChildren } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from './window-visibility';
 import { installedOrbisBuildOptions } from './orbis-release';
@@ -204,3 +204,12 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
 }
 
 export const useHostUpdateWatch = () => useContext(HostUpdateContext);
+
+export function useCoreUpdateBusy() {
+  const { watch } = useHostUpdateWatch();
+  const starting = useIsMutating({
+    mutationKey: ['orbis-compatibility', 'update'],
+    predicate: (mutation) => mutation.options.mutationKey?.[4] === 'apply',
+  });
+  return starting > 0 || coreWatchIsActive(watch);
+}

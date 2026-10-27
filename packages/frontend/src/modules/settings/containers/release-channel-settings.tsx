@@ -24,6 +24,7 @@ import {
   enrollOrbisReleaseChannel,
   orbisReleaseChannelsOptions,
   planStableChannelInstall,
+  releaseChannelErrorMessage,
   refreshReleaseChannelRelatedQueries,
   ReleaseChannelRequestError,
   type StableChannelPlan,
@@ -54,9 +55,14 @@ function isStablePlan(value: StableChannelPlan): boolean {
 }
 
 function errorText(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message && error.message.length < 400) return error.message;
-  return fallback;
+  if (error instanceof Error && safeLocalErrors.has(error.message)) return error.message;
+  return releaseChannelErrorMessage(error, fallback);
 }
+
+const safeLocalErrors = new Set([
+  'The stable installation review could not be verified. Refresh release channels and try again.',
+  'The stable installation was not accepted by the host.',
+]);
 
 export function ReleaseChannelSettings() {
   const id = useId();
@@ -75,7 +81,7 @@ export function ReleaseChannelSettings() {
   const [error, setError] = useState('');
   const [accepted, setAccepted] = useState(false);
   const operator = user?.operator === true;
-  const current = status.data?.current;
+  const current = status.isError ? undefined : status.data?.current;
 
   useEffect(() => {
     mounted.current = true;
@@ -213,7 +219,7 @@ export function ReleaseChannelSettings() {
           <h2 id={`${id}-title`}>Release channel</h2>
           <p id={`${id}-description`}>Stable for regular use. Nightly for testing.</p>
         </div>
-        {status.data ? (
+        {status.data && !status.isError ? (
           <fieldset
             className="release-channel-switch"
             aria-labelledby={`${id}-title`}
@@ -260,22 +266,24 @@ export function ReleaseChannelSettings() {
           </fieldset>
         ) : null}
       </div>
-      {status.isPending ? <output>Reading release channels…</output> : null}
-      {status.isError ? (
-        <InlineFeedback>
-          <p>Release channels could not be read.</p>
-          <Button variant="outline" onClick={() => void status.refetch()}>
-            Try again
-          </Button>
-        </InlineFeedback>
-      ) : null}
-      {status.data ? (
-        <>
-          {busy && !dialog ? <output className="release-channel-note">Changing release channel…</output> : null}
-          {operator ? null : <p className="release-channel-note">An operator account is required to change the release channel.</p>}
-          {error && !dialog ? <InlineFeedback className="release-channel-page-feedback">{error}</InlineFeedback> : null}
-        </>
-      ) : null}
+      <div className="release-channel-state" aria-live="polite">
+        {status.isPending ? <output>Reading release channels…</output> : null}
+        {status.isError ? (
+          <InlineFeedback>
+            <p>{releaseChannelErrorMessage(status.error, 'Release channel status could not be read. Check the server connection and try again.')}</p>
+            <Button variant="outline" onClick={() => void status.refetch()}>
+              Try again
+            </Button>
+          </InlineFeedback>
+        ) : null}
+        {status.data ? (
+          <>
+            {busy && !dialog ? <output className="release-channel-note">Changing release channel…</output> : null}
+            {operator ? null : <p className="release-channel-note">An operator account is required to change the release channel.</p>}
+            {error && !dialog ? <InlineFeedback className="release-channel-page-feedback">{error}</InlineFeedback> : null}
+          </>
+        ) : null}
+      </div>
 
       <Dialog open={dialog === 'nightly'} onOpenChange={closeDialog}>
         <DialogContent size="md" className="release-channel-dialog" aria-describedby={`${id}-nightly-description`}>
