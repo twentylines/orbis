@@ -14,6 +14,7 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { lazy, memo, Suspense, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Button } from '@/components/ui/Button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
@@ -28,11 +29,40 @@ import { useAppEmbedding } from './app-embedding';
 import { useDesktopPreferences } from './preferences';
 import { appEmbeddingBoundary, appEmbeddingWarning, type AppEmbeddingCheck } from './app-opening';
 import { useWindowVisible } from './window-visibility';
+import { appFlyoutAnchor, placeAppWindowFlyout, type AppFlyoutPoint, type AppFlyoutPosition } from './app-window-flyout';
+import { appMinimizeCrossfade } from './app-window-transition';
 
 const WindowSettings = lazy(() => import('./app-window-settings'));
 const edges: ResizeEdge[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
 const edgeNames = { n: 'top', ne: 'top right', e: 'right', se: 'bottom right', s: 'bottom', sw: 'bottom left', w: 'left', nw: 'top left' };
 const rectStyle = (box: DesktopWindowBounds) => ({ left: box.x, top: box.y, width: box.width, height: box.height });
+
+function useWindowFlyout(open: boolean, frame: HTMLElement | null, button: HTMLElement | null, anchor: AppFlyoutPoint | null) {
+  const [content, attach] = useState<HTMLElement | null>(null);
+  const [position, setPosition] = useState<(AppFlyoutPosition & { alignOffset: number; sideOffset: number }) | null>(null);
+  useLayoutEffect(() => {
+    if (!open || !content || !frame || !button) return;
+    const measure = () => {
+      const bounds = frame.getBoundingClientRect();
+      const trigger = button.getBoundingClientRect();
+      const origin = anchor ?? appFlyoutAnchor(null, bounds, trigger);
+      const next = placeAppWindowFlyout(bounds, origin, { width: content.offsetWidth, height: content.offsetHeight });
+      const value = { ...next, alignOffset: bounds.left + next.left - trigger.left, sideOffset: bounds.top + next.top - trigger.bottom };
+      setPosition((previous) => (JSON.stringify(previous) === JSON.stringify(value) ? previous : value));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(frame);
+    observer.observe(content);
+    observer.observe(button);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [open, content, frame, button, anchor]);
+  return { attach, position };
+}
 
 export function AppWindow({
   item,
@@ -46,6 +76,7 @@ export function AppWindow({
   originOpacity,
   trayReady,
   trayTarget,
+  trayElement,
   onPlace,
   onFocus,
   onMinimize,
@@ -66,6 +97,7 @@ export function AppWindow({
   originOpacity?: number;
   trayReady: boolean;
   trayTarget: () => DOMRect | undefined;
+  trayElement: () => HTMLElement | undefined;
   onPlace: (mode: AppWindowMode) => void;
   onFocus: () => void;
   onMinimize: () => void;
@@ -90,7 +122,12 @@ export function AppWindow({
   const flightAnimation = useRef<Animation | null>(null);
   const departure = useRef<{ box: DOMRect; opacity: number } | null>(null);
   const [settings, setSettings] = useState(false);
+  const [settingsSaveTarget, setSettingsSaveTarget] = useState<HTMLDivElement | null>(null);
   const [help, setHelp] = useState(false);
+  const [helpAnchor, setHelpAnchor] = useState<AppFlyoutPoint | null>(null);
+  const [layoutOpen, setLayoutOpen] = useState(false);
+  const [layoutAnchor, setLayoutAnchor] = useState<AppFlyoutPoint | null>(null);
+  const layoutFlyout = useWindowFlyout(layoutOpen, panel.current, layoutButton.current, layoutAnchor);
   const openingSplit = useRef(false);
   const keyboardWindow = useRef(false);
   const capturePlacement = (next: AppWindowMode) => {
@@ -113,6 +150,7 @@ export function AppWindow({
   const motion = useRef({
     origin,
     trayTarget,
+    trayElement,
     onMinimized,
     onRemoved,
     settings,
@@ -125,6 +163,7 @@ export function AppWindow({
   motion.current = {
     origin,
     trayTarget,
+    trayElement,
     onMinimized,
     onRemoved,
     settings,
@@ -159,10 +198,7 @@ export function AppWindow({
       `translate(${target.x - box.x}px, ${target.y - box.y}px) scale(${target.width / box.width}, ${target.height / box.height})`;
     const frames =
       status === 'minimizing' && end
-        ? [
-            { transform: start ? transformTo(start.box) : 'none', opacity: start?.opacity ?? 1 },
-            { transform: transformTo(end), opacity: 0.2 },
-          ]
+        ? [{ transform: start ? transformTo(start.box) : 'none' }, { transform: transformTo(end) }]
         : status === 'closing'
           ? [
               { transform: start ? transformTo(start.box) : 'none', opacity: start?.opacity ?? 1 },
@@ -192,6 +228,22 @@ export function AppWindow({
       fill: 'both' as const,
     };
     let animation = element.animate(frames, options);
+    const fades: Animation[] = [];
+    if (status === 'minimizing') {
+      const crossfade = appMinimizeCrossfade(start?.opacity ?? 1);
+      const timing = { duration, easing: 'linear', fill: 'both' as const };
+      const windowFade = element.animate(crossfade.window, timing);
+      windowFade.id = 'orbis-app-minimize-fade';
+      fades.push(windowFade);
+      const icon = motion.current.trayElement()?.querySelector<HTMLElement>('.app-logo');
+      if (icon) {
+        const iconFade = icon.animate(crossfade.icon, timing);
+        iconFade.id = 'orbis-app-tray-reveal';
+        fades.push(iconFade);
+      }
+      const started = document.timeline.currentTime;
+      if (started !== null) for (const item of [animation, ...fades]) item.startTime = started;
+    }
     const complete = () => {
       if (status === 'minimizing' && motion.current.status === 'minimizing') motion.current.onMinimized();
       else if (status === 'closing' && motion.current.status === 'closing') motion.current.onRemoved();
@@ -221,8 +273,8 @@ export function AppWindow({
         animation.cancel();
         animation = element.animate(
           [
-            { transform: transform(start), opacity },
-            { transform: transform(end), opacity: status === 'minimizing' ? 0.2 : status === 'closing' ? 0 : 1 },
+            { transform: transform(start), ...(status === 'minimizing' ? {} : { opacity }) },
+            { transform: transform(end), ...(status === 'minimizing' ? {} : { opacity: status === 'closing' ? 0 : 1 }) },
           ],
           { ...options, duration: Math.max(80, deadline - performance.now()) },
         );
@@ -234,6 +286,7 @@ export function AppWindow({
       window.removeEventListener('resize', retarget);
       cancelAnimationFrame(resizeFrame);
       animation.cancel();
+      for (const fade of fades) fade.cancel();
     };
   }, [status, hidden, flightReady]);
 
@@ -279,6 +332,7 @@ export function AppWindow({
   };
   const openHelp = () => {
     setSettings(false);
+    setLayoutOpen(false);
     setHelp(true);
   };
   const depart = (action: () => void) => {
@@ -353,7 +407,20 @@ export function AppWindow({
               aria-label="Page not working?"
               title="Page not working?"
               aria-expanded={help}
-              onClick={() => (help ? closeHelp() : openHelp())}
+              onClick={(event) => {
+                if (help) closeHelp();
+                else {
+                  if (panel.current)
+                    setHelpAnchor(
+                      appFlyoutAnchor(
+                        event.detail ? { x: event.clientX, y: event.clientY } : null,
+                        panel.current.getBoundingClientRect(),
+                        event.currentTarget.getBoundingClientRect(),
+                      ),
+                    );
+                  openHelp();
+                }
+              }}
             >
               <IconHelp size={20} aria-hidden="true" />
               <span>Page not working?</span>
@@ -365,19 +432,58 @@ export function AppWindow({
               aria-label="App settings"
               title="App settings"
               aria-expanded={settings}
-              onClick={() => setSettings((value) => !value)}
+              onClick={() => {
+                setHelp(false);
+                setSettings((value) => !value);
+              }}
             >
               <IconSettings size={18} aria-hidden="true" />
             </Button>
-            <DropdownMenu modal={false}>
+            <DropdownMenu
+              modal={false}
+              open={layoutOpen}
+              onOpenChange={(open) => {
+                setLayoutOpen(open);
+                if (open) setHelp(false);
+              }}
+            >
               <DropdownMenuTrigger asChild>
-                <Button ref={layoutButton} className="app-launcher-close" size="icon" aria-label="Window layout" title="Window layout">
+                <Button
+                  ref={layoutButton}
+                  className="app-launcher-close"
+                  size="icon"
+                  aria-label="Window layout"
+                  title="Window layout"
+                  onPointerDownCapture={(event) => {
+                    if (event.button === 0 && panel.current)
+                      setLayoutAnchor(
+                        appFlyoutAnchor(
+                          { x: event.clientX, y: event.clientY },
+                          panel.current.getBoundingClientRect(),
+                          event.currentTarget.getBoundingClientRect(),
+                        ),
+                      );
+                  }}
+                  onKeyDownCapture={(event) => {
+                    if (['Enter', ' ', 'ArrowDown'].includes(event.key)) setLayoutAnchor(null);
+                  }}
+                >
                   <IconLayoutColumns size={19} aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 className="app-window-layout-menu"
-                align="end"
+                ref={layoutFlyout.attach}
+                side="bottom"
+                align="start"
+                alignOffset={layoutFlyout.position?.alignOffset ?? 0}
+                sideOffset={layoutFlyout.position?.sideOffset ?? 8}
+                avoidCollisions={false}
+                style={{
+                  maxWidth: layoutFlyout.position?.maxWidth,
+                  maxHeight: layoutFlyout.position?.maxHeight,
+                  visibility: layoutFlyout.position ? 'visible' : 'hidden',
+                }}
                 onCloseAutoFocus={(event) => {
                   if (keyboardWindow.current) {
                     event.preventDefault();
@@ -463,12 +569,25 @@ export function AppWindow({
         </div>
         <div className="app-launcher-body">
           <div className="app-window-document" inert={settings || geometry.gestureKind !== null || undefined} aria-hidden={settings || undefined}>
+            {!active && !settings && !boundary && status === 'visible' ? (
+              <button
+                type="button"
+                className="app-window-activate"
+                aria-label={`Activate ${request.name} window`}
+                onPointerDown={(event) => event.preventDefault()}
+                onFocus={() => settingsButton.current?.focus({ preventScroll: true })}
+                onClick={onFocus}
+              />
+            ) : null}
             <AppFrame
               request={request}
               enabled={desktop && status === 'visible'}
               active={active}
               boundary={boundary}
               help={help}
+              helpAnchor={helpAnchor}
+              flyoutFrame={panel.current}
+              helpTrigger={helpButton.current}
               onHelpClose={closeHelp}
               onTab={onTab}
             />
@@ -477,12 +596,13 @@ export function AppWindow({
             <section className="app-window-settings" aria-label={`${request.name} settings`}>
               <header>
                 <h3>App settings</h3>
+                <div ref={setSettingsSaveTarget} className="app-window-settings-save-target" />
                 <Button ref={settingsClose} size="icon" aria-label="Back to app" title="Back to app" onClick={closeSettings}>
                   <IconX size={19} aria-hidden="true" />
                 </Button>
               </header>
               <Suspense fallback={<output>Loading app settings…</output>}>
-                <WindowSettings request={request} onSaved={closeSettings} />
+                <WindowSettings request={request} onSaved={closeSettings} saveTarget={settingsSaveTarget} />
               </Suspense>
             </section>
           ) : null}
@@ -517,6 +637,9 @@ const AppFrame = memo(function AppFrame({
   active,
   boundary,
   help,
+  helpAnchor,
+  flyoutFrame,
+  helpTrigger,
   onHelpClose,
   onTab,
 }: {
@@ -525,6 +648,9 @@ const AppFrame = memo(function AppFrame({
   active: boolean;
   boundary?: AppEmbeddingCheck;
   help: boolean;
+  helpAnchor: AppFlyoutPoint | null;
+  flyoutFrame: HTMLElement | null;
+  helpTrigger: HTMLElement | null;
   onHelpClose: () => void;
   onTab: () => void;
 }) {
@@ -540,13 +666,14 @@ const AppFrame = memo(function AppFrame({
   const check = useAppEmbedding(request, enabled && visible && !boundary && (awaitingLoad || help));
   const { preferences, update } = useDesktopPreferences();
   const showWarning = Boolean(boundary || help);
+  const helpFlyout = useWindowFlyout(showWarning && !boundary, flyoutFrame, helpTrigger, helpAnchor);
   const notice = appEmbeddingWarning(boundary ?? check.data) ?? {
     blocked: false,
     title: 'Connection options',
     description:
       check.data?.status === 'not-blocked-by-headers'
-        ? 'The server permits embedding. Reload the app or try a browser tab.'
-        : 'Reload the app, or try it in a browser tab.',
+        ? 'The initial response permits embedding, but sign-in or later pages may still need a browser tab. Reload the app or open a tab.'
+        : 'Some apps block embedded windows or need a browser tab for sign-in. Reload the app or open a tab.',
   };
   useLayoutEffect(() => {
     if (enabled && active && showWarning) noticeHeading.current?.focus({ preventScroll: true });
@@ -558,8 +685,62 @@ const AppFrame = memo(function AppFrame({
   }, [enabled, visible, boundary, awaitingLoad, loadKey]);
   const reload = () => {
     setAttempt((value) => value + 1);
-    onHelpClose();
   };
+  const warning = showWarning ? (
+    <section
+      ref={boundary ? undefined : helpFlyout.attach}
+      className={boundary ? 'app-window-compatibility' : 'app-window-recovery-panel'}
+      style={
+        boundary
+          ? undefined
+          : {
+              left: helpFlyout.position?.left,
+              top: helpFlyout.position?.top,
+              maxWidth: helpFlyout.position?.maxWidth,
+              maxHeight: helpFlyout.position?.maxHeight,
+              visibility: helpFlyout.position ? 'visible' : 'hidden',
+            }
+      }
+      role={boundary ? undefined : 'dialog'}
+      aria-label="App window help"
+      aria-busy={check.isFetching}
+    >
+      <div className={boundary ? 'app-window-compatibility-content' : 'app-window-recovery-content'}>
+        {boundary ? <IconExternalLink size={30} aria-hidden="true" /> : null}
+        <h3 ref={noticeHeading} tabIndex={-1}>
+          {notice.title}
+        </h3>
+        {boundary ? null : (
+          <Button className="app-window-recovery-close" size="icon" aria-label="Close page help" onClick={onHelpClose}>
+            <IconX size={18} aria-hidden="true" />
+          </Button>
+        )}
+        <p>{notice.description}</p>
+        <label className="app-window-remember-tab">
+          <input type="checkbox" checked={rememberTab} onChange={(event) => setRememberTab(event.target.checked)} />
+          <span>Always open this app in a new tab</span>
+        </label>
+        <div className="app-window-compatibility-actions">
+          {boundary ? null : <Button onClick={reload}>Reload app</Button>}
+          <Button
+            intent="primary"
+            onClick={() => {
+              if (rememberTab)
+                update({
+                  appLaunch: {
+                    ...preferences.appLaunch,
+                    apps: { ...preferences.appLaunch.apps, [request.urn]: { ...preferences.appLaunch.apps[request.urn], mode: 'tab' } },
+                  },
+                });
+              onTab();
+            }}
+          >
+            Open tab
+          </Button>
+        </div>
+      </div>
+    </section>
+  ) : null;
   return (
     <>
       {!showWarning && awaitingLoad && slowLoad === loadKey ? (
@@ -579,54 +760,7 @@ const AppFrame = memo(function AppFrame({
           sandbox="allow-forms allow-scripts allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation"
         />
       )}
-      {showWarning ? (
-        <section
-          className={boundary ? 'app-window-compatibility' : 'app-window-recovery-panel'}
-          role={boundary ? undefined : 'dialog'}
-          aria-label="App window help"
-          aria-busy={check.isFetching}
-        >
-          <div className={boundary ? 'app-window-compatibility-content' : 'app-window-recovery-content'}>
-            {boundary ? <IconExternalLink size={30} aria-hidden="true" /> : null}
-            <h3 ref={noticeHeading} tabIndex={-1}>
-              {notice.title}
-            </h3>
-            {boundary ? null : (
-              <Button className="app-window-recovery-close" size="icon" aria-label="Close page help" onClick={onHelpClose}>
-                <IconX size={18} aria-hidden="true" />
-              </Button>
-            )}
-            <p>{notice.description}</p>
-            <label className="app-window-remember-tab">
-              <input type="checkbox" checked={rememberTab} onChange={(event) => setRememberTab(event.target.checked)} />
-              <span>Always open this app in a new tab</span>
-            </label>
-            <div className="app-window-compatibility-actions">
-              {boundary ? null : <Button onClick={reload}>Reload app</Button>}
-              <Button
-                intent="primary"
-                onClick={() => {
-                  if (rememberTab)
-                    update({
-                      appLaunch: {
-                        ...preferences.appLaunch,
-                        apps: { ...preferences.appLaunch.apps, [request.urn]: { ...preferences.appLaunch.apps[request.urn], mode: 'tab' } },
-                      },
-                    });
-                  onTab();
-                }}
-              >
-                Open tab
-              </Button>
-            </div>
-            {boundary ? null : (
-              <Button variant="ghost" disabled={check.isFetching} onClick={() => void check.recheck()}>
-                {check.isFetching ? 'Checking…' : 'Check again'}
-              </Button>
-            )}
-          </div>
-        </section>
-      ) : null}
+      {warning && !boundary && flyoutFrame ? createPortal(warning, flyoutFrame) : warning}
     </>
   );
 });

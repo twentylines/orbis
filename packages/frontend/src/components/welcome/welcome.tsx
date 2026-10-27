@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import { TimeField, useTimeField } from '@/components/ui/TimeField/TimeField';
+import { validTime } from '@/components/ui/TimeField/time-field';
+import { automaticUpdateSettingsForSave } from '@/desktop/automatic-update-time';
 import { useAppContext } from '@/context/app-context';
 import {
   automaticUpdateSettingsOptions,
@@ -31,7 +34,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { saveSetupSteps, setupAppUpdateSteps, type SetupAppChoices, type SetupSaveStep } from './setup-save';
+import { saveSetupSteps, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices, type SetupSaveStep } from './setup-save';
 import './welcome.css';
 
 const steps = ['Your server', 'Colour', 'Wallpaper', 'Performance', 'Updates', 'Ready'] as const;
@@ -44,7 +47,6 @@ const descriptions = [
   'Your workspace is ready. Review your choices and make it yours.',
 ];
 const defaultAutomatic: AutomaticUpdateSettings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
-const validScheduleTime = (time: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
 
 export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolean }) => {
   const { preferences, completeOnboarding, syncState } = useDesktopPreferences();
@@ -64,7 +66,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const savingLock = useRef(false);
   const receipts = useRef(new Map<string, string>());
   const touchedApps = useRef<SetupAppChoices>(new Map());
-  const lastValidTime = useRef(defaultAutomatic.schedule.time);
   const heading = useRef<HTMLHeadingElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const [stageScroll, setStageScroll] = useState({ overflow: false, below: false });
@@ -89,13 +90,21 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const selectedApps = eligibleApps.filter(({ info }) => appChoices.includes(info.urn));
   const nameValid = name.trim().length > 0 && name.trim().length <= 40;
   const sharedScheduleNeeded = (automatic.orbis.enabled && automatic.orbis.mode === 'scheduled') || appChoices.length > 0;
-  const timeValid = validScheduleTime(automatic.schedule.time);
-  const scheduleValid = !sharedScheduleNeeded || timeValid;
+  const timeValid = validTime(automatic.schedule.time);
+  const scheduleValid = setupScheduleAllowsNext(automatic.schedule.time, automaticEdited, sharedScheduleNeeded);
+  const time = useTimeField({
+    value: timeValid ? automatic.schedule.time : null,
+    format: draft.appearance.timeFormat,
+    onFormatChange: (timeFormat) => setDraft((current) => ({ ...current, appearance: { ...current.appearance, timeFormat } })),
+    onChange: (next) => {
+      setAutomaticEdited(true);
+      setAutomatic((current) => ({ ...current, schedule: { ...current.schedule, time: next ?? '' } }));
+    },
+  });
 
   useEffect(() => {
     if (updateSettings.data && !automaticEdited) {
       setAutomatic(updateSettings.data.settings);
-      if (validScheduleTime(updateSettings.data.settings.schedule.time)) lastValidTime.current = updateSettings.data.settings.schedule.time;
     }
   }, [updateSettings.data, automaticEdited]);
   useLayoutEffect(() => {
@@ -138,7 +147,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     setSaving(true);
     setError('');
     const completedDraft = { ...draft, serverName: name.trim() };
-    const automaticToSave = timeValid ? automatic : { ...automatic, schedule: { ...automatic.schedule, time: lastValidTime.current } };
+    const automaticToSave = automaticUpdateSettingsForSave(automatic);
     const tasks: SetupSaveStep[] = [
       {
         id: 'Saving reporting preference',
@@ -146,7 +155,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
         save: () => acknowledgeWelcome({ body: { allowErrorMonitoring: errorMonitoring }, signal: AbortSignal.timeout(20_000), throwOnError: true }),
       },
     ];
-    if (canManageUpdates && automaticEdited)
+    if (canManageUpdates && automaticEdited && automaticToSave)
       tasks.push({ id: 'Saving Orbis update schedule', value: automaticToSave, save: () => saveAutomaticUpdateSettings(automaticToSave) });
     tasks.push(
       ...setupAppUpdateSteps(
@@ -169,7 +178,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     }
   };
   const setAutomaticDraft = (value: AutomaticUpdateSettings) => {
-    if (validScheduleTime(value.schedule.time)) lastValidTime.current = value.schedule.time;
     setAutomaticEdited(true);
     setAutomatic(value);
   };
@@ -470,22 +478,14 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                       </details>
                       {updateSettings.data ? (
                         <p className="orbis-setup-help">
-                          {timeValid || !sharedScheduleNeeded
-                            ? `Shared daily app time: ${timeValid ? automatic.schedule.time : lastValidTime.current} (${automatic.schedule.timezone}). Custom apps stay manual.`
+                          {timeValid
+                            ? `Shared daily app time: ${automatic.schedule.time} (${automatic.schedule.timezone}). Custom apps stay manual.`
                             : 'Choose a daily update time below. Custom apps stay manual.'}
                         </p>
                       ) : null}
-                      {sharedScheduleNeeded ? (
+                      {sharedScheduleNeeded || !timeValid ? (
                         <div className="orbis-setup-schedule">
-                          <Input
-                            label="Update time"
-                            name="setup-update-time"
-                            type="time"
-                            required
-                            value={automatic.schedule.time}
-                            error={timeValid ? undefined : 'Choose a valid daily update time.'}
-                            onChange={(event) => setAutomaticDraft({ ...automatic, schedule: { ...automatic.schedule, time: event.target.value } })}
-                          />
+                          <TimeField control={time} label="Update time" id="setup-update-time" name="setup-update-time" disabled={saving} />
                           <p className="orbis-setup-help">
                             Daily in {automatic.schedule.timezone}. Shared by selected apps and scheduled Orbis updates.
                           </p>

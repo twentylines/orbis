@@ -11,6 +11,7 @@ import { WallpaperSettings } from './wallpaper-settings';
 import { MaterialSettings } from './material-settings';
 import { preferenceCacheLimit } from '@/desktop/appearance-cache';
 import { AppOpeningSettings } from '@/desktop/app-opening-settings';
+import { presetLabels, resolveWallpaperKey, wallpaperSources } from '@/desktop/wallpaper-presets';
 import { AppearanceRange } from './appearance-controls';
 import './appearance.css';
 
@@ -29,6 +30,11 @@ export const Appearance = () => {
   const [message, setMessage] = useState('');
   const [wallpaperSettingsRevision, setWallpaperSettingsRevision] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wallpaperKey = resolveWallpaperKey(preferences);
+  const uploadedWallpaper = preferences.wallpaperMode === 'custom' && Boolean(preferences.appearance.wallpaperImage);
+  const wallpaperPreset = wallpaperKey.startsWith('theme-')
+    ? (wallpaperKey.slice(6) as DesktopPreferences['preset'])
+    : ({ sandstone: 'stone', tidal: 'ocean', canopy: 'forest' } as const)[preferences.wallpaper];
 
   useEffect(() => setName(preferences.serverName), [preferences.serverName]);
 
@@ -110,7 +116,7 @@ export const Appearance = () => {
               onChange={(event) => setName(event.target.value)}
             />
             <button type="button" onClick={saveName}>
-              Save name
+              Save
             </button>
           </div>
         </div>
@@ -120,23 +126,36 @@ export const Appearance = () => {
           <h2 id="appearance-preset">Colour preset</h2>
           <p>Applies to buttons, the logo, panels, menus and notifications. Each preset has light and dark colours.</p>
         </div>
-        <div className="appearance-presets">
-          {presets.map(({ value, title, description }) => (
-            <button
-              key={value}
-              type="button"
-              className={`appearance-preset appearance-preset-${value}`}
-              aria-pressed={preferences.preset === value}
-              onClick={() => changePreset(value)}
-            >
-              <span className="appearance-swatch" aria-hidden="true">
-                <span className="appearance-swatch-light" />
-                <span className="appearance-swatch-dark" />
-              </span>
-              <strong>{title}</strong>
-              <small>{description}</small>
-            </button>
-          ))}
+        <div className="appearance-preset-controls">
+          <div className="appearance-presets">
+            {presets.map(({ value, title, description }) => (
+              <button
+                key={value}
+                type="button"
+                className={`appearance-preset appearance-preset-${value}`}
+                aria-pressed={preferences.preset === value}
+                onClick={() => changePreset(value)}
+              >
+                <span className="appearance-swatch" aria-hidden="true">
+                  <span className="appearance-swatch-light" />
+                  <span className="appearance-swatch-dark" />
+                </span>
+                <strong>{title}</strong>
+                <small>{description}</small>
+              </button>
+            ))}
+          </div>
+          <div className="appearance-preset-wallpaper">
+            {uploadedWallpaper ? null : <img src={wallpaperSources[wallpaperKey].replace('.webp', '-preview.webp')} alt="" />}
+            <span>
+              {preferences.wallpaperMode === 'theme'
+                ? 'Wallpaper follows colours'
+                : uploadedWallpaper
+                  ? 'Your uploaded wallpaper stays fixed'
+                  : `Fixed wallpaper: ${presetLabels[wallpaperPreset]}`}
+            </span>
+            <a href="#appearance-wallpaper">Change</a>
+          </div>
         </div>
       </section>
       <section className="appearance-section" aria-labelledby="appearance-mode">

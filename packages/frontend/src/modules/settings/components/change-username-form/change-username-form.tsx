@@ -85,7 +85,7 @@ export const ChangeUsernameForm = ({ username }: Props) => {
           </DialogDescription>
           <DialogFooter>
             <Button loading={changeUsername.isPending} type="submit" intent="success" form={formId}>
-              {t('SETTINGS_SECURITY_CHANGE_USERNAME_FORM_SUBMIT')}
+              {t('SAVE')}
             </Button>
           </DialogFooter>
         </DialogContent>

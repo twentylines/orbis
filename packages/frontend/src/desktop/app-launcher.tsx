@@ -300,6 +300,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                         originOpacity={origins.current.get(item.request.urn)?.opacity}
                         trayReady={Boolean(tray)}
                         trayTarget={() => flightTarget(item.request.urn)}
+                        trayElement={() => trayButton(item.request.urn)}
                         onPlace={(mode) => {
                           const partner = [...state.windows]
                             .reverse()

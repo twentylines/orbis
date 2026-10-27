@@ -1,0 +1,87 @@
+.orbis-time-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.orbis-time-field > legend {
+  margin: 0 0 8px;
+  font: inherit;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.orbis-time-parts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1.25fr);
+  align-items: center;
+  gap: 6px;
+  width: min(100%, 16.25rem);
+  min-width: 0;
+}
+.orbis-time-parts[data-format="24h"] {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  width: min(100%, 10.5rem);
+}
+.orbis-time-parts .orbis-time-period {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+.orbis-time-field .orbis-time-input,
+.orbis-time-period .form-select {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  height: calc(1.4em + 1.25rem + 2px);
+  width: 100%;
+  margin: 0;
+  padding: 0.625rem 0.375rem;
+  border: 1px solid var(--desktop-line, var(--tblr-border-color));
+  border-radius: 9px;
+  color: var(--desktop-ink, var(--tblr-body-color));
+  background-color: var(--desktop-surface, var(--tblr-bg-surface));
+  font: inherit;
+  line-height: 1.4;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.orbis-time-period .form-select {
+  background-position: right 0.375rem center;
+  background-size: 0.5rem;
+}
+.orbis-time-period .orbis-select-value {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
+.orbis-time-field .orbis-time-parts .orbis-time-input[aria-invalid="true"] {
+  border-color: var(--desktop-negative, var(--tblr-danger));
+  background-color: color-mix(in srgb, var(--desktop-negative, var(--tblr-danger)) 8%, var(--desktop-surface, var(--tblr-bg-surface)));
+}
+.orbis-time-format {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  margin-top: 4px;
+  color: var(--desktop-muted, var(--tblr-secondary-color));
+  font-size: 0.875em;
+}
+.orbis-time-format .orbis-time-format-select {
+  width: min(100%, 7.5rem);
+  min-width: 0;
+  margin: 0;
+}
+.orbis-time-format-select .form-select {
+  min-height: 44px;
+  font: inherit;
+}
+.orbis-time-separator {
+  color: var(--desktop-muted, var(--tblr-secondary-color));
+  line-height: 1;
+}

@@ -2,6 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { normaliseDesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
 import {
   applyAutomaticUpdateTime,
+  appUpdateRuleForSave,
+  appUpdateModeDraft,
+  automaticUpdateSettingsForSave,
   editUpdateTime,
   parseWholeUpdateTime,
   readUpdateTime,
@@ -10,6 +13,28 @@ import {
 } from './automatic-update-time';
 
 describe('editable automatic update time', () => {
+  test('per-app mode toggles preserve existing custom times and invalid drafts instead of replacing them with the shared time', () => {
+    const shared = appUpdateModeDraft({ mode: 'custom', time: '17:42' }, undefined, '03:00', 'global');
+    expect(shared.rule).toEqual({ mode: 'global' });
+    expect(appUpdateModeDraft(shared.rule, shared.remembered, '03:00', 'custom').rule).toEqual({ mode: 'custom', time: '17:42' });
+    const disabled = appUpdateModeDraft({ mode: 'custom', time: '' }, null, '03:00', 'disabled');
+    const invalid = appUpdateModeDraft(disabled.rule, disabled.remembered, '03:00', 'custom');
+    expect(invalid.rule).toEqual({ mode: 'custom', time: '' });
+    expect(appUpdateRuleForSave(invalid.rule)).toBeNull();
+  });
+  test('per-app custom schedules reject invalid drafts while explicit disabled and shared choices stay available', () => {
+    for (const time of ['', '24:00', '99:00', '1500']) expect(appUpdateRuleForSave({ mode: 'custom', time })).toBeNull();
+    expect(appUpdateRuleForSave({ mode: 'custom', time: '15:00' })).toEqual({ mode: 'custom', time: '15:00' });
+    expect(appUpdateRuleForSave({ mode: 'disabled' })).toEqual({ mode: 'disabled' });
+    expect(appUpdateRuleForSave({ mode: 'global' })).toEqual({ mode: 'global' });
+  });
+  test('saving onboarding or automatic preferences cannot substitute an older valid time for an edited invalid draft', () => {
+    const settings = { orbis: { enabled: false, mode: 'idle' as const }, schedule: { time: '', timezone: 'Asia/Singapore' } };
+    expect(automaticUpdateSettingsForSave(settings)).toBeNull();
+    const valid = { ...settings, schedule: { ...settings.schedule, time: '15:00' } };
+    expect(automaticUpdateSettingsForSave(valid)).toBe(valid);
+    expect(valid.orbis.enabled).toBe(false);
+  });
   test.each([
     ['1500', '15:00'],
     ['0900', '09:00'],

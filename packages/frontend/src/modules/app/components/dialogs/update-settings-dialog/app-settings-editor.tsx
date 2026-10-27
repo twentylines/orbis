@@ -1,17 +1,28 @@
 import { getAppQueryKey, updateAppSettingsMutation } from '@/api-client/@tanstack/react-query.gen';
-import { Button } from '@/components/ui/Button';
 import { useAppContext } from '@/context/app-context';
 import type { AppInfo } from '@/types/app.types';
 import type { TranslatableError } from '@/types/error.types';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useId } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { type FormValues, InstallForm } from '../../install-form/install-form';
 import { AppUpdateSchedule } from './app-update-schedule';
 import './app-settings-editor.css';
+import { AppSettingsSaveButton } from './app-settings-save-button';
 
-export function AppSettingsEditor({ info, config, onSaved }: { info: AppInfo; config: Record<string, unknown>; onSaved: () => void }) {
+export function AppSettingsEditor({
+  info,
+  config,
+  onSaved,
+  saveTarget,
+}: {
+  info: AppInfo;
+  config: Record<string, unknown>;
+  onSaved: () => void;
+  saveTarget?: HTMLElement | null;
+}) {
   const { t } = useTranslation();
   const { user } = useAppContext();
   const formId = useId();
@@ -25,6 +36,7 @@ export function AppSettingsEditor({ info, config, onSaved }: { info: AppInfo; co
       onSaved();
     },
   });
+  const save = <AppSettingsSaveButton formId={formId} pending={updateConfig.isPending} header={Boolean(saveTarget)} />;
   return (
     <div className="app-settings-editor">
       <div className="app-settings-fields">
@@ -48,11 +60,7 @@ export function AppSettingsEditor({ info, config, onSaved }: { info: AppInfo; co
         />
         {user.operator ? <AppUpdateSchedule key={info.urn} urn={info.urn} name={info.name} /> : null}
       </div>
-      <div className="app-settings-save">
-        <Button type="submit" intent="primary" form={formId} disabled={updateConfig.isPending} aria-busy={updateConfig.isPending}>
-          {updateConfig.isPending ? 'Saving…' : 'Save'}
-        </Button>
-      </div>
+      {saveTarget === undefined ? <div className="app-settings-save">{save}</div> : saveTarget ? createPortal(save, saveTarget) : null}
     </div>
   );
 }

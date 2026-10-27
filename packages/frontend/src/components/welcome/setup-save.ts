@@ -1,4 +1,7 @@
 import type { AppUpdateRule } from '@/desktop/automatic-updates-api';
+import { validTime } from '@/components/ui/TimeField/time-field';
+
+export const setupScheduleAllowsNext = (time: string | null, edited: boolean, needed: boolean) => validTime(time) || (!edited && !needed);
 
 export type SetupSaveStep = { id: string; label?: string; value: unknown; save: () => Promise<unknown> };
 export type SetupAppChoices = Map<string, { name: string; previous: AppUpdateRule }>;

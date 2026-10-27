@@ -1,33 +1,39 @@
 import { useQuery } from '@tanstack/react-query';
+import { useId } from 'react';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import type { AppOpeningMode } from '@runtipi/common/schemas';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { useDesktopPreferences } from './preferences';
 import { AppLaunchModeChoice } from './app-launch-mode-choice';
 
 export function AppOpeningPreference({ urn, name, label = name }: { urn: string; name: string; label?: string }) {
   const { preferences, update } = useDesktopPreferences();
+  const triggerId = useId();
   const value = preferences.appLaunch.apps[urn]?.mode ?? 'default';
   return (
-    <label className="app-opening-select">
-      <span>{label}</span>
-      <select
-        className="form-select"
-        aria-label={`Open ${name}`}
+    <div className="app-opening-select">
+      <label htmlFor={triggerId}>{label}</label>
+      <Select
         value={value}
         disabled={preferences.appLaunch.mode === 'tab'}
-        onChange={(event) => {
+        onValueChange={(nextValue) => {
           const apps = { ...preferences.appLaunch.apps };
           apps[urn] = { ...apps[urn] };
-          if (event.target.value === 'default') delete apps[urn].mode;
-          else apps[urn].mode = event.target.value as AppOpeningMode;
+          if (nextValue === 'default') delete apps[urn].mode;
+          else apps[urn].mode = nextValue as AppOpeningMode;
           update({ appLaunch: { ...preferences.appLaunch, apps } });
         }}
       >
-        <option value="default">Use account default</option>
-        <option value="window">In Orbis</option>
-        <option value="tab">In a new tab</option>
-      </select>
-    </label>
+        <SelectTrigger id={triggerId} aria-label={`Open ${name}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="default">Use account default</SelectItem>
+          <SelectItem value="window">In Orbis</SelectItem>
+          <SelectItem value="tab">In a new tab</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 

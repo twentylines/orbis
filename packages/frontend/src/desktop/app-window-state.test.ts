@@ -5,6 +5,30 @@ const first = { urn: 'first:store', name: 'First', launchUrl: 'https://first.loc
 const second = { urn: 'second:store', name: 'Second', launchUrl: 'https://second.local' };
 const open = (state: AppWindowState, request = first) => reduce(state, { type: 'open', request });
 
+test('activating a background floating window changes only stacking focus and preserves document identity/order', () => {
+  const opened = open(open({ windows: [], section: '/dashboard' }), second);
+  const background = opened.windows[0];
+  const foreground = opened.windows[1];
+  const focused = reduce(opened, { type: 'focus', urn: first.urn });
+  expect(appWorkspace(focused).active).toBe(first.urn);
+  expect(focused.windows).toBe(opened.windows);
+  expect(focused.windows[0]).toBe(background);
+  expect(focused.windows[1]).toBe(foreground);
+  expect(focused.windows[0]?.request).toBe(first);
+  expect(reduce(focused, { type: 'focus', urn: first.urn })).toBe(focused);
+});
+
+test('body activation keeps split geometry, ratio and both existing iframe request objects', () => {
+  const paired = reduce(reduce(open({ windows: [] }), { type: 'place', urn: first.urn, mode: 'left' }), { type: 'pair', request: second });
+  const resized = reduce(paired, { type: 'ratio', value: 0.63 });
+  const before = appWorkspace(resized);
+  const activated = reduce(resized, { type: 'focus', urn: first.urn });
+  expect(activated.windows).toBe(resized.windows);
+  expect(appWorkspace(activated).split).toBe(before.split);
+  expect(appWorkspace(activated).ratio).toBe(0.63);
+  expect(activated.windows.map((item) => item.request)).toEqual([first, second]);
+});
+
 test('snap offers a partner, pairs independent documents, and focusing either pane keeps both visible', () => {
   const snapped = reduce(open({ windows: [] }), { type: 'place', urn: first.urn, mode: 'left' });
   expect(appWorkspace(snapped).split).toEqual({ anchor: first.urn, side: 'left' });

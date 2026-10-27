@@ -319,7 +319,7 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
               }
             }}
           >
-            {composeData.format === 'yaml' ? t('MULTI_SERVICE_YAML_SAVE') : t('MULTI_SERVICE_JSON_SAVE')}
+            {t('SAVE')}
           </Button>
           <div
             className={clsx('text-muted small text-center', {

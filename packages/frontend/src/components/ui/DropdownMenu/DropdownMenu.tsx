@@ -6,8 +6,14 @@ import clsx from 'clsx';
 import type * as React from 'react';
 import { Children, createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from 'react';
 import '../dropdown.css';
+import { dropdownBoundaryOptions } from './dropdown-boundary';
 
 const MenuOpenContext = createContext(false);
+const MenuBoundaryContext = createContext<HTMLElement | null>(null);
+
+export function DropdownMenuBoundary({ container, children }: React.PropsWithChildren<{ container: HTMLElement | null }>) {
+  return <MenuBoundaryContext.Provider value={container}>{children}</MenuBoundaryContext.Provider>;
+}
 const DropdownMenu = ({
   modal = false,
   open,
@@ -69,6 +75,7 @@ const DropdownMenuContent = ({
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) => {
   const content = useRef<HTMLDivElement | null>(null);
   const open = useContext(MenuOpenContext);
+  const boundary = dropdownBoundaryOptions(useContext(MenuBoundaryContext));
   const attach = useCallback(
     (node: HTMLDivElement | null) => {
       content.current = node;
@@ -88,9 +95,9 @@ const DropdownMenuContent = ({
     if (open && document.activeElement === menuTrigger(menu)) menu?.focus({ preventScroll: true });
   }, [open]);
   return (
-    <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Portal {...boundary.portal}>
       <DropdownMenuPrimitive.Content
-        collisionPadding={16}
+        {...boundary.content}
         sideOffset={sideOffset}
         className={clsx('orbis-dropdown-menu d-block position-relative', className)}
         {...props}

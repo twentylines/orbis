@@ -91,6 +91,38 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
+.appearance-preset-controls {
+  display: grid;
+  gap: 12px;
+}
+.appearance-preset-wallpaper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.appearance-preset-wallpaper img {
+  flex: none;
+  width: 48px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.appearance-preset-wallpaper span {
+  flex: 1;
+  min-width: 0;
+}
+.appearance-preset-wallpaper a {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  color: var(--desktop-accent);
+}
 .appearance-modes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 12em), 1fr));

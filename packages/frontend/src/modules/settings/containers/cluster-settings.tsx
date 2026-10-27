@@ -176,7 +176,7 @@ export function ClusterSettings() {
                 placeholder="My homelab"
               />
               <Button type="submit" disabled={busy || !clusterName.trim()} intent="primary">
-                {canManage ? 'Save name' : 'Create cluster'}
+                {canManage ? 'Save' : 'Create cluster'}
               </Button>
             </div>
           </form>

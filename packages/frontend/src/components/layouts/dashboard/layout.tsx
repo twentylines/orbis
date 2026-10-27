@@ -199,9 +199,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
                 </span>
               </Link>
               <span className="desktop-current" aria-current="page">
-                <span className="desktop-current-label" data-descenders={/[gjpqy]/.test(sectionLabel)}>
-                  {sectionLabel}
-                </span>
+                <span className="desktop-current-label">{sectionLabel}</span>
               </span>
               <div className="desktop-system-actions">
                 <OrbisUpdateNotice />

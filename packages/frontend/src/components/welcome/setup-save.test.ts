@@ -1,7 +1,18 @@
 /// <reference types="bun" />
 import { expect, test } from 'bun:test';
-import { saveSetupSteps, setupAppUpdateSteps, type SetupAppChoices } from './setup-save';
+import { saveSetupSteps, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices } from './setup-save';
 import type { AppUpdateRule } from '@/desktop/automatic-updates-api';
+
+test('onboarding blocks Next for edited invalid times even after automation is disabled', () => {
+  for (const time of ['', null, '25:00', '1500']) {
+    expect(setupScheduleAllowsNext(time, true, true)).toBe(false);
+    expect(setupScheduleAllowsNext(time, true, false)).toBe(false);
+    expect(setupScheduleAllowsNext(time, false, true)).toBe(false);
+  }
+  expect(setupScheduleAllowsNext('15:00', true, true)).toBe(true);
+  expect(setupScheduleAllowsNext('15:00', true, false)).toBe(true);
+  expect(setupScheduleAllowsNext(null, false, false)).toBe(true);
+});
 
 test('retries only requests that did not succeed and keeps completion last', async () => {
   const receipts = new Map<string, string>();

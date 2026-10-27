@@ -557,7 +557,7 @@ export const UserSettingsForm = (props: IProps) => {
           </div>
         )}
         <Button loading={loading} type="submit" intent="success">
-          {t('SETTINGS_GENERAL_SUBMIT')}
+          {t('SAVE')}
         </Button>
       </form>
     </>

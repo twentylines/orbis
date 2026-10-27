@@ -291,7 +291,7 @@ export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
               form={formId}
               disabled={pending || !password || (dialog === 'add' && !name.trim()) || (totpEnabled && !/^\d{6}$/.test(totpCode))}
             >
-              {dialog === 'add' ? 'Add passkey' : dialog === 'policy' ? 'Save verification' : 'Remove and sign out'}
+              {dialog === 'add' ? 'Add passkey' : dialog === 'policy' ? 'Save' : 'Remove and sign out'}
             </Button>
           </DialogFooter>
         </DialogContent>

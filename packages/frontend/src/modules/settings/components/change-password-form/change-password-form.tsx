@@ -78,7 +78,7 @@ export const ChangePasswordForm = () => {
         autoComplete="new-password"
       />
       <Button disabled={changePassword.isPending} className="mt-3" type="submit">
-        {t('SETTINGS_SECURITY_FORM_CHANGE_PASSWORD_SUBMIT')}
+        {t('SAVE')}
       </Button>
     </form>
   );

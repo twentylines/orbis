@@ -62,7 +62,7 @@ export function SystemUpdatesSettings() {
             type="submit"
             disabled={draft === null || draft === status.data?.settings.enabled || save.isPending || !status.data?.available}
           >
-            {save.isPending ? 'Saving…' : 'Save system update settings'}
+            {save.isPending ? 'Saving…' : 'Save'}
           </button>
         </form>
       ) : null}

@@ -2,20 +2,26 @@ import { useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appUpdateScheduleOptions, saveAppUpdateSchedule, type AppUpdateRule } from '@/desktop/automatic-updates-api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import { TimeField, useTimeField } from '@/components/ui/TimeField/TimeField';
+import { useDesktopPreferences } from '@/desktop/preferences';
+import { appUpdateModeDraft, appUpdateRuleForSave } from '@/desktop/automatic-update-time';
 import './app-update-schedule.css';
 
 export function AppUpdateSchedule({ urn, name }: { urn: string; name: string }) {
   const id = useId();
+  const { preferences, updateAppearance } = useDesktopPreferences();
   const client = useQueryClient();
   const options = appUpdateScheduleOptions(urn);
   const status = useQuery(options);
   const [draft, setDraft] = useState<AppUpdateRule | null>(null);
+  const [customTime, setCustomTime] = useState<string | null | undefined>(undefined);
   const rule: AppUpdateRule = draft ?? status.data?.rule ?? { mode: 'disabled' };
   const save = useMutation({
     mutationFn: (value: AppUpdateRule) => saveAppUpdateSchedule(urn, value),
     onSuccess: (value) => {
       client.setQueryData(options.queryKey, value);
       setDraft(null);
+      setCustomTime(undefined);
     },
     retry: false,
   });
@@ -23,6 +29,16 @@ export function AppUpdateSchedule({ urn, name }: { urn: string; name: string }) 
     setDraft(value);
     save.reset();
   };
+  const time = useTimeField({
+    value: customTime === undefined ? (rule.time ?? status.data?.shared.time ?? '03:00') : customTime,
+    format: preferences.appearance.timeFormat,
+    onFormatChange: (timeFormat) => updateAppearance({ timeFormat }),
+    onChange: (next) => {
+      setCustomTime(next);
+      change({ mode: 'custom', time: next ?? '' });
+    },
+  });
+  const ruleForSave = appUpdateRuleForSave(rule);
   return (
     <section className="app-update-schedule" aria-labelledby={`${id}-title`}>
       <h3 id={`${id}-title`}>Automatic updates</h3>
@@ -42,8 +58,10 @@ export function AppUpdateSchedule({ urn, name }: { urn: string; name: string }) 
             value={rule.mode}
             disabled={save.isPending}
             onValueChange={(mode) => {
-              if (mode === 'custom') change({ mode, time: status.data?.shared.time ?? '03:00' });
-              else if (mode === 'disabled' || mode === 'global') change({ mode });
+              if (mode !== 'custom' && mode !== 'disabled' && mode !== 'global') return;
+              const next = appUpdateModeDraft(rule, customTime, status.data?.shared.time ?? '03:00', mode);
+              setCustomTime(next.remembered);
+              change(next.rule);
             }}
           >
             <SelectTrigger id={`${id}-mode`} label="Update schedule">
@@ -68,16 +86,7 @@ export function AppUpdateSchedule({ urn, name }: { urn: string; name: string }) 
           )}
           {rule.mode === 'custom' ? (
             <div className="app-update-time">
-              <label htmlFor={`${id}-time`}>Update time</label>
-              <input
-                className="form-control"
-                id={`${id}-time`}
-                type="time"
-                required
-                value={rule.time ?? ''}
-                disabled={save.isPending}
-                onChange={(event) => change({ mode: 'custom', time: event.target.value })}
-              />
+              <TimeField control={time} label="Update time" id={`${id}-time`} disabled={save.isPending} />
             </div>
           ) : null}
           {status.data.reason ? <p>{status.data.reason}</p> : null}
@@ -85,15 +94,13 @@ export function AppUpdateSchedule({ urn, name }: { urn: string; name: string }) 
             <button
               className="btn btn-primary"
               type="button"
-              disabled={
-                !draft ||
-                (!status.data.available && rule.mode !== 'disabled') ||
-                save.isPending ||
-                (rule.mode === 'custom' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.time ?? ''))
-              }
-              onClick={() => save.mutate(rule)}
+              aria-busy={save.isPending}
+              disabled={!draft || (!status.data.available && rule.mode !== 'disabled') || save.isPending || !ruleForSave}
+              onClick={() => {
+                if (ruleForSave) save.mutate(ruleForSave);
+              }}
             >
-              {save.isPending ? 'Saving…' : 'Save schedule'}
+              Save
             </button>
             <output aria-live="polite">{save.isSuccess ? 'Schedule saved.' : ''}</output>
           </div>
