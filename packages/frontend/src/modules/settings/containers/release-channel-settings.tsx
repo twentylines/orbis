@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import {
@@ -58,6 +60,8 @@ function errorText(error: unknown, fallback: string): string {
 
 export function ReleaseChannelSettings() {
   const id = useId();
+  const reducedMotion = useReducedMotion();
+  const selectionMotion = reducedMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 460, damping: 28, mass: 0.7 };
   const mounted = useRef(false);
   const visible = useWindowVisible();
   const { user } = useAppContext();
@@ -113,6 +117,7 @@ export function ReleaseChannelSettings() {
 
   const chooseChannel = async (channel: 'stable' | 'nightly') => {
     if (!operator || !status.data || busy) return;
+    if (channel === current && !(channel === 'stable' && status.data.requiresStableInstall)) return;
     setError('');
     setPlanError('');
     setCanForce(false);
@@ -203,8 +208,58 @@ export function ReleaseChannelSettings() {
 
   return (
     <section className="release-channel-settings" aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`}>Release channel</h2>
-      <p className="release-channel-intro">Choose which Orbis releases this server follows.</p>
+      <div className="release-channel-row">
+        <div className="release-channel-heading">
+          <h2 id={`${id}-title`}>Release channel</h2>
+          <p id={`${id}-description`}>Stable for regular use. Nightly for testing.</p>
+        </div>
+        {status.data ? (
+          <fieldset
+            className="release-channel-switch"
+            aria-labelledby={`${id}-title`}
+            aria-describedby={`${id}-description`}
+            aria-busy={busy}
+            data-channel={current}
+          >
+            <button
+              type="button"
+              aria-pressed={current === 'stable'}
+              onClick={() => void chooseChannel('stable')}
+              disabled={!operator || !stableAvailable || busy}
+            >
+              {current === 'stable' ? (
+                <motion.span
+                  className="release-channel-selection"
+                  layout="position"
+                  layoutId={`${id}-selection`}
+                  transition={selectionMotion}
+                  initial={false}
+                  aria-hidden="true"
+                />
+              ) : null}
+              Stable
+            </button>
+            <button
+              type="button"
+              aria-pressed={current === 'nightly'}
+              onClick={() => void chooseChannel('nightly')}
+              disabled={!operator || !nightlyAvailable || busy}
+            >
+              {current === 'nightly' ? (
+                <motion.span
+                  className="release-channel-selection"
+                  layout="position"
+                  layoutId={`${id}-selection`}
+                  transition={selectionMotion}
+                  initial={false}
+                  aria-hidden="true"
+                />
+              ) : null}
+              Nightly
+            </button>
+          </fieldset>
+        ) : null}
+      </div>
       {status.isPending ? <output>Reading release channels…</output> : null}
       {status.isError ? (
         <InlineFeedback>
@@ -216,46 +271,7 @@ export function ReleaseChannelSettings() {
       ) : null}
       {status.data ? (
         <>
-          <p className="release-channel-installed">
-            Installed version: <strong>{status.data.installedVersion ? formatOrbisVersion(status.data.installedVersion) : 'Unknown'}</strong>
-          </p>
-          <div className="release-channel-list">
-            <article className="release-channel-option">
-              <div className="release-channel-copy">
-                <h3>Stable</h3>
-                <p>Receives reviewed Orbis releases intended for regular use.</p>
-              </div>
-              <div className="release-channel-action">
-                <span className="release-channel-current">{current === 'stable' ? 'Current channel' : 'Available'}</span>
-                <Button
-                  variant="outline"
-                  onClick={() => void chooseChannel('stable')}
-                  disabled={!operator || !stableAvailable || busy || (current === 'stable' && !status.data.requiresStableInstall)}
-                  loading={busy && dialog !== 'stable'}
-                  aria-label={current === 'stable' ? 'Stable is the current release channel' : 'Choose stable release channel'}
-                >
-                  {status.data.requiresStableInstall ? 'Review stable install' : current === 'stable' ? 'Selected' : 'Choose Stable'}
-                </Button>
-              </div>
-            </article>
-            <article className="release-channel-option">
-              <div className="release-channel-copy">
-                <h3>Nightly</h3>
-                <p>Receives in-development builds that may change or have incomplete features.</p>
-              </div>
-              <div className="release-channel-action">
-                <span className="release-channel-current">{current === 'nightly' ? 'Current channel' : 'Available'}</span>
-                <Button
-                  variant="outline"
-                  onClick={() => void chooseChannel('nightly')}
-                  disabled={!operator || !nightlyAvailable || busy || current === 'nightly'}
-                  aria-label={current === 'nightly' ? 'Nightly is the current release channel' : 'Choose nightly release channel'}
-                >
-                  {current === 'nightly' ? 'Selected' : 'Choose Nightly'}
-                </Button>
-              </div>
-            </article>
-          </div>
+          {busy && !dialog ? <output className="release-channel-note">Changing release channel…</output> : null}
           {operator ? null : <p className="release-channel-note">An operator account is required to change the release channel.</p>}
           {error && !dialog ? <InlineFeedback className="release-channel-page-feedback">{error}</InlineFeedback> : null}
         </>

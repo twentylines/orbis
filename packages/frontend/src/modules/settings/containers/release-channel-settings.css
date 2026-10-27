@@ -18,65 +18,90 @@
   line-height: 1.55;
 }
 
-.release-channel-settings .release-channel-intro,
-.release-channel-settings .release-channel-installed {
-  margin-bottom: 12px;
-}
-
-.release-channel-installed strong {
-  color: var(--desktop-ink);
-  font-weight: 600;
-}
-
-.release-channel-list {
-  display: grid;
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.release-channel-option {
+.release-channel-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--desktop-line);
-  border-radius: 12px;
-  background: var(--desktop-surface);
-}
-
-.release-channel-copy {
+  flex-wrap: wrap;
+  gap: 16px 24px;
   min-width: 0;
 }
 
-.release-channel-copy h3 {
-  margin: 0 0 4px;
-  color: var(--desktop-ink);
-  font-size: 1rem;
-  font-weight: 650;
-  line-height: 1.4;
+.release-channel-heading {
+  min-width: 0;
+  flex: 1 1 15rem;
 }
 
-.release-channel-copy p {
-  max-width: 42rem;
-}
-
-.release-channel-action {
-  display: grid;
-  flex: 0 0 auto;
-  justify-items: end;
-  gap: 8px;
-}
-
-.release-channel-action .btn {
-  width: 12rem;
+.release-channel-switch {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  flex: 0 1 18rem;
+  width: 18rem;
   max-width: 100%;
-  min-height: 44px;
-  white-space: normal;
+  min-width: 0;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
 }
 
-.release-channel-current,
+.release-channel-selection {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--desktop-accent) 20%, var(--desktop-surface));
+  pointer-events: none;
+}
+
+.release-channel-switch > button {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--desktop-muted);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.release-channel-switch > button[aria-pressed="true"] {
+  color: var(--desktop-ink);
+}
+
+.release-channel-switch > button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--desktop-accent) 7%, transparent);
+}
+
+.release-channel-switch > button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.release-channel-switch > button:focus-visible .release-channel-selection {
+  background: color-mix(in srgb, var(--desktop-accent) 32%, var(--desktop-surface));
+}
+
 .release-channel-note {
   color: var(--desktop-muted);
   font-size: 0.875rem;
@@ -201,25 +226,15 @@
 }
 
 .release-channel-settings :is(button, input):focus-visible {
-  outline: 2px solid var(--desktop-accent);
-  outline-offset: 3px;
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-accent) 15%, var(--desktop-surface));
+  color: var(--desktop-ink);
+  text-decoration: none;
 }
 
 @media (max-width: 560px) {
-  .release-channel-option {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .release-channel-action {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .release-channel-action .btn {
+  .release-channel-switch {
+    flex-basis: 18rem;
     width: 100%;
   }
 
@@ -229,6 +244,18 @@
 
   .release-channel-plan dl {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (forced-colors: active) {
+  .release-channel-switch > button[aria-pressed="true"] {
+    color: HighlightText;
+    background: Highlight;
+  }
+
+  .release-channel-settings :is(button, input):focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
   }
 }
 

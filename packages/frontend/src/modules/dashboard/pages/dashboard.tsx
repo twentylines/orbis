@@ -393,7 +393,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                           {tabOnly ? <AppTabIndicator /> : null}
                         </span>
                         {appUpdate ? <small>Update available</small> : null}
-                        <DockerHealth appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
+                        <DockerHealth summary appUrn={info.urn} telemetry={containers.data} stale={containers.isError} />
                       </span>
                     </Link>
                     <Link
