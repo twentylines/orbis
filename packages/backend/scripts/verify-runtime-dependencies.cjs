@@ -107,9 +107,17 @@ const verifyArchiveRuntime = () => {
   const instance = runtime('class-transformer').plainToInstance(Example, { name: 'Orbis' });
   assert.ok(instance instanceof Example);
   assert.equal(instance.name, 'Orbis');
+  const Docker = runtime('dockerode');
+  const docker = new Docker({ socketPath: '/var/run/docker.sock' });
+  assert.equal(typeof docker.getContainer('runtime-probe').inspect, 'function');
+  assert.equal(typeof runtime('dockerode/lib/session'), 'function');
+  const modemRequire = createRequire(createRequire(runtime.resolve('dockerode')).resolve('docker-modem'));
+  assert.equal(typeof modemRequire('ssh2').Client, 'function');
+  const swagger = runtime('swagger-ui-dist').getAbsoluteFSPath();
+  for (const asset of ['swagger-ui.css', 'swagger-ui-bundle.js']) assert.ok(fs.statSync(path.join(swagger, asset)).isFile());
   const archives = verifyArchiveRuntime();
   process.stdout.write(
-    `${JSON.stringify({ lockfileSha256: manifest.lockfileSha256, packages: manifest.packages.length, nativeHashVerified: true, transformerVerified: true, ...archives, node: process.version, architecture: process.arch })}\n`,
+    `${JSON.stringify({ lockfileSha256: manifest.lockfileSha256, packages: manifest.packages.length, nativeHashVerified: true, transformerVerified: true, dockerClientVerified: true, documentationAssetsVerified: true, ...archives, node: process.version, architecture: process.arch })}\n`,
   );
 })().catch((error) => {
   process.stderr.write(`Runtime dependency verification failed: ${error.message}\n`);

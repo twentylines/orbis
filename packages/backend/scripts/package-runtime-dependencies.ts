@@ -14,8 +14,9 @@ import {
 } from 'node:fs';
 import { createRequire } from 'node:module';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { hasPrivateBuildPath } from './production-artifact-privacy';
 
-export const runtimeDependencies = ['argon2', 'class-transformer'] as const;
+export const runtimeDependencies = ['argon2', 'class-transformer', 'dockerode', 'swagger-ui-dist'] as const;
 
 const privateConfigurationNames = new Set([
   '.envrc',
@@ -40,6 +41,12 @@ const isPrivateConfiguration = (file: string) => {
   );
 };
 
+const runtimeFile = (name: string, file: string) =>
+  name !== 'ssh2' ||
+  (!['test', 'examples', '.github'].includes(file.split(sep)[0] ?? '') &&
+    file !== join('lib', 'protocol', 'crypto', 'build') &&
+    !file.startsWith(`${join('lib', 'protocol', 'crypto', 'build')}${sep}`));
+
 type Package = {
   name: string;
   version: string;
@@ -61,7 +68,7 @@ const readPackage = (root: string): Package => {
 };
 const packageRoot = (name: string, from: string, installRoot: string) => {
   if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(name)) throw new Error(`Invalid runtime package name: ${name}`);
-  for (const lookup of createRequire(join(from, 'package.json')).resolve.paths(name) ?? []) {
+  for (const lookup of createRequire(join(from, 'package.json')).resolve.paths(`${name}/package.json`) ?? []) {
     const candidate = join(lookup, name);
     if (existsSync(join(candidate, 'package.json'))) {
       const root = realpathSync(candidate);
@@ -105,10 +112,14 @@ export function packageRuntimeDependencies(workspace: string, output: string, lo
       dereference: true,
       filter: (file) => {
         if (relative(root, file).split(sep)[0] === 'node_modules') return false;
+        // ssh2 supports its portable JS implementation; local native build scratch and upstream test keys are not runtime assets.
+        if (!runtimeFile(metadata.name, relative(root, file))) return false;
         const resolved = lstatSync(file).isSymbolicLink() ? realpathSync(file) : file;
         if (!inside(root, resolved)) throw new Error('Runtime package contains an escaping symlink');
         if (isPrivateConfiguration(file) || isPrivateConfiguration(resolved))
           throw new Error('Runtime package contains a prohibited configuration file');
+        if (lstatSync(resolved).isFile() && hasPrivateBuildPath(readFileSync(resolved)))
+          throw new Error('Runtime package contains a private build path');
         return true;
       },
     });
@@ -116,6 +127,7 @@ export function packageRuntimeDependencies(workspace: string, output: string, lo
     const lineage = new Map(ancestors).set(root, destination);
     const dependencies = { ...metadata.peerDependencies, ...metadata.dependencies, ...metadata.optionalDependencies };
     for (const name of Object.keys(dependencies).sort()) {
+      if (metadata.name === 'ssh2' && name === 'cpu-features') continue;
       const dependency = packageRoot(name, root, installRoot);
       if (!dependency) {
         if (Object.hasOwn(metadata.optionalDependencies ?? {}, name) || metadata.peerDependenciesMeta?.[name]?.optional) continue;

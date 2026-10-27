@@ -209,31 +209,35 @@ it.each([
   expect(() => rebaseBackupConfiguration(input)).toThrow('cannot be safely adapted');
 });
 
-it.each([source.appsRepoUrl, 'https://github.com/meienberger/runtipi-appstore'])(
-  'keeps rebased settings and connection values through real startup, including the existing repository migration (%s)',
-  async (appsRepoUrl) => {
-    const originalEnv = { ...process.env };
-    testState.directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-config-rebase-'));
-    try {
-      expect(DATA_DIR).toBe(testState.directory);
-      const input = options();
-      input.recovery.userSettings = { ...source, appsRepoUrl };
-      const result = rebaseBackupConfiguration(input);
-      expect(result.review.repositoryMigrated).toBe(appsRepoUrl !== source.appsRepoUrl);
-      await fs.mkdir(path.join(testState.directory, 'state'), { mode: 0o700 });
-      await fs.writeFile(path.join(testState.directory, '.env'), result.environment, { mode: 0o600 });
-      await fs.writeFile(path.join(testState.directory, 'state/settings.json'), result.settings, { mode: 0o600 });
-      await fs.writeFile(path.join(testState.directory, 'state/seed'), 'declared source seed fixture', { mode: 0o600 });
-      const generated = await generateSystemEnvFile({ readOnly: true });
-      const actual = dotenv.parse(Array.from(generated, ([key, value]) => `${key}=${value}`).join('\n'));
-      for (const [key, value] of Object.entries(dotenv.parse(result.environment))) expect(actual[key]).toBe(value);
-      expect(await fs.readFile(path.join(testState.directory, '.env'), 'utf8')).toBe(result.environment);
-      expect(await fs.readFile(path.join(testState.directory, 'state/settings.json'), 'utf8')).toBe(result.settings);
-    } finally {
-      for (const key of Object.keys(process.env)) if (!(key in originalEnv)) delete process.env[key];
-      Object.assign(process.env, originalEnv);
-      await fs.rm(testState.directory, { recursive: true, force: true });
-      testState.directory = '';
-    }
-  },
-);
+it.each(
+  [source.appsRepoUrl, 'https://github.com/meienberger/runtipi-appstore'].flatMap((appsRepoUrl) =>
+    (['arm64', 'x64'] as const).map((architecture) => ({ appsRepoUrl, architecture })),
+  ),
+)('keeps rebased settings and connection values through startup ($architecture, $appsRepoUrl)', async ({ appsRepoUrl, architecture }) => {
+  const originalEnv = { ...process.env };
+  const architectureMock = vi.spyOn(os, 'arch').mockReturnValue(architecture);
+  testState.directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-config-rebase-'));
+  try {
+    expect(DATA_DIR).toBe(testState.directory);
+    const input = options();
+    input.recovery.userSettings = { ...source, appsRepoUrl };
+    const result = rebaseBackupConfiguration(input);
+    expect(result.review.repositoryMigrated).toBe(appsRepoUrl !== source.appsRepoUrl);
+    await fs.mkdir(path.join(testState.directory, 'state'), { mode: 0o700 });
+    await fs.writeFile(path.join(testState.directory, '.env'), result.environment, { mode: 0o600 });
+    await fs.writeFile(path.join(testState.directory, 'state/settings.json'), result.settings, { mode: 0o600 });
+    await fs.writeFile(path.join(testState.directory, 'state/seed'), 'declared source seed fixture', { mode: 0o600 });
+    const generated = await generateSystemEnvFile({ readOnly: true });
+    const actual = dotenv.parse(Array.from(generated, ([key, value]) => `${key}=${value}`).join('\n'));
+    for (const [key, value] of Object.entries(dotenv.parse(result.environment)))
+      expect(actual[key]).toBe(key === 'ARCHITECTURE' ? (architecture === 'arm64' ? 'arm64' : 'amd64') : value);
+    expect(await fs.readFile(path.join(testState.directory, '.env'), 'utf8')).toBe(result.environment);
+    expect(await fs.readFile(path.join(testState.directory, 'state/settings.json'), 'utf8')).toBe(result.settings);
+  } finally {
+    architectureMock.mockRestore();
+    for (const key of Object.keys(process.env)) if (!(key in originalEnv)) delete process.env[key];
+    Object.assign(process.env, originalEnv);
+    await fs.rm(testState.directory, { recursive: true, force: true });
+    testState.directory = '';
+  }
+});

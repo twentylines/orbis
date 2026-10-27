@@ -1,5 +1,8 @@
 import { runtimeDependencies } from './scripts/package-runtime-dependencies';
 import { assertNoPrivateBuildPaths } from './scripts/production-artifact-privacy';
+import { productionHealthAssets } from './scripts/production-health-assets';
+
+const healthAssets = await productionHealthAssets('./dist');
 
 const result = await Bun.build({
   entrypoints: ['./src/main.ts', './src/restore-worker.ts'],
@@ -7,6 +10,8 @@ const result = await Bun.build({
   format: 'esm',
   target: 'node',
   env: 'disable',
+  plugins: [healthAssets.plugin],
+  banner: healthAssets.banner,
   define: { 'process.env.NODE_ENV': JSON.stringify('production') },
   sourcemap: true,
   minify: {

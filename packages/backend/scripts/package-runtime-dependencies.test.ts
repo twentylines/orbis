@@ -2,10 +2,10 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { packageRuntimeDependencies } from './package-runtime-dependencies';
+import { packageRuntimeDependencies, runtimeDependencies } from './package-runtime-dependencies';
 
 const temporary: string[] = [];
 const fixture = () => {
@@ -28,6 +28,28 @@ afterEach(() => {
 });
 
 describe('frozen runtime dependency packaging', () => {
+  it('rejects a private build path inside a runtime asset and removes incomplete output', () => {
+    const { root, workspace, output, lockfile } = fixture();
+    const alpha = join(root, 'node_modules', 'alpha');
+    module(alpha, { name: 'alpha', version: '1.0.0' });
+    writeFileSync(join(alpha, 'binding.node'), Buffer.from(`native fixture ${join(homedir(), 'build-only-file')}`));
+    expect(() => packageRuntimeDependencies(workspace, output, lockfile, ['alpha'])).toThrow('private build path');
+    expect(existsSync(output)).toBe(false);
+  });
+
+  it('retains declared packages whose names also identify Node builtins', () => {
+    const { root, workspace, output, lockfile } = fixture();
+    module(
+      join(root, 'node_modules', 'alpha'),
+      { name: 'alpha', version: '1.0.0', dependencies: { string_decoder: '*' } },
+      "module.exports = require('string_decoder/');",
+    );
+    module(join(root, 'node_modules', 'string_decoder'), { name: 'string_decoder', version: '1.3.0' });
+    const result = packageRuntimeDependencies(workspace, output, lockfile, ['alpha']);
+    expect(createRequire(join(root, 'runtime', 'probe.cjs'))('alpha')).toBe('1.3.0');
+    expect(result.packages.some((entry) => entry.name === 'string_decoder')).toBe(true);
+  });
+
   it('retains resolved transitive versions instead of flattening incompatible dependencies', () => {
     const { root, workspace, output, lockfile } = fixture();
     const alpha = join(root, 'node_modules', 'alpha');
@@ -155,13 +177,37 @@ describe('frozen runtime dependency packaging', () => {
     expect(existsSync(output)).toBe(false);
   });
 
-  it('loads the installed locked native hash and transformer modules from the standalone output', async () => {
+  it('retains ssh2 runtime files and licence without optional local builds or upstream test fixtures', () => {
+    const { root, workspace, output, lockfile } = fixture();
+    const ssh = join(root, 'node_modules', 'ssh2');
+    module(ssh, { name: 'ssh2', version: '1.17.0', optionalDependencies: { 'cpu-features': '*' } });
+    writeFileSync(join(ssh, 'LICENSE'), 'retained upstream licence fixture');
+    for (const file of [
+      'test/fixtures/id_rsa',
+      'examples/client.js',
+      '.github/workflows/check.yml',
+      'lib/protocol/crypto/build/Release/binding.node',
+    ]) {
+      mkdirSync(resolve(ssh, file, '..'), { recursive: true });
+      writeFileSync(join(ssh, file), 'excluded development fixture');
+    }
+    mkdirSync(join(ssh, 'lib'), { recursive: true });
+    writeFileSync(join(ssh, 'lib', 'client.js'), 'module.exports = function Client() {};');
+    module(join(root, 'node_modules', 'cpu-features'), { name: 'cpu-features', version: '1.0.0' });
+    packageRuntimeDependencies(workspace, output, lockfile, ['ssh2']);
+    expect(readFileSync(join(output, 'ssh2', 'LICENSE'), 'utf8')).toBe('retained upstream licence fixture');
+    expect(existsSync(join(output, 'ssh2', 'lib', 'client.js'))).toBe(true);
+    for (const file of ['test', 'examples', '.github', 'lib/protocol/crypto/build', 'node_modules/cpu-features'])
+      expect(existsSync(join(output, 'ssh2', file))).toBe(false);
+  });
+
+  it('loads the installed locked modules and their runtime assets from the standalone output', async () => {
     const { root, output } = fixture();
     const workspace = resolve(import.meta.dirname, '..');
     const result = packageRuntimeDependencies(workspace, output, resolve(workspace, '../../bun.lock'));
     const require = createRequire(join(root, 'runtime', 'probe.cjs'));
     const installed = createRequire(join(workspace, 'package.json'));
-    for (const name of ['argon2', 'class-transformer']) {
+    for (const name of runtimeDependencies) {
       expect(require(`${name}/package.json`).version).toBe(installed(`${name}/package.json`).version);
       expect(result.packages.find((entry) => entry.path === name)?.version).toBe(installed(`${name}/package.json`).version);
     }
@@ -183,6 +229,8 @@ describe('frozen runtime dependency packaging', () => {
     expect(JSON.parse(nativeNode.stdout)).toMatchObject({
       nativeHashVerified: true,
       transformerVerified: true,
+      dockerClientVerified: true,
+      documentationAssetsVerified: true,
       lockfileSha256: result.lockfileSha256,
     });
   });
