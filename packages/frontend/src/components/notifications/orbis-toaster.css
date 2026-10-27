@@ -33,8 +33,8 @@ body:not(:has(.desktop)) .orbis-notifications {
 }
 .orbis-notification {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 32px;
-  align-items: start;
+  grid-template-columns: 36px minmax(0, 1fr) 44px;
+  align-items: center;
   flex-shrink: 0;
   gap: 12px;
   min-height: 68px;
@@ -54,7 +54,7 @@ body:not(:has(.desktop)) .orbis-notifications {
 .orbis-notification[data-notification-type="success"] {
   --notice-color: var(--desktop-positive);
 }
-.orbis-notification[data-notification-type="error"] {
+.orbis-notification[data-notification-alert] {
   --notice-color: var(--desktop-negative);
 }
 .orbis-notification-icon {
@@ -67,6 +67,8 @@ body:not(:has(.desktop)) .orbis-notifications {
   background: color-mix(in srgb, var(--notice-color) 12%, transparent);
 }
 .orbis-notification-message {
+  display: grid;
+  align-content: center;
   min-width: 0;
   max-height: calc(100dvh - var(--notice-top) - 152px);
   overflow-y: auto;
@@ -74,6 +76,11 @@ body:not(:has(.desktop)) .orbis-notifications {
   line-height: 1.5;
   font-weight: 520;
   overflow-wrap: anywhere;
+}
+.orbis-notification-message:has(> .orbis-notification-actions) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
 }
 .orbis-notification-message .btn {
   max-width: 100%;
@@ -93,7 +100,8 @@ body:not(:has(.desktop)) .orbis-notifications {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  margin: 0;
+  justify-content: center;
 }
 .orbis-notification-action {
   display: inline-flex;
@@ -119,8 +127,8 @@ body:not(:has(.desktop)) .orbis-notifications {
 .orbis-notification-dismiss {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -134,9 +142,22 @@ body:not(:has(.desktop)) .orbis-notifications {
   color: var(--desktop-ink);
   background: color-mix(in srgb, var(--desktop-ink) 9%, transparent);
 }
+.orbis-notification[data-notification-alert] .orbis-notification-dismiss {
+  color: var(--desktop-negative);
+  background: color-mix(in srgb, var(--desktop-negative) 12%, transparent);
+}
+.orbis-notification[data-notification-alert] .orbis-notification-dismiss:hover {
+  background: color-mix(in srgb, var(--desktop-negative) 20%, transparent);
+}
 .orbis-notification :focus-visible {
-  outline: 3px solid var(--desktop-focus);
-  outline-offset: 3px;
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-accent) 18%, var(--desktop-surface));
+}
+@media (forced-colors: active) {
+  .orbis-notification :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+  }
 }
 .orbis-notification[data-notification-type="loading"] .orbis-notification-icon svg {
   animation: orbis-notice-spin 1.2s linear infinite;
@@ -165,6 +186,10 @@ body:not(:has(.desktop)) .orbis-notifications {
   .orbis-notification-message {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+  .orbis-notification-message:has(> .orbis-notification-actions) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
   .orbis-notification-dismiss {
     grid-column: 3;

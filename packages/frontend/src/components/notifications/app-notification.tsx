@@ -19,7 +19,7 @@ export function AppNotification({ message, event, urn, path, addresses, onDismis
   const openable = ['install_success', 'start_success', 'restart_success', 'update_success', 'reset_success', 'restore_success'].includes(event);
   const app = useQuery({ ...getAppOptions({ path: { urn } }), enabled: failed || openable, retry: false, staleTime: 0 });
   const navigate = useNavigate();
-  const entry = app.data;
+  const entry = app.data?.app && app.data.info && app.data.metadata ? app.data : undefined;
   const url = entry ? primaryAppAddress(appDestinations(entry, addresses, window.location.hostname), window.location.origin) : undefined;
   const installed = entry?.app && entry.app.status !== 'missing';
   const destination = failed ? (installed ? `${path}?tab=logs` : '/tasks') : event === 'backup_success' ? `${path}?tab=backups` : path;

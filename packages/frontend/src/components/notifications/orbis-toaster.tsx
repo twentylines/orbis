@@ -89,23 +89,28 @@ export function OrbisToaster() {
 
 function NotificationCard({ item, reducedMotion, onDismiss }: { item: Toast; reducedMotion: boolean; onDismiss: (id: string) => void }) {
   const present = useIsPresent();
-  const Icon =
-    item.type === 'success' ? IconCheck : item.type === 'error' ? IconExclamationMark : item.type === 'loading' ? IconLoader2 : IconInfoCircle;
+  const alert = item.type === 'error' || item.ariaProps.role === 'alert';
+  const Icon = item.type === 'success' ? IconCheck : item.type === 'loading' ? IconLoader2 : IconInfoCircle;
   return (
     <motion.div
       layout={reducedMotion ? false : 'position'}
       className="orbis-notification"
       data-notification-type={item.type}
+      data-notification-alert={alert || undefined}
       data-notification-id={item.id}
       data-notification-exiting={!present}
       {...item.ariaProps}
       aria-live={present ? item.ariaProps['aria-live'] : 'off'}
       aria-atomic="true"
       inert={!present}
-      initial={reducedMotion ? false : { opacity: 0, x: '105%' }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: '105%' }}
-      transition={{ duration: reducedMotion ? 0 : 0.3, ease: [0.22, 1, 0.36, 1] }}
+      initial={reducedMotion ? false : { opacity: 0, x: '105%', scale: 0.98 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={
+        reducedMotion
+          ? { opacity: 0, transition: { duration: 0 } }
+          : { opacity: 0, x: 0, scale: 0.94, transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] } }
+      }
+      transition={{ duration: reducedMotion ? 0 : 0.36, ease: [0.22, 1, 0.36, 1] }}
     >
       <span className="orbis-notification-icon" aria-hidden="true">
         {item.icon ?? <Icon size={20} stroke={1.9} />}
@@ -115,10 +120,10 @@ function NotificationCard({ item, reducedMotion, onDismiss }: { item: Toast; red
         type="button"
         className="orbis-notification-dismiss"
         disabled={!present}
-        aria-label="Dismiss notification"
+        aria-label={alert ? 'Dismiss alert' : 'Dismiss notification'}
         onClick={() => onDismiss(item.id)}
       >
-        <IconX size={16} stroke={1.8} aria-hidden="true" />
+        {alert ? <IconExclamationMark size={20} stroke={2} aria-hidden="true" /> : <IconX size={16} stroke={1.8} aria-hidden="true" />}
       </button>
     </motion.div>
   );
