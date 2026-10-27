@@ -68,21 +68,42 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     private readonly logger: LoggerService,
     private readonly channels: OrbisReleaseChannelsService,
   ) {
-    let timezone = this.config.get('userSettings').timeZone || 'UTC';
-    try {
-      new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
-    } catch {
-      timezone = 'UTC';
-    }
     this.state = {
       version: 1,
       revision: 0,
-      settings: { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone } },
+      settings: { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: this.serverTimezone() } },
       rules: {},
       apps: {},
       orbis: null,
       pauseReason: null,
     };
+  }
+
+  private serverTimezone() {
+    const validTimezone = (value: unknown): value is string => {
+      if (typeof value !== 'string' || !value || value.length > 100) return false;
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: value }).format();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const configured = this.config.get('userSettings').timeZone;
+    if (validTimezone(configured)) return configured;
+    try {
+      const system = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (validTimezone(system)) return system;
+    } catch {
+      // A server without usable system timezone data still has a deterministic daily schedule.
+    }
+    return 'UTC';
+  }
+  private effectiveSchedule() {
+    return { time: this.state.settings.schedule.time, timezone: this.serverTimezone() };
+  }
+  private serverTime(timezone: string) {
+    return { now: Date.now(), timezone };
   }
 
   async onModuleInit() {
@@ -263,8 +284,10 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   }
   async read() {
     await this.load();
+    const schedule = this.effectiveSchedule();
     return {
-      settings: structuredClone(this.state.settings),
+      settings: { ...structuredClone(this.state.settings), schedule },
+      serverTime: this.serverTime(schedule.timezone),
       available: !this.storageError,
       ...(this.storageError ? { reason: this.storageError } : {}),
       pauseReason: this.state.pauseReason,
@@ -272,7 +295,13 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     };
   }
   async update(raw: unknown) {
-    const settings = parseAutomaticSettings(raw);
+    const body = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : undefined;
+    const schedule = body?.schedule;
+    const settings = parseAutomaticSettings(
+      schedule && typeof schedule === 'object' && !Array.isArray(schedule)
+        ? { ...body, schedule: { ...schedule, timezone: this.serverTimezone() } }
+        : raw,
+    );
     if (this.config.get('demoMode')) throw new BadRequestException('Automatic updates are unavailable in demo mode.');
     await this.change((next) => {
       if (JSON.stringify(next.settings) === JSON.stringify(settings)) return;
@@ -304,9 +333,11 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   async readSystem() {
     await this.load();
     const reason = this.systemError ?? this.storageError;
+    const shared = this.effectiveSchedule();
     return {
       settings: { enabled: this.system.enabled },
-      shared: this.state.settings.schedule,
+      shared,
+      serverTime: this.serverTime(shared.timezone),
       available: !reason,
       ...(reason ? { reason } : {}),
       pauseReason: this.system.pauseReason,
@@ -362,9 +393,11 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     const reason =
       this.storageError ??
       (app ? (urn.endsWith(':_user') ? 'Custom apps do not support scheduled store updates.' : null) : 'This app is no longer installed.');
+    const shared = this.effectiveSchedule();
     return {
       rule: this.state.rules[urn] ?? { mode: 'disabled' as const },
-      shared: this.state.settings.schedule,
+      shared,
+      serverTime: this.serverTime(shared.timezone),
       available: !reason,
       ...(reason ? { reason } : {}),
       lastAttempt: this.state.apps[urn] ?? null,
@@ -693,10 +726,11 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     )
       return;
     const state = this.state;
+    const schedule = this.effectiveSchedule();
     const now = Date.now();
     if (await this.continueSystem()) return;
-    const slot = dailyUpdateSlot(state.settings.schedule, now, state.settings.orbis.mode === 'idle');
-    const systemSlot = dailyUpdateSlot(state.settings.schedule, now);
+    const slot = dailyUpdateSlot(schedule, now, state.settings.orbis.mode === 'idle');
+    const systemSlot = dailyUpdateSlot(schedule, now);
     const systemRevision = this.system.revision;
     const dueSystem = !this.systemError && this.system.enabled && systemSlot.due && this.system.attempt?.slot !== systemSlot.key;
     const dueCore =
@@ -705,10 +739,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       ([urn, rule]) =>
         rule.mode !== 'disabled' &&
         (() => {
-          const selected = dailyUpdateSlot(
-            { ...state.settings.schedule, time: rule.mode === 'custom' ? (rule.time ?? state.settings.schedule.time) : state.settings.schedule.time },
-            now,
-          );
+          const selected = dailyUpdateSlot({ ...schedule, time: rule.mode === 'custom' ? (rule.time ?? schedule.time) : schedule.time }, now);
           return selected.due && state.apps[urn]?.slot !== selected.key;
         })(),
     );
@@ -738,10 +769,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     if ((await this.apps.getApps()).some((app) => !stableApp.has(app.status))) return;
     for (const [urn, rule] of dueApps) {
       if (this.stopped || this.state.revision !== state.revision || installationMode().phase !== 'normal') return;
-      const selected = dailyUpdateSlot(
-        { ...state.settings.schedule, time: rule.mode === 'custom' ? (rule.time ?? state.settings.schedule.time) : state.settings.schedule.time },
-        now,
-      );
+      const selected = dailyUpdateSlot({ ...schedule, time: rule.mode === 'custom' ? (rule.time ?? schedule.time) : schedule.time }, now);
       const appUrn = this.appUrn(urn);
       const app = await this.apps.getAppByUrn(appUrn);
       if (!app || !normalApp.has(app.status) || urn.endsWith(':_user')) continue;

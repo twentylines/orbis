@@ -22,7 +22,9 @@ export function SystemUpdatesSettings() {
   return (
     <section className="automatic-updates-system" aria-labelledby={`${id}-title`}>
       <h3 id={`${id}-title`}>System packages</h3>
-      <p>Uses the saved daily time above on Ubuntu 24.04. Updates can restart services. Restart the server manually from Updates if requested.</p>
+      <p>
+        Updates Ubuntu 24.04 packages at the saved daily time, without upgrading Ubuntu’s release. Services may restart; server restarts stay manual.
+      </p>
       {status.isPending ? <output>Reading system update settings…</output> : null}
       {status.isError ? (
         <p role="alert">

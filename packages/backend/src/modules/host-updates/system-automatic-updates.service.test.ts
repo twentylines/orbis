@@ -127,6 +127,22 @@ describe('opt-in scheduled system updates', () => {
     expect(host.packageRefresh).toHaveBeenCalledTimes(1);
     disconnect();
   });
+  it('uses the current server timezone for the system schedule even when stored policy used another zone', async () => {
+    await automatic.update({ ...globalSettings, schedule: { time: '05:00', timezone: 'UTC' } });
+    await ready();
+    config.get.mockImplementation((key: string) =>
+      key === 'directories' ? { dataDir: directory } : key === 'userSettings' ? { timeZone: 'Asia/Singapore' } : false,
+    );
+    vi.setSystemTime(new Date('2026-10-25T20:45:00Z'));
+    await automatic.tick();
+    expect(host.packageRefresh).not.toHaveBeenCalled();
+    expect((await automatic.readSystem()).shared).toEqual({ time: '05:00', timezone: 'Asia/Singapore' });
+    vi.setSystemTime(new Date('2026-10-25T21:00:00Z'));
+    await automatic.tick();
+    expect(host.packageRefresh).toHaveBeenCalledTimes(1);
+    expect((await automatic.readSystem()).lastAttempt?.slot).toBe('2026-10-26/05:00/Asia/Singapore');
+    expect((await automatic.read()).settings.orbis.enabled).toBe(false);
+  });
   it.each(['queued', 'running'])('waits for the exact refresh job while it is %s', async (state) => {
     await ready();
     await automatic.tick();

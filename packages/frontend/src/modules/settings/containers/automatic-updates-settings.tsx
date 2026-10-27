@@ -1,10 +1,19 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Switch } from '@/components/ui/Switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { automaticUpdateSettingsOptions, saveAutomaticUpdateSettings, type AutomaticUpdateSettings } from '@/desktop/automatic-updates-api';
+import {
+  automaticUpdateSettingsOptions,
+  formatAutomaticUpdateServerTime,
+  saveAutomaticUpdateSettings,
+  type AutomaticUpdateSettings,
+} from '@/desktop/automatic-updates-api';
 import './automatic-updates-settings.css';
 import { SystemUpdatesSettings } from './system-updates-settings';
+
+const hours = Array.from({ length: 24 }, (_, value) => String(value).padStart(2, '0'));
+const minutes = Array.from({ length: 60 }, (_, value) => String(value).padStart(2, '0'));
 
 export function AutomaticUpdatesSettings() {
   const id = useId();
@@ -12,6 +21,15 @@ export function AutomaticUpdatesSettings() {
   const client = useQueryClient();
   const options = automaticUpdateSettingsOptions();
   const status = useQuery({ ...options, enabled: visible });
+  const serverTime = status.data?.serverTime;
+  const clock = useMemo(() => (serverTime ? { value: serverTime, receivedAt: performance.now() } : null), [serverTime]);
+  const [, refreshClock] = useState(0);
+  useEffect(() => {
+    if (!visible || !clock) return;
+    const timer = setInterval(() => refreshClock((value) => value + 1), 60_000);
+    return () => clearInterval(timer);
+  }, [visible, clock]);
+  const currentServerTime = clock ? formatAutomaticUpdateServerTime(clock.value, Math.max(0, performance.now() - clock.receivedAt)) : null;
   const [draft, setDraft] = useState<AutomaticUpdateSettings | null>(null);
   const [saved, setSaved] = useState(false);
   const save = useMutation({
@@ -79,34 +97,57 @@ export function AutomaticUpdatesSettings() {
               <span>After the daily update time</span>
             </label>
           </fieldset>
-          <div className="automatic-updates-time">
-            <label htmlFor={`${id}-time`}>
-              <span>Daily update time</span>
-              <input
-                id={`${id}-time`}
-                type="time"
-                required
-                value={value.schedule.time}
+          <fieldset className="automatic-updates-schedule" aria-describedby={`${id}-server-time ${id}-shared`}>
+            <legend className="automatic-updates-time-label">Daily update time</legend>
+            <div className="automatic-updates-time">
+              <Select
+                value={value.schedule.time.slice(0, 2)}
                 disabled={save.isPending || !status.data?.available}
-                onChange={(event) => change({ ...value, schedule: { ...value.schedule, time: event.target.value } })}
-              />
-            </label>
-            <label htmlFor={`${id}-zone`}>
-              <span>Timezone</span>
-              <input
-                id={`${id}-zone`}
-                type="text"
-                required
-                maxLength={100}
-                spellCheck={false}
-                autoComplete="off"
-                value={value.schedule.timezone}
+                onValueChange={(hour) => change({ ...value, schedule: { ...value.schedule, time: `${hour}:${value.schedule.time.slice(3)}` } })}
+              >
+                <SelectTrigger fitContent className="automatic-updates-time-select" aria-label="Daily update hour">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {hours.map((hour) => (
+                    <SelectItem key={hour} value={hour}>
+                      {hour}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span aria-hidden="true" className="automatic-updates-time-separator">
+                :
+              </span>
+              <Select
+                value={value.schedule.time.slice(3)}
                 disabled={save.isPending || !status.data?.available}
-                onChange={(event) => change({ ...value, schedule: { ...value.schedule, timezone: event.target.value } })}
-                aria-describedby={`${id}-shared`}
-              />
-            </label>
-          </div>
+                onValueChange={(minute) =>
+                  change({ ...value, schedule: { ...value.schedule, time: `${value.schedule.time.slice(0, 2)}:${minute}` } })
+                }
+              >
+                <SelectTrigger fitContent className="automatic-updates-time-select" aria-label="Daily update minute">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {minutes.map((minute) => (
+                    <SelectItem key={minute} value={minute}>
+                      {minute}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p id={`${id}-server-time`} className="automatic-updates-server-time">
+              {currentServerTime ? (
+                <>
+                  Server time: <time>{currentServerTime}</time> · {serverTime?.timezone}
+                </>
+              ) : (
+                'Server time is unavailable.'
+              )}
+            </p>
+          </fieldset>
           <p id={`${id}-shared`}>
             This daily time is also available to individual apps. App updates are disabled until you enable them in each app’s settings.
           </p>

@@ -32,6 +32,7 @@ describe('server automatic update scheduling', () => {
   let directory: string;
   let activity: MonitoringActivityService;
   let automatic: AutomaticUpdatesService;
+  let serverZone: unknown;
   const host = { status: vi.fn(), plan: vi.fn(), apply: vi.fn() };
   const releases = { latest: vi.fn() };
   const channels = { read: vi.fn(async () => ({ version: 1 as const, channel: 'nightly' as const, revision: 'initial' })) };
@@ -59,9 +60,12 @@ describe('server automatic update scheduling', () => {
     vi.setSystemTime(new Date('2026-10-24T03:20:00Z'));
     vi.stubEnv('ORBIS_VERSION', 'v0.1.0-beta.91');
     directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-automatic-test-'));
+    serverZone = 'UTC';
     config.get
       .mockReset()
-      .mockImplementation((key: string) => (key === 'directories' ? { dataDir: directory } : key === 'userSettings' ? { timeZone: 'UTC' } : false));
+      .mockImplementation((key: string) =>
+        key === 'directories' ? { dataDir: directory } : key === 'userSettings' ? { timeZone: serverZone } : false,
+      );
     host.status.mockReset().mockResolvedValue(healthy);
     host.plan.mockReset().mockResolvedValue(plan);
     host.apply.mockReset().mockResolvedValue({ jobId: 'accepted-job', state: 'running' });
@@ -84,6 +88,7 @@ describe('server automatic update scheduling', () => {
     activity.onModuleDestroy();
     await fs.rm(directory, { recursive: true, force: true });
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -96,6 +101,104 @@ describe('server automatic update scheduling', () => {
     expect(host.status).not.toHaveBeenCalled();
     expect(releases.latest).not.toHaveBeenCalled();
     expect(lifecycle.updateApp).not.toHaveBeenCalled();
+  });
+
+  it('reports the configured server timezone and bounded server clock across all schedule reads without enabling updates', async () => {
+    serverZone = 'Asia/Singapore';
+    const expected = { now: Date.now(), timezone: serverZone };
+    expect(await automatic.read()).toMatchObject({
+      settings: { orbis: { enabled: false }, schedule: { timezone: serverZone } },
+      serverTime: expected,
+    });
+    expect(await automatic.readSystem()).toMatchObject({ settings: { enabled: false }, shared: { timezone: serverZone }, serverTime: expected });
+    expect(await automatic.readApp('adguard:tipi')).toMatchObject({
+      rule: { mode: 'disabled' },
+      shared: { timezone: serverZone },
+      serverTime: expected,
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(host.status).not.toHaveBeenCalled();
+    await expect(fs.stat(path.join(directory, 'state/automatic-updates/settings.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('ignores browser timezone input, accepts time-only schedules and preserves explicit disabled choices', async () => {
+    serverZone = 'Asia/Singapore';
+    const value = await automatic.update({ ...settings(false), schedule: { time: '17:45', timezone: 'invalid/browser-zone' } });
+    expect(value.settings).toEqual({ orbis: { enabled: false, mode: 'idle' }, schedule: { time: '17:45', timezone: serverZone } });
+    const saved = JSON.parse(await fs.readFile(path.join(directory, 'state/automatic-updates/settings.json'), 'utf8'));
+    expect(saved.settings).toEqual(value.settings);
+    expect((await automatic.update({ orbis: { enabled: false, mode: 'scheduled' }, schedule: { time: '08:09' } })).settings.schedule).toEqual({
+      time: '08:09',
+      timezone: serverZone,
+    });
+    quiet();
+    await automatic.tick();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(host.status).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, '', 'invalid/server-zone', 'x'.repeat(101)])('uses the server system timezone for invalid configured case %#', async (zone) => {
+    serverZone = zone;
+    const fallback = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect((await automatic.read()).settings.schedule.timezone).toBe(fallback);
+    expect((await automatic.read()).settings.orbis.enabled).toBe(false);
+  });
+
+  it('falls back to UTC when the server system timezone is unusable too', async () => {
+    serverZone = 'invalid/server-zone';
+    const original = Intl.DateTimeFormat;
+    vi.spyOn(Intl, 'DateTimeFormat').mockImplementation((...args: Parameters<typeof Intl.DateTimeFormat>) => {
+      if (args[1]?.timeZone === undefined) throw new RangeError('Synthetic missing system timezone');
+      return new original(...args);
+    });
+    expect((await automatic.read()).serverTime.timezone).toBe('UTC');
+  });
+
+  it('uses a changed server timezone after loading legacy schedule state for the next local day', async () => {
+    await automatic.update(settings(true, 'scheduled', '05:00'));
+    automatic.onModuleDestroy();
+    serverZone = 'Asia/Singapore';
+    automatic = create();
+    await automatic.onModuleInit();
+    vi.setSystemTime(new Date('2026-10-24T20:45:00Z'));
+    expect((await automatic.read()).settings.schedule.timezone).toBe(serverZone);
+    await automatic.tick();
+    expect(releases.latest).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date('2026-10-24T21:00:00Z'));
+    await automatic.tick();
+    expect(host.apply).toHaveBeenCalledTimes(1);
+    expect((await automatic.read()).lastAttempt?.slot).toBe('2026-10-25/05:00/Asia/Singapore');
+  });
+
+  it('uses the effective server timezone for global and custom app schedules', async () => {
+    await automatic.update(settings(false, 'idle', '05:00'));
+    await automatic.updateApp('global:tipi', { mode: 'global' });
+    await automatic.updateApp('custom:tipi', { mode: 'custom', time: '06:00' });
+    serverZone = 'Asia/Singapore';
+    vi.setSystemTime(new Date('2026-10-24T20:45:00Z'));
+    await automatic.tick();
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date('2026-10-24T21:00:00Z'));
+    await automatic.tick();
+    expect(lifecycle.updateApp).toHaveBeenCalledTimes(1);
+    expect((await automatic.readApp('global:tipi')).lastAttempt?.slot).toBe('2026-10-25/05:00/Asia/Singapore');
+    vi.setSystemTime(new Date('2026-10-24T22:00:00Z'));
+    await automatic.tick();
+    expect(lifecycle.updateApp).toHaveBeenCalledTimes(2);
+    expect((await automatic.readApp('custom:tipi')).lastAttempt?.slot).toBe('2026-10-25/06:00/Asia/Singapore');
+    expect((await automatic.read()).settings.orbis.enabled).toBe(false);
+  });
+
+  it('does not repeat a configured-server daily check across the autumn DST hour repeat', async () => {
+    serverZone = 'America/New_York';
+    releases.latest.mockResolvedValue({ tag: healthy.currentTag, imageManifestUrl: 'present' });
+    await automatic.update(settings(true, 'scheduled', '01:30'));
+    vi.setSystemTime(new Date('2026-11-01T05:45:00Z'));
+    await automatic.tick();
+    vi.setSystemTime(new Date('2026-11-01T06:45:00Z'));
+    await automatic.tick();
+    expect(releases.latest).toHaveBeenCalledTimes(1);
+    expect((await automatic.read()).lastAttempt?.slot).toBe('2026-11-01/01:30/America/New_York');
   });
 
   it('reads the selected channel and uses one daily check and pinned host plan/apply across concurrent ticks', async () => {
@@ -297,7 +400,7 @@ describe('server automatic update scheduling', () => {
     for (const value of [
       { ...settings(), command: 'unsafe' },
       settings(true, 'idle', '25:00'),
-      { ...settings(), schedule: { time: '03:00', timezone: 'invalid/timezone' } },
+      { ...settings(), schedule: { time: '03:00', timezone: 'UTC', unexpected: true } },
     ])
       await expect(automatic.update(value)).rejects.toThrow();
     await expect(automatic.updateApp('adguard:tipi', { mode: 'custom' })).rejects.toThrow();
