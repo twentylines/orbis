@@ -51,6 +51,14 @@ def validate_manifest(raw: object) -> dict[str, str]:
         raise ValueError("release channel does not match the published version")
     if "updatePriority" in raw and raw["updatePriority"] not in ("normal", "critical"):
         raise ValueError("release update priority is invalid")
+    marker = raw.get("criticalThrough")
+    if marker is not None and (
+        not isinstance(marker, str)
+        or not POLICY.is_published_release_tag(marker)
+        or not POLICY.release_allowed_on_channel(marker, "stable" if is_stable_release_tag(raw["tag"]) else "nightly")
+        or POLICY.version_order(marker, raw["tag"]) not in (-1, 0)
+    ):
+        raise ValueError("release manifest has an invalid critical-through marker")
     if raw["runtipiCompatibility"].removeprefix("v") != "4.10.1":
         raise ValueError("release manifest does not target the 4.10.1 compatibility base")
     if "installationProtocol" in raw and raw["installationProtocol"] != INSTALLATION_PROTOCOL:

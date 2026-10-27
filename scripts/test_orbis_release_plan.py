@@ -56,6 +56,20 @@ class OrbisReleasePlanTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 PLAN.validate_manifest(invalid)
 
+    def test_manifest_validates_source_bound_critical_through_marker(self):
+        stable = {**MANIFEST, "criticalThrough": "v0.1.0"}
+        beta = {**MANIFEST, "tag": "v0.1.0-beta.10", "criticalThrough": "v0.1.0-beta.9"}
+        self.assertIs(PLAN.validate_manifest(stable), stable)
+        self.assertIs(PLAN.validate_manifest(beta), beta)
+        for invalid in (
+            {**MANIFEST, "criticalThrough": "v0.1.0-beta.1"},
+            {**MANIFEST, "tag": "v0.1.0-beta.10", "criticalThrough": "v0.1.0"},
+            {**MANIFEST, "criticalThrough": "v0.2.0"},
+            {**MANIFEST, "criticalThrough": "development"},
+        ):
+            with self.assertRaises(ValueError):
+                PLAN.validate_manifest(invalid)
+
     def test_compose_error_does_not_expose_environment(self):
         failed = type("Result", (), {"returncode": 1, "stdout": "", "stderr": "SECRET=private-value"})()
         with patch.object(PLAN.subprocess, "run", return_value=failed):

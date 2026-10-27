@@ -23,6 +23,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Validate release identity and metadata
         id: metadata
@@ -39,6 +41,16 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Carry the source-bound critical fix marker
+        id: watermark
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_CHANNEL: ${{ steps.metadata.outputs.channel }}
+          RELEASE_PRIORITY: ${{ steps.metadata.outputs.priority }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 scripts/orbis-release-watermark.py --tag "$RELEASE_TAG" --channel "$RELEASE_CHANNEL" --priority "$RELEASE_PRIORITY" --commit "$RELEASE_SHA" --notes "releases/${RELEASE_TAG}.md" --notes-output release-notes.md --github-output "$GITHUB_OUTPUT"
 
       - name: Build and publish Orbis image
         id: image
@@ -65,6 +77,7 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           UPDATE_PRIORITY: ${{ steps.metadata.outputs.priority }}
+          CRITICAL_THROUGH: ${{ steps.watermark.outputs.criticalThrough }}
         run: |
           jq -n \
             --arg schema 'orbis.release.v1' \
@@ -73,10 +86,10 @@ jobs:
             --arg commit "$RELEASE_SHA" \
             --arg digest "$IMAGE_DIGEST" \
             --arg updatePriority "$UPDATE_PRIORITY" \
+            --arg criticalThrough "$CRITICAL_THROUGH" \
             --arg migrationFingerprint "$(python3 scripts/orbis-migration-fingerprint.py)" \
             -f scripts/release-manifest.jq \
             > release-manifest.json
-          cp "releases/${RELEASE_TAG}.md" release-notes.md
           printf '\n\nImage: %s@%s\n' "$IMAGE" "$IMAGE_DIGEST" >> release-notes.md
 
       - name: Package the source-bound installer

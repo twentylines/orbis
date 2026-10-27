@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { latestTagFromAtom, OrbisReleaseService, parseOrbisReleaseNotes } from '../orbis-release.service';
+import {
+  latestTagFromAtom,
+  OrbisReleaseService,
+  parseOrbisReleaseNotes,
+  withCumulativeCriticalPriority,
+  type OrbisRelease,
+} from '../orbis-release.service';
 
 const TAG = 'v0.1.0-beta.9';
 const FEED = `<feed><entry><id>tag:github.com,2008:Repository/1419897175/${TAG}</id><updated>2026-10-15T03:00:00Z</updated></entry></feed>`;
@@ -7,16 +13,17 @@ const FEED = `<feed><entry><id>tag:github.com,2008:Repository/1419897175/${TAG}<
 describe('Orbis release feed', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
   });
 
   it('uses the public Atom feed and tagged notes when the GitHub API is rate limited', async () => {
-    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, _init) => {
       const url = String(input);
       expect(url).not.toContain('api.github.com');
       if (url.endsWith('/releases.atom')) return new Response(FEED);
       if (url.endsWith(`/${TAG}.md`)) return new Response('# Verified release notes');
-      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') return new Response(null, { status: 200 });
+      if (url.endsWith('/release-manifest.json')) return releaseManifestResponse(url);
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
@@ -57,11 +64,11 @@ describe('Orbis release feed', () => {
   it('rechecks an unfinished release after 30 seconds and shares concurrent requests', async () => {
     vi.useFakeTimers();
     let manifestReady = false;
-    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, _init) => {
       const url = String(input);
       if (url.endsWith('/releases.atom')) return new Response(FEED);
       if (url.endsWith(`/${TAG}.md`)) return new Response('# Release notes');
-      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') return new Response(null, { status: manifestReady ? 200 : 404 });
+      if (url.endsWith('/release-manifest.json')) return manifestReady ? releaseManifestResponse(url) : new Response(null, { status: 404 });
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
@@ -82,11 +89,11 @@ describe('Orbis release feed', () => {
   it('finds a new release after one minute without downloading unchanged notes again', async () => {
     vi.useFakeTimers();
     let tag = TAG;
-    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, _init) => {
       const url = String(input);
       if (url.endsWith('/releases.atom')) return new Response(FEED.replace(TAG, tag));
       if (url.endsWith(`/${tag}.md`)) return new Response(`# ${tag}`);
-      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') return new Response(null);
+      if (url.endsWith('/release-manifest.json')) return releaseManifestResponse(url);
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
@@ -108,12 +115,12 @@ describe('Orbis release feed', () => {
   it('retains the last known release when a later automatic check cannot reach GitHub', async () => {
     vi.useFakeTimers();
     let offline = false;
-    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, _init) => {
       const url = String(input);
       if (offline) throw new Error('network unavailable');
       if (url.endsWith('/releases.atom')) return new Response(FEED);
       if (url.endsWith(`/${TAG}.md`)) return new Response('# Release notes');
-      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') return new Response(null);
+      if (url.endsWith('/release-manifest.json')) return releaseManifestResponse(url);
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
@@ -130,12 +137,12 @@ describe('Orbis release feed', () => {
     const next = 'v0.1.0-beta.10';
     const feed = FEED.replace('<feed>', `<feed><entry><id>tag:github.com,2008:Repository/1419897175/${next}</id></entry>`);
     let ready = false;
-    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, _init) => {
       const url = String(input);
       if (url.endsWith('/releases.atom')) return new Response(feed);
       if (url.endsWith('.md')) return new Response('# Release notes');
-      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') {
-        return new Response(null, { status: url.includes(`/${next}/`) && !ready ? 404 : 200 });
+      if (url.endsWith('/release-manifest.json')) {
+        return url.includes(`/${next}/`) && !ready ? new Response(null, { status: 404 }) : releaseManifestResponse(url);
       }
       throw new Error(`unexpected release request: ${url}`);
     });
@@ -162,7 +169,7 @@ describe('Orbis release feed', () => {
       if (url.endsWith('/releases.atom')) return new Response(feed);
       if (url.includes(`/${next}/`)) return new Response(null, { status: 404 });
       if (url.endsWith(`/${TAG}.md`)) return new Response('# Published release');
-      if (url.endsWith('/release-manifest.json')) return new Response(null);
+      if (url.endsWith('/release-manifest.json')) return releaseManifestResponse(url);
       throw new Error(`unexpected release request: ${url}`);
     });
     expect((await new OrbisReleaseService().latest('nightly'))?.tag).toBe(TAG);
@@ -176,7 +183,7 @@ describe('Orbis release feed', () => {
       const url = String(input);
       if (url.endsWith('/releases.atom')) return new Response(outage ? FEED.replace(TAG, next) : FEED);
       if (url.endsWith('.md')) return new Response('# Release notes');
-      if (url.endsWith('/release-manifest.json')) return new Response(null, { status: outage ? 503 : 200 });
+      if (url.endsWith('/release-manifest.json')) return outage ? new Response(null, { status: 503 }) : releaseManifestResponse(url);
       throw new Error(`unexpected release request: ${url}`);
     });
     const service = new OrbisReleaseService();
@@ -198,6 +205,213 @@ const metadata = (number: number, extra: Record<string, unknown> = {}) => ({
 });
 const atom = (numbers: number[]) =>
   `<feed>${numbers.map((number) => `<entry><id>tag:github.com,2008:Repository/1419897175/v0.1.0-beta.${number}</id></entry>`).join('')}</feed>`;
+
+const publishedRelease = (tag: string, critical = false): OrbisRelease => ({
+  tag,
+  publishedAt: '2026-10-24T00:00:00Z',
+  body: `# Orbis ${tag}`,
+  url: `https://github.com/twentylines/orbis/releases/tag/${tag}`,
+  imageManifestUrl: `https://github.com/twentylines/orbis/releases/download/${tag}/release-manifest.json`,
+  ...(critical ? { priority: 'critical' as const } : {}),
+});
+
+const releaseMetadata = (tag: string, critical = false) => ({
+  tag_name: tag,
+  draft: false,
+  published_at: '2026-10-24T00:00:00Z',
+  body: `${critical ? '<!-- orbis-update-priority: critical -->\n' : ''}# Orbis ${tag}`,
+  assets: [{ name: 'release-manifest.json', state: 'uploaded' }],
+});
+
+const releaseManifestResponse = (url: string, criticalThrough: string | null = null) => {
+  const tag = url.match(/\/download\/(v[^/]+)\/release-manifest\.json/)?.[1] ?? TAG;
+  return Response.json({
+    schema: 'orbis.release.v1',
+    image: 'ghcr.io/twentylines/orbis',
+    tag,
+    commit: 'a'.repeat(40),
+    releaseChannel: /-(beta|rc)\./.test(tag) ? 'nightly' : 'stable',
+    updatePriority: 'normal',
+    criticalThrough,
+  });
+};
+
+describe('cumulative critical release priority', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('carries an unapplied intermediate critical release onto the latest and catalogue target', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'v1.1.0');
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases/latest')) return Response.json(releaseMetadata('v1.1.3'));
+      if (url.endsWith('/releases?per_page=100&page=1')) {
+        return Response.json([releaseMetadata('v1.1.3'), releaseMetadata('v1.1.2', true), releaseMetadata('v1.1.1')]);
+      }
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+
+    expect(await service.latest('stable')).toMatchObject({ tag: 'v1.1.3', priority: 'critical' });
+    expect((await service.listPublished('stable')).releases[0]).toMatchObject({ tag: 'v1.1.3', priority: 'critical' });
+    expect(request.mock.calls.filter(([url]) => String(url).includes('/releases?per_page=100&page=')).length).toBe(1);
+  });
+
+  it('does not carry an already-applied critical release forward', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'v1.1.2');
+    vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases/latest')) return Response.json(releaseMetadata('v1.1.3'));
+      if (url.endsWith('/releases?per_page=100&page=1')) {
+        return Response.json([releaseMetadata('v1.1.3'), releaseMetadata('v1.1.2', true)]);
+      }
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+
+    expect(await service.latest('stable')).toMatchObject({ tag: 'v1.1.3' });
+    expect(await service.latest('stable')).not.toHaveProperty('priority');
+    expect((await service.listPublished('stable')).releases[0]).not.toHaveProperty('priority');
+  });
+
+  it('leaves normal priority unchanged for an unknown or development install while preserving a critical target', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'development');
+    let targetIsCritical = false;
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases/latest')) return Response.json(releaseMetadata('v1.1.3', targetIsCritical));
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+
+    expect(await service.latest('stable')).not.toHaveProperty('priority');
+    expect(request).toHaveBeenCalledTimes(1);
+    targetIsCritical = true;
+    expect(await new OrbisReleaseService().latest('stable')).toMatchObject({ tag: 'v1.1.3', priority: 'critical' });
+    expect(request).toHaveBeenCalledTimes(2);
+    const criticalTarget = publishedRelease('v1.1.3', true);
+    expect(withCumulativeCriticalPriority(criticalTarget, 'development', [], 'stable')).toBe(criticalTarget);
+    expect(withCumulativeCriticalPriority(publishedRelease('v1.1.3'), undefined, [], 'stable')).toEqual(publishedRelease('v1.1.3'));
+  });
+
+  it('ignores critical releases newer than the target or older than the installed version', () => {
+    const target = publishedRelease('v1.1.3');
+    const installed = 'v1.1.0';
+
+    expect(withCumulativeCriticalPriority(target, installed, [publishedRelease('v1.1.4', true), publishedRelease('v1.0.9', true)], 'stable')).toBe(
+      target,
+    );
+    expect(withCumulativeCriticalPriority(target, 'v1.1.2', [publishedRelease('v1.1.2', true)], 'stable')).toBe(target);
+  });
+
+  it('uses the durable critical-through marker beyond the bounded release catalogue', () => {
+    const target = { ...publishedRelease('v1.1.3'), criticalThrough: 'v1.1.2' };
+    expect(withCumulativeCriticalPriority(target, 'v1.1.0', [], 'stable')).toMatchObject({ priority: 'critical' });
+    expect(withCumulativeCriticalPriority(target, 'v1.1.2', [], 'stable')).toBe(target);
+    expect(withCumulativeCriticalPriority({ ...target, criticalThrough: 'v1.1.4' }, 'v1.1.0', [], 'stable')).toEqual({
+      ...target,
+      criticalThrough: 'v1.1.4',
+    });
+    const wrongChannel = { ...target, criticalThrough: 'v1.1.2-beta.9' };
+    expect(withCumulativeCriticalPriority(wrongChannel, 'v1.1.0', [], 'stable')).toBe(wrongChannel);
+  });
+
+  it('retains an old Nightly critical watermark from the bounded manifest when release APIs are unavailable', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'v0.1.0-beta.7');
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('api.github.com')) return new Response(null, { status: 403 });
+      if (url.endsWith('/releases.atom')) return new Response(FEED);
+      if (url.endsWith(`/${TAG}.md`)) return new Response('# Nightly patch');
+      if (url.endsWith('/release-manifest.json')) return releaseManifestResponse(url, 'v0.1.0-beta.8');
+      throw new Error(`unexpected release request: ${url}`);
+    });
+
+    expect(await new OrbisReleaseService().latest('nightly')).toMatchObject({
+      tag: TAG,
+      criticalThrough: 'v0.1.0-beta.8',
+      priority: 'critical',
+    });
+    expect((await new OrbisReleaseService().listPublished('nightly')).releases[0]).toMatchObject({
+      tag: TAG,
+      criticalThrough: 'v0.1.0-beta.8',
+      priority: 'critical',
+    });
+    expect(request.mock.calls.some(([url]) => String(url).includes('/releases/tags/'))).toBe(false);
+  });
+
+  it('does not return normal-priority catalogue data when the latest manifest is unavailable', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'v0.1.0-beta.7');
+    vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('api.github.com')) return new Response(null, { status: 429 });
+      if (url.endsWith('/releases.atom')) return new Response(FEED);
+      if (url.endsWith(`/${TAG}.md`)) return new Response('# Nightly patch');
+      if (url.endsWith('/release-manifest.json')) return new Response(null, { status: 503 });
+      throw new Error(`unexpected release request: ${url}`);
+    });
+
+    await expect(new OrbisReleaseService().listPublished('nightly')).rejects.toThrow('temporarily unavailable');
+  });
+
+  it('reads the release-body watermark without a catalogue request', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'v1.1.0');
+    const request = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(Response.json({ ...releaseMetadata('v1.1.3'), body: '<!-- orbis-critical-through: v1.1.2 -->\n# Release' }));
+    expect(await new OrbisReleaseService().latest('stable')).toMatchObject({
+      tag: 'v1.1.3',
+      priority: 'critical',
+      criticalThrough: 'v1.1.2',
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when legacy cumulative-priority discovery is unavailable', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'v1.1.0');
+    vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases/latest')) return Response.json(releaseMetadata('v1.1.3'));
+      throw new Error('release catalog unavailable');
+    });
+    await expect(new OrbisReleaseService().latest('stable')).rejects.toThrow('Orbis release priority is temporarily unavailable.');
+  });
+
+  it('keeps stable and nightly critical releases isolated by selected channel', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'v1.1.0');
+    const request = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(Response.json([releaseMetadata('v1.1.3'), releaseMetadata('v1.1.2-beta.1', true), releaseMetadata('v1.0.9', true)]));
+    const service = new OrbisReleaseService();
+
+    expect((await service.listPublished('stable')).releases[0]).not.toHaveProperty('priority');
+    expect((await service.listPublished('nightly')).releases[0]).toMatchObject({ tag: 'v1.1.3', priority: 'critical' });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('finds a critical release on the second bounded catalogue page without fetching a third', async () => {
+    vi.stubEnv('ORBIS_VERSION', 'v1.0.0');
+    const firstPage = Array.from({ length: 100 }, (_, index) => releaseMetadata(`v1.1.${200 - index}`));
+    const secondPage = Array.from({ length: 100 }, (_, index) => releaseMetadata(`v1.1.${100 - index}`, index === 50));
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/releases/latest')) return Response.json(releaseMetadata('v1.1.200'));
+      if (url.endsWith('/releases?per_page=100&page=1')) return Response.json(firstPage);
+      if (url.endsWith('/releases?per_page=100&page=2')) return Response.json(secondPage);
+      throw new Error(`unexpected release request: ${url}`);
+    });
+    const service = new OrbisReleaseService();
+
+    expect(await service.latest('stable')).toMatchObject({ tag: 'v1.1.200', priority: 'critical' });
+    const catalog = await service.listPublished('stable');
+    expect(catalog.complete).toBe(false);
+    expect(catalog.releases[0]).toMatchObject({ tag: 'v1.1.200', priority: 'critical' });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls.some(([url]) => String(url).includes('page=3'))).toBe(false);
+  });
+});
 
 describe('Orbis included release history', () => {
   afterEach(() => {
@@ -279,12 +493,12 @@ describe('Orbis included release history', () => {
   });
 
   it('falls back to tagged notes without an API token when the public release API is rate limited', async () => {
-    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, _init) => {
       const url = String(input);
       if (url.includes('api.github.com')) return new Response(null, { status: 403 });
       if (url.endsWith('releases.atom')) return new Response(atom([90, 89, 88, 87]));
       if (url.endsWith('.md')) return new Response('- Tagged release change');
-      if (init?.method === 'HEAD') return new Response(null);
+      if (url.endsWith('/release-manifest.json')) return releaseManifestResponse(url);
       throw new Error(`unexpected release request: ${url}`);
     });
     const result = await new OrbisReleaseService().history('v0.1.0-beta.87', 'v0.1.0-beta.90', 'nightly');
@@ -295,12 +509,13 @@ describe('Orbis included release history', () => {
   });
 
   it('does not claim complete coverage if a note is missing or the installed version predates the bounded feed', async () => {
-    vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    vi.spyOn(global, 'fetch').mockImplementation(async (input, _init) => {
       const url = String(input);
       if (url.includes('api.github.com')) return new Response(null, { status: 429 });
       if (url.endsWith('releases.atom')) return new Response(atom([90, 89, 88, 87]));
       if (url.includes('/v0.1.0-beta.89/')) return new Response(null, { status: 404 });
-      return init?.method === 'HEAD' ? new Response(null) : new Response('- Change');
+      if (url.endsWith('/release-manifest.json')) return releaseManifestResponse(url);
+      return new Response('- Change');
     });
     const service = new OrbisReleaseService();
     const incomplete = await service.history('v0.1.0-beta.87', 'v0.1.0-beta.90', 'nightly');
@@ -375,12 +590,12 @@ describe('Orbis included release history', () => {
   it('keeps release caches channel-specific while filtering the shared catalog for each channel', async () => {
     const stable = metadata(1, { tag_name: 'v1.0.0', body: '# Stable release' });
     const rc = metadata(1, { tag_name: 'v1.1.0-rc.1', body: '# Release candidate' });
-    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    const request = vi.spyOn(global, 'fetch').mockImplementation(async (input, _init) => {
       const url = String(input);
       if (url.endsWith('/releases/latest')) return Response.json(stable);
       if (url.endsWith('/releases.atom')) return new Response(atom([90]));
       if (url.endsWith('/v0.1.0-beta.90.md')) return new Response('# Nightly beta');
-      if (url.endsWith('/release-manifest.json') && init?.method === 'HEAD') return new Response(null, { status: 200 });
+      if (url.endsWith('/release-manifest.json')) return releaseManifestResponse(url);
       if (url.endsWith('/releases?per_page=100&page=1')) return Response.json([stable, metadata(90), rc]);
       throw new Error(`unexpected release request: ${url}`);
     });
@@ -440,6 +655,18 @@ describe('Orbis included release history', () => {
       kind: 'maintenance',
       priority: 'critical',
       body: '- Urgent repair',
+    });
+  });
+
+  it('parses the generated critical-through header while preserving legacy metadata', () => {
+    expect(
+      parseOrbisReleaseNotes(
+        '<!-- orbis-critical-through: v1.1.2 -->\n<!-- orbis-update-priority: normal -->\n<!-- orbis-release-kind: maintenance -->\n- Fix',
+      ),
+    ).toEqual({
+      kind: 'maintenance',
+      criticalThrough: 'v1.1.2',
+      body: '- Fix',
     });
   });
 });
