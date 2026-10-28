@@ -89,13 +89,17 @@
   color: var(--orbis-chrome-muted, var(--desktop-chrome-ink));
   opacity: 1;
 }
-/* biome-ignore lint/complexity/noImportantStyles: Search is one continuous surface in every browser and focus state. */
 body:has(.orbis-theme) .desktop-search-surface .desktop-search-input #orbis-command-query {
-  outline: none;
-  box-shadow: none;
-  background: transparent;
-  border: 0;
-  filter: none;
+  /* biome-ignore lint/complexity/noImportantStyles: Shared keyboard styles must not frame this composite search control. */
+  outline: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Older shared focus styles paint an inset fill on inputs. */
+  box-shadow: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Native and shared field backgrounds must not repaint the search surface. */
+  background: transparent !important;
+  /* biome-ignore lint/complexity/noImportantStyles: The search bar owns its border. */
+  border: 0 !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Shared focus filters must not tint the search field. */
+  filter: none !important;
   caret-color: var(--desktop-accent);
 }
 .desktop-search-input:focus-within > svg {
