@@ -583,7 +583,6 @@ function LocalUpdates() {
             <IconBrandGithub size={22} aria-hidden="true" />
             <div>
               <h2 id="orbis-updates-title">Orbis</h2>
-              <p>Release notes from the Orbis GitHub repository</p>
             </div>
           </div>
           <Dialog

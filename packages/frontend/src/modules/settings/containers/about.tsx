@@ -70,7 +70,6 @@ export function About() {
     <div className="settings-about">
       <header>
         <h2>About Orbis</h2>
-        <p>Software and server details</p>
       </header>
       <div className="settings-about-sections">
         <section aria-labelledby="about-software-title">

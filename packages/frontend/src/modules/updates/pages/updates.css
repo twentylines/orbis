@@ -1033,6 +1033,9 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
 .desktop-orbis-release-head {
   margin-bottom: 16px;
 }
+.desktop-orbis-release-head h2 {
+  margin: 0;
+}
 .desktop-orbis-release-notes,
 .desktop-orbis-release-summary {
   min-width: 0;

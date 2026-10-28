@@ -9,10 +9,6 @@
   font-size: 1.25rem;
   line-height: 1.4;
 }
-.settings-about header p {
-  margin: 6px 0 0;
-  color: var(--desktop-muted);
-}
 .settings-about-sections {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
