@@ -9,10 +9,7 @@ export default function ResetPasswordPage() {
       <h2 className="desktop-auth-heading" data-auth-focus="" tabIndex={-1}>
         Reset your password
       </h2>
-      <p className="desktop-auth-help">
-        Orbis does not send password-reset emails. Ask the server administrator to run the recovery command on the server, then sign in with your new
-        password.
-      </p>
+      <p className="desktop-auth-help">Run this command on the server to request a password reset.</p>
       <pre className="desktop-auth-recovery-command">
         <code>./runtipi-cli reset-password</code>
       </pre>

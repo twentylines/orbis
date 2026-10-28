@@ -145,6 +145,9 @@ body:has(.orbis-theme) .host-sensors-heading h2:focus-visible {
 .host-sensors .host-sensor-coverage {
   margin: 16px 0;
 }
+.host-sensors > .host-sensor-coverage {
+  margin-block: 16px 24px;
+}
 .host-sensors-about {
   margin-top: 20px;
 }
@@ -237,7 +240,7 @@ body:has(.orbis-theme) .host-sensors-about summary:focus-visible {
     line-height: 1.6;
   }
   .host-sensor-list,
-  .host-sensors .host-sensor-coverage,
+  .host-sensor-groups .host-sensor-coverage,
   .host-sensors .host-sensor-empty {
     grid-column: 2;
   }
@@ -247,7 +250,7 @@ body:has(.orbis-theme) .host-sensors-about summary:focus-visible {
   .host-sensors .host-sensor-empty {
     margin-block: 18px 0;
   }
-  .host-sensors .host-sensor-coverage {
+  .host-sensor-groups .host-sensor-coverage {
     margin-block: 12px 0;
   }
 }

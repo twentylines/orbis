@@ -7,6 +7,7 @@ import { useWindowVisible } from '@/desktop/window-visibility';
 import { resourceBytes } from '@/components/container-resources/container-resources';
 import './host-sensors.css';
 import { sensorRefreshInterval } from './system-readings';
+import { highTemperature, temperatureLimit } from './system-health';
 
 async function loadSensors(signal: AbortSignal, path: string): Promise<HostSensors> {
   const response = await fetch(path, { credentials: 'include', signal });
@@ -111,7 +112,8 @@ export const HostSensorsView = memo(function HostSensorsView() {
                 <h3 id="host-temperatures-title">Temperatures</h3>
                 <div className="host-sensor-list">
                   {ready.temperatures.map((sensor) => {
-                    const critical = sensor.celsius !== null && sensor.criticalCelsius !== null && sensor.celsius >= sensor.criticalCelsius;
+                    const critical = highTemperature(sensor);
+                    const limit = temperatureLimit(sensor);
                     return (
                       <article className="host-sensor-card" key={sensor.id} data-sensor-id={sensor.id}>
                         <h4 title={sensor.label}>{sensor.label}</h4>
@@ -121,9 +123,9 @@ export const HostSensorsView = memo(function HostSensorsView() {
                         <strong className="host-sensor-reading" data-status={sensor.status} data-warning={critical || sensor.status === 'fault'}>
                           {sensor.celsius === null ? sensorState[sensor.status] || 'Unavailable' : temperature(sensor.celsius)}
                         </strong>
-                        {sensor.criticalCelsius !== null ? (
+                        {limit !== null ? (
                           <p className="host-sensor-threshold">
-                            Critical threshold {temperature(sensor.criticalCelsius)}
+                            {sensor.criticalCelsius !== null ? 'Critical' : 'High'} threshold {temperature(limit)}
                             {critical ? ' · Reached' : ''}
                           </p>
                         ) : null}

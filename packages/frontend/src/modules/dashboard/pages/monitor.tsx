@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import * as Tabs from '@radix-ui/react-tabs';
 import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/schemas/metric-history';
-import type { HostSensors } from '@runtipi/common/schemas/host-sensors';
+import type { HostTemperature } from '@runtipi/common/schemas/host-sensors';
 import { IconActivity, IconArrowDown, IconArrowUp, IconCpu, IconDatabase, IconDeviceDesktopAnalytics, IconNetwork } from '@tabler/icons-react';
 import { useMetricHistory } from '@/desktop/metric-history';
 import { MetricChart } from '@/components/metric-chart/metric-chart';
@@ -19,7 +19,9 @@ import { ServerRack, useCluster } from '@/desktop/cluster';
 import { useServerPath } from '@/desktop/cluster-data';
 import { ClusterOverview } from '@/desktop/cluster-views';
 import { useDesktopPreferences } from '@/desktop/preferences';
-import { statusNetwork, usagePercent, cpuTemperature, sensorRefreshInterval } from '../components/system-readings';
+import { statusNetwork, usagePercent, cpuTemperature } from '../components/system-readings';
+import { highTemperature, highUsage, temperatureLimit } from '../components/system-health';
+import { sensorOptions, useObserveSystemHealth } from '../components/use-system-health';
 import { MonitorDisclosure, MonitorUsage } from '../components/monitor-usage';
 import { DriveHealthView } from '../components/drive-health';
 
@@ -66,20 +68,15 @@ const percent = (value: number | null) => (value === null || !Number.isFinite(va
 const width = (value: number | null) => `${Math.min(100, Math.max(0, value ?? 0))}%`;
 const rate = (value: number | null | undefined) => (value === null || value === undefined ? 'Unavailable' : `${bytes(value)}/s`);
 
-function TemperatureReading({
-  sensor,
-  stale,
-}: {
-  sensor: { celsius: number | null; criticalCelsius: number | null } | null | undefined;
-  stale: boolean;
-}) {
-  const critical = sensor?.celsius != null && sensor.criticalCelsius !== null && sensor.celsius >= sensor.criticalCelsius;
+function TemperatureReading({ sensor, stale }: { sensor: HostTemperature | null | undefined; stale: boolean }) {
+  const critical = sensor ? highTemperature(sensor) : false;
+  const limit = sensor ? temperatureLimit(sensor) : null;
   return (
     <dd data-critical={critical}>
       {sensor?.celsius != null ? `${sensor.celsius.toFixed(1)} °C` : 'Unavailable'}
       {critical ? (
         <span className="monitor-temperature-critical">
-          {stale ? 'Critical in last sample' : 'Critical'} · {sensor.criticalCelsius?.toFixed(0)} °C threshold
+          {stale ? 'High in last sample' : 'High'} · {limit?.toFixed(0)} °C threshold
         </span>
       ) : null}
     </dd>
@@ -124,17 +121,11 @@ function ServerMonitor() {
   const history = useMetricHistory(range);
   const telemetry = useQuery(telemetryOptions(visible, telemetryPath, selectedId));
   const sample = telemetry.data;
-  const sensors = useQuery<HostSensors>({
-    queryKey: ['host-sensors', sensorsPath],
-    queryFn: async ({ signal }) => {
-      const response = await fetch(sensorsPath, { credentials: 'include', signal });
-      if (!response.ok) throw new Error('Hardware readings are unavailable');
-      return response.json();
-    },
-    enabled: visible,
-    refetchInterval: (query) => sensorRefreshInterval(query.state.data),
-    refetchIntervalInBackground: false,
-  });
+  const sensors = useQuery(sensorOptions(visible, sensorsPath));
+  useObserveSystemHealth(
+    { telemetry: sample, sensors: sensors.data, telemetryError: telemetry.isError, sensorsError: sensors.isError },
+    telemetryPath,
+  );
   const cpuSensor = cpuTemperature(sensors.data);
   const thermalReadings = sensors.data?.available
     ? sensors.data.temperatures.filter((sensor) => sensor.status === 'available' && sensor.celsius !== null)
@@ -196,7 +187,7 @@ function ServerMonitor() {
       <section className="desktop-host-overview" aria-label="Current system readings">
         <div className="desktop-host-overview-copy" key={selectedId}>
           <dl className="monitor-summary-grid">
-            <div className="monitor-summary-stat">
+            <div className="monitor-summary-stat" data-high={highUsage(sample?.cpu.totalPercent)}>
               <dt>
                 <IconCpu size={18} aria-hidden="true" />
                 CPU
@@ -207,28 +198,32 @@ function ServerMonitor() {
                 <span style={{ width: width(sample?.cpu.totalPercent ?? null) }} />
               </dd>
             </div>
-            <div className="monitor-summary-stat">
+            <div className="monitor-summary-stat" data-high={highUsage(memoryPercent)}>
               <dt>
                 <IconDeviceDesktopAnalytics size={18} aria-hidden="true" />
                 Memory
               </dt>
               <dd className="monitor-summary-value">{percent(memoryPercent)}</dd>
-              <dd className="monitor-summary-detail">
-                {bytes(usedMemory)} / {bytes(sample?.memory.totalBytes ?? null)}
-              </dd>
+              {memoryPercent !== null ? (
+                <dd className="monitor-summary-detail">
+                  {bytes(usedMemory)} / {bytes(sample?.memory.totalBytes ?? null)}
+                </dd>
+              ) : null}
               <dd className="workspace-meter" aria-hidden="true">
                 <span style={{ width: width(memoryPercent) }} />
               </dd>
             </div>
-            <div className="monitor-summary-stat">
+            <div className="monitor-summary-stat" data-high={highUsage(storagePercent)}>
               <dt>
                 <IconDatabase size={18} aria-hidden="true" />
                 {hostDisk ? 'Storage' : 'Core storage'}
               </dt>
               <dd className="monitor-summary-value">{percent(storagePercent)}</dd>
-              <dd className="monitor-summary-detail">
-                {bytes(disk?.usedBytes ?? null)} / {bytes(disk?.sizeBytes ?? null)}
-              </dd>
+              {storagePercent !== null ? (
+                <dd className="monitor-summary-detail">
+                  {bytes(disk?.usedBytes ?? null)} / {bytes(disk?.sizeBytes ?? null)}
+                </dd>
+              ) : null}
               <dd className="workspace-meter" aria-hidden="true">
                 <span style={{ width: width(storagePercent) }} />
               </dd>
@@ -410,7 +405,7 @@ function ServerMonitor() {
               <div className="desktop-telemetry-grid">
                 <section className="desktop-telemetry-cpu" aria-labelledby="telemetry-cpu-title">
                   <h2 id="telemetry-cpu-title">CPU</h2>
-                  <div className="desktop-telemetry-lead">
+                  <div className="desktop-telemetry-lead" data-high={highUsage(sample.cpu.totalPercent)}>
                     <strong>{percent(sample.cpu.totalPercent)}</strong>
                     <span>{sample.cpu.scope === 'host-proc' ? 'Utilisation' : 'Core container load'}</span>
                   </div>
@@ -420,7 +415,7 @@ function ServerMonitor() {
                       <div className="desktop-core-grid">
                         {sample.cpu.perCorePercent.map((core, index) => (
                           // biome-ignore lint/suspicious/noArrayIndexKey: Core position identifies the processor across samples.
-                          <div key={index}>
+                          <div key={index} data-high={highUsage(core)}>
                             <span>Core {index + 1}</span>
                             <strong>{percent(core)}</strong>
                             <div className="workspace-meter">
@@ -434,13 +429,19 @@ function ServerMonitor() {
                     <p>Per-core readings unavailable.</p>
                   )}
                 </section>
-                <section className="desktop-telemetry-memory" aria-labelledby="telemetry-memory-title">
+                <section className="desktop-telemetry-memory" aria-labelledby="telemetry-memory-title" data-high={highUsage(memoryPercent)}>
                   <h2 id="telemetry-memory-title">Memory</h2>
-                  <div className="desktop-telemetry-lead">
+                  <div className="desktop-telemetry-lead" data-high={highUsage(memoryPercent)}>
                     <strong className="desktop-memory-total">
-                      <span>{bytes(usedMemory)}</span>
-                      <span aria-hidden="true"> / </span>
-                      <span>{bytes(sample.memory.totalBytes)}</span>
+                      {memoryPercent === null ? (
+                        'Unavailable'
+                      ) : (
+                        <>
+                          <span>{bytes(usedMemory)}</span>
+                          <span aria-hidden="true"> / </span>
+                          <span>{bytes(sample.memory.totalBytes)}</span>
+                        </>
+                      )}
                     </strong>
                   </div>
                   <MetricChart

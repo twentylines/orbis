@@ -3,8 +3,12 @@ export type AppPreviewHistory = StorePreviewHistory & { appsReturnPath?: string;
 
 export function storeReturnPath(state: StorePreviewHistory | null, search: string) {
   if (typeof state?.storeReturnPath === 'string' && /^\/app-store(?:\?[^#]*)?$/.test(state.storeReturnPath)) return state.storeReturnPath;
-  const store = new URLSearchParams(search).get('store');
-  return store ? `/app-store?${new URLSearchParams({ store })}` : '/app-store';
+  const params = new URLSearchParams(search);
+  const filters = new URLSearchParams();
+  const store = params.get('store');
+  if (store) filters.set('store', store);
+  if (params.get('view') === 'apps') filters.set('view', 'apps');
+  return `/app-store${filters.size ? `?${filters}` : ''}`;
 }
 
 export function storePreviewDepth(state: StorePreviewHistory | null) {

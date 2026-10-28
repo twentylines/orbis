@@ -42,6 +42,10 @@
   border-radius: inherit;
   background: var(--desktop-surface);
 }
+.system-gauge[data-high="true"] .system-dial {
+  color: var(--desktop-negative);
+  background: conic-gradient(from -90deg, var(--desktop-negative) var(--dial-progress), var(--desktop-line) 0);
+}
 .system-dial > * {
   position: relative;
 }

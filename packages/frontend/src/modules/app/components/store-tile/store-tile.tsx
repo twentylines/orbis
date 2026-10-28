@@ -1,67 +1,83 @@
-import type React from 'react';
-import './store-tile.css';
 import { AppLogo } from '@/components/app-logo/app-logo';
-import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { Skeleton } from '@/components/ui/Skeleton/Skeleton';
+import { WrapWords } from '@/components/wrap-words/wrap-words';
+import { useWindowVisible } from '@/desktop/window-visibility';
 import type { AppInfoSimple } from '@/types/app.types';
+import { IconChevronRight } from '@tabler/icons-react';
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useLocation } from 'react-router';
 import { useStorePreview } from '../../pages/store-preview-context';
 import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
-import { Link, useLocation } from 'react-router';
-import { colorSchemeForCategory } from '../../helpers/table-helpers';
+import './store-tile.css';
 
-export const StoreTile: React.FC<{ app: AppInfoSimple; isLoading: boolean }> = ({ app, isLoading }) => {
+export function StoreTile({ app, isLoading }: { app: AppInfoSimple; isLoading: boolean }) {
   const { t } = useTranslation();
   const location = useLocation();
   const preview = useStorePreview();
-
-  const isNew = (app.created_at ?? 0) + 14 * 24 * 60 * 60 * 1000 > Date.now();
-
+  const visible = useWindowVisible();
+  const id = useId();
+  const age = Date.now() - app.created_at;
+  const isNew = app.created_at > 0 && age >= 0 && age < 14 * 24 * 60 * 60 * 1000;
   const [appId, storeId] = app.urn.split(':');
 
   return (
     <Link
-      ref={preview?.onCardMount}
-      aria-label={app.name}
-      className="app-tile"
+      ref={visible ? preview?.onCardMount : undefined}
+      aria-labelledby={`${id}-name`}
+      aria-describedby={`${id}-description${app.deprecated || !app.available ? ` ${id}-notice` : ''}`}
+      className="app-tile orbis-store-tile"
       to={`/app-store/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}${location.search}`}
       state={nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, location.pathname.startsWith('/app-store/'))}
       preventScrollReset
-      data-store-app={app.urn}
+      data-store-app={visible ? app.urn : undefined}
       aria-controls={preview?.split ? 'store-app-preview' : undefined}
       aria-expanded={preview?.split ? preview.selectedUrn === app.urn : undefined}
     >
-      <div key={app.id} className="d-flex overflow-hidden align-items-start catalogue-tile">
+      <div className="orbis-store-tile-header">
         <Skeleton loading={isLoading}>
-          <AppLogo className="logo" urn={app.urn} placeholder={isLoading} />
+          <AppLogo className="orbis-store-logo" urn={app.urn} size={64} placeholder={isLoading} />
         </Skeleton>
-        <div className="card-body">
-          <div className="d-flex align-items-center" style={{ columnGap: '0.75rem' }}>
-            <h3 className="text-bold mb-2 catalogue-tile-name" title={app.name}>
-              <Skeleton loading={isLoading}>
-                <span>
-                  <WrapWords text={app.name} />
-                </span>
-              </Skeleton>
-            </h3>
-            {isNew ? <div className="text-white badge me-1 bg-green">{t('APP_NEW')}</div> : null}
-          </div>
-          <p className="text-muted mb-2 catalogue-tile-description" title={app.short_desc}>
+        <div className="orbis-store-tile-title">
+          <h3 id={`${id}-name`} title={app.name}>
             <Skeleton loading={isLoading}>
-              <span>
-                <WrapWords text={app.short_desc} />
+              <WrapWords text={app.name} />
+            </Skeleton>
+          </h3>
+          <span className="orbis-store-tile-categories">
+            {app.categories.map((category, index) => (
+              <span key={category}>
+                {index ? (
+                  <span aria-hidden="true" className="orbis-store-category-separator">
+                    {' '}
+                    ·{' '}
+                  </span>
+                ) : null}
+                {t(`APP_CATEGORY_${category.toUpperCase()}`)}
               </span>
-            </Skeleton>
-          </p>
-          {app.categories?.map((category) => (
-            <Skeleton loading={isLoading} key={`${app.id}-${category}`}>
-              <div className={`text-white badge me-1 bg-${colorSchemeForCategory[category]}`}>
-                {t(`APP_CATEGORY_${category.toUpperCase() as Uppercase<typeof category>}`)}
-              </div>
-            </Skeleton>
-          ))}
+            ))}
+          </span>
         </div>
+      </div>
+      <p id={`${id}-description`} className="orbis-store-tile-description" title={app.short_desc}>
+        <Skeleton loading={isLoading}>
+          <WrapWords text={app.short_desc} />
+        </Skeleton>
+      </p>
+      <div className="orbis-store-tile-footer">
+        {app.deprecated || !app.available ? (
+          <span id={`${id}-notice`} className="orbis-store-tile-notice">
+            {app.deprecated ? 'Deprecated' : 'Unavailable'}
+          </span>
+        ) : isNew ? (
+          <span className="orbis-store-tile-new">{t('APP_NEW')}</span>
+        ) : (
+          <span />
+        )}
+        <span className="orbis-store-tile-action" aria-hidden="true">
+          Details <IconChevronRight size={16} />
+        </span>
       </div>
     </Link>
   );
-};
+}

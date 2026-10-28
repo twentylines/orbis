@@ -1,0 +1,214 @@
+.system-backups-settings {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--desktop-line);
+}
+.system-backups-settings :is(h2, h3, h4, p) {
+  margin: 0;
+}
+.system-backups-settings h2 {
+  font-size: 1.1875rem;
+  line-height: 1.4;
+}
+.system-backups-settings h3 {
+  font-size: 1.0625rem;
+  line-height: 1.4;
+}
+.system-backups-settings h4 {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.system-backups-settings :is(p, small, output) {
+  color: var(--desktop-muted);
+  line-height: 1.55;
+}
+.system-backups-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.system-backups-settings .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 16px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.45;
+}
+.system-backups-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 20px;
+}
+.system-backups-choices > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--desktop-surface) 72%, transparent);
+}
+.system-backups-choices .btn {
+  margin-top: auto;
+}
+.system-backups-form,
+.system-backups-job {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--desktop-surface) 72%, transparent);
+  animation: backup-reveal 160ms ease-out;
+}
+.system-backups-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 16px;
+}
+.system-backups-fields > div {
+  min-width: 0;
+}
+.system-backups-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.system-backups-jobs {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+.system-backups-progress {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.system-backups-progress > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.system-backups-progress progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  accent-color: var(--desktop-accent);
+  border-radius: 4px;
+}
+.system-backups-progress small {
+  font-variant-numeric: tabular-nums;
+}
+.system-backups-review {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.system-backups-review dl {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+.system-backups-review dl > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.3fr) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px 20px;
+}
+.system-backups-review dt {
+  font-weight: 650;
+}
+.system-backups-review dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.system-backups-review code {
+  display: block;
+  padding-top: 10px;
+  overflow-wrap: anywhere;
+}
+.system-backups-review summary {
+  cursor: pointer;
+  line-height: 1.5;
+}
+.system-backups-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  line-height: 1.55;
+  cursor: pointer;
+}
+.system-backups-confirm input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 0.2em;
+  accent-color: var(--desktop-accent);
+}
+.system-backups-settings .system-backups-warning {
+  color: var(--desktop-ink);
+  font-weight: 600;
+}
+.system-backups-settings .alert {
+  margin: 0;
+}
+.system-backups-settings .alert .btn {
+  margin-top: 12px;
+}
+@keyframes backup-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 520px) {
+  .system-backups-review dl > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .system-backups-form,
+  .system-backups-job,
+  .system-backups-choices > div {
+    padding: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .system-backups-form,
+  .system-backups-job {
+    animation: none;
+  }
+}
+body[data-motion="reduced"] :is(.system-backups-form, .system-backups-job) {
+  animation: none;
+}
+
+.system-backups-file {
+  overflow-wrap: anywhere;
+}
+.system-backups-settings[data-embedded="true"] {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 16px;
+}
+.system-backups-settings[data-embedded="true"] .system-backups-heading {
+  align-items: baseline;
+}

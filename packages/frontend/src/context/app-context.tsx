@@ -1,11 +1,12 @@
 import type { AppContextDto } from '@/api-client';
 import { appContextOptions, appContextQueryKey, systemLoadOptions } from '@/api-client/@tanstack/react-query.gen';
 import { type QueryClient, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { createContext, useContext, useEffect } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 
 interface AppContextValue extends AppContextDto {
   refreshAppContext: () => Promise<void>;
   setAppContext: (newAppContext: Partial<AppContextDto>) => void;
+  sessionIdentity: object;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -16,6 +17,7 @@ const prefetch = (queryClient: QueryClient) => {
 
 export const AppContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
+  const sessionIdentity = useRef({}).current;
 
   useEffect(() => {
     prefetch(queryClient);
@@ -31,6 +33,7 @@ export const AppContextProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const value = {
     ...appContext,
+    sessionIdentity,
     refreshAppContext,
     setAppContext: (newAppContext: Partial<AppContextDto>) => {
       queryClient.setQueryData(['appContext'], { ...appContext, ...newAppContext });

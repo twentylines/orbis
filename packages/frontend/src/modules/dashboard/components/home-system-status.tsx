@@ -8,6 +8,7 @@ import { useWindowVisible } from '@/desktop/window-visibility';
 import { useHostReadings } from './host-devices';
 import { SystemGauges } from './system-gauges';
 import { statusBytes, statusNetwork } from './system-readings';
+import { sensorOptions, useObserveSystemHealth } from './use-system-health';
 
 const rate = (value: number | null) => {
   if (value === null) return 'Unavailable';
@@ -25,6 +26,8 @@ const rate = (value: number | null) => {
 export function HomeSystemStatus() {
   const visible = useWindowVisible();
   const system = useQuery(telemetryOptions(visible));
+  const sensors = useQuery(sensorOptions(visible));
+  useObserveSystemHealth({ telemetry: system.data, sensors: sensors.data, telemetryError: system.isError, sensorsError: sensors.isError });
   const host = useHostReadings();
   const currentHost = host.data?.available && !host.data.stale && !host.isError ? host.data : null;
   const hostDisk = currentHost?.filesystems.find((filesystem) => filesystem.mount === '/');

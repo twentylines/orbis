@@ -529,6 +529,22 @@
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
+.monitor-summary-stat[data-high="true"] .monitor-summary-value {
+  color: var(--desktop-negative);
+}
+.desktop-telemetry-lead[data-high="true"] > strong,
+.desktop-core-grid > [data-high="true"] > strong {
+  color: var(--desktop-negative);
+}
+.desktop-core-grid > [data-high="true"] .workspace-meter > span {
+  background: var(--desktop-negative);
+}
+.desktop-telemetry-memory[data-high="true"] > .workspace-meter > span {
+  background: var(--desktop-negative);
+}
+.monitor-summary-stat[data-high="true"] .workspace-meter > span {
+  background: var(--desktop-negative);
+}
 .monitor-temperature-strip dd[data-critical="true"] {
   color: var(--desktop-negative);
 }

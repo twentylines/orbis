@@ -467,6 +467,9 @@
   font-size: 0.8125rem;
   margin: 0;
 }
+.workspace-attention:has(.workspace-health-attention) .workspace-attention-empty {
+  display: none;
+}
 .workspace-section-heading > a {
   display: inline-flex;
   align-items: center;
@@ -1306,6 +1309,27 @@
   list-style: none;
 }
 .workspace-recent-tasks,
+.workspace-health-attention {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 16px 0;
+  list-style: none;
+}
+.workspace-health-attention a {
+  display: grid;
+  gap: 4px;
+  padding: 8px 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.workspace-attention .workspace-health-attention strong {
+  color: var(--desktop-negative);
+}
+.workspace-health-attention span {
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+}
 .workspace-attention-apps {
   max-height: min(30rem, 42dvh);
   overflow-y: auto;

@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { type SettingsFormValues, UserSettingsForm } from '../components/user-settings-form/user-settings-form';
 import { AutomaticUpdatesSettings } from './automatic-updates-settings';
 import { ReleaseChannelSettings } from './release-channel-settings';
+import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
 
 type Props = {
   initialValues?: SettingsFormValues;
@@ -55,6 +56,7 @@ export const UserSettingsContainer = ({ initialValues }: Props) => {
         <>
           <ReleaseChannelSettings />
           <AutomaticUpdatesSettings />
+          <SystemBackupsSettings />
         </>
       ) : null}
     </div>

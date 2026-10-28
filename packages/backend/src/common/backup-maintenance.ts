@@ -101,6 +101,8 @@ export function backupMaintenanceMiddleware(request: Request, response: Response
   const pathname = request.originalUrl.split('?')[0] ?? '';
   if (pathname.startsWith('/api/system-backups')) response.setHeader('Cache-Control', 'no-store');
   if (!pathname.startsWith('/api/') || /^\/api\/(?:health\/?$|system-backups(?:\/|$))/.test(pathname)) return next();
+  // Event streams stay open for the browser session and do not mutate snapshot data.
+  if (request.method === 'GET' && /^\/api\/sse\/(?:app|app-logs|runtipi-logs)\/?$/.test(pathname)) return next();
   if (
     (recoveryRequired || restoreRecoveryRequired) &&
     !held &&

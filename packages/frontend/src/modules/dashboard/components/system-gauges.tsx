@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { IconCpu, IconDatabase, IconDeviceDesktopAnalytics } from '@tabler/icons-react';
 import { statusBytes, usagePercent } from './system-readings';
 import './system-gauges.css';
+import { highUsage } from './system-health';
 
 type Props = {
   cpu: number | null;
@@ -15,12 +16,14 @@ type Props = {
 };
 
 export function SystemGauges({ cpu, clockGHz, memoryUsed, memoryTotal, diskUsed, diskTotal, diskLabel }: Props) {
+  const memoryPercent = usagePercent(memoryUsed, memoryTotal);
+  const diskPercent = usagePercent(diskUsed, diskTotal);
   const readings = [
     { title: 'CPU', value: cpu, icon: IconCpu, hash: 'telemetry-cpu-title' },
-    { title: 'Memory', value: usagePercent(memoryUsed, memoryTotal), icon: IconDeviceDesktopAnalytics, hash: 'telemetry-memory-title' },
+    { title: 'Memory', value: memoryPercent, icon: IconDeviceDesktopAnalytics, hash: 'telemetry-memory-title' },
     {
       title: 'Storage',
-      value: usagePercent(diskUsed, diskTotal),
+      value: diskPercent,
       icon: IconDatabase,
       hash: diskLabel === 'Storage' ? 'host-storage-title' : 'telemetry-disks-title',
     },
@@ -33,7 +36,8 @@ export function SystemGauges({ cpu, clockGHz, memoryUsed, memoryTotal, diskUsed,
             key={title}
             to={`/monitor#${hash}`}
             className="system-gauge"
-            aria-label={`${title}, ${value === null ? 'unavailable' : `${value.toFixed(1)} percent`}`}
+            data-high={highUsage(value)}
+            aria-label={`${title}, ${value === null ? 'unavailable' : `${value.toFixed(1)} percent${highUsage(value) ? ', high' : ''}`}`}
           >
             <span className="system-dial" style={{ '--dial-progress': `${Math.max(0, Math.min(100, value ?? 0))}%` } as CSSProperties}>
               <Icon size={16} aria-hidden="true" />
@@ -53,17 +57,29 @@ export function SystemGauges({ cpu, clockGHz, memoryUsed, memoryTotal, diskUsed,
         <div>
           <dt>Memory</dt>
           <dd>
-            <span>{statusBytes(memoryUsed)}</span>
-            <span aria-hidden="true"> / </span>
-            <span>{statusBytes(memoryTotal)}</span>
+            {memoryPercent === null ? (
+              <span>Unavailable</span>
+            ) : (
+              <>
+                <span>{statusBytes(memoryUsed)}</span>
+                <span aria-hidden="true"> / </span>
+                <span>{statusBytes(memoryTotal)}</span>
+              </>
+            )}
           </dd>
         </div>
         <div>
           <dt>{diskLabel}</dt>
           <dd>
-            <span>{statusBytes(diskUsed)}</span>
-            <span aria-hidden="true"> / </span>
-            <span>{statusBytes(diskTotal)}</span>
+            {diskPercent === null ? (
+              <span>Unavailable</span>
+            ) : (
+              <>
+                <span>{statusBytes(diskUsed)}</span>
+                <span aria-hidden="true"> / </span>
+                <span>{statusBytes(diskTotal)}</span>
+              </>
+            )}
           </dd>
         </div>
       </dl>

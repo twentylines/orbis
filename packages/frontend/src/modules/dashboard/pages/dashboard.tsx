@@ -36,6 +36,7 @@ import { ClusterApps, ClusterOverview } from '@/desktop/cluster-views';
 
 import { homeApps, maximumHomePins, moveHomePin, placeHomePin, workspaceRows } from '@/desktop/workspace-apps';
 import { HomeSystemStatus } from '../components/home-system-status';
+import { SystemHealthAttention } from '../components/system-health-attention';
 
 const labels: Record<WidgetId, string> = {
   applications: 'Applications',
@@ -459,6 +460,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     attention: (
       <section className="workspace-attention" aria-labelledby="workspace-attention-title">
         <h2 id="workspace-attention-title">Needs attention</h2>
+        <SystemHealthAttention />
         {unhealthy > 0 ? (
           <p>
             {unhealthy} application{unhealthy === 1 ? '' : 's'} with an unhealthy Docker check.{' '}
@@ -466,7 +468,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
           </p>
         ) : null}
         {apps.data ? (
-          <p>
+          <p className={attention || unhealthy ? undefined : 'workspace-attention-empty'}>
             {attention
               ? `${attention} installed application${attention === 1 ? '' : 's'} stopped or ready to update.`
               : 'No stopped apps or available updates.'}

@@ -151,3 +151,49 @@ it('refuses controller execution when a request disconnected during authenticati
     release();
   }
 });
+
+it('does not wait for read-only browser event streams while still draining mutations', async () => {
+  const streams = new Subject<void>();
+  const subscriptions = [];
+  for (const pathname of ['/api/sse/app', '/api/sse/app-logs?appUrn=sample:catalogue', '/api/sse/runtipi-logs/']) {
+    const request = { originalUrl: pathname, method: 'GET' } as Request;
+    const response = Object.assign(new EventEmitter(), { setHeader: vi.fn() });
+    const next = vi.fn();
+    backupMaintenanceMiddleware(request, response as unknown as Response, next);
+    expect(next).toHaveBeenCalledOnce();
+    const context = { switchToHttp: () => ({ getRequest: () => request }) } as unknown as ExecutionContext;
+    subscriptions.push(new BackupMaintenanceInterceptor().intercept(context, { handle: () => streams }).subscribe());
+  }
+  const mutation = enterBackupMutation();
+  let acquired = false;
+  const waiting = acquireBackupMaintenance(new AbortController().signal).then((release) => {
+    acquired = true;
+    return release;
+  });
+  await Promise.resolve();
+  expect(acquired).toBe(false);
+  mutation?.();
+  const release = await waiting;
+  expect(acquired).toBe(true);
+  expect(enterBackupMutation()).toBeNull();
+  release();
+  streams.complete();
+  for (const subscription of subscriptions) subscription.unsubscribe();
+});
+it('keeps unknown event routes and mutation methods blocked during a snapshot', async () => {
+  const release = await acquireBackupMaintenance(new AbortController().signal);
+  try {
+    for (const [method, originalUrl] of [
+      ['POST', '/api/sse/app'],
+      ['GET', '/api/sse/app/modify'],
+    ]) {
+      const response = Object.assign(new EventEmitter(), { setHeader: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() });
+      const next = vi.fn();
+      backupMaintenanceMiddleware({ method, originalUrl } as Request, response as unknown as Response, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(response.status).toHaveBeenCalledWith(503);
+    }
+  } finally {
+    release();
+  }
+});

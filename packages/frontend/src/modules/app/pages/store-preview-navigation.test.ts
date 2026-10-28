@@ -19,6 +19,11 @@ describe('Store preview history', () => {
       storePreviewDepth: 1,
     });
   });
+  test('closing an all-apps preview keeps the selected repository and browse view without detail parameters', () => {
+    expect(storeReturnPath(null, '?store=community&view=apps&tab=description')).toBe('/app-store?store=community&view=apps');
+    expect(storeReturnPath(null, '?view=unknown&tab=description')).toBe('/app-store');
+    expect(nextStorePreviewHistory(null, '?view=apps').storeReturnPath).toBe('/app-store?view=apps');
+  });
   test('selecting another app records how many entries close must go back', () => {
     const first = nextStorePreviewHistory(null, '?store=official');
     expect(nextStorePreviewHistory(first, '?store=official')).toEqual({ storeReturnPath: '/app-store?store=official', storePreviewDepth: 2 });

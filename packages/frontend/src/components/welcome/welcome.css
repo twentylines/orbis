@@ -600,3 +600,46 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
     outline-offset: -3px;
   }
 }
+.orbis-setup-entry-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+}
+.orbis-setup-entry-choices > button {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 140px;
+  padding: 20px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  color: var(--desktop-ink);
+  background: var(--desktop-code-background);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+.orbis-setup-entry-choices > button[aria-pressed="true"] {
+  border-color: var(--desktop-accent);
+  background: color-mix(in srgb, var(--desktop-accent) 10%, var(--desktop-surface));
+}
+.orbis-setup-entry-choices strong {
+  font-size: 1.0625rem;
+  line-height: 1.4;
+}
+.orbis-setup-entry-choices span {
+  color: var(--desktop-muted);
+  line-height: 1.55;
+}
+.orbis-setup[data-reduced="true"] .orbis-setup-entry-choices > button {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-setup-entry-choices > button {
+    transition: none;
+  }
+}

@@ -115,7 +115,7 @@
   }
 }
 body:has(.orbis-theme) .form-select {
-  min-height: 40px;
+  min-height: var(--orbis-control-height, 40px);
 }
 body:has(.orbis-theme) :is(.btn-outline-primary, .btn-ghost-primary) {
   --tblr-btn-color: var(--desktop-ink);
@@ -428,7 +428,7 @@ body:has(.orbis-theme) :is(.form-control, .form-select, .input-group-text) {
   color: var(--desktop-ink);
   background-color: var(--desktop-surface);
   border-color: var(--desktop-line);
-  border-radius: 12px;
+  border-radius: var(--orbis-control-radius, 12px);
 }
 body:has(.orbis-theme) .form-control::placeholder {
   color: var(--desktop-muted);
@@ -460,8 +460,8 @@ body:has(.orbis-theme) .btn {
   --tblr-btn-active-shadow: none;
   max-width: 100%;
   white-space: normal;
-  min-height: 40px;
-  border-radius: 12px;
+  min-height: var(--orbis-control-height, 40px);
+  border-radius: var(--orbis-control-radius, 12px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
