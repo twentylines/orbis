@@ -12,6 +12,8 @@ import { MarketplaceService } from '../marketplace/marketplace.service';
 import { AppLifecycleService } from '../app-lifecycle/app-lifecycle.service';
 import { ClusterInstallService } from './cluster-install.service';
 
+const configurationSentinel = 'paired-install-fixture-only-value';
+
 const fixture = () => {
   const config = mock<ConfigurationService>();
   const stores = mock<AppStoreRepository>();
@@ -27,7 +29,7 @@ const fixture = () => {
     internalIp: '192.168.1.20',
     domain: 'peer.example.com',
     maxBackups: 3,
-    apiKey: 'private',
+    apiKey: configurationSentinel,
   };
   config.get.mockReturnValue(fromAny(settings));
   config.getConfig.mockReturnValue(fromAny({ architecture: 'arm64' }));
@@ -46,6 +48,7 @@ const fixture = () => {
 describe('paired app installation', () => {
   it('maps store origin and branch to the target slug, never the source host slug', async () => {
     const f = fixture();
+    f.info.source = 'https://private.example/app';
     const result = await f.service.context({ appName: 'tools', storeUrl: 'https://github.com/example/apps/', branch: 'main' });
     expect(f.marketplace.getAppInfoFromAppStore).toHaveBeenCalledExactlyOnceWith('tools:target-store');
     expect(result.source).toEqual({ appName: 'tools', storeUrl: 'https://github.com/example/apps', branch: 'main' });
@@ -56,7 +59,8 @@ describe('paired app installation', () => {
       domain: 'peer.example.com',
       maxBackups: 3,
     });
-    expect(JSON.stringify(result)).not.toContain('private');
+    expect(result.info.source).toBe('https://private.example/app');
+    expect(JSON.stringify(result)).not.toContain(configurationSentinel);
   });
 
   it('reports installation status without returning saved configuration', async () => {
