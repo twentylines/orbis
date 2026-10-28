@@ -78,6 +78,7 @@ export function AppWindow({
   trayTarget,
   trayElement,
   onPlace,
+  onDetachChange,
   onFocus,
   onMinimize,
   onMinimized,
@@ -99,6 +100,7 @@ export function AppWindow({
   trayTarget: () => DOMRect | undefined;
   trayElement: () => HTMLElement | undefined;
   onPlace: (mode: AppWindowMode) => void;
+  onDetachChange: (detached: boolean) => void;
   onFocus: () => void;
   onMinimize: () => void;
   onMinimized: () => void;
@@ -144,6 +146,7 @@ export function AppWindow({
     canSnap: !blocked,
     save: onSave,
     place: capturePlacement,
+    onDetachChange,
   });
   const hidden = !desktop || status === 'minimized';
   const busy = status === 'minimizing' || status === 'closing';
@@ -493,7 +496,7 @@ export function AppWindow({
                     bar.current?.focus({ preventScroll: true });
                   } else if (openingSplit.current) {
                     openingSplit.current = false;
-                    const target = document.querySelector<HTMLElement>('.app-split-picker input') ?? bar.current;
+                    const target = document.querySelector<HTMLElement>('.app-split-picker:not([inert]) input') ?? bar.current;
                     target?.focus({ preventScroll: true });
                   } else bar.current?.focus({ preventScroll: true });
                 }}

@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'framer-motion';
 import { useLocation } from 'react-router';
 import { IconX } from '@tabler/icons-react';
 import { AppLogo } from '@/components/app-logo/app-logo';
@@ -77,6 +78,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
       ? workspace.split
       : undefined;
   const [tray, setTray] = useState<HTMLElement | null>(null);
+  const [detachedWindow, setDetachedWindow] = useState<string | null>(null);
   const ratio = workspace.ratio ?? 0.5;
   const area = useAppWindowArea();
   const origins = useRef(new Map<string, { bounds: DOMRect; opacity?: number }>());
@@ -130,7 +132,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     requestAnimationFrame(() => {
       const surviving = document.querySelector<HTMLElement>('.orbis-app-launcher:not([hidden]):not([inert]) .app-launcher-bar');
       const target =
-        document.querySelector<HTMLElement>('.app-split-picker input') ??
+        document.querySelector<HTMLElement>('.app-split-picker:not([inert]) input') ??
         (preferTray ? trayButton(urn) : null) ??
         surviving ??
         (opener?.isConnected && !opener.closest('[hidden],[inert]') ? opener : null) ??
@@ -321,6 +323,9 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                           dispatch({ type: 'place', urn: item.request.urn, mode, partner: partner?.request.urn });
                         }}
                         onFocus={() => dispatch({ type: 'focus', urn: item.request.urn })}
+                        onDetachChange={(detached) =>
+                          setDetachedWindow((current) => (detached ? item.request.urn : current === item.request.urn ? null : current))
+                        }
                         onMinimize={() => dispatch({ type: 'minimize', urn: item.request.urn })}
                         onMinimized={() => {
                           dispatch({ type: 'minimized', urn: item.request.urn });
@@ -335,23 +340,26 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
                         onSave={(bounds) => saveBounds(item.request.urn, bounds)}
                       />
                     ))}
-                    {windowsEnabled && split && !split.partner && !workspace.pickerDismissed ? (
-                      <AppSplitPicker
-                        anchor={split.anchor}
-                        side={split.side === 'left' ? 'right' : 'left'}
-                        area={area}
-                        ratio={ratio}
-                        opened={state.windows.map(({ request }) => request)}
-                        onChoose={(request) => {
-                          remember(request);
-                          dispatch({ type: 'pair', request });
-                        }}
-                        onClose={() => {
-                          dispatch({ type: 'dismiss-picker' });
-                          restoreFocus(split?.anchor ?? '');
-                        }}
-                      />
-                    ) : null}
+                    <AnimatePresence>
+                      {windowsEnabled && split && !split.partner && !workspace.pickerDismissed && detachedWindow !== split.anchor ? (
+                        <AppSplitPicker
+                          key={`${section}:${split.anchor}:${split.side}`}
+                          anchor={split.anchor}
+                          side={split.side === 'left' ? 'right' : 'left'}
+                          area={area}
+                          ratio={ratio}
+                          opened={state.windows.map(({ request }) => request)}
+                          onChoose={(request) => {
+                            remember(request);
+                            dispatch({ type: 'pair', request });
+                          }}
+                          onClose={() => {
+                            dispatch({ type: 'dismiss-picker' });
+                            restoreFocus(split?.anchor ?? '');
+                          }}
+                        />
+                      ) : null}
+                    </AnimatePresence>
                     {windowsEnabled && split?.partner ? (
                       <AppSplitDivider area={area} ratio={ratio} onChange={(value) => dispatch({ type: 'ratio', value })} />
                     ) : null}

@@ -5,6 +5,7 @@ import { useAppContext } from '@/context/app-context';
 import { IconSearch, IconX } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { motion, useIsPresent } from 'framer-motion';
 import { appDestinations } from './app-destinations';
 import { appAddress, canEmbedApp, primaryAppAddress } from './app-opening';
 import { splitAppBounds } from './app-window-layout';
@@ -12,6 +13,7 @@ import type { AppLaunchRequest } from './app-window-state';
 import type { WindowArea } from './window-geometry';
 import { useDesktopPreferences } from './preferences';
 import { useBlockedAppEmbeds } from './app-embedding';
+import { useReducedMotion } from './motion-preferences';
 
 export function AppSplitPicker({
   anchor,
@@ -37,6 +39,8 @@ export function AppSplitPicker({
   const [search, setSearch] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const heading = useId();
+  const present = useIsPresent();
+  const reducedMotion = Boolean(useReducedMotion());
   const bounds = splitAppBounds(side, area, ratio);
   const requests = new Map<string, AppLaunchRequest>();
   for (const request of opened) requests.set(request.urn, request);
@@ -52,11 +56,18 @@ export function AppSplitPicker({
     .filter((item) => item.urn !== anchor && item.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
   useLayoutEffect(() => {
-    input.current?.focus({ preventScroll: true });
-  }, []);
+    if (present) input.current?.focus({ preventScroll: true });
+  }, [present]);
   return (
-    <dialog
+    <motion.dialog
       open
+      inert={!present}
+      aria-hidden={!present || undefined}
+      data-leaving={!present || undefined}
+      initial={reducedMotion ? false : { opacity: 0.7, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 6, transition: { duration: reducedMotion ? 0 : 0.24, ease: [0.2, 0.76, 0.22, 1] } }}
+      transition={{ duration: reducedMotion ? 0 : 0.36, ease: [0.2, 0.76, 0.22, 1] }}
       aria-labelledby={heading}
       className="app-split-picker"
       style={{ left: bounds.x, top: bounds.y, width: bounds.width, height: bounds.height }}
@@ -131,6 +142,6 @@ export function AppSplitPicker({
         })}
       </ul>
       {!apps.isPending && choices.length === 0 ? <p>No matching apps.</p> : null}
-    </dialog>
+    </motion.dialog>
   );
 }

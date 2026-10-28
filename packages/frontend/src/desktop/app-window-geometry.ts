@@ -21,6 +21,7 @@ export function useAppWindowGeometry({
   canSnap = true,
   save,
   place,
+  onDetachChange,
 }: {
   area: WindowArea;
   mode: AppWindowMode;
@@ -30,6 +31,7 @@ export function useAppWindowGeometry({
   canSnap?: boolean;
   save: (bounds: DesktopWindowBounds) => void;
   place: (mode: AppWindowMode) => void;
+  onDetachChange: (detached: boolean) => void;
 }) {
   const [floating, setFloating] = useState(() => initialAppBounds(area, saved, categories));
   const [draft, setDraft] = useState<DesktopWindowBounds | null>(null);
@@ -39,6 +41,9 @@ export function useAppWindowGeometry({
   const latest = useRef<DesktopWindowBounds | null>(null);
   const target = useRef<Exclude<AppWindowMode, 'floating'> | null>(null);
   const pending = useRef(0);
+  const detached = useRef(false);
+  const detachChanged = useRef(onDetachChange);
+  detachChanged.current = onDetachChange;
   const placed = mode === 'floating' ? clampAppBounds(floating, area) : mode === 'maximized' ? area : splitAppBounds(mode, area, ratio);
   const bounds = draft ?? placed;
   const cancel = useCallback(() => {
@@ -50,13 +55,26 @@ export function useAppWindowGeometry({
     setDraft(null);
     setGestureKind(null);
     setPreview(null);
+    if (detached.current) {
+      detached.current = false;
+      detachChanged.current(false);
+    }
   }, []);
   const constraint = useRef({ area, mode });
   useLayoutEffect(() => {
     if (constraint.current.area !== area || constraint.current.mode !== mode) cancel();
     constraint.current = { area, mode };
   }, [area, mode, cancel]);
-  useEffect(() => () => cancelAnimationFrame(pending.current), []);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(pending.current);
+      if (detached.current) {
+        detached.current = false;
+        detachChanged.current(false);
+      }
+    },
+    [],
+  );
   const finish = (commit: boolean) => {
     if (commit && gesture.current?.changed && latest.current) {
       const next = latest.current;
@@ -67,6 +85,10 @@ export function useAppWindowGeometry({
     cancel();
   };
   const change = (next: DesktopWindowBounds) => {
+    if (gesture.current?.kind === 'move' && mode !== 'floating' && !detached.current) {
+      detached.current = true;
+      detachChanged.current(true);
+    }
     if (gesture.current) gesture.current.changed = true;
     latest.current = clampAppBounds(next, area);
     if (!pending.current)
@@ -104,6 +126,7 @@ export function useAppWindowGeometry({
       if (!active?.pointer || active.pointer.id !== event.pointerId) return;
       const dx = event.clientX - active.pointer.x;
       const dy = event.clientY - active.pointer.y;
+      if (!active.changed && dx === 0 && dy === 0) return;
       const next =
         active.kind === 'move'
           ? { ...active.bounds, x: active.bounds.x + dx, y: active.bounds.y + dy }
