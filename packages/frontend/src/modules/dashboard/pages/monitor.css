@@ -620,6 +620,13 @@
   line-height: 1.5;
   cursor: pointer;
 }
+.monitor-section-tab-track {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+  gap: inherit;
+}
 .monitor-section-tab:hover {
   background: color-mix(in srgb, var(--desktop-preset-tint) 8%, transparent);
   color: var(--desktop-ink);

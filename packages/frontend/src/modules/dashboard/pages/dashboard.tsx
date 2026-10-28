@@ -246,7 +246,9 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
       const list = region.querySelector<HTMLElement>('.workspace-app-list');
       const firstApp = list?.querySelector<HTMLElement>('.workspace-app');
       const rowGap = list ? Number.parseFloat(getComputedStyle(list).rowGap) || 0 : 0;
-      const minimumApps = firstApp && list ? Math.min(list.scrollHeight + 8, firstApp.offsetHeight * 3 + rowGap * 2 + 8) : 160;
+      const regionStyle = getComputedStyle(region);
+      const scrollInset = (Number.parseFloat(regionStyle.paddingTop) || 0) + (Number.parseFloat(regionStyle.paddingBottom) || 0);
+      const minimumApps = firstApp && list ? Math.min(list.scrollHeight + scrollInset, firstApp.offsetHeight * 3 + rowGap * 2 + scrollInset) : 160;
       const auxiliaryLimit = Math.max(240, budget - minimumApps - 18);
       const auxiliaryHeight = auxiliary ? Math.max(0, ...Array.from(auxiliary.children, (widget) => widget.firstElementChild?.scrollHeight ?? 0)) : 0;
       const auxiliarySpace = auxiliaryHeight > 0 ? Math.min(auxiliaryHeight + 2, auxiliaryLimit) + 18 : 0;

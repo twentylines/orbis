@@ -6,6 +6,7 @@ import { metricHistoryRanges, type MetricHistoryRange } from '@runtipi/common/sc
 import type { HostDeviceHistory, HostHistorySelection } from '@runtipi/common/schemas/host-device-history';
 import { MetricPlot, formatPlotValue, type MetricPlotHistory } from '@/components/metric-chart/metric-plot';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select/Select';
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import './host-device-history.css';
@@ -162,14 +163,14 @@ export function HostDeviceHistoryView({ section, layoutReady = true }: { section
             </SelectContent>
           </Select>
         </div>
-        <fieldset className="monitor-history-ranges host-history-ranges">
+        <SelectionGroup as="fieldset" className="monitor-history-ranges host-history-ranges">
           <legend className="visually-hidden">Device history time range</legend>
           {ranges.map(([value, label]) => (
             <button type="button" key={value} aria-pressed={range === value} onClick={() => setParam('range', value)}>
               {label}
             </button>
           ))}
-        </fieldset>
+        </SelectionGroup>
       </div>
       {query.isError ? (
         <div className="host-history-notice" role="alert">

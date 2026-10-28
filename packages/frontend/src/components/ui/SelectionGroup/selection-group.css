@@ -1,0 +1,47 @@
+.orbis-selection-group {
+  position: relative;
+  isolation: isolate;
+}
+.orbis-selection-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+.orbis-selection-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: var(--orbis-selection-radius, 9px);
+  background: var(--orbis-selection-fill, color-mix(in srgb, var(--desktop-preset-tint) 20%, var(--desktop-surface)));
+}
+.orbis-selection-group > button {
+  position: relative;
+  z-index: 1;
+}
+body:has(.orbis-theme)
+  .orbis-selection-group[data-selection-ready="true"]
+  > button:is([aria-selected="true"], [aria-pressed="true"], [data-state="active"], [data-selection-active="true"]) {
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+}
+body:has(.orbis-theme) .orbis-selection-group > button:focus-visible {
+  outline: none;
+  box-shadow: none;
+  text-decoration: none;
+  background: color-mix(in srgb, var(--desktop-ink) 12%, transparent);
+}
+@media (forced-colors: active) {
+  .orbis-selection-background {
+    border: 2px solid Highlight;
+  }
+  body:has(.orbis-theme) .orbis-selection-group > button:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -4px;
+  }
+}

@@ -31,7 +31,7 @@ body:has(.orbis-theme)
         .desktop-task-trigger,
         .desktop-icon-button
       )
-  ):focus-visible {
+  ):not(h1, h2, h3, h4, h5, h6, [role="heading"]):focus-visible {
   /* biome-ignore lint/complexity/noImportantStyles: Preserve keyboard indication when low-effects removes decorative shadows. */
   box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--desktop-focus) 12%, transparent) !important;
 }

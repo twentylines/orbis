@@ -62,7 +62,12 @@ export default () => {
             About
           </TabsTrigger>
           <DropdownMenu>
-            <DropdownMenuTrigger className="nav-link dropdown-toggle d-block d-md-none">{t('MORE')}</DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              className="nav-link dropdown-toggle d-block d-md-none"
+              data-selection-active={['appstores', 'logs', 'about'].includes(currentTab)}
+            >
+              {t('MORE')}
+            </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={() => handleTabChange('appstores')}>{t('SETTINGS_APPSTORES_TAB_TITLE')}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleTabChange('logs')}>{t('SETTINGS_LOGS_TAB_TITLE')}</DropdownMenuItem>

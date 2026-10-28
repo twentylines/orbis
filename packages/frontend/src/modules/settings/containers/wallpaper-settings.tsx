@@ -287,14 +287,14 @@ export function WallpaperSettings() {
         <p className="appearance-upload-help">PNG, JPEG or WebP · Up to 32 MB and 64 megapixels. Original image quality is preserved.</p>
         <fieldset className="appearance-wallpaper-controls" disabled={busy}>
           <legend>Image layout</legend>
-          <div className="appearance-choice">
+          <SelectionGroup className="appearance-choice">
             <button type="button" aria-pressed={value.wallpaperFit === 'cover'} onClick={() => updateAppearance({ wallpaperFit: 'cover' })}>
               Fill screen
             </button>
             <button type="button" aria-pressed={value.wallpaperFit === 'contain'} onClick={() => updateAppearance({ wallpaperFit: 'contain' })}>
               Fit whole image
             </button>
-          </div>
+          </SelectionGroup>
           <div className="appearance-range-grid">
             <AppearanceRange
               label="Horizontal position"
@@ -333,3 +333,4 @@ export function WallpaperSettings() {
     </section>
   );
 }
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';

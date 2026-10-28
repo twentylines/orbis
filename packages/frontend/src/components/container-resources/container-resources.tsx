@@ -111,7 +111,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
             {compact ? 'Usage' : 'Container health and usage'}
           </h2>
         </div>
-        <fieldset className="container-resources-sort">
+        <SelectionGroup as="fieldset" className="container-resources-sort">
           <legend className="visually-hidden">Sort containers by</legend>
           <span className="container-resources-sort-label" aria-hidden="true">
             Sort by
@@ -122,7 +122,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
           <button type="button" aria-pressed={sort === 'memoryBytes'} onClick={() => setSort('memoryBytes')}>
             Memory
           </button>
-        </fieldset>
+        </SelectionGroup>
       </div>
       {compact ? null : (
         <section className="container-health-overview" aria-label="Container status summary">
@@ -392,3 +392,4 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
     </section>
   );
 }
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';

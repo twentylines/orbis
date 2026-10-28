@@ -227,14 +227,14 @@ export const Appearance = () => {
           <h2 id="appearance-density">Density</h2>
           <p>Compact fits more cards and rows by reducing spacing across Home, Apps, Store, Monitor and Settings. Text size stays the same.</p>
         </div>
-        <div className="appearance-choice">
+        <SelectionGroup className="appearance-choice">
           <button type="button" aria-pressed={preferences.density === 'comfortable'} onClick={() => update({ density: 'comfortable' })}>
             Comfortable
           </button>
           <button type="button" aria-pressed={preferences.density === 'compact'} onClick={() => update({ density: 'compact' })}>
             Compact
           </button>
-        </div>
+        </SelectionGroup>
       </section>
       <section className="appearance-section" aria-labelledby="appearance-transfer">
         <div>
@@ -278,3 +278,4 @@ export const Appearance = () => {
     </div>
   );
 };
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';

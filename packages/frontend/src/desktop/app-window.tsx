@@ -308,9 +308,14 @@ export function AppWindow({
     lastPlacement.current = { mode, area, bounds: next };
     if (before.area !== area || geometry.gestureKind || status !== 'visible') {
       placementAnimation.current?.cancel();
+      if (!geometry.gestureKind) placementFrom.current = null;
       return;
     }
-    if (before.mode === mode || hidden || !panel.current || prefersReducedMotion()) return;
+    if (hidden || !panel.current || prefersReducedMotion()) {
+      placementFrom.current = null;
+      return;
+    }
+    if (before.mode === mode && !placementFrom.current) return;
     const from = placementFrom.current ?? new DOMRect(before.bounds.x, before.bounds.y, before.bounds.width, before.bounds.height);
     placementFrom.current = null;
     flightAnimation.current?.cancel();

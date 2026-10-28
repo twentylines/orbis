@@ -5,6 +5,7 @@ import { useTasks, taskLabels, taskStates, taskIsActive } from '@/desktop/tasks'
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { useQuery } from '@tanstack/react-query';
 import type { TaskRecord } from '@runtipi/common/schemas';
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import './tasks.css';
 
 export default function Tasks() {
@@ -98,7 +99,7 @@ export default function Tasks() {
         </p>
       ) : null}
       <div className="task-toolbar">
-        <fieldset>
+        <SelectionGroup as="fieldset">
           <legend className="visually-hidden">Filter operations</legend>
           {[
             ['all', 'All'],
@@ -110,7 +111,7 @@ export default function Tasks() {
               {label}
             </button>
           ))}
-        </fieldset>
+        </SelectionGroup>
         <span>{tasks.data ? `Checked ${new Date(tasks.data.sampledAt).toLocaleTimeString()}` : 'Loading history'}</span>
       </div>
       {tasks.isPending ? <p>Loading operations…</p> : null}

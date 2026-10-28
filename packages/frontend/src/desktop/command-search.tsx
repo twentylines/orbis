@@ -424,7 +424,7 @@ export function CommandSearch() {
               <div ref={dropdown} className="desktop-search-dropdown" data-compact={bar.available < 340}>
                 <div className="desktop-search-discovery">
                   <Dialog.Description>Find apps, change settings, review updates and check your server.</Dialog.Description>
-                  <fieldset aria-label="Search in">
+                  <SelectionGroup as="fieldset" aria-label="Search in">
                     <legend className="visually-hidden">Search in</legend>
                     {searchScopes.map(([value, label]) => (
                       <button
@@ -439,7 +439,7 @@ export function CommandSearch() {
                         {label}
                       </button>
                     ))}
-                  </fieldset>
+                  </SelectionGroup>
                 </div>
                 <div id="desktop-search-results" className="desktop-search-results" aria-busy={loadingStore || installed.isPending}>
                   {groups
@@ -513,3 +513,4 @@ export function CommandSearch() {
     </Dialog.Root>
   );
 }
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';

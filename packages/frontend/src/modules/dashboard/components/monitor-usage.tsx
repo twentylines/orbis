@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { ContainerResources } from '@/components/container-resources/container-resources';
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { HostProcessesView } from './host-processes';
 
 export function MonitorUsage() {
@@ -16,7 +17,7 @@ export function MonitorUsage() {
   }, [location.hash]);
   return (
     <div className="monitor-usage-panel">
-      <fieldset className="monitor-usage-source">
+      <SelectionGroup as="fieldset" className="monitor-usage-source">
         <legend className="visually-hidden">Resource usage</legend>
         <button type="button" aria-pressed={source === 'containers'} onClick={() => setSource('containers')}>
           Containers
@@ -24,7 +25,7 @@ export function MonitorUsage() {
         <button type="button" aria-pressed={source === 'processes'} onClick={() => setSource('processes')}>
           Host processes
         </button>
-      </fieldset>
+      </SelectionGroup>
       {source === 'processes' ? <p className="monitor-usage-scope">CPU: 100% is one core. Host process and container readings overlap.</p> : null}
       {source === 'containers' ? (
         <>

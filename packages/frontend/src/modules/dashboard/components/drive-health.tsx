@@ -132,7 +132,7 @@ export function DriveHealthView() {
       {data ? (
         <>
           <div className="drive-health-toolbar">
-            <fieldset className="drive-health-filter">
+            <SelectionGroup as="fieldset" className="drive-health-filter">
               <legend className="visually-hidden">Show drives</legend>
               <button type="button" aria-pressed={!attention} onClick={() => setAttention(false)}>
                 All drives <span>{data.drives.length}</span>
@@ -140,7 +140,7 @@ export function DriveHealthView() {
               <button type="button" aria-pressed={attention} onClick={() => setAttention(true)}>
                 Needs attention <span>{needingAttention.length}</span>
               </button>
-            </fieldset>
+            </SelectionGroup>
             <input
               type="search"
               className="form-control"
@@ -489,3 +489,4 @@ export function DriveHealthView() {
     </section>
   );
 }
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';

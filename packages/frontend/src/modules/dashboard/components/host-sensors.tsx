@@ -92,7 +92,9 @@ export const HostSensorsView = memo(function HostSensorsView() {
           {ready.limited || ready.unreadable > 0 ? (
             <p className="host-sensor-coverage">
               {ready.limited ? 'The hardware scan reached its limit; some readings may be missing. ' : ''}
-              {ready.unreadable ? `${ready.unreadable.toLocaleString()} hardware attributes could not be read.` : ''}
+              {ready.unreadable
+                ? `${ready.unreadable.toLocaleString()} hardware ${ready.unreadable === 1 ? 'attribute' : 'attributes'} could not be read.`
+                : ''}
             </p>
           ) : null}
           {!ready.temperatures.length &&

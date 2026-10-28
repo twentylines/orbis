@@ -3,6 +3,7 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import clsx from 'clsx';
 import type * as React from 'react';
+import { SelectionGroup } from '../SelectionGroup/SelectionGroup';
 import './tabs.css';
 
 const Tabs = ({ className, children, ...props }: React.ComponentProps<typeof TabsPrimitive.Root>) => (
@@ -14,7 +15,7 @@ const Tabs = ({ className, children, ...props }: React.ComponentProps<typeof Tab
 const TabsList = ({ className, children, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) => (
   <TabsPrimitive.List className={clsx('', className)} {...props}>
     <div className="card-header">
-      <div className="nav nav-tabs card-header-tabs">{children}</div>
+      <SelectionGroup className="nav nav-tabs card-header-tabs">{children}</SelectionGroup>
     </div>
   </TabsPrimitive.List>
 );

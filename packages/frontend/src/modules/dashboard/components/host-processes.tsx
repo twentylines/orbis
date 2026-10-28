@@ -2,6 +2,7 @@ import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import type { HostProcesses } from '@runtipi/common/schemas';
 import { memo, useEffect, useRef, useState } from 'react';
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { resourceBytes } from '@/components/container-resources/container-resources';
 import './host-processes.css';
@@ -76,7 +77,7 @@ export const HostProcessesView = memo(function HostProcessesView({ limit }: { li
           maxLength={100}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <fieldset className="container-resources-sort host-processes-sort">
+        <SelectionGroup as="fieldset" className="container-resources-sort host-processes-sort">
           <legend className="visually-hidden">Sort by</legend>
           <span className="container-resources-sort-label" aria-hidden="true">
             Sort by
@@ -87,7 +88,7 @@ export const HostProcessesView = memo(function HostProcessesView({ limit }: { li
           <button type="button" aria-pressed={sort === 'memoryBytes'} onClick={() => setSort('memoryBytes')}>
             Memory
           </button>
-        </fieldset>
+        </SelectionGroup>
       </div>
       {query.isPending ? <output>Loading host processes…</output> : null}
       {query.isError || data?.available === false ? (

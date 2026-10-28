@@ -1,4 +1,5 @@
 import { WrapWords } from '@/components/wrap-words/wrap-words';
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { InstalledVersions } from '@/components/installed-versions/installed-versions';
@@ -477,7 +478,7 @@ function LocalUpdates() {
 
   return (
     <div className="desktop-updates">
-      <div className="desktop-updates-tabs" role="tablist" aria-label="Update categories">
+      <SelectionGroup className="desktop-updates-tabs" role="tablist" aria-label="Update categories">
         {(
           [
             {
@@ -528,7 +529,7 @@ function LocalUpdates() {
             ) : null}
           </button>
         ))}
-      </div>
+      </SelectionGroup>
       <div className="desktop-updates-grid">
         <section
           className="desktop-updates-card"

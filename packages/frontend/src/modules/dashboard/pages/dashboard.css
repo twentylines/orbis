@@ -406,7 +406,7 @@
   padding: 28px 0 31px;
   min-height: 0;
   position: relative;
-  overflow: clip;
+  overflow: visible;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -415,7 +415,7 @@
   -webkit-backdrop-filter: none;
 }
 .workspace-apps::after {
-  content: "";
+  content: none;
   position: absolute;
   width: 520px;
   height: 520px;
@@ -510,9 +510,16 @@
     scrollbar-gutter: stable;
     scrollbar-width: thin;
     scrollbar-color: var(--desktop-line) transparent;
-    scroll-padding-block: 8px;
-    padding-block: 4px;
-    padding-right: 12px;
+    scroll-padding-block: 20px;
+    padding-block: 16px 32px;
+    margin-block: -12px -28px;
+    padding-inline: 16px 28px;
+    margin-inline: -16px;
+    mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 16px), transparent);
+  }
+  .workspace-app-scroll:focus-visible,
+  .workspace-app-scroll:focus-within {
+    mask-image: none;
   }
   .workspace-pin-order {
     max-height: 52dvh;

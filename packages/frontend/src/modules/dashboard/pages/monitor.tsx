@@ -331,11 +331,13 @@ function ServerMonitor() {
           </Select>
         </div>
         <Tabs.List className="monitor-section-tabs" aria-label="Monitor sections">
-          {monitorSections.map(([value, label]) => (
-            <Tabs.Trigger className="monitor-section-tab" key={value} value={value}>
-              {label}
-            </Tabs.Trigger>
-          ))}
+          <SelectionGroup className="monitor-section-tab-track">
+            {monitorSections.map(([value, label]) => (
+              <Tabs.Trigger className="monitor-section-tab" key={value} value={value}>
+                {label}
+              </Tabs.Trigger>
+            ))}
+          </SelectionGroup>
         </Tabs.List>
         <Tabs.Content className="monitor-section-panel" value="usage">
           <MonitorUsage key={telemetryPath} />
@@ -348,7 +350,7 @@ function ServerMonitor() {
             <>
               <div className="monitor-history-toolbar">
                 <h2>Performance history</h2>
-                <fieldset className="monitor-history-ranges">
+                <SelectionGroup as="fieldset" className="monitor-history-ranges">
                   <legend className="visually-hidden">History time range</legend>
                   {(
                     [
@@ -371,7 +373,7 @@ function ServerMonitor() {
                       {label}
                     </button>
                   ))}
-                </fieldset>
+                </SelectionGroup>
                 <span className="monitor-history-resolution">
                   {range === '5m' ? 'Recent samples' : range === '1h' ? '1 min averages' : range === '24h' ? '5 min averages' : '30 min averages'}
                 </span>
@@ -568,3 +570,4 @@ function ServerMonitor() {
     </div>
   );
 }
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';

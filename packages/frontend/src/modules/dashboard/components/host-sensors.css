@@ -22,11 +22,11 @@
   line-height: 1.5;
   letter-spacing: -0.035em;
 }
-.host-sensors-heading h2:focus-visible {
+body:has(.orbis-theme) .host-sensors-heading h2:focus-visible {
   outline: none;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 5px;
+  box-shadow: none;
+  filter: none;
+  text-decoration: none;
 }
 .host-sensors-state,
 .host-sensors .host-sensor-coverage,
@@ -228,13 +228,13 @@ body:has(.orbis-theme) .host-sensors-about summary:focus-visible {
     display: grid;
     grid-template-columns: 9em minmax(0, 1fr);
     column-gap: 24px;
-    align-items: start;
+    align-items: first baseline;
   }
   .host-sensor-groups h3 {
     grid-column: 1;
-    grid-row: 1 / span 2;
+    grid-row: 1;
     margin: 0;
-    padding-top: 18px;
+    line-height: 1.6;
   }
   .host-sensor-list,
   .host-sensors .host-sensor-coverage,
@@ -252,7 +252,7 @@ body:has(.orbis-theme) .host-sensors-about summary:focus-visible {
   }
 }
 @media (forced-colors: active) {
-  .host-sensors-heading h2:focus-visible {
+  body:has(.orbis-theme) .host-sensors-heading h2:focus-visible {
     outline: 2px solid Highlight;
     outline-offset: 2px;
   }

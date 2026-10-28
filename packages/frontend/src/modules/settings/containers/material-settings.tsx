@@ -156,14 +156,14 @@ export function MaterialSettings() {
           <p>Reduce movement in navigation, app windows and the server rack.</p>
         </div>
         <div className="appearance-material-controls">
-          <fieldset className="appearance-choice" aria-label="Motion preference">
+          <SelectionGroup as="fieldset" className="appearance-choice" aria-label="Motion preference">
             <button type="button" aria-pressed={value.motion === 'system'} onClick={() => updateAppearance({ motion: 'system' })}>
               Follow system
             </button>
             <button type="button" aria-pressed={value.motion === 'reduced'} onClick={() => updateAppearance({ motion: 'reduced' })}>
               Reduce motion
             </button>
-          </fieldset>
+          </SelectionGroup>
           {value.lowEffects ? <p>Energy saving also reduces movement.</p> : null}
         </div>
       </section>
@@ -172,7 +172,7 @@ export function MaterialSettings() {
           <h2 id="appearance-transparency">Surfaces</h2>
           <p>Use solid surfaces when you prefer less background detail.</p>
         </div>
-        <fieldset className="appearance-choice" aria-label="Transparency preference">
+        <SelectionGroup as="fieldset" className="appearance-choice" aria-label="Transparency preference">
           {systemTransparency ? (
             <button type="button" aria-pressed={value.transparency === 'system'} onClick={() => updateAppearance({ transparency: 'system' })}>
               Use device setting
@@ -188,7 +188,7 @@ export function MaterialSettings() {
           <button type="button" aria-pressed={value.transparency === 'solid'} onClick={() => updateAppearance({ transparency: 'solid' })}>
             Solid
           </button>
-        </fieldset>
+        </SelectionGroup>
       </section>
       <section className="appearance-section" aria-labelledby="appearance-effects">
         <div>
@@ -202,3 +202,4 @@ export function MaterialSettings() {
     </>
   );
 }
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
