@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { TaskRecord } from '@runtipi/common/schemas/task-history';
 import { createAppQueryClient } from '@/lib/query-client';
 import { DesktopTaskLink } from './desktop-task-link';
-import { readTaskAcknowledgements, taskAttentionKey } from './task-attention';
+import { criticalUpdateAttentionKey, readTaskAcknowledgements, taskAttentionKey } from './task-attention';
 
 function task(status: TaskRecord['status'], digit = 'a'): TaskRecord {
   return {
@@ -29,7 +29,7 @@ test.each(['failed', 'interrupted', 'unconfirmed'] as const)('identifies a %s ta
 test.each(['running', 'queued', 'succeeded'] as const)('does not mark a %s task as an alert', (status) => {
   expect(taskAttentionKey(task(status))).toBeNull();
 });
-test('keeps the activity count and alert as separate elements on the same task button', () => {
+test('tints the existing number for unread failures without adding another badge', () => {
   const client = createAppQueryClient();
   client.setQueryData(['tasks'], {
     tasks: [task('running'), task('failed', 'b')],
@@ -46,7 +46,9 @@ test('keeps the activity count and alert as separate elements on the same task b
     </QueryClientProvider>,
   );
   expect(markup).toContain('desktop-task-count');
-  expect(markup).toContain('desktop-task-alert');
+  expect(markup).not.toContain('desktop-task-alert');
+  expect(markup).toContain('data-alert="true"');
+  expect(markup.match(/desktop-task-badge/g)?.length).toBe(1);
   expect(markup).toContain('1 active operation, 1 new alert');
   expect(markup.match(/<a /g)?.length).toBe(1);
   client.clear();
@@ -70,8 +72,8 @@ test('does not show an unread badge while the task centre is being viewed', () =
   expect(markup).not.toContain('desktop-task-alert');
   client.clear();
 });
-test.each(['broken', '{}', '[1]', JSON.stringify(['x'.repeat(129)]), JSON.stringify(Array(302).fill('alert'))])(
-  'ignores unsafe or oversized acknowledgement data: %s',
+test.each(['broken', '{}', '[1]', JSON.stringify(['x'.repeat(129)]), JSON.stringify(Array(303).fill('alert'))])(
+  'ignores unsafe or oversized acknowledgement data: case %#',
   (raw) => {
     expect(readTaskAcknowledgements({ getItem: () => raw })).toEqual([]);
   },
@@ -86,4 +88,42 @@ test('retains bounded acknowledgement keys and works when browser storage is una
       },
     }),
   ).toEqual([]);
+});
+
+test('only marks an available newer critical release, including inherited critical fixes', () => {
+  const release = {
+    tag: 'v1.1.3',
+    priority: 'critical' as const,
+    imageManifestUrl: 'https://example.test/release.json',
+    publishedAt: null,
+    body: '',
+    url: '',
+  };
+  expect(criticalUpdateAttentionKey(release, 'v1.1.0')).toBe('critical:v1.1.3');
+  expect(criticalUpdateAttentionKey(release, 'v1.1.3')).toBeNull();
+  expect(criticalUpdateAttentionKey(release, undefined)).toBeNull();
+  expect(criticalUpdateAttentionKey({ ...release, priority: undefined }, 'v1.1.0')).toBeNull();
+  expect(criticalUpdateAttentionKey({ ...release, imageManifestUrl: null }, 'v1.1.0')).toBeNull();
+});
+
+test('shows a red number for a critical update even when no app operation is running', () => {
+  const client = createAppQueryClient();
+  client.setQueryData(['orbis-release-channels'], { current: 'stable' });
+  client.setQueryData(['orbis-installed-build'], { version: 'v1.1.0' });
+  client.setQueryData(
+    ['orbis-github-releases', 'stable'],
+    [{ tag: 'v1.1.3', priority: 'critical', imageManifestUrl: 'https://example.test/release.json' }],
+  );
+  const markup = renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <DesktopTaskLink />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  expect(markup.match(/desktop-task-badge/g)?.length).toBe(1);
+  expect(markup).toContain('data-alert="true"');
+  expect(markup).toContain('0 active operations, 1 new alert');
+  expect(markup).not.toContain('desktop-task-alert');
+  client.clear();
 });

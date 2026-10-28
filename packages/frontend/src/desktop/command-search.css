@@ -82,15 +82,20 @@
   font: inherit;
   font-size: 0.8125rem;
   line-height: 1.45;
+  appearance: none;
+  -webkit-appearance: none;
 }
 .desktop-search-input input::placeholder {
   color: var(--orbis-chrome-muted, var(--desktop-chrome-ink));
   opacity: 1;
 }
-body:has(.orbis-theme) .desktop-search-surface .desktop-search-input input:is(:focus, :focus-visible) {
+/* biome-ignore lint/complexity/noImportantStyles: Search is one continuous surface in every browser and focus state. */
+body:has(.orbis-theme) .desktop-search-surface .desktop-search-input #orbis-command-query {
   outline: none;
   box-shadow: none;
-  background-color: transparent;
+  background: transparent;
+  border: 0;
+  filter: none;
   caret-color: var(--desktop-accent);
 }
 .desktop-search-input:focus-within > svg {
@@ -308,7 +313,7 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input input:is(:f
   color: var(--desktop-muted);
   font-size: 0.75rem;
 }
-.desktop-search-surface :is(button, input):focus-visible {
+.desktop-search-surface button:focus-visible {
   outline: 3px solid var(--desktop-focus);
   outline-offset: -4px;
 }

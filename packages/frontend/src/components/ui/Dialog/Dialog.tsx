@@ -112,6 +112,7 @@ const DialogContent = ({
         className={clsx('modal-content', 'orbis-dialog-content', 'orbis-modal-frame', className)}
         data-size={size}
         {...props}
+        data-focus-surface="parent"
         onInteractOutside={(event) => {
           if (event.target instanceof Element && event.target.closest('.orbis-notifications')) event.preventDefault();
           else onInteractOutside?.(event);
@@ -123,6 +124,10 @@ const DialogContent = ({
           opener.current = menuTrigger ?? active;
           focusFallback.current = opener.current?.closest<HTMLElement>('[data-dialog-focus-fallback]') ?? null;
           onOpenAutoFocus?.(event);
+          if (!event.defaultPrevented) {
+            event.preventDefault();
+            if (event.target instanceof HTMLElement) event.target.focus({ preventScroll: true });
+          }
         }}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);

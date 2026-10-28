@@ -128,7 +128,7 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
   const restoreFocus = (urn: string, preferTray = false) => {
     const opener = openers.current.get(urn);
     requestAnimationFrame(() => {
-      const surviving = document.querySelector<HTMLElement>('.orbis-app-launcher:not([hidden]):not([inert]) .app-launcher-close');
+      const surviving = document.querySelector<HTMLElement>('.orbis-app-launcher:not([hidden]):not([inert]) .app-launcher-bar');
       const target =
         document.querySelector<HTMLElement>('.app-split-picker input') ??
         (preferTray ? trayButton(urn) : null) ??

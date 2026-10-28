@@ -118,6 +118,7 @@ export function AppWindow({
   const layoutButton = useRef<HTMLButtonElement>(null);
   const helpButton = useRef<HTMLButtonElement>(null);
   const settingsClose = useRef<HTMLButtonElement>(null);
+  const settingsHeading = useRef<HTMLHeadingElement>(null);
   const placementFrom = useRef<DOMRect | null>(null);
   const flightAnimation = useRef<Animation | null>(null);
   const departure = useRef<{ box: DOMRect; opacity: number } | null>(null);
@@ -177,14 +178,14 @@ export function AppWindow({
   useLayoutEffect(() => {
     const element = panel.current;
     if (!element || hidden) return;
-    if (settings) settingsClose.current?.focus({ preventScroll: true });
+    if (settings) settingsHeading.current?.focus({ preventScroll: true });
   }, [settings, hidden]);
 
   useLayoutEffect(() => {
     const element = panel.current;
     if (!element || hidden || !flightReady) return;
     if (status === 'visible' && !motion.current.automatic)
-      (motion.current.settings ? settingsClose.current : settingsButton.current)?.focus({ preventScroll: true });
+      (motion.current.settings ? settingsHeading.current : bar.current)?.focus({ preventScroll: true });
     const end = status === 'minimizing' ? motion.current.trayTarget() : undefined;
     if (prefersReducedMotion()) {
       if (status === 'minimizing') motion.current.onMinimized();
@@ -324,11 +325,11 @@ export function AppWindow({
 
   const closeSettings = () => {
     setSettings(false);
-    settingsButton.current?.focus({ preventScroll: true });
+    bar.current?.focus({ preventScroll: true });
   };
   const closeHelp = () => {
     setHelp(false);
-    helpButton.current?.focus({ preventScroll: true });
+    bar.current?.focus({ preventScroll: true });
   };
   const openHelp = () => {
     setSettings(false);
@@ -386,6 +387,7 @@ export function AppWindow({
           className="app-launcher-bar"
           ref={bar}
           tabIndex={-1}
+          data-focus-surface="parent"
           {...geometry.move}
           onDoubleClick={(event) => {
             if (!(event.target as HTMLElement).closest('button,a,select')) place(mode === 'maximized' ? 'floating' : 'maximized');
@@ -485,16 +487,15 @@ export function AppWindow({
                   visibility: layoutFlyout.position ? 'visible' : 'hidden',
                 }}
                 onCloseAutoFocus={(event) => {
+                  event.preventDefault();
                   if (keyboardWindow.current) {
-                    event.preventDefault();
                     keyboardWindow.current = false;
                     bar.current?.focus({ preventScroll: true });
                   } else if (openingSplit.current) {
-                    event.preventDefault();
                     openingSplit.current = false;
-                    const target = document.querySelector<HTMLElement>('.app-split-picker input') ?? layoutButton.current;
+                    const target = document.querySelector<HTMLElement>('.app-split-picker input') ?? bar.current;
                     target?.focus({ preventScroll: true });
-                  }
+                  } else bar.current?.focus({ preventScroll: true });
                 }}
               >
                 <DropdownMenuLabel>Window layout</DropdownMenuLabel>
@@ -575,7 +576,7 @@ export function AppWindow({
                 className="app-window-activate"
                 aria-label={`Activate ${request.name} window`}
                 onPointerDown={(event) => event.preventDefault()}
-                onFocus={() => settingsButton.current?.focus({ preventScroll: true })}
+                onFocus={() => bar.current?.focus({ preventScroll: true })}
                 onClick={onFocus}
               />
             ) : null}
@@ -595,7 +596,9 @@ export function AppWindow({
           {settings ? (
             <section className="app-window-settings" aria-label={`${request.name} settings`}>
               <header>
-                <h3>App settings</h3>
+                <h3 ref={settingsHeading} tabIndex={-1} data-focus-surface="parent">
+                  App settings
+                </h3>
                 <div ref={setSettingsSaveTarget} className="app-window-settings-save-target" />
                 <Button ref={settingsClose} size="icon" aria-label="Back to app" title="Back to app" onClick={closeSettings}>
                   <IconX size={19} aria-hidden="true" />

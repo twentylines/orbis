@@ -168,18 +168,30 @@ html:has(.desktop) {
   line-height: 1;
   text-align: center;
   pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--task-badge-fill) 76%, #000);
+  background: linear-gradient(160deg, rgb(255 255 255 / 12%), transparent 55%, rgb(0 0 0 / 12%)) var(--task-badge-fill);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 24%);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
 }
 .desktop-task-count {
+  --task-badge-fill: #d3b78d;
   right: -5px;
   color: #17362b;
-  background: #d3b78d;
 }
-.desktop-task-alert {
-  left: -5px;
-  width: max(18px, 1.45em);
-  padding: 0;
+.desktop-task-count[data-alert="true"] {
+  --task-badge-fill: #9b3434;
   color: #fff5f3;
-  background: #9b3434;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-task-badge {
+    transition: none;
+  }
+}
+html[data-orbis-motion="reduced"] .desktop-task-badge {
+  transition: none;
 }
 .desktop-update-notice:hover,
 .desktop-search-trigger:hover,

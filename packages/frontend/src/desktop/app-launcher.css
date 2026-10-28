@@ -232,6 +232,10 @@
   outline: 3px solid var(--desktop-focus);
   outline-offset: 3px;
 }
+.orbis-app-launcher [data-focus-surface="parent"]:focus {
+  outline: none;
+  box-shadow: none;
+}
 .orbis-app-tray {
   flex: 0 1 auto;
   align-self: stretch;

@@ -149,6 +149,10 @@ body:has(.orbis-theme) .orbis-dialog-content .orbis-dialog-header {
   display: block;
   margin: auto;
 }
+.orbis-dialog-content[data-focus-surface="parent"]:focus {
+  outline: none;
+  box-shadow: none;
+}
 body:has(.orbis-theme) .orbis-dialog-content .btn:focus-visible {
   outline: none;
   box-shadow: none;

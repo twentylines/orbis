@@ -397,9 +397,11 @@ export function CommandSearch() {
                 <IconSearch size={20} aria-hidden="true" />
                 <input
                   ref={input}
+                  id="orbis-command-query"
                   data-focus-surface="parent"
                   value={closing ? '' : search}
                   type="search"
+                  autoComplete="off"
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search apps, settings and server tools"
                   aria-label="Search Orbis"
