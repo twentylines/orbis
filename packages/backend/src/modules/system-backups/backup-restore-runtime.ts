@@ -13,6 +13,8 @@ import { BackupRestoreJournal } from './backup-restore-journal';
 import { verifyRestoreDatabase } from './backup-restore-database';
 import type { RestoreRuntime } from './backup-restore-coordinator';
 import { verifyRestoreFiles } from './backup-restore-files';
+import { writeRestoreEnvironment } from './backup-restore-environment';
+import { deriveRestoreStorageLayout, verifyRestoreStorageMounts } from './backup-restore-storage';
 
 const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
 const digest = type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value));
@@ -24,6 +26,14 @@ const restart = type({
   MaximumRetryCount: 'number.integer >= 0 & number <= 1000000',
 });
 const snapshot = type({ '+': 'reject', id: digest, fingerprint: digest, running: 'boolean', restart });
+export const restoreDatabaseConnectionSchema = type({
+  '+': 'reject',
+  host: text,
+  port: 'number.integer > 0 & number <= 65535',
+  user: text,
+  password: 'string <= 4096',
+  database: text,
+});
 const operationSchema = type({
   '+': 'reject',
   version: '1',
@@ -33,6 +43,7 @@ const operationSchema = type({
   original: snapshot,
   candidate: snapshot,
   verifier: snapshot,
+  'worker?': snapshot,
   resumeApps: type({
     '+': 'reject',
     id: 'number.integer > 0',
@@ -51,14 +62,7 @@ const operationSchema = type({
   queue: type({ '+': 'reject', host: text, username: text, password: 'string <= 4096' }),
   database: type({
     '+': 'reject',
-    connection: type({
-      '+': 'reject',
-      host: text,
-      port: 'number.integer > 0 & number <= 65535',
-      user: text,
-      password: 'string <= 4096',
-      database: text,
-    }),
+    connection: restoreDatabaseConnectionSchema,
     owner: type({ '+': 'reject', name: text, oid: 'number.integer > 0', marker: text }),
     counts: type({
       '+': 'reject',
@@ -79,6 +83,19 @@ const operationSchema = type({
   }),
 });
 export type RestoreOperation = typeof operationSchema.infer;
+export const restoreRuntimeIdentitySchema = operationSchema.pick(
+  'version',
+  'id',
+  'nonce',
+  'image',
+  'original',
+  'candidate',
+  'verifier',
+  'worker',
+  'apps',
+  'queue',
+);
+export type RestoreRuntimeIdentity = typeof restoreRuntimeIdentitySchema.infer;
 type Snapshot = typeof snapshot.infer;
 const failed = (runtimeCheck = 'runtime') =>
   Object.assign(new BackupRequirementError('The restore runtime could not be verified. Keep apps stopped and retry recovery.'), { runtimeCheck });
@@ -124,16 +141,10 @@ export function snapshotRestoreContainer(container: Dockerode.ContainerInspectIn
 }
 
 export function verifyRestoreVerifierMounts(original: Dockerode.ContainerInspectInfo, verifier: Dockerode.ContainerInspectInfo) {
-  const destinations = ['/data', '/app-data', '/cache', '/data/logs'];
-  if (verifier.Mounts.length !== destinations.length || new Set(verifier.Mounts.map((mount) => mount.Destination)).size !== destinations.length)
+  try {
+    verifyRestoreStorageMounts(original.Mounts, verifier.Mounts, 'verifier');
+  } catch {
     throw failed('verifier-mounts');
-  for (const destination of destinations) {
-    const mount = verifier.Mounts.find((item) => item.Destination === destination);
-    const source = original.Mounts.find((item) => item.Destination === (destination === '/data/logs' ? '/data' : destination));
-    const expectedSource = source && (destination === '/data/logs' ? path.posix.join(source.Source, 'logs') : source.Source);
-    const writable = destination === '/cache' || destination === '/data/logs';
-    if (!mount || !source || source.Type !== 'bind' || mount.Type !== 'bind' || mount.Source !== expectedSource || mount.RW !== writable)
-      throw failed('verifier-mounts');
   }
 }
 
@@ -156,38 +167,65 @@ async function syncDirectory(directory: string) {
     await handle.close();
   }
 }
-async function replaceOwned(file: string, bytes: Buffer) {
-  const temporary = path.join(path.dirname(file), `.${randomUUID()}.tmp`);
-  try {
-    const output = await fs.open(temporary, 'wx', 0o600);
-    try {
-      await output.writeFile(bytes);
-      await output.sync();
-    } finally {
-      await output.close();
-    }
-    await fs.rename(temporary, file);
-    await syncDirectory(path.dirname(file));
-  } finally {
-    await fs.rm(temporary, { force: true });
-  }
-}
-export async function readRestoreOperation(journal: BackupRestoreJournal) {
-  await privateBackupDirectory(journal.directory);
-  const value = operationSchema(JSON.parse((await readOwned(path.join(journal.directory, 'runtime.json'))).toString('utf8')));
-  if (value instanceof type.errors) throw failed();
+async function checkRestoreIdentity(journal: BackupRestoreJournal, value: RestoreRuntimeIdentity) {
   const state = await journal.refresh();
   if (
     value.id !== state.id ||
     value.nonce !== state.nonce ||
     value.original.id !== state.originalController ||
     value.candidate.id !== state.candidateController ||
-    value.verifier.id !== state.verifierController
+    value.verifier.id !== state.verifierController ||
+    (value.worker && value.worker.id !== state.worker)
   )
     throw failed();
   const ids = [state.worker, value.original.id, value.candidate.id, value.verifier.id, ...value.apps.map((app) => app.container.id)];
-  if (new Set(ids).size !== ids.length) throw failed();
+  const restartingOriginal = value.original.id === value.candidate.id;
+  if (
+    new Set(ids).size !== ids.length - (restartingOriginal ? 1 : 0) ||
+    (restartingOriginal && JSON.stringify(canonical(value.original)) !== JSON.stringify(canonical(value.candidate)))
+  )
+    throw failed();
   return value;
+}
+
+export async function validateRestoreIdentity(journal: BackupRestoreJournal, input: unknown) {
+  const value = restoreRuntimeIdentitySchema(input);
+  if (value instanceof type.errors) throw failed();
+  return checkRestoreIdentity(journal, value);
+}
+
+async function validateRestoreOperation(journal: BackupRestoreJournal, input: unknown) {
+  const value = operationSchema(input);
+  if (value instanceof type.errors) throw failed();
+  await checkRestoreIdentity(journal, value);
+  return value;
+}
+
+export async function readRestoreOperation(journal: BackupRestoreJournal) {
+  await privateBackupDirectory(journal.directory);
+  return validateRestoreOperation(journal, JSON.parse((await readOwned(path.join(journal.directory, 'runtime.json'))).toString('utf8')));
+}
+
+export async function writeRestoreOperation(journal: BackupRestoreJournal, operation: RestoreOperation) {
+  await privateBackupDirectory(journal.directory);
+  if (!['staging', 'preparing'].includes((await journal.refresh()).phase)) throw failed('preparation-phase');
+  const value = await validateRestoreOperation(journal, operation);
+  const temporary = path.join(journal.directory, `.${randomUUID()}.runtime`);
+  try {
+    const file = await fs.open(temporary, 'wx', 0o600);
+    try {
+      await file.writeFile(JSON.stringify(value));
+      await file.sync();
+    } finally {
+      await file.close();
+    }
+    await fs.link(temporary, path.join(journal.directory, 'runtime.json'));
+    await fs.rm(temporary);
+    await syncDirectory(journal.directory);
+    return await readRestoreOperation(journal);
+  } finally {
+    await fs.rm(temporary, { force: true });
+  }
 }
 
 export class BackupRestoreDockerRuntime implements RestoreRuntime {
@@ -196,18 +234,23 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
   constructor(
     private readonly docker: Dockerode,
     private readonly journal: BackupRestoreJournal,
-    private readonly operation: RestoreOperation,
+    private readonly operation: RestoreOperation | RestoreRuntimeIdentity,
     private readonly roots = { data: '/data', appData: '/app-data', cache: '/cache' },
   ) {
     this.data = roots.data;
     this.cache = roots.cache;
+  }
+  private preparedOperation(): RestoreOperation {
+    if (!('database' in this.operation)) throw failed('not-prepared');
+    return this.operation;
   }
   private async owned(record: Snapshot) {
     const inspect = await this.docker.getContainer(record.id).inspect();
     if (snapshotRestoreContainer(inspect).fingerprint !== record.fingerprint) throw failed('container-snapshot');
     const policy = inspect.HostConfig.RestartPolicy ?? { Name: 'no', MaximumRetryCount: 0 };
     if (
-      ['staging', 'prepared'].includes(this.journal.state.phase) &&
+      (this.journal.state.phase === 'staging' ||
+        (record.id === this.journal.state.worker && !['completed', 'rolled-back', 'discarded'].includes(this.journal.state.phase))) &&
       (policy.Name !== record.restart.Name || (policy.MaximumRetryCount ?? 0) !== record.restart.MaximumRetryCount)
     )
       throw failed('initial-restart-policy');
@@ -226,11 +269,14 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
         return [entry.slice(0, split), entry.slice(split + 1)];
       }),
     );
+    // Restarting the original container preserves Compose ownership, proxy labels and network aliases for later OTA updates.
+    const restartingOriginal = role === 'candidate' && record.id === this.operation.original.id;
     if (
       inspect.Image !== this.operation.image ||
-      labels?.['io.orbis.restore'] !== this.operation.id ||
-      labels['io.orbis.restore.nonce'] !== this.operation.nonce ||
-      labels['io.orbis.restore.role'] !== role ||
+      (!restartingOriginal &&
+        (labels?.['io.orbis.restore'] !== this.operation.id ||
+          labels['io.orbis.restore.nonce'] !== this.operation.nonce ||
+          labels['io.orbis.restore.role'] !== role)) ||
       (role === 'verifier'
         ? env.get('ORBIS_INSTALLER_TRANSACTION') !== this.operation.id || env.get('ORBIS_INSTALLER_PHASE') !== 'hold'
         : env.has('ORBIS_INSTALLER_TRANSACTION') || env.has('ORBIS_INSTALLER_PHASE'))
@@ -238,7 +284,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       throw failed();
     return inspect;
   }
-  async verifyWorker(hostname: string) {
+  async verifyWorker(hostname: string, options: { preparing?: boolean } = {}) {
     const state = await this.journal.refresh();
     const worker = await this.docker.getContainer(hostname).inspect();
     if (
@@ -249,6 +295,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       worker.Config.Labels?.['io.orbis.restore.role'] !== 'worker'
     )
       throw failed('worker-identity');
+    if (this.operation.worker) await this.owned(this.operation.worker);
     const original = await this.owned(this.operation.original);
     if (original.Image !== this.operation.image) throw failed('original-image');
     const candidate = await this.role(this.operation.candidate, 'candidate');
@@ -267,46 +314,25 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
         .map((mount) => ({ type: mount.Type, source: mount.Source, destination: mount.Destination, rw: mount.RW }))
         .sort((a, b) => (a.destination < b.destination ? -1 : a.destination > b.destination ? 1 : 0));
     if (JSON.stringify(mountIdentity(original.Mounts)) !== JSON.stringify(mountIdentity(candidate.Mounts))) throw failed('candidate-mounts');
-    for (const mount of worker.Mounts) {
-      if (!['/data', '/app-data', '/cache', '/var/run/docker.sock'].includes(mount.Destination)) throw failed('worker-mounts');
-      if (mount.Destination === '/var/run/docker.sock') {
-        const socket = original.Mounts.find((item) => item.Destination === mount.Destination);
-        if (!socket || socket.Source !== mount.Source || socket.Type !== mount.Type) throw failed('worker-socket');
-      }
+    try {
+      verifyRestoreStorageMounts(original.Mounts, worker.Mounts, 'worker');
+    } catch {
+      throw failed('worker-mounts');
     }
-    if (!worker.HostConfig.ReadonlyRootfs || worker.HostConfig.Privileged || Object.keys(worker.HostConfig.PortBindings ?? {}).length)
+    if (
+      !worker.HostConfig.ReadonlyRootfs ||
+      worker.HostConfig.Privileged ||
+      worker.HostConfig.AutoRemove ||
+      Object.keys(worker.HostConfig.PortBindings ?? {}).length ||
+      worker.HostConfig.NetworkMode === 'host' ||
+      worker.HostConfig.PidMode === 'host' ||
+      worker.HostConfig.Devices?.length ||
+      worker.HostConfig.DeviceRequests?.length
+    )
       throw failed('worker-sandbox');
-    await this.fileRoots();
-    const dataMount = original.Mounts.find((mount) => mount.Destination === '/data');
-    const appDataMount = original.Mounts.find((mount) => mount.Destination === '/app-data');
-    const cacheMount = original.Mounts.find((mount) => mount.Destination === '/cache');
-    if (!dataMount || !appDataMount || !cacheMount) throw failed('storage-mounts');
-    const contains = (a: string, b: string) => a === b || b.startsWith(`${a}/`);
-    const physicalRoots = state.roots.map((name) => (name === 'app-data' ? appDataMount.Source : path.posix.join(dataMount.Source, name)));
-    if (
-      physicalRoots.some((root, index) =>
-        physicalRoots.some((other, position) => position !== index && (contains(root, other) || contains(other, root))),
-      )
-    )
-      throw failed('overlapping-roots');
-    if (
-      [
-        ...physicalRoots,
-        path.posix.join(dataMount.Source, 'backups'),
-        path.posix.join(dataMount.Source, 'logs'),
-        path.posix.join(dataMount.Source, '.env'),
-      ].some((root) => contains(root, cacheMount.Source) || contains(cacheMount.Source, root))
-    )
-      throw failed('cache-overlap');
-    for (const destination of ['/data', '/app-data', '/cache']) {
-      const source = original.Mounts.find((mount) => mount.Destination === destination);
-      if (!source || source.Type !== 'bind' || !source.RW) throw failed('shared-storage');
-      for (const current of [worker, candidate, verifier]) {
-        const mount = current.Mounts.find((item) => item.Destination === destination);
-        const readonly = current.Id === verifier.Id && destination !== '/cache';
-        if (!mount || mount.Type !== source.Type || mount.Source !== source.Source || mount.RW === readonly) throw failed('storage-access');
-      }
-    }
+    if (options.preparing) {
+      if (!['staging', 'preparing', 'discarded'].includes(state.phase)) throw failed('preparation-phase');
+    } else await this.fileRoots();
     if (!verifier.HostConfig.ReadonlyRootfs) throw failed('verifier-filesystem');
     verifyRestoreVerifierMounts(original, verifier);
     if (verifier.HostConfig.Devices?.length || verifier.HostConfig.DeviceRequests?.length || verifier.HostConfig.PidMode === 'host')
@@ -356,9 +382,13 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       await queue.close();
     }
   }
-  private async noOtherWriters() {
+  async preflightWriters() {
+    await this.noOtherWriters(true);
+  }
+  private async noOtherWriters(allowKnownRunning = false) {
     const original = await this.owned(this.operation.original);
-    const sources = original.Mounts.filter((item) => ['/data', '/app-data', '/cache'].includes(item.Destination)).map((item) => item.Source);
+    const layout = deriveRestoreStorageLayout(original.Mounts);
+    const sources = [...Object.values(layout.roots), layout.environment, layout.cache];
     const known = new Set([
       this.journal.state.worker,
       this.operation.original.id,
@@ -366,6 +396,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       this.operation.verifier.id,
       ...this.operation.apps.map((app) => app.container.id),
     ]);
+    const allowedRunning = new Set([this.operation.original.id, this.operation.candidate.id, ...this.operation.apps.map((app) => app.container.id)]);
     for (const current of await this.docker.listContainers({ all: true })) {
       if (current.Id === this.journal.state.worker) continue;
       const inspect = await this.docker.getContainer(current.Id).inspect();
@@ -375,7 +406,8 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
           item.Type === 'bind' &&
           sources.some((source) => item.Source === source || item.Source.startsWith(`${source}/`) || source.startsWith(`${item.Source}/`)),
       );
-      if (overlap && (inspect.State.Running || inspect.State.Restarting || inspect.State.Paused || !known.has(inspect.Id))) throw failed();
+      const active = inspect.State.Running || inspect.State.Restarting || inspect.State.Paused;
+      if (overlap && (!known.has(inspect.Id) || (active && (!allowKnownRunning || !allowedRunning.has(inspect.Id))))) throw failed('other-writer');
     }
   }
   async stopWriters(signal: AbortSignal) {
@@ -403,26 +435,36 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     await syncDirectory(this.cache);
   }
   private async environment(kind: 'original' | 'incoming') {
+    const operation = this.preparedOperation();
     const bytes = await readOwned(path.join(this.journal.directory, `${kind}.env`));
-    const expected = kind === 'original' ? this.operation.originalEnvSha256 : this.operation.incomingEnvSha256;
+    const expected = kind === 'original' ? operation.originalEnvSha256 : operation.incomingEnvSha256;
     if (hash(bytes) !== expected) throw failed();
     const env = dotenv.parse(bytes);
-    const db = this.operation.database;
+    const db = operation.database;
     if (
       env.POSTGRES_HOST !== db.connection.host ||
       env.POSTGRES_USERNAME !== db.connection.user ||
       env.POSTGRES_PASSWORD !== db.connection.password ||
-      Number(env.POSTGRES_PORT) !== db.connection.port ||
+      Number(env.POSTGRES_PORT ?? 5432) !== db.connection.port ||
       env.POSTGRES_DBNAME !== (kind === 'original' ? db.connection.database : db.owner.name)
     )
       throw failed();
     return bytes;
   }
   private async setEnvironment(kind: 'original' | 'incoming') {
-    const incoming = await this.environment(kind);
-    const current = await readOwned(path.join(this.data, '.env'));
-    if (![this.operation.originalEnvSha256, this.operation.incomingEnvSha256].includes(hash(current))) throw failed();
-    if (hash(current) !== hash(incoming)) await replaceOwned(path.join(this.data, '.env'), incoming);
+    const state = await this.journal.refresh();
+    const allowed = kind === 'incoming' ? ['promoting', 'verifying', 'committing', 'completed'] : ['rolling-back', 'rolled-back'];
+    if (!allowed.includes(state.phase)) throw failed('environment-phase');
+    const [original, incoming] = await Promise.all([this.environment('original'), this.environment('incoming')]);
+    await writeRestoreEnvironment({
+      file: path.join(this.data, '.env'),
+      journal: path.join(this.journal.directory, 'environment-pointer.json'),
+      id: state.id,
+      nonce: state.nonce,
+      original,
+      incoming,
+      target: kind,
+    });
   }
   async installDatabasePointer(signal: AbortSignal) {
     signal.throwIfAborted();
@@ -468,14 +510,15 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     throw failed();
   }
   async verify(signal: AbortSignal) {
+    const operation = this.preparedOperation();
     const files = {
       ledger: path.join(this.journal.directory, 'applied-files.ndjson'),
-      expected: this.operation.files,
+      expected: operation.files,
       roots: await this.fileRoots(),
       signal,
     };
     await verifyRestoreFiles(files);
-    await verifyRestoreDatabase({ id: this.operation.id, nonce: this.operation.nonce, ...this.operation.database, signal });
+    await verifyRestoreDatabase({ id: operation.id, nonce: operation.nonce, ...operation.database, signal });
     await this.role(this.operation.verifier, 'verifier');
     const before = hash(await readOwned(path.join(this.data, '.env')));
     const container = this.docker.getContainer(this.operation.verifier.id);
@@ -487,10 +530,11 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     }
     if (hash(await readOwned(path.join(this.data, '.env'))) !== before) throw failed();
     await this.idleQueues();
-    await verifyRestoreDatabase({ id: this.operation.id, nonce: this.operation.nonce, ...this.operation.database, signal });
+    await verifyRestoreDatabase({ id: operation.id, nonce: operation.nonce, ...operation.database, signal });
     await verifyRestoreFiles(files);
   }
   async activate() {
+    this.preparedOperation();
     const current = await this.role(this.operation.candidate, 'candidate');
     if (!current.State.Running) await this.clearCache();
     const container = this.docker.getContainer(current.Id);

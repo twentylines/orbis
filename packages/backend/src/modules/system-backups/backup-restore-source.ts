@@ -19,14 +19,14 @@ const counts = type({
   app: 'number.integer >= 0',
   link: 'number.integer >= 0',
 }).onUndeclaredKey('reject');
-const sealSchema = type({
+export const backupSourceSealSchema = type({
   version: '1',
   manifest: digest,
   recovery: digest,
   database: digest,
   normalized: type({ bytes: 'number.integer > 0 & number <= 268435456', sha256, counts }).onUndeclaredKey('reject'),
 }).onUndeclaredKey('reject');
-export type BackupSourceSeal = typeof sealSchema.infer;
+export type BackupSourceSeal = typeof backupSourceSealSchema.infer;
 const failed = () => new BackupRequirementError('The reviewed backup changed or is incomplete. Review its encrypted file again before restoring.');
 export class BackupSourcePinnedError extends BackupRequirementError {
   constructor() {
@@ -35,7 +35,7 @@ export class BackupSourcePinnedError extends BackupRequirementError {
 }
 
 export function createBackupSourceSeal(integrity: BackupContentIntegrity, normalized: BackupDatabaseReview): BackupSourceSeal {
-  const result = sealSchema({ version: 1, ...integrity, normalized });
+  const result = backupSourceSealSchema({ version: 1, ...integrity, normalized });
   if (result instanceof type.errors) throw failed();
   return structuredClone(result);
 }
@@ -107,7 +107,7 @@ export async function validateBackupSource(options: { directory: string; expecte
   const { directory, signal } = options;
   try {
     if (!path.isAbsolute(directory) || path.resolve(directory) !== directory) throw failed();
-    const seal = sealSchema(options.expected);
+    const seal = backupSourceSealSchema(options.expected);
     if (seal instanceof type.errors) throw failed();
     await privateDirectory(directory);
     const content = path.join(directory, 'content');

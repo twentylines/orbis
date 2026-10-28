@@ -26,14 +26,14 @@ afterEach(async () => {
   await fs.rm(directory, { recursive: true, force: true });
 });
 
-async function fixture() {
+async function fixture(controller = candidateController) {
   const data = path.join(directory, 'data');
   const store = path.join(data, 'backups', 'restores');
   const journal = await BackupRestoreJournal.create(store, {
     id: randomUUID(),
     nonce: randomUUID(),
     originalController,
-    candidateController,
+    candidateController: controller,
     worker,
     roots: ['state', 'app-data'],
   });
@@ -396,6 +396,24 @@ it('a later successful restore can claim the journal while retired controllers s
       onHeld: () => abort.abort(),
     }),
   ).rejects.toThrow();
+});
+
+it('restarts the same controller after commit and keeps it eligible for subsequent restores', async () => {
+  const test = await fixture(originalController);
+  expect(restoreStartupAllowed(test.journal.state, originalController.slice(0, 12))).toBe(false);
+  await runRestoreTransaction(test.journal, test.runtime, signal());
+  expect(restoreStartupAllowed(test.journal.state, originalController.slice(0, 12))).toBe(true);
+  const next = await BackupRestoreJournal.create(test.store, {
+    id: randomUUID(),
+    nonce: randomUUID(),
+    originalController,
+    candidateController: originalController,
+    verifierController: '6'.repeat(64),
+    worker: '5'.repeat(64),
+    roots: ['state'],
+  });
+  expect(await restoreControllerRetired(test.store, originalController)).toBe(false);
+  expect(restoreStartupAllowed(next.state, originalController.slice(0, 12))).toBe(true);
 });
 it('a rolled-back transaction permits another preparation from its original controller', async () => {
   const test = await fixture();

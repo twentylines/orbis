@@ -73,6 +73,34 @@ it('accepts exactly the verifier data, app-data, cache, and logs mounts with req
   expect(() => verifyMountSet(verifierMounts())).not.toThrow();
 });
 
+it('accepts the production child-bind layout through the runtime verifier boundary', () => {
+  const names = ['state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'backups', 'logs', '.env'];
+  const original = [
+    ...names.map((name) => ({ Type: 'bind', Source: `/srv/orbis/${name}`, Destination: `/data/${name}`, RW: true })),
+    { Type: 'bind', Source: '/srv/orbis/app-data', Destination: '/app-data', RW: true },
+    { Type: 'bind', Source: '/srv/orbis/cache', Destination: '/cache', RW: true },
+    { Type: 'bind', Source: '/proc/stat', Destination: '/host/proc/stat', RW: false },
+  ];
+  const verifier = original
+    .filter((mount) => !mount.Destination.startsWith('/host/'))
+    .map((mount) => ({ ...mount, RW: ['/data/logs', '/cache'].includes(mount.Destination) }));
+  expect(() =>
+    verifyRestoreVerifierMounts(
+      fixture({ Mounts: original }) as unknown as Dockerode.ContainerInspectInfo,
+      fixture({ Mounts: verifier }) as unknown as Dockerode.ContainerInspectInfo,
+    ),
+  ).not.toThrow();
+  const writable = verifier.find((mount) => mount.Destination === '/data/.env');
+  if (!writable) throw new Error('Missing fixture environment mount');
+  writable.RW = true;
+  expect(() =>
+    verifyRestoreVerifierMounts(
+      fixture({ Mounts: original }) as unknown as Dockerode.ContainerInspectInfo,
+      fixture({ Mounts: verifier }) as unknown as Dockerode.ContainerInspectInfo,
+    ),
+  ).toThrow();
+});
+
 it.each([
   [
     'read-only Docker socket',

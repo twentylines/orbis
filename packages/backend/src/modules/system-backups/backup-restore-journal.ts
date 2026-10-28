@@ -10,6 +10,7 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{1
 const containerId = /^[a-f0-9]{64}$/;
 const phases = [
   'staging',
+  'preparing',
   'discarded',
   'prepared',
   'quiescing',
@@ -61,7 +62,7 @@ function validate(value: unknown): asserts value is RestoreJournal {
     (item.verifierController !== undefined &&
       (!containerId.test(item.verifierController) ||
         [item.originalController, item.candidateController, item.worker].includes(item.verifierController))) ||
-    new Set([item.originalController, item.candidateController, item.worker]).size !== 3 ||
+    [item.originalController, item.candidateController].includes(item.worker) ||
     !phases.includes(item.phase) ||
     ![null, 'commit', 'rollback'].includes(item.decision) ||
     !Array.isArray(item.roots) ||
@@ -69,7 +70,7 @@ function validate(value: unknown): asserts value is RestoreJournal {
     item.roots.length > 8 ||
     item.roots.some((name) => typeof name !== 'string' || !/^[a-z][a-z0-9-]{0,31}$/.test(name)) ||
     new Set(item.roots).size !== item.roots.length ||
-    (['staging', 'prepared', 'quiescing', 'promoting', 'verifying'].includes(item.phase) && item.decision !== null) ||
+    (['staging', 'preparing', 'prepared', 'quiescing', 'promoting', 'verifying'].includes(item.phase) && item.decision !== null) ||
     (['committing', 'completed'].includes(item.phase) && item.decision !== 'commit') ||
     (['discarded', 'rolling-back', 'rolled-back'].includes(item.phase) && item.decision !== 'rollback')
   )
@@ -147,7 +148,7 @@ export class BackupRestoreJournal {
         if (survivor !== journal.originalController) throw failed();
         await active.retireRootFiles(previous.phase === 'discarded');
         const removed = previous.phase === 'completed' ? previous.originalController : previous.candidateController;
-        if (!retired.includes(removed)) retired.push(removed);
+        if (removed !== survivor && !retired.includes(removed)) retired.push(removed);
         if (retired.length > 4096) throw failed();
         await writePrivate(path.join(store, 'retired.json'), retired);
       }
@@ -208,7 +209,8 @@ export class BackupRestoreJournal {
     await this.refresh();
     const previous = this.current.phase;
     const legal: Record<RestorePhase, RestorePhase[]> = {
-      staging: ['prepared', 'discarded'],
+      staging: ['preparing', 'prepared', 'discarded'],
+      preparing: ['prepared', 'discarded'],
       discarded: [],
       prepared: ['quiescing', 'rolling-back'],
       quiescing: ['promoting', 'rolling-back'],

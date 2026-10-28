@@ -31,7 +31,7 @@ export async function runRestoreTransaction(journal: BackupRestoreJournal, runti
   try {
     return await withRestoreLease(path.dirname(journal.directory), async () => {
       await journal.refresh();
-      if (['staging', 'discarded'].includes(journal.state.phase))
+      if (['staging', 'preparing', 'discarded'].includes(journal.state.phase))
         throw new BackupRequirementError('The restore is not prepared. Server data has not been changed.');
       await journal.verifyRootLocations();
       const roots = await Promise.all(journal.state.roots.map((name) => BackupDirectorySwap.open(journal.rootJournal(name))));
