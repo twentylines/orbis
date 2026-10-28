@@ -6,14 +6,20 @@ let held = false;
 let acquiring = false;
 // Production queue consumers must remain closed until backup journals have been checked.
 let recoveryRequired = process.env.NODE_ENV === 'production';
+let restoreRecoveryRequired = false;
 let active = 0;
 const drained = new Set<() => void>();
 const available = new Set<() => void>();
 const requests = new WeakMap<Request, { release: () => void; entered: boolean; disconnected: boolean }>();
 
-export const backupMaintenanceActive = () => held || recoveryRequired;
+export const backupMaintenanceActive = () => held || recoveryRequired || restoreRecoveryRequired;
 export const setBackupRecoveryRequired = (required: boolean) => {
   recoveryRequired = required;
+  if (!backupMaintenanceActive()) for (const notify of available) notify();
+};
+
+export const setRestoreRecoveryRequired = (required: boolean) => {
+  restoreRecoveryRequired = required;
   if (!backupMaintenanceActive()) for (const notify of available) notify();
 };
 
@@ -33,7 +39,7 @@ export async function waitForBackupMutation() {
 }
 
 export function enterBackupMutation(): (() => void) | null {
-  if (held || recoveryRequired) return null;
+  if (backupMaintenanceActive()) return null;
   active++;
   let released = false;
   return () => {
@@ -83,7 +89,7 @@ export async function acquireBackupMaintenance(signal: AbortSignal): Promise<() 
       if (!released) {
         released = true;
         held = false;
-        if (!recoveryRequired) for (const notify of available) notify();
+        if (!backupMaintenanceActive()) for (const notify of available) notify();
       }
     };
   } finally {
@@ -96,7 +102,7 @@ export function backupMaintenanceMiddleware(request: Request, response: Response
   if (pathname.startsWith('/api/system-backups')) response.setHeader('Cache-Control', 'no-store');
   if (!pathname.startsWith('/api/') || /^\/api\/(?:health\/?$|system-backups(?:\/|$))/.test(pathname)) return next();
   if (
-    recoveryRequired &&
+    (recoveryRequired || restoreRecoveryRequired) &&
     !held &&
     (['GET', 'HEAD'].includes(request.method) || /^\/api\/auth\/(?:login|logout|verify-totp|passkeys\/login\/(?:options|verify))\/?$/.test(pathname))
   )

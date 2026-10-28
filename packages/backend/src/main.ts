@@ -13,6 +13,7 @@ import { APP_DIR, DATA_DIR } from './common/constants';
 import { generateSystemEnvFile } from './common/helpers/env-helpers';
 import { captureInstallationMode, installationMode } from './common/installation-mode';
 import { BackupRestoreJournal } from './modules/system-backups/backup-restore-journal';
+import { BackupRestoresService } from './modules/system-backups/backup-restores.service';
 import { SystemBackupsService } from './modules/system-backups/system-backups.service';
 import { captureRestoreStartupRole, waitForRestoreStartup } from './modules/system-backups/backup-restore-startup';
 import { BackupRestoreActivationService } from './modules/system-backups/backup-restore-activation.service';
@@ -66,6 +67,7 @@ async function bootstrap() {
   const appService = app.get(AppService);
   await appService.bootstrap(async () => {
     await app.get(SystemBackupsService).onModuleInit();
+    await app.get(BackupRestoresService).prepareStartup();
   });
   await app.get(BackupRestoreActivationService).resumeApps();
 

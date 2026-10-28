@@ -8,12 +8,48 @@ import {
   backupMaintenanceMiddleware,
   enterBackupMutation,
   setBackupRecoveryRequired,
+  setRestoreRecoveryRequired,
+  waitForBackupMutation,
 } from '@/common/backup-maintenance';
 import { Subject } from 'rxjs';
 import type { ExecutionContext } from '@nestjs/common';
 
 afterEach(() => {
   setBackupRecoveryRequired(false);
+  setRestoreRecoveryRequired(false);
+});
+it('retains independent restore and backup recovery holds until both are cleared', async () => {
+  setBackupRecoveryRequired(true);
+  setRestoreRecoveryRequired(true);
+  let admitted = false;
+  const waiting = waitForBackupMutation().then((release) => {
+    admitted = true;
+    return release;
+  });
+  setBackupRecoveryRequired(false);
+  await Promise.resolve();
+  expect(backupMaintenanceActive()).toBe(true);
+  expect(admitted).toBe(false);
+  setRestoreRecoveryRequired(false);
+  const release = await waiting;
+  expect(admitted).toBe(true);
+  release();
+});
+it('keeps fresh sign-in and progress available during restore recovery while blocking other mutations', () => {
+  setRestoreRecoveryRequired(true);
+  const response = Object.assign(new EventEmitter(), { setHeader: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() });
+  const next = vi.fn();
+  for (const [method, originalUrl] of [
+    ['POST', '/api/auth/login'],
+    ['POST', '/api/auth/verify-totp'],
+    ['GET', '/api/user'],
+    ['GET', '/api/system-backups/restores'],
+    ['POST', '/api/apps'],
+    ['POST', '/api/auth/change-password'],
+  ])
+    backupMaintenanceMiddleware({ method, originalUrl } as Request, response as unknown as Response, next);
+  expect(next).toHaveBeenCalledTimes(4);
+  expect(response.status).toHaveBeenCalledTimes(2);
 });
 it('closes admission, drains existing operations and releases exactly once', async () => {
   const first = enterBackupMutation();

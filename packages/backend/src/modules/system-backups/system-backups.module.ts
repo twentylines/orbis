@@ -1,3 +1,5 @@
+import { BackupRestoresService } from './backup-restores.service';
+import { BackupRestoresController } from './backup-restores.controller';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { AppsModule } from '../apps/apps.module';
@@ -15,7 +17,14 @@ import { AppLifecycleModule } from '../app-lifecycle/app-lifecycle.module';
 
 @Module({
   imports: [AuthModule, AppsModule, DockerModule, TasksModule, HostUpdatesModule, AppLifecycleModule],
-  controllers: [SystemBackupsController, BackupImportsController],
-  providers: [BackupRuntimeService, BackupDatabaseService, SystemBackupsService, BackupImportsService, BackupRestoreActivationService],
+  controllers: [SystemBackupsController, BackupImportsController, BackupRestoresController],
+  providers: [
+    BackupRestoresService,
+    BackupRuntimeService,
+    BackupDatabaseService,
+    SystemBackupsService,
+    BackupImportsService,
+    BackupRestoreActivationService,
+  ],
 })
 export class SystemBackupsModule {}
