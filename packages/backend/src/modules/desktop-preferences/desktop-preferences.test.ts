@@ -197,7 +197,7 @@ describe('desktop preferences', () => {
       .send({ serverName: 'Hades', preset: 'blush', density: 'comfortable', wallpaper: 'tidal' })
       .expect(200);
     const legacy = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test').expect(200);
-    expect(legacy.body.wallpaperMode).toBe('custom');
+    expect(legacy.body.wallpaperMode).toBe('theme');
   });
 
   it('persists light and dark mode and migrates older Graphite settings', async () => {

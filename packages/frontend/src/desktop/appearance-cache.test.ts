@@ -26,8 +26,8 @@ function firstPaint(raw: string | null, { dark = false, blockedStorage = false, 
 describe('appearance before hydration', () => {
   test.each(['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'] as const)('retains the saved %s palette while loading', (preset) => {
     const saved = { preset, mode: 'dark', wallpaper: 'canopy' } as const;
-    expect(appearanceFromStored(saved)).toEqual({ ...saved, wallpaperMode: 'custom', wallpaperPreset: null });
-    expect(firstPaint(JSON.stringify(saved))).toEqual({ desktopPreset: preset, desktopMode: 'dark', desktopWallpaper: 'canopy' });
+    expect(appearanceFromStored(saved)).toEqual({ ...saved, wallpaperMode: 'theme', wallpaperPreset: null });
+    expect(firstPaint(JSON.stringify(saved))).toEqual({ desktopPreset: preset, desktopMode: 'dark', desktopWallpaper: `theme-${preset}` });
   });
 
   test.each(['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'] as const)('uses the %s landscape before hydration', (preset) => {
@@ -39,7 +39,7 @@ describe('appearance before hydration', () => {
 
   test('keeps an explicitly selected legacy landscape and uploaded image fallback', () => {
     expect(firstPaint(JSON.stringify({ preset: 'blush', wallpaper: 'sandstone', wallpaperMode: 'custom' })).desktopWallpaper).toBe('sandstone');
-    expect(firstPaint(JSON.stringify({ preset: 'blush', wallpaper: 'tidal' })).desktopWallpaper).toBe('tidal');
+    expect(firstPaint(JSON.stringify({ preset: 'blush', wallpaper: 'tidal', wallpaperMode: 'custom' })).desktopWallpaper).toBe('tidal');
     expect(
       firstPaint(JSON.stringify({ preset: 'blush', wallpaper: 'sandstone', appearance: { wallpaperImage: 'a'.repeat(64) } })).desktopWallpaper,
     ).toBe('sandstone');
@@ -85,7 +85,7 @@ describe('appearance before hydration', () => {
     expect(firstPaint(JSON.stringify({ preset: 'stone', mode: 'light', wallpaper: 'tidal' }), { dark: true })).toEqual({
       desktopPreset: 'stone',
       desktopMode: 'light',
-      desktopWallpaper: 'tidal',
+      desktopWallpaper: 'theme-stone',
     });
   });
 
@@ -113,7 +113,7 @@ describe('appearance before hydration', () => {
     const raw = JSON.stringify(saved);
     expect(raw.length).toBeGreaterThan(16 * 1024);
     expect(raw.length).toBeLessThan(preferenceCacheLimit);
-    expect(firstPaint(raw, { dark: true })).toEqual({ desktopPreset: 'ocean', desktopMode: 'dark', desktopWallpaper: 'tidal' });
+    expect(firstPaint(raw, { dark: true })).toEqual({ desktopPreset: 'ocean', desktopMode: 'dark', desktopWallpaper: 'theme-ocean' });
   });
 
   test('applies enlarged text before hydration with a large pinned order', () => {
@@ -174,9 +174,9 @@ describe('appearance before hydration', () => {
       preset: 'ocean',
       mode: 'dark',
       wallpaper: 'tidal',
-      wallpaperMode: 'custom',
+      wallpaperMode: 'theme',
       wallpaperPreset: null,
     });
-    expect(firstPaint(JSON.stringify(saved))).toEqual({ desktopPreset: 'ocean', desktopMode: 'dark', desktopWallpaper: 'tidal' });
+    expect(firstPaint(JSON.stringify(saved))).toEqual({ desktopPreset: 'ocean', desktopMode: 'dark', desktopWallpaper: 'theme-ocean' });
   });
 });

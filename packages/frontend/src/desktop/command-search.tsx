@@ -397,6 +397,7 @@ export function CommandSearch() {
                 <IconSearch size={20} aria-hidden="true" />
                 <input
                   ref={input}
+                  data-focus-surface="parent"
                   value={closing ? '' : search}
                   type="search"
                   onChange={(event) => setSearch(event.target.value)}

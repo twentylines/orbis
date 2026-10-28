@@ -64,7 +64,7 @@ export function appearanceFromStored(value: unknown, options = appearanceOptions
     wallpaperMode:
       stored.wallpaperMode === 'theme' || stored.wallpaperMode === 'custom'
         ? stored.wallpaperMode
-        : wallpaper !== 'sandstone' || (typeof image === 'string' && /^[a-f0-9]{64}$/.test(image))
+        : options.presets.includes(stored.wallpaperPreset as ThemePreset) || (typeof image === 'string' && /^[a-f0-9]{64}$/.test(image))
           ? 'custom'
           : 'theme',
     ...(Object.keys(safeAppearance).length ? { appearance: safeAppearance } : {}),

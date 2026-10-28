@@ -102,8 +102,7 @@ export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPr
   preset: value.preset,
   density: value.density,
   wallpaper: value.wallpaper ?? defaultDesktopPreferences.wallpaper,
-  wallpaperMode:
-    value.wallpaperMode ?? ((value.wallpaper && value.wallpaper !== 'sandstone') || value.appearance?.wallpaperImage ? 'custom' : 'theme'),
+  wallpaperMode: value.wallpaperMode ?? (value.wallpaperPreset || value.appearance?.wallpaperImage ? 'custom' : 'theme'),
   wallpaperPreset: value.wallpaperPreset ?? null,
   windows: value.windows ?? {},
   appLaunch: value.appLaunch ?? defaultAppLaunch,

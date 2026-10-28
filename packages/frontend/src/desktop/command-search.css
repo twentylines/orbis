@@ -96,6 +96,12 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input input:is(:f
 .desktop-search-input:focus-within > svg {
   color: var(--desktop-accent);
 }
+@media (forced-colors: active) {
+  body:has(.orbis-theme) .desktop-search-input:has(input:focus-visible) {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+  }
+}
 .desktop-search-input input::-webkit-search-cancel-button {
   display: none;
 }

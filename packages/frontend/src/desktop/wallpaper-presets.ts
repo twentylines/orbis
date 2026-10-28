@@ -38,7 +38,7 @@ export const wallpaperSources: Record<WallpaperKey, string> = {
 // Kept self-contained because the same resolver runs before the client bundle loads.
 export function resolveWallpaperKey(value: WallpaperChoice): WallpaperKey {
   const presets = ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush'];
-  const mode = value.wallpaperMode ?? (value.wallpaper !== 'sandstone' || value.appearance?.wallpaperImage ? 'custom' : 'theme');
+  const mode = value.wallpaperMode ?? (value.wallpaperPreset || value.appearance?.wallpaperImage ? 'custom' : 'theme');
   if (mode === 'theme') return `theme-${value.preset}`;
   return value.wallpaperPreset && presets.includes(value.wallpaperPreset) ? `theme-${value.wallpaperPreset}` : value.wallpaper;
 }

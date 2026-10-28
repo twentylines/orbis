@@ -442,7 +442,9 @@ body:has(.orbis-theme) :is(input:not([type="checkbox"], [type="radio"], [type="r
   transition: background-color 160ms ease;
 }
 body:has(.orbis-theme)
-  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]), textarea, select):is(:focus, :focus-visible) {
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]), textarea, select):not(
+    [data-focus-surface="parent"]
+  ):is(:focus, :focus-visible) {
   outline: none;
   box-shadow: none;
   background-color: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));

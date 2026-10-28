@@ -142,13 +142,6 @@ body:not(:has(.desktop)) .orbis-notifications {
   color: var(--desktop-ink);
   background: color-mix(in srgb, var(--desktop-ink) 9%, transparent);
 }
-.orbis-notification[data-notification-alert] .orbis-notification-dismiss {
-  color: var(--desktop-negative);
-  background: color-mix(in srgb, var(--desktop-negative) 12%, transparent);
-}
-.orbis-notification[data-notification-alert] .orbis-notification-dismiss:hover {
-  background: color-mix(in srgb, var(--desktop-negative) 20%, transparent);
-}
 .orbis-notification :focus-visible {
   outline: none;
   background: color-mix(in srgb, var(--desktop-accent) 18%, var(--desktop-surface));

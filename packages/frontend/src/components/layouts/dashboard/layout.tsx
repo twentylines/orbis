@@ -10,7 +10,7 @@ import { useUserContext } from '@/context/user-context';
 import { PageTitle } from '@/components/page-title/page-title';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { DesktopWallpaper } from '@/desktop/wallpaper';
-import { useTasks, taskIsActive } from '@/desktop/tasks';
+import { DesktopTaskLink } from '@/desktop/desktop-task-link';
 import { CommandSearch } from '@/desktop/command-search';
 import { desktopNavigation as navigation } from '@/desktop/navigation';
 import { useSectionMotion } from '@/desktop/section-motion';
@@ -30,7 +30,7 @@ import { useNavigationWarmup } from '@/desktop/navigation-warmup';
 import { OrbisUpdateIcon, OrbisUpdateNotice } from '@/desktop/orbis-update-notice';
 import { revealPageFocus } from '@/desktop/window-viewport';
 import { ClusterConnection, ClusterProvider, ClusterServerLabel, ClusterSwitcher } from '@/desktop/cluster';
-import { IconLogout, IconMoon, IconSun, IconActivity } from '@tabler/icons-react';
+import { IconLogout, IconMoon, IconSun } from '@tabler/icons-react';
 import { QueryErrorResetBoundary } from '@tanstack/react-query';
 import { lazy, Suspense, useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { Link, useLocation, useMatches, useNavigation, useNavigate } from 'react-router';
@@ -285,22 +285,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     </HostUpdateProvider>
   );
 };
-
-function DesktopTaskLink() {
-  const tasks = useTasks();
-  const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
-  return (
-    <Link
-      to="/tasks"
-      className="desktop-task-trigger"
-      aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}`}
-      title="Task centre"
-    >
-      <IconActivity size={20} aria-hidden="true" />
-      {activeTasks > 0 ? <span>{activeTasks}</span> : null}
-    </Link>
-  );
-}
 
 function DesktopLogoutButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
   return (

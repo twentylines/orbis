@@ -76,9 +76,7 @@ export class DesktopPreferencesService {
         : {
             ...DEFAULT_DESKTOP_PREFERENCES,
             ...result,
-            wallpaperMode:
-              result.wallpaperMode ??
-              ((result.wallpaper && result.wallpaper !== 'sandstone') || result.appearance?.wallpaperImage ? 'custom' : 'theme'),
+            wallpaperMode: result.wallpaperMode ?? (result.wallpaperPreset || result.appearance?.wallpaperImage ? 'custom' : 'theme'),
             mode: result.mode ?? (result.preset === 'graphite' ? 'dark' : 'light'),
             workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...result.workspace },
             appearance: normaliseDesktopAppearance(result.appearance),
@@ -94,9 +92,7 @@ export class DesktopPreferencesService {
     const value = {
       ...DEFAULT_DESKTOP_PREFERENCES,
       ...preferences,
-      wallpaperMode:
-        preferences.wallpaperMode ??
-        ((preferences.wallpaper && preferences.wallpaper !== 'sandstone') || preferences.appearance?.wallpaperImage ? 'custom' : 'theme'),
+      wallpaperMode: preferences.wallpaperMode ?? (preferences.wallpaperPreset || preferences.appearance?.wallpaperImage ? 'custom' : 'theme'),
       mode: preferences.mode ?? (preferences.preset === 'graphite' ? 'dark' : 'light'),
       workspace: { ...DEFAULT_DESKTOP_PREFERENCES.workspace, ...preferences.workspace },
       appearance: normaliseDesktopAppearance(preferences.appearance),
