@@ -57,6 +57,52 @@ test('missing backend, expired session, unsafe request and retry limits have act
   }
 });
 
+const genericConflict = 'The server could not safely continue. Refresh status and resolve active tasks, compatibility or recovery before retrying.';
+const safeConflict = 'This controller cannot prepare an isolated restore worker. No server data has been changed.';
+
+test('recognized restore conflict messages are surfaced exactly', async () => {
+  await withFetch(Response.json({ message: safeConflict }, { status: 409 }), async () => {
+    try {
+      await backupRequest('/restores', 'POST', {});
+      throw new Error('Expected rejection');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BackupApiError);
+      expect((error as BackupApiError).recognizedSafeMessage).toBe(safeConflict);
+      expect((error as Error).message).toBe(safeConflict);
+    }
+  });
+});
+
+test('unknown, malformed and credential-bearing conflict bodies stay generic', async () => {
+  const bodies = [
+    Response.json({ message: 'private upstream detail' }, { status: 409 }),
+    new Response('{"message":', { status: 409 }),
+    Response.json({ message: 'password=fixture-secret; token=private-value' }, { status: 409 }),
+  ];
+  for (const response of bodies) {
+    await withFetch(response, async () => {
+      await expect(backupRequest('/restores', 'POST', {})).rejects.toThrow(genericConflict);
+    });
+  }
+});
+
+test('oversized conflict response is cancelled and stays generic', async () => {
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    type: 'bytes',
+    start(controller) {
+      controller.enqueue(new Uint8Array(16 * 1024 + 1));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  await withFetch(new Response(body, { status: 409 }), async () => {
+    await expect(backupRequest('/restores', 'POST', {})).rejects.toThrow(genericConflict);
+  });
+  expect(cancelled).toBe(true);
+});
+
 test('gateway HTML never escapes into inline error output', async () => {
   await withFetch(new Response('private-upstream-html', { status: 200 }), async () => {
     await expect(backupRequest('')).rejects.toThrow('The server response could not be read');

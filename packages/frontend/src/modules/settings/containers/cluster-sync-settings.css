@@ -1,0 +1,109 @@
+.cluster-sync-content,
+.cluster-sync-form,
+.cluster-sync-host,
+.cluster-sync-categories {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+.cluster-sync-settings .cluster-sync-content p {
+  max-width: none;
+}
+.cluster-sync-content :is(h3, p) {
+  margin: 0;
+}
+.cluster-sync-content h3 {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.cluster-sync-host {
+  padding: 18px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--desktop-surface) 72%, transparent);
+}
+.cluster-sync-host-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.cluster-sync-host-heading > span,
+.cluster-sync-content :is(output, small),
+.cluster-sync-results span {
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.cluster-sync-check.form-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding-block: 6px;
+  cursor: pointer;
+  line-height: 1.6;
+}
+.cluster-sync-check.form-check > .form-check-input {
+  margin: 0.15em 0 0;
+}
+.cluster-sync-check > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.cluster-sync-check strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.cluster-sync-check:has(input:disabled) {
+  cursor: not-allowed;
+}
+.cluster-sync-check:has(input:disabled) strong {
+  color: var(--desktop-muted);
+}
+.cluster-sync-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cluster-sync-actions .btn {
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.45;
+  justify-content: center;
+}
+.cluster-sync-content .cluster-sync-warning {
+  color: var(--desktop-ink);
+  padding: 12px 14px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--desktop-negative) 7%, var(--desktop-surface));
+}
+.cluster-sync-results {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cluster-sync-results li {
+  display: grid;
+  gap: 3px;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.cluster-sync-settings :is(input, button):focus-visible {
+  scroll-margin-block: 20px;
+}
+@media (max-width: 520px) {
+  .cluster-sync-host {
+    padding: 14px;
+  }
+  .cluster-sync-actions > .btn {
+    flex: 1 1 160px;
+  }
+}

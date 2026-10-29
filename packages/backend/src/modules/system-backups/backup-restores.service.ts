@@ -1,5 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { ConflictException, Inject, Injectable, NotFoundException, type OnModuleDestroy } from '@nestjs/common';
 import type Dockerode from 'dockerode';
 import { ConfigurationService } from '@/core/config/configuration.service';
@@ -20,9 +21,12 @@ import { discardUnstartedRestoreHandoff, prepareRestoreHandoff } from './backup-
 import { restoreStartupRole } from './backup-restore-startup';
 import { readRestoreProgress } from './backup-restore-progress';
 import { BackupRequirementError } from './backup-files';
+import { cleanupSettledRestoreAuxiliaries } from './backup-restore-terminal-cleanup';
+import { readTerminalOwnership } from './backup-restore-terminal-record';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const settled = (phase: string) => ['completed', 'rolled-back', 'discarded'].includes(phase);
+const matchingOutcome = (phase: string, status?: string) => status === (phase === 'completed' ? 'succeeded' : 'rolled-back');
 type Credentials = { password: string; totpCode?: string };
 const failed = () => new ConflictException('Restore recovery needs review. Your server data and backup have been preserved.');
 
@@ -34,6 +38,7 @@ export class BackupRestoresService implements OnModuleDestroy {
   private abort?: AbortController;
   private pending?: { id: string; release: () => void };
   private restart?: { id: string; controller: ReturnType<typeof snapshotRestoreContainer> };
+  private recoveryHold?: { id: string; nonce: string };
   private readonly launches = new Map<string, Promise<void>>();
 
   constructor(
@@ -84,18 +89,79 @@ export class BackupRestoresService implements OnModuleDestroy {
     if (current.Id !== journal.state.originalController || current.Id !== journal.state.candidateController) throw failed();
     return current;
   }
+  private async inertDiscard(journal: BackupRestoreJournal) {
+    if (journal.state.phase !== 'discarded') return false;
+    try {
+      for (const file of ['bootstrap.json', 'runtime.json', 'worker-status.json', ...journal.state.roots.map((name) => `roots/${name}/swap.json`)]) {
+        try {
+          await fs.lstat(path.join(journal.directory, file));
+          return false;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false;
+        }
+      }
+      const current = await this.ownController(journal);
+      if (!current.State.Running || current.State.Restarting || current.State.Paused) return false;
+      const ownership = await readTerminalOwnership(journal.directory, journal.state);
+      if (ownership && snapshotRestoreContainer(current).fingerprint !== ownership.fingerprint) return false;
+      for (const [id, role] of [
+        [journal.state.worker, 'worker'],
+        [journal.state.verifierController, 'verifier'],
+      ] as const) {
+        if (!id) return false;
+        try {
+          const value = await this.docker.getContainer(id).inspect();
+          if (
+            value.Id !== id ||
+            value.State.Running ||
+            value.State.Restarting ||
+            value.State.Paused ||
+            value.RestartCount ||
+            !(Date.parse(value.State.StartedAt) <= 0) ||
+            value.Config.Labels?.['io.orbis.restore'] !== journal.state.id ||
+            value.Config.Labels?.['io.orbis.restore.nonce'] !== journal.state.nonce ||
+            value.Config.Labels?.['io.orbis.restore.role'] !== role ||
+            (ownership && snapshotRestoreContainer(value).fingerprint !== ownership[role].fingerprint)
+          )
+            return false;
+        } catch (error) {
+          if ((error as { statusCode?: number }).statusCode !== 404) return false;
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  private async recoveryWorker(journal: BackupRestoreJournal) {
+    await this.ownController(journal);
+    const bootstrap = await readRestoreBootstrap(journal);
+    const preparing = ['staging', 'preparing', 'discarded'].includes(journal.state.phase);
+    const identity = preparing ? bootstrap.identity : await readRestoreOperation(journal);
+    const runtime = new BackupRestoreDockerRuntime(this.docker, journal, identity, this.directories());
+    await runtime.verifyWorker(journal.state.worker, { preparing });
+    const worker = await this.docker.getContainer(journal.state.worker).inspect();
+    if (worker.State.Paused) throw failed();
+    return worker;
+  }
+  private holdRecovery(journal: BackupRestoreJournal) {
+    this.recoveryHold = { id: journal.state.id, nonce: journal.state.nonce };
+    setRestoreRecoveryRequired(true);
+  }
   async status() {
     await this.prepareStartup();
-    const journal = await BackupRestoreJournal.active(this.store());
+    const journal = await BackupRestoreJournal.latest(this.store());
     if (!journal) return { job: null };
     const state = journal.state;
     const finished = settled(state.phase);
     let progress: Awaited<ReturnType<typeof readRestoreProgress>>;
     let progressUnavailable = false;
+    let progressInvalid = false;
     try {
       progress = await readRestoreProgress(journal);
     } catch {
       progressUnavailable = true;
+      progressInvalid = true;
     }
     let worker: Dockerode.ContainerInspectInfo | undefined;
     try {
@@ -114,37 +180,62 @@ export class BackupRestoresService implements OnModuleDestroy {
     const restarting = this.restart?.id === state.id;
     const ready = this.pending?.id === state.id;
     const running = worker?.State.Running || worker?.State.Restarting;
+    const inert = finished && !progressUnavailable && !progress && (await this.inertDiscard(journal));
+    const outcomePending = finished && !inert && !matchingOutcome(state.phase, progress?.status);
+    if (finished && !progress && !inert) progressUnavailable = true;
+    if (
+      this.recoveryHold?.id === state.id &&
+      this.recoveryHold.nonce === state.nonce &&
+      finished &&
+      !progressUnavailable &&
+      matchingOutcome(state.phase, progress?.status) &&
+      !this.startupHeld &&
+      !restarting &&
+      !ready
+    ) {
+      this.recoveryHold = undefined;
+      setRestoreRecoveryRequired(false);
+    }
     const needsRecovery =
       !restarting &&
       !ready &&
-      ((finished && this.startupHeld) || (!finished && (progressUnavailable || !running || progress?.status === 'recovery-required')));
+      ((finished && (this.startupHeld || (outcomePending && (progressUnavailable || !running || progress?.status === 'recovery-required')))) ||
+        (!finished && (progressUnavailable || !running || progress?.status === 'recovery-required')));
     const status = restarting
       ? 'running'
       : needsRecovery
         ? 'recovery-required'
-        : state.phase === 'completed'
-          ? 'succeeded'
-          : finished
-            ? 'rolled-back'
-            : ready
-              ? 'ready'
-              : 'running';
-    const stage = restarting ? 'restarting' : finished ? 'complete' : (progress?.stage ?? state.phase);
+        : outcomePending
+          ? 'running'
+          : state.phase === 'completed'
+            ? 'succeeded'
+            : finished
+              ? 'rolled-back'
+              : ready
+                ? 'ready'
+                : 'running';
+    const stage = restarting ? 'restarting' : outcomePending ? 'recovering' : finished ? 'complete' : (progress?.stage ?? state.phase);
     const message = restarting
       ? 'Finishing recovery. The page will reload automatically.'
       : status === 'succeeded'
         ? 'The restored server is ready.'
         : status === 'rolled-back'
-          ? 'Your original server has been recovered.'
+          ? inert
+            ? 'Restore stopped before server data was changed. The uploaded backup was not applied.'
+            : 'Restore rolled back. Your original server was recovered; the uploaded backup was not applied.'
           : status === 'recovery-required'
             ? 'Restore recovery needs review. Your data has been preserved.'
-            : status === 'ready'
-              ? 'Restore is ready to start.'
-              : stage === 'recovering'
-                ? 'Recovering your original server.'
-                : ['files', 'database', 'sealing', 'prepared', 'checking'].includes(stage)
-                  ? 'Preparing configuration and app data.'
-                  : 'Restoring configuration and app data.';
+            : outcomePending
+              ? state.phase === 'completed'
+                ? 'Confirming restore completion.'
+                : 'Recovering your original server.'
+              : status === 'ready'
+                ? 'Restore is ready to start.'
+                : stage === 'recovering'
+                  ? 'Recovering your original server.'
+                  : ['files', 'database', 'sealing', 'prepared', 'checking'].includes(stage)
+                    ? 'Preparing configuration and app data.'
+                    : 'Restoring configuration and app data.';
     return {
       job: {
         id: state.id,
@@ -155,7 +246,12 @@ export class BackupRestoresService implements OnModuleDestroy {
         needsRecovery,
         progressUnavailable,
         canCancel: !finished && state.decision !== 'commit',
-        canRecover: needsRecovery,
+        canRecover:
+          needsRecovery &&
+          !progressInvalid &&
+          (!finished ||
+            (this.startupHeld && (inert || matchingOutcome(state.phase, progress?.status))) ||
+            (state.phase !== 'completed' && Boolean(worker && !running && !worker.State.Paused))),
         ...(progress?.preparation ? { preparation: progress.preparation } : {}),
         ...(progress?.updatedAt ? { updatedAt: progress.updatedAt } : {}),
         ...(progress?.check ? { check: progress.check } : {}),
@@ -182,6 +278,13 @@ export class BackupRestoresService implements OnModuleDestroy {
       const apps = await this.apps.getApps();
       if (apps.some((app) => !['running', 'stopped', 'missing'].includes(app.status)))
         throw new ConflictException('Wait for apps to reach a stable state before restoring.');
+      await cleanupSettledRestoreAuxiliaries({
+        docker: this.docker,
+        store: this.store(),
+        controller: os.hostname(),
+        data: this.directories().data,
+        signal: abort.signal,
+      });
       const plan = await this.runtime.plan(apps.map((app) => `${app.appName}_${app.appStoreSlug}`));
       if (
         apps.some(
@@ -236,11 +339,28 @@ export class BackupRestoresService implements OnModuleDestroy {
   }
   async recover(id: string, ownerId: number, credentials: Credentials) {
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    await this.prepareStartup();
     if (this.preparing) throw new ConflictException('Wait for restore preparation to finish before recovering.');
     const journal = await this.active(id);
     const current = await this.ownController(journal);
+    let progress: Awaited<ReturnType<typeof readRestoreProgress>>;
+    try {
+      progress = await readRestoreProgress(journal);
+    } catch {
+      throw failed();
+    }
     if (settled(journal.state.phase)) {
-      if (this.startupHeld) this.restart = { id, controller: snapshotRestoreContainer(current) };
+      if (matchingOutcome(journal.state.phase, progress?.status) || (await this.inertDiscard(journal))) {
+        if (this.startupHeld) this.restart = { id, controller: snapshotRestoreContainer(current) };
+        return this.status();
+      }
+      if (journal.state.phase === 'completed') throw failed();
+      try {
+        await this.recoveryWorker(journal);
+      } catch {
+        throw failed();
+      }
+      this.holdRecovery(journal);
       return this.status();
     }
     try {
@@ -252,7 +372,7 @@ export class BackupRestoresService implements OnModuleDestroy {
       else setRestoreRecoveryRequired(false);
       return this.status();
     }
-    setRestoreRecoveryRequired(true);
+    this.holdRecovery(journal);
     return this.status();
   }
   // Called once after the authorized response is flushed, never while serializing it.
@@ -272,16 +392,13 @@ export class BackupRestoresService implements OnModuleDestroy {
         await this.docker.getContainer(current.Id).restart({ t: 30 });
         return;
       }
-      if (settled(journal.state.phase)) return;
-      await this.ownController(journal);
-      const bootstrap = await readRestoreBootstrap(journal);
-      const preparing = ['staging', 'preparing'].includes(journal.state.phase);
-      const identity = preparing ? bootstrap.identity : await readRestoreOperation(journal);
-      const runtime = new BackupRestoreDockerRuntime(this.docker, journal, identity, this.directories());
-      await runtime.verifyWorker(journal.state.worker, { preparing });
-      const worker = await this.docker.getContainer(journal.state.worker).inspect();
-      if (worker.State.Paused) throw failed();
-      setRestoreRecoveryRequired(true);
+      const progress = await readRestoreProgress(journal);
+      if (settled(journal.state.phase)) {
+        if (matchingOutcome(journal.state.phase, progress?.status) || (await this.inertDiscard(journal))) return;
+        if (journal.state.phase === 'completed') throw failed();
+      }
+      const worker = await this.recoveryWorker(journal);
+      this.holdRecovery(journal);
       if (!worker.State.Running && !worker.State.Restarting) await this.docker.getContainer(worker.Id).start();
     } catch {
       if (this.restart?.id === id) this.restart = undefined;

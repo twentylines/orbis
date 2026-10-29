@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import dotenv from 'dotenv';
 import { BackupRestoreJournal } from './backup-restore-journal';
+import { BackupDirectorySwap } from './backup-directory-swap';
 import { withRestoreLease } from './backup-restore-lease';
 import { restoreTreeNames, type RestoreTreeName } from './backup-restore-materialize';
 import { prepareRestorePayload, discardRestorePayload, type RestorePreparationProgress } from './backup-restore-preparation';
@@ -145,6 +146,10 @@ it('prepares seven real file trees, rebased settings and a durable worker operat
   const result = await prepare(test);
   expect((await options.journal.refresh()).phase).toBe('prepared');
   expect(await readRestoreOperation(options.journal)).toEqual(result.operation);
+  expect(result.operation.preservedTraefik).toBe(1);
+  const preserved = await BackupDirectorySwap.open(options.journal.rootJournal('traefik'));
+  expect(preserved.incomingDirectory).toBe(path.join(options.journal.rootJournal('traefik'), 'incoming'));
+  expect(await fs.readdir(options.roots.traefik)).toEqual(['original.txt']);
   expect(result.operation.database.owner).toEqual(owner);
   expect(result.operation.database.counts).toEqual({ user: 1, app: 1, app_store: 1, link: 0 });
   expect(result.operation.resumeApps).toEqual([{ id: 9, appUrn: 'fixture-app:catalogue' }]);
@@ -167,6 +172,87 @@ it('prepares seven real file trees, rebased settings and a durable worker operat
   expect(progress.some((value) => value.stage === 'files' && value.completedBytes > 0)).toBe(true);
   expect(progress.some((value) => value.stage === 'database' && value.records === 3)).toBe(true);
 });
+
+it('preserves destination machine identity while staging paused settings sync without old SQL account grants', async () => {
+  const test = await fixture();
+  const { options } = test;
+  const hostId = randomUUID();
+  const cluster = Buffer.from(JSON.stringify({ id: hostId, role: 'admin', privateMembership: 'destination-only fixture' }));
+  await fs.writeFile(path.join(options.roots.state, 'cluster.json'), cluster, { mode: 0o600 });
+  await fs.mkdir(path.join(options.roots.state, 'cluster-sync'), { mode: 0o700 });
+  const sync = Buffer.from(
+    JSON.stringify({
+      version: 1,
+      hostId,
+      revision: 2,
+      receiving: { revision: 3, userId: 9, categories: ['customisation'], trustRevision: 'a'.repeat(64) },
+      plans: [
+        {
+          hostId: randomUUID(),
+          sourceUserId: 9,
+          trustRevision: 'a'.repeat(64),
+          revision: 4,
+          categories: ['orbis-updates'],
+          automatic: true,
+          expected: {},
+          source: {},
+          status: 'idle',
+          lastAttemptAt: null,
+          results: [],
+        },
+      ],
+      receipts: {},
+    }),
+  );
+  await fs.writeFile(path.join(options.roots.state, 'cluster-sync', 'settings.json'), sync, { mode: 0o600 });
+  await fs.writeFile(path.join(options.roots['user-config'], 'tipi-compose.yml'), 'destination controller configuration', { mode: 0o600 });
+  const result = await prepare(test);
+  expect(result.operation.hostIdentity).toMatchObject({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
+  const incoming = `.orbis-restore-${options.journal.state.id}.incoming`;
+  expect(await fs.readFile(path.join(options.roots.state, incoming, 'cluster.json'))).toEqual(cluster);
+  const effective = JSON.parse(await fs.readFile(path.join(options.roots.state, incoming, 'cluster-sync', 'settings.json'), 'utf8'));
+  expect(effective.hostId).toBe(hostId);
+  expect(effective.receiving).toMatchObject({ userId: null, categories: [], trustRevision: null });
+  expect(effective.plans).toEqual([
+    expect.objectContaining({ categories: ['orbis-updates'], automatic: false, sourceUserId: null, trustRevision: null, status: 'disabled' }),
+  ]);
+  expect(await fs.readFile(path.join(options.roots.state, 'cluster-sync', 'settings.json'))).toEqual(sync);
+  expect(await fs.readFile(path.join(options.roots['user-config'], incoming, 'tipi-compose.yml'), 'utf8')).toBe(
+    'destination controller configuration',
+  );
+});
+
+it('fails unsupported destination settings-sync state before preparing a database or replacement trees', async () => {
+  const test = await fixture();
+  await fs.writeFile(path.join(test.options.roots.state, 'cluster.json'), JSON.stringify({ id: randomUUID() }), { mode: 0o600 });
+  await fs.mkdir(path.join(test.options.roots.state, 'cluster-sync'), { mode: 0o700 });
+  const file = path.join(test.options.roots.state, 'cluster-sync', 'settings.json');
+  await fs.writeFile(file, '{"version":2,"future":true}', { mode: 0o600 });
+  await expect(prepare(test)).rejects.toMatchObject({ preparationCheck: 'host-identity', message: expect.stringContaining('local review') });
+  expect(prepareRestoreDatabase).not.toHaveBeenCalled();
+  expect(await fs.readFile(file, 'utf8')).toBe('{"version":2,"future":true}');
+  expect(await fs.readdir(test.options.roots.traefik)).toEqual(['original.txt']);
+});
+
+it.each(['content', 'root-attrs'] as const)(
+  'refuses a destination network %s change during database staging before any replacement',
+  async (change) => {
+    const test = await fixture();
+    const original = vi.mocked(prepareRestoreDatabase).getMockImplementation();
+    if (!original) throw Error('Missing database preparation fixture');
+    vi.mocked(prepareRestoreDatabase).mockImplementation(async (input) => {
+      const owner = await original(input);
+      if (change === 'content') await fs.writeFile(path.join(test.options.roots.traefik, 'operator-change'), 'new network setting');
+      else await fs.chmod(test.options.roots.traefik, 0o750);
+      return owner;
+    });
+    await expect(prepare(test)).rejects.toMatchObject({ preparationCheck: 'host-identity-unchanged' });
+    expect((await test.options.journal.refresh()).phase).not.toBe('prepared');
+    if (change === 'content') expect(await fs.readFile(path.join(test.options.roots.traefik, 'operator-change'), 'utf8')).toBe('new network setting');
+    else expect((await fs.stat(test.options.roots.traefik)).mode & 0o777).toBe(0o750);
+    expect(await fs.readFile(path.join(test.options.roots['app-data'], 'original.txt'), 'utf8')).toBe('original app-data');
+  },
+);
 
 it('does not accept a backup that has not been moved into this restore journal', async () => {
   const test = await fixture();

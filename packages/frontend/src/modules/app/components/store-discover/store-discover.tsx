@@ -3,7 +3,7 @@ import { AppLogo } from '@/components/app-logo/app-logo';
 import { Button } from '@/components/ui/Button';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import type { AppCategory, AppInfoSimple } from '@/types/app.types';
-import { IconArrowRight, IconDeviceGamepad2, IconMovie } from '@tabler/icons-react';
+import { IconArrowRight } from '@tabler/icons-react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -14,13 +14,23 @@ import { mediaApps, mediaRecommendations, missingRecommendations, resolveCurated
 import { StoreStackReview } from './store-stack-review';
 
 const shelves: { category: AppCategory; title: string }[] = [
-  { category: 'ai', title: 'AI on your server' },
-  { category: 'development', title: 'Development environments' },
-  { category: 'utilities', title: 'Server essentials' },
-  { category: 'featured', title: 'Featured in your catalogue' },
+  { category: 'ai', title: 'AI' },
+  { category: 'development', title: 'Development' },
+  { category: 'utilities', title: 'Utilities' },
+  { category: 'featured', title: 'Featured' },
 ];
 
-export function StoreDiscover({ storeId, onBrowse }: { storeId?: string; onBrowse: (category?: AppCategory) => void }) {
+export function StoreDiscover({
+  storeId,
+  onBrowse,
+  onCollections,
+  presentation = 'page',
+}: {
+  storeId?: string;
+  onBrowse: (category?: AppCategory) => void;
+  onCollections?: () => void;
+  presentation?: 'page' | 'editorial';
+}) {
   const visible = useWindowVisible();
   const location = useLocation();
   const preview = useStorePreview();
@@ -62,87 +72,92 @@ export function StoreDiscover({ storeId, onBrowse }: { storeId?: string; onBrows
   const crafty = resolveCuratedApp(missingRecommendations(gaming.data?.data ?? [], current), ['crafty'], storeId);
   const showGaming = crafty && !current.some((app) => app.categories.includes('gaming'));
   const candidates = shelves.filter((shelf) => !current.some((app) => app.categories.includes(shelf.category))).slice(0, 2);
+  const artwork = [existingPlayer ?? player, ...companions.map((entry) => resolved[entry.id])].filter((app): app is AppInfoSimple => Boolean(app));
+  const checking = media.some((query) => query.isPending) || gaming.isPending;
   return (
-    <div className="orbis-store-discover">
+    <div className="orbis-store-discover" data-presentation={presentation}>
+      <header className="orbis-store-section-heading">
+        <h2>Collections</h2>
+        {presentation === 'editorial' && onCollections ? (
+          <button type="button" onClick={onCollections}>
+            See all <IconArrowRight size={16} aria-hidden="true" />
+          </button>
+        ) : null}
+      </header>
       {known ? (
         <>
           <div className="orbis-store-collections">
             {showMedia ? (
               <section className="orbis-store-collection orbis-store-collection-media">
-                <div className="orbis-store-collection-logos" aria-hidden="true">
-                  {player && !existingPlayer ? <AppLogo urn={player.urn} size={76} /> : <IconMovie size={56} stroke={1.5} />}
-                  {companions.slice(0, 3).map((entry) => (
-                    <AppLogo key={entry.id} urn={resolved[entry.id]?.urn} size={44} />
-                  ))}
+                <StoreCollectionArt apps={artwork} kind="media" />
+                <div className="orbis-store-collection-content">
+                  <h3>Media library</h3>
+                  <p>
+                    {existingPlayer
+                      ? `${existingPlayer.name} is installed. Choose missing library tools or a download client.`
+                      : `${[resolved.jellyfin?.name, resolved.plex?.name].filter(Boolean).join(' or ')}, with library tools and a download client. Review each app before installing.`}
+                  </p>
+                  <Button
+                    className="orbis-store-collection-action"
+                    onClick={() =>
+                      setReview({
+                        resolved: { ...resolved },
+                        existingPlayer: existingPlayer?.name,
+                        existingClient: existingClient?.name,
+                        installedIds: current.map((app) => app.id),
+                      })
+                    }
+                  >
+                    Review setup <IconArrowRight size={18} aria-hidden="true" />
+                  </Button>
                 </div>
-                <h3>{existingPlayer ? 'Extend your media setup' : 'Build a media stack'}</h3>
-                <p>
-                  {existingPlayer
-                    ? `${existingPlayer.name} is installed. Add only the library tools or download client you need.`
-                    : `Choose ${resolved.jellyfin && resolved.plex ? 'Jellyfin or Plex' : player?.name}, with optional library tools and a download client. Review each installation separately.`}
-                </p>
-                <Button
-                  className="orbis-store-collection-action"
-                  onClick={() =>
-                    setReview({
-                      resolved: { ...resolved },
-                      existingPlayer: existingPlayer?.name,
-                      existingClient: existingClient?.name,
-                      installedIds: current.map((app) => app.id),
-                    })
-                  }
-                >
-                  Choose apps <IconArrowRight size={18} aria-hidden="true" />
-                </Button>
               </section>
             ) : null}
             {showGaming ? (
               <section className="orbis-store-collection orbis-store-collection-gaming">
-                <div className="orbis-store-collection-logos" aria-hidden="true">
-                  <AppLogo urn={crafty.urn} size={76} />
-                  <IconDeviceGamepad2 size={38} stroke={1.5} />
+                <StoreCollectionArt apps={[crafty]} kind="gaming" />
+                <div className="orbis-store-collection-content">
+                  <h3>Game servers</h3>
+                  <p>Manage game servers with {crafty.name}. Review the configuration and required ports before installing.</p>
+                  <Link
+                    ref={visible ? preview?.onCardMount : undefined}
+                    className="orbis-store-collection-link"
+                    to={`/app-store/${encodeURIComponent(crafty.urn.split(':')[1] ?? '')}/${encodeURIComponent(crafty.id)}${location.search}`}
+                    state={nextStorePreviewHistory(
+                      location.state as StorePreviewHistory | null,
+                      location.search,
+                      location.pathname.startsWith('/app-store/'),
+                    )}
+                    preventScrollReset
+                    data-store-app={visible ? crafty.urn : undefined}
+                    aria-controls={preview?.split ? 'store-app-preview' : undefined}
+                    aria-expanded={preview?.split ? preview.selectedUrn === crafty.urn : undefined}
+                  >
+                    Preview {crafty.name} <IconArrowRight size={18} aria-hidden="true" />
+                  </Link>
                 </div>
-                <h3>Game servers</h3>
-                <p>Create and manage game servers with {crafty.name}. Check its required ports before installation.</p>
-                <Link
-                  ref={visible ? preview?.onCardMount : undefined}
-                  className="orbis-store-collection-link"
-                  data-store-app={visible ? crafty.urn : undefined}
-                  aria-controls={preview?.split ? 'store-app-preview' : undefined}
-                  aria-expanded={preview?.split ? preview.selectedUrn === crafty.urn : undefined}
-                  to={`/app-store/${encodeURIComponent(crafty.urn.split(':')[1] ?? '')}/${encodeURIComponent(crafty.id)}${location.search}`}
-                  state={nextStorePreviewHistory(
-                    location.state as StorePreviewHistory | null,
-                    location.search,
-                    location.pathname.startsWith('/app-store/'),
-                  )}
-                  preventScrollReset
-                >
-                  View {crafty.name} <IconArrowRight size={18} aria-hidden="true" />
-                </Link>
               </section>
             ) : null}
           </div>
           {media.some((query) => query.isError) || gaming.isError ? (
-            <p className="orbis-store-discovery-note">Some setup suggestions could not be checked. All apps remains available below.</p>
+            <p className="orbis-store-discovery-note">Some collections could not be checked. App browsing is still available.</p>
           ) : null}
-          {candidates.map((shelf) => (
-            <StoreShelf key={`${storeId ?? 'all'}-${shelf.category}`} {...shelf} installed={current} storeId={storeId} onBrowse={onBrowse} />
-          ))}
+          {presentation === 'editorial' ? (
+            !showMedia && !showGaming ? (
+              <output className="orbis-store-discovery-note">{checking ? 'Loading collections…' : 'No setup suggestions in this catalogue.'}</output>
+            ) : null
+          ) : (
+            candidates.map((shelf) => (
+              <StoreShelf key={`${storeId ?? 'all'}-${shelf.category}`} {...shelf} installed={current} storeId={storeId} onBrowse={onBrowse} />
+            ))
+          )}
         </>
       ) : (
         <div className="orbis-store-message" role={installed.isError ? 'alert' : 'status'}>
-          <p>
-            {installed.isError
-              ? 'Installed apps could not be checked. Browse all apps or retry to see relevant suggestions.'
-              : 'Checking installed apps for relevant suggestions…'}
-          </p>
+          <p>{installed.isError ? 'Collections could not be checked against your installed apps.' : 'Checking installed apps…'}</p>
           {installed.isError ? <Button onClick={() => void installed.refetch()}>Try again</Button> : null}
         </div>
       )}
-      <Button className="orbis-store-browse-all" intent="secondary" onClick={() => onBrowse()}>
-        Browse all apps <IconArrowRight size={18} aria-hidden="true" />
-      </Button>
       {review ? (
         <StoreStackReview
           installedIds={review.installedIds}
@@ -152,6 +167,19 @@ export function StoreDiscover({ storeId, onBrowse }: { storeId?: string; onBrows
           onClose={() => setReview(null)}
         />
       ) : null}
+    </div>
+  );
+}
+
+export function StoreCollectionArt({ apps, kind }: { apps: AppInfoSimple[]; kind: AppCategory }) {
+  if (!apps.length) return null;
+  return (
+    <div className="orbis-store-collection-art" data-collection-kind={kind} aria-hidden="true">
+      {apps.slice(0, 4).map((app, index) => (
+        <span className="orbis-store-artwork-app" data-art-position={index} key={app.urn}>
+          <AppLogo urn={app.urn} size={128} />
+        </span>
+      ))}
     </div>
   );
 }
@@ -175,11 +203,14 @@ function StoreShelf({
   if (query.isSuccess && !apps.length) return null;
   return (
     <section className="orbis-store-shelf">
-      <header className="orbis-store-result-heading">
-        <h3>{title}</h3>
-        <button type="button" onClick={() => onBrowse(category)}>
-          See all <IconArrowRight size={16} aria-hidden="true" />
-        </button>
+      <header className="orbis-store-shelf-heading">
+        <div className="orbis-store-section-heading">
+          <h2>{title}</h2>
+          <button type="button" onClick={() => onBrowse(category)}>
+            See all <IconArrowRight size={16} aria-hidden="true" />
+          </button>
+        </div>
+        {apps.length ? <StoreCollectionArt apps={apps} kind={category} /> : null}
       </header>
       {query.isError ? (
         <div className="orbis-store-message" role="alert">

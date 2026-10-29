@@ -12,6 +12,8 @@ import { BackupRestoreJournal } from './backup-restore-journal';
 import { materializeBackupSource, restoreTreeNames, type RestoreTreeName } from './backup-restore-materialize';
 import { writeRestoreOperation, type RestoreOperation } from './backup-restore-runtime';
 import { validateBackupSource, type BackupSourceSeal } from './backup-restore-source';
+import { captureRestoreHostIdentity, verifyRestoreHostIdentity, verifyPreservedTraefik } from './backup-restore-host-identity';
+import { restoreDestinationSyncSettings } from '../cluster/cluster-sync.store';
 
 export type RestorePreparationProgress = {
   stage: 'checking' | 'files' | 'database' | 'sealing' | 'prepared';
@@ -153,11 +155,31 @@ export async function prepareRestorePayload(options: {
     await privateBackupDirectory(journal.directory);
     await createPrivate(path.join(journal.directory, 'original.env'), original);
     await createPrivate(path.join(journal.directory, 'incoming.env'), incoming);
+    check = 'host-identity';
+    const hostIdentity = await captureRestoreHostIdentity({
+      directory: path.join(journal.directory, 'host-identity'),
+      id: state.id,
+      roots: options.roots,
+      signal,
+      transformClusterSync: (bytes, hostId) => {
+        const transformed = restoreDestinationSyncSettings(bytes, hostId);
+        if (!transformed) throw failed();
+        return transformed;
+      },
+    });
     const swaps = new Map<RestoreTreeName, BackupDirectorySwap>();
     check = 'directories';
     for (const name of restoreTreeNames) {
       signal.throwIfAborted();
-      swaps.set(name, await BackupDirectorySwap.create({ id: state.id, root: options.roots[name], journal: journal.rootJournal(name) }));
+      swaps.set(
+        name,
+        await BackupDirectorySwap.create({
+          id: state.id,
+          root: options.roots[name],
+          journal: journal.rootJournal(name),
+          ...(name === 'traefik' ? { preserve: true } : {}),
+        }),
+      );
     }
     progress.stage = 'files';
     check = 'files';
@@ -167,6 +189,7 @@ export async function prepareRestorePayload(options: {
       roots: Object.fromEntries([...swaps].map(([name, swap]) => [name, swap.incomingDirectory])) as Record<RestoreTreeName, string>,
       ledger: path.join(journal.directory, 'applied-files.ndjson'),
       settingsOverride: { original: { bytes: settings.bytes, sha256: settings.sha256 }, replacement: Buffer.from(configuration.settings) },
+      hostIdentity: { directory: path.join(journal.directory, 'host-identity'), id: state.id, seal: hostIdentity },
       signal,
       progress: (value) => {
         progress.completedBytes = value.completedBytes;
@@ -210,11 +233,28 @@ export async function prepareRestorePayload(options: {
       resumeApps: materialized.resumeApps,
       originalEnvSha256: hash(original),
       incomingEnvSha256: hash(incoming),
+      hostIdentity,
+      preservedTraefik: 1,
       files: materialized.files,
     });
     // A host configuration edit during preparation must not be overwritten at cutover.
     check = 'environment-unchanged';
     if (hash(await readPrivate(options.environment)) !== operation.originalEnvSha256) throw failed();
+    check = 'host-identity-unchanged';
+    await verifyRestoreHostIdentity({
+      directory: path.join(journal.directory, 'host-identity'),
+      id: state.id,
+      roots: options.roots,
+      seal: hostIdentity,
+      signal,
+    });
+    await verifyPreservedTraefik({
+      directory: path.join(journal.directory, 'host-identity'),
+      id: state.id,
+      roots: options.roots,
+      seal: hostIdentity,
+      signal,
+    });
     signal.throwIfAborted();
     await journal.advance('prepared');
     progress.stage = 'prepared';
@@ -222,6 +262,13 @@ export async function prepareRestorePayload(options: {
     return { operation, configuration: configuration.review };
   } catch {
     if (signal.aborted) signal.throwIfAborted();
+    if (check.startsWith('host-identity'))
+      throw Object.assign(
+        new BackupRequirementError(
+          'Network access and cluster settings need local review before restoring. Keep this server’s settings unchanged and review its settings sync configuration, then retry.',
+        ),
+        { preparationCheck: check },
+      );
     throw Object.assign(failed(), { preparationCheck: check });
   }
 }

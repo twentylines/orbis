@@ -37,8 +37,14 @@ export function restoreAuxiliaryContainerPlans(original: Dockerode.ContainerInsp
   const storage = deriveRestoreStorageLayout(original.Mounts);
   const networks = Object.keys(original.NetworkSettings.Networks);
   if (!networks.length || networks.length > 16 || networks.some((name) => !/^[a-zA-Z0-9_.-]{1,255}$/.test(name))) throw failed();
-  const networkMode = host.NetworkMode || networks[0];
-  if (!networkMode || !networks.includes(networkMode)) throw failed();
+  const requestedNetwork = host.NetworkMode || networks[0];
+  let networkMode = requestedNetwork;
+  if (requestedNetwork && /^[a-f0-9]{64}$/.test(requestedNetwork)) {
+    const matches = networks.filter((name) => original.NetworkSettings.Networks[name]?.NetworkID === requestedNetwork);
+    if (matches.length > 1 || (networks.includes(requestedNetwork) && matches.length === 1 && matches[0] !== requestedNetwork)) throw failed();
+    if (!networks.includes(requestedNetwork)) networkMode = matches.length === 1 ? matches[0] : undefined;
+  }
+  if (!networkMode || !networks.includes(networkMode) || ['host', 'none'].includes(networkMode)) throw failed();
   const endpoints = Object.fromEntries(networks.map((name) => [name, {}]));
   const labels = (role: string) => ({
     'io.orbis.restore': id,

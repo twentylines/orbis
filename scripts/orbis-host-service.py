@@ -40,6 +40,7 @@ TELEMETRY = load_script("orbis-host-telemetry.py", "orbis_telemetry_for_service"
 PROCESSES = load_script("orbis-host-processes.py", "orbis_processes_for_service").HostProcesses()
 SENSORS = load_script("orbis-host-sensors.py", "orbis_sensors_for_service").HostSensors()
 DRIVES = load_script("orbis-host-drives.py", "orbis_drives_for_service")
+DISCOVERY = load_script("orbis-host-discovery.py", "orbis_discovery_for_service")
 HOST = UPDATE.HOST
 PLAN = HOST.PLAN
 CHECK = UPDATE.CHECK
@@ -296,6 +297,7 @@ class HostService:
         self.restart_job_file = self.state_dir / "restart-job.json"
         self.maintenance_file = self.state_dir / "helper-maintenance.json"
         self.drives = DRIVES.DriveHealth(self.state_dir)
+        self.discovery = DISCOVERY.Discovery()
         previous = read_private(self.job_file)
         if previous and previous.get("state") in {"running", "recovering"}:
             previous["state"] = "interrupted"
@@ -903,6 +905,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self) -> None:
+        if self.path == "/v1/discovery/status":
+            self.send_json(200, self.server.service.discovery.status())
+            return
+        if self.path == "/v1/discovery/interfaces":
+            self.send_json(200, self.server.service.discovery.inventory())
+            return
         if self.path == "/v1/drives":
             self.send_json(200, self.server.service.drives.read())
             return
@@ -956,6 +964,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
+        if self.path in {"/v1/discovery/scan", "/v1/discovery/advertise", "/v1/discovery/disable"}:
+            try:
+                data = self.body()
+                discovery = self.server.service.discovery
+                if self.path.endswith("/disable"):
+                    if data:
+                        raise ValueError("Stop nearby visibility without additional fields")
+                    result = discovery.disable()
+                elif self.path.endswith("/scan"):
+                    if set(data) != {"interface"}:
+                        raise ValueError("Choose one private LAN interface")
+                    result = discovery.scan(data["interface"])
+                else:
+                    if set(data) != {"interface", "origin", "address", "leaseSeconds"}:
+                        raise ValueError("Confirm one nearby visibility lease")
+                    result = discovery.advertise(data["interface"], data["origin"], data["address"], data["leaseSeconds"])
+                self.send_json(200, result)
+            except (ValueError, OSError, RuntimeError, subprocess.SubprocessError):
+                self.send_json(200, {"available": False, "reason": "Nearby discovery is unavailable; enter an address manually"})
+            return
         if self.path not in {"/v1/channel", "/v1/plan", "/v1/apply", "/v1/recover", "/v1/packages/plan", "/v1/packages/apply", "/v1/packages/refresh", "/v1/restart/plan", "/v1/restart/apply", "/v1/drives/test"}:
             self.send_json(404, {"error": "not found"})
             return
@@ -1049,6 +1077,7 @@ def serve(socket_path: Path, service: HostService) -> None:
         except KeyboardInterrupt:
             pass
     finally:
+        service.discovery.disable()
         server.server_close()
         socket_path.unlink(missing_ok=True)
 

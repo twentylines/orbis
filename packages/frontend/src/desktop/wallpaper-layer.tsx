@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, typ
 import type { DesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
 import { resolveWallpaperKey, wallpaperSources, type WallpaperChoice } from './wallpaper-presets';
 import { readWallpaperImage, rememberBrowserWallpaper, wallpaperCacheEvent } from './wallpaper-cache';
+import { publicThemePackWallpaper, subscribeThemePackAppearance, themePackAppearanceSnapshot } from '@/modules/theme-packs/theme-pack-cache';
 import './wallpaper.css';
 
 const subscribeMotion = (changed: () => void) => {
@@ -119,6 +120,7 @@ export function WallpaperLayer({
 }) {
   const layer = useRef<HTMLDivElement>(null);
   const systemReducedMotion = useSyncExternalStore(subscribeMotion, prefersReducedMotion, fullMotion);
+  const themePack = useSyncExternalStore(subscribeThemePackAppearance, themePackAppearanceSnapshot, themePackAppearanceSnapshot);
   const value = {
     wallpaperImage: null,
     wallpaperFit: 'cover' as const,
@@ -135,7 +137,11 @@ export function WallpaperLayer({
   const protectedText = Boolean(
     hash || value.wallpaperFit !== 'cover' || value.wallpaperX !== 50 || value.wallpaperY !== 0 || value.wallpaperDim || value.wallpaperBlur,
   );
-  const source = hash ? custom.source : wallpaperSources[resolveWallpaperKey(choice)];
+  const packSource =
+    choice.wallpaperMode === 'theme' || (choice.wallpaperMode === undefined && !choice.wallpaperPreset && !value.wallpaperImage)
+      ? themePack && publicThemePackWallpaper(themePack)
+      : null;
+  const source = hash ? custom.source : packSource || wallpaperSources[resolveWallpaperKey(choice)];
   useLayoutEffect(() => {
     const surface = layer.current?.parentElement;
     if (!surface) return;

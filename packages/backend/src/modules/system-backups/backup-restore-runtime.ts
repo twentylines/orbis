@@ -15,6 +15,9 @@ import type { RestoreRuntime } from './backup-restore-coordinator';
 import { verifyRestoreFiles } from './backup-restore-files';
 import { writeRestoreEnvironment } from './backup-restore-environment';
 import { deriveRestoreStorageLayout, verifyRestoreStorageMounts } from './backup-restore-storage';
+import { attachVerifierDiagnostics, restoreFailureProgress, verifierDiagnosticCheck } from './backup-restore-diagnostics';
+import { verifyRestoreHostIdentity, verifyPreservedTraefik } from './backup-restore-host-identity';
+import type { RestoreTreeName } from './backup-restore-materialize';
 
 const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
 const digest = type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value));
@@ -74,6 +77,8 @@ const operationSchema = type({
   }),
   originalEnvSha256: digest,
   incomingEnvSha256: digest,
+  'hostIdentity?': type({ '+': 'reject', bytes: 'number.integer > 0 & number <= 67108864', sha256: digest }),
+  'preservedTraefik?': '1',
   files: type({
     '+': 'reject',
     bytes: 'number.integer >= 0 & number <= 67108864',
@@ -197,8 +202,33 @@ export async function validateRestoreIdentity(journal: BackupRestoreJournal, inp
 async function validateRestoreOperation(journal: BackupRestoreJournal, input: unknown) {
   const value = operationSchema(input);
   if (value instanceof type.errors) throw failed();
+  if (value.preservedTraefik === 1 && !value.hostIdentity) throw failed();
   await checkRestoreIdentity(journal, value);
   return value;
+}
+
+export function restoreRootPlanMatchesPolicy(name: string, input: unknown, preservedTraefik: boolean) {
+  if (!input || typeof input !== 'object') return false;
+  const value = input as { version?: unknown; mode?: unknown; incoming?: unknown; previous?: unknown; staging?: unknown };
+  if (name !== 'traefik' || !preservedTraefik) return value.version === 1 && !('mode' in value) && !('staging' in value);
+  if (
+    value.version !== 2 ||
+    value.mode !== 'preserve' ||
+    !Array.isArray(value.incoming) ||
+    value.incoming.length ||
+    !Array.isArray(value.previous) ||
+    value.previous.length
+  )
+    return false;
+  const staging = value.staging as { device?: unknown; inode?: unknown } | undefined;
+  return (
+    !!staging &&
+    Object.keys(staging).length === 2 &&
+    typeof staging.device === 'string' &&
+    /^[0-9]{1,32}$/.test(staging.device) &&
+    typeof staging.inode === 'string' &&
+    /^[0-9]{1,32}$/.test(staging.inode)
+  );
 }
 
 export async function readRestoreOperation(journal: BackupRestoreJournal) {
@@ -349,10 +379,32 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
             ? path.join(this.data, name)
             : undefined;
       const value = JSON.parse((await readOwned(path.join(this.journal.rootJournal(name), 'swap.json'), 64 * 1024 * 1024)).toString('utf8'));
-      if (!target || value.root !== target || value.id !== this.operation.id) throw failed();
+      if (
+        !target ||
+        value.root !== target ||
+        value.id !== this.operation.id ||
+        !restoreRootPlanMatchesPolicy(name, value, 'preservedTraefik' in this.operation && this.operation.preservedTraefik === 1)
+      )
+        throw failed();
       roots[name] = target;
     }
     return roots;
+  }
+  private async preservedTraefik(signal: AbortSignal) {
+    const operation = this.preparedOperation();
+    if (operation.preservedTraefik !== 1) return;
+    if (!operation.hostIdentity) throw failed('host-identity-required');
+    try {
+      await verifyPreservedTraefik({
+        directory: path.join(this.journal.directory, 'host-identity'),
+        id: operation.id,
+        seal: operation.hostIdentity,
+        roots: (await this.fileRoots()) as Record<RestoreTreeName, string>,
+        signal,
+      });
+    } catch {
+      throw failed('host-identity-changed');
+    }
   }
   private async stop(record: Snapshot, signal: AbortSignal) {
     signal.throwIfAborted();
@@ -417,6 +469,22 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     for (const app of this.operation.apps) await this.stop(app.container, signal);
     await this.noOtherWriters();
     if (this.journal.state.phase !== 'rolling-back') await this.idleQueues();
+    if (this.journal.state.phase === 'quiescing') {
+      if (!('hostIdentity' in this.operation) || !this.operation.hostIdentity) throw failed('host-identity-required');
+      if (!('preservedTraefik' in this.operation) || this.operation.preservedTraefik !== 1) throw failed('host-identity-required');
+      try {
+        await verifyRestoreHostIdentity({
+          directory: path.join(this.journal.directory, 'host-identity'),
+          id: this.operation.id,
+          seal: this.operation.hostIdentity,
+          roots: (await this.fileRoots()) as Record<RestoreTreeName, string>,
+          signal,
+        });
+        await this.preservedTraefik(signal);
+      } catch {
+        throw failed('host-identity-changed');
+      }
+    }
   }
   private async clearCache() {
     if ((await fs.realpath(this.cache)) !== path.resolve(this.cache)) throw failed();
@@ -477,7 +545,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     while (Date.now() < deadline) {
       signal.throwIfAborted();
       const inspect = await this.owned(record);
-      if (!inspect.State.Running || inspect.State.Restarting || inspect.State.Paused) throw failed();
+      if (!inspect.State.Running || inspect.State.Restarting || inspect.State.Paused) throw failed(phase === 'hold' ? 'verifier-exited' : 'runtime');
       let output = '';
       try {
         await backupDockerExec({
@@ -507,7 +575,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       }
       await delay(500, undefined, { signal });
     }
-    throw failed();
+    throw failed(phase === 'hold' ? 'verifier-health' : 'runtime');
   }
   async verify(signal: AbortSignal) {
     const operation = this.preparedOperation();
@@ -518,29 +586,45 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       signal,
     };
     await verifyRestoreFiles(files);
+    await this.preservedTraefik(signal);
     await verifyRestoreDatabase({ id: operation.id, nonce: operation.nonce, ...operation.database, signal });
     await this.role(this.operation.verifier, 'verifier');
     const before = hash(await readOwned(path.join(this.data, '.env')));
     const container = this.docker.getContainer(this.operation.verifier.id);
+    let diagnostics: Awaited<ReturnType<typeof attachVerifierDiagnostics>>;
+    try {
+      diagnostics = await attachVerifierDiagnostics(container, signal);
+    } catch {
+      signal.throwIfAborted();
+      throw failed('verifier-diagnostics');
+    }
     try {
       await container.start();
       await this.health(this.operation.verifier, 'hold', signal);
+    } catch (error) {
+      signal.throwIfAborted();
+      const marker = await diagnostics.finish();
+      throw failed(marker ? verifierDiagnosticCheck(marker) : (restoreFailureProgress(error, '').check ?? 'verifier-startup-failed'));
     } finally {
+      diagnostics.close();
       await this.stop(this.operation.verifier, new AbortController().signal);
     }
     if (hash(await readOwned(path.join(this.data, '.env'))) !== before) throw failed();
     await this.idleQueues();
     await verifyRestoreDatabase({ id: operation.id, nonce: operation.nonce, ...operation.database, signal });
     await verifyRestoreFiles(files);
+    await this.preservedTraefik(signal);
   }
   async activate() {
     this.preparedOperation();
+    await this.preservedTraefik(new AbortController().signal);
     const current = await this.role(this.operation.candidate, 'candidate');
     if (!current.State.Running) await this.clearCache();
     const container = this.docker.getContainer(current.Id);
     await container.update({ RestartPolicy: this.operation.original.restart });
     if (!current.State.Running) await container.start();
     await this.health(this.operation.candidate, 'resume', AbortSignal.timeout(20 * 60_000));
+    await this.preservedTraefik(new AbortController().signal);
   }
   async restoreDatabasePointer() {
     await this.setEnvironment('original');

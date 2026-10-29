@@ -1,6 +1,6 @@
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { UserRepository } from '@/modules/user/user.repository';
-import { Body, Controller, Get, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Patch, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { AcknowledgeWelcomeBody, AppContextDto, UserSettingsBody, UserContextDto } from './app.dto';
 import { AppService } from './app.service';
@@ -68,7 +68,9 @@ export class AppController {
 
   @Patch('/user-settings')
   @UseGuards(AuthGuard)
-  async updateUserSettings(@Body() body: UserSettingsBody) {
+  async updateUserSettings(@Req() req: Request, @Body() body: UserSettingsBody) {
+    if (req.authMethod !== 'session' || req.user?.operator !== true)
+      throw new ForbiddenException('An operator session is required to change server settings.');
     await this.configuration.setUserSettings(body);
   }
 

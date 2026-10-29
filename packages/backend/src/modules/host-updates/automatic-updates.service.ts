@@ -1,7 +1,15 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  ServiceUnavailableException,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from '@nestjs/common';
+import { syncHash, type SyncValues, type SyncCategory } from '../cluster/cluster-sync.schema';
 import { type } from 'arktype';
 import { gt, valid } from 'semver';
 import { releaseAllowedOnChannel } from '@runtipi/common/schemas/orbis-release-channel';
@@ -420,6 +428,86 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       next.revision++;
     });
     return this.readApp(urn);
+  }
+
+  private syncProjection(installed: string[], state = this.state) {
+    return {
+      'orbis-updates': structuredClone(state.settings.orbis),
+      'app-updates': installed.map((urn) => ({ urn, enabled: Boolean(state.rules[urn] && state.rules[urn]?.mode !== 'disabled') })),
+      schedules: {
+        time: state.settings.schedule.time,
+        apps: installed.map((urn) => {
+          const rule = state.rules[urn];
+          return rule?.mode === 'custom' ? { urn, mode: 'custom' as const, time: rule.time } : { urn, mode: 'global' as const };
+        }),
+      },
+    };
+  }
+
+  private async syncInstalled() {
+    const installed = (await this.apps.getApps())
+      .map((app) => `${app.appName}:${app.appStoreSlug}`)
+      .filter((urn) => /^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$/.test(urn) && !urn.endsWith(':_user'))
+      .sort();
+    if (installed.length > 256 || new Set(installed).size !== installed.length)
+      throw new ConflictException('The installed app list needs review before settings sync.');
+    return installed;
+  }
+
+  async clusterSnapshot() {
+    await this.load();
+    await this.writes;
+    if (this.storageError) throw new ServiceUnavailableException('Automatic update settings are unavailable for sync.');
+    return this.syncProjection(await this.syncInstalled());
+  }
+
+  async applyClusterSettings(values: Partial<Omit<SyncValues, 'customisation'>>, expected: Partial<Record<SyncCategory, string>>) {
+    if (this.config.get('demoMode')) throw new BadRequestException('Settings sync is unavailable in demo mode.');
+    const installed = await this.syncInstalled();
+    const accepted = new Set(installed);
+    const skipped = new Set<string>();
+    let applied = this.syncProjection(installed);
+    await this.change((next) => {
+      const before = this.syncProjection(installed, next);
+      for (const category of ['orbis-updates', 'app-updates', 'schedules'] as const)
+        if (values[category] !== undefined && syncHash(before[category]) !== expected[category])
+          throw new ConflictException('Update settings changed locally. Review current settings before syncing again.');
+      if (values['orbis-updates'] && JSON.stringify(values['orbis-updates']) !== JSON.stringify(next.settings.orbis)) {
+        if (next.orbis && ['applying', 'accepted'].includes(next.orbis.state))
+          throw new ConflictException('Wait for the current Orbis update before syncing its policy.');
+        const enabling = values['orbis-updates'].enabled && !next.settings.orbis.enabled;
+        next.settings.orbis = structuredClone(values['orbis-updates']);
+        if (enabling || (next.orbis && ['checking', 'planning', 'deferred'].includes(next.orbis.state))) next.orbis = null;
+        if (enabling) next.pauseReason = null;
+      }
+      for (const policy of values['app-updates'] ?? []) {
+        if (!accepted.has(policy.urn)) {
+          skipped.add(policy.urn);
+          continue;
+        }
+        const enabled = Boolean(next.rules[policy.urn] && next.rules[policy.urn]?.mode !== 'disabled');
+        if (policy.enabled === enabled) continue;
+        if (next.apps[policy.urn] && ['applying', 'accepted'].includes(next.apps[policy.urn]?.state ?? ''))
+          throw new ConflictException('Wait for the current app update before syncing its policy.');
+        if (!policy.enabled) delete next.rules[policy.urn];
+        else if (!next.rules[policy.urn]) next.rules[policy.urn] = { mode: 'global' };
+        delete next.apps[policy.urn];
+      }
+      if (values.schedules) {
+        next.settings.schedule.time = values.schedules.time;
+        for (const schedule of values.schedules.apps) {
+          if (!accepted.has(schedule.urn)) {
+            skipped.add(schedule.urn);
+            continue;
+          }
+          if (next.rules[schedule.urn] && next.rules[schedule.urn]?.mode !== 'disabled')
+            next.rules[schedule.urn] = schedule.mode === 'custom' ? { mode: 'custom', time: schedule.time } : { mode: 'global' };
+        }
+      }
+      next.revision++;
+      applied = this.syncProjection(installed, next);
+    });
+    return { values: applied, skippedApps: skipped.size };
   }
   private systemReady() {
     return (

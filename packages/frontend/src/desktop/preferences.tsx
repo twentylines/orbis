@@ -1,3 +1,6 @@
+import { useThemePack } from '@/modules/theme-packs/use-theme-pack';
+import { applyThemePackRuntime, themePackAppearance } from '@/modules/theme-packs/theme-pack-runtime';
+import '@/modules/theme-packs/theme-pack-runtime.css';
 import { applyAppearanceRuntime } from './appearance-runtime';
 import { transitionAppearance } from './theme-motion';
 import { MotionPreferences } from './motion-preferences';
@@ -141,6 +144,7 @@ export function readCachedDesktopPreferences(): DesktopPreferences {
 type PreferenceContext = {
   preferences: DesktopPreferences;
   resolvedMode: ResolvedColourMode;
+  activeThemePack: { id: string; version: string; name: string } | null;
   cacheAvailable: boolean;
   update: (value: Partial<DesktopPreferences>) => void;
   updateAppearance: (value: Partial<DesktopAppearance>) => void;
@@ -160,6 +164,7 @@ const LOAD_NOTICE = 'desktop-preferences-load';
 export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const { isLoggedIn } = useUserContext();
   const { pathname } = useLocation();
+  const themePack = useThemePack(isLoggedIn);
   const [cache] = useState(readPreferenceCache);
   const [preferences, setPreferences] = useState(cache.preferences);
   const [preview, setPreview] = useState<DesktopPreferences | null>(null);
@@ -193,7 +198,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       root.dataset.desktopWallpaper = displayedWallpaper;
       root.dataset.desktopLocalWallpaper = String(displayed.wallpaperMode === 'custom' && Boolean(displayed.appearance.wallpaperImage));
       root.dataset.orbisAppearanceReady = 'true';
-      applyAppearanceRuntime(displayed.appearance, effectiveMode);
+      applyThemePackRuntime(themePack, effectiveMode, displayed.wallpaperMode === 'theme');
+      applyAppearanceRuntime(themePackAppearance(themePack, displayed.appearance), effectiveMode);
     };
     transitionAppearance(apply, appearancePainted.current);
     appearancePainted.current = true;
@@ -208,7 +214,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     return () => {
       for (const query of queries) query.removeEventListener('change', apply);
     };
-  }, [displayed.appearance, displayed.preset, displayedWallpaper, displayed.mode, displayed.wallpaperMode, resolvedMode]);
+  }, [displayed.appearance, displayed.preset, displayedWallpaper, displayed.mode, displayed.wallpaperMode, resolvedMode, themePack]);
 
   useEffect(() => {
     if (isLoggedIn && !initialLoadComplete) return;
@@ -473,6 +479,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       value={{
         preferences,
         resolvedMode,
+        activeThemePack: themePack ? { id: themePack.id, version: themePack.version, name: themePack.name } : null,
         cacheAvailable,
         update,
         updateAppearance,

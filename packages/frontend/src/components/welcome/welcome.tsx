@@ -36,6 +36,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 're
 import { useNavigate } from 'react-router';
 import { saveSetupSteps, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices, type SetupSaveStep } from './setup-save';
 import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
+import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
 import { nextSetupStep, previousSetupStep, setupCanFinish, setupPosition, setupStepCopy, type SetupEntry, type SetupStep } from './setup-navigation';
 import './welcome.css';
 
@@ -131,7 +132,8 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   }, [step]);
 
   const position = setupPosition(step);
-  const SetupSurface = step === 'restore' ? 'div' : 'form';
+  const recoveryStep = step === 'restore' || step === 'transfer';
+  const SetupSurface = recoveryStep ? 'div' : 'form';
   const go = (next: SetupStep | null) => {
     if (saving || restoreBusy || next === null) return;
     setDirection(setupPosition(next).current > position.current ? 1 : -1);
@@ -188,7 +190,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
           aria-busy={saving}
           data-reduced={reduceSetupMotion}
           onSubmit={(event: FormEvent<HTMLElement>) => {
-            if (step === 'restore' || event.target !== event.currentTarget) return;
+            if (recoveryStep || event.target !== event.currentTarget) return;
             event.preventDefault();
             if (setupCanFinish(step, entry)) void save();
             else if ((step !== 'server' || nameValid) && (step !== 'updates' || scheduleValid)) go(nextSetupStep(step, entry));
@@ -196,10 +198,10 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
         >
           <header className="orbis-setup-header">
             <div className="orbis-setup-progress-label">
-              <span>{step === 'restore' ? 'Backup recovery' : 'Setup'}</span>
-              <span>{step === 'restore' ? 'Review & restore' : `${position.current} / ${position.total}`}</span>
+              <span>{recoveryStep ? (step === 'transfer' ? 'Server transfer' : 'Backup recovery') : 'Setup'}</span>
+              <span>{recoveryStep ? 'Review & restore' : `${position.current} / ${position.total}`}</span>
             </div>
-            {step !== 'restore' ? (
+            {recoveryStep ? null : (
               <div
                 className="orbis-setup-progress"
                 role="progressbar"
@@ -211,7 +213,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
               >
                 <span style={{ transform: `scaleX(${position.current / position.total})` }} />
               </div>
-            ) : null}
+            )}
           </header>
           <div ref={stage} id="setup-choices" className="orbis-setup-stage" data-direction={direction}>
             <section key={step} className="orbis-setup-step" aria-labelledby="setup-heading">
@@ -222,7 +224,8 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                 <p>{setupStepCopy[step].description}</p>
               </div>
               {step === 'restore' ? <SystemBackupsSettings restoreOnly embedded onActivityChange={setRestoreBusy} /> : null}
-              {step !== 'restore' ? (
+              {step === 'transfer' ? <HostTransferPanel mode="receive" embedded onActivityChange={setRestoreBusy} /> : null}
+              {recoveryStep ? null : (
                 <fieldset disabled={saving} className="orbis-setup-fields">
                   {step === 'choose' ? (
                     <div className="orbis-setup-entry-choices">
@@ -231,10 +234,16 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                         <span>Choose your server name, appearance and update preferences.</span>
                       </button>
                       {user.operator ? (
-                        <button type="button" aria-pressed={entry === 'restore'} onClick={() => setEntry('restore')}>
-                          <strong>Restore a backup</strong>
-                          <span>Bring back saved Orbis configuration and managed app data.</span>
-                        </button>
+                        <>
+                          <button type="button" aria-pressed={entry === 'restore'} onClick={() => setEntry('restore')}>
+                            <strong>Restore a backup</strong>
+                            <span>Bring back saved Orbis configuration and managed app data.</span>
+                          </button>
+                          <button type="button" aria-pressed={entry === 'transfer'} onClick={() => setEntry('transfer')}>
+                            <strong>Transfer a server</strong>
+                            <span>Receive an encrypted backup over your private network.</span>
+                          </button>
+                        </>
                       ) : null}
                     </div>
                   ) : null}
@@ -569,7 +578,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                     </>
                   ) : null}
                 </fieldset>
-              ) : null}
+              )}
             </section>
           </div>
           {error ? (
@@ -604,15 +613,19 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                 <output aria-live="polite">
                   {saving
                     ? savingStep
-                    : step === 'restore'
+                    : recoveryStep
                       ? restoreBusy
-                        ? 'Follow the backup progress above.'
-                        : 'Verify the backup before confirming replacement.'
+                        ? step === 'transfer'
+                          ? 'Follow transfer or restore progress above.'
+                          : 'Follow the backup progress above.'
+                        : step === 'transfer'
+                          ? 'Approve the transfer, then review the received backup.'
+                          : 'Verify the backup before confirming replacement.'
                       : 'Your choices are saved when you finish.'}
                 </output>
               )}
             </div>
-            {step !== 'restore' ? (
+            {recoveryStep ? null : (
               <Button
                 type="submit"
                 intent="primary"
@@ -627,7 +640,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                 {saving ? 'Saving…' : step === 'ready' ? 'Open workspace' : 'Continue'}
                 {saving ? null : step === 'ready' ? <IconCheck size={18} aria-hidden="true" /> : <IconArrowRight size={18} aria-hidden="true" />}
               </Button>
-            ) : null}
+            )}
           </footer>
         </SetupSurface>
       </AuthLayout>

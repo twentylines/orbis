@@ -42,6 +42,21 @@ import {
   type DesktopWindowBounds,
   type DesktopWindows,
 } from './desktop-windows.js';
+import {
+  themePackManifestSchema,
+  themePackPaletteSchema,
+  themePackAssetSchema,
+  themePackIdSchema,
+  themePackVersionSchema,
+  themePackReferenceSchema,
+  themePackStateSchema,
+  themePackSnapshotSchema,
+  type ThemePackManifest,
+  type ThemePackReference,
+  type ThemePackState,
+  type ThemePackInstallation,
+  type ThemePackSnapshot,
+} from './theme-pack.js';
 import { desktopAppearanceSchema, defaultDesktopAppearance, normaliseDesktopAppearance, type DesktopAppearance } from './desktop-appearance.js';
 
 export {
@@ -126,4 +141,17 @@ export {
   defaultDesktopAppearance,
   normaliseDesktopAppearance,
   type DesktopAppearance,
+  themePackManifestSchema,
+  themePackPaletteSchema,
+  themePackAssetSchema,
+  themePackIdSchema,
+  themePackVersionSchema,
+  themePackReferenceSchema,
+  themePackStateSchema,
+  themePackSnapshotSchema,
+  type ThemePackManifest,
+  type ThemePackReference,
+  type ThemePackState,
+  type ThemePackInstallation,
+  type ThemePackSnapshot,
 };

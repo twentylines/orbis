@@ -9,6 +9,7 @@ function firstPaint(raw: string | null, { dark = false, blockedStorage = false, 
     document: { documentElement: { dataset } },
     localStorage: {
       getItem(key: string) {
+        if (key === 'orbis-public-theme-appearance-v1') return null;
         expect(key).toBe(preferenceStorageKey);
         if (blockedStorage) throw new Error('Storage denied');
         return raw;

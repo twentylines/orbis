@@ -3,15 +3,25 @@ import { useWindowVisible, WindowVisibilityContext } from '@/desktop/window-visi
 import { motion } from 'framer-motion';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
-type StoreView = 'discover' | 'apps';
+type StoreView = 'discover' | 'apps' | 'themes';
 
-export function StoreViewTransition({ active, discover, apps }: { active: StoreView; discover: ReactNode; apps: ReactNode }) {
+export function StoreViewTransition({
+  active,
+  discover,
+  apps,
+  themes,
+}: {
+  active: StoreView;
+  discover: ReactNode;
+  apps: ReactNode;
+  themes?: ReactNode;
+}) {
   const reduced = useReducedMotion();
   const visible = useWindowVisible();
   const host = useRef<HTMLDivElement>(null);
   const panels = useRef<Partial<Record<StoreView, HTMLDivElement | null>>>({});
   const previous = useRef(active);
-  const positions = useRef<Record<StoreView, number>>({ discover: 0, apps: 0 });
+  const positions = useRef<Record<StoreView, number>>({ discover: 0, apps: 0, themes: 0 });
   const [size, setSize] = useState<{ height: number; animate: boolean } | null>(null);
   const measured = useRef(false);
   const lastFocus = useRef<HTMLElement | null>(null);
@@ -102,7 +112,7 @@ export function StoreViewTransition({ active, discover, apps }: { active: StoreV
       animate={size ? { height: size.height } : {}}
       transition={transition}
     >
-      {(['discover', 'apps'] as const).map((view) => {
+      {(themes === undefined ? (['discover', 'apps'] as const) : (['discover', 'apps', 'themes'] as const)).map((view) => {
         const selected = active === view;
         return (
           <motion.div
@@ -128,7 +138,9 @@ export function StoreViewTransition({ active, discover, apps }: { active: StoreV
               pointerEvents: selected ? undefined : 'none',
             }}
           >
-            <WindowVisibilityContext.Provider value={visible && selected}>{view === 'discover' ? discover : apps}</WindowVisibilityContext.Provider>
+            <WindowVisibilityContext.Provider value={visible && selected}>
+              {view === 'discover' ? discover : view === 'themes' ? themes : apps}
+            </WindowVisibilityContext.Provider>
           </motion.div>
         );
       })}

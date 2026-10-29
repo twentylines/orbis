@@ -20,7 +20,7 @@ function fixture() {
       Labels: { 'traefik.enable': 'true', 'com.docker.compose.service': 'runtipi' },
     },
     HostConfig: { NetworkMode: 'orbis_private', Memory: 512 * 1024 * 1024, PidsLimit: 128 },
-    NetworkSettings: { Networks: { orbis_private: { Aliases: ['runtipi', 'old-controller'], IPAddress: '192.0.2.9' } } },
+    NetworkSettings: { Networks: { orbis_private: { NetworkID: '4'.repeat(64), Aliases: ['runtipi', 'old-controller'], IPAddress: '192.0.2.9' } } },
     State: { Running: true, Restarting: false, Paused: false },
     Mounts: [
       { Type: 'bind', Source: '/srv/data', Destination: '/data', RW: true },
@@ -136,4 +136,64 @@ it('keeps the required worker capabilities independent from mutable create optio
   const result = plans(fixture());
   result.worker.HostConfig?.CapAdd.pop();
   expect(plans(fixture()).worker.HostConfig?.CapAdd).toEqual(['CHOWN', 'DAC_OVERRIDE', 'FOWNER']);
+});
+
+it('normalizes only the exact recorded full network ID to its endpoint name without changing worker or verifier isolation', () => {
+  const byName = fixture();
+  const byId = fixture();
+  byId.HostConfig.NetworkMode = byId.NetworkSettings.Networks.orbis_private.NetworkID;
+  const before = structuredClone(byId);
+  expect(plans(byId)).toEqual(plans(byName));
+  expect(byId).toEqual(before);
+  for (const plan of Object.values(plans(byId))) expect(plan.HostConfig?.NetworkMode).toBe('orbis_private');
+});
+
+it.each(['4'.repeat(12), '4'.repeat(63), '5'.repeat(64), '4'.repeat(65), 'bridge', 'none', 'host', `container:${'4'.repeat(64)}`])(
+  'rejects a network ID prefix, unknown mode or unsafe mode %s',
+  (mode) => {
+    const original = fixture();
+    original.HostConfig.NetworkMode = mode;
+    expect(() => plans(original)).toThrow('No server data has been changed');
+  },
+);
+
+it('rejects duplicated endpoint network IDs and ambiguous name-versus-ID identities', () => {
+  const original = fixture() as unknown as Dockerode.ContainerInspectInfo;
+  const endpoint = original.NetworkSettings.Networks.orbis_private;
+  if (!endpoint) throw new Error('Missing fixture endpoint');
+  original.HostConfig.NetworkMode = '4'.repeat(64);
+  original.NetworkSettings.Networks.other = { ...endpoint };
+  expect(() => restoreAuxiliaryContainerPlans(original, id, nonce)).toThrow('No server data has been changed');
+  delete original.NetworkSettings.Networks.other;
+  original.NetworkSettings.Networks['4'.repeat(64)] = { ...endpoint, NetworkID: '5'.repeat(64) };
+  expect(() => restoreAuxiliaryContainerPlans(original, id, nonce)).toThrow('No server data has been changed');
+});
+
+it('keeps exact recorded names valid and retains network, capability and resource bounds with ID-form modes', () => {
+  const original = fixture() as unknown as Dockerode.ContainerInspectInfo;
+  const endpoint = original.NetworkSettings.Networks.orbis_private;
+  if (!endpoint) throw new Error('Missing fixture endpoint');
+  original.HostConfig.NetworkMode = '4'.repeat(64);
+  original.HostConfig.Memory = 4 * 1024 ** 3;
+  original.HostConfig.PidsLimit = 1024;
+  const valid = restoreAuxiliaryContainerPlans(original, id, nonce);
+  for (const plan of Object.values(valid))
+    expect(plan.HostConfig).toMatchObject({
+      Memory: 1024 ** 3,
+      PidsLimit: 256,
+      ReadonlyRootfs: true,
+      CapDrop: ['ALL'],
+      Privileged: false,
+      AutoRemove: false,
+      PortBindings: {},
+    });
+  original.HostConfig.CapDrop = ['ALL'];
+  expect(() => restoreAuxiliaryContainerPlans(original, id, nonce)).toThrow();
+  original.HostConfig.CapDrop = [];
+  for (let index = 0; index < 16; index++) original.NetworkSettings.Networks[`extra_${index}`] = { ...endpoint, NetworkID: '5'.repeat(64) };
+  expect(() => restoreAuxiliaryContainerPlans(original, id, nonce)).toThrow();
+  const named = fixture() as unknown as Dockerode.ContainerInspectInfo;
+  named.NetworkSettings.Networks['6'.repeat(64)] = { ...endpoint, NetworkID: '7'.repeat(64) };
+  named.HostConfig.NetworkMode = '6'.repeat(64);
+  expect(restoreAuxiliaryContainerPlans(named, id, nonce).worker.HostConfig?.NetworkMode).toBe('6'.repeat(64));
 });

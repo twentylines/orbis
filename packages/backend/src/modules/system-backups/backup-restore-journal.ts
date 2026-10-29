@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readLatestTerminalPointer } from './backup-restore-terminal-record';
 import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -188,6 +189,18 @@ export class BackupRestoreJournal {
     } catch {
       throw failed();
     }
+  }
+  static async latest(store: string) {
+    const active = await BackupRestoreJournal.active(store);
+    if (active) return active;
+    const pointer = await readLatestTerminalPointer(store);
+    if (!pointer) return undefined;
+    const directory = path.join(store, pointer.id);
+    await privateBackupDirectory(directory);
+    const state = await readPrivate(path.join(directory, 'restore.json'));
+    validate(state);
+    if (state.id !== pointer.id || state.nonce !== pointer.nonce || state.phase !== pointer.phase) throw failed();
+    return new BackupRestoreJournal(directory, state);
   }
   async refresh() {
     const active = await BackupRestoreJournal.active(path.dirname(this.directory));

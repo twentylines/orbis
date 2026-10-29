@@ -1,3 +1,5 @@
+import { themePackCacheBootstrap } from '@/modules/theme-packs/theme-pack-cache';
+import { applyThemePackAppearanceRuntime, themePackAppearance } from '@/modules/theme-packs/theme-pack-runtime';
 import { applyAppearanceRuntime } from './appearance-runtime';
 import { resolveColourMode } from './colour-mode';
 import { resolveWallpaperKey, type ThemePreset } from './wallpaper-presets';
@@ -99,9 +101,11 @@ export const appearanceBootstrap = `(()=>{
   }
   const mode=(${resolveColourMode.toString()})(requested,systemDark);
   const root=document.documentElement;
+  ${themePackCacheBootstrap}
   root.dataset.desktopPreset=preset;
   root.dataset.desktopMode=mode;
   const cached=(${appearanceFromStored.toString()})(stored,options);
+  if(cachedThemePack&&root.style?.setProperty)(${applyThemePackAppearanceRuntime.toString()})(cachedThemePack,mode,cached.wallpaperMode==='theme',publicThemePackWallpaper(cachedThemePack,publicThemePackWallpapers));
   root.dataset.desktopWallpaper=(${resolveWallpaperKey.toString()})(cached);
   if(cached.wallpaperMode==='custom'&&cached.appearance?.wallpaperImage)root.dataset.desktopLocalWallpaper='true';
   const apply=()=>{
@@ -110,7 +114,8 @@ export const appearanceBootstrap = `(()=>{
       return;
     }
     if(typeof getComputedStyle!=='function')return;
-    (${applyAppearanceRuntime.toString()})(stored.appearance,mode);
+    const personal=stored.appearance&&typeof stored.appearance==='object'?stored.appearance:{};
+    (${applyAppearanceRuntime.toString()})(cachedThemePack?(${themePackAppearance.toString()})(cachedThemePack,personal):personal,mode);
     if(root.dataset.orbisEffects&&typeof document.removeEventListener==='function')document.removeEventListener('load',apply,true);
   };
   if(typeof requestAnimationFrame==='function')requestAnimationFrame(apply);

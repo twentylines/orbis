@@ -20,6 +20,7 @@ import YAML from 'yaml';
 import { installationMode } from './common/installation-mode';
 import { QueueFactory } from './modules/queue/queue.factory';
 import { backupMaintenanceActive } from './common/backup-maintenance';
+import { restoreStartupRole } from './modules/system-backups/backup-restore-startup';
 
 @Injectable()
 export class AppService {
@@ -88,8 +89,12 @@ export class AppService {
       }
       this.systemEventsQueue.publishRepeatable({ command: 'sync_app_statuses' }, '*/5 * * * *');
 
-      await this.copyAssets();
-      await this.generateTlsCertificates({ localDomain: userSettings.localDomain });
+      if (installation.phase === 'resume' && restoreStartupRole() === 'candidate') {
+        await this.initializeAssets(true);
+      } else {
+        await this.copyAssets();
+        await this.generateTlsCertificates({ localDomain: userSettings.localDomain });
+      }
 
       if (installation.phase !== 'resume' && __prod__ && (buster !== version || version === 'nightly')) {
         this.appLifecycleService.restartRunningApps();
@@ -123,28 +128,34 @@ export class AppService {
   }
 
   public async copyAssets() {
+    await this.initializeAssets(false);
+  }
+
+  private async initializeAssets(preserveNetworkAccess: boolean) {
     const { directories, userSettings } = this.configuration.getConfig();
     const { appDir, dataDir, appDataDir } = directories;
 
     const assetsFolder = path.join(appDir, 'assets');
 
-    this.logger.info('Creating traefik folders');
+    if (!preserveNetworkAccess) {
+      this.logger.info('Creating traefik folders');
 
-    await this.filesystem.createDirectories([
-      path.join(dataDir, 'traefik', 'dynamic'),
-      path.join(dataDir, 'traefik', 'shared'),
-      path.join(dataDir, 'traefik', 'tls'),
-    ]);
+      await this.filesystem.createDirectories([
+        path.join(dataDir, 'traefik', 'dynamic'),
+        path.join(dataDir, 'traefik', 'shared'),
+        path.join(dataDir, 'traefik', 'tls'),
+      ]);
 
-    if (userSettings.persistTraefikConfig) {
-      this.logger.warn('Skipping the copy of traefik files because persistTraefikConfig is set to true');
-    } else {
-      this.logger.info('Copying traefik files');
-      await this.writeTraefikConfig(path.join(assetsFolder, 'traefik', 'traefik.yml'), path.join(dataDir, 'traefik', 'traefik.yml'));
-      await this.filesystem.copyFile(
-        path.join(assetsFolder, 'traefik', 'dynamic', 'dynamic.yml'),
-        path.join(dataDir, 'traefik', 'dynamic', 'dynamic.yml'),
-      );
+      if (userSettings.persistTraefikConfig) {
+        this.logger.warn('Skipping the copy of traefik files because persistTraefikConfig is set to true');
+      } else {
+        this.logger.info('Copying traefik files');
+        await this.writeTraefikConfig(path.join(assetsFolder, 'traefik', 'traefik.yml'), path.join(dataDir, 'traefik', 'traefik.yml'));
+        await this.filesystem.copyFile(
+          path.join(assetsFolder, 'traefik', 'dynamic', 'dynamic.yml'),
+          path.join(dataDir, 'traefik', 'dynamic', 'dynamic.yml'),
+        );
+      }
     }
 
     // Create base folders

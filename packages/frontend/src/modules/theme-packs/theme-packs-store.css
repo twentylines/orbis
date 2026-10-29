@@ -1,0 +1,61 @@
+.theme-packs-store {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.theme-packs-store .theme-pack-card {
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
+}
+.theme-packs-store .theme-pack-card > img {
+  aspect-ratio: 16 / 8;
+  max-height: 220px;
+}
+.theme-packs-store .theme-pack-body {
+  gap: 14px;
+  padding: 20px;
+}
+.theme-packs-store .theme-pack-body > p {
+  line-height: 1.6;
+}
+.theme-packs-store > div:first-child h2 {
+  margin: 0 0 8px;
+  font-size: var(--orbis-compact-section, 1.375rem);
+  line-height: 1.4;
+}
+.theme-packs-store > div:first-child p,
+.theme-packs-scope,
+.theme-packs-empty {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.theme-packs-scope,
+.theme-packs-empty {
+  margin-top: 20px;
+}
+.theme-packs-store .theme-packs-content button {
+  border: 1px solid var(--desktop-line);
+  border-radius: 11px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.theme-packs-store .theme-packs-content button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
+}
+.theme-packs-store .theme-packs-content button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+@container (max-width: 25em) {
+  .theme-packs-store .theme-pack-body {
+    padding: 16px;
+  }
+  .theme-packs-store .theme-pack-actions > button {
+    flex: 1 1 100%;
+  }
+}

@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { watch, constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -19,6 +20,126 @@ afterEach(async () => {
 const signal = () => new AbortController().signal;
 const hash = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
 const interrupted = () => Object.assign(new Error('Disposable rename interruption'), { code: 'EIO' });
+
+async function watchedIdentity(root: string) {
+  const entries: unknown[] = [];
+  const visit = async (file: string) => {
+    const stat = await fs.lstat(file, { bigint: true });
+    entries.push({
+      name: path.relative(root, file),
+      device: String(stat.dev),
+      inode: String(stat.ino),
+      changed: String(stat.ctimeNs),
+      modified: String(stat.mtimeNs),
+      uid: String(stat.uid),
+      gid: String(stat.gid),
+      mode: String(stat.mode),
+      ...(stat.isFile() ? { sha256: hash(await fs.readFile(file)) } : {}),
+    });
+    if (stat.isDirectory()) for (const name of (await fs.readdir(file)).sort()) await visit(path.join(file, name));
+  };
+  await visit(root);
+  return entries;
+}
+
+it.each(['commit', 'rollback', 'discard'] as const)('preserved plans keep live identity and file watches intact during %s', async (outcome) => {
+  const root = path.join(directory, 'watched-traefik');
+  const journal = path.join(directory, 'private-plan');
+  await fs.mkdir(path.join(root, 'tls'), { recursive: true, mode: 0o700 });
+  await fs.writeFile(path.join(root, 'dynamic.json'), 'destination routes');
+  await fs.writeFile(path.join(root, 'tls', 'cert.pem'), 'destination certificate');
+  const before = await watchedIdentity(root);
+  const events: { file: string; event: string; name: string | undefined }[] = [];
+  const watchers = [root, path.join(root, 'dynamic.json'), path.join(root, 'tls'), path.join(root, 'tls', 'cert.pem')].map((file) =>
+    watch(file, (event, name) => events.push({ file: path.relative(root, file), event, name: name?.toString() })),
+  );
+  const mutations = ['mkdir', 'rename', 'rm', 'chmod', 'chown', 'utimes', 'writeFile'] as const;
+  const observers = mutations.map((method) => vi.spyOn(fs, method));
+  const opened = vi.spyOn(fs, 'open');
+  try {
+    const swap = await BackupDirectorySwap.create({ id: randomUUID(), root, journal, preserve: true });
+    expect(swap.incomingDirectory).toBe(path.join(journal, 'incoming'));
+    await fs.writeFile(path.join(swap.incomingDirectory, 'dynamic.json'), 'verified destination staging copy');
+    await swap.seal(signal());
+    if (outcome === 'discard') await swap.discardPrepared();
+    else {
+      await swap.promote(signal());
+      if (outcome === 'commit') {
+        await swap.commit();
+        await swap.commit();
+      } else {
+        await swap.rollback();
+        await swap.rollback();
+      }
+      expect((await swap.retainedDirectories()).directories).toEqual([]);
+      await swap.cleanup();
+      await swap.cleanup();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(await watchedIdentity(root)).toEqual(before);
+    const insideRoot = (value: unknown) => typeof value === 'string' && (value === root || value.startsWith(`${root}/`));
+    for (const observer of observers) expect(observer.mock.calls.some((args) => args.some(insideRoot))).toBe(false);
+    expect(
+      opened.mock.calls.some(
+        ([file, flags]) =>
+          insideRoot(file) &&
+          (typeof flags === 'number'
+            ? !!(flags & (constants.O_WRONLY | constants.O_RDWR | constants.O_CREAT | constants.O_TRUNC | constants.O_APPEND))
+            : flags !== 'r'),
+      ),
+    ).toBe(false);
+    // macOS may deliver older directory-creation events; live inode identity and file watches remain observable.
+    expect(events.filter((event) => ['dynamic.json', 'tls/cert.pem'].includes(event.file))).toEqual([]);
+    const prior = events.length;
+    await fs.appendFile(path.join(root, 'tls', 'cert.pem'), '-watch-probe');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(events.slice(prior).some((event) => event.file === 'tls/cert.pem' && event.event === 'change')).toBe(true);
+  } finally {
+    for (const watcher of watchers) watcher.close();
+  }
+  expect((await fs.readdir(root)).sort()).toEqual(['dynamic.json', 'tls']);
+  await expect(fs.lstat(path.join(journal, 'incoming'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it.each(['version', 'mode', 'incoming', 'staging', 'live-root'] as const)(
+  'refuses forged preserved plan %s without touching live data',
+  async (change) => {
+    const root = path.join(directory, 'preserved-root');
+    const journal = path.join(directory, 'private-plan');
+    await fs.mkdir(root);
+    await fs.writeFile(path.join(root, 'keep'), 'protected');
+    await BackupDirectorySwap.create({ id: randomUUID(), root, journal, preserve: true });
+    const file = path.join(journal, 'swap.json');
+    const plan = JSON.parse(await fs.readFile(file, 'utf8'));
+    if (change === 'version') plan.version = 3;
+    if (change === 'mode') plan.mode = 'swap';
+    if (change === 'incoming') plan.incoming = ['keep'];
+    if (change === 'staging') plan.staging.inode = '999999';
+    if (change === 'live-root') {
+      await fs.rename(root, `${root}-original`);
+      await fs.mkdir(root);
+      await fs.writeFile(path.join(root, 'keep'), 'protected');
+    }
+    await fs.writeFile(file, JSON.stringify(plan));
+    await expect(BackupDirectorySwap.open(journal)).rejects.toThrow();
+    expect(await fs.readFile(path.join(root, 'keep'), 'utf8')).toBe('protected');
+  },
+);
+
+it('refuses deletion of a replaced private preservation stage', async () => {
+  const root = path.join(directory, 'preserved-root');
+  const journal = path.join(directory, 'private-plan');
+  await fs.mkdir(root);
+  const swap = await BackupDirectorySwap.create({ id: randomUUID(), root, journal, preserve: true });
+  await swap.seal(signal());
+  await swap.promote(signal());
+  await swap.commit();
+  await fs.rename(swap.incomingDirectory, `${swap.incomingDirectory}-original`);
+  await fs.mkdir(swap.incomingDirectory, { mode: 0o700 });
+  await fs.writeFile(path.join(swap.incomingDirectory, 'unrelated'), 'do not delete');
+  await expect(swap.cleanup()).rejects.toThrow();
+  expect(await fs.readFile(path.join(swap.incomingDirectory, 'unrelated'), 'utf8')).toBe('do not delete');
+});
 
 it('preserves reserved-looking names inside app data while keeping the top-level generation namespace private', async () => {
   const root = path.join(directory, 'root');

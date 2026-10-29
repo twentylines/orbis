@@ -8,6 +8,7 @@ import { BackupRestoreJournal } from './modules/system-backups/backup-restore-jo
 import { RestoreRolledBackError } from './modules/system-backups/backup-restore-coordinator';
 import { executeRestoreWorker, type RestoreWorkerProgress } from './modules/system-backups/backup-restore-worker';
 import { requestRestoreCancellation } from './modules/system-backups/backup-restore-bootstrap';
+import { restoreFailureProgress } from './modules/system-backups/backup-restore-diagnostics';
 
 const abort = new AbortController();
 process.once('SIGINT', () => {
@@ -96,20 +97,22 @@ try {
   settled = true;
 } catch (error) {
   await finishProgress();
+  const diagnostic = restoreFailureProgress(error, stage);
+  stage = diagnostic.stage;
   if (error instanceof RestoreRolledBackError) {
     await report(
       'rolled-back',
       error.cancelled
         ? 'Restore cancelled. Your original server is ready.'
         : 'The restore could not finish. Your original server has been recovered.',
+      diagnostic.check,
     );
     settled = true;
   } else {
-    const code = error && typeof error === 'object' && 'runtimeCheck' in error ? error.runtimeCheck : undefined;
     await report(
       'recovery-required',
       'Restore recovery needs attention. Your original files and database have been preserved.',
-      typeof code === 'string' && /^[a-z-]{1,40}$/.test(code) ? code : undefined,
+      diagnostic.check,
     ).catch(() => undefined);
     process.exitCode = 1;
   }

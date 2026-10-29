@@ -13,6 +13,7 @@ import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { InstallForm, type FormValues } from '../install-form/install-form';
 import { installationState, mediaApps, mediaPlan, type MediaApp } from './store-curation';
+import './store-stack-review.css';
 
 const privateInstallDefaults = { openPort: false, exposed: false, exposedLocal: false };
 
@@ -112,7 +113,7 @@ export function StoreStackReview({
           if (install.isPending) event.preventDefault();
         }}
       >
-        <DialogHeader>
+        <DialogHeader className="orbis-store-stack-header">
           <DialogTitle>
             {step === null ? 'Build a media stack' : current ? `${step + 1} of ${plan.length} · ${current.name}` : 'Media stack reviewed'}
           </DialogTitle>
@@ -150,20 +151,25 @@ export function StoreStackReview({
                     .map((entry) => (
                       <div key={entry.id}>
                         <Checkbox
-                          label={resolved[entry.id]?.name ?? entry.name}
+                          className="orbis-store-stack-option"
+                          label={
+                            <span className="orbis-store-stack-option-copy">
+                              <span className="orbis-store-stack-option-title">{resolved[entry.id]?.name ?? entry.name}</span>
+                              <span className="orbis-store-stack-option-description">
+                                {resolved[entry.id]
+                                  ? entry.purpose
+                                  : installedIds.includes(entry.id)
+                                    ? 'Already installed.'
+                                    : 'Not available in this catalogue.'}
+                              </span>
+                            </span>
+                          }
                           disabled={!resolved[entry.id]}
                           checked={companions.includes(entry.id)}
                           onCheckedChange={(checked) =>
                             setCompanions((previous) => (checked ? [...previous, entry.id] : previous.filter((id) => id !== entry.id)))
                           }
                         />
-                        <p>
-                          {resolved[entry.id]
-                            ? entry.purpose
-                            : installedIds.includes(entry.id)
-                              ? 'Already installed.'
-                              : 'Not available in this catalogue.'}
-                        </p>
                       </div>
                     ))}
                 </div>

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { CacheModule } from '@/core/cache/cache.module';
+import { NearbyDiscoveryModule } from './modules/nearby-discovery/discovery.module';
 import { ConfigurationModule } from '@/core/config/configuration.module';
 import { DatabaseModule } from '@/core/database/database.module';
 import { AuthModule } from '@/modules/auth/auth.module';
@@ -42,6 +43,8 @@ import { installationMiddleware } from './common/installation.middleware';
 import { DockerAppsModule } from './modules/docker-apps/docker-apps.module';
 import { ClusterModule } from './modules/cluster/cluster.module';
 import { SystemBackupsModule } from './modules/system-backups/system-backups.module';
+import { ThemePacksModule } from './modules/theme-packs/theme-packs.module';
+import { HostTransferModule } from './modules/host-transfer/host-transfer.module';
 import { BackupMaintenanceInterceptor, backupMaintenanceMiddleware } from './common/backup-maintenance';
 
 const DEFAULT_THROTTLE_TTL = 60_000;
@@ -80,6 +83,9 @@ const imports: NonNullable<ModuleMetadata['imports']> = [
   DockerAppsModule,
   ClusterModule,
   SystemBackupsModule,
+  HostTransferModule,
+  ThemePacksModule,
+  NearbyDiscoveryModule,
 ];
 
 if (process.env.NODE_ENV === 'production') {

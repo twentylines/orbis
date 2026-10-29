@@ -118,6 +118,12 @@
   gap: 16px;
   min-width: 0;
 }
+.system-backups-review .system-backups-review-disclosure {
+  min-width: 0;
+  margin: 0;
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
+}
 .system-backups-review dl {
   display: grid;
   gap: 12px;

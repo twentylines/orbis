@@ -12,7 +12,9 @@ const maximumJournalBytes = 64 * 1024 * 1024;
 const failed = () => new BackupRequirementError('The restore files need recovery. Keep apps stopped until recovery has completed.');
 type Attributes = { uid: number; gid: number; mode: number };
 type Plan = {
-  version: 1;
+  version: 1 | 2;
+  mode?: 'preserve';
+  staging?: FileIdentity;
   id: string;
   root: string;
   device: string;
@@ -118,6 +120,7 @@ export class BackupDirectorySwap {
     private readonly plan: Plan,
   ) {}
   get incomingDirectory() {
+    if (this.plan.version === 2) return path.join(this.journal, 'incoming');
     return path.join(this.plan.root, `${prefix}${this.plan.id}.incoming`);
   }
   private get previousDirectory() {
@@ -130,7 +133,7 @@ export class BackupDirectorySwap {
     return path.join(this.journal, 'moves.ndjson');
   }
 
-  static async create(options: { id: string; root: string; journal: string }) {
+  static async create(options: { id: string; root: string; journal: string; preserve?: true }) {
     if (!uuid.test(options.id) || !path.isAbsolute(options.root) || !path.isAbsolute(options.journal)) throw failed();
     const root = path.resolve(options.root);
     const journal = path.resolve(options.journal);
@@ -141,14 +144,15 @@ export class BackupDirectorySwap {
     const previous = await directoryNames(root);
     if (!names(previous)) throw failed();
     const plan: Plan = {
-      version: 1,
+      version: options.preserve ? 2 : 1,
+      ...(options.preserve ? { mode: 'preserve' as const } : {}),
       id: options.id,
       root,
       device: String(stat.dev),
       inode: String(stat.ino),
       original: { uid: Number(stat.uid), gid: Number(stat.gid), mode: Number(stat.mode & 0o777n) },
       incoming: [],
-      previous,
+      previous: options.preserve ? [] : previous,
       phase: 'staging',
     };
     if (
@@ -161,17 +165,25 @@ export class BackupDirectorySwap {
     await fs.mkdir(journal, { mode: 0o700 });
     await privateBackupDirectory(journal);
     await syncDirectory(path.dirname(journal));
+    if (options.preserve) {
+      const staging = path.join(journal, 'incoming');
+      await fs.mkdir(staging, { mode: 0o700 });
+      const identity = await fs.lstat(staging, { bigint: true });
+      plan.staging = { device: String(identity.dev), inode: String(identity.ino) };
+    }
     const swap = new BackupDirectorySwap(journal, plan);
     await privateJson(swap.planFile, plan, true);
-    await fs.mkdir(swap.incomingDirectory, { mode: 0o700 });
-    await fs.mkdir(swap.previousDirectory, { mode: 0o700 });
+    if (!options.preserve) {
+      await fs.mkdir(swap.incomingDirectory, { mode: 0o700 });
+      await fs.mkdir(swap.previousDirectory, { mode: 0o700 });
+    }
     const events = await fs.open(swap.eventFile, 'wx', 0o600);
     try {
       await events.sync();
     } finally {
       await events.close();
     }
-    await syncDirectory(root);
+    if (!options.preserve) await syncDirectory(root);
     await syncDirectory(journal);
     return swap;
   }
@@ -186,8 +198,8 @@ export class BackupDirectorySwap {
     }
     if (
       !value ||
-      Object.keys(value).length !== 9 ||
-      value.version !== 1 ||
+      ![1, 2].includes(value.version) ||
+      Object.keys(value).length !== (value.version === 2 ? 11 : 9) ||
       !uuid.test(value.id) ||
       !path.isAbsolute(value.root) ||
       Buffer.byteLength(value.root) > 4096 ||
@@ -198,6 +210,14 @@ export class BackupDirectorySwap {
       !attributes(value.original) ||
       !names(value.incoming) ||
       !names(value.previous) ||
+      (value.version === 2 &&
+        (value.mode !== 'preserve' ||
+          !value.staging ||
+          Object.keys(value.staging).length !== 2 ||
+          !/^[0-9]{1,32}$/.test(value.staging.device) ||
+          !/^[0-9]{1,32}$/.test(value.staging.inode) ||
+          value.incoming.length !== 0 ||
+          value.previous.length !== 0)) ||
       [...value.incoming, ...value.previous].reduce((bytes, name) => bytes + Buffer.byteLength(name), 0) > maximumPathBytes ||
       !['staging', 'prepared', 'promoting', 'rolling-back', 'rolled-back', 'committed'].includes(value.phase)
     )
@@ -210,6 +230,19 @@ export class BackupDirectorySwap {
     if ((await fs.realpath(this.plan.root)) !== this.plan.root) throw failed();
     const root = await fs.lstat(this.plan.root, { bigint: true });
     if (!root.isDirectory() || String(root.dev) !== this.plan.device || String(root.ino) !== this.plan.inode) throw failed();
+    if (this.plan.version === 2) {
+      if ((await directoryNames(this.plan.root)).some((name) => name.startsWith(prefix))) throw failed();
+      const staging = this.incomingDirectory;
+      if (await exists(staging)) {
+        await privateBackupDirectory(staging);
+        const identity = await fs.lstat(staging, { bigint: true });
+        if (String(identity.dev) !== this.plan.staging?.device || String(identity.ino) !== this.plan.staging?.inode) throw failed();
+      } else if (!['rolled-back', 'committed'].includes(this.plan.phase)) throw failed();
+      if (await exists(this.eventFile)) {
+        if ((await privateFile(this.eventFile)).length) throw failed();
+      }
+      return;
+    }
     for (const directory of [this.incomingDirectory, this.previousDirectory]) {
       if (await exists(directory)) await privateBackupDirectory(directory);
       else if (!['staging', 'rolling-back', 'rolled-back', 'committed'].includes(this.plan.phase)) throw failed();
@@ -221,7 +254,17 @@ export class BackupDirectorySwap {
   }
   private async refresh() {
     const current = (await BackupDirectorySwap.open(this.journal)).plan;
-    const identity = (plan: Plan) => [plan.id, plan.root, plan.device, plan.inode, plan.original, plan.previous];
+    const identity = (plan: Plan) => [
+      plan.version,
+      plan.mode,
+      plan.staging,
+      plan.id,
+      plan.root,
+      plan.device,
+      plan.inode,
+      plan.original,
+      plan.previous,
+    ];
     if (JSON.stringify(identity(current)) !== JSON.stringify(identity(this.plan))) throw failed();
     this.plan.phase = current.phase;
     this.plan.incoming = current.incoming;
@@ -231,7 +274,7 @@ export class BackupDirectorySwap {
     await this.refresh();
     if (this.plan.phase !== 'staging') throw failed();
     await this.checkRoot();
-    if (!(await exists(this.incomingDirectory)) || !(await exists(this.previousDirectory))) throw failed();
+    if (!(await exists(this.incomingDirectory)) || (this.plan.version === 1 && !(await exists(this.previousDirectory)))) throw failed();
     const incoming = await directoryNames(this.incomingDirectory);
     if (!names(incoming) || [...incoming, ...this.plan.previous].reduce((bytes, name) => bytes + Buffer.byteLength(name), 0) > maximumPathBytes)
       throw failed();
@@ -245,7 +288,7 @@ export class BackupDirectorySwap {
       const stat = await fs.lstat(file, { bigint: true });
       if (
         stat.isSymbolicLink() ||
-        String(stat.dev) !== this.plan.device ||
+        String(stat.dev) !== (this.plan.version === 2 ? this.plan.staging?.device : this.plan.device) ||
         (!stat.isDirectory() && !stat.isFile()) ||
         (stat.isFile() && stat.nlink !== 1n)
       )
@@ -267,6 +310,11 @@ export class BackupDirectorySwap {
     };
     for (const name of incoming) await visit(path.join(this.incomingDirectory, name));
     await syncDirectory(this.incomingDirectory);
+    if (this.plan.version === 2) {
+      await this.save('prepared');
+      signal.throwIfAborted();
+      return;
+    }
     this.plan.incoming = incoming;
     const estimatedEvents = [...incoming, ...this.plan.previous].reduce(
       (bytes, name) => bytes + Buffer.byteLength(JSON.stringify({ kind: 'promote', name, device: '9'.repeat(32), inode: '9'.repeat(32) })) + 1,
@@ -348,6 +396,10 @@ export class BackupDirectorySwap {
     if (this.plan.phase !== 'prepared') throw failed();
     await this.checkRoot();
     if ((await privateFile(this.eventFile)).length) throw failed();
+    if (this.plan.version === 2) {
+      await this.save('promoting');
+      return;
+    }
     const current = (await directoryNames(this.plan.root)).filter(
       (name) => name !== path.basename(this.incomingDirectory) && name !== path.basename(this.previousDirectory),
     );
@@ -374,6 +426,11 @@ export class BackupDirectorySwap {
     if (this.plan.phase === 'committed') throw failed();
     await this.checkRoot();
     if (this.plan.phase === 'rolled-back') return;
+    if (this.plan.version === 2) {
+      await this.save('rolling-back');
+      await this.save('rolled-back');
+      return;
+    }
     const intents = (await exists(this.eventFile)) ? await this.readIntents() : [];
     const originals = new Map(intents.filter((item) => item.kind === 'backup').map((item) => [item.name, item]));
     await this.save('rolling-back');
@@ -412,6 +469,10 @@ export class BackupDirectorySwap {
     if (this.plan.phase === 'committed') return;
     if (this.plan.phase !== 'promoting') throw failed();
     await this.checkRoot();
+    if (this.plan.version === 2) {
+      await this.save('committed');
+      return;
+    }
     const intents = await this.readIntents();
     const promoted = new Set(intents.filter((item) => item.kind === 'promote').map((item) => item.name));
     if (
@@ -433,6 +494,13 @@ export class BackupDirectorySwap {
     await this.refresh();
     if (!['committed', 'rolled-back'].includes(this.plan.phase)) throw failed();
     await this.checkRoot();
+    if (this.plan.version === 2) {
+      if (await exists(this.incomingDirectory)) {
+        await fs.rm(this.incomingDirectory, { recursive: true });
+      }
+      await syncDirectory(this.journal);
+      return;
+    }
     for (const directory of [this.incomingDirectory, this.previousDirectory]) {
       if (await exists(directory)) {
         await privateBackupDirectory(directory);
@@ -445,6 +513,7 @@ export class BackupDirectorySwap {
     await this.refresh();
     if (!['committed', 'rolled-back'].includes(this.plan.phase)) throw failed();
     await this.checkRoot();
+    if (this.plan.version === 2) return { id: this.plan.id, root: this.plan.root, directories: [] as string[] };
     const directories: string[] = [];
     for (const directory of [this.incomingDirectory, this.previousDirectory]) if (await exists(directory)) directories.push(directory);
     return { id: this.plan.id, root: this.plan.root, directories };

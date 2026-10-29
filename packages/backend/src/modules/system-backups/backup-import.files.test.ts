@@ -66,6 +66,7 @@ it('inspects an actual exported tar stream and verifies every file without expos
   const result = await inspect(fixture.archive);
   expect(result.review.compatibility.compatible).toBe(true);
   expect(result.review.databaseValidation).toBe('pending');
+  expect(result.review.hostIdentityPolicy).toBe('preserve-destination');
   expect(result.review.fileCount).toBe(fixture.manifest.files.length + 3);
   expect(JSON.stringify(result.review)).not.toContain('disposable-private-recovery-fixture');
   expect(await fs.readFile(path.join(root, 'inspected', 'app-data', 'document'), 'utf8')).toBe('fixture app content');

@@ -1,3 +1,4 @@
+import { ThemePacksCatalogue } from '@/modules/theme-packs/theme-packs-catalogue';
 import {
   defaultDesktopPreferences,
   isPreferences,
@@ -25,7 +26,7 @@ const presets: { value: DesktopPreferences['preset']; title: string; description
 ];
 
 export const Appearance = () => {
-  const { preferences, cacheAvailable, update, reset, syncState, updateAppearance } = useDesktopPreferences();
+  const { preferences, activeThemePack, cacheAvailable, update, reset, syncState, updateAppearance } = useDesktopPreferences();
   const [name, setName] = useState(preferences.serverName);
   const [message, setMessage] = useState('');
   const [wallpaperSettingsRevision, setWallpaperSettingsRevision] = useState(0);
@@ -39,8 +40,12 @@ export const Appearance = () => {
   useEffect(() => setName(preferences.serverName), [preferences.serverName]);
 
   const changePreset = (preset: DesktopPreferences['preset']) => {
-    update({ preset, appearance: { ...preferences.appearance, accent: null } });
-    setMessage(`${presets.find((item) => item.value === preset)?.title} applied.`);
+    update(activeThemePack ? { preset } : { preset, appearance: { ...preferences.appearance, accent: null } });
+    setMessage(
+      activeThemePack
+        ? `${presets.find((item) => item.value === preset)?.title} saved as your fallback. Choose Use colour preset above to apply it.`
+        : `${presets.find((item) => item.value === preset)?.title} applied.`,
+    );
   };
 
   const saveName = () => {
@@ -121,10 +126,15 @@ export const Appearance = () => {
           </div>
         </div>
       </section>
+      <ThemePacksCatalogue />
       <section className="appearance-section" aria-labelledby="appearance-preset">
         <div>
-          <h2 id="appearance-preset">Colour preset</h2>
-          <p>Applies to buttons, the logo, panels, menus and notifications. Each preset has light and dark colours.</p>
+          <h2 id="appearance-preset">{activeThemePack ? 'Colour preset fallback' : 'Colour preset'}</h2>
+          <p>
+            {activeThemePack
+              ? `${activeThemePack.name} is applied. This preset returns when you remove or stop using the pack. Your custom accent stays in place.`
+              : 'Applies to buttons, the logo, panels, menus and notifications. Each preset has light and dark colours.'}
+          </p>
         </div>
         <div className="appearance-preset-controls">
           <div className="appearance-presets">

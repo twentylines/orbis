@@ -1,0 +1,50 @@
+.orbis-store-stack-dialog .orbis-store-player-choice {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+}
+
+.orbis-store-stack-dialog .orbis-store-player-choice > button {
+  min-height: 50px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.orbis-store-stack-dialog .orbis-store-stack-header > .orbis-dialog-close {
+  align-self: start;
+}
+
+.orbis-store-stack-dialog .orbis-store-stack-options {
+  gap: 12px;
+}
+
+.orbis-store-stack-dialog .orbis-store-stack-option {
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  height: auto;
+  text-align: left;
+}
+
+.orbis-store-stack-dialog .orbis-store-stack-option-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.orbis-store-stack-dialog .orbis-store-stack-option-title {
+  color: var(--desktop-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.orbis-store-stack-dialog .orbis-store-stack-option-description {
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+  font-weight: 450;
+  line-height: 1.45;
+}

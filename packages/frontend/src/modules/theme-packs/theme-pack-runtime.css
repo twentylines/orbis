@@ -1,0 +1,29 @@
+html[data-orbis-theme-pack] body,
+html[data-orbis-theme-pack] [data-bs-theme] {
+  --orbis-font-ui: var(--orbis-pack-font);
+}
+html[data-orbis-theme-pack][data-orbis-pack-wallpaper="true"] .orbis-theme,
+html[data-orbis-theme-pack][data-orbis-pack-wallpaper="true"] body:has(.orbis-theme),
+html[data-orbis-theme-pack][data-orbis-pack-wallpaper="true"]:has(.orbis-startup) {
+  --desktop-wallpaper: var(--orbis-pack-wallpaper);
+}
+html[data-orbis-theme-pack] .orbis-theme :is(.orbis-app-launcher, .desktop-settings, .dropdown-menu),
+html[data-orbis-theme-pack] :is(.dialog-content, .dropdown-menu) {
+  border-radius: var(--orbis-pack-radius);
+}
+html[data-orbis-theme-pack] .orbis-theme :is(button, input, select, textarea) {
+  border-color: var(--orbis-pack-control-border);
+  transition-duration: var(--orbis-pack-duration);
+}
+html[data-orbis-theme-pack] .orbis-theme .tabler-icon {
+  stroke-width: var(--orbis-pack-icon-stroke);
+}
+html[data-orbis-theme-pack] .metric-chart-gridline {
+  stroke: color-mix(in srgb, var(--desktop-ink) var(--orbis-pack-chart-alpha), transparent);
+}
+html[data-orbis-theme-pack] .dropdown-menu {
+  box-shadow: var(--orbis-pack-menu-shadow);
+}
+html[data-orbis-theme-pack][data-orbis-motion="reduced"] .orbis-theme :is(button, input, select, textarea) {
+  transition-duration: 0s;
+}

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { InlineFeedback } from '@/components/ui/Alert/Alert';
+import { Alert, InlineFeedback } from '@/components/ui/Alert/Alert';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import {
@@ -25,6 +25,7 @@ import {
   type ImportJob,
   type RestoreJob,
 } from './contracts';
+import { isAcceptedRestoreReconnect, shouldStopBackupStatusPolling } from './backup-reconnection';
 import './system-backups-settings.css';
 
 type Action =
@@ -140,6 +141,11 @@ function Review({ review }: { review: BackupReview }) {
           {reasons[reason]}
         </p>
       ))}
+      {review.hostIdentityPolicy === 'preserve-destination' ? (
+        <Alert className="system-backups-review-disclosure" role="note" variant="info">
+          Network access and cluster membership stay with this server. Review settings sync after restoring accounts.
+        </Alert>
+      ) : null}
       <p>
         External bind mounts and host-specific settings need separate review. This archive does not include data outside Orbis’s managed backup roots.
       </p>
@@ -151,9 +157,9 @@ function Review({ review }: { review: BackupReview }) {
   );
 }
 
-type BackupSettingsProps = { restoreOnly?: boolean; embedded?: boolean; onActivityChange?: (active: boolean) => void };
+type BackupSettingsProps = { restoreOnly?: boolean; embedded?: boolean; initialImportId?: string; onActivityChange?: (active: boolean) => void };
 
-export function SystemBackupsSettings({ restoreOnly = false, embedded = false, onActivityChange }: BackupSettingsProps = {}) {
+export function SystemBackupsSettings({ restoreOnly = false, embedded = false, initialImportId, onActivityChange }: BackupSettingsProps = {}) {
   const id = useId();
   const { user } = useAppContext();
   const visible = useWindowVisible();
@@ -164,11 +170,11 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, o
     retry: false,
     refetchInterval: (query) => {
       const error = query.state.error;
-      return error instanceof BackupApiError && [401, 403, 404].includes(error.status) ? false : backupPollingInterval(query.state.data, visible);
+      return shouldStopBackupStatusPolling(error, query.state.data) ? false : backupPollingInterval(query.state.data, visible);
     },
     refetchIntervalInBackground: false,
   });
-  const [action, setAction] = useState<Action | null>(() => (restoreOnly && embedded ? { kind: 'upload' } : null));
+  const [action, setAction] = useState<Action | null>(() => (restoreOnly && embedded && !initialImportId ? { kind: 'upload' } : null));
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [removal, setRemoval] = useState<{ kind: 'export' | 'import'; id: string } | null>(null);
@@ -181,6 +187,7 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, o
   const mounted = useRef(true);
   const running = useRef(false);
   const awaitingRestore = useRef(false);
+  const seededImport = useRef<string | null>(null);
   const actionOpener = useRef<HTMLElement | null>(null);
   const actionKeyboard = useRef(false);
   const chooseAction = (next: Action) => {
@@ -209,6 +216,13 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, o
     } else if (actionOpener.current?.isConnected) actionOpener.current.focus();
   }, [action]);
   const data = status.data;
+  useEffect(() => {
+    if (!initialImportId || seededImport.current === initialImportId || action || busy) return;
+    const job = data?.imports.jobs.find((entry) => entry.id === initialImportId);
+    if (!job || job.uploadedBytes <= 0 || ['uploading', 'reviewing', 'preparing'].includes(job.status)) return;
+    seededImport.current = initialImportId;
+    setAction({ kind: 'review', job });
+  }, [initialImportId, data, action, busy]);
   const restore = data?.restore.job;
   const restoreActive = Boolean(restore && !['succeeded', 'rolled-back'].includes(restore.status));
   useEffect(() => {
@@ -318,6 +332,7 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, o
       await backupRequest(path, method, undefined, signal);
     });
   const missing = status.error instanceof BackupApiError && status.error.status === 404;
+  const reconnectingAcceptedRestore = status.isError && isAcceptedRestoreReconnect(status.error, restore?.status, awaitingRestore.current);
   const unavailable = !data || !data.exports.available || !data.imports.available || status.isError;
   const phraseNeeded = action?.kind === 'export' || action?.kind === 'review';
   const destructive = action?.kind === 'restore';
@@ -343,8 +358,12 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, o
       {status.isPending ? <output>Reading backup capabilities…</output> : null}
       {status.isError ? (
         <InlineFeedback>
-          {missing ? 'This server does not provide the full backup and restore API. Update Orbis, then refresh status.' : status.error.message}
-          {restoreActive ? ' Reconnecting; the last confirmed restore status remains below.' : ''}
+          {reconnectingAcceptedRestore
+            ? 'Orbis is reconnecting after the accepted restore. The status below shows the last confirmed progress; the new server has not replied yet.'
+            : missing
+              ? 'This server does not provide the full backup and restore API. Update Orbis, then refresh status.'
+              : status.error.message}
+          {restoreActive && !reconnectingAcceptedRestore ? ' Reconnecting; the last confirmed restore status remains below.' : ''}
           {status.error instanceof BackupApiError && status.error.status === 401 ? (
             <Button type="button" variant="outline" onClick={() => window.location.reload()}>
               Sign in again

@@ -56,7 +56,7 @@ export function signedHeaders(id: string, secret: string, body: string, timestam
 // Resolve once and pin that address for this connection; never follow redirects.
 export async function clusterRequest<T>(
   origin: string,
-  endpoint: '/api/cluster/accept' | '/api/cluster/peer',
+  endpoint: '/api/cluster/accept' | '/api/cluster/peer' | '/api/cluster/settings-sync/peer',
   body: object,
   headers = {},
   insecureLan = false,

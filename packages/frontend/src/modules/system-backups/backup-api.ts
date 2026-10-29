@@ -9,25 +9,84 @@ import {
 } from './contracts';
 
 export type BackupCredentials = { password: string; totpCode?: string };
+const restoreConflictMessages = new Set([
+  'Finish the current operation or restore recovery before starting another restore.',
+  'Wait for app tasks to finish before restoring.',
+  'Finish the server update or recovery before restoring.',
+  'Wait for apps to reach a stable state before restoring.',
+  'A running app could not be identified. Refresh Apps before restoring.',
+  'Another container is writing Orbis data. Stop it before creating a full backup.',
+  'Full restore requires supported writable bind storage. No server data has been changed.',
+  'This controller cannot prepare an isolated restore worker. No server data has been changed.',
+]);
+const conflictBodyLimit = 16 * 1024;
+
 export class BackupApiError extends Error {
-  constructor(public readonly status: number) {
+  constructor(
+    public readonly status: number,
+    public readonly recognizedSafeMessage?: string,
+  ) {
     super(
-      status === 401
-        ? 'Sign in again to continue. Backup status will be checked after sign-in.'
-        : status === 403
-          ? 'This action needs an operator session and a valid authentication code, if enabled.'
-          : status === 404
-            ? 'Full backup support or this saved backup is unavailable on this server.'
-            : status === 409
-              ? 'The server could not safely continue. Refresh status and resolve active tasks, compatibility or recovery before retrying.'
-              : status === 400
-                ? 'Check your password, authentication code, backup passphrase and selected file, then try again.'
-                : status === 429
-                  ? 'Too many attempts. Wait a minute before trying again.'
-                  : 'The backup request did not finish. Check the connection and refresh status before retrying.',
+      status === 409 && recognizedSafeMessage
+        ? recognizedSafeMessage
+        : status === 401
+          ? 'Sign in again to continue. Backup status will be checked after sign-in.'
+          : status === 403
+            ? 'This action needs an operator session and a valid authentication code, if enabled.'
+            : status === 404
+              ? 'Full backup support or this saved backup is unavailable on this server.'
+              : status === 409
+                ? 'The server could not safely continue. Refresh status and resolve active tasks, compatibility or recovery before retrying.'
+                : status === 400
+                  ? 'Check your password, authentication code, backup passphrase and selected file, then try again.'
+                  : status === 429
+                    ? 'Too many attempts. Wait a minute before trying again.'
+                    : 'The backup request did not finish. Check the connection and refresh status before retrying.',
     );
   }
 }
+
+async function recognizedConflictMessage(response: Response): Promise<string | undefined> {
+  const body = response.body;
+  if (!body) return undefined;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (total <= conflictBodyLimit) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      if (total + value.byteLength > conflictBodyLimit) {
+        await reader.cancel();
+        return undefined;
+      }
+      total += value.byteLength;
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const message = (parsed as { message?: unknown }).message;
+    return typeof message === 'string' && restoreConflictMessages.has(message) ? message : undefined;
+  } catch {
+    try {
+      await reader?.cancel();
+    } catch {
+      // The generic conflict message remains safe if the response cannot be read.
+    }
+    return undefined;
+  } finally {
+    reader?.releaseLock();
+  }
+}
+
 const root = '/api/system-backups';
 function endpoint(path: string) {
   if (!/^\/(?:imports|restores|export|[a-f0-9-]{36})(?:\/[a-f0-9-]{36})?(?:\/(?:file|review|cancel|recover|download))?$/.test(path) && path !== '')
@@ -43,7 +102,10 @@ export async function backupRequest(path: string, method = 'GET', body?: unknown
     signal,
     ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   });
-  if (!response.ok) throw new BackupApiError(response.status);
+  if (!response.ok) {
+    const safeMessage = response.status === 409 ? await recognizedConflictMessage(response) : undefined;
+    throw new BackupApiError(response.status, safeMessage);
+  }
   try {
     return await response.json();
   } catch {

@@ -6,6 +6,9 @@ import { clusterRequest, useCluster } from '@/desktop/cluster';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { useAppContext } from '@/context/app-context';
 import { copyText } from '@/lib/clipboard';
+import { ClusterSyncSettings } from './cluster-sync-settings';
+import { NearbyServers } from '@/components/nearby-servers/nearby-servers';
+import { NearbyVisibility } from '@/components/nearby-servers/nearby-visibility';
 import './cluster-settings.css';
 
 type Invitation = { code: string; expiresAt: string };
@@ -199,6 +202,15 @@ export function ClusterSettings() {
               required
               autoComplete="off"
             />
+            <fieldset className="cluster-settings-nearby" disabled={busy}>
+              <legend className="visually-hidden">Optional nearby server search</legend>
+              <NearbyServers
+                onSelect={(origin) => {
+                  setUrl(origin);
+                  setAllowInsecureLan(false);
+                }}
+              />
+            </fieldset>
             <label htmlFor="cluster-pair-code">Pairing code</label>
             <input
               id="cluster-pair-code"
@@ -319,6 +331,14 @@ export function ClusterSettings() {
           ))}
         </ul>
       </section>
+      <section className="cluster-settings-section" aria-labelledby="cluster-nearby-heading">
+        <div>
+          <h2 id="cluster-nearby-heading">Nearby servers</h2>
+          <p>Let another Orbis find this server’s address briefly. Codes and approval are still required.</p>
+        </div>
+        <NearbyVisibility disabled={busy} />
+      </section>
+      <ClusterSyncSettings />
       <Dialog
         open={removeId !== null}
         onOpenChange={(open) => {

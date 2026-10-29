@@ -46,6 +46,7 @@ export type FullBackupManifest = {
   exclusions: string[];
 };
 export type FullBackupReview = {
+  hostIdentityPolicy: 'preserve-destination';
   formatVersion: 1;
   createdAt: number;
   orbisVersion: string;
@@ -304,6 +305,7 @@ export async function inspectFullBackup(options: {
         }),
       ) as BackupContentIntegrity,
       review: {
+        hostIdentityPolicy: 'preserve-destination',
         formatVersion: 1,
         createdAt: manifest.createdAt,
         orbisVersion: manifest.orbisVersion,

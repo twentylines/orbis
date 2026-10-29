@@ -43,7 +43,7 @@ export function publicSecureAccessOrigin(hostname: unknown, sslPort: unknown = 4
 }
 
 export async function readLocalCertificate(signal: AbortSignal): Promise<Blob> {
-  const response = await fetch('/api/system/certificate', { signal, credentials: 'same-origin', cache: 'no-store' });
+  const response = await fetch('/api/system/certificate', { signal, credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
   if (!response.ok) throw new Error('The local certificate is not available. Check certificate setup on the server, then try again.');
   const content = await response.text();
   if (content.length > 65536 || !/^-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----\s*$/.test(content) || /PRIVATE KEY/.test(content))

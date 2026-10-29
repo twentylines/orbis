@@ -13,6 +13,11 @@ import { ClusterController } from './cluster.controller';
 import { ClusterService } from './cluster.service';
 import { ClusterStateService } from './cluster-state.service';
 import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.module';
+import { DesktopPreferencesModule } from '../desktop-preferences/desktop-preferences.module';
+import { UserModule } from '../user/user.module';
+import { ClusterSyncController } from './cluster-sync.controller';
+import { ClusterSyncService } from './cluster-sync.service';
+import { ClusterSyncStore } from './cluster-sync.store';
 
 @Module({
   imports: [
@@ -25,8 +30,10 @@ import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.
     MarketplaceModule,
     AppStoreModule,
     MonitoringActivityModule,
+    DesktopPreferencesModule,
+    UserModule,
   ],
-  controllers: [ClusterController],
-  providers: [ClusterService, ClusterStateService, ClusterInstallService, HostUpdatesGuard],
+  controllers: [ClusterController, ClusterSyncController],
+  providers: [ClusterService, ClusterStateService, ClusterInstallService, HostUpdatesGuard, ClusterSyncService, ClusterSyncStore],
 })
 export class ClusterModule {}

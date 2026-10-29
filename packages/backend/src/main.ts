@@ -17,6 +17,13 @@ import { BackupRestoresService } from './modules/system-backups/backup-restores.
 import { SystemBackupsService } from './modules/system-backups/system-backups.service';
 import { captureRestoreStartupRole, waitForRestoreStartup } from './modules/system-backups/backup-restore-startup';
 import { BackupRestoreActivationService } from './modules/system-backups/backup-restore-activation.service';
+import {
+  VerifierStartupDiagnostics,
+  VerifierStartupFailure,
+  reportVerifierStartupFailure,
+} from './modules/system-backups/backup-restore-diagnostics';
+
+const verifierDiagnostics = new VerifierStartupDiagnostics();
 
 async function setupSwagger(app: INestApplication) {
   if (process.env.NODE_ENV === 'production') {
@@ -50,26 +57,33 @@ async function bootstrap() {
     onHeld: () => console.warn('Waiting for full restore recovery before starting Orbis.'),
   });
   captureRestoreStartupRole(restoreMode);
+  if (restoreMode === 'verify' && installation.phase === 'hold') verifierDiagnostics.enable();
   if (restoreMode === 'candidate' && installation.phase === 'normal') {
     const restore = await BackupRestoreJournal.active(path.join(DATA_DIR, 'backups', 'restores'));
     if (!restore || restore.state.decision !== 'commit' || !restore.state.candidateController.startsWith(os.hostname()))
       throw new Error('Restore startup ownership changed.');
     captureInstallationMode({ ORBIS_INSTALLER_TRANSACTION: restore.state.id, ORBIS_INSTALLER_PHASE: 'resume' });
   } else captureInstallationMode();
-  await generateSystemEnvFile({ readOnly: restoreMode === 'verify' });
+  await verifierDiagnostics.run('env', () => generateSystemEnvFile({ readOnly: restoreMode === 'verify' }));
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    abortOnError: true,
-    logger: [process.env.LOG_LEVEL as LogLevel, 'error', 'warn', 'fatal'],
-  });
+  const app = await verifierDiagnostics.run('app', () =>
+    NestFactory.create<NestExpressApplication>(AppModule, {
+      abortOnError: !verifierDiagnostics.active,
+      logger: [process.env.LOG_LEVEL as LogLevel, 'error', 'warn', 'fatal'],
+    }),
+  );
   app.enableShutdownHooks(['SIGTERM', 'SIGINT']);
 
   const appService = app.get(AppService);
-  await appService.bootstrap(async () => {
-    await app.get(SystemBackupsService).onModuleInit();
-    await app.get(BackupRestoresService).prepareStartup();
-  });
-  await app.get(BackupRestoreActivationService).resumeApps();
+  await verifierDiagnostics.run('database', () =>
+    appService.bootstrap(() =>
+      verifierDiagnostics.run('recovery', async () => {
+        await app.get(SystemBackupsService).onModuleInit();
+        await app.get(BackupRestoresService).prepareStartup();
+      }),
+    ),
+  );
+  await verifierDiagnostics.run('activation', () => app.get(BackupRestoreActivationService).resumeApps());
 
   app.set('trust proxy', true);
   app.setGlobalPrefix('/api');
@@ -79,10 +93,18 @@ async function bootstrap() {
 
   await setupSwagger(app);
 
-  await app.listen(3000);
+  await verifierDiagnostics.run('listen', () => app.listen(3000));
 }
 
 bootstrap().catch((err) => {
+  if (verifierDiagnostics.active) {
+    reportVerifierStartupFailure(
+      err instanceof VerifierStartupFailure ? err : new VerifierStartupFailure('startup', undefined),
+      (marker, finished) => process.stderr.write(marker, finished),
+      () => process.exit(1),
+    );
+    return;
+  }
   console.error(err);
   process.exit(1);
 });

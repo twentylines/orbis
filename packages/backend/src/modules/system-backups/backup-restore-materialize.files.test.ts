@@ -16,6 +16,7 @@ import { verifyRestoreFiles } from './backup-restore-files';
 import { BackupDirectorySwap } from './backup-directory-swap';
 import { fullBackupLimits } from './backup-limits';
 import { rebaseBackupConfiguration } from './backup-restore-configuration';
+import { captureRestoreHostIdentity } from './backup-restore-host-identity';
 
 let temporary: string;
 const signal = () => new AbortController().signal;
@@ -393,4 +394,108 @@ it('aggregates space across roots on the same filesystem before copying', async 
   await expect(run(test)).rejects.toThrow('not enough free storage');
   await expect(fs.lstat(test.ledger)).rejects.toMatchObject({ code: 'ENOENT' });
   for (const root of Object.values(test.roots)) expect(await fs.readdir(root)).toEqual([]);
+});
+
+async function hostIdentityFixture(empty: boolean) {
+  const test = await fixture();
+  for (const [name, contents] of [
+    ['data/traefik/source-tls', 'source certificate identity'],
+    ['data/state/cluster.json', 'source membership'],
+    ['data/user-config/tipi-compose.yml', 'source controller override'],
+  ] as const) {
+    await fs.writeFile(path.join(test.source.content, name), contents, { mode: 0o600 });
+    test.source.manifest.files.push(await fileMetadata(test.source.content, name));
+  }
+  for (const name of ['data/state/secure-access', 'data/state/cluster-sync']) {
+    await fs.mkdir(path.join(test.source.content, name), { mode: 0o700 });
+    test.source.manifest.directories.push(await directoryMetadata(test.source.content, name));
+    const file = `${name}/settings.json`;
+    await fs.writeFile(path.join(test.source.content, file), 'source private host configuration', { mode: 0o600 });
+    test.source.manifest.files.push(await fileMetadata(test.source.content, file));
+  }
+  await reseal(test.source);
+  const live = {} as Record<RestoreTreeName, string>;
+  for (const name of restoreTreeNames) {
+    live[name] = path.join(temporary, `live-${name}`);
+    await fs.mkdir(live[name], { mode: 0o700 });
+  }
+  if (!empty) {
+    await fs.writeFile(path.join(live.traefik, 'target-tls'), 'destination certificate identity', { mode: 0o640 });
+    await fs.mkdir(path.join(live.traefik, 'empty-directory'), { mode: 0o750 });
+    await fs.writeFile(path.join(live.state, 'cluster.json'), '{"id":"destination membership"}', { mode: 0o600 });
+    await fs.writeFile(path.join(live['user-config'], 'tipi-compose.yml'), 'destination controller override', { mode: 0o600 });
+    await fs.mkdir(path.join(live.state, 'secure-access'), { mode: 0o700 });
+    await fs.writeFile(path.join(live.state, 'secure-access', 'authority.json'), 'destination authority fixture', { mode: 0o600 });
+  }
+  const directory = path.join(temporary, 'host-snapshot');
+  const id = randomUUID();
+  const seal = await captureRestoreHostIdentity({ directory, id, roots: live, signal: signal(), transformClusterSync: (bytes) => bytes });
+  return { test, hostIdentity: { directory, id, seal } };
+}
+
+it.each([false, true])('applies destination host identity including preserved absence (empty=%s) in the real effective ledger', async (empty) => {
+  const { test, hostIdentity } = await hostIdentityFixture(empty);
+  const result = await materializeBackupSource({
+    directory: test.source.directory,
+    expected: test.source.seal,
+    roots: test.roots,
+    ledger: test.ledger,
+    signal: signal(),
+    progress: () => undefined,
+    hostIdentity,
+  });
+  await verifyRestoreFiles({ roots: test.roots, ledger: test.ledger, expected: result.files, signal: signal() });
+  await expect(fs.lstat(path.join(test.roots.traefik, 'source-tls'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(fs.lstat(path.join(test.roots.state, 'cluster-sync'))).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await fs.readFile(path.join(test.roots.state, 'seed'), 'utf8')).toBe('fixture-state');
+  expect(await fs.readFile(path.join(test.roots['app-data'], 'document'))).toEqual(Buffer.alloc(320 * 1024, 29));
+  if (empty) {
+    expect(await fs.readdir(test.roots.traefik)).toEqual([]);
+    for (const name of ['cluster.json', 'secure-access'])
+      await expect(fs.lstat(path.join(test.roots.state, name))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.lstat(path.join(test.roots['user-config'], 'tipi-compose.yml'))).rejects.toMatchObject({ code: 'ENOENT' });
+  } else {
+    expect(await fs.readFile(path.join(test.roots.traefik, 'target-tls'), 'utf8')).toBe('destination certificate identity');
+    expect(await fs.readdir(path.join(test.roots.traefik, 'empty-directory'))).toEqual([]);
+    expect((await fs.stat(path.join(test.roots.traefik, 'target-tls'))).mode & 0o777).toBe(0o640);
+    expect(await fs.readFile(path.join(test.roots['user-config'], 'tipi-compose.yml'), 'utf8')).toBe('destination controller override');
+    expect(await fs.readFile(path.join(test.roots.state, 'secure-access', 'authority.json'), 'utf8')).toBe('destination authority fixture');
+    await fs.writeFile(path.join(test.roots.traefik, 'target-tls'), 'tampered destination');
+    await expect(verifyRestoreFiles({ roots: test.roots, ledger: test.ledger, expected: result.files, signal: signal() })).rejects.toThrow();
+  }
+});
+
+it('still validates excluded source host files', async () => {
+  const { test, hostIdentity } = await hostIdentityFixture(false);
+  await fs.writeFile(path.join(test.source.content, 'data/traefik/source-tls'), 'tampered source identity');
+  await expect(
+    materializeBackupSource({
+      directory: test.source.directory,
+      expected: test.source.seal,
+      roots: test.roots,
+      ledger: test.ledger,
+      signal: signal(),
+      progress: () => undefined,
+      hostIdentity,
+    }),
+  ).rejects.toThrow();
+});
+
+it('refuses altered destination snapshot content before it can enter the effective ledger', async () => {
+  const { test, hostIdentity } = await hostIdentityFixture(false);
+  const files = (await fs.readdir(hostIdentity.directory)).filter((name) => /^\d+$/.test(name));
+  const first = files[0];
+  if (!first) throw Error('Missing destination snapshot fixture');
+  await fs.writeFile(path.join(hostIdentity.directory, first), 'tampered snapshot content');
+  await expect(
+    materializeBackupSource({
+      directory: test.source.directory,
+      expected: test.source.seal,
+      roots: test.roots,
+      ledger: test.ledger,
+      signal: signal(),
+      progress: () => undefined,
+      hostIdentity,
+    }),
+  ).rejects.toThrow();
 });

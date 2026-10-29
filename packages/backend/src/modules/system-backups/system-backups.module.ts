@@ -18,6 +18,7 @@ import { AppLifecycleModule } from '../app-lifecycle/app-lifecycle.module';
 @Module({
   imports: [AuthModule, AppsModule, DockerModule, TasksModule, HostUpdatesModule, AppLifecycleModule],
   controllers: [SystemBackupsController, BackupImportsController, BackupRestoresController],
+  exports: [SystemBackupsService, BackupImportsService],
   providers: [
     BackupRestoresService,
     BackupRuntimeService,

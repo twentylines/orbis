@@ -24,6 +24,7 @@ export const reviewSchema = type({
   manifestSha256: sha256,
   databaseValidation: "'pending' | 'validated'",
   'databaseRecords?': count,
+  'hostIdentityPolicy?': "'preserve-destination'",
   compatibility: {
     compatible: 'boolean',
     blockers: type("'runtipi-version' | 'newer-orbis' | 'unknown-orbis-version'").array(),

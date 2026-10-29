@@ -58,3 +58,11 @@ export function installationState(status?: string | null): 'ready' | 'busy' | 'm
   if (status === 'running' || status === 'stopped') return 'ready';
   return !status || status === 'missing' ? 'missing' : 'busy';
 }
+
+export function storeView(value: string | null | undefined): 'apps' | 'discover' | 'themes' {
+  return value === 'themes' ? 'themes' : value === 'discover' || value === 'collections' ? 'discover' : 'apps';
+}
+
+export function storeEditorialFits(width: number, rootFontSize: number) {
+  return Number.isFinite(width) && Number.isFinite(rootFontSize) && rootFontSize > 0 && width >= 68 * rootFontSize;
+}

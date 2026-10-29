@@ -10,6 +10,7 @@ import { type SettingsFormValues, UserSettingsForm } from '../components/user-se
 import { AutomaticUpdatesSettings } from './automatic-updates-settings';
 import { ReleaseChannelSettings } from './release-channel-settings';
 import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
+import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
 
 type Props = {
   initialValues?: SettingsFormValues;
@@ -51,12 +52,17 @@ export const UserSettingsContainer = ({ initialValues }: Props) => {
 
   return (
     <div className="card-body">
-      <UserSettingsForm initialValues={initialValues} onSubmit={onSubmit} loading={updateSettings.isPending} />
+      {user?.operator === true ? (
+        <UserSettingsForm initialValues={initialValues} onSubmit={onSubmit} loading={updateSettings.isPending} />
+      ) : (
+        <p className="text-muted mb-0">Server settings are managed by an operator.</p>
+      )}
       {user?.operator === true ? (
         <>
           <ReleaseChannelSettings />
           <AutomaticUpdatesSettings />
           <SystemBackupsSettings />
+          <HostTransferPanel />
         </>
       ) : null}
     </div>

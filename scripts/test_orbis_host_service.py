@@ -33,6 +33,37 @@ CURRENT = manifest("v0.1.0-beta.6", "b")
 TARGET = manifest("v0.1.0-beta.7", "c")
 
 
+class DiscoveryRoutesTests(unittest.TestCase):
+    def handler(self, path, body=None):
+        handler = object.__new__(SERVICE.Handler)
+        handler.path = path
+        handler.server = mock.Mock()
+        handler.send_json = mock.Mock()
+        handler.body = mock.Mock(return_value=body)
+        return handler
+
+    def test_status_and_interface_routes_are_read_only(self):
+        for path, method in [("/v1/discovery/status", "status"), ("/v1/discovery/interfaces", "inventory")]:
+            handler = self.handler(path)
+            getattr(handler.server.service.discovery, method).return_value = {"available": False}
+            handler.do_GET()
+            handler.send_json.assert_called_once_with(200, {"available": False})
+            handler.server.service.discovery.advertise.assert_not_called()
+
+    def test_advertisement_requires_exact_nonsecret_fields_and_disable_is_explicit(self):
+        fields = {"interface": "eth0", "origin": "https://source.example", "address": "192.168.50.10", "leaseSeconds": 120}
+        handler = self.handler("/v1/discovery/advertise", fields)
+        handler.do_POST()
+        handler.server.service.discovery.advertise.assert_called_once_with("eth0", "https://source.example", "192.168.50.10", 120)
+        handler = self.handler("/v1/discovery/advertise", {**fields, "pairingCode": "fixture-only"})
+        handler.do_POST()
+        handler.server.service.discovery.advertise.assert_not_called()
+        self.assertFalse(handler.send_json.call_args.args[1]["available"])
+        handler = self.handler("/v1/discovery/disable", {})
+        handler.do_POST()
+        handler.server.service.discovery.disable.assert_called_once()
+
+
 class PlanReviewTimeTests(unittest.TestCase):
     def test_review_window_includes_its_boundaries_and_rejects_invalid_timestamps(self):
         with mock.patch.object(SERVICE.time, "time", return_value=900):

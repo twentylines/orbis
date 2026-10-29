@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { prepareRestoreHandoff, discardUnstartedRestoreHandoff, type RestoreHandoffOptions } from './backup-restore-handoff';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { readRestoreBootstrap } from './backup-restore-bootstrap';
+import { readTerminalOwnership } from './backup-restore-terminal-record';
 import { pinBackupSource } from './backup-restore-source';
 import { makeReviewedBackupFixture } from './backup-restore-source.fixture';
 import { withRestoreLease } from './backup-restore-lease';
@@ -93,7 +94,18 @@ beforeEach(async () => {
     Id: controller,
     Name: '/controller',
     Image: image,
-    Config: { User: '0', Env: ['NODE_ENV=production'], Labels: {} },
+    Config: {
+      User: '0',
+      Env: ['NODE_ENV=production'],
+      Labels: {
+        'io.orbis.installation-protocol': 'orbis.installation-state.v1',
+        'com.docker.compose.project': 'fixture',
+        'com.docker.compose.service': 'runtipi',
+        'com.docker.compose.oneoff': 'false',
+        'com.docker.compose.project.working_dir': '/srv/orbis',
+        'com.docker.compose.project.config_files': '/srv/orbis/docker-compose.yml',
+      },
+    },
     HostConfig: { NetworkMode: 'fixture', RestartPolicy: { Name: 'unless-stopped', MaximumRetryCount: 0 } },
     State: { Running: true, Paused: false, Restarting: false, StartedAt: '2026-01-01T00:00:00Z' },
     RestartCount: 0,
@@ -339,5 +351,22 @@ it.each(['permissions', 'hardlink', 'symlink'])('refuses unsafe private environm
   }
   await expect(prepareRestoreHandoff(options)).rejects.toThrow();
   expect(create).not.toHaveBeenCalled();
+  assertOriginalUntouched();
+});
+
+it('retains nonsecret ownership before a failed reviewed-source claim so discarded generations can be finalized later', async () => {
+  options.claimReviewedSource = async () => {
+    throw Error('source claim refused');
+  };
+  await expect(prepareRestoreHandoff(options)).rejects.toThrow();
+  const active = await currentJournal();
+  expect(active?.state.phase).toBe('discarded');
+  if (!active) throw Error('Missing discarded fixture');
+  const ownership = await readTerminalOwnership(active.directory, active.state);
+  expect(ownership?.original).toBe(controller);
+  expect(ownership?.worker.id).toBe('3'.repeat(64));
+  expect(JSON.stringify(ownership)).not.toContain(connection.password);
+  expect(snapshots.has('2'.repeat(64))).toBe(false);
+  expect(snapshots.has('3'.repeat(64))).toBe(false);
   assertOriginalUntouched();
 });

@@ -9,6 +9,7 @@ import { BackupExtractionBudget } from './backup-extraction-budget';
 import { fullBackupLimits } from './backup-limits';
 import { validateBackupSource, type BackupSourceSeal } from './backup-restore-source';
 import type { RestoreFileReview } from './backup-restore-files';
+import { preservesRestoreHostPath, readRestoreHostIdentity, type RestoreHostIdentitySeal } from './backup-restore-host-identity';
 
 export const restoreTreeNames = ['state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'app-data'] as const;
 export type RestoreTreeName = (typeof restoreTreeNames)[number];
@@ -135,10 +136,14 @@ export async function materializeBackupSource(options: {
   signal: AbortSignal;
   progress: (value: RestoreMaterializeProgress) => void;
   settingsOverride?: RestoreSettingsOverride;
+  hostIdentity?: { directory: string; id: string; seal: RestoreHostIdentitySeal };
 }) {
   const { signal, roots } = options;
   try {
     const override = settingsOverride(options.settingsOverride);
+    const preserved = options.hostIdentity
+      ? await readRestoreHostIdentity(options.hostIdentity.directory, options.hostIdentity.id, options.hostIdentity.seal)
+      : undefined;
     const source = await validateBackupSource(options);
     const sourceSettings = source.manifest.files.find((entry) => entry.name === settingsName);
     if (override && (!sourceSettings || sourceSettings.bytes !== override.original.bytes || sourceSettings.sha256 !== override.original.sha256))
@@ -163,16 +168,36 @@ export async function materializeBackupSource(options: {
     if (new Set(targets).size !== restoreTreeNames.length) throw failed();
     const environment = source.manifest.files.find((entry) => entry.name === 'data/.env');
     if (!environment || !source.manifest.files.some((entry) => entry.name === 'data/state/seed')) throw failed();
-    const totalBytes = source.manifest.files.reduce((total, entry) => total + entry.bytes, 0);
+    const inputFiles = [
+      ...source.manifest.files.map((entry) => ({
+        ...entry,
+        inputPath: path.join(source.directory, 'content', entry.name),
+        omitOutput: !!preserved && preservesRestoreHostPath(entry.name),
+      })),
+      ...(preserved?.files.map((entry) => ({ ...entry, omitOutput: false })) ?? []),
+    ];
+    const effectiveDirectories = [
+      ...source.manifest.directories.filter((entry) => !preserved || !preservesRestoreHostPath(entry.name)),
+      ...(preserved?.directories ?? []),
+    ];
+    if (
+      inputFiles.filter((entry) => !entry.omitOutput && entry.name !== 'data/.env').length +
+        effectiveDirectories.filter((entry) => locate(entry.name).relative).length >
+      fullBackupLimits.entries
+    )
+      throw failed();
+    const totalBytes = inputFiles.reduce((total, entry) => total + entry.bytes, 0);
     if (!Number.isSafeInteger(totalBytes)) throw failed();
     await capacity(
       roots,
       options.ledger,
-      source.manifest.files.map((entry) => ({
-        name: entry.name,
-        bytes: override && entry.name === settingsName ? override.replacement.length : entry.bytes,
-      })),
-      source.manifest.directories,
+      inputFiles
+        .filter((entry) => !entry.omitOutput)
+        .map((entry) => ({
+          name: entry.name,
+          bytes: override && entry.name === settingsName ? override.replacement.length : entry.bytes,
+        })),
+      effectiveDirectories,
     );
     const budgets = Object.fromEntries(restoreTreeNames.map((name) => [name, new BackupExtractionBudget(roots[name])])) as Record<
       RestoreTreeName,
@@ -183,9 +208,9 @@ export async function materializeBackupSource(options: {
       completedBytes: 0,
       totalBytes,
       files: 0,
-      totalFiles: source.manifest.files.length,
+      totalFiles: inputFiles.length,
       directories: 0,
-      totalDirectories: source.manifest.directories.filter((entry) => locate(entry.name).relative).length,
+      totalDirectories: effectiveDirectories.filter((entry) => locate(entry.name).relative).length,
     };
     options.progress({ ...progress });
     signal.throwIfAborted();
@@ -200,7 +225,7 @@ export async function materializeBackupSource(options: {
       await ledger.writeFile(bytes);
       digest.update(bytes);
     };
-    const directories = source.manifest.directories
+    const directories = effectiveDirectories
       .map((entry) => ({ ...entry, ...locate(entry.name) }))
       .filter((entry) => entry.relative)
       .sort((a, b) => a.relative.split('/').length - b.relative.split('/').length || a.name.localeCompare(b.name));
@@ -210,9 +235,9 @@ export async function materializeBackupSource(options: {
         await budgets[entry.root].reserve(entry.relative, 'd', 0);
         await fs.mkdir(path.join(roots[entry.root], entry.relative), { mode: 0o700 });
       }
-      for (const entry of source.manifest.files) {
+      for (const entry of inputFiles) {
         signal.throwIfAborted();
-        const inputPath = path.join(source.directory, 'content', entry.name);
+        const inputPath = entry.inputPath;
         if ((await fs.realpath(inputPath)) !== inputPath) throw failed();
         const input = await fs.open(inputPath, constants.O_RDONLY | constants.O_NOFOLLOW);
         let output: FileHandle | undefined;
@@ -226,7 +251,7 @@ export async function materializeBackupSource(options: {
             (process.getuid && before.uid !== process.getuid())
           )
             throw failed();
-          const destination = entry.name === 'data/.env' ? undefined : locate(entry.name);
+          const destination = entry.name === 'data/.env' || entry.omitOutput ? undefined : locate(entry.name);
           const replacement = entry.name === settingsName ? override : undefined;
           const openOutput = async (size: number) => {
             if (!destination) throw failed();

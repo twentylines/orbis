@@ -1,0 +1,54 @@
+.nearby-visibility,
+.nearby-visibility-controls,
+.nearby-visibility-form {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+.nearby-visibility > .btn {
+  justify-self: start;
+}
+.nearby-visibility-controls {
+  padding-block: 4px;
+}
+.nearby-visibility :is(p, output) {
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.6;
+}
+.nearby-visibility-origin {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 4px;
+}
+.nearby-visibility-consent.form-check {
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding-block: 8px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.nearby-visibility-consent.form-check > .form-check-input {
+  margin-top: 0.2em;
+}
+.nearby-visibility-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.nearby-visibility .btn {
+  min-height: 44px;
+  max-width: 100%;
+  justify-content: center;
+  white-space: normal;
+  line-height: 1.45;
+}
+.nearby-visibility :is(input, select, button):focus-visible {
+  scroll-margin-block: 20px;
+}
+@media (max-width: 520px) {
+  .nearby-visibility-actions > .btn {
+    flex: 1 1 180px;
+  }
+}

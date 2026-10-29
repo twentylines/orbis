@@ -1,6 +1,25 @@
 import { describe, expect, test } from 'bun:test';
 import type { AppInfoSimple } from '@/types/app.types';
-import { installationState, mediaPlan, mediaRecommendations, missingRecommendations, resolveCuratedApp } from './store-curation';
+import {
+  installationState,
+  mediaApps,
+  mediaPlan,
+  mediaRecommendations,
+  missingRecommendations,
+  resolveCuratedApp,
+  storeView,
+  storeEditorialFits,
+} from './store-curation';
+import { createElement } from 'react';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createAppQueryClient } from '@/lib/query-client';
+import { getInstalledAppsOptions, searchAppsOptions } from '@/api-client/@tanstack/react-query.gen';
+import { StoreCollectionArt, StoreDiscover } from './store-discover';
+import { StoreTile } from '../store-tile/store-tile';
 
 const app = (id: string, store = 'official', overrides: Partial<AppInfoSimple> = {}): AppInfoSimple => ({
   id,
@@ -95,5 +114,104 @@ describe('Store collection resolution', () => {
     expect(installationState('stopped')).toBe('ready');
     expect(installationState(null)).toBe('missing');
     expect(installationState('missing')).toBe('missing');
+  });
+});
+
+describe('catalogue-first Store presentation', () => {
+  test('the root, explicit apps and unsupported views open the catalogue, while saved discovery URLs remain collections', () => {
+    for (const value of [undefined, null, '', 'apps', 'unknown']) expect(storeView(value)).toBe('apps');
+    expect(storeView('discover')).toBe('discover');
+    expect(storeView('collections')).toBe('discover');
+    expect(storeView('themes')).toBe('themes');
+  });
+
+  test('editorial content disappears before it crowds enlarged text and never treats invalid measurements as wide', () => {
+    expect(storeEditorialFits(1088, 16)).toBe(true);
+    expect(storeEditorialFits(1087, 16)).toBe(false);
+    expect(storeEditorialFits(1500, 24)).toBe(false);
+    expect(storeEditorialFits(1632, 24)).toBe(true);
+    for (const width of [320, 390, 768]) expect(storeEditorialFits(width, 16)).toBe(false);
+    for (const [width, font] of [
+      [Number.POSITIVE_INFINITY, 16],
+      [1200, Number.NaN],
+      [1200, 0],
+    ])
+      expect(storeEditorialFits(width ?? 0, font ?? 0)).toBe(false);
+  });
+
+  test('product cards keep exact repository and preview history, real descriptions and availability without nested install buttons', () => {
+    const item = app('jellyfin', 'community', { name: 'Jellyfin', short_desc: 'A personal media server.', available: false });
+    const i18n = createInstance();
+    void i18n.init({ lng: 'en', initImmediate: false, resources: { en: { translation: { APP_CATEGORY_MEDIA: 'Media' } } } });
+    const html = renderToStaticMarkup(
+      createElement(
+        I18nextProvider,
+        { i18n },
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/app-store?view=apps&store=community'] },
+          createElement(StoreTile, { app: item, isLoading: false }),
+        ),
+      ),
+    );
+    expect(html).toContain('/app-store/community/jellyfin?view=apps&amp;store=community');
+    expect(html).toContain('/api/marketplace/apps/jellyfin%3Acommunity/image');
+    expect(html).toContain('width="72"');
+    expect(html).toContain('Unavailable');
+    expect(html).toContain('Preview');
+    expect(html).toContain('A personal media server.');
+    expect(html).toContain('aria-describedby=');
+    expect(html).not.toContain('<button');
+  });
+
+  test('collection art uses at most four actual app icons and never creates art for an empty catalogue', () => {
+    const items = ['jellyfin', 'sonarr', 'radarr', 'prowlarr', 'qbittorrent'].map((id) => app(id, 'community'));
+    const html = renderToStaticMarkup(createElement(StoreCollectionArt, { apps: items, kind: 'media' }));
+    expect(html.match(/<img /g)?.length).toBe(4);
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain('/api/marketplace/apps/radarr%3Acommunity/image');
+    expect(html).not.toContain('qbittorrent');
+    expect(renderToStaticMarkup(createElement(StoreCollectionArt, { apps: [], kind: 'media' }))).toBe('');
+  });
+
+  test('the rendered editorial panel respects installed alternatives and opens real app previews without an app-browsing gate', () => {
+    const client = createAppQueryClient();
+    const installed = [app('plex', 'custom', { name: 'Plex' }), app('sonarr'), app('qbittorrent')];
+    client.setQueryData([...getInstalledAppsOptions().queryKey], { installed: installed.map((info) => ({ app: { status: 'running' }, info })) });
+    for (const entry of mediaApps)
+      client.setQueryData([...searchAppsOptions({ query: { search: entry.name, pageSize: 24, storeId: 'community' } }).queryKey], {
+        data: [app(entry.id, 'community', { name: entry.name })],
+        total: 1,
+        nextCursor: null,
+      });
+    client.setQueryData([...searchAppsOptions({ query: { search: 'Crafty', pageSize: 24, storeId: 'community' } }).queryKey], {
+      data: [app('crafty', 'community', { name: 'Crafty', categories: ['gaming'] })],
+      total: 1,
+      nextCursor: null,
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/app-store?view=apps&store=community'] },
+          createElement(StoreDiscover, {
+            presentation: 'editorial',
+            storeId: 'community',
+            onBrowse: () => undefined,
+            onCollections: () => undefined,
+          }),
+        ),
+      ),
+    );
+    expect(html).toContain('Plex is installed.');
+    expect(html).toContain('Review setup');
+    expect(html).toContain('/api/marketplace/apps/radarr%3Acommunity/image');
+    expect(html).not.toContain('/api/marketplace/apps/jellyfin');
+    expect(html).not.toContain('/api/marketplace/apps/qbittorrent');
+    expect(html).toContain('/app-store/community/crafty?view=apps&amp;store=community');
+    expect(html).not.toContain('Browse all apps');
+    client.clear();
   });
 });

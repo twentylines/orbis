@@ -19,6 +19,7 @@ import YAML from 'yaml';
 import { DatabaseService } from '@/core/database/database.service';
 import { QueueFactory } from '@/modules/queue/queue.factory';
 import { LoggerService } from '@/core/logger/logger.service';
+import * as restoreStartup from '@/modules/system-backups/backup-restore-startup';
 
 const TRAEFIK_CONFIG = `api:
   dashboard: true
@@ -178,6 +179,73 @@ describe('AppService', () => {
     expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
     expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
     expect(pruneNetworks).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['resume', 'candidate', true],
+    ['resume', 'ordinary', false],
+    ['normal', 'ordinary', false],
+  ] as const)('preserves proxy identity only for verified restore activation (%s/%s)', async (phase, role, preserved) => {
+    if (phase === 'resume') {
+      vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
+      vi.stubEnv('ORBIS_INSTALLER_PHASE', 'resume');
+    }
+    const selectedRole = vi.spyOn(restoreStartup, 'restoreStartupRole').mockReturnValue(role);
+    const filesystem = new FilesystemService(loggerService);
+    const directoryWrites = vi.spyOn(FilesystemService.prototype, 'createDirectories');
+    const textWrites = vi.spyOn(FilesystemService.prototype, 'writeTextFile');
+    const copies = vi.spyOn(FilesystemService.prototype, 'copyFile');
+    const tls = vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
+    const files = fs as unknown as FsMock;
+    const protectedFiles = {
+      [path.join(DATA_DIR, 'traefik', 'traefik.yml')]: 'destination static configuration',
+      [path.join(DATA_DIR, 'traefik', 'dynamic', 'dynamic.yml')]: 'destination routes and certificate reference',
+      [path.join(DATA_DIR, 'traefik', 'tls', 'cert.pem')]: 'destination public certificate fixture',
+      [path.join(DATA_DIR, 'traefik', 'tls', 'key.pem')]: 'destination private identity fixture',
+    };
+    files.__applyMockFiles({
+      ...protectedFiles,
+      [path.join(APP_DIR, 'assets', 'traefik', 'traefik.yml')]: TRAEFIK_CONFIG,
+      [path.join(APP_DIR, 'assets', 'traefik', 'dynamic', 'dynamic.yml')]: 'ordinary generated dynamic configuration',
+    });
+    configurationService.getConfig.mockReturnValue(
+      fromPartial({
+        version: '4.10.1',
+        __prod__: false,
+        directories: { appDir: APP_DIR, dataDir: DATA_DIR, appDataDir: APP_DATA_DIR },
+        userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'target.lan', persistTraefikConfig: false },
+      }),
+    );
+    configurationService.get.calledWith('traefik').mockReturnValue({ trustedProxyIps: [] });
+    try {
+      await appService.bootstrap();
+      expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
+      expect(queueFactory.completeInstallationResume).toHaveBeenCalledOnce();
+      expect(await filesystem.pathExists(path.join(DATA_DIR, 'apps'))).toBe(true);
+      expect(await filesystem.pathExists(path.join(APP_DATA_DIR))).toBe(true);
+      expect(await filesystem.pathExists(path.join(DATA_DIR, 'media', 'downloads', 'complete'))).toBe(true);
+      const created = directoryWrites.mock.calls.flatMap(([directories]) => directories);
+      if (preserved) {
+        expect(created.some((directory) => directory.startsWith(path.join(DATA_DIR, 'traefik')))).toBe(false);
+        expect(textWrites).not.toHaveBeenCalled();
+        expect(copies).not.toHaveBeenCalled();
+        expect(tls).not.toHaveBeenCalled();
+        for (const [file, contents] of Object.entries(protectedFiles)) expect(await fs.promises.readFile(file, 'utf8')).toBe(contents);
+      } else {
+        expect(created).toContain(path.join(DATA_DIR, 'traefik', 'tls'));
+        expect(textWrites).toHaveBeenCalledWith(path.join(DATA_DIR, 'traefik', 'traefik.yml'), expect.any(String));
+        expect(copies).toHaveBeenCalledWith(
+          path.join(APP_DIR, 'assets', 'traefik', 'dynamic', 'dynamic.yml'),
+          path.join(DATA_DIR, 'traefik', 'dynamic', 'dynamic.yml'),
+        );
+        expect(tls).toHaveBeenCalledWith({ localDomain: 'target.lan' });
+      }
+    } finally {
+      selectedRole.mockRestore();
+      directoryWrites.mockRestore();
+      textWrites.mockRestore();
+      copies.mockRestore();
+    }
   });
 
   it('fails installer resume instead of reporting a healthy partially initialized controller', async () => {

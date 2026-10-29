@@ -6,11 +6,29 @@ import type Dockerode from 'dockerode';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupRestoresService } from './backup-restores.service';
 import { BackupRestoreJournal } from './backup-restore-journal';
-import { backupMaintenanceActive, enterBackupMutation, setBackupRecoveryRequired, setRestoreRecoveryRequired } from '@/common/backup-maintenance';
-import { captureRestoreStartupRole } from './backup-restore-startup';
+import {
+  backupMaintenanceActive,
+  enterBackupMutation,
+  setBackupRecoveryRequired,
+  setRestoreRecoveryRequired,
+  acquireBackupMaintenance,
+} from '@/common/backup-maintenance';
+import { executeRestoreWorker } from './backup-restore-worker';
+import { BackupDirectorySwap } from './backup-directory-swap';
+import { writeTerminalJson } from './backup-restore-terminal-record';
+import { captureRestoreStartupRole, waitForRestoreStartup } from './backup-restore-startup';
 
 // This service suite uses real journals and maintenance locks; Docker, authentication and reviewed-source handoff are declared boundaries.
-const boundary = vi.hoisted(() => ({ handoff: vi.fn(), discard: vi.fn(), bootstrap: vi.fn(), verify: vi.fn() }));
+const boundary = vi.hoisted(() => ({
+  handoff: vi.fn(),
+  discard: vi.fn(),
+  bootstrap: vi.fn(),
+  verify: vi.fn(),
+  cleanup: vi.fn(),
+  operation: vi.fn(),
+  resume: vi.fn(),
+}));
+vi.mock('./backup-restore-terminal-cleanup', () => ({ cleanupSettledRestoreAuxiliaries: boundary.cleanup }));
 vi.mock('./backup-restore-handoff', () => ({ prepareRestoreHandoff: boundary.handoff, discardUnstartedRestoreHandoff: boundary.discard }));
 vi.mock('./backup-restore-bootstrap', async (original) => ({
   ...(await original<typeof import('./backup-restore-bootstrap')>()),
@@ -18,8 +36,10 @@ vi.mock('./backup-restore-bootstrap', async (original) => ({
 }));
 vi.mock('./backup-restore-runtime', async (original) => ({
   ...(await original<typeof import('./backup-restore-runtime')>()),
+  readRestoreOperation: boundary.operation,
   BackupRestoreDockerRuntime: class {
     verifyWorker = boundary.verify;
+    resumeOriginal = boundary.resume;
   },
 }));
 let root: string;
@@ -79,11 +99,15 @@ beforeEach(async () => {
   worker = {
     Id: workerId,
     Config: { Labels: {} },
-    State: { Running: false, Restarting: false, Paused: false },
+    State: { Running: false, Restarting: false, Paused: false, StartedAt: '0001-01-01T00:00:00Z' },
+    RestartCount: 0,
   } as unknown as Dockerode.ContainerInspectInfo;
   docker = {
     getContainer: vi.fn((id: string) => ({
-      inspect: vi.fn(async () => (id === workerId ? structuredClone(worker) : structuredClone(controller))),
+      inspect: vi.fn(async () => {
+        if (id === '2'.repeat(64)) throw Object.assign(new Error('absent'), { statusCode: 404 });
+        return id === workerId ? structuredClone(worker) : structuredClone(controller);
+      }),
       start,
       restart,
     })),
@@ -106,8 +130,11 @@ beforeEach(async () => {
     logger as never,
     docker as never,
   );
+  boundary.cleanup.mockResolvedValue(undefined);
   boundary.bootstrap.mockResolvedValue({ identity: {} });
   boundary.verify.mockResolvedValue(workerId);
+  boundary.operation.mockResolvedValue({});
+  boundary.resume.mockResolvedValue(undefined);
   boundary.handoff.mockImplementation(async (options) => {
     const value = await journal();
     await options.claimReviewedSource(value, async () => undefined);
@@ -219,12 +246,12 @@ it('keeps progress available without exposing private messages, paths or transac
   expect(result.job?.status).toBe('running');
   expect(JSON.stringify(result)).not.toMatch(/private\/location|secret-value|nonce|password/);
 });
-it('fails closed on an unowned worker or corrupted progress and offers authorized recovery', async () => {
+it('fails closed on an unowned worker or corrupted progress without offering an unverified retry', async () => {
   const value = await journal();
   worker.State.Running = true;
   worker.Config.Labels = {};
   await fs.writeFile(path.join(value.directory, 'worker-status.json'), '{}', { mode: 0o600 });
-  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', progressUnavailable: true, canRecover: true });
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', progressUnavailable: true, canRecover: false });
 });
 it('requires fresh credentials for cancellation and writes only durable cancel intent', async () => {
   const value = await journal();
@@ -270,4 +297,221 @@ it('does not start a paused or unverifiable worker', async () => {
   await service.launch(value.state.id);
   expect(start).not.toHaveBeenCalled();
   expect(backupMaintenanceActive()).toBe(true);
+});
+
+it('checks terminal auxiliaries before admitting another restore plan and exposes a safe refusal', async () => {
+  boundary.cleanup.mockRejectedValueOnce(new Error('terminal cleanup refused'));
+  await expect(service.prepare(randomUUID(), 7, credentials, 'a'.repeat(64))).rejects.toThrow('needs review');
+  expect(boundary.cleanup).toHaveBeenCalledTimes(1);
+  expect(runtime.plan).not.toHaveBeenCalled();
+  expect(boundary.handoff).not.toHaveBeenCalled();
+});
+
+async function outcome(value: BackupRestoreJournal, status: string) {
+  await fs.writeFile(
+    path.join(value.directory, 'worker-status.json'),
+    JSON.stringify({ status, stage: 'recovering', message: 'private fixture detail', updatedAt: Date.now() }),
+    { mode: 0o600 },
+  );
+}
+async function rollback(value: BackupRestoreJournal) {
+  await fs.mkdir(path.join(root, 'state'), { mode: 0o700 });
+  const swap = await BackupDirectorySwap.create({ id: value.state.id, root: path.join(root, 'state'), journal: value.rootJournal('state') });
+  await swap.seal(new AbortController().signal);
+  await value.advance('prepared');
+  await value.advance('rolling-back');
+  await swap.rollback();
+  await value.advance('rolled-back');
+}
+it('retries the exact worker after rollback health failure and waits for its actual recovered outcome', async () => {
+  const value = await journal();
+  await rollback(value);
+  await outcome(value, 'recovery-required');
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', needsRecovery: true, canRecover: true, stage: 'recovering' });
+  expect(backupMaintenanceActive()).toBe(false);
+  boundary.resume.mockRejectedValueOnce(new Error('fixture health failure'));
+  start.mockImplementation(async () => {
+    worker.State.Running = true;
+    await outcome(value, 'running');
+    try {
+      const result = await executeRestoreWorker({
+        docker: docker as never,
+        journal: value,
+        hostname: workerId,
+        signal: new AbortController().signal,
+        progress: () => undefined,
+      });
+      await outcome(value, result === 'completed' ? 'succeeded' : 'rolled-back');
+    } catch {
+      await outcome(value, 'recovery-required');
+    } finally {
+      worker.State.Running = false;
+    }
+  });
+  await service.recover(value.state.id, 7, credentials);
+  await service.launch(value.state.id);
+  expect(boundary.resume).toHaveBeenCalledTimes(1);
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', canRecover: true });
+  expect(backupMaintenanceActive()).toBe(true);
+  expect(enterBackupMutation()).toBeNull();
+  await fs.unlink(path.join(value.directory, 'worker-status.json'));
+  expect((await service.status()).job?.status).toBe('recovery-required');
+  expect(backupMaintenanceActive()).toBe(true);
+  await outcome(value, 'succeeded');
+  expect((await service.status()).job?.status).toBe('recovery-required');
+  expect(backupMaintenanceActive()).toBe(true);
+  await outcome(value, 'recovery-required');
+  await service.recover(value.state.id, 7, credentials);
+  await service.launch(value.state.id);
+  expect(boundary.resume).toHaveBeenCalledTimes(2);
+  expect(start).toHaveBeenCalledTimes(2);
+  expect(auth.verifySensitiveAction).toHaveBeenCalledTimes(2);
+  expect((await service.status()).job).toMatchObject({ status: 'rolled-back', canRecover: false, needsRecovery: false, stage: 'complete' });
+  expect(backupMaintenanceActive()).toBe(false);
+  const mutation = enterBackupMutation();
+  expect(mutation).not.toBeNull();
+  mutation?.();
+});
+it.each(['running', 'missing'] as const)('never declares rollback recovered with a %s worker outcome', async (kind) => {
+  const value = await journal();
+  await rollback(value);
+  if (kind === 'running') {
+    await outcome(value, 'running');
+    worker.State.Running = true;
+  }
+  const result = (await service.status()).job;
+  expect(result).toMatchObject({ status: kind === 'running' ? 'running' : 'recovery-required', stage: 'recovering' });
+  expect(result?.message).not.toContain('was recovered');
+  expect(backupMaintenanceActive()).toBe(false);
+});
+it.each(['rolled-back', 'completed'] as const)('keeps archived %s outcomes complete after legitimate worker cleanup', async (phase) => {
+  const value = await journal();
+  await fs.writeFile(
+    path.join(value.directory, 'restore.json'),
+    JSON.stringify({ ...value.state, phase, decision: phase === 'completed' ? 'commit' : 'rollback' }),
+    { mode: 0o600 },
+  );
+  await outcome(value, phase === 'completed' ? 'succeeded' : 'rolled-back');
+  await writeTerminalJson(path.join(root, 'backups', 'restores', 'latest-terminal.json'), {
+    version: 1,
+    id: value.state.id,
+    nonce: value.state.nonce,
+    phase,
+  });
+  await fs.unlink(path.join(root, 'backups', 'restores', 'active.json'));
+  docker.getContainer.mockImplementation(() => ({
+    inspect: async () => {
+      throw Object.assign(new Error('removed'), { statusCode: 404 });
+    },
+  }));
+  expect((await service.status()).job).toMatchObject({
+    status: phase === 'completed' ? 'succeeded' : 'rolled-back',
+    needsRecovery: false,
+    canRecover: false,
+    stage: 'complete',
+  });
+});
+it('reports a proved inert discarded handoff without claiming recovery or offering a no-op action', async () => {
+  const value = await journal();
+  await value.advance('discarded');
+  expect((await service.status()).job).toMatchObject({
+    status: 'rolled-back',
+    canRecover: false,
+    needsRecovery: false,
+    message: 'Restore stopped before server data was changed. The uploaded backup was not applied.',
+  });
+});
+it('does not offer recovery for a settled transaction whose exact worker is unavailable', async () => {
+  const value = await journal();
+  await rollback(value);
+  await outcome(value, 'recovery-required');
+  docker.getContainer.mockImplementation((id: string) => ({
+    inspect: async () => {
+      if (id === workerId) throw Object.assign(new Error('absent'), { statusCode: 404 });
+      return controller;
+    },
+  }));
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', canRecover: false, needsRecovery: true });
+  boundary.verify.mockRejectedValueOnce(new Error('worker missing'));
+  await expect(service.recover(value.state.id, 7, credentials)).rejects.toThrow();
+  expect(start).not.toHaveBeenCalled();
+});
+
+it('requires fresh authentication before any settled recovery inspection or launch', async () => {
+  const value = await journal();
+  await rollback(value);
+  await outcome(value, 'recovery-required');
+  auth.verifySensitiveAction.mockRejectedValueOnce(new Error('fresh verification refused'));
+  await expect(service.recover(value.state.id, 7, credentials)).rejects.toThrow('fresh verification refused');
+  expect(docker.getContainer).not.toHaveBeenCalled();
+  expect(start).not.toHaveBeenCalled();
+});
+it('admits original normal bootstrap while rollback health recovery is still awaiting its worker outcome', async () => {
+  const value = await journal();
+  await rollback(value);
+  await outcome(value, 'recovery-required');
+  const onHeld = vi.fn();
+  expect(
+    await waitForRestoreStartup({ dataDirectory: root, controller: controllerId, installation: { phase: 'normal', transactionId: null }, onHeld }),
+  ).toBe('ordinary');
+  expect(onHeld).not.toHaveBeenCalled();
+  await service.prepareStartup();
+  expect(backupMaintenanceActive()).toBe(false);
+  expect((await service.status()).job?.status).toBe('recovery-required');
+});
+it('reports a completed journal without an outcome as review-only rather than offering a no-op retry', async () => {
+  const value = await journal();
+  await fs.writeFile(path.join(value.directory, 'restore.json'), JSON.stringify({ ...value.state, phase: 'completed', decision: 'commit' }), {
+    mode: 0o600,
+  });
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', canRecover: false, needsRecovery: true });
+  await expect(service.recover(value.state.id, 7, credentials)).rejects.toThrow('needs review');
+  expect(start).not.toHaveBeenCalled();
+});
+
+it.each(['backup-recovery', 'active-backup'] as const)('releases only its successful restore recovery hold while preserving %s', async (kind) => {
+  const value = await journal();
+  await rollback(value);
+  await outcome(value, 'recovery-required');
+  await service.recover(value.state.id, 7, credentials);
+  expect(backupMaintenanceActive()).toBe(true);
+  let release: (() => void) | undefined;
+  if (kind === 'backup-recovery') setBackupRecoveryRequired(true);
+  else release = await acquireBackupMaintenance(new AbortController().signal);
+  await outcome(value, 'rolled-back');
+  expect((await service.status()).job).toMatchObject({ status: 'rolled-back', needsRecovery: false });
+  expect(backupMaintenanceActive()).toBe(true);
+  expect(enterBackupMutation()).toBeNull();
+  if (kind === 'backup-recovery') setBackupRecoveryRequired(false);
+  else release?.();
+  expect(backupMaintenanceActive()).toBe(false);
+  const mutation = enterBackupMutation();
+  expect(mutation).not.toBeNull();
+  mutation?.();
+});
+it('rejects malformed progress before authorizing a terminal retry and retains its prior recovery hold', async () => {
+  const value = await journal();
+  await rollback(value);
+  await outcome(value, 'recovery-required');
+  await service.recover(value.state.id, 7, credentials);
+  await fs.writeFile(path.join(value.directory, 'worker-status.json'), '{}', { mode: 0o600 });
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', canRecover: false, progressUnavailable: true });
+  await expect(service.recover(value.state.id, 7, credentials)).rejects.toThrow('needs review');
+  await service.launch(value.state.id);
+  expect(start).not.toHaveBeenCalled();
+  expect(backupMaintenanceActive()).toBe(true);
+  expect(enterBackupMutation()).toBeNull();
+});
+
+it('does not release its recovery hold from another transaction generation’s matching outcome', async () => {
+  const value = await journal();
+  await rollback(value);
+  await outcome(value, 'recovery-required');
+  await service.recover(value.state.id, 7, credentials);
+  const next = await journal();
+  await next.advance('discarded');
+  await outcome(next, 'rolled-back');
+  expect((await service.status()).job?.id).toBe(next.state.id);
+  expect(backupMaintenanceActive()).toBe(true);
+  expect(enterBackupMutation()).toBeNull();
 });

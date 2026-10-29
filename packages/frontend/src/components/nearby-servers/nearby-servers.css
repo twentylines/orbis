@@ -1,0 +1,63 @@
+.nearby-servers {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  margin-block: 16px;
+}
+.nearby-servers > button {
+  justify-self: start;
+}
+.nearby-servers-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+}
+.nearby-servers label {
+  display: grid;
+  flex: 1 1 14rem;
+  gap: 8px;
+  min-width: 0;
+}
+.nearby-servers select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--desktop-ink);
+  background: var(--desktop-surface);
+  border: 1px solid var(--desktop-line);
+  border-radius: 8px;
+}
+.nearby-servers p,
+.nearby-servers output {
+  margin: 0;
+  color: var(--desktop-muted);
+  line-height: 1.6;
+}
+.nearby-servers ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nearby-servers li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.nearby-servers li > div {
+  display: grid;
+  flex: 1 1 14rem;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.nearby-servers button:focus-visible,
+.nearby-servers select:focus-visible {
+  scroll-margin-block: 20px;
+}

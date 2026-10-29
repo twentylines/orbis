@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { BackupRequirementError } from './backup-files';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { withRestoreLease } from './backup-restore-lease';
+import { retainRestoreControllerOwnership } from './backup-restore-terminal-ownership';
 import { restoreAuxiliaryContainerPlans } from './backup-restore-containers';
 import { writeRestoreBootstrap } from './backup-restore-bootstrap';
 import { BackupRestoreDockerRuntime, snapshotRestoreContainer, type RestoreRuntimeIdentity } from './backup-restore-runtime';
@@ -125,6 +126,13 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
       worker: worker.id,
       roots: [...restoreTreeNames],
     });
+    await withRestoreLease(path.dirname(journal.directory), () =>
+      retainRestoreControllerOwnership(journal as BackupRestoreJournal, original, {
+        identity,
+        connection: options.connection,
+        database: options.connection.database,
+      }),
+    );
     const runtime = new BackupRestoreDockerRuntime(docker, journal, identity, options.directories);
     await runtime.verifyWorker(worker.id, { preparing: true });
     await runtime.preflightWriters();

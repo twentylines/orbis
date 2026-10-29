@@ -36,7 +36,7 @@ export function StoreTile({ app, isLoading }: { app: AppInfoSimple; isLoading: b
     >
       <div className="orbis-store-tile-header">
         <Skeleton loading={isLoading}>
-          <AppLogo className="orbis-store-logo" urn={app.urn} size={64} placeholder={isLoading} />
+          <AppLogo className="orbis-store-logo" urn={app.urn} size={72} placeholder={isLoading} />
         </Skeleton>
         <div className="orbis-store-tile-title">
           <h3 id={`${id}-name`} title={app.name}>
@@ -75,7 +75,7 @@ export function StoreTile({ app, isLoading }: { app: AppInfoSimple; isLoading: b
           <span />
         )}
         <span className="orbis-store-tile-action" aria-hidden="true">
-          Details <IconChevronRight size={16} />
+          Preview <IconChevronRight size={16} />
         </span>
       </div>
     </Link>

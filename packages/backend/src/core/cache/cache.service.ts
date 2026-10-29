@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { Injectable } from '@nestjs/common';
+import { restoreStartupRole } from '@/modules/system-backups/backup-restore-startup';
 
 export const ONE_DAY_IN_SECONDS = 60 * 60 * 24;
 
@@ -8,7 +9,7 @@ export class CacheService {
   private db: DatabaseSync;
 
   constructor() {
-    this.db = new DatabaseSync('/cache/cache.sqlite');
+    this.db = new DatabaseSync(restoreStartupRole() === 'verify' ? ':memory:' : '/cache/cache.sqlite');
 
     const tableCheck = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").get();
 

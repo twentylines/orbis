@@ -1,4 +1,8 @@
 import path from 'node:path';
+import os from 'node:os';
+import Dockerode from 'dockerode';
+import { finalizeTerminalRestoreBeforeStartup } from './backup-restore-terminal-cleanup';
+import { terminalFailure, terminalPhase } from './backup-restore-terminal-record';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BackupRestoreJournal, restoreControllerRetired, restoreStartupAllowed } from './backup-restore-journal';
 
@@ -21,6 +25,19 @@ export async function waitForRestoreStartup(options: {
     options.signal?.throwIfAborted();
     const retired = await restoreControllerRetired(store, options.controller);
     const journal = await BackupRestoreJournal.active(store);
+    const self = options.controller === os.hostname() && /^[a-f0-9]{12,64}$/.test(options.controller);
+    if (self && retired) throw terminalFailure();
+    if (self && journal && terminalPhase(journal.state) && !restoreStartupAllowed(journal.state, options.controller, options.installation)) {
+      if (options.installation?.phase !== 'normal' || options.installation.transactionId !== null) throw terminalFailure();
+      await finalizeTerminalRestoreBeforeStartup({
+        docker: new Dockerode({ socketPath: '/var/run/docker.sock' }),
+        store,
+        controller: options.controller,
+        data: options.dataDirectory,
+        signal: options.signal ?? new AbortController().signal,
+      });
+      return 'ordinary';
+    }
     if (!retired && (!journal || restoreStartupAllowed(journal.state, options.controller, options.installation)))
       return journal?.state.phase === 'verifying' && journal.state.verifierController?.startsWith(options.controller)
         ? 'verify'
