@@ -1,7 +1,80 @@
 /// <reference types="bun" />
 import { expect, test } from 'bun:test';
-import { saveSetupSteps, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices } from './setup-save';
+import { finishSetup, saveSetupSteps, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices } from './setup-save';
 import type { AppUpdateRule } from '@/desktop/automatic-updates-api';
+
+test('an installed app can stay manual while a custom schedule survives other onboarding choices', async () => {
+  const written: Array<{ urn: string; rule: AppUpdateRule }> = [];
+  const rules: Record<string, AppUpdateRule> = { 'jellyfin:tipi': { mode: 'custom', time: '04:15' }, 'adguard:tipi': { mode: 'global' } };
+  const steps = setupAppUpdateSteps(
+    [{ urn: 'jellyfin:tipi', name: 'Jellyfin' }],
+    new Map(),
+    {
+      read: async (urn) => ({ rule: rules[urn] ?? { mode: 'disabled' } }),
+      save: async (urn, rule) => {
+        written.push({ urn, rule });
+      },
+    },
+    { manualApps: [{ urn: 'adguard:tipi', name: 'AdGuard' }], originalRules: rules },
+  );
+  await saveSetupSteps(steps, new Map(), () => {});
+  expect(written).toEqual([
+    { urn: 'jellyfin:tipi', rule: { mode: 'custom', time: '04:15' } },
+    { urn: 'adguard:tipi', rule: { mode: 'disabled' } },
+  ]);
+});
+
+test('Finish replaces setup with Home only after every save succeeds', async () => {
+  const calls: unknown[] = [];
+  await finishSetup(
+    [
+      {
+        id: 'complete',
+        value: { complete: true },
+        save: async () => {
+          calls.push('saved');
+        },
+      },
+    ],
+    new Map(),
+    () => {},
+    (destination, options) => {
+      calls.push({ destination, options });
+    },
+  );
+  expect(calls).toEqual(['saved', { destination: '/dashboard', options: { replace: true } }]);
+});
+
+test('a failed Finish stays in setup and retry reaches Home without repeating acknowledged saves', async () => {
+  const calls: string[] = [];
+  const receipts = new Map<string, string>();
+  let fail = true;
+  const steps = [
+    {
+      id: 'appearance',
+      value: 'forest',
+      save: async () => {
+        calls.push('appearance');
+      },
+    },
+    {
+      id: 'complete',
+      value: true,
+      save: async () => {
+        calls.push('complete');
+        if (fail) throw new Error('Save failed');
+      },
+    },
+  ];
+  const navigate = (destination: string) => {
+    calls.push(destination);
+  };
+  await expect(finishSetup(steps, receipts, () => {}, navigate)).rejects.toThrow('Save failed');
+  expect(calls).toEqual(['appearance', 'complete']);
+  fail = false;
+  await finishSetup(steps, receipts, () => {}, navigate);
+  expect(calls).toEqual(['appearance', 'complete', 'complete', '/dashboard']);
+});
 
 test('onboarding blocks Next for edited invalid times even after automation is disabled', () => {
   for (const time of ['', null, '25:00', '1500']) {

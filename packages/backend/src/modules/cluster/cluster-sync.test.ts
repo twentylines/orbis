@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash, X509Certificate } from 'node:crypto';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { type } from 'arktype';
@@ -19,6 +19,11 @@ import { ClusterSyncService } from './cluster-sync.service';
 import { ClusterSyncStore, restoreDestinationSyncSettings } from './cluster-sync.store';
 import { customisationSchema, projectCustomisation, syncHash, syncPeerSchema, type SyncCategory } from './cluster-sync.schema';
 import { clusterRequest, CLUSTER_PROTOCOL, signedHeaders } from './cluster-transport';
+
+import { bindClusterCertificate, clusterCertificate } from './cluster-certificate';
+import { clusterTlsFixture } from './cluster-tls.fixture';
+
+vi.unmock('node:fs');
 
 vi.mock('./cluster-transport', async (original) => ({ ...(await original<typeof import('./cluster-transport')>()), clusterRequest: vi.fn() }));
 let root: string;
@@ -636,4 +641,36 @@ it('clears receiving consent until the restored operator explicitly chooses an a
   await expect(target.receiving(1, { revision: 1, categories: ['customisation'] })).rejects.toThrow('changed');
   await target.receiving(1, { revision: restored.receiving.revision, categories: ['customisation'] });
   expect((await targetStore.read(targetId)).receiving).toMatchObject({ userId: 1, categories: ['customisation'], trustRevision: expect.any(String) });
+});
+
+it('uses only bound per-member certificate trust for signed settings sync and blocks a copied origin before any peer request', async () => {
+  const fixture = clusterTlsFixture();
+  try {
+    const certificate = clusterCertificate({
+      peerCertificatePem: fixture.root,
+      peerCertificateSha256: createHash('sha256').update(new X509Certificate(fixture.root).raw).digest('hex'),
+      confirmPeerCertificate: true,
+    });
+    if (!certificate) throw new Error('Missing test certificate');
+    await sourceState.transaction((value) => {
+      const peer = value.peers[0];
+      if (!peer) throw new Error('Missing peer');
+      peer.tls = bindClusterCertificate(certificate, sourceId, peer.id, peer.url, peer.secret);
+    });
+    const expected = await optIn(['customisation']);
+    expect((await run(expected)).status).toBe('synced');
+    for (const call of vi.mocked(clusterRequest).mock.calls) {
+      expect(call[5]).toEqual(certificate);
+      expect(JSON.stringify(call[2])).not.toContain('BEGIN CERTIFICATE');
+    }
+    await sourceState.transaction((value) => {
+      const peer = value.peers[0];
+      if (peer) peer.url = 'https://changed.example.test';
+    });
+    vi.mocked(clusterRequest).mockClear();
+    expect((await source.status(1)).hosts[0]?.available).toBe(false);
+    expect(clusterRequest).not.toHaveBeenCalled();
+  } finally {
+    fixture.remove();
+  }
 });

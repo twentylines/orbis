@@ -278,6 +278,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private ensureTimer() {
     const enabled =
       this.state.settings.orbis.enabled ||
+      this.state.settings.apps?.enabled ||
       (!this.systemError && (this.system.enabled || this.system.attempt?.state === 'accepted')) ||
       Object.values(this.state.rules).some((rule) => rule.mode !== 'disabled');
     if (this.stopped || this.storageError || !enabled || this.config.get('demoMode')) {
@@ -295,6 +296,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     const schedule = this.effectiveSchedule();
     return {
       settings: { ...structuredClone(this.state.settings), schedule },
+      appRules: structuredClone(this.state.rules),
       serverTime: this.serverTime(schedule.timezone),
       available: !this.storageError,
       ...(this.storageError ? { reason: this.storageError } : {}),
@@ -312,6 +314,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     );
     if (this.config.get('demoMode')) throw new BadRequestException('Automatic updates are unavailable in demo mode.');
     await this.change((next) => {
+      if (settings.apps === undefined && next.settings.apps !== undefined) settings.apps = { ...next.settings.apps };
       if (JSON.stringify(next.settings) === JSON.stringify(settings)) return;
       if (settings.orbis.enabled && !next.settings.orbis.enabled) {
         next.orbis = null;
@@ -394,6 +397,9 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Choose an installed app.');
     }
   }
+  private appRule(urn: string, state = this.state) {
+    return state.rules[urn] ?? { mode: state.settings.apps?.enabled && !urn.endsWith(':_user') ? ('global' as const) : ('disabled' as const) };
+  }
   async readApp(raw: unknown) {
     await this.load();
     const urn = this.appUrn(raw);
@@ -403,7 +409,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       (app ? (urn.endsWith(':_user') ? 'Custom apps do not support scheduled store updates.' : null) : 'This app is no longer installed.');
     const shared = this.effectiveSchedule();
     return {
-      rule: this.state.rules[urn] ?? { mode: 'disabled' as const },
+      rule: this.appRule(urn),
       shared,
       serverTime: this.serverTime(shared.timezone),
       available: !reason,
@@ -418,12 +424,9 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     if (rule.mode !== 'disabled' && (!(await this.apps.getAppByUrn(urn)) || urn.endsWith(':_user')))
       throw new BadRequestException('Choose an installed store app.');
     await this.change((next) => {
-      if (JSON.stringify(next.rules[urn] ?? { mode: 'disabled' }) === JSON.stringify(rule)) return;
-      if (rule.mode === 'disabled') delete next.rules[urn];
-      else {
-        if (!next.rules[urn] && Object.keys(next.rules).length >= 256) throw new BadRequestException('Too many app schedules.');
-        next.rules[urn] = rule;
-      }
+      if (JSON.stringify(next.rules[urn]) === JSON.stringify(rule)) return;
+      if (!next.rules[urn] && Object.keys(next.rules).length >= 256) throw new BadRequestException('Too many app schedules.');
+      next.rules[urn] = rule;
       delete next.apps[urn];
       next.revision++;
     });
@@ -433,11 +436,11 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private syncProjection(installed: string[], state = this.state) {
     return {
       'orbis-updates': structuredClone(state.settings.orbis),
-      'app-updates': installed.map((urn) => ({ urn, enabled: Boolean(state.rules[urn] && state.rules[urn]?.mode !== 'disabled') })),
+      'app-updates': installed.map((urn) => ({ urn, enabled: this.appRule(urn, state).mode !== 'disabled' })),
       schedules: {
         time: state.settings.schedule.time,
         apps: installed.map((urn) => {
-          const rule = state.rules[urn];
+          const rule = this.appRule(urn, state);
           return rule?.mode === 'custom' ? { urn, mode: 'custom' as const, time: rule.time } : { urn, mode: 'global' as const };
         }),
       },
@@ -485,12 +488,12 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
           skipped.add(policy.urn);
           continue;
         }
-        const enabled = Boolean(next.rules[policy.urn] && next.rules[policy.urn]?.mode !== 'disabled');
-        if (policy.enabled === enabled) continue;
+        const enabled = this.appRule(policy.urn, next).mode !== 'disabled';
+        if (policy.enabled === enabled && next.rules[policy.urn] !== undefined) continue;
         if (next.apps[policy.urn] && ['applying', 'accepted'].includes(next.apps[policy.urn]?.state ?? ''))
           throw new ConflictException('Wait for the current app update before syncing its policy.');
-        if (!policy.enabled) delete next.rules[policy.urn];
-        else if (!next.rules[policy.urn]) next.rules[policy.urn] = { mode: 'global' };
+        if (!policy.enabled) next.rules[policy.urn] = { mode: 'disabled' };
+        else if (!next.rules[policy.urn] || next.rules[policy.urn]?.mode === 'disabled') next.rules[policy.urn] = { mode: 'global' };
         delete next.apps[policy.urn];
       }
       if (values.schedules) {
@@ -500,7 +503,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
             skipped.add(schedule.urn);
             continue;
           }
-          if (next.rules[schedule.urn] && next.rules[schedule.urn]?.mode !== 'disabled')
+          if (this.appRule(schedule.urn, next).mode !== 'disabled')
             next.rules[schedule.urn] = schedule.mode === 'custom' ? { mode: 'custom', time: schedule.time } : { mode: 'global' };
         }
       }
@@ -823,7 +826,14 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     const dueSystem = !this.systemError && this.system.enabled && systemSlot.due && this.system.attempt?.slot !== systemSlot.key;
     const dueCore =
       state.settings.orbis.enabled && slot.due && (state.orbis?.slot !== slot.key || state.orbis.state === 'deferred') && this.quiet(state.revision);
-    const dueApps = Object.entries(state.rules).filter(
+    const appRules = { ...state.rules };
+    if (state.settings.apps?.enabled) {
+      for (const app of await this.apps.getApps()) {
+        const urn = `${app.appName}:${app.appStoreSlug}`;
+        if (!urn.endsWith(':_user')) appRules[urn] ??= { mode: 'global' };
+      }
+    }
+    const dueApps = Object.entries(appRules).filter(
       ([urn, rule]) =>
         rule.mode !== 'disabled' &&
         (() => {

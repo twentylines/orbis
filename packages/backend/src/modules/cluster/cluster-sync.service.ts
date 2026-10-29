@@ -18,6 +18,7 @@ import { AutomaticUpdatesService } from '../host-updates/automatic-updates.servi
 import { UserRepository } from '../user/user.repository';
 import { ClusterStateService, type ClusterState, type ClusterPeer } from './cluster-state.service';
 import { clusterRequest, signedHeaders } from './cluster-transport';
+import { pairedClusterCertificate } from './cluster-certificate';
 import { ClusterSyncStore, syncResultSchema, type SyncPlan, type SyncStoreState } from './cluster-sync.store';
 import {
   parseSync,
@@ -143,6 +144,7 @@ export class ClusterSyncService implements OnModuleInit, OnModuleDestroy {
       body,
       signedHeaders(cluster.id, peer.secret, JSON.stringify(body)),
       peer.insecureLan,
+      pairedClusterCertificate(cluster.id, peer),
     );
   }
   private async remoteStatus(cluster: ClusterState, peer: ClusterPeer) {

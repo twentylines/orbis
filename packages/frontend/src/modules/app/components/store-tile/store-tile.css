@@ -1,15 +1,17 @@
 .orbis-store .orbis-store-tile.app-tile {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  --store-art-tint: var(--desktop-preset-tint);
   height: 100%;
   min-width: 0;
-  padding: 20px;
+  min-height: 0;
+  padding: 0;
   border: 1px solid var(--desktop-line);
-  border-radius: 20px;
+  border-radius: 18px;
   background: var(--desktop-surface);
   color: var(--desktop-ink);
   text-decoration: none;
+  overflow: hidden;
   transition:
     background 180ms ease,
     border-color 180ms ease,
@@ -30,40 +32,72 @@
   outline: 2px solid var(--desktop-focus);
   outline-offset: 3px;
 }
-.orbis-store-tile-header {
+.orbis-store-tile-art {
+  position: relative;
+  isolation: isolate;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 18px;
   min-width: 0;
+  min-height: 7rem;
+  padding: 20px;
+  background: linear-gradient(
+    115deg,
+    color-mix(in srgb, var(--store-art-tint) 16%, var(--desktop-surface)),
+    color-mix(in srgb, var(--store-art-tint) 3%, var(--desktop-surface))
+  );
+  overflow: hidden;
+}
+.orbis-store-tile-art-backdrop {
+  position: absolute;
+  inset: -45% -10% -45% 35%;
+  display: grid;
+  place-items: center;
+  z-index: -1;
+  opacity: 0.12;
+  filter: blur(22px);
+  pointer-events: none;
+}
+.orbis-store-tile-art-backdrop img {
+  width: 12rem;
+  height: 12rem;
+  object-fit: contain;
+}
+:root[data-orbis-effects="low"] .orbis-store-tile-art-backdrop,
+:root[data-orbis-transparency="solid"] .orbis-store-tile-art-backdrop {
+  display: none;
+  filter: none;
 }
 .orbis-store-logo {
   flex: none;
-  border-radius: 18px;
+  border-radius: 22%;
   object-fit: contain;
+  --app-logo-size: 4.5rem;
 }
-.orbis-store-tile-title {
-  flex: 1 1 7rem;
+.orbis-store-tile-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 8px;
   min-width: 0;
+  padding: 16px 20px 12px;
 }
 .orbis-store .orbis-store-tile h3 {
-  margin: 0 0 7px;
-  font-size: 1.4375rem;
+  margin: 0;
+  font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.035em;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 .orbis-store-tile-categories {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  color: var(--desktop-muted);
-  font-size: 0.8125rem;
+  max-width: 9rem;
+  color: var(--desktop-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
   line-height: 1.5;
-}
-.orbis-store-category-separator {
-  padding-inline: 2px;
+  text-align: end;
+  overflow-wrap: normal;
 }
 .orbis-store .orbis-store-tile-description {
   display: -webkit-box;
@@ -73,7 +107,7 @@
   min-height: 3em;
   margin: 0;
   color: var(--desktop-muted);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 .orbis-store-tile-footer {
@@ -81,9 +115,10 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   margin-top: auto;
-  font-size: 0.8125rem;
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
   line-height: 1.5;
 }
 .orbis-store-tile-new {
@@ -101,14 +136,65 @@
   min-height: 36px;
   padding: 6px 0;
   background: transparent;
-  color: var(--desktop-accent);
-  font-weight: 650;
+  color: var(--desktop-muted);
+  font-weight: 600;
 }
 .orbis-store-tile-action svg {
   flex: none;
+  transition: transform 180ms ease;
+}
+.orbis-store-tile:hover .orbis-store-tile-action svg {
+  transform: translateX(3px);
+}
+@container (max-width: 26rem) {
+  .orbis-store .orbis-store-tile.app-tile {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    gap: 14px;
+    padding: 16px;
+  }
+  .orbis-store-tile-art {
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 10px;
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+  }
+  .orbis-store-tile-categories {
+    text-align: center;
+  }
+  .orbis-store-tile-art-backdrop {
+    display: none;
+  }
+  .orbis-store-tile-copy {
+    padding: 0;
+  }
+}
+@container (max-width: 14rem) {
+  .orbis-store .orbis-store-tile.app-tile {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .orbis-store-tile-art {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .orbis-store-tile-categories {
+    max-width: 100%;
+    text-align: start;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .orbis-store .orbis-store-tile.app-tile {
+  .orbis-store .orbis-store-tile.app-tile,
+  .orbis-store-tile-action svg {
     transition: none;
   }
+  .orbis-store-tile:hover .orbis-store-tile-action svg {
+    transform: none;
+  }
+}
+.orbis-store[data-reduced-motion="true"] .orbis-store-tile-action svg {
+  transition: none;
+  transform: none;
 }

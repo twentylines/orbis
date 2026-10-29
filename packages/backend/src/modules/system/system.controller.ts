@@ -115,8 +115,9 @@ export class SystemController {
 
   @UseGuards(AuthGuard)
   @Get('/orbis-release')
-  async latestOrbisRelease(@Query('channel') channel: unknown) {
-    return this.orbisReleases.latest(requireReleaseChannel(channel) ?? (await this.channels.read()).channel);
+  async latestOrbisRelease(@Query('channel') channel: unknown, @Res() response: Response) {
+    const release = await this.orbisReleases.latest(requireReleaseChannel(channel) ?? (await this.channels.read()).channel);
+    response.json(release);
   }
 
   @UseGuards(AuthGuard)

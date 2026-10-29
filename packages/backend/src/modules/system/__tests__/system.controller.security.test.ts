@@ -1,6 +1,6 @@
 import { LoggerService } from '@/core/logger/logger.service';
 import { Test } from '@nestjs/testing';
-import { type INestApplication, type NestMiddleware, NotFoundException } from '@nestjs/common';
+import { type INestApplication, type NestMiddleware, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { mock } from 'vitest-mock-extended';
@@ -72,6 +72,7 @@ describe('SystemController certificate security', () => {
 
   beforeEach(() => {
     systemService.getLocalCertificate.mockReset();
+    orbisReleases.latest.mockReset();
     drives.read.mockReset();
     releaseChannels.read.mockReset().mockResolvedValue({ version: 1, channel: 'stable', revision: 'a65a9a64-f57e-4c73-9dc8-8d35d0b5b5a1' });
     releaseChannels.status.mockReset().mockResolvedValue({
@@ -294,6 +295,43 @@ describe('SystemController certificate security', () => {
     expect(orbisReleases.latest).toHaveBeenLastCalledWith('stable');
     expect(releaseChannels.read).toHaveBeenCalledOnce();
   });
+  it('serializes no Stable release as literal JSON null through the actual HTTP adapter', async () => {
+    orbisReleases.latest.mockResolvedValue(null);
+    const response = await request(app.getHttpServer()).get('/system/orbis-release').set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/json');
+    expect(response.text).toBe('null');
+    expect(response.body).toBeNull();
+    await expect(new Response(response.text, { status: response.status }).json()).resolves.toBeNull();
+    expect(orbisReleases.latest).toHaveBeenCalledOnce();
+    expect(orbisReleases.latest).toHaveBeenCalledWith('stable');
+  });
+  it('preserves a non-null latest release JSON payload and explicit channel', async () => {
+    const release = {
+      tag: 'v0.1.0-beta.122',
+      publishedAt: null,
+      body: '# Release',
+      url: 'https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.122',
+      imageManifestUrl: null,
+    };
+    orbisReleases.latest.mockResolvedValue(release);
+    const response = await request(app.getHttpServer()).get('/system/orbis-release?channel=nightly').set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/json');
+    expect(response.body).toEqual(release);
+    expect(orbisReleases.latest).toHaveBeenCalledWith('nightly');
+    expect(releaseChannels.read).not.toHaveBeenCalled();
+  });
+  it('keeps genuine release-fetch failures as errors and authenticates before nullable discovery', async () => {
+    orbisReleases.latest.mockRejectedValue(new ServiceUnavailableException('Orbis releases are temporarily unavailable.'));
+    expect((await request(app.getHttpServer()).get('/system/orbis-release')).status).toBe(401);
+    expect(orbisReleases.latest).not.toHaveBeenCalled();
+    const response = await request(app.getHttpServer()).get('/system/orbis-release').set('Authorization', 'Bearer cli-token');
+    expect(response.status).toBe(503);
+    expect(response.body.message).toBe('Orbis releases are temporarily unavailable.');
+    expect(response.text).not.toBe('null');
+  });
+
   it('requires authentication for the published catalogue and included changelogs', async () => {
     orbisReleases.listPublished.mockReset();
     orbisReleases.history.mockReset();

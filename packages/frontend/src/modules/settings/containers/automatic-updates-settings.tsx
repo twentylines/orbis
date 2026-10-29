@@ -121,6 +121,12 @@ export function AutomaticUpdatesSettings() {
             disabled={save.isPending || !status.data?.available}
             describedBy={`${id}-server-time ${id}-shared`}
           />
+          <Switch
+            label="Update apps automatically"
+            checked={value.apps?.enabled ?? false}
+            disabled={save.isPending || !status.data?.available}
+            onCheckedChange={(enabled) => change({ ...value, apps: { enabled } })}
+          />
           <p id={`${id}-server-time`} className="automatic-updates-server-time">
             {currentServerTime ? (
               <>
@@ -131,7 +137,8 @@ export function AutomaticUpdatesSettings() {
             )}
           </p>
           <p id={`${id}-shared`}>
-            This daily time is also available to individual apps. App updates are disabled until you enable them in each app’s settings.
+            Store apps use this daily time when automatic updates are enabled. Each app can use its own schedule or stay manual. Custom apps stay
+            manual.
           </p>
           {status.data?.pauseReason ? <p>{status.data.pauseReason}</p> : null}
           {status.data?.lastAttempt ? <p>Last Orbis check: {status.data.lastAttempt.message ?? status.data.lastAttempt.state}</p> : null}

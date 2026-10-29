@@ -65,7 +65,7 @@ def build(files, release_bytes):
     if sum(len(data) for data in sources.values()) > 8 * 1024 * 1024:
         raise ValueError("Installer files exceed their total size limit")
     output = io.BytesIO()
-    with gzip.GzipFile(fileobj=output, mode="wb", filename="", mtime=0) as compressed:
+    with gzip.GzipFile(fileobj=output, mode="wb", filename="", mtime=0, compresslevel=9) as compressed:
         with tarfile.open(fileobj=compressed, mode="w", format=tarfile.USTAR_FORMAT) as archive:
             for name, data in sorted(sources.items()):
                 entry = tarfile.TarInfo(name)

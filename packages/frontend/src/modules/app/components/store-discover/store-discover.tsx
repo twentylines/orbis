@@ -94,8 +94,8 @@ export function StoreDiscover({
                   <h3>Media library</h3>
                   <p>
                     {existingPlayer
-                      ? `${existingPlayer.name} is installed. Choose missing library tools or a download client.`
-                      : `${[resolved.jellyfin?.name, resolved.plex?.name].filter(Boolean).join(' or ')}, with library tools and a download client. Review each app before installing.`}
+                      ? `${existingPlayer.name} is installed. Add missing library tools or a download client.`
+                      : `${[resolved.jellyfin?.name, resolved.plex?.name].filter(Boolean).join(' or ')} and tools for your library.`}
                   </p>
                   <Button
                     className="orbis-store-collection-action"
@@ -118,7 +118,7 @@ export function StoreDiscover({
                 <StoreCollectionArt apps={[crafty]} kind="gaming" />
                 <div className="orbis-store-collection-content">
                   <h3>Game servers</h3>
-                  <p>Manage game servers with {crafty.name}. Review the configuration and required ports before installing.</p>
+                  <p>{crafty.name} for managing your game servers.</p>
                   <Link
                     ref={visible ? preview?.onCardMount : undefined}
                     className="orbis-store-collection-link"
@@ -203,14 +203,11 @@ function StoreShelf({
   if (query.isSuccess && !apps.length) return null;
   return (
     <section className="orbis-store-shelf">
-      <header className="orbis-store-shelf-heading">
-        <div className="orbis-store-section-heading">
-          <h2>{title}</h2>
-          <button type="button" onClick={() => onBrowse(category)}>
-            See all <IconArrowRight size={16} aria-hidden="true" />
-          </button>
-        </div>
-        {apps.length ? <StoreCollectionArt apps={apps} kind={category} /> : null}
+      <header className="orbis-store-section-heading">
+        <h2>{title}</h2>
+        <button type="button" onClick={() => onBrowse(category)}>
+          See all <IconArrowRight size={16} aria-hidden="true" />
+        </button>
       </header>
       {query.isError ? (
         <div className="orbis-store-message" role="alert">

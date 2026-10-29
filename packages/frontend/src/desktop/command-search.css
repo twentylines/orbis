@@ -100,10 +100,10 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input #orbis-comm
   border: 0 !important;
   /* biome-ignore lint/complexity/noImportantStyles: Shared focus filters must not tint the search field. */
   filter: none !important;
-  caret-color: var(--desktop-accent);
+  caret-color: currentColor;
 }
 .desktop-search-input:focus-within > svg {
-  color: var(--desktop-accent);
+  color: inherit;
 }
 @media (forced-colors: active) {
   body:has(.orbis-theme) .desktop-search-input:has(input:focus-visible) {

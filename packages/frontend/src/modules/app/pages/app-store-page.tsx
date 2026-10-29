@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation, useParams, useSearchParams } from 'react-router';
 import { StoreDiscover } from '../components/store-discover/store-discover';
 import { StoreViewTransition } from '../components/store-discover/store-view-transition';
-import { StoreTile } from '../components/store-tile/store-tile';
+import { StoreCatalogue } from './store-catalogue';
 import { nextStorePreviewHistory, type StorePreviewHistory } from './store-preview-navigation';
 import './app-store-page.css';
 import { ThemePacksCatalogue } from '@/modules/theme-packs/theme-packs-catalogue';
@@ -302,13 +302,23 @@ function LocalStore() {
                 <AppStorePageSuspense />
               ) : apps.length ? (
                 <>
-                  <div className="orbis-store-grid">
-                    {apps.map((app, index) => (
-                      <div ref={index === apps.length - 1 ? lastElementRef : null} key={app.urn} className="orbis-store-grid-item">
-                        <StoreTile app={app} isLoading={false} />
-                      </div>
-                    ))}
-                  </div>
+                  <StoreCatalogue
+                    apps={apps}
+                    lastElementRef={lastElementRef}
+                    collections={
+                      <aside className="orbis-store-editorial" hidden={!showEditorial} inert={!showEditorial} aria-label="App collections">
+                        <WindowVisibilityContext.Provider value={showEditorial}>
+                          <StoreDiscover
+                            presentation="editorial"
+                            onCollections={discover}
+                            key={`editorial-${selectedStore ?? 'all'}`}
+                            storeId={selectedStore}
+                            onBrowse={browse}
+                          />
+                        </WindowVisibilityContext.Provider>
+                      </aside>
+                    }
+                  />
                   {hasNextPage ? (
                     <div className="orbis-store-pagination">
                       <span>
@@ -331,17 +341,6 @@ function LocalStore() {
                 </div>
               ) : null}
             </div>
-            <aside className="orbis-store-editorial" hidden={!showEditorial} inert={!showEditorial} aria-label="App collections">
-              <WindowVisibilityContext.Provider value={showEditorial}>
-                <StoreDiscover
-                  presentation="editorial"
-                  onCollections={discover}
-                  key={`editorial-${selectedStore ?? 'all'}`}
-                  storeId={selectedStore}
-                  onBrowse={browse}
-                />
-              </WindowVisibilityContext.Provider>
-            </aside>
           </div>
         }
         discover={<StoreDiscover key={selectedStore ?? 'all'} storeId={selectedStore} onBrowse={browse} />}

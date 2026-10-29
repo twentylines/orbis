@@ -1,12 +1,11 @@
-export const freshSetupSteps = ['choose', 'server', 'colour', 'wallpaper', 'performance', 'updates', 'ready'] as const;
+export const freshSetupSteps = ['choose', 'server', 'customisation', 'performance', 'updates', 'ready'] as const;
 export type SetupStep = (typeof freshSetupSteps)[number] | 'restore' | 'transfer';
 export type SetupEntry = 'fresh' | 'restore' | 'transfer' | null;
 
 export const setupStepCopy: Record<SetupStep, { title: string; description: string }> = {
   choose: { title: 'Welcome to Orbis', description: 'Start fresh, restore an encrypted backup, or transfer from another server.' },
   server: { title: 'Your server', description: 'Give this server a name. You can change every choice later in Settings.' },
-  colour: { title: 'Colour', description: 'Choose a palette and display mode. Preview your workspace as you go.' },
-  wallpaper: { title: 'Wallpaper', description: 'Each palette has its own landscape. Keep them linked, or choose a favourite.' },
+  customisation: { title: 'Customisation', description: 'Choose your colours, display mode and wallpaper.' },
   performance: { title: 'Performance', description: 'Choose the balance that suits your devices. Your apps keep all their features.' },
   updates: { title: 'Updates', description: 'Keep updates manual, or choose what Orbis may update automatically.' },
   ready: { title: 'Ready when you are', description: 'Review your choices before opening your workspace.' },
@@ -16,8 +15,8 @@ export const setupStepCopy: Record<SetupStep, { title: string; description: stri
       'Upload and verify an encrypted backup before replacing this server. Its saved configuration and managed app data are restored together.',
   },
   transfer: {
-    title: 'Transfer your server',
-    description: 'Receive an encrypted backup from your original server over a private HTTPS connection. Review it before replacing this server.',
+    title: 'Transfer a server',
+    description: 'Transfer from Orbis to Orbis over private HTTPS. Review the encrypted backup before replacing this server.',
   },
 };
 

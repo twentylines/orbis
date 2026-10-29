@@ -14,7 +14,7 @@ import { useHostUpdateWatch } from './host-update-watch';
 import { coreWatchIsActive, coreUpdateTitle } from './core-update-state';
 import './cluster.css';
 
-export type ClusterServer = { id: string; name: string; url: string; role: 'admin' | 'member'; local: boolean };
+export type ClusterServer = { id: string; name: string; url: string; role: 'admin' | 'member'; local: boolean; certificateSha256?: string };
 export type Cluster = {
   id: string;
   name: string;

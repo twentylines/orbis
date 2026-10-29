@@ -5,8 +5,16 @@ import { BadRequestException, ConflictException, Injectable, UnauthorizedExcepti
 import { type } from 'arktype';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { clusterOrigin, CLUSTER_PROTOCOL, digest, equalSecret, signedHeaders } from './cluster-transport';
+import { clusterCertificateTrustSchema } from './cluster-certificate';
 
-const peerSchema = type({ id: 'string', name: 'string', url: 'string', secret: 'string', insecureLan: 'boolean' });
+const peerSchema = type({
+  id: 'string',
+  name: 'string',
+  url: 'string',
+  secret: 'string',
+  insecureLan: 'boolean',
+  'tls?': clusterCertificateTrustSchema,
+});
 const stateSchema = type({
   version: '1',
   id: 'string',
@@ -14,7 +22,7 @@ const stateSchema = type({
   role: "'standalone'|'admin'|'member'",
   serverName: 'string',
   'admin?': { id: 'string', name: 'string', secret: 'string' },
-  peers: peerSchema.array(),
+  peers: peerSchema.array().atMostLength(12),
   'invite?': { hash: 'string', expiresAt: 'number' },
   nonces: type({ value: 'string', expiresAt: 'number' }).array(),
 });
@@ -106,7 +114,14 @@ export class ClusterStateService {
       ...(state.admin ? { admin: { id: state.admin.id, name: state.admin.name } } : {}),
       servers: [
         { id: state.id, name: state.serverName, url: '', role: state.role === 'admin' ? 'admin' : 'member', local: true },
-        ...state.peers.map(({ id, name, url }) => ({ id, name, url, role: 'member', local: false })),
+        ...state.peers.map(({ id, name, url, tls }) => ({
+          id,
+          name,
+          url,
+          role: 'member',
+          local: false,
+          ...(tls ? { certificateSha256: tls.sha256 } : {}),
+        })),
       ],
     };
   }

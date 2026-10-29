@@ -48,20 +48,22 @@
   transform-origin: left;
   border-radius: inherit;
   background: var(--desktop-accent);
-  transition: transform 380ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .orbis-setup-stage {
+  position: relative;
   min-height: 430px;
   min-width: 0;
+  padding: 8px 12px;
+  margin-inline: -12px;
+}
+.orbis-setup-stage[data-more-below="true"] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
 }
 .orbis-setup-step {
   display: grid;
   gap: 28px;
   min-width: 0;
-  animation: orbis-setup-enter 380ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-.orbis-setup-stage[data-direction="-1"] {
-  --setup-direction: -1;
 }
 .orbis-setup-intro {
   display: grid;
@@ -88,6 +90,10 @@
   margin: 0;
   min-width: 0;
   border: 0;
+}
+.orbis-setup-form {
+  min-width: 0;
+  margin: 0;
 }
 .orbis-setup-fields .form-control,
 .orbis-setup-fields .form-select {
@@ -392,9 +398,8 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 18px;
-  padding-top: 24px;
-  border-top: 1px solid var(--desktop-line);
 }
 .orbis-setup-footer > .btn {
   display: inline-flex;
@@ -451,26 +456,13 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   background: color-mix(in srgb, var(--desktop-negative) 7%, var(--desktop-surface));
   line-height: 1.6;
 }
-.orbis-setup[data-reduced="true"] .orbis-setup-step {
-  animation: none;
-}
 .orbis-setup[data-reduced="true"] .orbis-setup-progress > span {
   transition: none;
 }
 .orbis-setup[data-reduced="true"] .orbis-setup-scroll-hint svg {
   transition: none;
 }
-@keyframes orbis-setup-enter {
-  from {
-    opacity: 0;
-    transform: translateX(calc(16px * var(--setup-direction, 1)));
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@media (min-width: 900px) and (min-height: 640px) {
+@media (min-height: 640px) {
   .desktop-auth.desktop-auth-setup {
     height: 100dvh;
     min-height: 0;
@@ -514,7 +506,7 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
     overflow-x: hidden;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
-    padding-block: 4px;
+    padding-block: 8px;
     scroll-padding-block: 8px;
   }
   .orbis-setup-header,
@@ -522,12 +514,14 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   .orbis-setup-footer {
     flex-shrink: 0;
   }
-  .orbis-setup-footer {
-    padding-top: 16px;
-  }
   .orbis-setup-name-mark {
     min-height: 96px;
     padding-block: 20px;
+  }
+}
+@media (max-width: 640px) and (min-height: 640px) {
+  .desktop-auth.desktop-auth-setup {
+    grid-template-rows: auto minmax(0, 1fr);
   }
 }
 @media (max-width: 600px) {
@@ -583,10 +577,12 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
     padding-inline: 12px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .orbis-setup-step {
-    animation: none;
+@media (max-width: 600px) and (min-height: 640px) {
+  .orbis-setup-stage {
+    min-height: 0;
   }
+}
+@media (prefers-reduced-motion: reduce) {
   .orbis-setup-progress > span {
     transition: none;
   }

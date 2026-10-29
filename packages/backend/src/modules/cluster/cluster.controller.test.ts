@@ -36,8 +36,54 @@ describe('cluster installation authorization', () => {
     await app.init();
   });
   afterAll(async () => app.close());
-  beforeEach(() => cluster.command.mockReset());
+  beforeEach(() => {
+    cluster.command.mockReset();
+    cluster.invite.mockReset();
+    cluster.pair.mockReset();
+  });
   const payload = { action: 'install-app', payload: { urn: 'tools:target', form: { port: 18765 } } };
+
+  it.each(['invite', 'pair'])('protects new %s trust with operator session, same origin and exact actor forwarding', async (action) => {
+    const body = {
+      password: 'disposable-pairing-password',
+      totpCode: '123456',
+      ...(action === 'pair' ? { url: 'https://peer.example.test', code: 'A'.repeat(24) } : {}),
+    };
+    const endpoint = `/cluster/${action}`;
+    const base = request(app.getHttpServer());
+    expect((await base.post(endpoint).send(body)).status).toBe(401);
+    for (const role of ['guest', 'cli'])
+      expect(
+        (
+          await base
+            .post(endpoint)
+            .set('Authorization', `Bearer ${role}`)
+            .set('Host', 'orbis.example')
+            .set('Origin', 'http://orbis.example')
+            .send(body)
+        ).status,
+      ).toBe(403);
+    expect(
+      (
+        await base
+          .post(endpoint)
+          .set('Authorization', 'Bearer operator')
+          .set('Host', 'orbis.example')
+          .set('Origin', 'https://other.example')
+          .send(body)
+      ).status,
+    ).toBe(403);
+    expect(cluster.invite).not.toHaveBeenCalled();
+    expect(cluster.pair).not.toHaveBeenCalled();
+    const response = await base
+      .post(endpoint)
+      .set('Authorization', 'Bearer operator')
+      .set('Host', 'orbis.example')
+      .set('Origin', 'http://orbis.example')
+      .send(body);
+    expect(response.status).toBe(201);
+    expect(action === 'invite' ? cluster.invite : cluster.pair).toHaveBeenCalledWith(body, 1);
+  });
 
   it('requires an operator browser session and matching origin before dispatching an install', async () => {
     const base = request(app.getHttpServer());

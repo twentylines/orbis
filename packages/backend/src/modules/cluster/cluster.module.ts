@@ -18,9 +18,11 @@ import { UserModule } from '../user/user.module';
 import { ClusterSyncController } from './cluster-sync.controller';
 import { ClusterSyncService } from './cluster-sync.service';
 import { ClusterSyncStore } from './cluster-sync.store';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
+    AuthModule,
     ConfigurationModule,
     AppsModule,
     AppLifecycleModule,

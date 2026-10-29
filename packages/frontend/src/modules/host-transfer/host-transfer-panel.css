@@ -123,27 +123,6 @@
 .host-transfer-panel :is(button, input, select):focus-visible {
   scroll-margin-block: 20px;
 }
-.host-transfer-progress {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-.host-transfer-progress > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px 16px;
-  flex-wrap: wrap;
-}
-.host-transfer-progress progress {
-  display: block;
-  width: 100%;
-  height: 8px;
-  accent-color: var(--desktop-accent);
-}
-.host-transfer-progress small {
-  font-variant-numeric: tabular-nums;
-}
 .host-transfer-panel .alert {
   margin: 0;
 }
@@ -182,5 +161,103 @@
 }
 body[data-motion="reduced"] .host-transfer-stage,
 .orbis-setup[data-reduced="true"] .host-transfer-stage {
+  animation: none;
+}
+
+.host-transfer-source-summary {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-block: 4px;
+}
+.host-transfer-source-summary > span {
+  color: var(--desktop-muted);
+}
+.host-transfer-nearby > fieldset {
+  min-width: 0;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+  animation: host-transfer-enter 240ms ease-out;
+}
+.host-transfer-panel[data-embedded="true"] .host-transfer-job {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+:root[data-orbis-effects="low"] .host-transfer-stage,
+:root[data-orbis-effects="low"] .host-transfer-nearby > fieldset,
+body[data-motion="reduced"] .host-transfer-nearby > fieldset,
+.orbis-setup[data-reduced="true"] .host-transfer-nearby > fieldset {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .host-transfer-nearby > fieldset {
+    animation: none;
+  }
+}
+
+.host-transfer-panel .alert-danger {
+  animation: host-transfer-enter 180ms ease-out;
+}
+:root[data-orbis-effects="low"] .host-transfer-panel .alert-danger,
+body[data-motion="reduced"] .host-transfer-panel .alert-danger,
+.orbis-setup[data-reduced="true"] .host-transfer-panel .alert-danger {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .host-transfer-panel .alert-danger {
+    animation: none;
+  }
+}
+
+.host-transfer-entry {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--desktop-line);
+}
+.host-transfer-entry :is(h2, p) {
+  margin: 0;
+}
+.host-transfer-entry h2 {
+  font-size: 1.1875rem;
+  line-height: 1.4;
+}
+.host-transfer-entry p {
+  color: var(--desktop-muted);
+  line-height: 1.55;
+}
+.host-transfer-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+.host-transfer-entry-actions > button {
+  min-height: 44px;
+  white-space: normal;
+}
+.host-transfer-window-body {
+  min-width: 0;
+  padding-top: 0;
+}
+.host-transfer-window .host-transfer-heading {
+  gap: 12px;
+}
+.host-transfer-window .host-transfer-panel {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+@media (max-width: 520px) {
+  .host-transfer-entry-actions > button {
+    flex: 1 1 100%;
+  }
+}
+
+.host-transfer-panel[data-reduced="true"] :is(.host-transfer-stage, .host-transfer-nearby > fieldset, .alert-danger) {
   animation: none;
 }

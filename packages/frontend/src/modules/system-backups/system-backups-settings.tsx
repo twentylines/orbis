@@ -2,9 +2,11 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { RecoveryProgress } from '@/components/recovery-progress/recovery-progress';
 import { Alert, InlineFeedback } from '@/components/ui/Alert/Alert';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import {
   BackupApiError,
   backupRequest,
@@ -19,7 +21,6 @@ import {
   backupPollingInterval,
   canRestore,
   formatBackupBytes,
-  progressPercent,
   type BackupReview,
   type ExportJob,
   type ImportJob,
@@ -63,38 +64,6 @@ const actionLabels = {
   'cancel-restore': 'Cancel restore and recover',
   'recover-restore': 'Recover server',
 };
-
-function BackupProgress({
-  label,
-  completed,
-  total,
-  settled = false,
-  unit = 'bytes',
-}: {
-  label: string;
-  completed: number;
-  total: number | null;
-  settled?: boolean;
-  unit?: 'bytes' | 'records';
-}) {
-  const percentage = progressPercent(completed, total, settled);
-  return (
-    <div className="system-backups-progress">
-      <div>
-        <span>{label}</span>
-        <span>{percentage === undefined ? 'Working…' : `${percentage}%`}</span>
-      </div>
-      <progress aria-label={label} max={100} value={percentage} />
-      {total !== null ? (
-        <small>
-          {unit === 'records'
-            ? `${completed.toLocaleString()} of ${total.toLocaleString()} records`
-            : `${formatBackupBytes(completed)} of ${formatBackupBytes(total)}`}
-        </small>
-      ) : null}
-    </div>
-  );
-}
 
 function Review({ review }: { review: BackupReview }) {
   const reasons = {
@@ -161,6 +130,7 @@ type BackupSettingsProps = { restoreOnly?: boolean; embedded?: boolean; initialI
 
 export function SystemBackupsSettings({ restoreOnly = false, embedded = false, initialImportId, onActivityChange }: BackupSettingsProps = {}) {
   const id = useId();
+  const reduced = useReducedMotion();
   const { user } = useAppContext();
   const visible = useWindowVisible();
   const status = useQuery({
@@ -184,6 +154,7 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
   const abort = useRef<AbortController | null>(null);
   const downloadCleanup = useRef<(() => void) | null>(null);
   const credentialsForm = useRef<HTMLFormElement | null>(null);
+  const filePicker = useRef<HTMLInputElement | null>(null);
   const mounted = useRef(true);
   const running = useRef(false);
   const awaitingRestore = useRef(false);
@@ -196,6 +167,7 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
     credentialsForm.current?.reset();
     setError(null);
     setNotice(null);
+    setUpload(null);
     setAction(next);
     setRemoval(null);
   };
@@ -337,7 +309,7 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
   const phraseNeeded = action?.kind === 'export' || action?.kind === 'review';
   const destructive = action?.kind === 'restore';
   return (
-    <section className="system-backups-settings" data-embedded={embedded} aria-labelledby={`${id}-title`}>
+    <section className="system-backups-settings" data-embedded={embedded} data-reduced={Boolean(reduced)} aria-labelledby={`${id}-title`}>
       <div className="system-backups-heading">
         {embedded ? (
           <h3 id={`${id}-title`}>Encrypted backup</h3>
@@ -379,14 +351,15 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
           <h3 id={`${id}-restore`}>Server restore</h3>
           <output>{restore.message}</output>
           {restore.preparation ? (
-            <BackupProgress
+            <RecoveryProgress
               label={`Preparation · ${stageLabels[restore.preparation.stage] ?? 'Checking progress'}`}
               completed={restore.preparation.stage === 'database' ? restore.preparation.records : restore.preparation.completedBytes}
               total={restore.preparation.stage === 'database' ? restore.preparation.totalRecords : restore.preparation.totalBytes}
               unit={restore.preparation.stage === 'database' ? 'records' : 'bytes'}
             />
           ) : null}
-          {restore.status === 'succeeded' ? <BackupProgress label="Restore complete" completed={0} total={null} settled /> : null}
+          {!restore.preparation && ['ready', 'running'].includes(restore.status) ? <RecoveryProgress label="Restoring this server" /> : null}
+          {restore.status === 'succeeded' ? <RecoveryProgress label="Restore complete" completed={0} total={null} settled /> : null}
           {restore.progressUnavailable ? <p>Detailed progress is unavailable. Recovery controls use the server’s verified restore state.</p> : null}
           {restore.status === 'running' || restore.status === 'ready' ? (
             <p>Orbis may disconnect while replacing its configuration and app data. Status is checked automatically when the connection returns.</p>
@@ -463,27 +436,48 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
           </div>
         </div>
       ) : null}
-      {action ? (
+      {action && !(action.kind === 'upload' && ((busy && upload) || restoreActive || awaitingRestore.current)) ? (
         <form className="system-backups-form" ref={credentialsForm} onSubmit={submit} aria-labelledby={`${id}-action`}>
           <h3 id={`${id}-action`} tabIndex={-1}>
-            {actionLabels[action.kind]}
+            {action.kind === 'upload' ? 'Choose your backup' : actionLabels[action.kind]}
           </h3>
           {action.kind === 'upload' ? (
             <>
-              <Input
+              <input
+                ref={filePicker}
                 type="file"
-                label="Encrypted Orbis backup"
+                aria-label="Encrypted Orbis backup"
+                className="visually-hidden"
+                tabIndex={-1}
                 accept=".orbis,application/octet-stream"
-                required
                 disabled={busy}
                 onChange={(event) => {
                   setFile(event.currentTarget.files?.[0] ?? null);
                   setUpload(null);
+                  event.currentTarget.value = '';
                 }}
               />
-              <p className="system-backups-file">
-                {file ? `${file.name} · ${formatBackupBytes(file.size)}` : 'Choose the original encrypted .orbis file.'}
-              </p>
+              <div className="system-backups-file-picker">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  aria-describedby={`${id}-filename`}
+                  onClick={() => filePicker.current?.click()}
+                >
+                  Choose file
+                </Button>
+                <span id={`${id}-filename`} className="system-backups-file" aria-live="polite">
+                  {file ? (
+                    <>
+                      {file.name}
+                      <small>{formatBackupBytes(file.size)}</small>
+                    </>
+                  ) : (
+                    'No file chosen'
+                  )}
+                </span>
+              </div>
             </>
           ) : null}
           {destructive && action.job.review ? (
@@ -560,39 +554,46 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
                 busy ||
                 unavailable ||
                 (['export', 'upload', 'review', 'restore'].includes(action.kind) && working) ||
+                (action.kind === 'upload' && !file) ||
                 (destructive && !canRestore(action.job, Date.now()))
               }
             >
-              {busy ? 'Working…' : actionLabels[action.kind]}
+              {busy ? 'Working…' : action.kind === 'upload' ? 'Continue' : actionLabels[action.kind]}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                credentialsForm.current?.reset();
-                setAction(null);
-                setFile(null);
-                setError(null);
-              }}
-            >
-              Back
-            </Button>
-            {busy && upload && !upload.confirmed ? (
-              <Button type="button" variant="outline" onClick={() => abort.current?.abort()}>
-                Cancel upload
+            {embedded && action.kind === 'upload' ? null : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  credentialsForm.current?.reset();
+                  setAction(null);
+                  setFile(null);
+                  setError(null);
+                }}
+              >
+                Cancel
               </Button>
-            ) : null}
+            )}
           </div>
         </form>
       ) : null}
       {upload ? (
-        <BackupProgress
-          label={upload.confirmed ? 'Upload complete' : 'Uploading encrypted backup'}
-          completed={upload.completed}
-          total={upload.total}
-          settled={upload.confirmed}
-        />
+        <div className="system-backups-upload-progress">
+          <RecoveryProgress
+            label={upload.confirmed ? 'Upload complete' : 'Uploading encrypted backup'}
+            completed={upload.completed}
+            total={upload.total}
+            settled={upload.confirmed}
+          />
+          {busy && !upload.confirmed ? (
+            <div className="system-backups-actions">
+              <Button type="button" variant="outline" onClick={() => abort.current?.abort()}>
+                Cancel upload
+              </Button>
+            </div>
+          ) : null}
+        </div>
       ) : null}
       {error ? <InlineFeedback>{error}</InlineFeedback> : null}
       {notice ? <output aria-live="polite">{notice}</output> : null}
@@ -606,7 +607,7 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
                 <h4>{new Date(job.createdAt).toLocaleString()}</h4>
                 <p>{job.message}</p>
                 {job.status === 'running' || job.status === 'succeeded' ? (
-                  <BackupProgress
+                  <RecoveryProgress
                     label={job.status === 'succeeded' ? 'Backup ready' : `Backup · ${stageLabels[job.stage] ?? 'Checking progress'}`}
                     completed={job.completedBytes}
                     total={job.totalBytes}
@@ -659,7 +660,7 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
                 <h4>{new Date(job.createdAt).toLocaleString()}</h4>
                 <p>{job.message}</p>
                 {['uploading', 'reviewing', 'preparing'].includes(job.status) ? (
-                  <BackupProgress
+                  <RecoveryProgress
                     label={`Verification · ${stageLabels[job.stage] ?? 'Checking progress'}`}
                     completed={job.completedBytes}
                     total={job.totalBytes}

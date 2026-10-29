@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
 import { Input } from '@/components/ui/Input';
+import { RecoveryProgress } from '@/components/recovery-progress/recovery-progress';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import { copyText } from '@/lib/clipboard';
 import { NearbyServers } from '@/components/nearby-servers/nearby-servers';
 import { NearbyVisibility } from '@/components/nearby-servers/nearby-visibility';
 import { readBackups, type BackupCredentials } from '../system-backups/backup-api';
-import { formatBackupBytes, progressPercent } from '../system-backups/contracts';
+import { formatBackupBytes } from '../system-backups/contracts';
 import { SystemBackupsSettings } from '../system-backups/system-backups-settings';
 import {
   approveTransferOffer,
@@ -63,21 +66,6 @@ function Fingerprint({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-function Progress({ completed, total, complete, label }: { completed: number; total: number; complete: boolean; label: string }) {
-  const percentage = progressPercent(completed, total, complete);
-  return (
-    <div className="host-transfer-progress">
-      <div>
-        <span>{label}</span>
-        <span>{percentage === undefined ? 'Working…' : `${percentage}%`}</span>
-      </div>
-      <progress max={100} value={percentage} aria-label={label} />
-      <small>
-        {formatBackupBytes(completed)} of {formatBackupBytes(total)}
-      </small>
-    </div>
-  );
-}
 function Authentication({ disabled }: { disabled: boolean }) {
   return (
     <div className="host-transfer-fields">
@@ -103,13 +91,123 @@ function Authentication({ disabled }: { disabled: boolean }) {
   );
 }
 
-export function HostTransferPanel({ mode = 'both', embedded = false, onActivityChange }: Props = {}) {
+export function ReceiveAccountVerification({
+  source,
+  code,
+  localCertificate,
+  disabled,
+}: {
+  source: string;
+  code: string;
+  localCertificate: boolean;
+  disabled: boolean;
+}) {
+  return (
+    <>
+      <p>Confirm with your account on this server. You’ll compare fingerprints and approve the destination on the source next.</p>
+      <div className="host-transfer-source-summary">
+        <span>Source server</span>
+        <strong className="host-transfer-address">{source}</strong>
+        <small>{localCertificate ? 'Local certificate fingerprint confirmed' : 'HTTPS certificate checked when connecting'}</small>
+      </div>
+      <input type="hidden" name="sourceOrigin" value={source} />
+      <input type="hidden" name="code" value={code} />
+      <Authentication disabled={disabled} />
+      <Checkbox
+        className="host-transfer-confirm"
+        name="confirm"
+        value="yes"
+        required
+        disabled={disabled}
+        label="I want to receive this backup for review on this server."
+      />
+    </>
+  );
+}
+
+export function HostTransferPanel(props: Props = {}) {
   const id = useId();
+  const { user } = useAppContext();
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(false);
+  const [initialView, setInitialView] = useState<'overview' | 'receive'>('receive');
+  const reportActivity = useCallback(
+    (value: boolean) => {
+      setActive(value);
+      props.onActivityChange?.(value);
+    },
+    [props.onActivityChange],
+  );
+  if (user?.operator !== true) return null;
+  if (props.embedded || props.mode === 'receive') return <HostTransferWizard {...props} />;
+  return (
+    <section className="host-transfer-entry" aria-labelledby={`${id}-title`}>
+      <h2 id={`${id}-title`}>Restore from another server</h2>
+      <p>Bring an encrypted Orbis backup across your private network, then review it before restoring.</p>
+      <div className="host-transfer-entry-actions">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setInitialView('receive');
+            setOpen(true);
+          }}
+        >
+          Restore from another server
+        </Button>
+        <Button
+          type="button"
+          variant="link"
+          onClick={() => {
+            setInitialView('overview');
+            setOpen(true);
+          }}
+        >
+          Prepare this server as a source
+        </Button>
+      </div>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!active) setOpen(next);
+        }}
+      >
+        <DialogContent
+          size="md"
+          className="host-transfer-window"
+          closeDisabled={active}
+          aria-describedby={`${id}-description`}
+          onEscapeKeyDown={(event) => {
+            if (active) event.preventDefault();
+          }}
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Restore from another server</DialogTitle>
+          </DialogHeader>
+          <DialogDescription id={`${id}-description`}>Orbis-to-Orbis transfer over your private network.</DialogDescription>
+          <div className="modal-body host-transfer-window-body">
+            <HostTransferWizard mode="both" embedded initialView={initialView} onActivityChange={reportActivity} />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
+export function HostTransferWizard({
+  mode = 'both',
+  embedded = false,
+  onActivityChange,
+  initialView,
+}: Props & { initialView?: 'overview' | 'receive' } = {}) {
+  const id = useId();
+  const reduced = useReducedMotion();
   const { user } = useAppContext();
   const visible = useWindowVisible();
   const queryClient = useQueryClient();
   const key = ['orbis-host-transfers', user?.id];
-  const [view, setView] = useState<View>({ kind: mode === 'receive' ? 'receive' : 'overview' });
+  const [view, setView] = useState<View>({ kind: initialView ?? (mode === 'receive' ? 'receive' : 'overview') });
   const [direction, setDirection] = useState(1);
   const [busy, setBusy] = useState(false);
   const [restoreBusy, setRestoreBusy] = useState(false);
@@ -117,6 +215,9 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
   const [notice, setNotice] = useState<string | null>(null);
   const [code, setCode] = useState<{ id: string; value: string } | null>(null);
   const [sourceAddress, setSourceAddress] = useState('');
+  const [receiveStep, setReceiveStep] = useState<'source' | 'verify'>('source');
+  const [transferCode, setTransferCode] = useState('');
+  const [nearbyOpen, setNearbyOpen] = useState(false);
   const [sourceCertificate, setSourceCertificate] = useState<SourceCertificate | null>(null);
   const changeSource = (address: string) => {
     setSourceAddress(address);
@@ -171,14 +272,19 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
     focusNext.current = null;
     if (!focus || view.kind === 'restore') return;
     const heading = stage.current?.querySelector<HTMLElement>('h3');
-    const target = focus.keyboard ? (stage.current?.querySelector<HTMLElement>('input:not([type=checkbox]), select') ?? heading) : heading;
+    const selector =
+      view.kind === 'receive' && receiveStep === 'verify' ? 'input[name=password]' : 'input:not([type=checkbox]):not([type=hidden]), select';
+    const target = focus.keyboard ? (stage.current?.querySelector<HTMLElement>(selector) ?? heading) : heading;
     target?.focus({ preventScroll: true });
-  }, [view]);
+  }, [view, receiveStep]);
   const go = (next: View) => {
     if (running.current) return;
     focusNext.current = { keyboard: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible') };
     setDirection(next.kind === 'overview' ? -1 : 1);
     setSourceCertificate(null);
+    setTransferCode('');
+    setReceiveStep('source');
+    setNearbyOpen(false);
     setError(null);
     setNotice(null);
     setView(next);
@@ -214,6 +320,14 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
       }
     }
   };
+  const reviewSource = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy || (sourceCertificate && !sourceCertificate.confirmed)) return;
+    focusNext.current = { keyboard: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible') };
+    setError(null);
+    setDirection(1);
+    setReceiveStep('verify');
+  };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -224,7 +338,7 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
     };
     const backupId = String(values.get('backupId') ?? '');
     const source = String(values.get('sourceOrigin') ?? '');
-    const transferCode = String(values.get('code') ?? '')
+    const submittedCode = String(values.get('code') ?? '')
       .trim()
       .toLowerCase();
     const confirmed = values.get('confirm') === 'yes';
@@ -247,10 +361,20 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
         rememberOffer(approved);
       } else if (selected.kind === 'receive') {
         const certificate = sourceCertificate;
-        setSourceCertificate(null);
-        const job = await claimTransfer(source, transferCode, credentials, signal, certificate);
-        if (!mounted.current) return;
-        rememberJob(job);
+        setTransferCode('');
+        try {
+          const job = await claimTransfer(source, submittedCode, credentials, signal, certificate);
+          if (!mounted.current) return;
+          setSourceCertificate(null);
+          rememberJob(job);
+        } catch (reason) {
+          if (mounted.current) {
+            focusNext.current = { keyboard: false };
+            setSourceCertificate(null);
+            setReceiveStep('source');
+          }
+          throw reason;
+        }
       }
       if (mounted.current) {
         focusNext.current = { keyboard: false };
@@ -262,7 +386,7 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
   if (user?.operator !== true) return null;
   if (view.kind === 'restore')
     return (
-      <div className="host-transfer-panel" data-embedded={embedded}>
+      <div className="host-transfer-panel" data-embedded={embedded} data-reduced={Boolean(reduced)}>
         <div className="host-transfer-stage" data-direction={direction}>
           <div className="host-transfer-actions">
             <Button type="button" variant="outline" disabled={restoreBusy} onClick={() => go({ kind: 'overview' })}>
@@ -277,12 +401,13 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
     <section
       className="host-transfer-panel"
       data-embedded={embedded}
+      data-reduced={Boolean(reduced)}
       aria-label={embedded ? 'Host transfer' : undefined}
       aria-labelledby={embedded ? undefined : `${id}-title`}
     >
       {!embedded || view.kind === 'overview' ? (
         <header className="host-transfer-heading">
-          {embedded ? <h3 id={`${id}-title`}>Transfer from another server</h3> : <h2 id={`${id}-title`}>Move to another server</h2>}
+          {embedded ? <h3 id={`${id}-title`}>Transfer status</h3> : <h2 id={`${id}-title`}>Restore from another server</h2>}
           <Button
             type="button"
             variant="outline"
@@ -296,7 +421,10 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
         </header>
       ) : null}
       {embedded ? null : (
-        <p>Send an encrypted full backup over your private network. Both servers need operator approval; the original server stays unchanged.</p>
+        <p>
+          Send an encrypted full backup over your private network. Orbis-to-Orbis transfers need approval on both servers. The original server stays
+          unchanged.
+        </p>
       )}
       {status.isPending ? <output>Reading transfer status…</output> : null}
       {status.isError ? (
@@ -313,17 +441,17 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
       ) : null}
       {error ? <InlineFeedback>{error}</InlineFeedback> : null}
       {notice ? <output aria-live="polite">{notice}</output> : null}
-      <div ref={stage} className="host-transfer-stage" data-direction={direction} key={view.kind}>
+      <div ref={stage} className="host-transfer-stage" data-direction={direction} key={`${view.kind}-${view.kind === 'receive' ? receiveStep : ''}`}>
         {view.kind === 'overview' ? (
           <>
             <div className="host-transfer-actions">
               {mode === 'both' ? (
                 <Button type="button" variant="outline" disabled={busy || status.isError} onClick={() => go({ kind: 'offer' })}>
-                  Send from this server
+                  Create source code
                 </Button>
               ) : null}
               <Button type="button" variant="outline" disabled={busy || status.isError} onClick={() => go({ kind: 'receive' })}>
-                Receive from another server
+                Restore from another server
               </Button>
             </div>
             {mode === 'both' ? <NearbyVisibility disabled={busy} /> : null}
@@ -378,10 +506,10 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
                 ) : null}
                 {offer.status === 'approved' ? <p>On the destination, compare the source fingerprint and choose Start transfer.</p> : null}
                 {offer.status === 'sending' || offer.status === 'complete' ? (
-                  <Progress
+                  <RecoveryProgress
                     completed={offer.completedBytes}
                     total={offer.bytes}
-                    complete={offer.status === 'complete'}
+                    settled={offer.status === 'complete'}
                     label="Encrypted backup sent"
                   />
                 ) : null}
@@ -439,11 +567,12 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
                     </form>
                   </>
                 ) : null}
+                {job.status === 'checking-approval' ? <RecoveryProgress label="Checking source approval" /> : null}
                 {job.status === 'receiving' || job.status === 'complete' ? (
-                  <Progress
+                  <RecoveryProgress
                     completed={job.completedBytes}
                     total={job.totalBytes}
-                    complete={job.status === 'complete'}
+                    settled={job.status === 'complete'}
                     label="Encrypted backup received"
                   />
                 ) : null}
@@ -478,9 +607,24 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
             ))}
           </>
         ) : (
-          <form className="host-transfer-form" onSubmit={submit} aria-labelledby={`${id}-action`}>
-            <h3 id={`${id}-action`} className={embedded && view.kind === 'receive' ? 'visually-hidden' : undefined} tabIndex={-1}>
-              {view.kind === 'offer' ? 'Create a transfer code' : view.kind === 'approve' ? 'Approve this destination' : 'Connect to the source'}
+          <form
+            className="host-transfer-form"
+            onSubmit={view.kind === 'receive' && receiveStep === 'source' ? reviewSource : submit}
+            aria-labelledby={`${id}-action`}
+          >
+            {busy && view.kind === 'receive' ? <RecoveryProgress label="Connecting to source" /> : null}
+            <h3
+              id={`${id}-action`}
+              className={embedded && view.kind === 'receive' && receiveStep === 'source' ? 'visually-hidden' : undefined}
+              tabIndex={-1}
+            >
+              {view.kind === 'offer'
+                ? 'Create a transfer code'
+                : view.kind === 'approve'
+                  ? 'Approve this destination'
+                  : receiveStep === 'source'
+                    ? 'Connect to the source'
+                    : 'Verify your account'}
             </h3>
             {view.kind === 'offer' ? (
               <>
@@ -512,9 +656,9 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
                 <Fingerprint label="Destination fingerprint" value={view.offer.destinationFingerprint ?? ''} />
                 <Fingerprint label="Source fingerprint" value={view.offer.sourceFingerprint} />
               </>
-            ) : (
+            ) : receiveStep === 'source' ? (
               <>
-                <p>Create a transfer code on the original server. Use its private HTTPS address with a trusted certificate.</p>
+                <p>For an Orbis-to-Orbis transfer, enter the source’s private HTTPS address and one-use code.</p>
                 <Input
                   label="Source server address"
                   name="sourceOrigin"
@@ -528,13 +672,29 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
                   value={sourceAddress}
                   onChange={(event) => changeSource(event.target.value)}
                 />
-                <fieldset className="host-transfer-nearby" disabled={busy}>
-                  <legend className="visually-hidden">Optional nearby source search</legend>
-                  <NearbyServers onSelect={changeSource} />
-                </fieldset>
+                <div className="host-transfer-nearby">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    aria-expanded={nearbyOpen}
+                    aria-controls={`${id}-nearby`}
+                    onClick={() => setNearbyOpen(!nearbyOpen)}
+                  >
+                    Nearby servers
+                  </Button>
+                  {nearbyOpen ? (
+                    <fieldset id={`${id}-nearby`} disabled={busy}>
+                      <legend className="visually-hidden">Optional nearby source search</legend>
+                      <NearbyServers onSelect={changeSource} />
+                    </fieldset>
+                  ) : null}
+                </div>
                 <Input
                   label="One-use transfer code"
                   name="code"
+                  value={transferCode}
+                  onChange={(event) => setTransferCode(event.currentTarget.value)}
                   required
                   pattern="[a-fA-F0-9]{64}"
                   minLength={64}
@@ -545,28 +705,48 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
                   disabled={busy}
                 />
                 <SourceCertificatePicker key={sourceAddress} disabled={busy} value={sourceCertificate} onChange={setSourceCertificate} />
-                <p>The source must approve this destination before the encrypted backup can arrive.</p>
               </>
+            ) : (
+              <ReceiveAccountVerification source={sourceAddress} code={transferCode} localCertificate={sourceCertificate !== null} disabled={busy} />
             )}
-            <Authentication disabled={busy} />
-            <Checkbox
-              className="host-transfer-confirm"
-              name="confirm"
-              value="yes"
-              required
-              disabled={busy}
-              label={
-                view.kind === 'offer'
-                  ? 'I want to share this encrypted backup with a destination I approve.'
-                  : view.kind === 'approve'
-                    ? 'The destination fingerprint matches the screen on my destination server.'
-                    : 'I want to receive this backup for review on this server.'
-              }
-            />
+            {view.kind === 'receive' ? null : <Authentication disabled={busy} />}
+            {view.kind === 'receive' ? null : (
+              <Checkbox
+                className="host-transfer-confirm"
+                name="confirm"
+                value="yes"
+                required
+                disabled={busy}
+                label={
+                  view.kind === 'offer'
+                    ? 'I want to share this encrypted backup with a destination I approve.'
+                    : view.kind === 'approve'
+                      ? 'The destination fingerprint matches the screen on my destination server.'
+                      : 'I want to receive this backup for review on this server.'
+                }
+              />
+            )}
             <div className="host-transfer-actions">
-              <Button type="button" variant="outline" disabled={busy} onClick={() => go({ kind: 'overview' })}>
-                Cancel
-              </Button>
+              {view.kind === 'receive' && receiveStep === 'verify' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={(event) => {
+                    event.currentTarget.form?.reset();
+                    focusNext.current = { keyboard: event.currentTarget.matches(':focus-visible') };
+                    setDirection(-1);
+                    setReceiveStep('source');
+                    setError(null);
+                  }}
+                >
+                  Change source
+                </Button>
+              ) : embedded && mode === 'receive' ? null : (
+                <Button type="button" variant="outline" disabled={busy} onClick={() => go({ kind: 'overview' })}>
+                  Cancel
+                </Button>
+              )}
               <Button
                 type="submit"
                 intent="primary"
@@ -577,7 +757,15 @@ export function HostTransferPanel({ mode = 'both', embedded = false, onActivityC
                   (view.kind === 'receive' && sourceCertificate !== null && !sourceCertificate.confirmed)
                 }
               >
-                {busy ? 'Checking…' : view.kind === 'offer' ? 'Create code' : view.kind === 'approve' ? 'Approve destination' : 'Connect to source'}
+                {busy
+                  ? 'Checking…'
+                  : view.kind === 'offer'
+                    ? 'Create code'
+                    : view.kind === 'approve'
+                      ? 'Approve destination'
+                      : receiveStep === 'source'
+                        ? 'Continue'
+                        : 'Connect to source'}
               </Button>
             </div>
           </form>

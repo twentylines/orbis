@@ -4,7 +4,10 @@ import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clusterRequest } from './cluster-transport';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 function respond(status: number, body: string) {
   vi.spyOn(http, 'request').mockImplementation(((options: http.RequestOptions, callback: (response: http.IncomingMessage) => void) => {
@@ -34,6 +37,22 @@ function respond(status: number, body: string) {
 const read = () => clusterRequest('http://192.168.1.20', '/api/cluster/peer', { action: 'command', command: 'plan-orbis' }, {}, true);
 
 describe('paired server responses', () => {
+  it('bounds a stalled request by its absolute deadline', async () => {
+    vi.useFakeTimers();
+    const emitter = new EventEmitter();
+    const destroy = vi.fn((error?: Error) => {
+      emitter.emit('close');
+      if (error) emitter.emit('error', error);
+    });
+    vi.spyOn(http, 'request').mockReturnValue(Object.assign(emitter, { end: vi.fn(), destroy }) as unknown as http.ClientRequest);
+    const pending = read();
+    const rejected = expect(pending).rejects.toThrow('Cannot reach the paired server');
+    await vi.advanceTimersByTimeAsync(11999);
+    expect(destroy).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2);
+    await rejected;
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
   it('preserves the actionable host-update refusal returned by a member', async () => {
     respond(409, JSON.stringify({ statusCode: 409, message: 'Stop installed apps before updating Orbis.' }));
     await expect(read()).rejects.toThrow('Paired server: Stop installed apps before updating Orbis.');

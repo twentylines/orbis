@@ -22,6 +22,8 @@ import { ClusterStateService, clusterName } from './cluster-state.service';
 import { CLUSTER_PROTOCOL, clusterRequest, signedHeaders } from './cluster-transport';
 import { ClusterInstallService } from './cluster-install.service';
 import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
+import { AuthService } from '../auth/auth.service';
+import { bindClusterCertificate, clusterCertificate, pairedClusterCertificate } from './cluster-certificate';
 
 @Injectable()
 export class ClusterService {
@@ -44,9 +46,48 @@ export class ClusterService {
     private readonly installs: ClusterInstallService,
     private readonly activity: MonitoringActivityService,
     private readonly drives: DriveHealthService,
+    private readonly auth: AuthService,
   ) {}
 
-  async pair(body: Record<string, unknown>) {
+  private fields(body: unknown, allowed: string[]): asserts body is Record<string, unknown> {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some((key) => !allowed.includes(key)))
+      throw new BadRequestException('Provide only the requested pairing details.');
+  }
+
+  private async approveTrust(userId: number, body: Record<string, unknown>) {
+    if (
+      !Number.isSafeInteger(userId) ||
+      userId <= 0 ||
+      typeof body.password !== 'string' ||
+      !body.password ||
+      body.password.length > 1024 ||
+      (body.totpCode !== undefined && (typeof body.totpCode !== 'string' || !/^\d{6}$/.test(body.totpCode)))
+    )
+      throw new BadRequestException('Confirm pairing with your account password and authentication code if enabled.');
+    const user = await this.auth.verifySensitiveAction(userId, body.password, body.totpCode as string | undefined);
+    if (user.operator !== true) throw new ForbiddenException('An operator account is required for pairing.');
+  }
+
+  async invite(body: Record<string, unknown>, userId: number) {
+    this.fields(body, ['password', 'totpCode']);
+    await this.approveTrust(userId, body);
+    return this.state.invite();
+  }
+
+  async pair(body: Record<string, unknown>, userId: number) {
+    this.fields(body, [
+      'password',
+      'totpCode',
+      'url',
+      'code',
+      'name',
+      'allowInsecureLan',
+      'peerCertificatePem',
+      'peerCertificateSha256',
+      'confirmPeerCertificate',
+    ]);
+    await this.approveTrust(userId, body);
+    const certificate = clusterCertificate(body);
     const current = await this.state.read();
     if (current.role !== 'admin') throw new ForbiddenException('Create a cluster on its admin server first.');
     if (current.peers.length >= 12) throw new ConflictException('A cluster supports up to 12 paired servers.');
@@ -70,8 +111,17 @@ export class ClusterService {
       },
       {},
       insecureLan,
+      certificate,
     );
-    if (result.protocol !== CLUSTER_PROTOCOL || typeof result.id !== 'string' || !/^[a-f0-9-]{36}$/.test(result.id) || result.id === current.id) {
+    if (
+      !result ||
+      typeof result !== 'object' ||
+      Array.isArray(result) ||
+      result.protocol !== CLUSTER_PROTOCOL ||
+      typeof result.id !== 'string' ||
+      !/^[a-f0-9-]{36}$/.test(result.id) ||
+      result.id === current.id
+    ) {
       throw new ConflictException('This server does not support the cluster protocol or is the admin server itself.');
     }
     const name = clusterName(result.name);
@@ -84,9 +134,16 @@ export class ClusterService {
       ) {
         throw new ConflictException('Cluster membership changed while pairing. Leave the cluster on the joining server and try again.');
       }
-      state.peers.push({ id: result.id, name, url, secret, insecureLan });
+      state.peers.push({
+        id: result.id,
+        name,
+        url,
+        secret,
+        insecureLan,
+        ...(certificate ? { tls: bindClusterCertificate(certificate, current.id, result.id, url, secret) } : {}),
+      });
     });
-    return { paired: true, id: result.id, name };
+    return { paired: true, id: result.id, name, ...(certificate ? { certificateSha256: certificate.sha256 } : {}) };
   }
 
   private async send<T>(id: string, body: object): Promise<T> {
@@ -101,6 +158,7 @@ export class ClusterService {
       envelope,
       signedHeaders(state.id, peer.secret, JSON.stringify(envelope)),
       peer.insecureLan,
+      pairedClusterCertificate(state.id, peer),
     );
   }
 

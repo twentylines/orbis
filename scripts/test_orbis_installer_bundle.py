@@ -51,6 +51,32 @@ class BundleTests(unittest.TestCase):
         manifest = BOOT.verify_manifest(self.assets[BUILD.MANIFEST], self.identity)
         self.assertEqual(BOOT.verify_files(self.assets[BUILD.ARCHIVE], manifest), {name: self.files[name] for name in BUILD.REQUIRED})
 
+    def test_level_nine_bundle_ignores_runtime_default_level_six(self):
+        real_gzip_file = BUILD.gzip.GzipFile
+        requested_levels = []
+
+        def runtime_default_six(*args, compresslevel=6, **kwargs):
+            requested_levels.append(compresslevel)
+            return real_gzip_file(*args, compresslevel=compresslevel, **kwargs)
+
+        with mock.patch.object(BUILD.gzip, "GzipFile", side_effect=runtime_default_six):
+            assets = BUILD.build(self.files, self.release_bytes)
+
+        self.assertEqual(requested_levels, [9])
+        self.assertEqual(assets, self.assets)
+        archive = assets[BUILD.ARCHIVE]
+        self.assertEqual(archive[:2], b"\x1f\x8b")
+        self.assertEqual(archive[8], 2)
+
+        manifest = BOOT.verify_manifest(assets[BUILD.MANIFEST], self.identity)
+        self.assertEqual(manifest["archiveBytes"], len(archive))
+        self.assertEqual(manifest["archiveSha256"], BUILD.sha(archive))
+        self.assertEqual(BOOT.verify_files(archive, manifest), {name: self.files[name] for name in BUILD.REQUIRED})
+
+        namespace = {"__name__": "imported_release_launcher"}
+        exec(compile(assets[BUILD.LAUNCHER], "release-launcher", "exec"), namespace)
+        self.assertEqual(namespace["EXPECTED_RELEASE"], self.identity)
+
     def test_private_notes_credentials_tests_and_unrelated_files_are_never_packaged(self):
         files = {**self.files, "HANDOFF.md": b"private", "AGENTS.md": b"private", ".env": b"secret", "scripts/test_orbis_host.py": b"test", ".orbis-private/orbis-secret.py": b"secret", "screenshots/private.png": b"pixels"}
         self.assertEqual(self.assets, BUILD.build(files, self.release_bytes))

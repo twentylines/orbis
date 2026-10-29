@@ -13,6 +13,7 @@ const timezone = type('string > 0 & string <= 100').narrow((value) => {
 });
 export const automaticUpdateSettingsSchema = type({
   orbis: type({ enabled: 'boolean', mode: "'idle' | 'scheduled'" }).onUndeclaredKey('reject'),
+  'apps?': type({ enabled: 'boolean' }).onUndeclaredKey('reject'),
   schedule: type({ time, timezone }).onUndeclaredKey('reject'),
 }).onUndeclaredKey('reject');
 export const appUpdateRuleSchema = type({ mode: "'disabled' | 'global' | 'custom'", 'time?': time })

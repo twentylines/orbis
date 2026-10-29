@@ -163,7 +163,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 28px;
+  gap: 24px;
 }
 .orbis-store-results,
 .orbis-store-editorial,
@@ -229,9 +229,9 @@
 }
 .orbis-store-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(14.5rem, calc((100% - 48px) / 4))), 1fr));
-  grid-auto-rows: 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(15rem, calc((100% - 60px) / 4))), 1fr));
+  grid-auto-rows: auto;
+  gap: 20px;
   min-width: 0;
 }
 .orbis-store-message {
@@ -292,16 +292,17 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border: 1px solid var(--desktop-line);
-  border-radius: 24px;
-  background: var(--desktop-surface);
+  border: 0;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 7%, var(--desktop-surface));
+  overflow: hidden;
 }
 .orbis-store-collection-content {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   flex: 1;
-  gap: 14px;
+  gap: 12px;
   padding: 24px;
 }
 .orbis-store-collection h3 {
@@ -348,7 +349,7 @@
   height: 11rem;
   overflow: hidden;
   isolation: isolate;
-  border-radius: 23px 23px 0 0;
+  border-radius: 0;
   background: linear-gradient(
     135deg,
     color-mix(in srgb, var(--desktop-preset-tint) 22%, var(--desktop-surface)),
@@ -402,15 +403,18 @@
   letter-spacing: -0.02em;
 }
 .orbis-store-discover[data-presentation="editorial"] .orbis-store-collections {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   gap: 20px;
 }
 .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.7fr) minmax(0, 1fr);
   border-radius: 18px;
 }
 .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-art {
-  height: 9rem;
-  border-radius: 17px 17px 0 0;
+  height: 100%;
+  min-height: 10rem;
+  border-radius: 0;
 }
 .orbis-store-discover[data-presentation="editorial"] .orbis-store-artwork-app {
   --app-logo-size: 4rem;
@@ -449,33 +453,8 @@
 }
 .orbis-store-shelf {
   margin-top: 36px;
-  padding-top: 28px;
+  padding-top: 24px;
   border-top: 1px solid var(--desktop-line);
-}
-.orbis-store-shelf-heading {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(14rem, 1fr);
-  align-items: center;
-  gap: 24px;
-  margin-bottom: 20px;
-}
-.orbis-store-shelf-heading .orbis-store-section-heading {
-  align-items: flex-start;
-  flex-direction: column;
-  margin: 0;
-}
-.orbis-store-shelf-heading .orbis-store-collection-art {
-  height: 9rem;
-  border-radius: 18px;
-}
-.orbis-store-shelf-heading .orbis-store-artwork-app {
-  --app-logo-size: 3.75rem;
-}
-.orbis-store-shelf-heading .orbis-store-artwork-app[data-art-position="1"] {
-  --app-logo-size: 3rem;
-}
-.orbis-store-shelf-heading .orbis-store-artwork-app[data-art-position="2"] {
-  --app-logo-size: 2.5rem;
 }
 .orbis-store-view-transition {
   position: relative;
@@ -517,10 +496,12 @@
 
 @container (min-width: 68rem) {
   .orbis-store-catalogue[data-editorial="true"] {
-    grid-template-columns: minmax(0, 3fr) minmax(15rem, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
-  .orbis-store-catalogue[data-editorial="true"] > .orbis-store-editorial:not([hidden]) {
+  .orbis-store-catalogue[data-editorial="true"] .orbis-store-editorial:not([hidden]) {
     display: block;
+    grid-column: 1 / -1;
+    padding-block: 12px;
   }
 }
 @container (min-width: 60rem) {
@@ -552,12 +533,12 @@
   --app-logo-size: 4.5rem;
 }
 .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-gaming {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(5rem, 0.5fr) minmax(0, 1fr);
 }
 .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-gaming .orbis-store-collection-art {
-  height: 6rem;
-  min-height: 0;
-  border-radius: 17px 17px 0 0;
+  height: 100%;
+  min-height: 10rem;
+  border-radius: 0;
 }
 .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-art[data-collection-kind="gaming"] .orbis-store-artwork-app {
   --app-logo-size: 4rem;
@@ -657,14 +638,6 @@
   }
   .orbis-store-collection h3 {
     font-size: 1.625rem;
-  }
-  .orbis-store-shelf-heading {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
-  }
-  .orbis-store-shelf-heading .orbis-store-section-heading {
-    flex-direction: row;
-    align-items: center;
   }
   .orbis-store-grid {
     gap: 14px;

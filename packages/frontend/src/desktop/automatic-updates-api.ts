@@ -2,12 +2,14 @@ import { queryOptions } from '@tanstack/react-query';
 
 export type AutomaticUpdateSettings = {
   orbis: { enabled: boolean; mode: 'idle' | 'scheduled' };
+  apps?: { enabled: boolean };
   schedule: { time: string; timezone: string };
 };
 export type UpdateAttempt = { state: string; message?: string; at: number; targetVersion?: number };
 export type AutomaticUpdateServerTime = { now: number; timezone: string };
 export type AutomaticUpdateStatus = {
   settings: AutomaticUpdateSettings;
+  appRules?: Record<string, AppUpdateRule>;
   pauseReason?: string | null;
   lastAttempt?: UpdateAttempt | null;
   available: boolean;
@@ -90,7 +92,11 @@ export const appUpdateScheduleOptions = (urn: string) =>
   });
 export const readAppUpdateSchedule = (urn: string) => automaticRequest<AppUpdateSchedule>(`/apps/${encodeURIComponent(urn)}`);
 export const saveAutomaticUpdateSettings = (settings: AutomaticUpdateSettings) =>
-  automaticRequest<AutomaticUpdateStatus>('', { orbis: settings.orbis, schedule: { time: settings.schedule.time } });
+  automaticRequest<AutomaticUpdateStatus>('', {
+    orbis: settings.orbis,
+    ...(settings.apps ? { apps: settings.apps } : {}),
+    schedule: { time: settings.schedule.time },
+  });
 export const saveAppUpdateSchedule = (urn: string, rule: AppUpdateRule) =>
   automaticRequest<AppUpdateSchedule>(`/apps/${encodeURIComponent(urn)}`, rule);
 export const systemUpdateScheduleOptions = () =>

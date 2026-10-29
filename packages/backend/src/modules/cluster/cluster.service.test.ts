@@ -38,6 +38,7 @@ it('keeps paired app library fields while excluding private saved configuration'
     mock<Dependencies[15]>(),
     mock<Dependencies[16]>(),
     mock<Dependencies[17]>(),
+    mock<Dependencies[18]>(),
   );
 
   const result = await service.read('local-server', 'apps');
@@ -74,6 +75,7 @@ const peerFixture = () => {
     mock<Dependencies[15]>(),
     activity,
     drives,
+    mock<Dependencies[18]>(),
   );
   return { state, activity, drives, updates, service };
 };

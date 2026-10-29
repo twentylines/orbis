@@ -5,6 +5,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { isIP } from 'node:net';
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import type { ClusterCertificate } from './cluster-certificate';
 
 export const CLUSTER_PROTOCOL = 'orbis.cluster.v1';
 export const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -60,8 +61,10 @@ export async function clusterRequest<T>(
   body: object,
   headers = {},
   insecureLan = false,
+  certificate?: ClusterCertificate,
 ): Promise<T> {
   const url = clusterOrigin(origin, insecureLan);
+  if (certificate && url.protocol !== 'https:') throw new BadRequestException('A confirmed peer certificate requires HTTPS.');
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const deadline = Date.now() + 12_000;
   const addresses = isIP(hostname)
@@ -87,6 +90,9 @@ export async function clusterRequest<T>(
         method: 'POST',
         family: target.family,
         lookup: (_hostname, _options, callback) => callback(null, target.address, target.family),
+        agent: false,
+        rejectUnauthorized: true,
+        ...(certificate ? { ca: certificate.pem } : {}),
         headers: { ...headers, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
       },
       (response) => {
@@ -128,7 +134,11 @@ export async function clusterRequest<T>(
     const timer = setTimeout(() => request.destroy(new Error('Cluster request timed out.')), Math.max(1, deadline - Date.now()));
     request.on('close', () => clearTimeout(timer));
     request.on('error', () =>
-      reject(new ServiceUnavailableException('Cannot reach the paired server. Check its address, connection and certificate.')),
+      reject(
+        new ServiceUnavailableException(
+          'Cannot reach the paired server. Use a hostname matching its HTTPS certificate and check certificate trust and connection.',
+        ),
+      ),
     );
     request.end(data);
   });

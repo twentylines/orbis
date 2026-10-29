@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Body, Controller, Delete, Get, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { HostUpdatesGuard } from '../host-updates/host-updates.guard';
@@ -11,6 +11,12 @@ export class ClusterController {
     private readonly cluster: ClusterService,
     private readonly state: ClusterStateService,
   ) {}
+
+  private operator(request: Request) {
+    if (request.authMethod !== 'session' || request.user?.operator !== true)
+      throw new ForbiddenException('An operator session is required for pairing.');
+    return request.user.id;
+  }
 
   @Get()
   @UseGuards(AuthGuard)
@@ -32,14 +38,14 @@ export class ClusterController {
 
   @Post('invite')
   @UseGuards(AuthGuard, HostUpdatesGuard)
-  invite() {
-    return this.state.invite();
+  invite(@Req() request: Request, @Body() body: Record<string, unknown>) {
+    return this.cluster.invite(body, this.operator(request));
   }
 
   @Post('pair')
   @UseGuards(AuthGuard, HostUpdatesGuard)
-  pair(@Body() body: Record<string, unknown>) {
-    return this.cluster.pair(body);
+  pair(@Req() request: Request, @Body() body: Record<string, unknown>) {
+    return this.cluster.pair(body, this.operator(request));
   }
 
   @Post('accept')

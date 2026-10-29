@@ -10,12 +10,22 @@ export function setupAppUpdateSteps(
   selected: Array<{ urn: string; name: string }>,
   touched: SetupAppChoices,
   api: { read: (urn: string) => Promise<{ rule: AppUpdateRule }>; save: (urn: string, rule: AppUpdateRule) => Promise<unknown> },
+  choices?: { manualApps: Array<{ urn: string; name: string }>; originalRules: Record<string, AppUpdateRule> },
 ): SetupSaveStep[] {
   const apps = new Map([...touched].map(([urn, app]) => [urn, app.name]));
   const selectedUrns = new Set(selected.map(({ urn }) => urn));
   for (const { urn, name } of selected) apps.set(urn, name);
+  const manualUrns = new Set(choices?.manualApps.map(({ urn }) => urn));
+  for (const { urn, name } of choices?.manualApps ?? []) apps.set(urn, name);
   return [...apps].map(([urn, name]) => {
-    const rule: AppUpdateRule = selectedUrns.has(urn) ? { mode: 'global' } : (touched.get(urn)?.previous ?? { mode: 'disabled' });
+    const original = choices?.originalRules[urn];
+    const rule: AppUpdateRule = selectedUrns.has(urn)
+      ? original?.mode === 'custom'
+        ? { ...original }
+        : { mode: 'global' }
+      : manualUrns.has(urn)
+        ? { mode: 'disabled' }
+        : (touched.get(urn)?.previous ?? { mode: 'disabled' });
     return {
       id: `app:${urn}`,
       label: `Saving updates for ${name}`,
@@ -38,4 +48,14 @@ export async function saveSetupSteps(steps: SetupSaveStep[], receipts: Map<strin
     await step.save();
     receipts.set(step.id, fingerprint);
   }
+}
+
+export async function finishSetup(
+  steps: SetupSaveStep[],
+  receipts: Map<string, string>,
+  onProgress: (label: string) => void,
+  navigate: (destination: string, options: { replace: true }) => unknown,
+) {
+  await saveSetupSteps(steps, receipts, onProgress);
+  await navigate('/dashboard', { replace: true });
 }

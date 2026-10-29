@@ -20,6 +20,7 @@ import { createAppQueryClient } from '@/lib/query-client';
 import { getInstalledAppsOptions, searchAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { StoreCollectionArt, StoreDiscover } from './store-discover';
 import { StoreTile } from '../store-tile/store-tile';
+import { StoreCatalogue } from '../../pages/store-catalogue';
 
 const app = (id: string, store = 'official', overrides: Partial<AppInfoSimple> = {}): AppInfoSimple => ({
   id,
@@ -118,6 +119,49 @@ describe('Store collection resolution', () => {
 });
 
 describe('catalogue-first Store presentation', () => {
+  test('collection shelves follow eight real catalogue links and do not replace or duplicate any app', () => {
+    const items = Array.from({ length: 12 }, (_, index) => app(`product-${index}`));
+    const i18n = createInstance();
+    void i18n.init({ lng: 'en', initImmediate: false, resources: { en: { translation: { APP_CATEGORY_MEDIA: 'Media' } } } });
+    const html = renderToStaticMarkup(
+      createElement(
+        I18nextProvider,
+        { i18n },
+        createElement(
+          MemoryRouter,
+          {},
+          createElement(StoreCatalogue, {
+            apps: items,
+            lastElementRef: () => undefined,
+            collections: createElement('aside', { 'data-collection-shelf': true }, 'Collections'),
+          }),
+        ),
+      ),
+    );
+    const shelf = html.indexOf('data-collection-shelf');
+    expect(shelf).toBeGreaterThan(html.indexOf('href="/app-store/official/product-7"'));
+    expect(shelf).toBeLessThan(html.indexOf('href="/app-store/official/product-8"'));
+    expect(html.match(/href="\/app-store\/official\/product-/g)?.length).toBe(12);
+    for (const item of items) expect(html.split(`href="/app-store/official/${item.id}"`).length).toBe(2);
+    const short = renderToStaticMarkup(
+      createElement(
+        I18nextProvider,
+        { i18n },
+        createElement(
+          MemoryRouter,
+          {},
+          createElement(StoreCatalogue, {
+            apps: items.slice(0, 3),
+            lastElementRef: () => undefined,
+            collections: createElement('aside', { 'data-collection-shelf': true }, 'Collections'),
+          }),
+        ),
+      ),
+    );
+    expect(short).not.toContain('data-collection-shelf');
+    expect(short.match(/href="\/app-store\/official\/product-/g)?.length).toBe(3);
+  });
+
   test('the root, explicit apps and unsupported views open the catalogue, while saved discovery URLs remain collections', () => {
     for (const value of [undefined, null, '', 'apps', 'unknown']) expect(storeView(value)).toBe('apps');
     expect(storeView('discover')).toBe('discover');
@@ -157,6 +201,11 @@ describe('catalogue-first Store presentation', () => {
     expect(html).toContain('/app-store/community/jellyfin?view=apps&amp;store=community');
     expect(html).toContain('/api/marketplace/apps/jellyfin%3Acommunity/image');
     expect(html).toContain('width="72"');
+    expect(html.match(/loading="lazy"/g)?.length).toBe(1);
+    expect([...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map((match) => match[1])).toEqual([
+      '/api/marketplace/apps/jellyfin%3Acommunity/image',
+      '/api/marketplace/apps/jellyfin%3Acommunity/image',
+    ]);
     expect(html).toContain('Unavailable');
     expect(html).toContain('Preview');
     expect(html).toContain('A personal media server.');

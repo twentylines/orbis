@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AutomaticUpdatesService } from './automatic-updates.service';
 import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
 import { dailyUpdateSlot, parseAppUpdateRule, parseAutomaticSettings } from './automatic-updates.model';
+import { syncHash } from '../cluster/cluster-sync.schema';
 
 const settings = (enabled = true, mode: 'idle' | 'scheduled' = 'idle', time = '03:00') => ({
   orbis: { enabled, mode },
@@ -335,6 +336,47 @@ describe('server automatic update scheduling', () => {
     expect((await automatic.read()).pauseReason).toContain('requires stopped applications');
     await automatic.tick();
     expect(host.plan).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps app updates manual on legacy settings and inherits an explicitly enabled default for later installations', async () => {
+    await automatic.update(settings(false));
+    expect((await automatic.readApp('adguard:tipi')).rule.mode).toBe('disabled');
+    await automatic.update({ ...settings(false), apps: { enabled: true } });
+    apps.getApps.mockResolvedValue([{ appName: 'adguard', appStoreSlug: 'tipi', status: 'running' }]);
+    quiet();
+    await automatic.tick();
+    expect(lifecycle.updateApp).toHaveBeenCalledWith({ appUrn: 'adguard:tipi', performBackup: true });
+    expect((await automatic.readApp('adguard:tipi')).rule.mode).toBe('global');
+  });
+
+  it('preserves a manual app override through default changes, legacy saves and a server restart', async () => {
+    await automatic.updateApp('adguard:tipi', { mode: 'disabled' });
+    await automatic.update({ ...settings(false), apps: { enabled: true } });
+    await automatic.update(settings(false, 'scheduled', '02:00'));
+    expect((await automatic.read()).settings.apps?.enabled).toBe(true);
+    automatic.onModuleDestroy();
+    automatic = create();
+    await automatic.onModuleInit();
+    apps.getApps.mockResolvedValue([{ appName: 'adguard', appStoreSlug: 'tipi', status: 'running' }]);
+    quiet();
+    await automatic.tick();
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
+    expect((await automatic.readApp('adguard:tipi')).rule.mode).toBe('disabled');
+    expect((await automatic.readApp('compose:_user')).rule.mode).toBe('disabled');
+  });
+
+  it('retains an explicitly synced manual app policy when the shared default is enabled later', async () => {
+    apps.getApps.mockResolvedValue([{ appName: 'adguard', appStoreSlug: 'tipi', status: 'running' }]);
+    const before = await automatic.clusterSnapshot();
+    await automatic.applyClusterSettings(
+      { 'app-updates': [{ urn: 'adguard:tipi', enabled: false }] },
+      { 'app-updates': syncHash(before['app-updates']) },
+    );
+    await automatic.update({ ...settings(false), apps: { enabled: true } });
+    expect((await automatic.readApp('adguard:tipi')).rule.mode).toBe('disabled');
+    quiet();
+    await automatic.tick();
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
   });
 
   it('backs off read-only release failures until the next local day and does not offer downgrades', async () => {

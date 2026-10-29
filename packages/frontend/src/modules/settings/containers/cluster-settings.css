@@ -57,6 +57,25 @@
   line-height: 1.6;
   margin-top: 4px;
 }
+.cluster-settings-control,
+.cluster-pair-form > label,
+.cluster-pair-form .cluster-settings-control,
+.cluster-pair-form > .w-100 {
+  width: 100%;
+  min-width: 0;
+}
+.cluster-settings-control > input {
+  width: 100%;
+  min-width: 0;
+}
+.cluster-settings-control .form-label {
+  display: block;
+  margin: 0 0 4px;
+  color: var(--desktop-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.6;
+}
 :where(.cluster-settings-form label) > span {
   font-weight: 450;
 }
@@ -120,6 +139,106 @@
   color: var(--desktop-muted);
   font-size: 0.75rem;
   line-height: 1.65;
+}
+.cluster-pair-certificate,
+.cluster-pair-http-warning {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, var(--desktop-surface));
+}
+.cluster-pair-certificate > label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+.cluster-pair-certificate > p {
+  max-width: 62ch;
+  margin: 0 0 8px;
+}
+.cluster-pair-certificate > input[type="file"] {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.8125rem;
+}
+.cluster-pair-fingerprint {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  min-width: 0;
+}
+.cluster-pair-fingerprint > span,
+.cluster-pair-fingerprint code,
+.cluster-server-certificate code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+.cluster-pair-fingerprint > .orbis-checkbox {
+  justify-content: flex-start;
+  min-width: 0;
+  height: auto;
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.cluster-pair-fingerprint .form-check-label {
+  overflow-wrap: anywhere;
+}
+.cluster-pair-http-warning {
+  border-color: color-mix(in srgb, var(--desktop-warning) 40%, var(--desktop-line));
+}
+.cluster-pair-http-warning .orbis-checkbox {
+  justify-content: flex-start;
+  min-width: 0;
+  height: auto;
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.cluster-pair-http-warning .form-check-label {
+  overflow-wrap: anywhere;
+}
+.cluster-pair-error {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.cluster-pair-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+.cluster-pair-actions > button {
+  flex: 1 1 150px;
+}
+.cluster-invite-auth {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--desktop-preset-tint) 6%, var(--desktop-surface));
+}
+.cluster-settings-servers .cluster-server-http {
+  color: var(--desktop-warning);
+  font-weight: 650;
+}
+.cluster-server-certificate code {
+  color: var(--desktop-ink);
 }
 .cluster-settings-membership {
   display: flex;
