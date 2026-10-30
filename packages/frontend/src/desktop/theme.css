@@ -249,7 +249,7 @@ html[data-desktop-mode="dark"] {
   --workspace-heading-shadow: rgb(0 0 0 / 0.18);
   --desktop-wallpaper-shade-start-alpha: 0.43;
   --desktop-wallpaper-shade-end-alpha: 0.72;
-  --desktop-wallpaper-tint: rgba(var(--desktop-base-chrome-rgb), 0.55);
+  --desktop-wallpaper-tint: rgba(var(--desktop-base-chrome-rgb), 0.64);
   color-scheme: dark;
 }
 

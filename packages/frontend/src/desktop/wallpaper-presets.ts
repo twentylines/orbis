@@ -20,7 +20,7 @@ export const presetLabels: Record<ThemePreset, string> = {
 export const presetWallpaperSources: Record<ThemePreset, string> = {
   frost: '/wallpapers/frost-v2.webp',
   graphite: '/wallpapers/graphite-v2.webp',
-  forest: '/wallpapers/forest-v2.webp',
+  forest: '/wallpapers/forest-v3.webp',
   stone: '/wallpapers/stone-v2.webp',
   ocean: '/wallpapers/ocean-v3.webp',
   blush: '/wallpapers/blush-v3.webp',

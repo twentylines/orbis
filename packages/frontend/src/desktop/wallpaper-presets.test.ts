@@ -8,7 +8,7 @@ import { presetWallpaperPreviews, presetWallpaperSources, resolveWallpaperKey, t
 describe('versioned wallpaper photographs', () => {
   test('every preset points to its new full image and preview', () => {
     for (const preset of themePresets) {
-      const version = preset === 'blush' || preset === 'ocean' ? 'v3' : 'v2';
+      const version = preset === 'blush' || preset === 'ocean' || preset === 'forest' ? 'v3' : 'v2';
       expect(presetWallpaperSources[preset]).toBe(`/wallpapers/${preset}-${version}.webp`);
       expect(presetWallpaperPreviews[preset]).toBe(`/wallpapers/${preset}-${version}-preview.webp`);
       expect(Bun.file(new URL(`../../public${presetWallpaperSources[preset]}`, import.meta.url)).size).toBeGreaterThan(0);
