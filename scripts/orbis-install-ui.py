@@ -26,7 +26,10 @@ def display_release(tag):
     match = re.fullmatch(r"v?(\d+\.\d+\.\d+)(?:-(beta|rc)\.(\d+))?", tag) if isinstance(tag, str) else None
     if match is None:
         return "version unavailable"
-    return match[1] if match[2] is None else f"{match[1]} {match[2]} {match[3]}"
+    base = match[1]
+    if match[2] is not None and base.endswith(".0"):
+        base = base[:-2]
+    return base if match[2] is None else f"{base} {match[2]} {match[3]}"
 
 
 def spaceflight(width, tick):

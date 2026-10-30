@@ -22,9 +22,9 @@ const release = (tag: string, imageManifestUrl: string | null = 'https://example
 });
 test('uses spaced beta numbers for display while retaining release identities for comparisons', () => {
   expect(formatOrbisVersion('v1.0.1-beta.1')).toBe('1.0.1 beta 1');
-  expect(formatOrbisVersion('v1.1.0-beta.12')).toBe('1.1.0 beta 12');
+  expect(formatOrbisVersion('v1.1.0-beta.12')).toBe('1.1 beta 12');
   expect(formatOrbisVersion('1.0.1-beta.2+abc123')).toBe('1.0.1 beta 2');
-  expect(formatOrbisVersion('v0.1.0-beta.112')).toBe('0.1.0 beta 112');
+  expect(formatOrbisVersion('v0.1.0-beta.112')).toBe('0.1 beta 112');
   expect(formatOrbisVersion('v1.0.0')).toBe('1.0.0');
   expect(formatOrbisVersion('1.1.0')).toBe('1.1.0');
   expect(formatOrbisVersion('development')).toBe('development');

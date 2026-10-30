@@ -24,7 +24,7 @@ CHANNEL_METADATA_URL = "https://twentylines.github.io/orbis/channels.json"
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
 ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|packaging/systemd/orbis-host\.service")
-REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "packaging/systemd/orbis-host.service"}
+REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-prerequisites.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "packaging/systemd/orbis-host.service"}
 
 
 def require_supported_host():
@@ -42,7 +42,10 @@ def release_channel(tag):
 
 def display_release(tag):
     release_channel(tag)
-    return tag[1:].replace("-beta.", " beta ").replace("-rc.", " rc ")
+    base, separator, suffix = tag[1:].partition("-")
+    if separator and base.endswith(".0"):
+        base = base[:-2]
+    return base + (" " + suffix.replace(".", " ") if separator else "")
 
 
 def select_channel(catalog, requested=None, ask=None):

@@ -41,7 +41,7 @@
   --desktop-wallpaper-base: color-mix(in srgb, var(--desktop-preset-tint) 35%, var(--desktop-surface));
   --desktop-wallpaper-shade-start-alpha: 0;
   --desktop-wallpaper-shade-end-alpha: 0;
-  --desktop-wallpaper-tint: rgb(255 255 255 / 0.24);
+  --desktop-wallpaper-tint: color-mix(in srgb, color-mix(in srgb, var(--desktop-base-surface) 80%, var(--desktop-preset-tint)) 24%, transparent);
   --desktop-wallpaper-shade:
     linear-gradient(180deg, color-mix(in srgb, var(--desktop-surface) 36%, transparent) 38%, transparent 70%),
     linear-gradient(
@@ -76,7 +76,7 @@
   --desktop-danger-ink: #fff8ee;
   --desktop-base-focus: var(--desktop-base-accent);
   --workspace-heading-ink: #132e2b;
-  --workspace-heading-shadow: rgba(246, 251, 244, 0.18);
+  --workspace-heading-shadow: color-mix(in srgb, var(--desktop-base-surface) 88%, transparent);
   color-scheme: light;
 }
 

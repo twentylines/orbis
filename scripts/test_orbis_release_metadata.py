@@ -33,13 +33,21 @@ class ReleaseMetadataTests(unittest.TestCase):
             "prerelease": True, "priority": "normal", "kind": "maintenance",
         })
         rc = METADATA.release_metadata("v2.4.0-rc.2", self.notes_file("v2.4.0-rc.2", "notes"))
-        self.assertEqual(rc["displayVersion"], "2.4.0 rc 2")
+        self.assertEqual(rc["displayVersion"], "2.4 rc 2")
         self.assertEqual(rc["channel"], "nightly")
         stable = METADATA.release_metadata("v2.4.0", self.notes_file("v2.4.0", "notes"))
         self.assertEqual((stable["displayVersion"], stable["channel"], stable["prerelease"]), ("2.4.0", "stable", False))
         for invalid in ("1.0.0", "v01.0.0", "v1.0.0-beta.00", "v1.0.0-nightly.20261027", "v9007199254740992.0.0"):
             with self.subTest(tag=invalid), self.assertRaisesRegex(ValueError, "strict published"):
                 METADATA.release_metadata(invalid, self.notes_file(invalid, "notes"))
+
+    def test_compact_prerelease_display_preserves_tag_channel_and_stable_patch(self):
+        for tag, display in [("v0.5.0-beta.1","0.5 beta 1"),("v1.1.0-beta.2","1.1 beta 2"),("v1.1.3-beta.2","1.1.3 beta 2"),("v0.5.0-rc.1","0.5 rc 1"),("v1.2.0","1.2.0")]:
+            with self.subTest(tag=tag):
+                result=METADATA.release_metadata(tag,self.notes_file(tag,"- Required setup improvements"))
+                self.assertEqual(result["displayVersion"],display)
+                self.assertEqual(result["tag"],tag)
+                self.assertEqual(result["channel"],"stable" if "-" not in tag else "nightly")
 
     def test_leading_headers_are_order_independent_and_only_headers_are_removed(self):
         for headers in (

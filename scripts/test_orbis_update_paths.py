@@ -34,9 +34,10 @@ class InstallerUpdateTests(unittest.TestCase):
             manifest = root / 'release.json'; manifest.write_text(json.dumps(TARGET))
             selected = {'installRoot': str(root), 'product': 'orbis', 'reviewRequired': []}
             argv = ['installer', '--manifest', str(manifest), '--state-dir', str(root / 'private'), '--yes', '--accept-nightly', '--root', str(root)]
-            with mock.patch.object(sys, 'argv', argv), mock.patch.object(GUIDE.sys, 'platform', 'linux'), mock.patch.object(GUIDE.os, 'geteuid', return_value=0), mock.patch.object(GUIDE.APPS, 'Docker') as docker, mock.patch.object(GUIDE.REPLACE, 'Engine'), mock.patch.object(GUIDE.APPS.DETECT, 'discover', return_value={'installations': [selected]}), mock.patch.object(GUIDE, 'update_existing', return_value={'result': 'orbis-updated'}) as update, mock.patch.object(GUIDE, 'replacement') as replacement, contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.object(sys, 'argv', argv), mock.patch.object(GUIDE.sys, 'platform', 'linux'), mock.patch.object(GUIDE.os, 'geteuid', return_value=0), mock.patch.object(GUIDE.APPS, 'Docker') as docker, mock.patch.object(GUIDE.PREREQUISITES, 'prepare') as prerequisites, mock.patch.object(GUIDE.REPLACE, 'Engine'), mock.patch.object(GUIDE.APPS.DETECT, 'discover', return_value={'installations': [selected]}), mock.patch.object(GUIDE, 'update_existing', return_value={'result': 'orbis-updated'}) as update, mock.patch.object(GUIDE, 'replacement') as replacement, contextlib.redirect_stdout(io.StringIO()):
                 docker.return_value._read.return_value = '2.36.0'
                 self.assertEqual(GUIDE.main(), 0)
+            prerequisites.assert_called_once()
             update.assert_called_once()
             self.assertEqual(update.call_args.args[:3], (root, docker.return_value, TARGET))
             replacement.assert_not_called()
@@ -65,7 +66,7 @@ class InstallerUpdateTests(unittest.TestCase):
             return {'capabilities': ['restart.v1', 'packages.refresh.v1', 'release-channels.v1'], **(status or complete)}
         def module(name, _):
             return upgrade if name == 'orbis-host-service-upgrade.py' else enable
-        with mock.patch.object(GUIDE, 'load', side_effect=module), mock.patch.object(GUIDE.REPLACE.UPDATE, 'verify_release'), mock.patch.object(GUIDE, 'host_request', side_effect=request), mock.patch.object(GUIDE.time, 'sleep'), contextlib.redirect_stdout(io.StringIO()):
+        with mock.patch.object(GUIDE, 'load', side_effect=module), mock.patch.object(GUIDE, 'prepare_backup_tools'), mock.patch.object(GUIDE.REPLACE.UPDATE, 'verify_release'), mock.patch.object(GUIDE, 'host_request', side_effect=request), mock.patch.object(GUIDE.time, 'sleep'), contextlib.redirect_stdout(io.StringIO()):
             result = GUIDE.update_existing(root, SimpleNamespace(context='owned'), target, GUIDE.UI.Presentation(interactive=False))
         return result, calls, upgrade
 

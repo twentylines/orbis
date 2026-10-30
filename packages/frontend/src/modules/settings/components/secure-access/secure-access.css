@@ -68,3 +68,12 @@
     padding-inline-start: 4px;
   }
 }
+
+.secure-access-benefits {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 24px;
+  color: var(--desktop-muted);
+  line-height: 1.6;
+}

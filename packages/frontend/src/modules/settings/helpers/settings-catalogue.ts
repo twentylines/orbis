@@ -170,14 +170,6 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     operator: true,
   },
   {
-    id: 'automatic-themes',
-    label: 'Seasonal themes',
-    section: 'general',
-    anchor: 'setting-allowAutoThemes',
-    aliases: 'automatic themes auto theme seasonal',
-    operator: true,
-  },
-  {
     id: 'advanced-settings',
     label: 'Advanced settings',
     section: 'general',

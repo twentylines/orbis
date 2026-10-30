@@ -26,7 +26,7 @@ class TerminalStream(io.StringIO):
 
 class InstallerPresentationTests(unittest.TestCase):
     def test_human_release_names_do_not_change_channel_or_invent_beta_labels(self):
-        for tag, expected in (("v1.2.3", "1.2.3"), ("v0.1.0-beta.126", "0.1.0 beta 126"), ("v1.0.0-rc.2", "1.0.0 rc 2")):
+        for tag, expected in (("v1.2.3", "1.2.3"), ("v0.5.0-beta.1", "0.5 beta 1"), ("v1.1.0-beta.2", "1.1 beta 2"), ("v1.1.3-beta.2", "1.1.3 beta 2"), ("v1.2.0", "1.2.0"), ("v0.1.0-beta.126", "0.1 beta 126"), ("v1.0.0-rc.2", "1.0 rc 2")):
             self.assertEqual(UI.display_release(tag), expected)
             output = io.StringIO()
             UI.Presentation(stream=output).banner(tag)
@@ -60,7 +60,7 @@ class InstallerPresentationTests(unittest.TestCase):
                     self.assertLessEqual(len(ui.frame("Reviewing app ownership and backup storage", tick)), width - 1)
                 output.seek(0); output.truncate()
                 ui.banner("v0.1.0-beta.68")
-                self.assertIn("0.1.0 beta 68", output.getvalue())
+                self.assertIn("0.1 beta 68", output.getvalue())
                 if width < 32:
                     self.assertTrue(output.getvalue().startswith("Orbis\n"))
                 elif width < 64:

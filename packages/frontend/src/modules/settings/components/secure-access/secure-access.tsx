@@ -72,10 +72,14 @@ export function SecureAccessSetup({
         <IconLock aria-hidden="true" />
         <h2 id="https-setup-heading">HTTPS</h2>
       </div>
-      <p>
-        Keep Orbis on your private LAN or VPN. HTTPS enables passkeys and secure server transfers without opening router ports or making this server
-        public.
-      </p>
+      <p>Use HTTPS on your private LAN or VPN. You do not need to open router ports or make Orbis public.</p>
+      <ul className="secure-access-benefits">
+        <li>Encrypt sign-in details, session cookies and traffic between this device and Orbis.</li>
+        <li>Use passkeys in a compatible browser with a trusted HTTPS hostname.</li>
+        <li>Pair trusted private servers and transfer data over authenticated, encrypted connections.</li>
+        <li>Advertise a private HTTPS address through nearby discovery on supported hosts.</li>
+      </ul>
+      <p>HTTPS provides the secure connection. Nearby discovery also needs supported host networking and an available discovery service.</p>
       <ol className="secure-access-steps">
         <li>
           <h3>Private address</h3>

@@ -32,12 +32,23 @@ APPS = REPLACE.APPS
 UI = load("orbis-install-ui.py", "orbis_guided_ui")
 CHANNELS = load("orbis-host-service.py", "orbis_guided_channels")
 BOOT = load("install-orbis.py", "orbis_guided_platform")
+PREREQUISITES = load("orbis-install-prerequisites.py", "orbis_guided_prerequisites")
 
 
-DOCKER_INSTALL_HELP = "Install Docker Engine and the Docker Compose plugin first, then rerun this installer. For 64-bit Raspberry Pi OS or Debian: https://docs.docker.com/engine/install/debian/ ; for Ubuntu: https://docs.docker.com/engine/install/ubuntu/ . Existing Docker packages are never upgraded by this installer."
+DOCKER_INSTALL_HELP = "Install Docker Engine and the Docker Compose plugin first, then rerun this installer. For 64-bit Raspberry Pi OS or Debian: https://docs.docker.com/engine/install/debian/ ; for Ubuntu: https://docs.docker.com/engine/install/ubuntu/ . Automatic setup supports the local default Docker context on 64-bit Debian 12/13 and Ubuntu 22.04/24.04; other layouts need a separate review."
 
 
-def require_docker_prerequisites(reader):
+def require_docker_prerequisites(reader, *, state_dir=None, accepted=False, inspect_only=False):
+    if state_dir is not None:
+        terminal = None
+        def ask(question):
+            nonlocal terminal
+            if terminal is None: terminal = Terminal()
+            return terminal.ask(question)
+        try:
+            PREREQUISITES.prepare(reader.context, state_dir, accepted=accepted, ask=None if accepted else ask, inspect_only=inspect_only)
+        finally:
+            if terminal: terminal.close()
     if shutil.which("docker") is None:
         raise ValueError("Docker was not found. " + DOCKER_INSTALL_HELP)
     try:
@@ -160,19 +171,7 @@ def semantic_review(value):
 
 
 def prepare_backup_tools(display):
-    if shutil.which("rsync"):
-        return
-    release = platform.freedesktop_os_release()
-    if release.get("ID") not in {"ubuntu", "debian"} or not Path("/usr/bin/apt-get").is_file():
-        raise ValueError("Install rsync 3.1.3 or newer before continuing; it is required for Orbis update backups and recovery")
-    with display.step("Installing required backup tools"):
-        environment = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
-        command = ["/usr/bin/apt-get", "-o", "DPkg::Lock::Timeout=30", "-o", "Acquire::Retries=1", "-o", "Acquire::http::Timeout=20", "-o", "Acquire::https::Timeout=20"]
-        for arguments in (["update"], ["install", "--yes", "--no-install-recommends", "--no-upgrade", "rsync"]):
-            result = subprocess.run([*command, *arguments], env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, timeout=180)
-            if result.returncode:
-                raise RuntimeError("APT could not prepare rsync. Check package-manager locks and network access, then rerun the installer; Orbis has not been replaced")
-        REPLACE.TX.RESTORE.runtime()
+    REPLACE.TX.RESTORE.runtime()
 
 
 def executor_failure(path):
@@ -415,8 +414,10 @@ def main():
     channel = args.channel or ("stable" if HOST.PLAN.POLICY.is_stable_release_tag(manifest["tag"]) else "nightly")
     if not HOST.PLAN.POLICY.release_allowed_on_channel(manifest["tag"], channel):
         raise ValueError("This release is not available on the selected update channel")
+    if channel == "nightly" and args.yes and not args.accept_nightly:
+        raise ValueError("Nightly installation was not approved. Use --accept-nightly only after reviewing this warning")
     reader = APPS.Docker(args.docker_context)
-    require_docker_prerequisites(reader)
+    require_docker_prerequisites(reader, state_dir=args.state_dir, accepted=args.yes, inspect_only=args.inspect)
     REPLACE.Engine(reader)
     if args.inspect:
         report = APPS.DETECT.discover(reader)

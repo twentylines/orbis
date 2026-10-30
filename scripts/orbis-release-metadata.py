@@ -73,9 +73,12 @@ def release_metadata(tag: str, notes_path: Path) -> dict[str, object]:
         raise ValueError("release notes must contain a changelog")
     prerelease = parsed["prerelease"] is not None
     suffix = f" {parsed['prerelease']} {parsed['iteration']}" if prerelease else ""
+    base = parsed["base"]
+    if prerelease and base.endswith(".0"):
+        base = base[:-2]
     return {
         "tag": tag,
-        "displayVersion": f"{parsed['base']}{suffix}",
+        "displayVersion": f"{base}{suffix}",
         "channel": "nightly" if prerelease else "stable",
         "prerelease": prerelease,
         "priority": priority,

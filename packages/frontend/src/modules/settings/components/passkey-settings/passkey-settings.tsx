@@ -48,6 +48,7 @@ export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
   }, []);
   const available = Boolean(!browserReason && list.data?.available);
   const unavailable = browserReason ?? list.data?.reason;
+  const needsHttps = typeof window !== 'undefined' && httpsSetupVisible(window.location.protocol) && !window.isSecureContext;
   const open = (value: 'add' | 'policy' | PasskeyCredential, control: HTMLButtonElement) => {
     opener.current = control;
     setError('');
@@ -116,14 +117,11 @@ export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
         <IconFingerprint aria-hidden="true" />
         <h2 id={`${formId}-heading`}>Passkeys</h2>
       </div>
-      <p className="text-muted">
-        Use your device, password manager or security key to sign in. Passkeys sign you in directly unless you choose extra verification below. Your
-        password stays available and follows your account’s two-factor settings.
-      </p>
-      {httpsSetupVisible(typeof window === 'undefined' ? '' : window.location.protocol) ? (
-        <p className="settings-passkey-note">
-          Passkeys need HTTPS. <Link to={httpsSettingsPath}>Set up HTTPS</Link>
-        </p>
+      <p className="text-muted">Sign in with your device, password manager or security key. Your password remains available.</p>
+      {needsHttps ? (
+        <Button asChild variant="outline">
+          <Link to={httpsSettingsPath}>Set up HTTPS</Link>
+        </Button>
       ) : null}
       {list.isPending && <output>Reading your passkeys…</output>}
       {list.isError && (
@@ -132,7 +130,7 @@ export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
           <Button onClick={() => void list.refetch()}>Try again</Button>
         </div>
       )}
-      {list.data && list.data.credentials.length === 0 && <p className="settings-passkey-empty">No passkeys added yet.</p>}
+      {!needsHttps && list.data && list.data.credentials.length === 0 && <p className="settings-passkey-empty">No passkeys added yet.</p>}
       {list.data && list.data.credentials.length > 0 && (
         <ul className="settings-passkey-list">
           {list.data.credentials.map((credential) => (
@@ -156,22 +154,23 @@ export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
           ))}
         </ul>
       )}
-      <Button
-        disabled={!available || pending}
-        onClick={(event) => open('add', event.currentTarget)}
-        onPointerEnter={warmPasskeyClient}
-        onFocus={warmPasskeyClient}
-      >
-        <IconPlus size={18} aria-hidden="true" />
-        Add passkey
-      </Button>
+      {needsHttps ? null : (
+        <Button
+          disabled={!available || pending}
+          onClick={(event) => open('add', event.currentTarget)}
+          onPointerEnter={warmPasskeyClient}
+          onFocus={warmPasskeyClient}
+        >
+          <IconPlus size={18} aria-hidden="true" />
+          Add passkey
+        </Button>
+      )}
       {notice && <output className="settings-passkey-note">{notice}</output>}
-      {unavailable && <p className="settings-passkey-note">{unavailable}</p>}
+      {!needsHttps && unavailable && <p className="settings-passkey-note">{unavailable}</p>}
       <p className="settings-passkey-note">
-        Keep a working password or another passkey. Losing every sign-in method requires recovery on the server; Orbis does not send password-reset
-        emails.
+        Keep another sign-in method. Account recovery requires access to the server; Orbis does not send password-reset emails.
       </p>
-      {list.data?.policy && (
+      {list.data?.policy && (!needsHttps || list.data.credentials.length > 0 || list.data.policy.requireTotpAfterPasskey) && (
         <div className="settings-passkey-policy">
           <Switch
             ref={policyControl}

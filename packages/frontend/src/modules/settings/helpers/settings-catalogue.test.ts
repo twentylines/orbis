@@ -86,3 +86,7 @@ test('HTTPS setup appears only for HTTP access and keeps its real dedicated anch
   expect(http.some((entry) => entry.id === 'https-setup' && entry.section === 'https' && entry.anchor === 'setting-https-setup')).toBe(true);
   expect(searchSettings('https setup', { operator: true, http: false }).some((entry) => entry.id === 'https-setup')).toBe(false);
 });
+
+test('removed seasonal control has no dead settings search destination', () => {
+  expect(settingsCatalogue.some((entry) => entry.id === 'automatic-themes' || entry.anchor === 'setting-allowAutoThemes')).toBe(false);
+});

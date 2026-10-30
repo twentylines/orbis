@@ -66,7 +66,7 @@ export function desktopActivity(
   }
   for (const check of checks.filter((check) => check.operation === 'downgrade')) {
     const title = 'Checking';
-    const detail = check.target.replace(/^v?0\.1\.0-beta\./, 'Beta ');
+    const detail = formatOrbisVersion(check.target).replace(/^0\.1 beta /, 'Beta ');
     items.unshift({ id: check.id, kind: 'core', title, detail, state: 'checking' });
     summary = { title, detail, kind: 'core', count: items.length };
   }
@@ -97,7 +97,7 @@ export function desktopActivity(
     items.unshift({ id: watch.id, kind: 'core', title, detail: `${formatOrbisVersion(watch.targetTag)} · ${watch.message}`, state: watch.phase });
     summary = {
       title: title.replace(/ Orbis$/, ''),
-      detail: `Orbis ${formatOrbisVersion(watch.targetTag).replace(/^0\.1\.0 beta /, 'beta ')}`,
+      detail: `Orbis ${formatOrbisVersion(watch.targetTag).replace(/^0\.1 beta /, 'beta ')}`,
       kind: 'core',
       count: items.length,
     };

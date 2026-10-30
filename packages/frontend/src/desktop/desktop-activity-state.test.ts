@@ -81,7 +81,7 @@ describe('dock activity describes actual active work', () => {
     const watch = advanceCoreUpdate(advanceCoreUpdate(null, { type: 'accepted', id, targetTag: 'v0.1.0-beta.79' }), { type: 'unavailable' });
     const activity = desktopActivity([], names, watch, null);
     expect(activity).toMatchObject({ title: 'Restarting', detail: 'Orbis beta 79', kind: 'core', count: 1 });
-    expect(activity?.items[0]).toMatchObject({ title: 'Restarting Orbis', detail: `0.1.0 beta 79 · ${watch?.message}` });
+    expect(activity?.items[0]).toMatchObject({ title: 'Restarting Orbis', detail: `0.1 beta 79 · ${watch?.message}` });
   });
 });
 

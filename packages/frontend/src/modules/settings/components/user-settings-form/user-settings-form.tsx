@@ -240,32 +240,6 @@ export const UserSettingsForm = (props: IProps) => {
         <div className="mb-3">
           <Controller
             control={control}
-            name="allowAutoThemes"
-            defaultValue={false}
-            render={({ field: { onChange, value, ref, ...rest } }) => (
-              <Switch
-                id="setting-allowAutoThemes"
-                className="mb-3"
-                ref={ref}
-                checked={value}
-                onCheckedChange={onChange}
-                {...rest}
-                label={
-                  <>
-                    {t('SETTINGS_GENERAL_ALLOW_AUTO_THEMES')}
-                    <Tooltip className="tooltip" anchorSelect=".allow-auto-themes-hint">
-                      {t('SETTINGS_GENERAL_ALLOW_AUTO_THEMES_HINT')}
-                    </Tooltip>
-                    <span className={clsx('ms-1 form-help allow-auto-themes-hint')}>?</span>
-                  </>
-                }
-              />
-            )}
-          />
-        </div>
-        <div className="mb-3">
-          <Controller
-            control={control}
             name="advancedSettings"
             defaultValue={false}
             render={({ field: { onChange, value, ref, ...rest } }) => (

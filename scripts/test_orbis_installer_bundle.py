@@ -58,7 +58,10 @@ class BundleTests(unittest.TestCase):
 
     def test_channel_prompt_uses_human_versions_with_canonical_selection_unchanged(self):
         self.assertEqual(BOOT.display_release("v1.2.3"), "1.2.3")
-        self.assertEqual(BOOT.display_release("v0.1.0-beta.126"), "0.1.0 beta 126")
+        self.assertEqual(BOOT.display_release("v0.1.0-beta.126"), "0.1 beta 126")
+        for tag, expected in [("v0.5.0-beta.1","0.5 beta 1"),("v1.1.0-beta.2","1.1 beta 2"),("v1.1.3-beta.2","1.1.3 beta 2"),("v0.5.0-rc.1","0.5 rc 1"),("v1.2.0","1.2.0")]:
+            self.assertEqual(BOOT.display_release(tag),expected)
+            self.assertEqual(BOOT.release_channel(tag),"stable" if "-" not in tag else "nightly")
         with self.assertRaises(ValueError): BOOT.display_release("v1.0.0\nprivate")
 
     def test_reproducible_archive_and_pinned_launcher(self):
@@ -107,6 +110,9 @@ class BundleTests(unittest.TestCase):
         assets = BUILD.build(files, self.release_bytes)
         manifest = json.loads(assets[BUILD.MANIFEST])
         verified = BOOT.verify_files(assets[BUILD.ARCHIVE], manifest)
+        self.assertEqual(len(verified),38)
+        self.assertIn("scripts/orbis-install-prerequisites.py",BUILD.REQUIRED & BOOT.REQUIRED)
+        self.assertEqual(verified["scripts/orbis-install-prerequisites.py"],files["scripts/orbis-install-prerequisites.py"])
         with tempfile.TemporaryDirectory() as folder:
             for name, data in verified.items():
                 destination = Path(folder) / name
@@ -116,7 +122,7 @@ class BundleTests(unittest.TestCase):
             spec = importlib.util.spec_from_file_location("packaged_guided_installer", entry)
             guided = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(guided)
-            for name in ("install-orbis.py", "orbis-install-new.py", "orbis-host-service-enable.py"):
+            for name in ("install-orbis.py", "orbis-install-prerequisites.py", "orbis-install-new.py", "orbis-host-service-enable.py"):
                 with self.subTest(name=name):
                     module = guided.load(name, "packaged_" + name)
                     self.assertEqual(Path(module.__file__).parent, entry.parent)

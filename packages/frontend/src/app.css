@@ -60,6 +60,17 @@ body:has(.orbis-startup),
   background-position: center;
   background-size: cover;
 }
+html:not([data-desktop-mode="dark"]) .orbis-startup:not([data-desktop-mode="dark"]) {
+  --orbis-startup-shade: radial-gradient(
+    ellipse at 50% 48%,
+    color-mix(in srgb, var(--desktop-surface) 82%, transparent) 0%,
+    color-mix(in srgb, var(--desktop-surface) 66%, transparent) 20%,
+    color-mix(in srgb, var(--desktop-preset-tint) 12%, transparent) 76%
+  );
+}
+html:not([data-desktop-mode="dark"]) .orbis-startup:not([data-desktop-mode="dark"]) :is(output, .orbis-startup-detail) {
+  color: var(--desktop-ink);
+}
 .orbis-startup,
 .orbis-startup-content,
 .orbis-startup-brand,

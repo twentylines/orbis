@@ -16,9 +16,13 @@ Until the first channel-aware release is published, the default endpoint can rem
 
 Use **64-bit Raspberry Pi OS or Ubuntu** on ARM64 hardware. A 64-bit kernel with a 32-bit userland is unsupported, as are older 32-bit Pi models. Python 3.10 or newer and a running systemd host are required; Debian Bookworm provides Python 3.11.
 
-Install a local rootful Docker Engine with **API 1.44 or newer** (Docker 25 or newer) and the **Docker Compose plugin** before starting Orbis. Follow Docker’s official [Debian instructions for 64-bit Raspberry Pi OS and Debian](https://docs.docker.com/engine/install/debian/) or [Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/). Verify that `sudo docker version` reaches the local daemon and `sudo docker compose version` reports the plugin. An older distribution Docker package may need a separately reviewed upgrade. Orbis does not install, replace or upgrade Docker packages automatically.
+On **64-bit Raspberry Pi OS based on Debian 12/13, Debian 12/13, and Ubuntu 22.04/24.04**, the installer prepares missing required Docker Engine, Compose, iproute2 and rsync tools through signed official repositories. A compatible healthy Docker Engine (API 1.44 or newer) and Compose plugin are retained. Other Docker contexts and unsupported systems need their own reviewed setup; see Docker’s official [Debian and Raspberry Pi OS instructions](https://docs.docker.com/engine/install/debian/) or [Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/).
 
-The installer also needs `iproute2` for LAN address discovery. It can install the required `rsync` backup tool on Debian or Ubuntu when missing; other systems need rsync 3.1.3 or newer already installed. Keep dashboard ports 80 and 443 free, or choose an available port when prompted. Monitoring tools are managed separately in Monitor.
+Setup asks **Continue** before required package changes. Docker services and apps may restart, and Docker manages container networking and firewall rules. An existing engine update retains exact package recovery archives, checkpoints stopped Docker storage and configuration, and checks container, image, volume and network identities before restoring the original restart policies and running set. Shared Kubernetes runtimes, unsupported storage layouts, missing recovery archives or insufficient checkpoint space stop before package replacement with an explanation. Setup does not purge packages, remove app data or perform an operating-system upgrade.
+
+Interrupted setup retains its private journal and recovery files. Rerunning the same installer with the same state directory recovers that transaction before starting another. Recovery before app resume can restore its sealed checkpoint; after apps resume it only finishes forward, preserving accepted app writes. Keep those private files until the installation is verified.
+
+Keep dashboard ports 80 and 443 free, or choose an available port when prompted. Monitoring tools are managed separately in Monitor.
 
 ## Inspect an existing installation
 
