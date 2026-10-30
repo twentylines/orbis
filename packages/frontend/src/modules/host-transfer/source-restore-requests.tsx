@@ -55,7 +55,7 @@ export function SourceRestoreRequests() {
                 disabled={!requests.available}
                 onClick={(event) => requests.review(value.id, event.currentTarget)}
               >
-                Review
+                View request
               </Button>
             ) : (
               <Button

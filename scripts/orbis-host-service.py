@@ -964,7 +964,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
-        if self.path in {"/v1/discovery/scan", "/v1/discovery/advertise", "/v1/discovery/disable", "/v1/discovery/policy", "/v1/discovery/configure", "/v1/discovery/suspend"}:
+        if self.path in {"/v1/discovery/scan", "/v1/discovery/advertise", "/v1/discovery/disable", "/v1/discovery/policy", "/v1/discovery/configure", "/v1/discovery/configure-address", "/v1/discovery/suspend"}:
             try:
                 data = self.body()
                 discovery = self.server.service.discovery
@@ -977,6 +977,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         raise ValueError("Suspend nearby discovery without fields")
                     discovery.disable(stop_scan=False)
                     result = discovery.policy_status()
+                elif self.path.endswith("/configure-address"):
+                    if set(data) != {"interface", "port"}:
+                        raise ValueError("Provide one private LAN interface and configured port")
+                    result = discovery.configure_address(data["interface"], data["port"])
                 elif self.path.endswith("/configure"):
                     if set(data) != {"interface", "origin", "address"}:
                         raise ValueError("Provide one configured private HTTPS endpoint")

@@ -16,6 +16,7 @@ import { useResolvedColourMode, readSystemColourMode, type ColourMode, type Reso
 import { appearanceFromStored, preferenceStorageKey, preferenceCacheLimit, preferenceChangeEvent, appearanceCacheEvent } from './appearance-cache';
 import { validHomePins } from './workspace-apps';
 import { resolveWallpaperKey, type ThemePreset } from './wallpaper-presets';
+import { validHiddenRecommendationCategories, type StoreRecommendationCategory } from '@/modules/app/components/store-discover/store-recommendations';
 
 export const widgetIds = ['applications', 'activity', 'storage', 'attention'] as const;
 export type WidgetId = (typeof widgetIds)[number];
@@ -33,6 +34,8 @@ export type DesktopPreferences = {
   windows: DesktopWindows;
   appLaunch: AppLaunchPreferences;
   appearance: DesktopAppearance;
+  showStoreRecommendations: boolean;
+  hiddenStoreRecommendationCategories: StoreRecommendationCategory[];
 };
 
 export const defaultDesktopPreferences: DesktopPreferences = {
@@ -46,6 +49,8 @@ export const defaultDesktopPreferences: DesktopPreferences = {
   windows: {},
   appLaunch: defaultAppLaunch,
   appearance: normaliseDesktopAppearance(),
+  showStoreRecommendations: true,
+  hiddenStoreRecommendationCategories: [],
   workspace: { order: [...widgetIds], hidden: [], wide: ['applications'], pinnedApps: [], showAllApps: false },
 };
 const STORAGE_KEY = preferenceStorageKey;
@@ -54,9 +59,30 @@ type StoredWorkspacePreferences = Omit<WorkspacePreferences, 'pinnedApps' | 'sho
   Partial<Pick<WorkspacePreferences, 'pinnedApps' | 'showAllApps'>>;
 type StoredDesktopPreferences = Omit<
   DesktopPreferences,
-  'mode' | 'wallpaper' | 'workspace' | 'windows' | 'appearance' | 'appLaunch' | 'wallpaperMode' | 'wallpaperPreset'
+  | 'mode'
+  | 'wallpaper'
+  | 'workspace'
+  | 'windows'
+  | 'appearance'
+  | 'appLaunch'
+  | 'wallpaperMode'
+  | 'wallpaperPreset'
+  | 'showStoreRecommendations'
+  | 'hiddenStoreRecommendationCategories'
 > &
-  Partial<Pick<DesktopPreferences, 'mode' | 'wallpaper' | 'windows' | 'appLaunch' | 'wallpaperMode' | 'wallpaperPreset'>> & {
+  Partial<
+    Pick<
+      DesktopPreferences,
+      | 'mode'
+      | 'wallpaper'
+      | 'windows'
+      | 'appLaunch'
+      | 'wallpaperMode'
+      | 'wallpaperPreset'
+      | 'showStoreRecommendations'
+      | 'hiddenStoreRecommendationCategories'
+    >
+  > & {
     workspace?: StoredWorkspacePreferences;
     appearance?: typeof desktopAppearanceSchema.infer;
   };
@@ -95,6 +121,9 @@ export const isPreferences = (value: unknown): value is StoredDesktopPreferences
     (candidate.workspace === undefined || isWorkspacePreferences(candidate.workspace)) &&
     (candidate.windows === undefined || desktopWindowsSchema.allows(candidate.windows)) &&
     (candidate.appLaunch === undefined || appLaunchSchema.allows(candidate.appLaunch)) &&
+    (candidate.showStoreRecommendations === undefined || typeof candidate.showStoreRecommendations === 'boolean') &&
+    (candidate.hiddenStoreRecommendationCategories === undefined ||
+      validHiddenRecommendationCategories(candidate.hiddenStoreRecommendationCategories)) &&
     (candidate.appearance === undefined || desktopAppearanceSchema.allows(candidate.appearance))
   );
 };
@@ -109,6 +138,8 @@ export const normalisePreferences = (value: StoredDesktopPreferences): DesktopPr
   wallpaperPreset: value.wallpaperPreset ?? null,
   windows: value.windows ?? {},
   appLaunch: value.appLaunch ?? defaultAppLaunch,
+  showStoreRecommendations: value.showStoreRecommendations ?? true,
+  hiddenStoreRecommendationCategories: value.hiddenStoreRecommendationCategories ?? [],
   appearance: normaliseDesktopAppearance(value.appearance),
   mode: value.mode ?? (value.preset === 'graphite' ? 'dark' : 'light'),
   workspace: {

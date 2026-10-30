@@ -2,7 +2,25 @@ import { useEffect, useRef, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { initialNearbySearch, NearbySearch } from './nearby-search';
+import type { NearbyCandidate } from './nearby-api';
 import './nearby-servers.css';
+
+export function NearbyResult({ item, disabled, onSelect }: { item: NearbyCandidate; disabled: boolean; onSelect: () => void }) {
+  return (
+    <li>
+      <div>
+        <strong>Orbis {item.id.slice(0, 6)}</strong>
+        <span>{item.kind === 'address' ? `${item.address}:${item.port}` : item.origin}</span>
+        <span>{item.kind === 'address' ? 'Unverified · HTTPS required' : 'Unverified'}</span>
+      </div>
+      {item.kind === 'address' ? null : (
+        <button type="button" className="btn btn-secondary" disabled={disabled} onClick={onSelect}>
+          Select
+        </button>
+      )}
+    </li>
+  );
+}
 
 export function NearbyServers({ onSelect }: { onSelect: (origin: string) => void }) {
   const visible = useWindowVisible();
@@ -53,23 +71,15 @@ export function NearbyServers({ onSelect }: { onSelect: (origin: string) => void
       {candidates.length ? (
         <ul>
           {candidates.map((item) => (
-            <li key={item.id}>
-              <div>
-                <strong>Orbis {item.id.slice(0, 6)}</strong>
-                <span>{item.origin}</span>
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={busy || !visible}
-                onClick={() => {
-                  const origin = controller.choose(item.id);
-                  if (origin) onSelect(origin);
-                }}
-              >
-                Select
-              </button>
-            </li>
+            <NearbyResult
+              key={item.id}
+              item={item}
+              disabled={busy || !visible}
+              onSelect={() => {
+                const origin = controller.choose(item.id);
+                if (origin) onSelect(origin);
+              }}
+            />
           ))}
         </ul>
       ) : null}

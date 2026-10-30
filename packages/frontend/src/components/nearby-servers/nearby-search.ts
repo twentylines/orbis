@@ -98,6 +98,6 @@ export class NearbySearch {
       this.publish({ candidates: [], message: 'Nearby results expired. Refresh, or enter the address manually.' });
       return;
     }
-    return candidate.origin;
+    return candidate.kind === 'address' ? undefined : candidate.origin;
   }
 }

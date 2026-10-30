@@ -74,6 +74,16 @@ class DiscoveryRoutesTests(unittest.TestCase):
         handler.do_POST()
         handler.server.service.discovery.set_policy.assert_not_called()
 
+    def test_address_hint_configuration_is_private_bounded_fields_only(self):
+        handler = self.handler("/v1/discovery/configure-address", {"interface": "eth0", "port": 8080})
+        handler.do_POST()
+        handler.server.service.discovery.configure_address.assert_called_once_with("eth0", 8080)
+        for extra in [{"address": "8.8.8.8"}, {"origin": "http://public.example"}, {"password": "fixture"}, {"enabled": True}]:
+            handler = self.handler("/v1/discovery/configure-address", {"interface": "eth0", "port": 8080, **extra})
+            handler.do_POST()
+            handler.server.service.discovery.configure_address.assert_not_called()
+            self.assertFalse(handler.send_json.call_args.args[1]["available"])
+
 
 class PlanReviewTimeTests(unittest.TestCase):
     def test_review_window_includes_its_boundaries_and_rejects_invalid_timestamps(self):

@@ -62,7 +62,13 @@ export function discoveryResponse(value: unknown, kind: 'status' | 'interfaces' 
           Number(item.prefixLength) > 30
         )
           throw new Error('Invalid LAN interface');
-        return { id: discoveryInterface(item.id), address: ipv4(item.address), prefixLength: Number(item.prefixLength) };
+        if (item.preferred !== undefined && typeof item.preferred !== 'boolean') throw new Error('Invalid preferred interface');
+        return {
+          id: discoveryInterface(item.id),
+          address: ipv4(item.address),
+          prefixLength: Number(item.prefixLength),
+          preferred: item.preferred === true,
+        };
       }),
     };
   }
@@ -81,8 +87,21 @@ export function discoveryResponse(value: unknown, kind: 'status' | 'interfaces' 
           Number(item.port) > 65535
         )
           throw new Error('Invalid nearby candidate');
-        const endpoint = origin(item.origin);
         const address = ipv4(item.address);
+        if (item.kind === 'address') {
+          if (Object.keys(item).some((key) => !['kind', 'id', 'address', 'port', 'expiresAt', 'verified'].includes(key)))
+            throw new Error('Invalid address-only hint');
+          return {
+            kind: 'address' as const,
+            id: item.id,
+            address,
+            port: Number(item.port),
+            expiresAt: timestamp(item.expiresAt),
+            verified: false as const,
+          };
+        }
+        if (item.kind !== undefined && item.kind !== 'https') throw new Error('Invalid hint kind');
+        const endpoint = origin(item.origin);
         const url = new URL(endpoint);
         if (Number(url.port || 443) !== Number(item.port) || (isIP(url.hostname) && url.hostname !== address))
           throw new Error('Invalid candidate endpoint');
@@ -93,13 +112,29 @@ export function discoveryResponse(value: unknown, kind: 'status' | 'interfaces' 
   const sharing = data.sharing === null ? null : record(data.sharing);
   if (data.policyVersion !== 1 || typeof data.enabled !== 'boolean' || (!data.enabled && sharing !== null))
     throw new Error('Persistent nearby discovery is unavailable');
+  if (data.hintVersion !== undefined && data.hintVersion !== 2) throw new Error('Unsupported nearby hint version');
+  const shared = () => {
+    if (sharing === null) return null;
+    const common = { interface: discoveryInterface(sharing.interface), expiresAt: timestamp(sharing.expiresAt) };
+    if (sharing.kind === 'address') {
+      if (
+        data.hintVersion !== 2 ||
+        sharing.origin !== undefined ||
+        !Number.isInteger(sharing.port) ||
+        Number(sharing.port) < 1 ||
+        Number(sharing.port) > 65535
+      )
+        throw new Error('Invalid address-only visibility');
+      return { kind: 'address' as const, address: ipv4(sharing.address), port: Number(sharing.port), ...common };
+    }
+    if (sharing.kind !== undefined && sharing.kind !== 'https') throw new Error('Invalid visibility kind');
+    return { origin: origin(sharing.origin), ...common };
+  };
   return {
     available: true as const,
     policyVersion: 1 as const,
     enabled: data.enabled,
-    sharing:
-      sharing === null
-        ? null
-        : { origin: origin(sharing.origin), interface: discoveryInterface(sharing.interface), expiresAt: timestamp(sharing.expiresAt) },
+    ...(data.hintVersion === 2 ? { hintVersion: 2 as const } : {}),
+    sharing: shared(),
   };
 }

@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import type * as React from 'react';
-import { Fragment } from 'react';
+import { Fragment, useId } from 'react';
 import './input.css';
 
 interface IProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -26,6 +26,7 @@ const TextAffix = ({ text }: { text: string }) => (
 
 export const InputGroup = ({
   name,
+  id: providedId,
   label,
   error,
   type = 'text',
@@ -36,6 +37,8 @@ export const InputGroup = ({
   groupClassName,
   ...rest
 }: IProps) => {
+  const generatedId = useId();
+  const controlId = providedId ?? name ?? generatedId;
   let prefix = groupPrefix;
   if (typeof groupPrefix === 'string') {
     prefix = <TextAffix text={groupPrefix} />;
@@ -48,7 +51,7 @@ export const InputGroup = ({
   return (
     <div className={clsx('orbis-input-field', className)}>
       {label && (
-        <label htmlFor={name} className="form-label">
+        <label htmlFor={controlId} className="form-label">
           {label}
         </label>
       )}
@@ -59,7 +62,7 @@ export const InputGroup = ({
           aria-label={label ? undefined : name}
           type={type}
           name={name}
-          id={name}
+          id={controlId}
           className={clsx('form-control', { 'is-invalid is-invalid-lite': error || isInvalid })}
           {...rest}
         />

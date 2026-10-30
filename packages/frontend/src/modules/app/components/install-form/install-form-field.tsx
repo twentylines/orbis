@@ -2,14 +2,15 @@ import { Input } from '@/components/ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import type { FormField } from '@/types/app.types';
-import clsx from 'clsx';
 import { type Control, Controller, type UseFormRegister } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'react-tooltip';
 import type { FormValues } from './install-form';
+import { useId } from 'react';
 import { PasswordInput } from '@/components/ui/PasswordInput/PasswordInput';
 
 type IProps = {
+  id?: string;
   field: FormField;
   control: Control<FormValues>;
   register: UseFormRegister<FormValues>;
@@ -25,6 +26,8 @@ type IProps = {
  */
 export const InstallFormField = (props: IProps) => {
   const { field, control, register, initialValue, error, loading } = props;
+  const generatedId = useId();
+  const controlId = props.id ?? generatedId;
   const { t } = useTranslation();
 
   const label = (
@@ -33,10 +36,12 @@ export const InstallFormField = (props: IProps) => {
       {field.required && <span className="ms-1 text-danger">*</span>}
       {Boolean(field.hint) && (
         <>
-          <Tooltip className="tooltip" anchorSelect={`.${field.env_variable}`}>
+          <Tooltip className="tooltip" id={`${controlId}-hint`}>
             {field.hint}
           </Tooltip>
-          <span className={clsx('ms-1 form-help', field.env_variable)}>?</span>
+          <span className="ms-1 form-help" data-tooltip-id={`${controlId}-hint`}>
+            ?
+          </span>
         </>
       )}
     </>
@@ -49,7 +54,16 @@ export const InstallFormField = (props: IProps) => {
         name={field.env_variable}
         defaultValue={(field.default as boolean) || false}
         render={({ field: { onChange, value, ref, ...rest } }) => (
-          <Switch className="mb-3" ref={ref} checked={Boolean(value)} onCheckedChange={onChange} {...rest} disabled={loading} label={label} />
+          <Switch
+            id={controlId}
+            className="mb-3"
+            ref={ref}
+            checked={Boolean(value)}
+            onCheckedChange={onChange}
+            {...rest}
+            disabled={loading}
+            label={label}
+          />
         )}
       />
     );
@@ -63,7 +77,7 @@ export const InstallFormField = (props: IProps) => {
         defaultValue={field.default as string}
         render={({ field: { onChange, value, ...rest } }) => (
           <Select value={value as string} defaultValue={initialValue} onValueChange={onChange} {...rest} disabled={loading}>
-            <SelectTrigger className="mb-3" error={error} label={label}>
+            <SelectTrigger id={controlId} className="mb-3" error={error} label={label}>
               <SelectValue placeholder={t('APP_INSTALL_FORM_CHOOSE_OPTION')} />
             </SelectTrigger>
             <SelectContent>
@@ -102,6 +116,7 @@ export const InstallFormField = (props: IProps) => {
   if (field.type === 'password') {
     return (
       <PasswordInput
+        id={controlId}
         key={field.env_variable}
         {...register(field.env_variable)}
         label={label}
@@ -116,6 +131,7 @@ export const InstallFormField = (props: IProps) => {
 
   return (
     <Input
+      id={controlId}
       key={field.env_variable}
       {...register(field.env_variable)}
       label={label}

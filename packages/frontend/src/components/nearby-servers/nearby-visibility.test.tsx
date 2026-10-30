@@ -74,3 +74,21 @@ test('older helpers, malformed policy or private diagnostics cannot produce an e
     });
   }
 });
+
+test('a confirmed address-only lease needs no HTTPS name but never accepts an origin or untrusted public address', async () => {
+  const hint = { kind: 'address', interface: 'eth0', address: '192.168.50.20', port: 8080, expiresAt: sharing.expiresAt } as const;
+  const value = { ...allowed, hintVersion: 2 as const, sharing: hint };
+  await withFetch([Response.json(value), Response.json(value)], async () => {
+    expect(await setNearbyVisibility(true)).toEqual(value);
+  });
+  for (const changed of [
+    { ...value, hintVersion: undefined },
+    { ...value, sharing: { ...hint, origin: 'http://192.168.50.20' } },
+    { ...value, sharing: { ...hint, address: '8.8.8.8' } },
+    { ...value, sharing: { ...hint, port: 0 } },
+  ]) {
+    await withFetch([Response.json(changed)], async () => {
+      await expect(readNearbyVisibility()).rejects.toThrow();
+    });
+  }
+});

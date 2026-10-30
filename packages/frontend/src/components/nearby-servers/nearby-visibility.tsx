@@ -3,11 +3,19 @@ import { type } from 'arktype';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { nearbyFallback, nearbyOrigin } from './nearby-api';
+import { nearbyAddress, nearbyFallback, nearbyOrigin } from './nearby-api';
 import './nearby-visibility.css';
 
 const lease = type({ '+': 'reject', interface: 'string', origin: 'string', expiresAt: 'string' });
-const status = type({ '+': 'reject', available: 'true', policyVersion: '1', enabled: 'boolean', sharing: lease.or('null') });
+const addressLease = type({ '+': 'reject', kind: "'address'", interface: 'string', address: 'string', port: 'number', expiresAt: 'string' });
+const status = type({
+  '+': 'reject',
+  available: 'true',
+  policyVersion: '1',
+  'hintVersion?': '2',
+  enabled: 'boolean',
+  sharing: lease.or(addressLease).or('null'),
+});
 export type NearbyVisibilityState = { available: false; sharing: null } | typeof status.infer;
 export async function readNearbyVisibility(signal?: AbortSignal): Promise<NearbyVisibilityState> {
   const response = await fetch('/api/nearby-discovery', {
@@ -26,7 +34,13 @@ export async function readNearbyVisibility(signal?: AbortSignal): Promise<Nearby
     (value.sharing && (!/^[A-Za-z0-9_.-]{1,15}$/.test(value.sharing.interface) || !Number.isFinite(Date.parse(value.sharing.expiresAt))))
   )
     throw new Error(nearbyFallback);
-  return { ...value, sharing: value.sharing ? { ...value.sharing, origin: nearbyOrigin(value.sharing.origin) } : null };
+  if (!value.sharing) return value;
+  if ('kind' in value.sharing) {
+    if (value.hintVersion !== 2 || !Number.isInteger(value.sharing.port) || value.sharing.port < 1 || value.sharing.port > 65535)
+      throw new Error(nearbyFallback);
+    return { ...value, sharing: { ...value.sharing, address: nearbyAddress(value.sharing.address) } };
+  }
+  return { ...value, sharing: { ...value.sharing, origin: nearbyOrigin(value.sharing.origin) } };
 }
 export async function setNearbyVisibility(enabled: boolean, signal?: AbortSignal) {
   const response = await fetch('/api/nearby-discovery/policy', {
@@ -107,14 +121,14 @@ export function NearbyVisibility({ disabled = false }: { disabled?: boolean }) {
           void run(enabled);
         }}
       />
-      <p>When advertising, nearby Orbis servers can find this server’s private HTTPS address. Pairing and transfers still require approval.</p>
+      <p>When advertising, nearby Orbis servers can find this host’s private LAN address. Pairing and transfers still require HTTPS and approval.</p>
       <output aria-live="polite">
         {message ||
           (state?.available
             ? state.enabled
               ? state.sharing
                 ? 'This server is advertising on its private LAN.'
-                : 'Discovery is allowed but not advertising. Configure a private HTTPS hostname and a matching LAN interface.'
+                : 'Discovery is allowed but not advertising. Check the host service and private LAN connection.'
               : 'Nearby discovery is off.'
             : state
               ? nearbyFallback

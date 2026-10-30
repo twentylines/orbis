@@ -14,6 +14,7 @@ import { useId } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import './add-link-dialog.css';
 
 type FormValues = {
   title: string;
@@ -94,12 +95,12 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
 
   return (
     <Dialog open={isOpen} onOpenChange={mutationExecuting ? undefined : onClose}>
-      <DialogContent size="sm">
+      <DialogContent size="sm" className="orbis-link-dialog">
         <DialogHeader>
           <DialogTitle>{link ? t('LINKS_EDIT_TITLE') : t('LINKS_ADD_TITLE')}</DialogTitle>
         </DialogHeader>
         <DialogDescription>
-          <form onSubmit={handleSubmit((values) => onSubmit(values))} id={formId}>
+          <form noValidate onSubmit={handleSubmit((values) => onSubmit(values))} id={formId}>
             <Input
               disabled={mutationExecuting}
               {...register('title')}
@@ -154,7 +155,7 @@ export const AddLinkDialog: React.FC<AddLinkDialogProps> = ({ isOpen, onClose, l
         </DialogDescription>
         <DialogFooter>
           <Button type="submit" intent="success" disabled={mutationExecuting} form={formId}>
-            {link ? t('LINKS_EDIT_SUBMIT') : t('LINKS_ADD_SUBMIT')}
+            {link ? 'Save' : 'Add'}
           </Button>
         </DialogFooter>
       </DialogContent>

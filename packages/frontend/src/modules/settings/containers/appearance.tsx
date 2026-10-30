@@ -15,6 +15,7 @@ import { AppOpeningSettings } from '@/desktop/app-opening-settings';
 import { presetLabels, resolveWallpaperKey, wallpaperSources } from '@/desktop/wallpaper-presets';
 import { AppearanceRange } from './appearance-controls';
 import { Button } from '@/components/ui/Button';
+import { StoreRecommendationSettings } from './store-recommendation-settings';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import './appearance.css';
 
@@ -52,6 +53,7 @@ export function AppearanceReset({ open, onOpenChange, onReset }: { open: boolean
               <li>Server display name, colours, light/dark mode, text size and spacing.</li>
               <li>Wallpaper, material effects, motion, clock and dock settings.</li>
               <li>Home layout and pins, saved window positions and sizes, and app-opening preferences.</li>
+              <li>Store recommendations and hidden suggestion categories.</li>
             </ul>
             <p>Your selected theme pack and uploaded images are kept. Accounts, installed apps and their data are unchanged.</p>
           </DialogDescription>
@@ -284,6 +286,12 @@ export const Appearance = () => {
       <MaterialSettings key={wallpaperSettingsRevision} />
       <WallpaperSettings key={wallpaperSettingsRevision} />
       <AppOpeningSettings />
+      <StoreRecommendationSettings
+        shown={preferences.showStoreRecommendations}
+        hidden={preferences.hiddenStoreRecommendationCategories}
+        onChange={(showStoreRecommendations) => update({ showStoreRecommendations })}
+        onRestore={() => update({ hiddenStoreRecommendationCategories: [] })}
+      />
       <section className="appearance-section" aria-labelledby="appearance-density">
         <div>
           <h2 id="appearance-density">Density</h2>

@@ -44,7 +44,7 @@ test('destination waiting state exposes both full comparison values and an expli
   expect(markup).toContain('orbis-checkbox host-transfer-confirm');
   expect(markup).toContain('The source fingerprint matches, and I approved this destination on the source.');
   expect(markup).toContain('>Start</button>');
-  expect(markup).not.toContain('>Review</button>');
+  expect(markup).not.toContain('>Open backup</button>');
   expect(markup).not.toContain('replace-server');
   expect(markup).not.toContain('claimToken');
 });
@@ -53,7 +53,7 @@ test('receiving state shows actual byte progress and cancellation without a rest
   expect(markup).toContain('value="50"');
   expect(markup).toContain('Encrypted backup received');
   expect(markup).toContain('>Cancel</button>');
-  expect(markup).not.toContain('>Review</button>');
+  expect(markup).not.toContain('>Open backup</button>');
 });
 test('completed receipt offers verification separately and source cards preserve both fingerprints after approval', () => {
   const markup = render({
@@ -71,7 +71,7 @@ test('completed receipt offers verification separately and source cards preserve
     ],
     jobs: [{ ...job, status: 'complete', completedBytes: 1024 }],
   });
-  expect(markup).toContain('>Review</button>');
+  expect(markup).toContain('>Open backup</button>');
   expect(markup).toContain('value="100"');
   expect(markup).toContain('Source fingerprint');
   expect(markup).toContain('Destination fingerprint');

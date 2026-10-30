@@ -117,7 +117,7 @@ test('one pending request is one normal task badge and real review row, never a 
   expect(markup).toContain('>1</span>');
   expect(markup).not.toContain('data-alert="true"');
   expect(markup).toContain('A destination is waiting for approval');
-  expect(markup).toContain('>Review</button>');
+  expect(markup).toContain('>View request</button>');
 });
 test('source requests have no empty setup card', () => {
   const markup = render(
@@ -168,7 +168,7 @@ test.each([401, 403, 404, 503])('successful cached requests followed by %s withh
     </RestoreRequestsContext.Provider>,
   );
   expect(markup).not.toContain('pending restore request');
-  expect(markup).not.toContain('>Review</button>');
+  expect(markup).not.toContain('>View request</button>');
   expect(markup).not.toContain('desktop-task-count');
   expect(requestPollingAllowed(true, true, new RestoreRequestApiError(status))).toBe(status === 503);
   expect(notice.update(before.snapshot, true).request?.id).toBe(id);

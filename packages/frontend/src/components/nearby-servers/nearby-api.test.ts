@@ -38,3 +38,20 @@ test('requests only go to the local discovery API and searching is an explicit P
     globalThis.fetch = original;
   }
 });
+
+test('address-only hints have no transferable origin and reject public, credential or URL payloads', () => {
+  const hint = { kind: 'address', id: 'b'.repeat(32), address: '192.168.50.20', port: 8080, expiresAt: '2026-01-01T00:00:10Z', verified: false };
+  expect(parseNearby({ available: true, candidates: [hint] }, 'scan')).toMatchObject({ candidates: [hint] });
+  for (const change of [
+    { address: '8.8.8.8' },
+    { address: '127.0.0.1' },
+    { address: '192.168.050.20' },
+    { address: '10.999.0.1' },
+    { port: 0 },
+    { verified: true },
+    { origin: 'http://192.168.50.20' },
+    { token: 'fixture' },
+  ])
+    expect(() => parseNearby({ available: true, candidates: [{ ...hint, ...change }] }, 'scan')).toThrow();
+  expect(() => nearbyOrigin('http://192.168.50.20:8080')).toThrow();
+});

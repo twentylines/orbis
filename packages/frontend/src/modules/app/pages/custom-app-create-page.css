@@ -16,7 +16,26 @@
 }
 
 .custom-app-name-panel > .card-body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
   padding: 20px;
+}
+.custom-app-create-close.btn {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+}
+.custom-app-create-close:hover {
+  background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
 }
 
 .custom-app-name-field {

@@ -60,7 +60,7 @@ function errorText(error: unknown, fallback: string): string {
 }
 
 const safeLocalErrors = new Set([
-  'The stable installation review could not be verified. Refresh release channels and try again.',
+  'The stable installation plan could not be verified. Refresh release channels and try again.',
   'The stable installation was not accepted by the host.',
 ]);
 
@@ -107,7 +107,7 @@ export function ReleaseChannelSettings() {
     try {
       const result = await planStableChannelInstall(force);
       if (!isStablePlan(result) || result.forced !== force || result.expiresAt <= Date.now()) {
-        throw new Error('The stable installation review could not be verified. Refresh release channels and try again.');
+        throw new Error('The stable installation plan could not be verified. Refresh release channels and try again.');
       }
       if (!mounted.current) return;
       setPlan(result);
@@ -308,7 +308,7 @@ export function ReleaseChannelSettings() {
       <Dialog open={dialog === 'stable'} onOpenChange={closeDialog}>
         <DialogContent size="md" className="release-channel-dialog" aria-describedby={`${id}-stable-description`}>
           <DialogHeader>
-            <DialogTitle>Review Stable installation</DialogTitle>
+            <DialogTitle>Stable installation plan</DialogTitle>
           </DialogHeader>
           <DialogDescription id={`${id}-stable-description`}>
             Stable requires installing a reviewed release. Check the plan and confirm before Orbis starts the installation.
@@ -354,7 +354,7 @@ export function ReleaseChannelSettings() {
               </dl>
               {plan.warnings.length ? (
                 <div className="release-channel-warnings" role="note">
-                  <strong>Review these warnings</strong>
+                  <strong>Warnings</strong>
                   <ul>
                     {plan.warnings.map((warning, index) => (
                       <li key={`${index}-${warning}`}>{warning}</li>
@@ -386,12 +386,12 @@ export function ReleaseChannelSettings() {
             </Button>
             {canForce && !plan ? (
               <Button intent="danger" onClick={() => void beginStableReview(true)} loading={busy}>
-                Review forced plan
+                {busy ? 'Initialising…' : 'Force install'}
               </Button>
             ) : null}
             {plan ? (
               <Button intent={plan.forced ? 'danger' : 'primary'} onClick={() => void applyStable()} disabled={!accepted || busy} loading={busy}>
-                {plan.forced ? 'Apply forced installation' : 'Apply reviewed plan'}
+                {busy ? 'Initialising…' : plan.operation === 'downgrade' ? (plan.forced ? 'Force downgrade' : 'Downgrade') : 'Install'}
               </Button>
             ) : null}
           </DialogFooter>

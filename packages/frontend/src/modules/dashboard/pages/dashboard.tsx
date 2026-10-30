@@ -488,7 +488,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                 </li>
               ))}
             </ul>
-            <Link to="/apps">Review applications</Link>
+            <Link to="/apps">View applications</Link>
           </>
         ) : null}
       </section>

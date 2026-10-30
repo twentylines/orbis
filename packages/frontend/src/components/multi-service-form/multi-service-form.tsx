@@ -7,7 +7,7 @@ import { IconArrowsDownUp, IconCloudDataConnection, IconPlus, IconServer, IconSe
 import { useForm } from 'react-hook-form';
 import { ComposeEditor } from './compose-editor';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { AdvancedConfig } from './elements/advanced';
 import { PortsConfig } from './elements/ports';
@@ -24,11 +24,17 @@ import { WrapWords } from '@/components/wrap-words/wrap-words';
 
 type Props = {
   onSubmit?: (data: typeof dynamicComposeSchemaArk.infer) => void;
+  submitLabel?: string;
+  submitting?: boolean;
+};
+
+export type MultiServiceFormHandle = {
+  hasUnsavedChanges: () => boolean;
 };
 
 const cleanSchema = type.pipe((d) => dynamicComposeSchemaArk.omit('schemaVersion')(deepClean(d)));
 
-export const MultiServiceForm = ({ onSubmit }: Props) => {
+export const MultiServiceForm = forwardRef<MultiServiceFormHandle, Props>(function MultiServiceForm({ onSubmit, submitLabel, submitting }, ref) {
   const { t } = useTranslation();
   const {
     services,
@@ -91,6 +97,14 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
     mode: 'onSubmit',
     reValidateMode: 'onChange',
   });
+  const initialConfiguration = useRef(JSON.stringify({ services, composeExtras: useMultiServiceStore.getState().composeExtras }));
+  const formDirty = form.formState.isDirty;
+  useImperativeHandle(ref, () => ({
+    hasUnsavedChanges: () =>
+      isDirty ||
+      formDirty ||
+      JSON.stringify({ services, composeExtras: useMultiServiceStore.getState().composeExtras }) !== initialConfiguration.current,
+  }));
 
   // biome-ignore lint/suspicious/noExplicitAny: We need any type here
   function saveBeforeAction<T extends (...args: any[]) => any>(action: T) {
@@ -303,8 +317,8 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
           </div>
         )}
         <div className="service-form-footer">
-          <Button disabled={composeEditorOpen} type="submit" className={clsx({ 'd-none': composeEditorOpen })}>
-            {t('MULTI_SERVICE_VALIDATE_ALL_SERVICES')}
+          <Button disabled={composeEditorOpen || submitting} loading={submitting} type="submit" className={clsx({ 'd-none': composeEditorOpen })}>
+            {submitLabel ?? t('MULTI_SERVICE_VALIDATE_ALL_SERVICES')}
           </Button>
           <Button
             className={clsx({ 'd-none': !composeEditorOpen })}
@@ -350,4 +364,4 @@ export const MultiServiceForm = ({ onSubmit }: Props) => {
       </div>
     </form>
   );
-};
+});

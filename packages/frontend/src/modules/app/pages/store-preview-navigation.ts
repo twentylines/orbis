@@ -1,4 +1,4 @@
-export type StorePreviewHistory = { storeReturnPath?: string; storePreviewDepth?: number };
+export type StorePreviewHistory = { storeReturnPath?: string; storePreviewDepth?: number; storeInstallUrn?: string };
 export type AppPreviewHistory = StorePreviewHistory & { appsReturnPath?: string; appsPreviewDepth?: number };
 
 export function storeReturnPath(state: StorePreviewHistory | null, search: string) {

@@ -137,7 +137,7 @@ export function ClusterOverview() {
             </div>
           </div>
           <Link to="/updates" className="cluster-view-text-link">
-            Review updates <IconArrowRight size={17} aria-hidden="true" />
+            View updates <IconArrowRight size={17} aria-hidden="true" />
           </Link>
         </div>
         <ServerRack readings={readings} />

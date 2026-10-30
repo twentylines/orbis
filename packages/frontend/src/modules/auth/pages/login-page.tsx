@@ -79,6 +79,7 @@ export default () => {
   const passkeyAttempt = useRef(0);
   const challenge = useRef<string | null>(null);
   const lastChallenge = useRef<string | null>(null);
+  const signInHandoff = useRef(false);
   const [browserReason] = useState(browserPasskeyReason);
   const passkeyAvailability = useQuery({ ...passkeyAvailabilityOptions(), enabled: !browserReason });
   useEffect(
@@ -100,7 +101,7 @@ export default () => {
   const loginType = capitalize(app ?? '') || t('AUTH_LOGIN_TYPE_ACCOUNT');
 
   useEffect(() => {
-    if (boot.signingIn || !isLoggedIn || !redirect_url || !isSafeRedirect(redirect_url)) {
+    if (boot.signingIn || signInHandoff.current || !isLoggedIn || !redirect_url || !isSafeRedirect(redirect_url)) {
       return;
     }
 
@@ -125,6 +126,7 @@ export default () => {
 
   const completeSignIn = async (redirectUrl?: string) => {
     if (!boot.isActive()) return;
+    signInHandoff.current = true;
     boot.begin();
     setUserContext({ isLoggedIn: true });
     void refreshUserContext();
@@ -197,7 +199,7 @@ export default () => {
     },
   });
 
-  if (isLoggedIn && !boot.signingIn) {
+  if (isLoggedIn && !boot.signingIn && !signInHandoff.current) {
     if (redirect_url && isSafeRedirect(redirect_url)) {
       return null;
     }

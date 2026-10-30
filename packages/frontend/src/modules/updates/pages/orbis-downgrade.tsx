@@ -177,7 +177,7 @@ export function OrbisDowngrade({
                   plan.mutate({ tag: selected });
                 }}
               >
-                {planning ? 'Checking compatibility…' : 'Review downgrade'}
+                {planning ? 'Initialising…' : 'Downgrade'}
               </button>
             </div>
           ) : null}
@@ -193,7 +193,7 @@ export function OrbisDowngrade({
                 setReview(lastPlan.data ?? null);
               }}
             >
-              Open last downgrade review
+              Open last downgrade plan
             </button>
           ) : null}
           {canForce ? (
@@ -209,7 +209,7 @@ export function OrbisDowngrade({
                   plan.mutate({ tag: selected, force: true });
                 }}
               >
-                Review force downgrade
+                Force downgrade
               </button>
             </div>
           ) : null}
@@ -327,9 +327,9 @@ export function OrbisDowngrade({
                   {apply.isPending
                     ? 'Starting downgrade…'
                     : planning
-                      ? 'Checking compatibility…'
+                      ? 'Initialising…'
                       : needsReview
-                        ? 'Review again'
+                        ? 'Check again'
                         : review?.forced
                           ? 'Force downgrade'
                           : 'Downgrade Orbis'}

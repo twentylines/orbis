@@ -650,7 +650,7 @@ function LocalUpdates() {
               disabled={!canPlan || updateCore.isPending}
               onClick={() => setCoreReview(lastCoreReview.data ?? null)}
             >
-              Open last update review
+              Open last update plan
             </button>
           ) : null}
           <div className="desktop-orbis-release-layout">
@@ -893,7 +893,7 @@ function LocalUpdates() {
                     reviewRestart.mutate();
                   }}
                 >
-                  {reviewRestart.isPending ? 'Reviewing restart…' : 'Restart server'}
+                  {reviewRestart.isPending ? 'Initialising…' : 'Restart'}
                 </button>
               </div>
             ) : null}
@@ -936,7 +936,7 @@ function LocalUpdates() {
               </DialogHeader>
               {restartReviewExpired || reviewRestart.isError || applyRestart.isError ? (
                 <div className="modal-body">
-                  {restartReviewExpired ? <output>This review expired. Review the restart again before continuing.</output> : null}
+                  {restartReviewExpired ? <output>This check expired. Check the restart again before continuing.</output> : null}
                   {reviewRestart.isError || applyRestart.isError ? (
                     <p role="alert">{reviewRestart.error?.message || applyRestart.error?.message}</p>
                   ) : null}
@@ -960,9 +960,9 @@ function LocalUpdates() {
                   {applyRestart.isPending
                     ? 'Restarting…'
                     : reviewRestart.isPending
-                      ? 'Reviewing restart…'
+                      ? 'Initialising…'
                       : restartReviewExpired || reviewRestart.isError || applyRestart.isError
-                        ? 'Review again'
+                        ? 'Check again'
                         : 'Restart server'}
                 </button>
               </DialogFooter>
@@ -1145,9 +1145,9 @@ function LocalUpdates() {
                           {applyPackages.isPending
                             ? 'Starting update…'
                             : planPackages.isPending
-                              ? 'Checking updates…'
+                              ? 'Initialising…'
                               : packageNeedsReview
-                                ? 'Review again'
+                                ? 'Check again'
                                 : 'Install updates'}
                         </button>
                       </DialogFooter>

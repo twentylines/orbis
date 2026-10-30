@@ -87,13 +87,53 @@ def eligible_interfaces(rows):
     return result[:32]
 
 
+def preferred_interface(rows, routes):
+    if len(rows) == 1:
+        return rows[0]["id"]
+    if not isinstance(routes, list) or len(routes) > 64:
+        return None
+    choices = []
+    for route in routes:
+        if not isinstance(route, dict):
+            return None
+        if route.get("dst") != "default" or route.get("table", "main") not in ("main", 254):
+            continue
+        metric = route.get("metric", 0)
+        if type(metric) is not int or not 0 <= metric <= 2147483647:
+            return None
+        selected = next((item for item in rows if item["id"] == route.get("dev")), None)
+        device = None
+        if route.get("type", "unicast") == "unicast" and "multipath" not in route and "nexthops" not in route and selected is not None and private_ip(route.get("gateway")):
+            network = ipaddress.IPv4Network(f"{selected['address']}/{selected['prefixLength']}", strict=False)
+            gateway = ipaddress.IPv4Address(route["gateway"])
+            if gateway in network and gateway not in (network.network_address, network.broadcast_address, ipaddress.IPv4Address(selected["address"])):
+                device = selected["id"]
+        # Retain uncertain defaults so a higher-metric backup cannot become preferred.
+        choices.append((metric, device))
+    if not choices:
+        return None
+    best = min(metric for metric, _ in choices)
+    devices = {name for metric, name in choices if metric == best}
+    return next(iter(devices)) if len(devices) == 1 else None
+
+
 def interfaces():
     if sys.platform != "linux" or not hasattr(socket, "SO_BINDTODEVICE"):
         raise ValueError("Nearby discovery requires the Linux host service; enter an address manually")
     completed = subprocess.run(["ip", "-j", "-d", "-4", "address", "show"], capture_output=True, check=False, timeout=2)
     if completed.returncode or len(completed.stdout) > 64 * 1024:
         raise ValueError("Private LAN interfaces are unavailable; enter an address manually")
-    return eligible_interfaces(json.loads(completed.stdout))
+    rows = eligible_interfaces(json.loads(completed.stdout))
+    routes = []
+    if len(rows) > 1:
+        try:
+            route = subprocess.run(["ip", "-j", "-4", "route", "show", "table", "main", "default"], capture_output=True, check=False, timeout=2)
+            if route.returncode == 0 and len(route.stdout) <= 64 * 1024:
+                routes = json.loads(route.stdout)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+    preferred = preferred_interface(rows, routes)
+    return [{**item, "preferred": item["id"] == preferred} for item in rows]
 
 
 def select_interface(name, rows=None):
@@ -215,12 +255,18 @@ def query_packet(identifier):
     return struct.pack("!6H", identifier, 0, 1, 0, 0, 0) + encode_name(SERVICE) + struct.pack("!HH", 12, 1)
 
 
-def response_packet(identifier, ephemeral, origin, address, ttl=10, legacy=True):
-    origin, port = secure_origin(origin)
+def response_packet(identifier, ephemeral, origin, address, ttl=10, legacy=True, hint_port=None):
+    if hint_port is None:
+        origin, port = secure_origin(origin)
+        txt = ["product=orbis", "proto=1", f"origin={origin}", f"id={ephemeral}"]
+    else:
+        if origin is not None or type(hint_port) is not int or not 1 <= hint_port <= 65535:
+            raise ValueError("Invalid address hint port")
+        port = hint_port
+        txt = ["product=orbis", "proto=2", f"id={ephemeral}"]
     if not re.fullmatch(r"[0-9a-f]{32}", ephemeral) or not private_ip(address):
         raise ValueError("Invalid discovery advertisement")
     instance, host = f"orbis-{ephemeral}.{SERVICE}", f"orbis-{ephemeral}.local"
-    txt = ["product=orbis", "proto=1", f"origin={origin}", f"id={ephemeral}"]
     text = b"".join(bytes([len(item)]) + item.encode("ascii") for item in txt)
     values = [(SERVICE, 12, encode_name(instance)), (instance, 33, struct.pack("!HHH", 0, 0, port) + encode_name(host)), (instance, 16, text), (host, 1, socket.inet_aton(address))]
     question = encode_name(SERVICE) + struct.pack("!HH", 12, 1) if legacy else b""
@@ -244,16 +290,19 @@ def candidate(data, identifier, source):
     if len(srv) != 1 or len(txt) != 1:
         return None
     fields = txt[0][4]
-    if set(fields) != {"product", "proto", "origin", "id"} or fields["product"] != "orbis" or fields["proto"] != "1" or ptr.split(".")[0] != "orbis-" + fields["id"]:
+    hint = fields.get("proto") == "2"
+    expected = {"product", "proto", "id"} if hint else {"product", "proto", "origin", "id"}
+    if set(fields) != expected or fields["product"] != "orbis" or fields["proto"] not in ("1", "2") or ptr.split(".")[0] != "orbis-" + fields["id"]:
         return None
-    origin, port = secure_origin(fields["origin"])
     host, advertised_port = srv[0][4]
+    origin, port = (None, advertised_port) if hint else secure_origin(fields["origin"])
     addresses = [row for row in records if row[:3] == (host, 1, 1) and row[3] > 0]
-    if port != advertised_port or len(addresses) != 1 or addresses[0][4] != source or not private_ip(source):
+    if not 1 <= port <= 65535 or port != advertised_port or len(addresses) != 1 or addresses[0][4] != source or not private_ip(source):
         return None
-    if re.fullmatch(r"[0-9.]+", urlsplit(origin).hostname or "") and urlsplit(origin).hostname != source:
+    if not hint and re.fullmatch(r"[0-9.]+", urlsplit(origin).hostname or "") and urlsplit(origin).hostname != source:
         return None
-    return {"id": fields["id"], "origin": origin, "address": source, "port": port, "ttl": min(10, *(row[3] for row in [pointers[0], srv[0], txt[0], addresses[0]])), "verified": False}
+    result = {"id": fields["id"], "address": source, "port": port, "ttl": min(10, *(row[3] for row in [pointers[0], srv[0], txt[0], addresses[0]])), "verified": False}
+    return {**result, "kind": "address"} if hint else {**result, "origin": origin}
 
 
 def peer_allowed(source, selected):
@@ -368,7 +417,7 @@ class Discovery:
                 enabled = self.policy_enabled()
                 if not enabled and (self.lease is not None or self.connection is not None):
                     self.disable(stop_scan=False)
-                return {**self.status(), "policyVersion": 1, "enabled": enabled}
+                return {**self.status(), "policyVersion": 1, "enabled": enabled, "hintVersion": 2}
         except (ValueError, OSError):
             self.disable(stop_scan=False)
             return {"available": False, "reason": "Nearby discovery is unavailable; enter an address manually"}
@@ -396,10 +445,15 @@ class Discovery:
                     self.disable(stop_scan=False)
             else:
                 self.policy_enabled()
-                if not isinstance(configuration, dict) or set(configuration) != {"interface", "origin", "address"}:
+                if not isinstance(configuration, dict):
                     raise ValueError("A private HTTPS endpoint is required")
                 try:
-                    result = self.advertise(configuration["interface"], configuration["origin"], configuration["address"], 180)
+                    if set(configuration) == {"interface", "origin", "address"}:
+                        result = self.advertise(configuration["interface"], configuration["origin"], configuration["address"], 180)
+                    elif set(configuration) == {"kind", "interface", "port"} and configuration["kind"] == "address":
+                        result = self.advertise_address(configuration["interface"], configuration["port"])
+                    else:
+                        raise ValueError("Provide one private LAN discovery configuration")
                     if not result["available"] or result["sharing"] is None:
                         raise ValueError("Nearby discovery is unavailable")
                     self.write_policy(True)
@@ -417,7 +471,8 @@ class Discovery:
     def status(self):
         with self.lock:
             lease = self.lease if self.lease and self.lease["until"] > self.clock() and not self.stop.is_set() else None
-            return {"available": sys.platform == "linux", "sharing": None if lease is None else {key: lease[key] for key in ("id", "origin", "interface", "expiresAt")}}
+            keys = ("id", "kind", "address", "port", "interface", "expiresAt") if lease and lease.get("kind") == "address" else ("id", "origin", "interface", "expiresAt")
+            return {"available": sys.platform == "linux", "sharing": None if lease is None else {key: lease[key] for key in keys}}
 
     def disable(self, stop_scan=True):
         with self.operation_lock:
@@ -439,11 +494,38 @@ class Discovery:
         selected = select_interface(name, self.interface_reader())
         if address != selected["address"]:
             raise ValueError("The private HTTPS address must match the selected LAN interface")
+        return self._activate(selected, {"origin": normalized}, seconds)
+
+    def advertise_address(self, name, port):
+        if type(port) is not int or not 1 <= port <= 65535:
+            raise ValueError("Use the configured private HTTP port")
+        inventory = self.interface_reader()
+        selected = select_interface(name, inventory)
+        preferred = inventory if len(inventory) == 1 else [item for item in inventory if item.get("preferred") is True]
+        if len(preferred) != 1 or preferred[0]["id"] != name:
+            raise ValueError("The preferred private LAN interface changed or is ambiguous")
+        return self._activate(selected, {"kind": "address", "address": selected["address"], "port": port}, 180)
+
+    def configure_address(self, name, port):
+        with self.operation_lock:
+            try:
+                if self.policy_enabled():
+                    self.advertise_address(name, port)
+                else:
+                    self.disable(stop_scan=False)
+                return self.policy_status()
+            except (ValueError, OSError, RuntimeError, subprocess.SubprocessError):
+                self.disable(stop_scan=False)
+                raise
+
+    def _activate(self, selected, details, seconds):
+        if type(seconds) is not int or not 30 <= seconds <= 300:
+            raise ValueError("Nearby visibility must last 30 to 300 seconds")
         with self.operation_lock:
             self.disable(stop_scan=False)
             connection = self.socket_factory(selected, True)
             stop = threading.Event()
-            lease = {"id": secrets.token_hex(16), "origin": normalized, "interface": name, "until": self.clock() + seconds, "expiresAt": datetime.fromtimestamp(self.wall() + seconds, timezone.utc).isoformat()}
+            lease = {"id": secrets.token_hex(16), **details, "interface": selected["id"], "until": self.clock() + seconds, "expiresAt": datetime.fromtimestamp(self.wall() + seconds, timezone.utc).isoformat()}
             with self.lock:
                 self.stop, self.connection, self.lease = stop, connection, lease
             worker = threading.Thread(target=self.respond, args=(connection, selected, lease, stop), daemon=True, name="orbis-nearby")
@@ -474,7 +556,7 @@ class Discovery:
                     if flags & 0x8000 or questions != [(SERVICE, 12, 1)] or peer[1] < 1024 or now - last_response.get(peer[0], float("-inf")) < 0.5:
                         continue
                     legacy = peer[1] != PORT
-                    packet = response_packet(identifier, lease["id"], lease["origin"], selected["address"], 10 if legacy else 30, legacy)
+                    packet = response_packet(identifier, lease["id"], lease.get("origin"), selected["address"], 10 if legacy else 30, legacy, lease.get("port"))
                     if stop.is_set() or self.clock() >= lease["until"]:
                         break
                     connection.sendto(packet, peer if legacy else (GROUP, PORT))

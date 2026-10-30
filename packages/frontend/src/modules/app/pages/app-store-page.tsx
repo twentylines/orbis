@@ -1,4 +1,8 @@
-import { getEnabledAppStoresOptions, searchAppsInfiniteOptions } from '@/api-client/@tanstack/react-query.gen';
+import { useDesktopPreferences } from '@/desktop/preferences';
+import type { StoreRecommendationCategory } from '../components/store-discover/store-recommendations';
+import { useAppContext } from '@/context/app-context';
+import { useTasks } from '@/desktop/tasks';
+import { getEnabledAppStoresOptions, getInstalledAppsOptions, searchAppsInfiniteOptions } from '@/api-client/@tanstack/react-query.gen';
 import { RefreshAppStoresButton } from '@/components/refresh-app-stores/refresh-app-stores';
 import { Input } from '@/components/ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
@@ -12,7 +16,7 @@ import { iconForCategory } from '@/modules/app/helpers/table-helpers';
 import { useAppStoreState } from '@/stores/app-store';
 import type { AppCategory } from '@/types/app.types';
 import { IconArrowRight, IconSearch, IconX } from '@tabler/icons-react';
-import { keepPreviousData, useInfiniteQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useWindowVisible, WindowVisibilityContext } from '@/desktop/window-visibility';
 import { storeView, storeEditorialFits } from '../components/store-discover/store-curation';
@@ -46,14 +50,34 @@ function LocalStore() {
   const themes = view === 'themes';
   const surface = useRef<HTMLElement>(null);
   const visible = useWindowVisible();
+  const { preferences, update } = useDesktopPreferences();
+  const recommendationProps = {
+    enabled: preferences.showStoreRecommendations,
+    hiddenCategories: preferences.hiddenStoreRecommendationCategories,
+    onHideCategory: (category: StoreRecommendationCategory) =>
+      update({
+        hiddenStoreRecommendationCategories: [...new Set([...preferences.hiddenStoreRecommendationCategories, category])],
+      }),
+  };
+  const { user } = useAppContext();
+  const installed = useQuery({ ...getInstalledAppsOptions(), enabled: visible && browsing && user.operator, staleTime: 5000 });
+  const installedApps = new Set(installed.data?.installed.filter((entry) => entry.app.status !== 'missing').map((entry) => entry.info.urn) ?? []);
+  const tasks = useTasks();
+  for (const task of tasks.data?.tasks ?? []) {
+    if (['queued', 'running', 'unconfirmed'].includes(task.status)) installedApps.add(task.appUrn);
+  }
   const [editorialFits, setEditorialFits] = useState(false);
   useLayoutEffect(() => {
     const element = surface.current;
     if (!element) return;
+    const catalogue = element.closest<HTMLElement>('.store-catalogue-pane');
     const update = () =>
-      setEditorialFits(storeEditorialFits(element.clientWidth, Number.parseFloat(getComputedStyle(document.documentElement).fontSize)));
+      setEditorialFits(
+        storeEditorialFits(element.clientWidth, catalogue?.clientHeight ?? 0, Number.parseFloat(getComputedStyle(document.documentElement).fontSize)),
+      );
     const observer = new ResizeObserver(update);
     observer.observe(element);
+    if (catalogue) observer.observe(catalogue);
     observer.observe(document.documentElement);
     update();
     return () => observer.disconnect();
@@ -90,7 +114,7 @@ function LocalStore() {
     changeQuery((next) => next.set('view', 'discover'));
   };
   const hasFilters = Boolean(search || category || selectedStore);
-  const showEditorial = visible && browsing && editorialFits && !hasFilters;
+  const showEditorial = visible && browsing && !params.appId && !hasFilters && preferences.showStoreRecommendations;
   const clearFilters = () => {
     clearSearch();
     setCategory(undefined);
@@ -160,104 +184,94 @@ function LocalStore() {
           ) : null}
         </div>
         <SelectionGroup className="orbis-store-view-choice" role="group" aria-label="Store view">
-          <button type="button" data-store-view="apps" aria-label="All apps" aria-pressed={browsing} onClick={() => browse(category)}>
-            <span className="orbis-store-view-label-full" aria-hidden="true">
-              All apps
-            </span>
-            <span className="orbis-store-view-label-compact" aria-hidden="true">
-              Apps
-            </span>
-          </button>
-          <button type="button" data-store-view="discover" aria-label="Collections" aria-pressed={view === 'discover'} onClick={discover}>
-            <span className="orbis-store-view-label-full" aria-hidden="true">
-              Collections
-            </span>
-            <span className="orbis-store-view-label-compact" aria-hidden="true">
-              Collections
-            </span>
+          <button type="button" data-store-view="apps" aria-label="Apps" aria-pressed={!themes} onClick={() => browse(category)}>
+            Apps
           </button>
           <button
             type="button"
             data-store-view="themes"
-            aria-label="Theme packs"
+            aria-label="Themes"
             aria-pressed={themes}
             onClick={() => changeQuery((next) => next.set('view', 'themes'))}
           >
-            <span className="orbis-store-view-label-full" aria-hidden="true">
-              Theme packs
-            </span>
-            <span className="orbis-store-view-label-compact" aria-hidden="true">
-              Themes
-            </span>
+            Themes
           </button>
         </SelectionGroup>
-        {browsing || (!themes && (appStores.appStores.length > 1 || selectedStore)) ? (
-          <div className="orbis-store-filters">
-            {browsing ? (
-              <div className="orbis-store-category">
-                <Select value={category ?? 'all'} onValueChange={(value) => browse(value === 'all' ? undefined : (value as AppCategory))}>
-                  <SelectTrigger aria-label="App category">
-                    {category ? null : (
-                      <span className="orbis-store-compact-filter-name" aria-hidden="true">
-                        Category
+        <div
+          className="orbis-store-filters"
+          data-inactive={themes ? 'true' : undefined}
+          aria-hidden={themes || undefined}
+          inert={themes || undefined}
+        >
+          <div className="orbis-store-category">
+            <Select value={category ?? 'all'} onValueChange={(value) => browse(value === 'all' ? undefined : (value as AppCategory))}>
+              <SelectTrigger aria-label="App category">
+                {category ? null : (
+                  <span className="orbis-store-compact-filter-name" aria-hidden="true">
+                    Category
+                  </span>
+                )}
+                <span className={category ? undefined : 'orbis-store-filter-default'}>
+                  <SelectValue />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {iconForCategory.map((item) => {
+                  const CategoryIcon = item.icon;
+                  return (
+                    <SelectItem key={item.id} value={item.id}>
+                      <span className="orbis-store-category-option">
+                        <CategoryIcon size={18} aria-hidden="true" />
+                        {t(`APP_CATEGORY_${item.id.toUpperCase()}`)}
                       </span>
-                    )}
-                    <span className={category ? undefined : 'orbis-store-filter-default'}>
-                      <SelectValue />
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All categories</SelectItem>
-                    {iconForCategory.map((item) => {
-                      const CategoryIcon = item.icon;
-                      return (
-                        <SelectItem key={item.id} value={item.id}>
-                          <span className="orbis-store-category-option">
-                            <CategoryIcon size={18} aria-hidden="true" />
-                            {t(`APP_CATEGORY_${item.id.toUpperCase()}`)}
-                          </span>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-            {!themes && (appStores.appStores.length > 1 || selectedStore) ? (
-              <div className="orbis-store-source">
-                <Select
-                  value={selectedStore ?? ''}
-                  onValueChange={(value) =>
-                    changeQuery((next) => {
-                      if (value) next.set('store', value);
-                      else next.delete('store');
-                    })
-                  }
-                >
-                  <SelectTrigger aria-label="App repository">
-                    {selectedStore ? null : (
-                      <span className="orbis-store-compact-filter-name" aria-hidden="true">
-                        Source
-                      </span>
-                    )}
-                    <span className={selectedStore ? undefined : 'orbis-store-filter-default'}>
-                      <SelectValue />
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All repositories</SelectItem>
-                    {appStores.appStores.map((store) => (
-                      <SelectItem key={store.slug} value={store.slug}>
-                        {store.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
           </div>
-        ) : null}
-        {themes ? null : <RefreshAppStoresButton />}
+          {appStores.appStores.length > 1 || selectedStore ? (
+            <div className="orbis-store-source">
+              <Select
+                value={selectedStore ?? ''}
+                onValueChange={(value) =>
+                  changeQuery((next) => {
+                    if (value) next.set('store', value);
+                    else next.delete('store');
+                  })
+                }
+              >
+                <SelectTrigger aria-label="App repository">
+                  {selectedStore ? null : (
+                    <span className="orbis-store-compact-filter-name" aria-hidden="true">
+                      Source
+                    </span>
+                  )}
+                  <span className={selectedStore ? undefined : 'orbis-store-filter-default'}>
+                    <SelectValue />
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All repositories</SelectItem>
+                  {appStores.appStores.map((store) => (
+                    <SelectItem key={store.slug} value={store.slug}>
+                      {store.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+        </div>
+        <div
+          className="orbis-store-refresh"
+          data-inactive={themes ? 'true' : undefined}
+          aria-hidden={themes || undefined}
+          inert={themes || undefined}
+        >
+          <RefreshAppStoresButton />
+        </div>
       </div>
       <StoreViewTransition
         active={view}
@@ -267,7 +281,7 @@ function LocalStore() {
             <div className="orbis-store-results" aria-busy={updating || undefined}>
               <div className="orbis-store-result-heading">
                 <div>
-                  <h2>{category ? t(`APP_CATEGORY_${category.toUpperCase()}`) : search ? 'Search results' : 'All apps'}</h2>
+                  <h2>{category ? t(`APP_CATEGORY_${category.toUpperCase()}`) : search ? 'Search results' : 'Apps'}</h2>
                   <p aria-live="polite">
                     {updating
                       ? 'Updating results…'
@@ -305,18 +319,20 @@ function LocalStore() {
                   <StoreCatalogue
                     apps={apps}
                     lastElementRef={lastElementRef}
+                    collectionsAfter={editorialFits ? 8 : 16}
+                    canInstall={user.operator && installed.isSuccess && tasks.isSuccess && !tasks.isError}
+                    installedApps={installedApps}
                     collections={
-                      <aside className="orbis-store-editorial" hidden={!showEditorial} inert={!showEditorial} aria-label="App collections">
-                        <WindowVisibilityContext.Provider value={showEditorial}>
-                          <StoreDiscover
-                            presentation="editorial"
-                            onCollections={discover}
-                            key={`editorial-${selectedStore ?? 'all'}`}
-                            storeId={selectedStore}
-                            onBrowse={browse}
-                          />
-                        </WindowVisibilityContext.Provider>
-                      </aside>
+                      <WindowVisibilityContext.Provider value={showEditorial}>
+                        <StoreDiscover
+                          {...recommendationProps}
+                          presentation="editorial"
+                          onCollections={discover}
+                          key={`editorial-${selectedStore ?? 'all'}`}
+                          storeId={selectedStore}
+                          onBrowse={browse}
+                        />
+                      </WindowVisibilityContext.Provider>
                     }
                   />
                   {hasNextPage ? (
@@ -343,7 +359,7 @@ function LocalStore() {
             </div>
           </div>
         }
-        discover={<StoreDiscover key={selectedStore ?? 'all'} storeId={selectedStore} onBrowse={browse} />}
+        discover={<StoreDiscover {...recommendationProps} key={selectedStore ?? 'all'} storeId={selectedStore} onBrowse={browse} />}
       />
     </section>
   );

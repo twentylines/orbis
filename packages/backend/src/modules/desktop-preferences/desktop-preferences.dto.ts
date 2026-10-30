@@ -27,6 +27,12 @@ export const desktopPreferencesSchema = type({
   'workspace?': workspace,
   'windows?': desktopWindowsSchema,
   'appLaunch?': appLaunchSchema,
+  'showStoreRecommendations?': 'boolean',
+  'hiddenStoreRecommendationCategories?': type
+    .enumerated('media', 'gaming', 'ai', 'finance', 'development', 'automation', 'utilities')
+    .array()
+    .atMostLength(7)
+    .narrow((categories) => new Set(categories).size === categories.length),
   'appearance?': desktopAppearanceSchema,
 }).onUndeclaredKey('delete');
 

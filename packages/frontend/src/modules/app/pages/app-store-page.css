@@ -6,8 +6,8 @@
   color: var(--desktop-ink);
 }
 .orbis-store-toolbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 16rem) minmax(11rem, 22rem) auto;
   align-items: stretch;
   gap: 10px;
   padding-bottom: 20px;
@@ -68,10 +68,18 @@
   --orbis-selection-radius: 9px;
 }
 .orbis-store-view-choice {
-  flex: 0 1 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
 }
-.orbis-store-view-label-compact {
-  display: none;
+.orbis-store-refresh {
+  display: flex;
+  min-width: 0;
+}
+.orbis-store-filters[data-inactive="true"],
+.orbis-store-refresh[data-inactive="true"] {
+  visibility: hidden;
+  pointer-events: none;
 }
 .orbis-store-view-choice > button,
 .orbis-store-player-choice > button {
@@ -152,6 +160,7 @@
   flex: none;
 }
 .orbis-store-toolbar .refresh-app-stores {
+  width: 100%;
   min-height: 44px;
   align-self: stretch;
   padding: 10px 12px;
@@ -170,7 +179,11 @@
 .orbis-store-grid-item {
   min-width: 0;
 }
-.orbis-store-editorial,
+.orbis-store-editorial {
+  display: block;
+  grid-column: 1 / -1;
+  padding-block: 12px;
+}
 .orbis-store-editorial[hidden] {
   display: none;
 }
@@ -234,38 +247,37 @@
   gap: 14px;
   min-width: 0;
 }
-.orbis-store .orbis-store-tile.app-tile.orbis-store-tile-catalogue {
+.orbis-store-product {
   position: relative;
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 14px;
-  align-items: stretch;
-  min-height: 112px;
-  padding: 16px 48px 16px 16px;
+  height: 100%;
+  min-width: 0;
+}
+.orbis-store .orbis-store-tile.app-tile.orbis-store-tile-catalogue {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
   border-radius: 16px;
 }
 .orbis-store .orbis-store-tile-catalogue .orbis-store-tile-art {
-  display: grid;
-  grid-column: 1;
-  grid-row: 1;
-  place-items: center;
-  min-height: 0;
-  padding: 0;
-  background: transparent;
-  overflow: visible;
-}
-.orbis-store .orbis-store-tile-catalogue .orbis-store-tile-art-backdrop {
-  display: none;
+  min-height: 4rem;
+  gap: 12px;
+  padding: 12px 16px;
 }
 .orbis-store .orbis-store-tile-catalogue .orbis-store-logo {
-  --app-logo-size: 64px;
+  --app-logo-size: 3rem;
+}
+.orbis-store .orbis-store-tile-catalogue .orbis-store-tile-categories {
+  min-width: 0;
+  font-size: 0.75rem;
+  line-height: 1.3;
 }
 .orbis-store .orbis-store-tile-catalogue .orbis-store-tile-copy {
-  grid-column: 2;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
-  gap: 5px;
-  padding: 0;
+  gap: 6px;
+  padding: 12px 16px;
 }
 .orbis-store .orbis-store-tile-catalogue h3 {
   display: -webkit-box;
@@ -275,13 +287,6 @@
   font-size: 1rem;
   line-height: 1.35;
 }
-.orbis-store .orbis-store-tile-catalogue .orbis-store-tile-catalogue-categories {
-  display: flex;
-  flex-wrap: wrap;
-  color: var(--desktop-muted);
-  font-size: 0.75rem;
-  line-height: 1.3;
-}
 .orbis-store .orbis-store-tile-catalogue .orbis-store-tile-description {
   min-height: 0;
   line-height: 1.45;
@@ -289,30 +294,26 @@
   word-break: normal;
 }
 .orbis-store .orbis-store-tile-catalogue .orbis-store-tile-footer {
-  gap: 0;
-  margin-top: 0;
+  min-height: 44px;
+  margin-top: auto;
 }
-.orbis-store .orbis-store-tile-catalogue .orbis-store-tile-action {
+.orbis-store-install-slot,
+.orbis-store-quick-install.btn {
+  width: 7rem;
+  min-height: 44px;
+}
+.orbis-store-quick-install.btn {
   position: absolute;
-  top: 50%;
-  right: 12px;
-  width: 24px;
-  min-height: 24px;
-  padding: 0;
-  transform: translateY(-50%);
-}
-@container (max-width: 18rem) {
-  .orbis-store .orbis-store-tile.app-tile.orbis-store-tile-catalogue {
-    grid-template-columns: 56px minmax(0, 1fr);
-    min-height: 116px;
-    padding: 16px;
-  }
-  .orbis-store .orbis-store-tile-catalogue .orbis-store-logo {
-    --app-logo-size: 56px;
-  }
-  .orbis-store .orbis-store-tile-catalogue .orbis-store-tile-action {
-    display: none;
-  }
+  inset-inline-end: 16px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: calc(100% - 32px);
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  line-height: 1.4;
 }
 .orbis-store-message {
   display: flex;
@@ -363,6 +364,7 @@
 .orbis-store-collections {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: 1fr;
   gap: 24px;
 }
 .orbis-store-collections:empty {
@@ -385,7 +387,7 @@
   gap: 12px;
   padding: 24px;
 }
-.orbis-store-collection h3 {
+.orbis-store .orbis-store-collection h3 {
   margin: 0;
   color: var(--desktop-ink);
   font-size: 1.875rem;
@@ -406,6 +408,7 @@
   justify-content: center;
   gap: 8px;
   min-height: 44px;
+  width: min(100%, 9rem);
   max-width: 100%;
   margin-top: auto;
   padding: 10px 15px;
@@ -483,7 +486,7 @@
   letter-spacing: -0.02em;
 }
 .orbis-store-discover[data-presentation="editorial"] .orbis-store-collections {
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
 .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection {
@@ -552,7 +555,7 @@
   padding: 4px var(--orbis-dialog-gutter, 24px) 20px;
   color: var(--desktop-ink);
 }
-.orbis-store-stack-body h3 {
+.orbis-store-stack-dialog .orbis-store-stack-body h3 {
   margin-block: 20px 14px;
 }
 .orbis-store-stack-options {
@@ -574,65 +577,33 @@
   line-height: 1.6;
 }
 
-@container (min-width: 68rem) {
-  .orbis-store-catalogue[data-editorial="true"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .orbis-store-catalogue[data-editorial="true"] .orbis-store-editorial:not([hidden]) {
-    display: block;
-    grid-column: 1 / -1;
-    padding-block: 12px;
-  }
-}
 @container (min-width: 60rem) {
   .orbis-store-discover[data-presentation="page"] .orbis-store-collections {
-    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
-    align-items: start;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .orbis-store-discover[data-presentation="page"] .orbis-store-collection-media {
+  .orbis-store-discover[data-presentation="page"] .orbis-store-collection {
     display: grid;
-    grid-template-columns: minmax(12rem, 0.9fr) minmax(0, 1.1fr);
-    min-height: 16rem;
+    grid-template-columns: minmax(10rem, 0.9fr) minmax(0, 1.1fr);
+    min-height: 14rem;
   }
-  .orbis-store-discover[data-presentation="page"] .orbis-store-collection-media .orbis-store-collection-art {
+  .orbis-store-discover[data-presentation="page"] .orbis-store-collection-art {
     height: 100%;
     min-height: 14rem;
-    border-radius: 23px 0 0 23px;
   }
 }
-.orbis-store-collection-gaming {
-  display: grid;
-  grid-template-columns: minmax(5rem, 0.35fr) minmax(0, 1fr);
-}
-.orbis-store-collection-gaming .orbis-store-collection-art {
-  height: 100%;
-  min-height: 10rem;
-  border-radius: 23px 0 0 23px;
-}
-.orbis-store-collection-gaming .orbis-store-collection-art[data-collection-kind="gaming"] .orbis-store-artwork-app {
-  --app-logo-size: 4.5rem;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-gaming {
-  grid-template-columns: minmax(5rem, 0.5fr) minmax(0, 1fr);
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-gaming .orbis-store-collection-art {
-  height: 100%;
-  min-height: 10rem;
-  border-radius: 0;
-}
-.orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-art[data-collection-kind="gaming"] .orbis-store-artwork-app {
-  --app-logo-size: 4rem;
-}
 @container (max-width: 60rem) {
-  .orbis-store-toolbar:has(> .refresh-app-stores) {
+  .orbis-store-discover[data-presentation="editorial"] .orbis-store-collections {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .orbis-store-toolbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 44px;
   }
-  .orbis-store-toolbar:has(> .refresh-app-stores) > .orbis-store-search {
+  .orbis-store-toolbar > .orbis-store-search {
     grid-column: 1;
     grid-row: 1;
   }
-  .orbis-store-toolbar:has(> .refresh-app-stores) > .orbis-store-view-choice {
+  .orbis-store-toolbar > .orbis-store-view-choice {
     grid-column: 1 / -1;
     grid-row: 2;
   }
@@ -646,7 +617,7 @@
     display: inline;
   }
   .orbis-store-filter-default,
-  .orbis-store-toolbar > .refresh-app-stores span {
+  .orbis-store-toolbar .orbis-store-refresh .refresh-app-stores span {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -654,49 +625,44 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .orbis-store-toolbar > .refresh-app-stores {
+  .orbis-store-toolbar > .orbis-store-refresh {
     grid-column: 2;
     grid-row: 1;
     width: 44px;
+  }
+  .orbis-store-refresh .refresh-app-stores {
     padding: 0;
   }
-}
-@container (max-width: 44rem) {
-  .orbis-store-view-label-full {
+  .orbis-store-filters[data-inactive="true"] {
     display: none;
-  }
-  .orbis-store-view-label-compact {
-    display: inline;
   }
 }
 @container (min-width: 44rem) and (max-width: 60rem) {
-  .orbis-store-toolbar:has(> .refresh-app-stores) {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 44px;
+  .orbis-store-toolbar {
+    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr) 44px;
   }
-  .orbis-store-toolbar:has(> .refresh-app-stores) > .orbis-store-search {
+  .orbis-store-toolbar > .orbis-store-search {
     grid-column: 1 / 3;
   }
-  .orbis-store-toolbar:has(> .refresh-app-stores) > .orbis-store-view-choice {
+  .orbis-store-toolbar > .orbis-store-view-choice {
     grid-column: 1;
   }
   .orbis-store-filters {
     grid-column: 2 / -1;
     grid-row: 2;
   }
-  .orbis-store-toolbar > .refresh-app-stores {
+  .orbis-store-toolbar > .orbis-store-refresh {
     grid-column: 3;
   }
 }
 @container (max-width: 38rem) {
-  .orbis-store-collection-gaming {
+  .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection {
     grid-template-columns: minmax(0, 1fr);
   }
-  .orbis-store-collection-gaming .orbis-store-collection-art {
+  .orbis-store-discover[data-presentation="editorial"] .orbis-store-collection-art {
     height: 6rem;
     min-height: 0;
-    border-radius: 23px 23px 0 0;
   }
-
   .orbis-store-toolbar {
     gap: 10px;
     padding-bottom: 16px;

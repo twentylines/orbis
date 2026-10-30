@@ -20,6 +20,8 @@ export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences & { workspace: NonN
   wallpaperPreset: null,
   windows: {},
   appLaunch: defaultAppLaunch,
+  showStoreRecommendations: true,
+  hiddenStoreRecommendationCategories: [],
   appearance: normaliseDesktopAppearance(),
   workspace: {
     order: ['applications', 'activity', 'storage', 'attention'],

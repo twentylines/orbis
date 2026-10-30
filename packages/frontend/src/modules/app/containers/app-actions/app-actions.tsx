@@ -16,7 +16,7 @@ import {
   IconTrash,
 } from '@tabler/icons-react';
 import type React from 'react';
-import { createElement, useRef } from 'react';
+import { createElement, useEffect, useRef } from 'react';
 import { Button, type ButtonProps } from '@/components/ui/Button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { useDisclosure } from '@/lib/hooks/use-disclosure';
@@ -42,6 +42,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useAppLauncher } from '@/desktop/app-launcher';
 import { useStorePreview } from '../../pages/store-preview-context';
 import { AppSettingsEditor } from '../../components/dialogs/update-settings-dialog/app-settings-editor';
+import type { StorePreviewHistory } from '../../pages/store-preview-navigation';
 
 interface IProps {
   app?: AppDetails | null;
@@ -49,6 +50,7 @@ interface IProps {
   metadata: AppMetadata;
   localDomain?: string;
   sslPort?: number;
+  allowQuickInstall?: boolean;
 }
 
 interface BtnProps extends ButtonProps {
@@ -70,7 +72,7 @@ const ActionButton: React.FC<BtnProps> = (props) => {
 
 type OpenType = 'local' | 'domain' | 'local_domain';
 
-export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps) => {
+export const AppActions = ({ app, info, localDomain, metadata, sslPort, allowQuickInstall = false }: IProps) => {
   const openApp = useAppLauncher();
   const installDisclosure = useDisclosure();
   const stopDisclosure = useDisclosure();
@@ -85,6 +87,31 @@ export const AppActions = ({ app, info, localDomain, metadata, sslPort }: IProps
   const location = useLocation();
   const navigate = useNavigate();
   const preview = useStorePreview();
+  const installRequest = (location.state as StorePreviewHistory | null)?.storeInstallUrn;
+  const handledInstallRequest = useRef<string | null>(null);
+  useEffect(() => {
+    if (!installRequest) {
+      handledInstallRequest.current = null;
+      return;
+    }
+    if (installRequest !== info.urn || handledInstallRequest.current === installRequest) return;
+    handledInstallRequest.current = installRequest;
+    const { storeInstallUrn: _, ...state } = location.state as StorePreviewHistory;
+    void navigate(`${location.pathname}${location.search}`, { replace: true, state, preventScrollReset: true });
+    if (allowQuickInstall && info.available && !info.deprecated && (app?.status ?? 'missing') === 'missing') installDisclosure.open();
+  }, [
+    installRequest,
+    info.urn,
+    info.available,
+    info.deprecated,
+    app?.status,
+    allowQuickInstall,
+    location.state,
+    location.pathname,
+    location.search,
+    navigate,
+    installDisclosure.open,
+  ]);
   const openingInlineSettings = useRef(false);
   const openSettings = () => {
     if (preview?.openPanel && preview.closePanel) {

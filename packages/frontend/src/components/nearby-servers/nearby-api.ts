@@ -1,12 +1,42 @@
 import { type } from 'arktype';
 
 const nic = type({ id: 'string', address: 'string', prefixLength: 'number' });
-const candidate = type({ id: 'string', origin: 'string', address: 'string', port: 'number', expiresAt: 'string', verified: 'false' });
+const candidate = type({
+  'kind?': "'https'",
+  id: 'string',
+  origin: 'string',
+  address: 'string',
+  port: 'number',
+  expiresAt: 'string',
+  verified: 'false',
+});
+const addressHint = type({
+  '+': 'reject',
+  kind: "'address'",
+  id: 'string',
+  address: 'string',
+  port: 'number',
+  expiresAt: 'string',
+  verified: 'false',
+});
 const availableInterfaces = type({ available: 'true', interfaces: nic.array().atMostLength(32) });
-const availableCandidates = type({ available: 'true', candidates: candidate.array().atMostLength(16) });
-export type NearbyCandidate = typeof candidate.infer;
+const availableCandidates = type({ available: 'true', candidates: candidate.or(addressHint).array().atMostLength(16) });
+export type NearbyCandidate = typeof candidate.infer | typeof addressHint.infer;
 export type NearbyInterface = typeof nic.infer;
 export const nearbyFallback = 'Nearby discovery is unavailable. Enter the server address manually.';
+
+export function nearbyAddress(value: string) {
+  const parts = value.split('.');
+  const [a, b] = parts.map(Number);
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !/^\d{1,3}$/.test(part) || Number(part) > 255) ||
+    parts.map(Number).join('.') !== value ||
+    !(a === 10 || (a === 172 && b !== undefined && b >= 16 && b <= 31) || (a === 192 && b === 168))
+  )
+    throw new Error('Invalid nearby private address.');
+  return value;
+}
 
 export function nearbyOrigin(value: string) {
   const url = new URL(value);
@@ -54,7 +84,12 @@ export function parseNearby(value: unknown, kind: 'interfaces' | 'scan') {
     )
   )
     throw new Error(nearbyFallback);
-  return { ...result, candidates: result.candidates.map((item) => ({ ...item, origin: nearbyOrigin(item.origin) })) };
+  return {
+    ...result,
+    candidates: result.candidates.map((item) =>
+      item.kind === 'address' ? { ...item, address: nearbyAddress(item.address) } : { ...item, origin: nearbyOrigin(item.origin) },
+    ),
+  };
 }
 
 async function request(action: 'interfaces' | 'scan' | 'advertise' | 'disable', body?: object, signal?: AbortSignal) {

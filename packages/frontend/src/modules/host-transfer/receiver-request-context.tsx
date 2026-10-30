@@ -150,7 +150,7 @@ function RequestSession({ instance, operator, children }: { instance: string; op
               toast.dismiss(notice.id);
             }}
           >
-            Review
+            View request
           </Button>
         </span>
       ),

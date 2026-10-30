@@ -1,0 +1,34 @@
+.orbis-store-recommendation-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding-top: 4px;
+}
+.orbis-store-recommendation-tools .btn {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 12px;
+  white-space: normal;
+  text-align: start;
+  line-height: 1.4;
+}
+.orbis-store-recommendation-tools .btn-icon {
+  flex: 0 0 44px;
+  width: 44px;
+  padding: 12px;
+}
+.orbis-store-recommendations .orbis-store-section-heading button {
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+.orbis-store-recommendations .orbis-store-section-heading button:hover {
+  background: color-mix(in srgb, var(--desktop-action) 12%, transparent);
+}
+.orbis-store-recommendations > .orbis-store-collections {
+  position: relative;
+}
+.orbis-store-recommendations[inert] {
+  overflow: hidden;
+}

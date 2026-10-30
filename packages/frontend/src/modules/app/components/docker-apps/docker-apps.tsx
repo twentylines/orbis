@@ -116,7 +116,7 @@ export function DockerAppsSection({ filters = { search: '', category: '', sort: 
                       </p>
                       {app.source === 'runtipi' ? <p className="docker-app-origin">Runtipi configuration not imported</p> : null}
                     </div>
-                    <Button onClick={() => openReview(app)} aria-label={`Review uninstall for ${app.name}`} data-docker-app-id={app.id}>
+                    <Button onClick={() => openReview(app)} aria-label={`Uninstall ${app.name}`} data-docker-app-id={app.id}>
                       <IconTrash size={18} aria-hidden="true" /> Uninstall
                     </Button>
                   </li>

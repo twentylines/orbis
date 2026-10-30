@@ -4,13 +4,16 @@ import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { convertLegacyToYaml } from '@runtipi/common/schemas/utils/convert-legacy-schema';
 import type { dynamicComposeSchemaYaml } from '@runtipi/common/schemas/compose-yaml';
-import { MultiServiceForm } from '@/components/multi-service-form/multi-service-form';
+import { MultiServiceForm, type MultiServiceFormHandle } from '@/components/multi-service-form/multi-service-form';
 import { createCustomAppMutation } from '@/api-client/@tanstack/react-query.gen';
 import { Input } from '@/components/ui/Input/Input';
+import { Button } from '@/components/ui/Button';
+import { IconX } from '@tabler/icons-react';
 import type { TranslatableError } from '@/types/error.types';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { type } from 'arktype';
 import { useMultiServiceStore } from '@/stores/multiServiceStore';
+import { confirmDiscard } from '@/desktop/confirmation';
 import './custom-app-create-page.css';
 
 const RESERVED_APP_NAMES = ['create'];
@@ -21,6 +24,14 @@ export default () => {
   const [appName, setAppName] = useState('');
   const [appNameError, setAppNameError] = useState<string>();
   const { composeExtras, setComposeExtras } = useMultiServiceStore();
+  const form = useRef<MultiServiceFormHandle>(null);
+  const closeIntent = useRef(0);
+  useEffect(
+    () => () => {
+      closeIntent.current += 1;
+    },
+    [],
+  );
 
   const appNameSchema = type('string').narrow((name, ctx) => {
     if (name.length < 1) ctx.reject({ message: t('CUSTOM_APP_NAME_REQUIRED') });
@@ -47,6 +58,7 @@ export default () => {
   }, [setComposeExtras]);
 
   const onSubmit = (data: typeof dynamicComposeSchemaYaml.infer) => {
+    closeIntent.current += 1;
     const validation = appNameSchema(appName);
     if (validation instanceof type.errors) {
       setAppNameError(validation.summary);
@@ -54,6 +66,15 @@ export default () => {
     }
 
     createCustomApp.mutate({ body: { config: data, name: appName } });
+  };
+
+  const close = async () => {
+    if (createCustomApp.isPending) return;
+    const intent = ++closeIntent.current;
+    const snapshot = useMultiServiceStore.getState();
+    if ((appName.length > 0 || form.current?.hasUnsavedChanges()) && !(await confirmDiscard('Leave without adding this app?'))) return;
+    if (closeIntent.current !== intent || useMultiServiceStore.getState() !== snapshot) return;
+    navigate('/apps');
   };
 
   return (
@@ -80,9 +101,23 @@ export default () => {
               {t('CUSTOM_APP_NAME_HELP')}
             </p>
           </div>
+          <Button
+            type="button"
+            className="custom-app-create-close"
+            aria-label="Back to apps"
+            disabled={createCustomApp.isPending}
+            onClick={() => void close()}
+          >
+            <IconX size={20} aria-hidden="true" />
+          </Button>
         </div>
       </section>
-      <MultiServiceForm onSubmit={(d) => onSubmit({ ...convertLegacyToYaml(d), ...composeExtras })} />
+      <MultiServiceForm
+        ref={form}
+        submitLabel="Add"
+        submitting={createCustomApp.isPending}
+        onSubmit={(d) => onSubmit({ ...convertLegacyToYaml(d), ...composeExtras })}
+      />
     </div>
   );
 };

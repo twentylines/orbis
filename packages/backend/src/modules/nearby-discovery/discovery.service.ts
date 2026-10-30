@@ -35,7 +35,7 @@ export class NearbyDiscoveryService implements OnModuleInit, OnModuleDestroy {
     this.writes = operation;
     return operation;
   }
-  private async configuredEndpoint() {
+  private async secureEndpoint() {
     const { localDomain, sslPort } = this.config.get('userSettings');
     const port = Number(sslPort);
     if (
@@ -60,6 +60,24 @@ export class NearbyDiscoveryService implements OnModuleInit, OnModuleDestroy {
     if (matches.length !== 1 || !selected) throw new BadRequestException('A unique private LAN interface must match this server’s HTTPS address.');
     return { interface: selected.id, origin: target.origin, address: target.address };
   }
+  private async configuredEndpoint(addressHints: boolean) {
+    try {
+      return await this.secureEndpoint();
+    } catch (error) {
+      if (!addressHints) throw error;
+      const configuredPort: unknown = this.config.get('userSettings').port;
+      const port =
+        typeof configuredPort === 'number' || (typeof configuredPort === 'string' && /^\d{1,5}$/.test(configuredPort))
+          ? Number(configuredPort)
+          : Number.NaN;
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new BadRequestException('The configured local HTTP port is unavailable.');
+      const inventory = await this.read('interfaces');
+      const interfaces = inventory.available && inventory.interfaces ? inventory.interfaces : [];
+      const matches = interfaces.length === 1 ? interfaces : interfaces.filter((item) => item.preferred);
+      if (matches.length !== 1 || !matches[0]) throw new BadRequestException('A unique eligible private LAN interface is required for discovery.');
+      return { kind: 'address' as const, interface: matches[0].id, port };
+    }
+  }
   reconcile() {
     if (this.reconciliation) return this.reconciliation;
     this.reconciliation = this.serialize(async () => {
@@ -67,8 +85,9 @@ export class NearbyDiscoveryService implements OnModuleInit, OnModuleDestroy {
       const current = await this.status();
       if (!current.available || !('enabled' in current) || !current.enabled) return current;
       try {
-        const endpoint = await this.configuredEndpoint();
+        const endpoint = await this.configuredEndpoint('hintVersion' in current && current.hintVersion === 2);
         if (this.stopped || installationMode().phase !== 'normal') return discoveryUnavailable();
+        if ('kind' in endpoint) return await this.read('configure-address', { interface: endpoint.interface, port: endpoint.port });
         return await this.read('configure', endpoint);
       } catch {
         await this.read('suspend', {});
@@ -81,7 +100,7 @@ export class NearbyDiscoveryService implements OnModuleInit, OnModuleDestroy {
   }
 
   private request(
-    action: 'status' | 'interfaces' | 'scan' | 'advertise' | 'disable' | 'configure' | 'policy' | 'suspend',
+    action: 'status' | 'interfaces' | 'scan' | 'advertise' | 'disable' | 'configure' | 'configure-address' | 'policy' | 'suspend',
     body?: object,
   ): Promise<unknown> {
     if (!this.socketPath || !path.isAbsolute(this.socketPath) || this.socketPath.includes('\0')) return Promise.resolve(discoveryUnavailable());
@@ -117,7 +136,10 @@ export class NearbyDiscoveryService implements OnModuleInit, OnModuleDestroy {
       request.end(payload);
     });
   }
-  private async read(action: 'status' | 'interfaces' | 'scan' | 'advertise' | 'disable' | 'configure' | 'policy' | 'suspend', body?: object) {
+  private async read(
+    action: 'status' | 'interfaces' | 'scan' | 'advertise' | 'disable' | 'configure' | 'configure-address' | 'policy' | 'suspend',
+    body?: object,
+  ) {
     try {
       return discoveryResponse(await this.request(action, body), action === 'interfaces' || action === 'scan' ? action : 'status');
     } catch {
@@ -146,7 +168,11 @@ export class NearbyDiscoveryService implements OnModuleInit, OnModuleDestroy {
     return this.serialize(async () => {
       if (this.stopped || installationMode().phase !== 'normal') return discoveryUnavailable();
       const enabled = body.enabled;
-      const configuration = enabled ? await this.configuredEndpoint() : undefined;
+      const current = enabled ? await this.status() : undefined;
+      if (enabled && !current?.available) return discoveryUnavailable();
+      const configuration = enabled
+        ? await this.configuredEndpoint(Boolean(current && 'hintVersion' in current && current.hintVersion === 2))
+        : undefined;
       if (this.stopped || installationMode().phase !== 'normal') return discoveryUnavailable();
       await this.read('policy', { enabled, ...(configuration ? { configuration } : {}) });
       return this.status();

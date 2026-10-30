@@ -44,6 +44,93 @@ describe('nearby discovery bounds and trust', () => {
     for (const value of [0, 29, 301, true, '120']) expect(() => discoveryLease(value)).toThrow();
     expect(discoveryLease(120)).toBe(120);
   });
+  it('keeps address-only hints separate from HTTPS origins and never upgrades trust', () => {
+    const hint = { kind: 'address', id: 'b'.repeat(32), address: '192.168.50.20', port: 80, expiresAt: candidate.expiresAt, verified: false };
+    expect(discoveryResponse({ available: true, candidates: [hint] }, 'scan')).toEqual({ available: true, candidates: [hint] });
+    for (const change of [
+      { address: '8.8.8.8' },
+      { origin: 'http://192.168.50.20' },
+      { url: 'https://192.168.50.20' },
+      { verified: true },
+      { port: 0 },
+    ])
+      expect(() => discoveryResponse({ available: true, candidates: [{ ...hint, ...change }] }, 'scan')).toThrow();
+    const sharing = { kind: 'address', address: hint.address, port: 80, interface: 'eth0', expiresAt: hint.expiresAt };
+    expect(discoveryResponse({ available: true, policyVersion: 1, hintVersion: 2, enabled: true, sharing }, 'status')).toMatchObject({ sharing });
+    expect(() => discoveryResponse({ available: true, policyVersion: 1, enabled: true, sharing }, 'status')).toThrow();
+    expect(() => discoveryResponse({ available: true, policyVersion: 1, hintVersion: 3, enabled: true, sharing: null }, 'status')).toThrow();
+  });
+  it('fresh HTTP setups advertise only their own private address on a capable helper without DNS', async () => {
+    const resolve = vi.fn();
+    const service = new NearbyDiscoveryService({ resolve } as never, { get: () => ({ localDomain: '', port: 8080, sslPort: 443 }) } as never);
+    const socket = vi
+      .spyOn(service as unknown as { request: (...args: unknown[]) => Promise<unknown> }, 'request')
+      .mockImplementation(async (action) =>
+        action === 'interfaces'
+          ? { available: true, interfaces: [{ id: 'eth0', index: 2, address: '192.168.50.10', prefixLength: 24 }] }
+          : { available: true, policyVersion: 1, hintVersion: 2, enabled: true, sharing: null },
+      );
+    await service.reconcile();
+    expect(resolve).not.toHaveBeenCalled();
+    expect(socket).toHaveBeenCalledWith('configure-address', { interface: 'eth0', port: 8080 });
+    expect(socket.mock.calls.some(([action]) => action === 'configure')).toBe(false);
+    expect(socket.mock.calls.some(([action]) => action === 'suspend')).toBe(false);
+  });
+  it('failed HTTPS DNS can fall back only to a unique kernel-preferred private interface', async () => {
+    for (const preferred of [true, false]) {
+      const resolve = vi.fn().mockRejectedValue(new Error('Private DNS requirement'));
+      const service = new NearbyDiscoveryService(
+        { resolve } as never,
+        { get: () => ({ localDomain: 'source.example', port: 80, sslPort: 443 }) } as never,
+      );
+      const socket = vi
+        .spyOn(service as unknown as { request: (...args: unknown[]) => Promise<unknown> }, 'request')
+        .mockImplementation(async (action) =>
+          action === 'interfaces'
+            ? {
+                available: true,
+                interfaces: [
+                  { id: 'eth0', index: 2, address: '192.168.50.10', prefixLength: 24, preferred: false },
+                  { id: 'wlan0', index: 3, address: '192.168.60.10', prefixLength: 24, preferred },
+                ],
+              }
+            : { available: true, policyVersion: 1, hintVersion: 2, enabled: true, sharing: null },
+        );
+      await service.reconcile();
+      if (preferred) expect(socket).toHaveBeenCalledWith('configure-address', { interface: 'wlan0', port: 80 });
+      else {
+        expect(socket).toHaveBeenCalledWith('suspend', {});
+        expect(socket.mock.calls.some(([action]) => action === 'configure-address')).toBe(false);
+      }
+    }
+  });
+  it('address-only visibility enable is confirmed through the existing boolean policy without persisting an origin', async () => {
+    const resolve = vi.fn();
+    const service = new NearbyDiscoveryService({ resolve } as never, { get: () => ({ localDomain: '', port: 80, sslPort: 443 }) } as never);
+    const socket = vi
+      .spyOn(service as unknown as { request: (...args: unknown[]) => Promise<unknown> }, 'request')
+      .mockImplementation(async (action) =>
+        action === 'interfaces'
+          ? { available: true, interfaces: [{ id: 'eth0', index: 2, address: '192.168.50.10', prefixLength: 24 }] }
+          : { available: true, policyVersion: 1, hintVersion: 2, enabled: true, sharing: null },
+      );
+    await service.policy({ enabled: true });
+    expect(socket).toHaveBeenCalledWith('policy', { enabled: true, configuration: { kind: 'address', interface: 'eth0', port: 80 } });
+    await service.policy({ enabled: false });
+    expect(socket).toHaveBeenCalledWith('policy', { enabled: false });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+  it('invalid configured HTTP ports never invent an address endpoint', async () => {
+    for (const port of [true, null, 0, 65536, '0x50']) {
+      const service = new NearbyDiscoveryService({ resolve: vi.fn() } as never, { get: () => ({ localDomain: '', port, sslPort: 443 }) } as never);
+      const socket = vi
+        .spyOn(service as unknown as { request: (...args: unknown[]) => Promise<unknown> }, 'request')
+        .mockResolvedValue({ available: true, policyVersion: 1, hintVersion: 2, enabled: true, sharing: null });
+      await service.reconcile();
+      expect(socket).toHaveBeenCalledWith('suspend', {});
+      expect(socket.mock.calls.some(([action]) => action === 'configure-address')).toBe(false);
+    }
+  });
   it('never resolves or contacts a candidate during scans, status or disable; absent helper is ordinary unavailable', async () => {
     const resolve = vi.fn();
     const service = new NearbyDiscoveryService({ resolve } as unknown as TransferTransport, config as never);

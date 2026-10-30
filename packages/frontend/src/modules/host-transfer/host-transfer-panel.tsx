@@ -496,7 +496,7 @@ export function HostTransferWizard({
                 {offer.destinationFingerprint ? <Fingerprint label="Destination fingerprint" value={offer.destinationFingerprint} /> : null}
                 {offer.status === 'awaiting-approval' ? (
                   <Button type="button" variant="outline" disabled={busy || status.isError} onClick={() => go({ kind: 'approve', offer })}>
-                    Review destination
+                    View destination request
                   </Button>
                 ) : null}
                 {offer.status === 'approved' ? <p>On the destination, compare the source fingerprint and choose Start transfer.</p> : null}
@@ -579,7 +579,7 @@ export function HostTransferWizard({
                       disabled={busy || status.isError}
                       onClick={() => go({ kind: 'restore', importId: job.importId })}
                     >
-                      Review
+                      Open backup
                     </Button>
                   ) : null}
                   {stopped.has(job.status) ? null : (

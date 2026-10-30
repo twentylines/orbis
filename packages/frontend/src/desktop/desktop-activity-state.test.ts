@@ -64,7 +64,8 @@ describe('dock activity describes actual active work', () => {
       state: 'complete',
       operationCount: 3,
     });
-    expect(value).toMatchObject({ title: 'Installing · Queued', detail: 'Photos', count: 1 });
+    expect(value).toMatchObject({ title: 'Installing', detail: 'Photos', count: 1 });
+    expect(value?.items[0]).toMatchObject({ detail: 'Queued', state: 'queued' });
   });
   test('system package operation counts remain separate from app counts', () => {
     const value = desktopActivity([task('a', 'photos:store')], names, null, { id: 'apt', state: 'running', operationCount: 7 });

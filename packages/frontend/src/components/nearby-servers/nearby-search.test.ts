@@ -3,7 +3,7 @@ import { NearbySearch } from './nearby-search';
 import { nearbyFallback, type NearbyCandidate } from './nearby-api';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { NearbyServers } from './nearby-servers';
+import { NearbyResult, NearbyServers } from './nearby-servers';
 
 const eth = { id: 'eth0', address: '192.168.1.2', prefixLength: 24 };
 const wifi = { id: 'wlan0', address: '192.168.2.2', prefixLength: 24 };
@@ -246,4 +246,33 @@ test('the picker starts without a separate search setup action and retains manua
   expect(markup).not.toContain('Find nearby servers');
   expect(markup).toContain('Verify the selected server');
   expect(markup).toContain('enter its address manually');
+});
+
+test('address-only results are visible but cannot select, rewrite a URL or start transfer', async () => {
+  const hint: NearbyCandidate = {
+    kind: 'address',
+    id: 'c'.repeat(32),
+    address: '192.168.1.3',
+    port: 8080,
+    expiresAt: candidate.expiresAt,
+    verified: false,
+  };
+  const search = new NearbySearch(() => {}, {
+    interfaces: async () => ({ available: true, interfaces: [eth] }),
+    scan: async () => ({ available: true, candidates: [hint] }),
+  });
+  await search.show();
+  expect(search.snapshot.candidates).toEqual([hint]);
+  expect(search.choose(hint.id, 1)).toBeUndefined();
+  let selections = 0;
+  const markup = renderToStaticMarkup(createElement(NearbyResult, { item: hint, disabled: false, onSelect: () => selections++ }));
+  expect(markup).toContain('192.168.1.3:8080');
+  expect(markup).toContain('Unverified · HTTPS required');
+  expect(markup).not.toContain('<button');
+  expect(markup).not.toContain('href=');
+  expect(markup).not.toContain('https://192.168.1.3');
+  expect(selections).toBe(0);
+  const secure = renderToStaticMarkup(createElement(NearbyResult, { item: candidate, disabled: false, onSelect: () => selections++ }));
+  expect(secure).toContain('>Select</button>');
+  expect(secure).toContain('Unverified');
 });

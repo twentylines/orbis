@@ -56,9 +56,8 @@ export function desktopActivity(
   if (latest) {
     const group = activeTasks.filter((task) => task.action === latest.action);
     const appCount = new Set(group.map((task) => task.appUrn)).size;
-    const queued = group.every((task) => task.status === 'queued');
     summary = {
-      title: `${verbs[latest.action]}${queued ? ' · Queued' : ''}`,
+      title: verbs[latest.action],
       detail: appCount === 1 ? name(latest) : `${appCount} apps${group.length > appCount ? ` · ${group.length} operations` : ''}`,
       appUrn: appCount === 1 ? latest.appUrn : undefined,
       kind: 'app',
@@ -87,7 +86,7 @@ export function desktopActivity(
       state: packageJob.state,
     });
     summary = {
-      title: `${refresh ? 'Refreshing' : 'Updating'}${packageJob.state === 'queued' ? ' · Queued' : ''}`,
+      title: refresh ? 'Refreshing' : 'Updating',
       detail: refresh ? 'System package lists' : count ? `${count} system package${count === 1 ? '' : 's'}` : 'System packages',
       kind: 'packages',
       count: items.length,

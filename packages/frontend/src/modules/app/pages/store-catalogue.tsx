@@ -5,10 +5,16 @@ import { StoreTile } from '../components/store-tile/store-tile';
 export function StoreCatalogue({
   apps,
   collections,
+  collectionsAfter = 8,
+  canInstall = false,
+  installedApps,
   lastElementRef,
 }: {
   apps: AppInfoSimple[];
   collections?: ReactNode;
+  collectionsAfter?: number;
+  canInstall?: boolean;
+  installedApps?: ReadonlySet<string>;
   lastElementRef: (node: HTMLDivElement) => void;
 }) {
   return (
@@ -16,9 +22,9 @@ export function StoreCatalogue({
       {apps.map((app, index) => (
         <Fragment key={app.urn}>
           <div ref={index === apps.length - 1 ? lastElementRef : null} className="orbis-store-grid-item">
-            <StoreTile app={app} isLoading={false} catalogueRow />
+            <StoreTile app={app} isLoading={false} catalogueRow quickInstall={canInstall && !installedApps?.has(app.urn)} />
           </div>
-          {index === 7 ? collections : null}
+          {index === collectionsAfter - 1 ? collections : null}
         </Fragment>
       ))}
     </div>

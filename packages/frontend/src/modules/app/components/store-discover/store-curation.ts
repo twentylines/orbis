@@ -1,12 +1,21 @@
 import type { AppInfoSimple } from '@/types/app.types';
 
-export type MediaApp = 'jellyfin' | 'plex' | 'sonarr' | 'radarr' | 'prowlarr' | 'qbittorrent' | 'transmission';
+export const mediaPlayers = ['jellyfin', 'plex', 'emby'] as const;
+export type MediaPlayer = (typeof mediaPlayers)[number];
+export type MediaApp = MediaPlayer | 'sonarr' | 'radarr' | 'prowlarr' | 'bazarr' | 'lidarr' | 'jackett' | 'qbittorrent' | 'transmission';
+export function isMediaPlayer(id: MediaApp): id is MediaPlayer {
+  return mediaPlayers.includes(id as MediaPlayer);
+}
 export const mediaApps: { id: MediaApp; name: string; purpose: string }[] = [
   { id: 'jellyfin', name: 'Jellyfin', purpose: 'Stream your personal media library.' },
   { id: 'plex', name: 'Plex', purpose: 'Stream your personal media library.' },
+  { id: 'emby', name: 'Emby', purpose: 'Stream your personal media library.' },
   { id: 'prowlarr', name: 'Prowlarr', purpose: 'Manage indexers for your media tools.' },
+  { id: 'jackett', name: 'Jackett', purpose: 'Connect indexers to compatible media tools.' },
   { id: 'sonarr', name: 'Sonarr', purpose: 'Organise and monitor your TV library.' },
   { id: 'radarr', name: 'Radarr', purpose: 'Organise and monitor your film library.' },
+  { id: 'bazarr', name: 'Bazarr', purpose: 'Find subtitles for your media library.' },
+  { id: 'lidarr', name: 'Lidarr', purpose: 'Organise and monitor your music library.' },
   { id: 'qbittorrent', name: 'qBittorrent', purpose: 'A download client to connect to your library tools.' },
   { id: 'transmission', name: 'Transmission', purpose: 'A download client to connect to your library tools.' },
 ];
@@ -18,7 +27,7 @@ export function resolveCuratedApp(apps: AppInfoSimple[], ids: readonly string[],
 }
 
 export function mediaPlan(
-  player: 'jellyfin' | 'plex' | null,
+  player: MediaPlayer | null,
   companions: readonly MediaApp[],
   resolved: Partial<Record<MediaApp, AppInfoSimple>>,
   downloadClient: 'qbittorrent' | 'transmission' | null = null,
@@ -28,7 +37,7 @@ export function mediaPlan(
     ...(downloadClient ? [downloadClient] : []),
     ...mediaApps
       .map((entry) => entry.id)
-      .filter((id) => !['jellyfin', 'plex', 'qbittorrent', 'transmission'].includes(id) && companions.includes(id)),
+      .filter((id) => !isMediaPlayer(id) && !['qbittorrent', 'transmission'].includes(id) && companions.includes(id)),
   ].flatMap((id) => (resolved[id] ? [resolved[id] as AppInfoSimple] : []));
 }
 
@@ -42,12 +51,12 @@ export function mediaRecommendations(
   catalogue: Partial<Record<MediaApp, AppInfoSimple>>,
   installed: readonly { urn: string; id: string; name: string }[],
 ) {
-  const existingPlayer = installed.find((app) => app.id === 'jellyfin' || app.id === 'plex');
+  const existingPlayer = installed.find((app) => app.id === 'jellyfin' || app.id === 'plex' || app.id === 'emby');
   const existingClient = installed.find((app) => app.id === 'qbittorrent' || app.id === 'transmission');
   const resolved: Partial<Record<MediaApp, AppInfoSimple>> = {};
   for (const entry of mediaApps) {
     const app = catalogue[entry.id];
-    if (existingPlayer && (entry.id === 'jellyfin' || entry.id === 'plex')) continue;
+    if (existingPlayer && isMediaPlayer(entry.id)) continue;
     if (existingClient && (entry.id === 'qbittorrent' || entry.id === 'transmission')) continue;
     if (app && missingRecommendations([app], installed).length) resolved[entry.id] = app;
   }
@@ -63,6 +72,13 @@ export function storeView(value: string | null | undefined): 'apps' | 'discover'
   return value === 'themes' ? 'themes' : value === 'discover' || value === 'collections' ? 'discover' : 'apps';
 }
 
-export function storeEditorialFits(width: number, rootFontSize: number) {
-  return Number.isFinite(width) && Number.isFinite(rootFontSize) && rootFontSize > 0 && width >= 68 * rootFontSize;
+export function storeEditorialFits(width: number, height: number, rootFontSize: number) {
+  return (
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    Number.isFinite(rootFontSize) &&
+    rootFontSize > 0 &&
+    width >= 68 * rootFontSize &&
+    height >= 40 * rootFontSize
+  );
 }

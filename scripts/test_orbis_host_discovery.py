@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import os
 import json
 import socket
@@ -18,6 +19,21 @@ ID = "a" * 32
 
 
 class DiscoveryPacketTests(unittest.TestCase):
+    def test_proto1_bytes_remain_compatible_and_proto2_contains_only_an_address_hint(self):
+        original = D.response_packet(7, ID, "https://source.internal.example:8443", "192.168.50.20")
+        self.assertEqual(hashlib.sha256(original).hexdigest(), "ca9f46edf0152424b2c586f63ff4d86955a2e2d1e0f203af254aacfc87e39ce2")
+        raw = D.response_packet(7, ID, None, "192.168.50.20", hint_port=8080)
+        self.assertLessEqual(len(raw), D.PACKET_LIMIT)
+        self.assertEqual(D.candidate(raw, 7, "192.168.50.20"), {"kind": "address", "id": ID, "address": "192.168.50.20", "port": 8080, "ttl": 10, "verified": False})
+        self.assertNotIn(b"origin=", raw)
+        for changed, source in [(raw, "8.8.8.8"), (raw, "192.168.50.21"), (raw.replace(b"proto=2", b"proto=3"), "192.168.50.20"), (raw.replace(b"proto=2", b"proto=1"), "192.168.50.20"), (original.replace(b"proto=1", b"proto=2"), "192.168.50.20")]:
+            self.assertIsNone(D.candidate(changed, 7, source))
+        for port in [0, 65536, True, "80"]:
+            with self.assertRaises(ValueError):
+                D.response_packet(7, ID, None, "192.168.50.20", hint_port=port)
+        with self.assertRaises(ValueError):
+            D.response_packet(7, ID, "http://192.168.50.20", "192.168.50.20", hint_port=80)
+
     def test_round_trip_is_only_an_unverified_hint_with_ephemeral_identity(self):
         raw = D.response_packet(7, ID, "https://source.internal.example:8443", "192.168.50.20")
         item = D.candidate(raw, 7, "192.168.50.20")
@@ -73,6 +89,53 @@ class DiscoveryPacketTests(unittest.TestCase):
 
 
 class DiscoveryInterfaceTests(unittest.TestCase):
+    def test_default_route_selects_only_a_unique_eligible_private_interface(self):
+        wifi = {**NIC, "id": "wlan0", "index": 3, "address": "192.168.60.10"}
+        route = {"dst": "default", "dev": "eth0", "gateway": "192.168.50.1", "metric": 100}
+        self.assertEqual(D.preferred_interface([NIC], []), "eth0")
+        self.assertEqual(D.preferred_interface([wifi, NIC], [route]), "eth0")
+        other = {**route, "dev": "wlan0", "gateway": "192.168.60.1"}
+        self.assertIsNone(D.preferred_interface([NIC, wifi], [route, other]))
+        self.assertEqual(D.preferred_interface([NIC, wifi], [route, {**other, "metric": 50}]), "wlan0")
+        for changed in [{"gateway": "8.8.8.8"}, {"gateway": NIC["address"]}, {"gateway": "192.168.50.255"}, {"dev": "wg0"}, {"metric": True}, {"table": 123}, {"multipath": []}, {"nexthops": []}]:
+            self.assertIsNone(D.preferred_interface([NIC, wifi], [{**route, **changed}]))
+        self.assertIsNone(D.preferred_interface([NIC, wifi], [route] * 65))
+
+    def test_ambiguous_or_unsafe_preferred_default_cannot_select_a_backup(self):
+        wifi = {**NIC, "id": "wlan0", "index": 3, "address": "192.168.60.10"}
+        backup = {"dst": "default", "dev": "wlan0", "gateway": "192.168.60.1", "metric": 100}
+        primary = {"dst": "default", "metric": 10, "nexthops": [
+            {"dev": "eth0", "gateway": "192.168.50.1"},
+            {"dev": "wlan0", "gateway": "192.168.60.1"},
+        ]}
+        competing = [primary, {**primary, "metric": 100}, {**primary, "multipath": primary["nexthops"]},
+                     {**backup, "metric": 10, "gateway": "8.8.8.8"},
+                     {**backup, "metric": 10, "dev": "wg0"},
+                     {**backup, "metric": 10, "type": "blackhole"},
+                     {**backup, "metric": True}]
+        for uncertain in competing:
+            for routes in ([uncertain, backup], [backup, uncertain]):
+                with self.subTest(routes=routes):
+                    self.assertIsNone(D.preferred_interface([NIC, wifi], routes))
+
+    def test_unambiguous_lower_metric_private_route_wins_over_uncertain_backup(self):
+        wifi = {**NIC, "id": "wlan0", "index": 3, "address": "192.168.60.10"}
+        primary = {"dst": "default", "dev": "eth0", "gateway": "192.168.50.1", "metric": 10}
+        backup = {"dst": "default", "metric": 100, "nexthops": [
+            {"dev": "eth0", "gateway": "192.168.50.1"},
+            {"dev": "wlan0", "gateway": "192.168.60.1"},
+        ]}
+        for routes in ([primary, backup], [backup, primary]):
+            self.assertEqual(D.preferred_interface([NIC, wifi], routes), "eth0")
+        self.assertEqual(D.preferred_interface([NIC, wifi], [primary, {**primary}]), "eth0")
+
+    def test_interface_preference_uses_only_bounded_read_only_route_metadata(self):
+        wifi = {**ROW, "ifname": "wlan0", "ifindex": 3, "addr_info": [{"family": "inet", "local": "192.168.60.10", "prefixlen": 24}]}
+        route = [{"dst": "default", "dev": "eth0", "gateway": "192.168.50.1"}]
+        with mock.patch.object(D.sys, "platform", "linux"), mock.patch.object(D.socket, "SO_BINDTODEVICE", 25, create=True), mock.patch.object(D.subprocess, "run", side_effect=[mock.Mock(returncode=0, stdout=json.dumps([ROW, wifi]).encode()), mock.Mock(returncode=0, stdout=json.dumps(route).encode())]) as command:
+            values = D.interfaces()
+            self.assertEqual([item["id"] for item in values if item["preferred"]], ["eth0"])
+            self.assertEqual(command.call_args_list[1].args[0], ["ip", "-j", "-4", "route", "show", "table", "main", "default"])
     def test_selects_only_explicit_private_active_multicast_lan_interfaces(self):
         self.assertEqual(D.eligible_interfaces([ROW]), [NIC])
         for changes in [{"flags": ["UP"]}, {"flags": ["UP", "MULTICAST", "POINTOPOINT"]}, {"ifname": "docker0"}, {"ifname": "eth0;bad"}, {"ifindex": 0}, {"link_type": "loopback"}, {"linkinfo": {"info_kind": "bridge"}}, {"addr_info": [{"family": "inet", "local": "8.8.8.8", "prefixlen": 24}]}, {"addr_info": ROW["addr_info"] + [{"family": "inet", "local": "8.8.8.8", "prefixlen": 24}]}]:
@@ -176,7 +239,7 @@ class DiscoveryPolicyTests(unittest.TestCase):
 
     def test_absence_defaults_allowed_without_socket_or_advertisement(self):
         with mock.patch.object(D.sys, "platform", "linux"):
-            self.assertEqual(self.discovery.policy_status(), {"available": True, "sharing": None, "policyVersion": 1, "enabled": True})
+            self.assertEqual(self.discovery.policy_status(), {"available": True, "sharing": None, "policyVersion": 1, "enabled": True, "hintVersion": 2})
         self.factory.assert_not_called()
         self.assertFalse(self.file.exists())
 
@@ -187,6 +250,58 @@ class DiscoveryPolicyTests(unittest.TestCase):
         restarted = D.Discovery(policy_path=self.file, socket_factory=self.factory, interface_reader=lambda: [NIC])
         self.assertFalse(restarted.configure("eth0", "https://source.example", NIC["address"])["enabled"])
         self.factory.assert_not_called()
+
+    def test_address_hint_without_dns_is_bounded_and_opt_out_survives_restart(self):
+        with mock.patch.object(D.threading, "Thread"), mock.patch.object(D.sys, "platform", "linux"):
+            active = self.discovery.configure_address("eth0", 8080)
+            self.assertEqual(active["sharing"]["kind"], "address")
+            self.assertEqual(active["sharing"]["address"], NIC["address"])
+            self.assertEqual(active["sharing"]["port"], 8080)
+            self.assertNotIn("origin", active["sharing"])
+            self.assertLessEqual(self.discovery.lease["until"] - self.discovery.clock(), 180)
+            self.discovery.set_policy(False)
+            restarted = D.Discovery(policy_path=self.file, socket_factory=self.factory, interface_reader=lambda: [NIC])
+            self.factory.reset_mock()
+            self.assertFalse(restarted.configure_address("eth0", 8080)["enabled"])
+            self.factory.assert_not_called()
+            allowed = restarted.set_policy(True, {"kind": "address", "interface": "eth0", "port": 8080})
+            self.assertTrue(allowed["enabled"])
+            self.assertEqual(json.loads(self.file.read_text()), {"version": 1, "enabled": True})
+        self.discovery.disable()
+
+    def test_address_hint_activation_failure_never_enables_or_persists_invalid_configuration(self):
+        self.discovery.set_policy(False)
+        for configuration in [{"kind": "address", "interface": "eth0", "port": True}, {"kind": "address", "interface": "foreign0", "port": 80}, {"kind": "address", "interface": "eth0", "port": 80, "origin": "http://8.8.8.8"}]:
+            with self.assertRaises(ValueError):
+                self.discovery.set_policy(True, configuration)
+            self.assertFalse(self.discovery.policy_enabled())
+        self.factory.side_effect = OSError("fixture failure")
+        with self.assertRaises(OSError):
+            self.discovery.set_policy(True, {"kind": "address", "interface": "eth0", "port": 80})
+        self.assertFalse(self.discovery.policy_enabled())
+
+    def test_address_hint_rechecks_current_preferred_interface_before_opening_a_socket(self):
+        wifi = {**NIC, "id": "wlan0", "index": 3, "address": "192.168.60.10", "preferred": True}
+        self.discovery.interface_reader = lambda: [{**NIC, "preferred": False}, wifi]
+        with self.assertRaisesRegex(ValueError, "changed or is ambiguous"):
+            self.discovery.configure_address("eth0", 80)
+        self.factory.assert_not_called()
+        self.discovery.interface_reader = lambda: [{**NIC, "preferred": False}, {**wifi, "preferred": False}]
+        with self.assertRaises(ValueError):
+            self.discovery.configure_address("wlan0", 80)
+        self.factory.assert_not_called()
+
+    def test_expired_address_hint_worker_cannot_receive_or_send(self):
+        now = [0]
+        self.discovery.clock = lambda: now[0]
+        with mock.patch.object(D.threading, "Thread"):
+            self.discovery.configure_address("eth0", 80)
+        connection, lease, stop = self.discovery.connection, self.discovery.lease, self.discovery.stop
+        now[0] = 181
+        self.discovery.respond(connection, NIC, lease, stop)
+        connection.recvmsg.assert_not_called()
+        connection.sendto.assert_not_called()
+        self.assertIsNone(self.discovery.status()["sharing"])
 
     def test_opt_in_requires_valid_endpoint_and_successful_socket_before_persisting(self):
         self.discovery.set_policy(False)
