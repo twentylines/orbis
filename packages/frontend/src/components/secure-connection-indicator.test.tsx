@@ -174,3 +174,13 @@ test('unavailable HTTPS retains its actionable availability explanation', () => 
   expect(html).toContain('Passkeys require a trusted HTTPS origin or localhost.');
   expect(html).not.toContain('Set up HTTPS');
 });
+
+test('browser-secure HTTP with backend HTTPS refusal keeps only the shared setup action', () => {
+  const html = renderPasskeys({ protocol: 'http:', secureContext: true, available: false });
+  expect(html.match(/Set up HTTPS/g)?.length).toBe(1);
+  expect(html).toContain('href="/settings?tab=https"');
+  expect(html).not.toContain('Add passkey');
+  expect(html).not.toContain('No passkeys added yet');
+  expect(html).not.toContain('Passkeys require a trusted HTTPS');
+  expect(html).not.toContain('Require an account code');
+});

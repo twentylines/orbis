@@ -48,7 +48,8 @@ export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
   }, []);
   const available = Boolean(!browserReason && list.data?.available);
   const unavailable = browserReason ?? list.data?.reason;
-  const needsHttps = typeof window !== 'undefined' && httpsSetupVisible(window.location.protocol) && !window.isSecureContext;
+  const needsHttps =
+    typeof window !== 'undefined' && httpsSetupVisible(window.location.protocol) && (!window.isSecureContext || list.data?.available === false);
   const open = (value: 'add' | 'policy' | PasskeyCredential, control: HTMLButtonElement) => {
     opener.current = control;
     setError('');
