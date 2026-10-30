@@ -35,6 +35,7 @@ class InstallerUpdateTests(unittest.TestCase):
             selected = {'installRoot': str(root), 'product': 'orbis', 'reviewRequired': []}
             argv = ['installer', '--manifest', str(manifest), '--state-dir', str(root / 'private'), '--yes', '--accept-nightly', '--root', str(root)]
             with mock.patch.object(sys, 'argv', argv), mock.patch.object(GUIDE.sys, 'platform', 'linux'), mock.patch.object(GUIDE.os, 'geteuid', return_value=0), mock.patch.object(GUIDE.APPS, 'Docker') as docker, mock.patch.object(GUIDE.REPLACE, 'Engine'), mock.patch.object(GUIDE.APPS.DETECT, 'discover', return_value={'installations': [selected]}), mock.patch.object(GUIDE, 'update_existing', return_value={'result': 'orbis-updated'}) as update, mock.patch.object(GUIDE, 'replacement') as replacement, contextlib.redirect_stdout(io.StringIO()):
+                docker.return_value._read.return_value = '2.36.0'
                 self.assertEqual(GUIDE.main(), 0)
             update.assert_called_once()
             self.assertEqual(update.call_args.args[:3], (root, docker.return_value, TARGET))
@@ -61,7 +62,7 @@ class InstallerUpdateTests(unittest.TestCase):
             if endpoint == '/v1/apply':
                 if apply_error: raise apply_error
                 return accepted
-            return status or complete
+            return {'capabilities': ['restart.v1', 'packages.refresh.v1', 'release-channels.v1'], **(status or complete)}
         def module(name, _):
             return upgrade if name == 'orbis-host-service-upgrade.py' else enable
         with mock.patch.object(GUIDE, 'load', side_effect=module), mock.patch.object(GUIDE.REPLACE.UPDATE, 'verify_release'), mock.patch.object(GUIDE, 'host_request', side_effect=request), mock.patch.object(GUIDE.time, 'sleep'), contextlib.redirect_stdout(io.StringIO()):
@@ -71,19 +72,19 @@ class InstallerUpdateTests(unittest.TestCase):
     def test_latest_installer_checks_and_applies_exactly_once(self):
         result, calls, upgraded = self.exercise()
         self.assertEqual(result['result'], 'orbis-updated')
-        self.assertEqual([x[0] for x in calls], ['/v1/plan', '/v1/apply', '/v1/status'])
+        self.assertEqual([x[0] for x in calls], ['/v1/status', '/v1/plan', '/v1/apply', '/v1/status'])
         upgraded.upgrade.assert_called_once()
 
     def test_explicit_nightly_update_from_stable_selects_channel_before_planning(self):
         _, calls, upgrade = self.exercise(channel='stable')
-        self.assertEqual([endpoint for endpoint, _ in calls], ['/v1/channel', '/v1/plan', '/v1/apply', '/v1/status'])
-        self.assertEqual(calls[0][1], {'channel': 'nightly', 'revision': 'initial', 'acknowledgeNightly': True})
+        self.assertEqual([endpoint for endpoint, _ in calls], ['/v1/status', '/v1/channel', '/v1/plan', '/v1/apply', '/v1/status'])
+        self.assertEqual(calls[1][1], {'channel': 'nightly', 'revision': 'initial', 'acknowledgeNightly': True})
         self.assertEqual(upgrade.SERVICE.read_channel.call_count, 2)
 
     def test_current_release_is_a_clear_noop_and_never_reapplies(self):
         result, calls, _ = self.exercise(target=CURRENT)
         self.assertEqual(result['result'], 'up-to-date')
-        self.assertEqual(calls, [])
+        self.assertEqual(calls, [('/v1/status', None)])
 
     def test_old_pinned_installer_cannot_downgrade(self):
         with self.assertRaisesRegex(ValueError, 'newer.*no downgrade'):
@@ -97,7 +98,7 @@ class InstallerUpdateTests(unittest.TestCase):
         result, calls, _ = self.exercise(apply_error=TimeoutError('connection lost after acceptance'))
         self.assertEqual(result['result'], 'orbis-updated')
         self.assertEqual(sum(endpoint == '/v1/apply' for endpoint, _ in calls), 1)
-        self.assertEqual(sum(endpoint == '/v1/status' for endpoint, _ in calls), 2)
+        self.assertEqual(sum(endpoint == '/v1/status' for endpoint, _ in calls), 3)
 
     def test_semver_numeric_prereleases_and_stable_order(self):
         self.assertLess(GUIDE.release_order('v0.1.0-beta.9'), GUIDE.release_order('v0.1.0-beta.10'))
