@@ -7,6 +7,7 @@ from contextvars import ContextVar
 import fcntl
 import hashlib
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -304,12 +305,59 @@ def inventory(context):
     return {'root':'/var/lib/docker','driver':info['Driver'],'containers':containers,'networks':networks,'volumes':volumes,'images':images}
 
 
+def comparable_networks(networks):
+    records=[];builtin={};names=set();identifiers=set()
+    for value in networks:
+        name=value.get('name');identifier=value.get('id')
+        if not isinstance(name,str) or name in names or not isinstance(identifier,str) or not CONTAINER.fullmatch(identifier) or identifier in identifiers:raise PrerequisiteError('Docker network identities are invalid or duplicated.')
+        names.add(name);identifiers.add(identifier);record=dict(value)
+        if name in {'bridge','host','none'}:
+            expected={'bridge':'bridge','host':'host','none':'null'}[name]
+            ipam=value.get('ipam')
+            if value.get('driver')!=expected or value.get('internal') is not False or not isinstance(ipam,dict) or set(ipam)!={'Config','Driver','Options'} or ipam['Driver']!='default' or ipam['Options'] not in (None,{}):raise PrerequisiteError('A built-in Docker network has unsupported settings.')
+            configuration=ipam['Config']
+            if name in {'host','none'}:
+                if configuration not in (None,[]):raise PrerequisiteError('A built-in host network unexpectedly has address configuration.')
+                configuration=[]
+            else:
+                if not isinstance(configuration,list) or not 1<=len(configuration)<=16:raise PrerequisiteError('The built-in Docker bridge has invalid address configuration.')
+                for entry in configuration:
+                    if not isinstance(entry,dict) or not set(entry).issubset({'Subnet','Gateway','IPRange','AuxiliaryAddresses'}) or not isinstance(entry.get('Subnet'),str):raise PrerequisiteError('The built-in bridge address fields are unsupported.')
+                    try:
+                        subnet=ipaddress.ip_network(entry['Subnet'],strict=False)
+                        if entry.get('Gateway') and ipaddress.ip_address(entry['Gateway']) not in subnet:raise ValueError('gateway outside subnet')
+                        if entry.get('IPRange') and not ipaddress.ip_network(entry['IPRange'],strict=False).subnet_of(subnet):raise ValueError('range outside subnet')
+                        auxiliary=entry.get('AuxiliaryAddresses') or {}
+                        if not isinstance(auxiliary,dict) or any(ipaddress.ip_address(address) not in subnet for address in auxiliary.values()):raise ValueError('auxiliary outside subnet')
+                    except (TypeError,ValueError) as error:raise PrerequisiteError('The built-in bridge addresses are invalid.') from error
+            record['id']='builtin:'+name;record['ipam']={**ipam,'Config':configuration};builtin[name]=identifier
+        records.append(record)
+    return sorted(records,key=lambda item:item['name']),builtin
+
+
+def comparable_attachments(attachments,builtin):
+    result={}
+    for name,value in attachments.items():
+        item=dict(value)
+        if name in builtin:
+            identifier=item.get('NetworkID')
+            if identifier not in {'',builtin[name]}:raise PrerequisiteError('A container references a different built-in network identity.')
+            if identifier:item['NetworkID']='builtin:'+name
+        result[name]=item
+    return result
+
+
 def same_inventory(before,after,*,restored=False):
-    if any(before[key]!=after[key] for key in ['root','driver','networks','volumes','images']):return False
-    if len(before['containers'])!=len(after['containers']):return False
-    for old,new in zip(before['containers'],after['containers']):
-        keys=['id','imageId','image','mounts','networks']+(['running','restart'] if restored else [])
-        if any(old.get(key)!=new.get(key) for key in keys):return False
+    if any(before[key]!=after[key] for key in ['root','driver','volumes','images']):return False
+    try:
+        old_networks,old_builtin=comparable_networks(before['networks']);new_networks,new_builtin=comparable_networks(after['networks'])
+        if old_networks!=new_networks:return False
+        if len(before['containers'])!=len(after['containers']):return False
+        for old,new in zip(before['containers'],after['containers']):
+            keys=['id','imageId','image','mounts']+(['running','restart'] if restored else [])
+            if any(old.get(key)!=new.get(key) for key in keys):return False
+            if comparable_attachments(old.get('networks') or {},old_builtin)!=comparable_attachments(new.get('networks') or {},new_builtin):return False
+    except (PrerequisiteError,TypeError,ValueError):return False
     return True
 
 
@@ -421,7 +469,27 @@ def apply_namespace(directory,plan_file):
     if read(directory/'guard-receipt.json')!={'verified':True,'planSha256':sha(plan_file)}:raise PrerequisiteError('APT did not confirm the reviewed Docker package guard.')
 
 
+def stage_archives(apt_directory,archives):
+    cache=public_directory(Path(apt_directory)/'archives');staged={}
+    for name,item in sorted(archives.items()):
+        source=protected(item['path'],256*1024*1024)
+        if not PACKAGE.fullmatch(name) or not re.fullmatch(r'[a-f0-9]{64}',item['sha256']) or not re.fullmatch(r'[A-Za-z0-9%+.:~_-]+\.deb',source.name) or sha(source)!=item['sha256']:raise PrerequisiteError('A retained package archive changed before cache staging.')
+        target=cache/source.name
+        if source!=target:
+            if target.exists() or target.is_symlink():
+                if sha(protected(target,256*1024*1024))!=item['sha256']:raise PrerequisiteError('The private package cache contains a different archive; it was not overwritten.')
+            else:
+                descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o644)
+                os.fchmod(descriptor,0o644)
+                with os.fdopen(descriptor,'wb') as output,source.open('rb') as stream:
+                    shutil.copyfileobj(stream,output,1024*1024);output.flush();os.fsync(output.fileno())
+        if sha(protected(target,256*1024*1024))!=item['sha256']:raise PrerequisiteError('A staged package archive did not match its retained hash.')
+        staged[name]={**item,'path':str(target),'retainedPath':item.get('retainedPath',str(source))}
+    return staged
+
+
 def apply_packages(directory,review,archives,apt_directory,*,recovery=False):
+    archives=stage_archives(apt_directory,archives)
     helpers=service_helpers()
     for name in ['/usr/bin/unshare','/usr/bin/mount','/usr/bin/dpkg-deb','/usr/bin/python3']:
         protected(Path(name).resolve(strict=True),64*1024*1024)

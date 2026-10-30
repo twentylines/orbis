@@ -118,13 +118,25 @@ class FreshFlowTests(unittest.TestCase):
         with mock.patch.object(P,'host'),mock.patch.object(P,'inspect',return_value={'kind':'install'}),mock.patch.object(P,'require_local_setup') as local:
             with self.assertRaisesRegex(P.PrerequisiteError,'Inspection'):P.prepare('default',Path('/unused'),inspect_only=True)
             local.assert_not_called()
+    def test_uninspectable_existing_engine_data_is_never_treated_as_fresh(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);actual_exists=Path.exists
+            def exists(path):return True if str(path)=='/var/lib/docker' else actual_exists(path)
+            def private(path):path=Path(path);path.mkdir(parents=True,exist_ok=True);return path
+            with mock.patch.object(P,'host'),mock.patch.object(P,'inspect',return_value={'kind':'install'}),mock.patch.object(P,'require_local_setup'),mock.patch.object(P,'host_barrier',return_value=contextlib.nullcontext()),mock.patch.object(P.platform,'freedesktop_os_release',return_value={'ID':'ubuntu','VERSION_ID':'24.04','VERSION_CODENAME':'noble'}),mock.patch.object(P,'run',return_value='arm64'),mock.patch.object(P,'private_directory',side_effect=private),mock.patch.object(Path,'exists',exists),mock.patch.object(P,'install_required') as install,contextlib.redirect_stdout(io.StringIO()),self.assertRaisesRegex(P.PrerequisiteError,'Docker data already exists'):
+                P.prepare('default',root,accepted=True)
+            install.assert_not_called()
+
     def fresh(self,failed=False):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);cache=root/'public-cache'
             def private(path):path=Path(path);path.mkdir(parents=True,exist_ok=True);return path
             def public(_path):cache.mkdir(exist_ok=True);return cache
             installed={};review={'selected':{'docker-ce':{'old':None,'version':'1'}},'removed':{}}
+            actual_exists=Path.exists
+            def exists(path):return False if str(path) in {'/var/lib/docker','/var/lib/containerd'} else actual_exists(path)
             with contextlib.ExitStack() as stack:
+                stack.enter_context(mock.patch.object(Path,'exists',exists))
                 for name,value in [('host',None),('require_local_setup',None),('tools_required',False),('installed_packages',installed),('service_helpers',{}),('prepare_repository',None),('requested_packages',{'docker-ce':'1'}),('simulate',review),('acquire_archives',{'docker-ce':{'version':'1'}}),('backup_packages',{}),('persist_repository',None)]:stack.enter_context(mock.patch.object(P,name,return_value=value))
                 stack.enter_context(mock.patch.object(P,'inspect',side_effect=[{'kind':'install','context':'default'},{'kind':'ready'}]))
                 stack.enter_context(mock.patch.object(P,'private_directory',side_effect=private));stack.enter_context(mock.patch.object(P,'public_directory',side_effect=public))
@@ -175,7 +187,7 @@ class RecoveryTests(unittest.TestCase):
                     P.rollback_engine(Path('/unused'),{'phase':phase,'appsResumed':True},lambda _:None)
             execute.assert_not_called()
     def test_stable_inventory_checks_original_id_image_mount_network_and_running_state(self):
-        original={'root':'/var/lib/docker','driver':'overlay2','images':['sha256:image'],'networks':[{'id':'network'}],'volumes':[{'name':'data'}],'containers':[{'id':'container','imageId':'sha256:image','image':'example:old','mounts':[{'Name':'data'}],'networks':{'default':{'NetworkID':'network'}},'running':True,'restart':{'Name':'on-failure','MaximumRetryCount':3}}]}
+        original={'root':'/var/lib/docker','driver':'overlay2','images':['sha256:image'],'networks':[{'id':'a'*64,'name':'custom','driver':'bridge','internal':True,'ipam':{'Driver':'default','Options':{},'Config':[{'Subnet':'172.18.0.0/16','Gateway':'172.18.0.1'}]}}],'volumes':[{'name':'data'}],'containers':[{'id':'container','imageId':'sha256:image','image':'example:old','mounts':[{'Name':'data'}],'networks':{'default':{'NetworkID':'network'}},'running':True,'restart':{'Name':'on-failure','MaximumRetryCount':3}}]}
         self.assertTrue(P.same_inventory(original,copy.deepcopy(original),restored=True))
         for key,value in [('id','replacement'),('imageId','sha256:new'),('mounts',[]),('networks',{}),('running',False),('restart',{'Name':'always'})]:
             changed=copy.deepcopy(original);changed['containers'][0][key]=value
@@ -237,6 +249,61 @@ class RecoveryTests(unittest.TestCase):
         with mock.patch.object(P.shutil,'which',return_value='/usr/bin/ctr'),mock.patch.object(P,'run',return_value='moby\nk8s.io') as execute,self.assertRaisesRegex(P.PrerequisiteError,'Other workloads share'):
             P.require_exclusive_engine({'containerd.io':'1'})
         self.assertEqual(execute.call_count,1)
+
+class NetworkCompatibilityTests(unittest.TestCase):
+    def snapshot(self):
+        networks=[{'id':'a'*64,'name':'bridge','driver':'bridge','internal':False,'ipam':{'Driver':'default','Options':None,'Config':[{'Subnet':'172.17.0.0/16','Gateway':'172.17.0.1'}]}},{'id':'b'*64,'name':'host','driver':'host','internal':False,'ipam':{'Driver':'default','Options':None,'Config':[]}},{'id':'c'*64,'name':'none','driver':'null','internal':False,'ipam':{'Driver':'default','Options':None,'Config':[]}},{'id':'d'*64,'name':'custom','driver':'bridge','internal':True,'ipam':{'Driver':'default','Options':{},'Config':[{'Subnet':'172.18.0.0/16','Gateway':'172.18.0.1'}]}}]
+        return {'root':'/var/lib/docker','driver':'overlay2','images':['sha256:'+'1'*64],'volumes':[],'networks':networks,'containers':[{'id':'2'*64,'imageId':'sha256:'+'1'*64,'image':'owned:1','mounts':[],'networks':{'bridge':{'NetworkID':'a'*64,'Aliases':None,'IPAMConfig':None},'custom':{'NetworkID':'d'*64,'Aliases':['owned'],'IPAMConfig':None}},'running':False,'restart':{'Name':'no','MaximumRetryCount':0}}]}
+    def test_validated_builtin_regeneration_and_empty_ipam_representation_are_equivalent(self):
+        before=self.snapshot();after=copy.deepcopy(before)
+        after['networks'][0]['id']='e'*64;after['networks'][1]['ipam']['Config']=None;after['networks'][2]['ipam']['Config']=None
+        after['networks'].reverse();after['containers'][0]['networks']['bridge']['NetworkID']='e'*64
+        self.assertTrue(P.same_inventory(before,after,restored=True))
+    def test_custom_network_identity_or_configuration_changes_remain_rejected(self):
+        for change in [('id','e'*64),('internal',False),('ipam',{'Driver':'default','Options':{},'Config':None})]:
+            before=self.snapshot();after=copy.deepcopy(before);after['networks'][3][change[0]]=change[1]
+            with self.subTest(change=change):self.assertFalse(P.same_inventory(before,after))
+    def test_builtin_name_alone_cannot_waive_driver_scope_or_address_changes(self):
+        for index,key,value in [(0,'driver','macvlan'),(0,'internal',True),(0,'ipam',{'Driver':'default','Options':None,'Config':[{'Subnet':'172.19.0.0/16','Gateway':'172.19.0.1'}]}),(1,'ipam',{'Driver':'default','Options':None,'Config':[{'Subnet':'172.17.0.0/16'}]})]:
+            before=self.snapshot();after=copy.deepcopy(before);after['networks'][index][key]=value
+            with self.subTest(key=key,value=value):self.assertFalse(P.same_inventory(before,after))
+    def test_builtin_reference_must_match_that_snapshot_validated_network(self):
+        before=self.snapshot();after=copy.deepcopy(before);after['containers'][0]['networks']['bridge']['NetworkID']='f'*64
+        self.assertFalse(P.same_inventory(before,after))
+        after=copy.deepcopy(before);after['networks'].append(copy.deepcopy(after['networks'][0]))
+        self.assertFalse(P.same_inventory(before,after))
+
+class ArchiveStagingTests(unittest.TestCase):
+    def test_retained_epoch_archive_is_hash_staged_into_isolated_no_download_cache(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);retained=root/'rollback';cache=root/'archives';retained.mkdir();cache.mkdir()
+            source=retained/'docker-ce_5%3a24.0.9_arm64.deb';source.write_bytes(b'retained archive');source.chmod(0o600)
+            item={'path':str(source),'sha256':P.sha(source),'version':'5:24.0.9','old':'5:29.9.2'}
+            previous_umask=os.umask(0o077)
+            try:
+                with mock.patch.object(P,'public_directory',return_value=cache):staged=P.stage_archives(root,{'docker-ce':item})
+            finally:os.umask(previous_umask)
+            target=cache/source.name
+            self.assertEqual(target.stat().st_mode&0o777,0o644)
+            self.assertEqual(staged['docker-ce']['path'],str(target));self.assertEqual(staged['docker-ce']['retainedPath'],str(source))
+            self.assertEqual(P.sha(target),item['sha256']);self.assertTrue(source.exists())
+            job=root/'job';job.mkdir();P.save(job/'plan.json',{'aptDirectory':str(root),'packages':staged,'removed':{},'recovery':True})
+            command=P.package_apply_command(job,job/'plan.json')
+            self.assertIn('--no-download',command);self.assertIn(str(target),command);self.assertNotIn(str(source),command)
+    def test_changed_cache_archive_or_symlink_is_never_overwritten(self):
+        for symbolic in [False,True]:
+            with self.subTest(symbolic=symbolic),tempfile.TemporaryDirectory() as folder:
+                root=Path(folder);source=root/'old.deb';source.write_bytes(b'retained');cache=root/'archives';cache.mkdir();other=root/'outside';other.write_bytes(b'preserve')
+                target=cache/source.name
+                if symbolic:target.symlink_to(other)
+                else:target.write_bytes(b'preserve')
+                with mock.patch.object(P,'public_directory',return_value=cache),self.assertRaises(P.PrerequisiteError):P.stage_archives(root,{'docker-ce':{'path':str(source),'sha256':P.sha(source)}})
+                self.assertEqual(other.read_bytes(),b'preserve');self.assertEqual(target.read_bytes(),b'preserve')
+    def test_changed_retained_archive_is_rejected_before_creating_cache_copy(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);source=root/'old.deb';source.write_bytes(b'changed');cache=root/'archives';cache.mkdir()
+            with mock.patch.object(P,'public_directory',return_value=cache),self.assertRaises(P.PrerequisiteError):P.stage_archives(root,{'docker-ce':{'path':str(source),'sha256':hashlib.sha256(b'original').hexdigest()}})
+            self.assertEqual(list(cache.iterdir()),[])
 
 class RollbackSafetyTests(unittest.TestCase):
     def test_external_baseline_package_change_refuses_before_service_or_package_mutation(self):
