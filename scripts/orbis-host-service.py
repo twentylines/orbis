@@ -297,7 +297,7 @@ class HostService:
         self.restart_job_file = self.state_dir / "restart-job.json"
         self.maintenance_file = self.state_dir / "helper-maintenance.json"
         self.drives = DRIVES.DriveHealth(self.state_dir)
-        self.discovery = DISCOVERY.Discovery()
+        self.discovery = DISCOVERY.Discovery(policy_path=self.state_dir / "discovery-policy.json")
         previous = read_private(self.job_file)
         if previous and previous.get("state") in {"running", "recovering"}:
             previous["state"] = "interrupted"
@@ -906,7 +906,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/v1/discovery/status":
-            self.send_json(200, self.server.service.discovery.status())
+            self.send_json(200, self.server.service.discovery.policy_status())
             return
         if self.path == "/v1/discovery/interfaces":
             self.send_json(200, self.server.service.discovery.inventory())
@@ -964,14 +964,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
-        if self.path in {"/v1/discovery/scan", "/v1/discovery/advertise", "/v1/discovery/disable"}:
+        if self.path in {"/v1/discovery/scan", "/v1/discovery/advertise", "/v1/discovery/disable", "/v1/discovery/policy", "/v1/discovery/configure", "/v1/discovery/suspend"}:
             try:
                 data = self.body()
                 discovery = self.server.service.discovery
                 if self.path.endswith("/disable"):
                     if data:
                         raise ValueError("Stop nearby visibility without additional fields")
-                    result = discovery.disable()
+                    result = discovery.set_policy(False)
+                elif self.path.endswith("/suspend"):
+                    if data:
+                        raise ValueError("Suspend nearby discovery without fields")
+                    discovery.disable(stop_scan=False)
+                    result = discovery.policy_status()
+                elif self.path.endswith("/configure"):
+                    if set(data) != {"interface", "origin", "address"}:
+                        raise ValueError("Provide one configured private HTTPS endpoint")
+                    result = discovery.configure(data["interface"], data["origin"], data["address"])
+                elif self.path.endswith("/policy"):
+                    if set(data) not in ({"enabled"}, {"enabled", "configuration"}):
+                        raise ValueError("Choose one discovery policy")
+                    result = discovery.set_policy(data["enabled"], data.get("configuration"))
                 elif self.path.endswith("/scan"):
                     if set(data) != {"interface"}:
                         raise ValueError("Choose one private LAN interface")
@@ -979,7 +992,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 else:
                     if set(data) != {"interface", "origin", "address", "leaseSeconds"}:
                         raise ValueError("Confirm one nearby visibility lease")
-                    result = discovery.advertise(data["interface"], data["origin"], data["address"], data["leaseSeconds"])
+                    if type(data["leaseSeconds"]) is not int or not 30 <= data["leaseSeconds"] <= 300:
+                        raise ValueError("Invalid visibility lease")
+                    result = discovery.configure(data["interface"], data["origin"], data["address"])
                 self.send_json(200, result)
             except (ValueError, OSError, RuntimeError, subprocess.SubprocessError):
                 self.send_json(200, {"available": False, "reason": "Nearby discovery is unavailable; enter an address manually"})

@@ -1,7 +1,9 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { RecoveryProgress } from '@/components/recovery-progress/recovery-progress';
 import { Alert, InlineFeedback } from '@/components/ui/Alert/Alert';
 import { useAppContext } from '@/context/app-context';
@@ -65,6 +67,82 @@ const actionLabels = {
   'recover-restore': 'Recover server',
 };
 
+const submitLabels: Record<Action['kind'], string> = {
+  export: 'Continue',
+  upload: 'Continue',
+  review: 'Continue',
+  restore: 'Restore',
+  download: 'Download',
+  'recover-export': 'Recover',
+  'cancel-restore': 'Cancel',
+  'recover-restore': 'Recover',
+};
+
+export function backupEncryptionPassphrase(values: FormData, kind: 'export' | 'review', useAccountPassword: boolean): string {
+  const account = kind === 'export' && useAccountPassword;
+  const passphrase = String(values.get(account ? 'password' : 'passphrase') ?? '');
+  if (passphrase.trim().length < 12 || passphrase.length > 1024) {
+    throw new Error(
+      account
+        ? 'Your account password must be between 12 and 1024 characters to encrypt a backup. Choose a separate backup passphrase instead.'
+        : 'Use a backup password or passphrase between 12 and 1024 characters.',
+    );
+  }
+  if (kind === 'export' && !account && passphrase !== String(values.get('repeatPassphrase') ?? '')) {
+    throw new Error('The backup passphrases did not match. Enter them again.');
+  }
+  return passphrase;
+}
+
+export function BackupEncryptionFields({
+  useAccountPassword,
+  disabled,
+  onChange,
+  id,
+}: {
+  useAccountPassword: boolean;
+  disabled: boolean;
+  onChange: (value: boolean) => void;
+  id: string;
+}) {
+  return (
+    <div className="system-backups-encryption">
+      <Checkbox checked={useAccountPassword} disabled={disabled} onCheckedChange={onChange} label="Use my account password to encrypt this backup" />
+      <p>
+        {useAccountPassword
+          ? 'Open this backup with the account password you use today. Changing your account password later won’t change this backup.'
+          : 'Keep this passphrase with your recovery records. It cannot be recovered if lost.'}
+      </p>
+      {useAccountPassword ? null : (
+        <div className="system-backups-fields">
+          <Input
+            name="passphrase"
+            id={`${id}-passphrase`}
+            label="New backup passphrase"
+            type="password"
+            autoComplete="off"
+            minLength={12}
+            maxLength={1024}
+            required
+            disabled={disabled}
+          />
+          <Input
+            name="repeatPassphrase"
+            id={`${id}-repeatPassphrase`}
+            label="Repeat backup passphrase"
+            type="password"
+            autoComplete="off"
+            minLength={12}
+            maxLength={1024}
+            required
+            disabled={disabled}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Review({ review }: { review: BackupReview }) {
   const reasons = {
     'runtipi-version': 'Runtipi version differs',
@@ -126,9 +204,21 @@ function Review({ review }: { review: BackupReview }) {
   );
 }
 
-type BackupSettingsProps = { restoreOnly?: boolean; embedded?: boolean; initialImportId?: string; onActivityChange?: (active: boolean) => void };
+type BackupSettingsProps = {
+  restoreOnly?: boolean;
+  embedded?: boolean;
+  initialImportId?: string;
+  onActivityChange?: (active: boolean) => void;
+  recoveryActions?: ReactNode;
+};
 
-export function SystemBackupsSettings({ restoreOnly = false, embedded = false, initialImportId, onActivityChange }: BackupSettingsProps = {}) {
+export function SystemBackupsSettings({
+  restoreOnly = false,
+  embedded = false,
+  initialImportId,
+  onActivityChange,
+  recoveryActions,
+}: BackupSettingsProps = {}) {
   const id = useId();
   const reduced = useReducedMotion();
   const { user } = useAppContext();
@@ -146,6 +236,10 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
   });
   const [action, setAction] = useState<Action | null>(() => (restoreOnly && embedded && !initialImportId ? { kind: 'upload' } : null));
   const [file, setFile] = useState<File | null>(null);
+  const [useAccountPassword, setUseAccountPassword] = useState(true);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardJob, setWizardJob] = useState<{ kind: 'export' | 'import'; id: string } | null>(null);
+  const [wizardPurpose, setWizardPurpose] = useState<Action['kind'] | null>(null);
   const [busy, setBusy] = useState(false);
   const [removal, setRemoval] = useState<{ kind: 'export' | 'import'; id: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +262,14 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
     setError(null);
     setNotice(null);
     setUpload(null);
+    setUseAccountPassword(true);
+    setWizardJob(
+      'job' in next && ['review', 'restore', 'download', 'recover-export'].includes(next.kind)
+        ? { kind: next.kind === 'download' || next.kind === 'recover-export' ? 'export' : 'import', id: next.job.id }
+        : null,
+    );
+    setWizardPurpose(next.kind);
+    if (!embedded) setWizardOpen(true);
     setAction(next);
     setRemoval(null);
   };
@@ -184,9 +286,9 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
       const keyboard = actionOpener.current
         ? actionKeyboard.current
         : document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible');
-      credentialsForm.current?.querySelector<HTMLElement>(keyboard ? 'input:not([type=hidden]), button' : 'h3')?.focus();
-    } else if (actionOpener.current?.isConnected) actionOpener.current.focus();
-  }, [action]);
+      credentialsForm.current?.querySelector<HTMLElement>(keyboard ? 'input:not([type=hidden]):not([type=file])' : 'h3')?.focus();
+    } else if ((embedded || !wizardOpen) && actionOpener.current?.isConnected) actionOpener.current.focus();
+  }, [action, embedded, wizardOpen]);
   const data = status.data;
   useEffect(() => {
     if (!initialImportId || seededImport.current === initialImportId || action || busy) return;
@@ -194,8 +296,15 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
     if (!job || job.uploadedBytes <= 0 || ['uploading', 'reviewing', 'preparing'].includes(job.status)) return;
     seededImport.current = initialImportId;
     setAction({ kind: 'review', job });
-  }, [initialImportId, data, action, busy]);
+    setWizardJob({ kind: 'import', id: job.id });
+    setWizardPurpose('review');
+    if (!embedded) setWizardOpen(true);
+  }, [initialImportId, data, action, busy, embedded]);
   const restore = data?.restore.job;
+  const guidedImportId = restoreOnly && embedded ? initialImportId : undefined;
+  const visibleImports = guidedImportId ? data?.imports.jobs.filter((job) => job.id === guidedImportId) : data?.imports.jobs;
+  const selectedImport = visibleImports?.find((job) => job.id === guidedImportId);
+  const showImportSummary = !guidedImportId || !action || ['uploading', 'reviewing', 'preparing'].includes(selectedImport?.status ?? '');
   const restoreActive = Boolean(restore && !['succeeded', 'rolled-back'].includes(restore.status));
   useEffect(() => {
     if (restore && ['ready', 'running', 'recovery-required'].includes(restore.status)) awaitingRestore.current = true;
@@ -242,25 +351,26 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
     const values = new FormData(form);
     const password = String(values.get('password') ?? '');
     const totpCode = String(values.get('totpCode') ?? '');
-    const passphrase = String(values.get('passphrase') ?? '');
     const confirmation = String(values.get('confirmation') ?? '');
     const credentials: BackupCredentials = { password, ...(totpCode ? { totpCode } : {}) };
     form.reset();
     if (!action) return;
-    if ((action.kind === 'export' || action.kind === 'review') && passphrase.trim().length < 12) {
-      setError('Use a backup passphrase of at least 12 characters.');
-      return;
-    }
-    if (action.kind === 'export' && passphrase !== String(values.get('repeatPassphrase') ?? '')) {
-      setError('The backup passphrases did not match. Enter them again.');
+    let passphrase = '';
+    try {
+      if (action.kind === 'export' || action.kind === 'review') passphrase = backupEncryptionPassphrase(values, action.kind, useAccountPassword);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Check the backup password or passphrase.');
       return;
     }
     const selected = action;
     void run(async (signal) => {
-      if (selected.kind === 'export') await startExport(credentials, passphrase, signal);
-      else if (selected.kind === 'upload') {
+      if (selected.kind === 'export') {
+        const job = await startExport(credentials, passphrase, signal);
+        if (mounted.current) setWizardJob({ kind: 'export', id: job.id });
+      } else if (selected.kind === 'upload') {
         if (!file || file.size < 52) throw new Error('Choose a complete encrypted Orbis backup file.');
         const job = await createImport(credentials, signal);
+        if (mounted.current) setWizardJob({ kind: 'import', id: job.id });
         setUpload({ completed: 0, total: file.size, confirmed: false });
         await uploadBackup(job.id, file, signal, (completed, total) => {
           if (mounted.current) setUpload({ completed, total, confirmed: false });
@@ -306,139 +416,143 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
   const missing = status.error instanceof BackupApiError && status.error.status === 404;
   const reconnectingAcceptedRestore = status.isError && isAcceptedRestoreReconnect(status.error, restore?.status, awaitingRestore.current);
   const unavailable = !data || !data.exports.available || !data.imports.available || status.isError;
-  const phraseNeeded = action?.kind === 'export' || action?.kind === 'review';
+  const phraseNeeded = action?.kind === 'review';
   const destructive = action?.kind === 'restore';
-  return (
-    <section className="system-backups-settings" data-embedded={embedded} data-reduced={Boolean(reduced)} aria-labelledby={`${id}-title`}>
-      <div className="system-backups-heading">
-        {embedded ? (
-          <h3 id={`${id}-title`}>Encrypted backup</h3>
-        ) : (
-          <h2 id={`${id}-title`}>{restoreOnly ? 'Restore a backup' : 'Full backup & recovery'}</h2>
-        )}
-        <Button variant="outline" type="button" onClick={refresh} disabled={status.isFetching || busy}>
-          Refresh status
-        </Button>
+  const renderExportJob = (job: ExportJob, inWizard = false) => (
+    <article className="system-backups-job" key={job.id}>
+      <h4>{new Date(job.createdAt).toLocaleString()}</h4>
+      <p>{job.message}</p>
+      {job.status === 'running' || job.status === 'succeeded' ? (
+        <RecoveryProgress
+          label={job.status === 'succeeded' ? 'Backup ready' : `Backup · ${stageLabels[job.stage] ?? 'Checking progress'}`}
+          completed={job.completedBytes}
+          total={job.totalBytes}
+          settled={job.status === 'succeeded'}
+        />
+      ) : null}
+      {job.restartRequired ? <p role="alert">Apps have recovered. Restart Orbis to finish recovery before making further changes.</p> : null}
+      <div className="system-backups-actions">
+        {job.status === 'running' ? (
+          <Button variant="outline" disabled={busy || status.isError} onClick={() => simpleAction(`/${job.id}/cancel`)}>
+            Cancel backup
+          </Button>
+        ) : null}
+        {job.needsRecovery && job.status !== 'running' ? (
+          <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'recover-export', job })}>
+            Recover
+          </Button>
+        ) : null}
+        {job.status === 'succeeded' ? (
+          <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'download', job })}>
+            Download
+          </Button>
+        ) : null}
+        {!inWizard && job.status !== 'running' && !job.needsRecovery ? (
+          <Button
+            variant="outline"
+            disabled={busy || status.isError}
+            onClick={() => {
+              setAction(null);
+              setRemoval({ kind: 'export', id: job.id });
+            }}
+          >
+            Remove
+          </Button>
+        ) : null}
       </div>
-      {embedded ? null : (
-        <p>
-          {restoreOnly
-            ? 'Verify the encrypted archive before replacing this server’s configuration and managed app data.'
-            : 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Apps pause while their data is copied to keep it consistent.'}
-        </p>
-      )}
-      {status.isPending ? <output>Reading backup capabilities…</output> : null}
-      {status.isError ? (
-        <InlineFeedback>
-          {reconnectingAcceptedRestore
-            ? 'Orbis is reconnecting after the accepted restore. The status below shows the last confirmed progress; the new server has not replied yet.'
-            : missing
-              ? 'This server does not provide the full backup and restore API. Update Orbis, then refresh status.'
-              : status.error.message}
-          {restoreActive && !reconnectingAcceptedRestore ? ' Reconnecting; the last confirmed restore status remains below.' : ''}
-          {status.error instanceof BackupApiError && status.error.status === 401 ? (
-            <Button type="button" variant="outline" onClick={() => window.location.reload()}>
-              Sign in again
-            </Button>
-          ) : null}
-        </InlineFeedback>
+    </article>
+  );
+  const renderImportJob = (job: ImportJob, inWizard = false) => (
+    <article className="system-backups-job" key={job.id}>
+      <h4>{new Date(job.createdAt).toLocaleString()}</h4>
+      <p>{job.message}</p>
+      {['uploading', 'reviewing', 'preparing'].includes(job.status) ? (
+        <RecoveryProgress
+          label={`Verification · ${stageLabels[job.stage] ?? 'Checking progress'}`}
+          completed={job.completedBytes}
+          total={job.totalBytes}
+        />
       ) : null}
-      {data && (!data.exports.available || !data.imports.available) ? (
-        <InlineFeedback>Backup storage needs operator review. Existing status remains available; new operations are disabled.</InlineFeedback>
+      {job.review ? <Review review={job.review} /> : null}
+      {job.reviewExpiresAt ? <p>Review expires {new Date(job.reviewExpiresAt).toLocaleTimeString()}. Verify again if it expires.</p> : null}
+      <div className="system-backups-actions">
+        {job.uploadedBytes > 0 && !['uploading', 'reviewing', 'preparing'].includes(job.status) ? (
+          <Button variant="outline" disabled={working || status.isError} onClick={() => chooseAction({ kind: 'review', job })}>
+            Verify
+          </Button>
+        ) : null}
+        {job.review ? (
+          <Button
+            intent="danger"
+            variant="outline"
+            disabled={working || status.isError || !canRestore(job, Date.now())}
+            onClick={() => chooseAction({ kind: 'restore', job })}
+          >
+            Restore
+          </Button>
+        ) : null}
+        {['uploading', 'reviewing'].includes(job.status) ? (
+          <Button variant="outline" disabled={busy || status.isError} onClick={() => simpleAction(`/imports/${job.id}/cancel`)}>
+            Cancel
+          </Button>
+        ) : null}
+        {inWizard || ['uploading', 'reviewing', 'preparing'].includes(job.status) ? null : (
+          <Button
+            variant="outline"
+            disabled={busy || restoreActive || status.isError}
+            onClick={() => {
+              setAction(null);
+              setRemoval({ kind: 'import', id: job.id });
+            }}
+          >
+            Remove
+          </Button>
+        )}
+      </div>
+    </article>
+  );
+  const restorePanel = restore ? (
+    <article className="system-backups-job" aria-labelledby={`${id}-restore`}>
+      <h3 id={`${id}-restore`}>Server restore</h3>
+      <output>{restore.message}</output>
+      {restore.preparation ? (
+        <RecoveryProgress
+          label={`Preparation · ${stageLabels[restore.preparation.stage] ?? 'Checking progress'}`}
+          completed={restore.preparation.stage === 'database' ? restore.preparation.records : restore.preparation.completedBytes}
+          total={restore.preparation.stage === 'database' ? restore.preparation.totalRecords : restore.preparation.totalBytes}
+          unit={restore.preparation.stage === 'database' ? 'records' : 'bytes'}
+        />
       ) : null}
-      {restore ? (
-        <article className="system-backups-job" aria-labelledby={`${id}-restore`}>
-          <h3 id={`${id}-restore`}>Server restore</h3>
-          <output>{restore.message}</output>
-          {restore.preparation ? (
-            <RecoveryProgress
-              label={`Preparation · ${stageLabels[restore.preparation.stage] ?? 'Checking progress'}`}
-              completed={restore.preparation.stage === 'database' ? restore.preparation.records : restore.preparation.completedBytes}
-              total={restore.preparation.stage === 'database' ? restore.preparation.totalRecords : restore.preparation.totalBytes}
-              unit={restore.preparation.stage === 'database' ? 'records' : 'bytes'}
-            />
-          ) : null}
-          {!restore.preparation && ['ready', 'running'].includes(restore.status) ? <RecoveryProgress label="Restoring this server" /> : null}
-          {restore.status === 'succeeded' ? <RecoveryProgress label="Restore complete" completed={0} total={null} settled /> : null}
-          {restore.progressUnavailable ? <p>Detailed progress is unavailable. Recovery controls use the server’s verified restore state.</p> : null}
-          {restore.status === 'running' || restore.status === 'ready' ? (
-            <p>Orbis may disconnect while replacing its configuration and app data. Status is checked automatically when the connection returns.</p>
-          ) : null}
-          <div className="system-backups-actions">
-            {restore.canCancel ? (
-              <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'cancel-restore', job: restore })}>
-                Cancel and recover
-              </Button>
-            ) : null}
-            {restore.canRecover ? (
-              <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'recover-restore', job: restore })}>
-                Recover server
-              </Button>
-            ) : null}
-            {['succeeded', 'rolled-back'].includes(restore.status) ? (
-              <Button variant="outline" onClick={() => window.location.reload()}>
-                Reload server
-              </Button>
-            ) : null}
-          </div>
-        </article>
+      {!restore.preparation && ['ready', 'running'].includes(restore.status) ? <RecoveryProgress label="Restoring this server" /> : null}
+      {restore.status === 'succeeded' ? <RecoveryProgress label="Restore complete" completed={0} total={null} settled /> : null}
+      {restore.progressUnavailable ? <p>Detailed progress is unavailable. Recovery controls use the server’s verified restore state.</p> : null}
+      {restore.status === 'running' || restore.status === 'ready' ? (
+        <p>Orbis may disconnect while replacing its configuration and app data. Status is checked automatically when the connection returns.</p>
       ) : null}
-      {restoreOnly ? (
-        action ? null : (
-          <div className="system-backups-actions">
-            <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'upload' })}>
-              Choose encrypted backup
-            </Button>
-          </div>
-        )
-      ) : (
-        <div className="system-backups-choices">
-          <div>
-            <h3>Create a backup</h3>
-            <p>Save the file and its passphrase separately. Server copies expire after {data?.exports.retentionHours ?? 24} hours.</p>
-            <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'export' })}>
-              Create encrypted backup
-            </Button>
-          </div>
-          <div>
-            <h3>Restore a backup</h3>
-            <p>Upload and verify the archive first. Restoring replaces this server’s configuration and managed app data.</p>
-            <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'upload' })}>
-              Choose encrypted backup
-            </Button>
-          </div>
-        </div>
-      )}
-      {restoreOnly && data?.exports.jobs.some((job) => job.status === 'running' || job.needsRecovery || job.restartRequired) ? (
-        <InlineFeedback>Finish the existing full backup or its app recovery in Settings before starting a restore.</InlineFeedback>
-      ) : null}
-      {removal ? (
-        <div className="system-backups-form">
-          <h3>{removal.kind === 'export' ? 'Remove server backup copy?' : 'Remove uploaded backup?'}</h3>
-          <p>This permanently deletes the server’s stored archive and its review. Files already saved on your device are unaffected.</p>
-          <div className="system-backups-actions">
-            <Button
-              type="button"
-              intent="danger"
-              disabled={busy || status.isError || restoreActive}
-              onClick={() =>
-                void run(async (signal) => {
-                  await backupRequest(`${removal.kind === 'import' ? '/imports' : ''}/${removal.id}`, 'DELETE', undefined, signal);
-                  if (mounted.current) setRemoval(null);
-                })
-              }
-            >
-              Remove server copy
-            </Button>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => setRemoval(null)}>
-              Keep copy
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <div className="system-backups-actions">
+        {restore.canCancel ? (
+          <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'cancel-restore', job: restore })}>
+            Cancel
+          </Button>
+        ) : null}
+        {restore.canRecover ? (
+          <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'recover-restore', job: restore })}>
+            Recover
+          </Button>
+        ) : null}
+        {['succeeded', 'rolled-back'].includes(restore.status) ? (
+          <Button variant="outline" onClick={() => window.location.reload()}>
+            Reload
+          </Button>
+        ) : null}
+      </div>
+    </article>
+  ) : null;
+  const credentialPanel = (
+    <>
       {action && !(action.kind === 'upload' && ((busy && upload) || restoreActive || awaitingRestore.current)) ? (
-        <form className="system-backups-form" ref={credentialsForm} onSubmit={submit} aria-labelledby={`${id}-action`}>
-          <h3 id={`${id}-action`} tabIndex={-1}>
+        <form className="system-backups-form" ref={credentialsForm} onSubmit={submit} aria-labelledby={`${id}-action`} noValidate>
+          <h3 id={`${id}-action`} className={embedded ? undefined : 'visually-hidden'} tabIndex={-1}>
             {action.kind === 'upload' ? 'Choose your backup' : actionLabels[action.kind]}
           </h3>
           {action.kind === 'upload' ? (
@@ -522,20 +636,7 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
               <Input
                 name="passphrase"
                 id={`${id}-passphrase`}
-                label={action.kind === 'export' ? 'New backup passphrase' : 'Backup passphrase'}
-                type="password"
-                autoComplete="off"
-                minLength={12}
-                maxLength={1024}
-                required
-                disabled={busy}
-              />
-            ) : null}
-            {action.kind === 'export' ? (
-              <Input
-                name="repeatPassphrase"
-                id={`${id}-repeatPassphrase`}
-                label="Repeat backup passphrase"
+                label="Original account password or backup passphrase"
                 type="password"
                 autoComplete="off"
                 minLength={12}
@@ -545,8 +646,35 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
               />
             ) : null}
           </div>
-          {phraseNeeded ? <p>The backup passphrase is separate from your account password. It cannot be recovered if lost.</p> : null}
+          {action.kind === 'export' ? (
+            <BackupEncryptionFields
+              id={id}
+              useAccountPassword={useAccountPassword}
+              disabled={busy}
+              onChange={(value) => {
+                setUseAccountPassword(value);
+                setError(null);
+              }}
+            />
+          ) : null}
+          {phraseNeeded ? <p>Use the original server account password chosen for this backup, or its separate backup passphrase.</p> : null}
           <div className="system-backups-actions">
+            {embedded && action.kind === 'upload' ? null : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  credentialsForm.current?.reset();
+                  if (!embedded && !restoreActive && !awaitingRestore.current) setWizardOpen(false);
+                  setAction(null);
+                  setFile(null);
+                  setError(null);
+                }}
+              >
+                Cancel
+              </Button>
+            )}
             <Button
               type="submit"
               intent={destructive ? 'danger' : 'primary'}
@@ -558,23 +686,8 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
                 (destructive && !canRestore(action.job, Date.now()))
               }
             >
-              {busy ? 'Working…' : action.kind === 'upload' ? 'Continue' : actionLabels[action.kind]}
+              {busy ? 'Working…' : submitLabels[action.kind]}
             </Button>
-            {embedded && action.kind === 'upload' ? null : (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  credentialsForm.current?.reset();
-                  setAction(null);
-                  setFile(null);
-                  setError(null);
-                }}
-              >
-                Cancel
-              </Button>
-            )}
           </div>
         </form>
       ) : null}
@@ -589,7 +702,7 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
           {busy && !upload.confirmed ? (
             <div className="system-backups-actions">
               <Button type="button" variant="outline" onClick={() => abort.current?.abort()}>
-                Cancel upload
+                Cancel
               </Button>
             </div>
           ) : null}
@@ -597,115 +710,197 @@ export function SystemBackupsSettings({ restoreOnly = false, embedded = false, i
       ) : null}
       {error ? <InlineFeedback>{error}</InlineFeedback> : null}
       {notice ? <output aria-live="polite">{notice}</output> : null}
+    </>
+  );
+  const wizardLocked = busy || restoreActive || awaitingRestore.current;
+  const wizardExport = wizardJob?.kind === 'export' ? data?.exports.jobs.find((job) => job.id === wizardJob.id) : undefined;
+  const wizardImport = wizardJob?.kind === 'import' ? data?.imports.jobs.find((job) => job.id === wizardJob.id) : undefined;
+  const restoringInWizard =
+    restoreActive ||
+    awaitingRestore.current ||
+    wizardPurpose === 'restore' ||
+    wizardPurpose === 'cancel-restore' ||
+    wizardPurpose === 'recover-restore';
+  const closeWizard = () => {
+    if (wizardLocked) return;
+    credentialsForm.current?.reset();
+    setAction(null);
+    setFile(null);
+    setUpload(null);
+    setError(null);
+    setNotice(null);
+    setWizardOpen(false);
+  };
+  return (
+    <section className="system-backups-settings" data-embedded={embedded} data-reduced={Boolean(reduced)} aria-labelledby={`${id}-title`}>
+      {guidedImportId && !status.isError ? (
+        <h3 id={`${id}-title`} className="visually-hidden">
+          Encrypted backup
+        </h3>
+      ) : (
+        <div className="system-backups-heading">
+          {embedded ? (
+            <h3 id={`${id}-title`} className={guidedImportId ? 'visually-hidden' : undefined}>
+              Encrypted backup
+            </h3>
+          ) : (
+            <h2 id={`${id}-title`}>{restoreOnly ? 'Restore a backup' : 'Full backup & recovery'}</h2>
+          )}
+          <Button variant="outline" type="button" onClick={refresh} disabled={status.isFetching || busy}>
+            Refresh
+          </Button>
+        </div>
+      )}
+      {embedded ? null : (
+        <p>
+          {restoreOnly
+            ? 'Verify the encrypted archive before replacing this server’s configuration and managed app data.'
+            : 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Apps pause while their data is copied to keep it consistent.'}
+        </p>
+      )}
+      {status.isPending ? <output>Reading backup capabilities…</output> : null}
+      {status.isError ? (
+        <InlineFeedback>
+          {reconnectingAcceptedRestore
+            ? 'Orbis is reconnecting after the accepted restore. The status below shows the last confirmed progress; the new server has not replied yet.'
+            : missing
+              ? 'This server does not provide the full backup and restore API. Update Orbis, then refresh status.'
+              : status.error.message}
+          {restoreActive && !reconnectingAcceptedRestore ? ' Reconnecting; the last confirmed restore status remains below.' : ''}
+          {status.error instanceof BackupApiError && status.error.status === 401 ? (
+            <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+              Sign in again
+            </Button>
+          ) : null}
+        </InlineFeedback>
+      ) : null}
+      {data && (!data.exports.available || !data.imports.available) ? (
+        <InlineFeedback>Backup storage needs operator review. Existing status remains available; new operations are disabled.</InlineFeedback>
+      ) : null}
+      {embedded || !wizardOpen ? restorePanel : null}
+      {restoreOnly ? (
+        action || guidedImportId ? null : (
+          <div className="system-backups-actions">
+            <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'upload' })}>
+              Restore
+            </Button>
+          </div>
+        )
+      ) : (
+        <div className="system-backups-choices">
+          <div>
+            <h3>Create a backup</h3>
+            <p>
+              Encrypt with your account password or a separate backup passphrase. Server copies expire after {data?.exports.retentionHours ?? 24}{' '}
+              hours.
+            </p>
+            <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'export' })}>
+              Create
+            </Button>
+          </div>
+          <div>
+            <h3>Restore a backup</h3>
+            <p>Upload and verify the archive first. Restoring replaces this server’s configuration and managed app data.</p>
+            <Button type="button" variant="outline" disabled={working || unavailable} onClick={() => chooseAction({ kind: 'upload' })}>
+              Restore
+            </Button>
+          </div>
+        </div>
+      )}
+      {embedded || restoreOnly ? null : recoveryActions}
+      {restoreOnly && data?.exports.jobs.some((job) => job.status === 'running' || job.needsRecovery || job.restartRequired) ? (
+        <InlineFeedback>Finish the existing full backup or its app recovery in Settings before starting a restore.</InlineFeedback>
+      ) : null}
+      {removal ? (
+        <div className="system-backups-form">
+          <h3>{removal.kind === 'export' ? 'Remove server backup copy?' : 'Remove uploaded backup?'}</h3>
+          <p>This permanently deletes the server’s stored archive and its review. Files already saved on your device are unaffected.</p>
+          <div className="system-backups-actions">
+            <Button
+              type="button"
+              intent="danger"
+              disabled={busy || status.isError || restoreActive}
+              onClick={() =>
+                void run(async (signal) => {
+                  await backupRequest(`${removal.kind === 'import' ? '/imports' : ''}/${removal.id}`, 'DELETE', undefined, signal);
+                  if (mounted.current) setRemoval(null);
+                })
+              }
+            >
+              Remove
+            </Button>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setRemoval(null)}>
+              Keep
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {embedded ? credentialPanel : null}
       {!restoreOnly && data?.exports.jobs.length ? (
         <div className="system-backups-jobs">
           <h3>Server backups</h3>
-          {[...data.exports.jobs]
-            .sort((a, b) => b.createdAt - a.createdAt)
-            .map((job) => (
-              <article className="system-backups-job" key={job.id}>
-                <h4>{new Date(job.createdAt).toLocaleString()}</h4>
-                <p>{job.message}</p>
-                {job.status === 'running' || job.status === 'succeeded' ? (
-                  <RecoveryProgress
-                    label={job.status === 'succeeded' ? 'Backup ready' : `Backup · ${stageLabels[job.stage] ?? 'Checking progress'}`}
-                    completed={job.completedBytes}
-                    total={job.totalBytes}
-                    settled={job.status === 'succeeded'}
-                  />
-                ) : null}
-                {job.restartRequired ? (
-                  <p role="alert">Apps have recovered. Restart Orbis to finish recovery before making further changes.</p>
-                ) : null}
-                <div className="system-backups-actions">
-                  {job.status === 'running' ? (
-                    <Button variant="outline" disabled={busy || status.isError} onClick={() => simpleAction(`/${job.id}/cancel`)}>
-                      Cancel backup
-                    </Button>
-                  ) : null}
-                  {job.needsRecovery && job.status !== 'running' ? (
-                    <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'recover-export', job })}>
-                      Recover apps
-                    </Button>
-                  ) : null}
-                  {job.status === 'succeeded' ? (
-                    <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'download', job })}>
-                      Download
-                    </Button>
-                  ) : null}
-                  {job.status !== 'running' && !job.needsRecovery ? (
-                    <Button
-                      variant="outline"
-                      disabled={busy || status.isError}
-                      onClick={() => {
-                        setAction(null);
-                        setRemoval({ kind: 'export', id: job.id });
-                      }}
-                    >
-                      Remove server copy
-                    </Button>
-                  ) : null}
-                </div>
-              </article>
-            ))}
+          {[...data.exports.jobs].sort((a, b) => b.createdAt - a.createdAt).map((job) => renderExportJob(job))}
         </div>
       ) : null}
-      {data?.imports.jobs.length ? (
+      {showImportSummary && visibleImports?.length ? (
         <div className="system-backups-jobs">
-          <h3>Uploaded backups</h3>
-          {[...data.imports.jobs]
-            .sort((a, b) => b.createdAt - a.createdAt)
-            .map((job) => (
-              <article className="system-backups-job" key={job.id}>
-                <h4>{new Date(job.createdAt).toLocaleString()}</h4>
-                <p>{job.message}</p>
-                {['uploading', 'reviewing', 'preparing'].includes(job.status) ? (
-                  <RecoveryProgress
-                    label={`Verification · ${stageLabels[job.stage] ?? 'Checking progress'}`}
-                    completed={job.completedBytes}
-                    total={job.totalBytes}
-                  />
-                ) : null}
-                {job.review ? <Review review={job.review} /> : null}
-                {job.reviewExpiresAt ? <p>Review expires {new Date(job.reviewExpiresAt).toLocaleTimeString()}. Verify again if it expires.</p> : null}
-                <div className="system-backups-actions">
-                  {job.uploadedBytes > 0 && !['uploading', 'reviewing', 'preparing'].includes(job.status) ? (
-                    <Button variant="outline" disabled={working || status.isError} onClick={() => chooseAction({ kind: 'review', job })}>
-                      Verify backup
-                    </Button>
-                  ) : null}
-                  {job.review ? (
-                    <Button
-                      intent="danger"
-                      variant="outline"
-                      disabled={working || status.isError || !canRestore(job, Date.now())}
-                      onClick={() => chooseAction({ kind: 'restore', job })}
-                    >
-                      Review restore
-                    </Button>
-                  ) : null}
-                  {['uploading', 'reviewing'].includes(job.status) ? (
-                    <Button variant="outline" disabled={busy || status.isError} onClick={() => simpleAction(`/imports/${job.id}/cancel`)}>
-                      Cancel verification
-                    </Button>
-                  ) : null}
-                  {['uploading', 'reviewing', 'preparing'].includes(job.status) ? null : (
-                    <Button
-                      variant="outline"
-                      disabled={busy || restoreActive || status.isError}
-                      onClick={() => {
-                        setAction(null);
-                        setRemoval({ kind: 'import', id: job.id });
-                      }}
-                    >
-                      Remove upload
-                    </Button>
-                  )}
-                </div>
-              </article>
-            ))}
+          <h3>{guidedImportId ? 'Backup details' : 'Uploaded backups'}</h3>
+          {[...visibleImports].sort((a, b) => b.createdAt - a.createdAt).map((job) => renderImportJob(job))}
         </div>
       ) : null}
+      {embedded ? null : (
+        <Dialog
+          open={wizardOpen}
+          onOpenChange={(open) => {
+            if (!open) closeWizard();
+          }}
+        >
+          <DialogContent
+            size="md"
+            className="system-backups-window"
+            closeDisabled={wizardLocked}
+            aria-describedby={undefined}
+            onEscapeKeyDown={(event) => {
+              if (wizardLocked) event.preventDefault();
+            }}
+            onInteractOutside={(event) => event.preventDefault()}
+            onOpenAutoFocus={(event) => {
+              if (actionKeyboard.current) {
+                const field = credentialsForm.current?.querySelector<HTMLInputElement>('input:not([type=hidden]):not([type=file])');
+                if (field) {
+                  event.preventDefault();
+                  field.focus();
+                }
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {wizardPurpose === 'upload' ? 'Restore a backup' : wizardPurpose ? actionLabels[wizardPurpose] : 'Backup & recovery'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="modal-body system-backups-window-body" data-reduced={Boolean(reduced)}>
+              {status.isError ? (
+                <InlineFeedback>
+                  {reconnectingAcceptedRestore
+                    ? 'Orbis is reconnecting after the accepted restore. Waiting for confirmed status.'
+                    : status.error.message}
+                </InlineFeedback>
+              ) : null}
+              {credentialPanel}
+              {action ? null : restoringInWizard ? (
+                restorePanel
+              ) : wizardExport ? (
+                renderExportJob(wizardExport, true)
+              ) : wizardImport ? (
+                renderImportJob(wizardImport, true)
+              ) : wizardJob ? (
+                <RecoveryProgress label="Reading backup status" />
+              ) : null}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </section>
   );
 }

@@ -1,15 +1,19 @@
-"""Opt-in, interface-bound IPv4 DNS-SD hints. Hints never establish peer trust."""
+"""Policy-controlled, interface-bound IPv4 DNS-SD hints. Hints never establish peer trust."""
 
 import ipaddress
 import json
+import os
 import re
 import secrets
 import socket
 import struct
 import subprocess
+import stat
 import sys
 import threading
 import time
+import tempfile
+from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
@@ -305,12 +309,104 @@ def receive(connection, selected, multicast):
 
 
 class Discovery:
-    def __init__(self, clock=time.monotonic, wall=time.time, socket_factory=bound_socket, interface_reader=interfaces):
+    def __init__(self, clock=time.monotonic, wall=time.time, socket_factory=bound_socket, interface_reader=interfaces, policy_path=None):
         self.clock, self.wall, self.socket_factory, self.interface_reader = clock, wall, socket_factory, interface_reader
         self.lock, self.scan_lock = threading.Lock(), threading.Lock()
         self.operation_lock = threading.RLock()
         self.stop, self.scan_stop = threading.Event(), threading.Event()
         self.lease, self.connection, self.worker = None, None, None
+        self.policy_path = Path(policy_path) if policy_path is not None else None
+
+    def policy_enabled(self):
+        if self.policy_path is None:
+            raise ValueError("Persistent nearby discovery is unavailable")
+        try:
+            descriptor = os.open(self.policy_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except FileNotFoundError:
+            return True
+        with os.fdopen(descriptor, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid() or before.st_nlink != 1 or stat.S_IMODE(before.st_mode) & 0o077 or before.st_size > 1024:
+                raise ValueError("Nearby discovery policy is invalid")
+            raw = stream.read(1025)
+            after = os.fstat(stream.fileno())
+            if len(raw) > 1024 or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                raise ValueError("Nearby discovery policy changed")
+        def unique_fields(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value:
+                    raise ValueError("Duplicate discovery policy field")
+                value[key] = item
+            return value
+        value = json.loads(raw, object_pairs_hook=unique_fields)
+        if not isinstance(value, dict) or set(value) != {"version", "enabled"} or type(value["version"]) is not int or value["version"] != 1 or type(value["enabled"]) is not bool:
+            raise ValueError("Nearby discovery policy is invalid")
+        return value["enabled"]
+
+    def write_policy(self, enabled):
+        self.policy_enabled()
+        descriptor, name = tempfile.mkstemp(prefix=".discovery-policy-", dir=self.policy_path.parent)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                stream.write(json.dumps({"version": 1, "enabled": enabled}, separators=(",", ":")).encode("ascii"))
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(name, self.policy_path)
+            directory = os.open(self.policy_path.parent, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            Path(name).unlink(missing_ok=True)
+
+    def policy_status(self):
+        try:
+            with self.operation_lock:
+                enabled = self.policy_enabled()
+                if not enabled and (self.lease is not None or self.connection is not None):
+                    self.disable(stop_scan=False)
+                return {**self.status(), "policyVersion": 1, "enabled": enabled}
+        except (ValueError, OSError):
+            self.disable(stop_scan=False)
+            return {"available": False, "reason": "Nearby discovery is unavailable; enter an address manually"}
+
+    def configure(self, name, origin, address):
+        with self.operation_lock:
+            try:
+                if self.policy_enabled():
+                    self.advertise(name, origin, address, 180)
+                else:
+                    self.disable(stop_scan=False)
+                return self.policy_status()
+            except (ValueError, OSError, RuntimeError, subprocess.SubprocessError):
+                self.disable(stop_scan=False)
+                raise
+
+    def set_policy(self, enabled, configuration=None):
+        if type(enabled) is not bool:
+            raise ValueError("Choose a nearby discovery preference")
+        with self.operation_lock:
+            if not enabled:
+                try:
+                    self.write_policy(False)
+                finally:
+                    self.disable(stop_scan=False)
+            else:
+                self.policy_enabled()
+                if not isinstance(configuration, dict) or set(configuration) != {"interface", "origin", "address"}:
+                    raise ValueError("A private HTTPS endpoint is required")
+                try:
+                    result = self.advertise(configuration["interface"], configuration["origin"], configuration["address"], 180)
+                    if not result["available"] or result["sharing"] is None:
+                        raise ValueError("Nearby discovery is unavailable")
+                    self.write_policy(True)
+                except (ValueError, OSError, RuntimeError, subprocess.SubprocessError):
+                    self.disable(stop_scan=False)
+                    raise
+            return self.policy_status()
 
     def inventory(self):
         try:
@@ -323,10 +419,11 @@ class Discovery:
             lease = self.lease if self.lease and self.lease["until"] > self.clock() and not self.stop.is_set() else None
             return {"available": sys.platform == "linux", "sharing": None if lease is None else {key: lease[key] for key in ("id", "origin", "interface", "expiresAt")}}
 
-    def disable(self):
+    def disable(self, stop_scan=True):
         with self.operation_lock:
             self.stop.set()
-            self.scan_stop.set()
+            if stop_scan:
+                self.scan_stop.set()
             with self.lock:
                 if self.connection:
                     self.connection.close()
@@ -343,7 +440,7 @@ class Discovery:
         if address != selected["address"]:
             raise ValueError("The private HTTPS address must match the selected LAN interface")
         with self.operation_lock:
-            self.disable()
+            self.disable(stop_scan=False)
             connection = self.socket_factory(selected, True)
             stop = threading.Event()
             lease = {"id": secrets.token_hex(16), "origin": normalized, "interface": name, "until": self.clock() + seconds, "expiresAt": datetime.fromtimestamp(self.wall() + seconds, timezone.utc).isoformat()}

@@ -36,4 +36,10 @@ export class NearbyDiscoveryController {
   disable(@Body() body: unknown) {
     return this.discovery.disable(body);
   }
+  @Post('policy')
+  @Header('Cache-Control', 'no-store')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  policy(@Body() body: unknown) {
+    return this.discovery.policy(body);
+  }
 }

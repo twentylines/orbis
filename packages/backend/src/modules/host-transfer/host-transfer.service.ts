@@ -5,11 +5,13 @@ import { AuthService } from '../auth/auth.service';
 import { BackupImportsService } from '../system-backups/backup-imports.service';
 import { SystemBackupsService } from '../system-backups/system-backups.service';
 import { TransferTransport, transferLimits, type TransferTarget } from './transfer-transport';
+import { TransferCapacity } from './transfer-capacity';
 import { sourceCertificate, type SourceCertificateInput } from './transfer-certificates';
 
 type Credentials = { password: string; totpCode?: string };
 type OfferStatus = 'awaiting-claim' | 'awaiting-approval' | 'approved' | 'sending' | 'complete' | 'failed' | 'cancelled' | 'expired';
 type Offer = {
+  releaseCapacity?: () => void;
   id: string;
   ownerId: number;
   backupId: string;
@@ -27,6 +29,7 @@ type Offer = {
   timer?: ReturnType<typeof setTimeout>;
 };
 type TransferJob = {
+  releaseCapacity?: () => void;
   id: string;
   ownerId: number;
   importId: string;
@@ -64,12 +67,17 @@ export class HostTransferService implements OnModuleDestroy {
   private creatingImports = 0;
   private closing = false;
 
+  private readonly unregisterRetention: () => void;
+
   constructor(
     private readonly backups: SystemBackupsService,
     private readonly imports: BackupImportsService,
     private readonly auth: AuthService,
     private readonly transport: TransferTransport,
-  ) {}
+    private readonly capacity: TransferCapacity = new TransferCapacity(),
+  ) {
+    this.unregisterRetention = this.capacity.registerRetentionCleanup(() => this.clean());
+  }
 
   private publicOffer(offer: Offer) {
     return {
@@ -114,6 +122,7 @@ export class HostTransferService implements OnModuleDestroy {
       }
       if (now > offer.expiresAt + transferLimits.pendingMs) {
         clearTimeout(offer.timer);
+        offer.releaseCapacity?.();
         this.offers.delete(id);
       }
     }
@@ -124,7 +133,10 @@ export class HostTransferService implements OnModuleDestroy {
         this.clearCertificate(job);
         job.message = 'This transfer expired. Create a new transfer on the source server.';
       }
-      if (now > job.expiresAt + transferLimits.transferMs && !job.done) this.jobs.delete(id);
+      if (now > job.expiresAt + transferLimits.transferMs && !job.done) {
+        job.releaseCapacity?.();
+        this.jobs.delete(id);
+      }
     }
   }
   private ownedOffer(id: string, ownerId: number) {
@@ -164,6 +176,8 @@ export class HostTransferService implements OnModuleDestroy {
     const active = [...this.offers.values()].filter((offer) => !terminal.has(offer.status)).length;
     if (this.closing || active + this.creatingOffers >= transferLimits.offers || this.offers.size + this.creatingOffers >= transferLimits.jobs)
       throw new ConflictException('Cancel or finish an existing transfer offer before creating another.');
+    let reservedOffer: Offer | undefined;
+    const releaseCapacity = this.capacity.reserveSource(() => !reservedOffer || !terminal.has(reservedOffer.status));
     this.creatingOffers++;
     let opened: Awaited<ReturnType<SystemBackupsService['download']>> | undefined;
     try {
@@ -173,6 +187,7 @@ export class HostTransferService implements OnModuleDestroy {
       const code = secret();
       const offer: Offer = {
         id: randomUUID(),
+        releaseCapacity,
         ownerId,
         backupId,
         codeHash: digest(code),
@@ -188,11 +203,13 @@ export class HostTransferService implements OnModuleDestroy {
         offer.output?.destroy();
       });
       this.deadline(offer, transferLimits.pendingMs);
+      reservedOffer = offer;
       this.offers.set(offer.id, offer);
       opened = undefined;
       return { ...this.publicOffer(offer), code };
     } finally {
       opened?.stream.destroy();
+      if (!reservedOffer) releaseCapacity();
       this.creatingOffers--;
     }
   }
@@ -292,6 +309,8 @@ export class HostTransferService implements OnModuleDestroy {
     this.clean();
     if (this.closing || this.jobs.size + this.creatingImports >= transferLimits.jobs)
       throw new ConflictException('Finish existing transfers before creating another.');
+    const releaseCapacity = this.capacity.reserveDestination();
+    let reservedJob = false;
     this.creatingImports++;
     let importId: string | undefined;
     try {
@@ -318,6 +337,7 @@ export class HostTransferService implements OnModuleDestroy {
         id: randomUUID(),
         ownerId,
         importId,
+        releaseCapacity,
         sourceOrigin: target.origin,
         target,
         destinationFingerprint,
@@ -331,11 +351,13 @@ export class HostTransferService implements OnModuleDestroy {
         message: 'Compare both fingerprints and approve this destination on the source server.',
       };
       this.jobs.set(job.id, job);
+      reservedJob = true;
       return this.publicJob(job);
     } catch (error) {
       if (importId) await this.imports.remove(importId, ownerId);
       throw error;
     } finally {
+      if (!reservedJob) releaseCapacity();
       this.creatingImports--;
     }
   }
@@ -345,11 +367,13 @@ export class HostTransferService implements OnModuleDestroy {
     if (!validSecret(sourceFingerprint) || sourceFingerprint !== job.sourceFingerprint)
       throw new BadRequestException('Compare and confirm the fingerprint shown on the source server.');
     if ([...this.jobs.values()].some((entry) => entry.done)) throw new ConflictException('Wait for the current transfer to finish.');
+    const releaseTransfer = this.capacity.reserveTransfer();
     job.status = 'checking-approval';
     job.message = 'Checking source approval.';
     const abort = new AbortController();
     job.abort = abort;
     job.done = this.receive(job, abort.signal).finally(() => {
+      releaseTransfer();
       job.done = undefined;
       job.abort = undefined;
     });
@@ -428,16 +452,19 @@ export class HostTransferService implements OnModuleDestroy {
     return this.publicJob(job);
   }
   async onModuleDestroy() {
+    this.unregisterRetention();
     this.closing = true;
     for (const offer of this.offers.values()) {
       clearTimeout(offer.timer);
       offer.status = 'cancelled';
       offer.output?.destroy();
       offer.stream.destroy();
+      offer.releaseCapacity?.();
     }
     for (const job of this.jobs.values()) job.abort?.abort();
     await Promise.allSettled([...this.jobs.values()].map((job) => job.done));
     this.offers.clear();
+    for (const job of this.jobs.values()) job.releaseCapacity?.();
     this.jobs.clear();
   }
 }

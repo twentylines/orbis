@@ -103,7 +103,7 @@ function Receiving({ value, busy, run }: { value: ClusterSyncSnapshot['receiving
       <Categories id={id} selected={selected} onChange={setSelected} disabled={busy} />
       <div className="cluster-sync-actions">
         <Button type="submit" intent="primary" disabled={busy}>
-          Save receiving choices
+          Save
         </Button>
       </div>
     </form>
@@ -164,7 +164,7 @@ export function ClusterSyncHostChoices({ host, busy, run }: { host: ClusterSyncH
         ) : null}
         <div className="cluster-sync-actions">
           <Button type="submit" intent="primary" disabled={busy || (enabled && !selected.length)}>
-            Save choices
+            Save
           </Button>
           {host.plan?.categories.length ? (
             <Button

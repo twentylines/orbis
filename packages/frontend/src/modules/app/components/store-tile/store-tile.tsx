@@ -11,7 +11,7 @@ import { useStorePreview } from '../../pages/store-preview-context';
 import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
 import './store-tile.css';
 
-export function StoreTile({ app, isLoading }: { app: AppInfoSimple; isLoading: boolean }) {
+export function StoreTile({ app, isLoading, catalogueRow = false }: { app: AppInfoSimple; isLoading: boolean; catalogueRow?: boolean }) {
   const { t } = useTranslation();
   const location = useLocation();
   const preview = useStorePreview();
@@ -26,7 +26,7 @@ export function StoreTile({ app, isLoading }: { app: AppInfoSimple; isLoading: b
       ref={visible ? preview?.onCardMount : undefined}
       aria-labelledby={`${id}-name`}
       aria-describedby={`${id}-description${app.deprecated || !app.available ? ` ${id}-notice` : ''}`}
-      className="app-tile orbis-store-tile"
+      className={`app-tile orbis-store-tile${catalogueRow ? ' orbis-store-tile-catalogue' : ''}`}
       to={`/app-store/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}${location.search}`}
       state={nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, location.pathname.startsWith('/app-store/'))}
       preventScrollReset
@@ -49,14 +49,16 @@ export function StoreTile({ app, isLoading }: { app: AppInfoSimple; isLoading: b
         <Skeleton loading={isLoading}>
           <AppLogo className="orbis-store-logo" urn={app.urn} size={72} placeholder={isLoading} />
         </Skeleton>
-        <span className="orbis-store-tile-categories">
-          {app.categories.map((category, index) => (
-            <span key={category}>
-              {index ? <span aria-hidden="true"> · </span> : null}
-              {t(`APP_CATEGORY_${category.toUpperCase()}`)}
-            </span>
-          ))}
-        </span>
+        {catalogueRow ? null : (
+          <span className="orbis-store-tile-categories">
+            {app.categories.map((category, index) => (
+              <span key={category}>
+                {index ? <span aria-hidden="true"> · </span> : null}
+                {t(`APP_CATEGORY_${category.toUpperCase()}`)}
+              </span>
+            ))}
+          </span>
+        )}
       </div>
       <div className="orbis-store-tile-copy">
         <div className="orbis-store-tile-title">
@@ -66,26 +68,45 @@ export function StoreTile({ app, isLoading }: { app: AppInfoSimple; isLoading: b
             </Skeleton>
           </h3>
         </div>
+        {catalogueRow ? (
+          <span className="orbis-store-tile-catalogue-categories">
+            {app.categories.map((category, index) => (
+              <span key={category}>
+                {index ? <span aria-hidden="true"> · </span> : null}
+                {t(`APP_CATEGORY_${category.toUpperCase()}`)}
+              </span>
+            ))}
+          </span>
+        ) : null}
         <p id={`${id}-description`} className="orbis-store-tile-description" title={app.short_desc}>
           <Skeleton loading={isLoading}>
             <WrapWords text={app.short_desc} />
           </Skeleton>
         </p>
-        <div className="orbis-store-tile-footer">
-          {app.deprecated || !app.available ? (
-            <span id={`${id}-notice`} className="orbis-store-tile-notice">
-              {app.deprecated ? 'Deprecated' : 'Unavailable'}
-            </span>
-          ) : isNew ? (
-            <span className="orbis-store-tile-new">{t('APP_NEW')}</span>
-          ) : (
-            <span />
-          )}
-          <span className="orbis-store-tile-action" aria-hidden="true">
-            Preview <IconChevronRight size={16} />
-          </span>
-        </div>
+        {!catalogueRow || app.deprecated || !app.available || isNew ? (
+          <div className="orbis-store-tile-footer">
+            {app.deprecated || !app.available ? (
+              <span id={`${id}-notice`} className="orbis-store-tile-notice">
+                {app.deprecated ? 'Deprecated' : 'Unavailable'}
+              </span>
+            ) : isNew ? (
+              <span className="orbis-store-tile-new">{t('APP_NEW')}</span>
+            ) : (
+              <span />
+            )}
+            {catalogueRow ? null : (
+              <span className="orbis-store-tile-action" aria-hidden="true">
+                Preview <IconChevronRight size={16} />
+              </span>
+            )}
+          </div>
+        ) : null}
       </div>
+      {catalogueRow ? (
+        <span className="orbis-store-tile-action" aria-hidden="true">
+          <IconChevronRight size={16} />
+        </span>
+      ) : null}
     </Link>
   );
 }

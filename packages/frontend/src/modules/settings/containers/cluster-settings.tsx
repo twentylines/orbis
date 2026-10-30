@@ -539,6 +539,7 @@ export function ClusterSettings() {
                 variant="outline"
                 disabled={busy}
                 onClick={() => {
+                  setUrl('');
                   setCode('');
                   setServerName('');
                   setPairError('');
@@ -546,7 +547,7 @@ export function ClusterSettings() {
                   setAllowInsecureLan(false);
                 }}
               >
-                Cancel
+                Clear
               </Button>
               <Button type="submit" intent="primary" disabled={busy || !url.trim() || !code.trim() || !pairPassword}>
                 <IconPlus size={18} aria-hidden="true" />
@@ -703,7 +704,7 @@ export function ClusterSettings() {
       <section className="cluster-settings-section" aria-labelledby="cluster-nearby-heading">
         <div>
           <h2 id="cluster-nearby-heading">Nearby servers</h2>
-          <p>Let another Orbis find this server’s address briefly. Codes and approval are still required.</p>
+          <p>Control whether nearby Orbis servers can find this server’s private HTTPS address.</p>
         </div>
         <NearbyVisibility disabled={busy} />
       </section>

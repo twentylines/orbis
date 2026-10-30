@@ -61,8 +61,7 @@ export const UserSettingsContainer = ({ initialValues }: Props) => {
         <>
           <ReleaseChannelSettings />
           <AutomaticUpdatesSettings />
-          <SystemBackupsSettings />
-          <HostTransferPanel />
+          <SystemBackupsSettings recoveryActions={<HostTransferPanel contained />} />
         </>
       ) : null}
     </div>

@@ -39,11 +39,17 @@
   margin: 0 0 8px;
 }
 .cluster-settings-section p {
-  max-width: 34ch;
   margin: 0;
   color: var(--desktop-muted);
   font-size: 0.8125rem;
   line-height: 1.65;
+}
+.cluster-settings-section > div:first-child > p {
+  max-width: 44ch;
+}
+.cluster-settings-section .nearby-servers :is(p, output),
+.cluster-settings-section .nearby-visibility :is(p, output) {
+  max-width: none;
 }
 .cluster-settings-form {
   display: flex;

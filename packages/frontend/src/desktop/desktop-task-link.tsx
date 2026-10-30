@@ -1,3 +1,4 @@
+import { useRestoreRequests } from '@/modules/host-transfer/receiver-request-context';
 import { AnimatePresence, motion } from 'framer-motion';
 import { IconActivity } from '@tabler/icons-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -27,6 +28,7 @@ function TaskBadge({ alert, reducedMotion, children }: { alert: boolean; reduced
 
 export function DesktopTaskLink() {
   const tasks = useTasks();
+  const pendingRequests = useRestoreRequests()?.pendingCount ?? 0;
   const location = useLocation();
   const reducedMotion = Boolean(useReducedMotion());
   // Observe the header's existing update queries without starting another request or polling loop.
@@ -77,13 +79,13 @@ export function DesktopTaskLink() {
   const seen = new Set(acknowledged);
   const alerts = location.pathname === '/tasks' ? 0 : keys.filter((key) => !seen.has(key)).length;
   const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
-  const count = activeTasks || alerts;
+  const count = activeTasks + pendingRequests || alerts;
   return (
     <Link
       to="/tasks"
       className="desktop-task-trigger"
       onClick={acknowledge}
-      aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}${alerts ? `, ${alerts} new alert${alerts === 1 ? '' : 's'}` : ''}`}
+      aria-label={`Open task centre, ${activeTasks} active operation${activeTasks === 1 ? '' : 's'}${pendingRequests ? `, ${pendingRequests} pending restore request${pendingRequests === 1 ? '' : 's'}` : ''}${alerts ? `, ${alerts} new alert${alerts === 1 ? '' : 's'}` : ''}`}
       title={alerts ? 'Task centre · new alerts' : 'Task centre'}
     >
       <IconActivity size={20} aria-hidden="true" />

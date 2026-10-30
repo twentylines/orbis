@@ -1,3 +1,4 @@
+import { ReceiverRequestProvider } from '@/modules/host-transfer/receiver-request-context';
 import { AppContextProvider } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
 import { GuestDashboard } from '@/modules/dashboard/pages/guest-dashboard';
@@ -35,13 +36,15 @@ export default () => {
           >
             <Suspense fallback={<DashboardLayoutSuspense />}>
               <AppContextProvider>
-                <SSEProvider>
-                  <Suspense fallback={<DashboardLayout />}>
-                    <DashboardLayout>
-                      <Outlet />
-                    </DashboardLayout>
-                  </Suspense>
-                </SSEProvider>
+                <ReceiverRequestProvider>
+                  <SSEProvider>
+                    <Suspense fallback={<DashboardLayout />}>
+                      <DashboardLayout>
+                        <Outlet />
+                      </DashboardLayout>
+                    </Suspense>
+                  </SSEProvider>
+                </ReceiverRequestProvider>
               </AppContextProvider>
             </Suspense>
           </ErrorBoundary>

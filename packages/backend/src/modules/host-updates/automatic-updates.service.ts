@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';
+import fs, { constants, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
@@ -28,6 +28,7 @@ import { OrbisReleaseChannelsService } from '../system/orbis-release-channels.se
 import { HostUpdatesService, type HostUpdateStatus } from './host-updates.service';
 import {
   automaticUpdateStateSchema,
+  automaticAppLimit,
   dailyUpdateSlot,
   parseAppUpdateRule,
   parseAutomaticSettings,
@@ -42,6 +43,10 @@ const QUIET_MS = 10 * 60_000;
 const normalApp = new Set(['running', 'stopped']);
 const stableApp = new Set(['running', 'stopped', 'missing']);
 const busyHost = new Set(['queued', 'running', 'recovering', 'interrupted']);
+const appCapacityReason = 'Automatic app update tracking reached the 256-app limit. Review installed apps and retained update history.';
+const appWarningRecord = { version: 1 as const, reason: 'capacity' as const };
+type AppWarningChange = 'capacity-warning' | 'clear-app-warning';
+type AppStateMutation = ((next: AutomaticUpdateState) => void) | ((next: AutomaticUpdateState) => AppWarningChange | undefined);
 
 @Injectable()
 export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
@@ -52,6 +57,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private timer?: ReturnType<typeof setInterval>;
   private stopped = false;
   private storageError: string | null = null;
+  private appPauseReason: string | null = null;
   private systemError: string | null = null;
   private system: SystemUpdateState = {
     version: 1,
@@ -129,8 +135,91 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private systemFile() {
     return path.join(path.dirname(this.file()), 'system.json');
   }
+  private appWarningFile() {
+    return path.join(path.dirname(this.file()), 'app-capacity-warning.json');
+  }
+  private async appWarningRecord() {
+    const directory = await fs.lstat(path.dirname(this.appWarningFile())).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
+    if (!directory) return null;
+    if (
+      !directory.isDirectory() ||
+      directory.isSymbolicLink() ||
+      (directory.mode & 0o077) !== 0 ||
+      (process.getuid && directory.uid !== process.getuid())
+    )
+      throw new Error('Unsafe app warning directory');
+    let handle: FileHandle;
+    try {
+      handle = await fs.open(this.appWarningFile(), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    }
+    try {
+      const before = await handle.stat();
+      if (
+        !before.isFile() ||
+        before.nlink !== 1 ||
+        (before.mode & 0o077) !== 0 ||
+        before.size > 128 ||
+        (process.getuid && before.uid !== process.getuid())
+      )
+        throw new Error('Unsafe app warning file');
+      const buffer = Buffer.alloc(129);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      const after = await handle.stat();
+      if (
+        bytesRead > 128 ||
+        bytesRead !== before.size ||
+        before.dev !== after.dev ||
+        before.ino !== after.ino ||
+        before.size !== after.size ||
+        before.mtimeMs !== after.mtimeMs ||
+        before.ctimeMs !== after.ctimeMs ||
+        buffer.subarray(0, bytesRead).toString('utf8').trim() !== JSON.stringify(appWarningRecord)
+      )
+        throw new Error('Invalid app warning record');
+      return before;
+    } finally {
+      await handle.close();
+    }
+  }
+  private async readAppWarning() {
+    try {
+      this.appPauseReason = (await this.appWarningRecord()) ? appCapacityReason : null;
+    } catch {
+      this.appPauseReason = 'The automatic app warning could not be read safely. Review automatic update settings before enabling the default.';
+    }
+  }
+  private async saveAppWarning() {
+    await this.appWarningRecord();
+    await this.persist(appWarningRecord, this.appWarningFile());
+  }
+  private async clearAppWarning() {
+    const previous = await this.appWarningRecord();
+    if (!previous) return;
+    const current = await fs.lstat(this.appWarningFile());
+    if (
+      previous.dev !== current.dev ||
+      previous.ino !== current.ino ||
+      previous.size !== current.size ||
+      previous.mtimeMs !== current.mtimeMs ||
+      previous.ctimeMs !== current.ctimeMs
+    )
+      throw new Error('App warning changed');
+    await fs.unlink(this.appWarningFile());
+    const directory = await fs.open(path.dirname(this.appWarningFile()), constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
+  }
   private load() {
-    this.loading ??= Promise.all([this.readStored(), this.readSystemStored()]).then(() => undefined);
+    this.loading ??= Promise.all([this.readStored(), this.readSystemStored(), this.readAppWarning()]).then(() => undefined);
     return this.loading;
   }
   private async readStored() {
@@ -203,7 +292,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async persist(next: AutomaticUpdateState | SystemUpdateState, file = this.file()) {
+  private async persist(next: AutomaticUpdateState | SystemUpdateState | typeof appWarningRecord, file = this.file()) {
     const directory = path.dirname(file);
     const temporary = `${file}.${randomUUID()}.tmp`;
     await fs.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -243,11 +332,19 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.writes = run;
     return run;
   }
-  private change(mutate: (next: AutomaticUpdateState) => void, requireLoaded = true) {
+  private change(mutate: AppStateMutation, requireLoaded = true) {
     return this.write(async () => {
       if (this.storageError) throw new ServiceUnavailableException(this.storageError);
       const next = structuredClone(this.state);
-      mutate(next);
+      const warning = mutate(next);
+      if (!automaticUpdateStateSchema.allows(next)) throw new ConflictException('Automatic update state needs review before it can be saved.');
+      if (warning === 'clear-app-warning') {
+        try {
+          await this.clearAppWarning();
+        } catch {
+          throw new ServiceUnavailableException('The app warning could not be cleared safely. Update preferences were not changed.');
+        }
+      }
       try {
         await this.persist(next);
       } catch {
@@ -258,6 +355,15 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
         throw new ServiceUnavailableException(this.storageError);
       }
       this.state = next;
+      if (warning === 'clear-app-warning') this.appPauseReason = null;
+      if (warning === 'capacity-warning') {
+        this.appPauseReason = appCapacityReason;
+        try {
+          await this.saveAppWarning();
+        } catch {
+          throw new ServiceUnavailableException('The app default is off, but its warning could not be saved. Review automatic update settings.');
+        }
+      }
     }, requireLoaded);
   }
   private changeSystem(mutate: (next: SystemUpdateState) => void, requireLoaded = true) {
@@ -300,7 +406,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       serverTime: this.serverTime(schedule.timezone),
       available: !this.storageError,
       ...(this.storageError ? { reason: this.storageError } : {}),
-      pauseReason: this.state.pauseReason,
+      pauseReason: [this.state.pauseReason, this.appPauseReason].filter(Boolean).join(' ') || null,
       lastAttempt: this.state.orbis,
     };
   }
@@ -313,9 +419,17 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
         : raw,
     );
     if (this.config.get('demoMode')) throw new BadRequestException('Automatic updates are unavailable in demo mode.');
+    const explicitApps = settings.apps !== undefined;
+    const installed = settings.apps?.enabled ? await this.storeAppUrns() : undefined;
     await this.change((next) => {
+      if (installed) {
+        this.pruneOrphanChecks(next, installed);
+        if (this.appCapacityExceeded(next, installed))
+          throw new BadRequestException('Automatic app updates support 256 retained apps. Review installed apps and earlier update attempts first.');
+      }
       if (settings.apps === undefined && next.settings.apps !== undefined) settings.apps = { ...next.settings.apps };
-      if (JSON.stringify(next.settings) === JSON.stringify(settings)) return;
+      const warning = explicitApps && settings.apps?.enabled ? ('clear-app-warning' as const) : undefined;
+      if (JSON.stringify(next.settings) === JSON.stringify(settings)) return warning;
       if (settings.orbis.enabled && !next.settings.orbis.enabled) {
         next.orbis = null;
         next.pauseReason = null;
@@ -323,6 +437,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       if (next.orbis && ['checking', 'planning', 'deferred'].includes(next.orbis.state)) next.orbis = null;
       next.settings = settings;
       next.revision++;
+      return warning;
     });
     return this.read();
   }
@@ -400,6 +515,73 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private appRule(urn: string, state = this.state) {
     return state.rules[urn] ?? { mode: state.settings.apps?.enabled && !urn.endsWith(':_user') ? ('global' as const) : ('disabled' as const) };
   }
+  private async storeAppUrns() {
+    const installed = new Set<string>();
+    for (const app of await this.apps.getApps()) {
+      const urn = `${app.appName}:${app.appStoreSlug}`;
+      if (!urn.endsWith(':_user')) installed.add(this.appUrn(urn));
+    }
+    return installed;
+  }
+  private pruneOrphanChecks(next: AutomaticUpdateState, installed: Set<string>) {
+    for (const [urn, attempt] of Object.entries(next.apps))
+      if (
+        !installed.has(urn) &&
+        next.rules[urn] === undefined &&
+        attempt.targetVersion === undefined &&
+        attempt.targetTag === undefined &&
+        attempt.jobId === undefined &&
+        (attempt.state === 'no-update' || attempt.state === 'failed')
+      )
+        delete next.apps[urn];
+  }
+  private appCapacityExceeded(next: AutomaticUpdateState, installed: Set<string>) {
+    return installed.size > automaticAppLimit || new Set([...installed, ...Object.keys(next.apps)]).size > automaticAppLimit;
+  }
+  private async reconcileAppCapacity(installed: Set<string>) {
+    const next = structuredClone(this.state);
+    this.pruneOrphanChecks(next, installed);
+    const pause = next.settings.apps?.enabled && this.appCapacityExceeded(next, installed);
+    if (Object.keys(next.apps).length === Object.keys(this.state.apps).length && !pause) return;
+    await this.change((current) => {
+      this.pruneOrphanChecks(current, installed);
+      if (current.settings.apps?.enabled && this.appCapacityExceeded(current, installed)) {
+        current.settings.apps = { enabled: false };
+        current.revision++;
+        return 'capacity-warning';
+      }
+    });
+  }
+  private async recordAppAttempt(
+    urn: string,
+    revision: number,
+    attempt: (previous: AutomaticUpdateAttempt | undefined) => AutomaticUpdateAttempt | undefined,
+  ) {
+    if (
+      !this.state.apps[urn] &&
+      Object.keys(this.state.apps).length >= automaticAppLimit &&
+      this.appPauseReason === appCapacityReason &&
+      !this.state.settings.apps?.enabled
+    )
+      return false;
+    let recorded = false;
+    await this.change((next) => {
+      if (next.revision !== revision || this.stopped) return;
+      if (!next.apps[urn] && Object.keys(next.apps).length >= automaticAppLimit) {
+        if (next.settings.apps?.enabled) {
+          next.settings.apps = { enabled: false };
+          next.revision++;
+        }
+        return 'capacity-warning';
+      }
+      const value = attempt(next.apps[urn]);
+      if (value) {
+        next.apps[urn] = value;
+        recorded = true;
+      }
+    });
+    return recorded;
+  }
   async readApp(raw: unknown) {
     await this.load();
     const urn = this.appUrn(raw);
@@ -425,9 +607,9 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Choose an installed store app.');
     await this.change((next) => {
       if (JSON.stringify(next.rules[urn]) === JSON.stringify(rule)) return;
-      if (!next.rules[urn] && Object.keys(next.rules).length >= 256) throw new BadRequestException('Too many app schedules.');
+      if (!next.rules[urn] && Object.keys(next.rules).length >= automaticAppLimit) throw new BadRequestException('Too many app schedules.');
       next.rules[urn] = rule;
-      delete next.apps[urn];
+      if (!['applying', 'accepted'].includes(next.apps[urn]?.state ?? '')) delete next.apps[urn];
       next.revision++;
     });
     return this.readApp(urn);
@@ -816,10 +998,12 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       Date.now() - this.startedAt < QUIET_MS
     )
       return;
+    if (await this.continueSystem()) return;
+    const installed = this.state.settings.apps?.enabled || Object.keys(this.state.apps).length ? await this.storeAppUrns() : new Set<string>();
+    await this.reconcileAppCapacity(installed);
     const state = this.state;
     const schedule = this.effectiveSchedule();
     const now = Date.now();
-    if (await this.continueSystem()) return;
     const slot = dailyUpdateSlot(schedule, now, state.settings.orbis.mode === 'idle');
     const systemSlot = dailyUpdateSlot(schedule, now);
     const systemRevision = this.system.revision;
@@ -828,10 +1012,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       state.settings.orbis.enabled && slot.due && (state.orbis?.slot !== slot.key || state.orbis.state === 'deferred') && this.quiet(state.revision);
     const appRules = { ...state.rules };
     if (state.settings.apps?.enabled) {
-      for (const app of await this.apps.getApps()) {
-        const urn = `${app.appName}:${app.appStoreSlug}`;
-        if (!urn.endsWith(':_user')) appRules[urn] ??= { mode: 'global' };
-      }
+      for (const urn of installed) appRules[urn] ??= { mode: 'global' };
     }
     const dueApps = Object.entries(appRules).filter(
       ([urn, rule]) =>
@@ -871,32 +1052,40 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       const appUrn = this.appUrn(urn);
       const app = await this.apps.getAppByUrn(appUrn);
       if (!app || !normalApp.has(app.status) || urn.endsWith(':_user')) continue;
+      if (!state.apps[urn] && Object.keys(state.apps).length >= automaticAppLimit) {
+        await this.recordAppAttempt(urn, state.revision, () => undefined);
+        continue;
+      }
       const update = await this.marketplace.getAppUpdateInfo(appUrn).catch(() => null);
       if (!update) {
-        await this.change((next) => {
-          next.apps[urn] = {
-            slot: selected.key,
-            state: 'failed',
-            at: Date.now(),
-            message: 'The app update check failed. A new check will wait until the next day.',
-          };
-        });
+        if (
+          !(await this.recordAppAttempt(urn, state.revision, (previous) =>
+            previous?.targetVersion !== undefined
+              ? { ...previous, slot: selected.key }
+              : {
+                  slot: selected.key,
+                  state: 'failed',
+                  at: Date.now(),
+                  message: 'The app update check failed. A new check will wait until the next day.',
+                },
+          ))
+        )
+          return;
         continue;
       }
       if (!Number.isSafeInteger(update.latestVersion) || update.latestVersion <= app.version || app.ignoredVersion === update.latestVersion) {
-        await this.change((next) => {
-          next.apps[urn] = { slot: selected.key, state: 'no-update', at: Date.now(), message: 'No eligible app update.' };
-        });
+        if (
+          !(await this.recordAppAttempt(urn, state.revision, (previous) =>
+            previous?.targetVersion !== undefined
+              ? { ...previous, slot: selected.key }
+              : { slot: selected.key, state: 'no-update', at: Date.now(), message: 'No eligible app update.' },
+          ))
+        )
+          return;
         continue;
       }
-      if (
-        state.apps[urn]?.targetVersion === update.latestVersion &&
-        ['applying', 'accepted', 'failed', 'interrupted'].includes(state.apps[urn]?.state ?? '')
-      ) {
-        await this.change((next) => {
-          const previous = next.apps[urn];
-          if (previous) next.apps[urn] = { ...previous, slot: selected.key };
-        });
+      if (state.apps[urn]?.targetVersion === update.latestVersion) {
+        if (!(await this.recordAppAttempt(urn, state.revision, (previous) => (previous ? { ...previous, slot: selected.key } : undefined)))) return;
         continue;
       }
       const attempt: AutomaticUpdateAttempt = {
@@ -906,9 +1095,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
         at: Date.now(),
         message: 'Starting the scheduled app update with a backup.',
       };
-      await this.change((next) => {
-        next.apps[urn] = attempt;
-      });
+      if (!(await this.recordAppAttempt(urn, state.revision, () => attempt))) return;
       if (this.state.revision !== state.revision || this.stopped) return;
       try {
         const result = await this.lifecycle.updateApp({ appUrn, performBackup: true });

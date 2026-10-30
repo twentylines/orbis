@@ -144,3 +144,19 @@ it('never opens a request after cancellation and bounds name resolution time', a
   await vi.advanceTimersByTimeAsync(6001);
   await rejected;
 });
+it('receiver-request peer endpoints keep exact pinned private HTTPS paths, native verification and body bounds', async () => {
+  const target = await transport.resolve('https://source.example.test');
+  for (const endpoint of ['request', 'request-status', 'request-cancel'] as const) {
+    await transport.json(target, endpoint, { version: 1 }, new AbortController().signal);
+    expect(state.requests.at(-1)).toMatchObject({ path: `/api/system-backups/transfers/peer/${endpoint}`, rejectUnauthorized: true, agent: false });
+  }
+  const count = state.requests.length;
+  await expect(transport.json(target, 'request', { padding: 'x'.repeat(1025) }, new AbortController().signal)).rejects.toThrow('too large');
+  await expect(transport.json(target, '../settings' as never, {}, new AbortController().signal)).rejects.toThrow('unsupported');
+  expect(state.requests).toHaveLength(count);
+  state.response = { status: 200, headers: { 'content-type': 'application/octet-stream', 'content-length': '64' }, chunks: [Buffer.alloc(64)] };
+  const stream = await transport.download(target, {}, 64, new AbortController().signal, 'request-file');
+  expect(state.requests.at(-1)?.path).toBe('/api/system-backups/transfers/peer/request-file');
+  expect(stream.readableFlowing).toBe(null);
+  stream.destroy();
+});

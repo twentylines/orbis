@@ -1,3 +1,4 @@
+import { SourceRestoreRequests } from '@/modules/host-transfer/source-restore-requests';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { IconActivity, IconArrowUpRight, IconCheck, IconClock, IconAlertTriangle } from '@tabler/icons-react';
@@ -38,6 +39,7 @@ export default function Tasks() {
 
   return (
     <div className="task-centre">
+      {appScope ? null : <SourceRestoreRequests />}
       {appScope ? (
         <div className="task-scope">
           <span>

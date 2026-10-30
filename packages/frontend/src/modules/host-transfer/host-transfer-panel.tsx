@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { RecoveryProgress } from '@/components/recovery-progress/recovery-progress';
@@ -12,7 +12,6 @@ import { useWindowVisible } from '@/desktop/window-visibility';
 import { useReducedMotion } from '@/desktop/motion-preferences';
 import { copyText } from '@/lib/clipboard';
 import { NearbyServers } from '@/components/nearby-servers/nearby-servers';
-import { NearbyVisibility } from '@/components/nearby-servers/nearby-visibility';
 import { readBackups, type BackupCredentials } from '../system-backups/backup-api';
 import { formatBackupBytes } from '../system-backups/contracts';
 import { SystemBackupsSettings } from '../system-backups/system-backups-settings';
@@ -33,9 +32,17 @@ import {
 import { SourceCertificatePicker } from './source-certificate-picker';
 import { SourceCertificateInfo } from './source-certificate-info';
 import type { SourceCertificate } from './source-certificate';
+import { ReceiverRequestWizard } from './receiver-request-wizard';
+import { SourceRestoreRequests } from './source-restore-requests';
 import './host-transfer-panel.css';
 
-type Props = { mode?: 'receive' | 'both'; embedded?: boolean; onActivityChange?: (active: boolean) => void };
+type Props = {
+  mode?: 'receive' | 'both';
+  embedded?: boolean;
+  contained?: boolean;
+  onActivityChange?: (active: boolean) => void;
+  onDismiss?: () => void;
+};
 type View = { kind: 'overview' | 'offer' | 'receive' } | { kind: 'approve'; offer: TransferOffer } | { kind: 'restore'; importId: string };
 const offerLabels: Record<TransferOffer['status'], string> = {
   'awaiting-claim': 'Waiting for destination',
@@ -130,7 +137,6 @@ export function HostTransferPanel(props: Props = {}) {
   const { user } = useAppContext();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
-  const [initialView, setInitialView] = useState<'overview' | 'receive'>('receive');
   const reportActivity = useCallback(
     (value: boolean) => {
       setActive(value);
@@ -139,33 +145,23 @@ export function HostTransferPanel(props: Props = {}) {
     [props.onActivityChange],
   );
   if (user?.operator !== true) return null;
-  if (props.embedded || props.mode === 'receive') return <HostTransferWizard {...props} />;
+  if (props.embedded || props.mode === 'receive') return <ReceiverRequestWizard {...props} />;
   return (
-    <section className="host-transfer-entry" aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`}>Restore from another server</h2>
+    <section className="host-transfer-entry" data-contained={Boolean(props.contained)} aria-labelledby={`${id}-title`}>
+      {props.contained ? <h3 id={`${id}-title`}>Restore from another server</h3> : <h2 id={`${id}-title`}>Restore from another server</h2>}
       <p>Bring an encrypted Orbis backup across your private network, then review it before restoring.</p>
       <div className="host-transfer-entry-actions">
         <Button
           type="button"
           variant="outline"
           onClick={() => {
-            setInitialView('receive');
             setOpen(true);
           }}
         >
-          Restore from another server
-        </Button>
-        <Button
-          type="button"
-          variant="link"
-          onClick={() => {
-            setInitialView('overview');
-            setOpen(true);
-          }}
-        >
-          Prepare this server as a source
+          Connect
         </Button>
       </div>
+      <SourceRestoreRequests />
       <Dialog
         open={open}
         onOpenChange={(next) => {
@@ -176,7 +172,7 @@ export function HostTransferPanel(props: Props = {}) {
           size="md"
           className="host-transfer-window"
           closeDisabled={active}
-          aria-describedby={`${id}-description`}
+          aria-describedby={undefined}
           onEscapeKeyDown={(event) => {
             if (active) event.preventDefault();
           }}
@@ -185,9 +181,8 @@ export function HostTransferPanel(props: Props = {}) {
           <DialogHeader>
             <DialogTitle>Restore from another server</DialogTitle>
           </DialogHeader>
-          <DialogDescription id={`${id}-description`}>Orbis-to-Orbis transfer over your private network.</DialogDescription>
           <div className="modal-body host-transfer-window-body">
-            <HostTransferWizard mode="both" embedded initialView={initialView} onActivityChange={reportActivity} />
+            <ReceiverRequestWizard embedded onActivityChange={reportActivity} onDismiss={() => setOpen(false)} />
           </div>
         </DialogContent>
       </Dialog>
@@ -200,6 +195,7 @@ export function HostTransferWizard({
   embedded = false,
   onActivityChange,
   initialView,
+  onDismiss,
 }: Props & { initialView?: 'overview' | 'receive' } = {}) {
   const id = useId();
   const reduced = useReducedMotion();
@@ -416,7 +412,7 @@ export function HostTransferWizard({
               void status.refetch();
             }}
           >
-            Refresh status
+            Refresh
           </Button>
         </header>
       ) : null}
@@ -447,14 +443,13 @@ export function HostTransferWizard({
             <div className="host-transfer-actions">
               {mode === 'both' ? (
                 <Button type="button" variant="outline" disabled={busy || status.isError} onClick={() => go({ kind: 'offer' })}>
-                  Create source code
+                  Create code
                 </Button>
               ) : null}
               <Button type="button" variant="outline" disabled={busy || status.isError} onClick={() => go({ kind: 'receive' })}>
-                Restore from another server
+                Connect
               </Button>
             </div>
-            {mode === 'both' ? <NearbyVisibility disabled={busy} /> : null}
             {!offers.length && !jobs.length && !status.isPending ? (
               <p>Create a code on the source server, then enter it on the destination.</p>
             ) : null}
@@ -562,7 +557,7 @@ export function HostTransferWizard({
                         label="The source fingerprint matches, and I approved this destination on the source."
                       />
                       <Button type="submit" intent="primary" disabled={busy || status.isError}>
-                        Start transfer
+                        Start
                       </Button>
                     </form>
                   </>
@@ -584,7 +579,7 @@ export function HostTransferWizard({
                       disabled={busy || status.isError}
                       onClick={() => go({ kind: 'restore', importId: job.importId })}
                     >
-                      Review received backup
+                      Review
                     </Button>
                   ) : null}
                   {stopped.has(job.status) ? null : (
@@ -599,7 +594,7 @@ export function HostTransferWizard({
                         });
                       }}
                     >
-                      Cancel transfer
+                      Cancel
                     </Button>
                   )}
                 </div>
@@ -743,7 +738,7 @@ export function HostTransferWizard({
                   Change source
                 </Button>
               ) : embedded && mode === 'receive' ? null : (
-                <Button type="button" variant="outline" disabled={busy} onClick={() => go({ kind: 'overview' })}>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => (onDismiss ? onDismiss() : go({ kind: 'overview' }))}>
                   Cancel
                 </Button>
               )}
@@ -762,10 +757,10 @@ export function HostTransferWizard({
                   : view.kind === 'offer'
                     ? 'Create code'
                     : view.kind === 'approve'
-                      ? 'Approve destination'
+                      ? 'Approve'
                       : receiveStep === 'source'
                         ? 'Continue'
-                        : 'Connect to source'}
+                        : 'Connect'}
               </Button>
             </div>
           </form>

@@ -14,7 +14,8 @@ export type TransferTarget = Readonly<{
   port: string;
   certificate?: SourceCertificate;
 }>;
-type PeerEndpoint = 'claim' | 'status' | 'file';
+type JsonPeerEndpoint = 'claim' | 'status' | 'request' | 'request-status' | 'request-cancel';
+type PeerEndpoint = JsonPeerEndpoint | 'file' | 'request-file';
 
 export function privateTransferAddress(input: string) {
   const address = input.replace(/^::ffff:/i, '');
@@ -67,6 +68,11 @@ export class TransferTransport {
   private response(target: TransferTarget, endpoint: PeerEndpoint, body: object, signal: AbortSignal, binary: boolean) {
     signal.throwIfAborted();
     const data = JSON.stringify(body);
+    if (
+      !['claim', 'status', 'file', 'request', 'request-status', 'request-file', 'request-cancel'].includes(endpoint) ||
+      Buffer.byteLength(data) > 1024
+    )
+      throw new BadRequestException('The transfer peer request is unsupported or too large.');
     return new Promise<IncomingMessage>((resolve, reject) => {
       const request = https.request(
         {
@@ -113,7 +119,7 @@ export class TransferTransport {
     });
   }
 
-  async json(target: TransferTarget, endpoint: 'claim' | 'status', body: object, signal: AbortSignal): Promise<unknown> {
+  async json(target: TransferTarget, endpoint: JsonPeerEndpoint, body: object, signal: AbortSignal): Promise<unknown> {
     const response = await this.response(target, endpoint, body, signal, false);
     try {
       if (response.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') throw new Error('Invalid response type');
@@ -132,8 +138,8 @@ export class TransferTransport {
     }
   }
 
-  async download(target: TransferTarget, body: object, expectedBytes: number, signal: AbortSignal) {
-    const response = await this.response(target, 'file', body, signal, true);
+  async download(target: TransferTarget, body: object, expectedBytes: number, signal: AbortSignal, endpoint: 'file' | 'request-file' = 'file') {
+    const response = await this.response(target, endpoint, body, signal, true);
     const length = response.headers['content-length'];
     if (
       response.headers['content-type']?.split(';')[0]?.trim() !== 'application/octet-stream' ||

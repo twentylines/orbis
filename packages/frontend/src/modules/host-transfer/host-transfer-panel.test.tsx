@@ -43,8 +43,8 @@ test('destination waiting state exposes both full comparison values and an expli
   expect(markup).toContain('required=""');
   expect(markup).toContain('orbis-checkbox host-transfer-confirm');
   expect(markup).toContain('The source fingerprint matches, and I approved this destination on the source.');
-  expect(markup).toContain('Start transfer');
-  expect(markup).not.toContain('Review received backup');
+  expect(markup).toContain('>Start</button>');
+  expect(markup).not.toContain('>Review</button>');
   expect(markup).not.toContain('replace-server');
   expect(markup).not.toContain('claimToken');
 });
@@ -52,8 +52,8 @@ test('receiving state shows actual byte progress and cancellation without a rest
   const markup = render({ offers: [], jobs: [{ ...job, status: 'receiving', completedBytes: 512 }] });
   expect(markup).toContain('value="50"');
   expect(markup).toContain('Encrypted backup received');
-  expect(markup).toContain('Cancel transfer');
-  expect(markup).not.toContain('Review received backup');
+  expect(markup).toContain('>Cancel</button>');
+  expect(markup).not.toContain('>Review</button>');
 });
 test('completed receipt offers verification separately and source cards preserve both fingerprints after approval', () => {
   const markup = render({
@@ -71,7 +71,7 @@ test('completed receipt offers verification separately and source cards preserve
     ],
     jobs: [{ ...job, status: 'complete', completedBytes: 1024 }],
   });
-  expect(markup).toContain('Review received backup');
+  expect(markup).toContain('>Review</button>');
   expect(markup).toContain('value="100"');
   expect(markup).toContain('Source fingerprint');
   expect(markup).toContain('Destination fingerprint');
@@ -98,11 +98,12 @@ test('receive starts with bounded source details and defers account verification
   expect(markup).not.toContain('Discover');
 });
 
-test('source transfer screen offers optional collapsed visibility without opening a lease form automatically', () => {
+test('source preparation retains code creation without temporary visibility controls', () => {
   const markup = render({ offers: [], jobs: [] });
-  expect(markup).toContain('Nearby visibility');
-  expect(markup).toContain('aria-expanded="false"');
+  expect(markup).toContain('>Create code</button>');
+  expect(markup).not.toContain('Nearby visibility');
   expect(markup).not.toContain('nearby-consent');
+  expect(markup).not.toContain('Advertise for');
 });
 test('viewer accounts cannot render transfer controls', () => {
   expect(render({ offers: [], jobs: [job] }, false)).toBe('');
@@ -131,7 +132,7 @@ test('receive verification binds the chosen source and requires fresh local auth
   expect(busy).toContain('HTTPS certificate checked when connecting');
 });
 
-test('Settings offers a working restore window entry while retaining an unobtrusive source preparation path', () => {
+test('Settings starts receiver-initiated restore without manual source preparation', () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true } });
   const markup = renderToStaticMarkup(
@@ -142,8 +143,9 @@ test('Settings offers a working restore window entry while retaining an unobtrus
     </QueryClientProvider>,
   );
   client.clear();
-  expect(markup).toContain('>Restore from another server</button>');
-  expect(markup).toContain('Prepare this server as a source');
+  expect(markup).toContain('>Connect</button>');
+  expect(markup).not.toContain('Source options');
+  expect(markup).not.toContain('Create code');
   expect(markup).not.toContain('Move to another server');
   expect(markup).not.toContain('Send from this server');
   expect(markup).not.toContain('name="password"');

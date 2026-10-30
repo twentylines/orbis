@@ -4,7 +4,13 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AutomaticUpdatesService } from './automatic-updates.service';
 import { MonitoringActivityService } from '@/core/monitoring/monitoring-activity.service';
-import { dailyUpdateSlot, parseAppUpdateRule, parseAutomaticSettings } from './automatic-updates.model';
+import {
+  automaticUpdateStateSchema,
+  dailyUpdateSlot,
+  parseAppUpdateRule,
+  parseAutomaticSettings,
+  type AutomaticUpdateAttempt,
+} from './automatic-updates.model';
 import { syncHash } from '../cluster/cluster-sync.schema';
 
 const settings = (enabled = true, mode: 'idle' | 'scheduled' = 'idle', time = '03:00') => ({
@@ -55,6 +61,26 @@ describe('server automatic update scheduling', () => {
       logger as never,
       channels as never,
     );
+  const installedApps = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({ appName: `app${index}`, appStoreSlug: 'tipi', status: 'running' }));
+  const attempt = (state: AutomaticUpdateAttempt['state'] = 'no-update', targetVersion?: number): AutomaticUpdateAttempt => ({
+    slot: 'old-day/03:00/UTC',
+    state,
+    at: Date.now(),
+    message: 'Previous check',
+    ...(targetVersion === undefined ? {} : { targetVersion }),
+  });
+  const stored = async () => JSON.parse(await fs.readFile(path.join(directory, 'state', 'automatic-updates', 'settings.json'), 'utf8'));
+  const warningFile = () => path.join(directory, 'state', 'automatic-updates', 'app-capacity-warning.json');
+  const seedHistory = async (history: Record<string, AutomaticUpdateAttempt>, rules = {}, enabled = true) => {
+    await automatic.update({ ...settings(false), apps: { enabled } });
+    const next = { ...(await stored()), apps: history, rules };
+    expect(automaticUpdateStateSchema.allows(next)).toBe(true);
+    await fs.writeFile(path.join(directory, 'state', 'automatic-updates', 'settings.json'), JSON.stringify(next));
+    automatic.onModuleDestroy();
+    automatic = create();
+    await automatic.onModuleInit();
+  };
 
   beforeEach(async () => {
     vi.useFakeTimers();
@@ -347,6 +373,238 @@ describe('server automatic update scheduling', () => {
     await automatic.tick();
     expect(lifecycle.updateApp).toHaveBeenCalledWith({ appUrn: 'adguard:tipi', performBackup: true });
     expect((await automatic.readApp('adguard:tipi')).rule.mode).toBe('global');
+  });
+  it('rejects a default above 256 Store apps without persisting invalid state, while custom apps do not consume admission slots', async () => {
+    apps.getApps.mockResolvedValue(installedApps(257));
+    await expect(automatic.update({ ...settings(false), apps: { enabled: true } })).rejects.toThrow('256');
+    expect((await automatic.read()).available).toBe(true);
+    expect((await automatic.read()).settings.apps?.enabled ?? false).toBe(false);
+    apps.getApps.mockResolvedValue([...installedApps(256), { appName: 'local', appStoreSlug: '_user', status: 'running' }]);
+    await automatic.update({ ...settings(false), apps: { enabled: true } });
+    expect(automaticUpdateStateSchema.allows(await stored())).toBe(true);
+    expect((await automatic.read()).settings.apps?.enabled).toBe(true);
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
+    expect((await stored()).appPauseReason).toBeUndefined();
+  });
+  it('pauses only the default when a future installation crosses the limit, retaining explicit choices and Orbis policy', async () => {
+    await automatic.update({ ...settings(true, 'scheduled', '23:59'), apps: { enabled: true } });
+    await automatic.updateApp('manual:tipi', { mode: 'disabled' });
+    await automatic.updateApp('custom:tipi', { mode: 'custom', time: '23:59' });
+    apps.getApps.mockResolvedValue(installedApps(257));
+    quiet();
+    await automatic.tick();
+    const status = await automatic.read();
+    expect(status.settings.apps?.enabled).toBe(false);
+    expect(status.settings.orbis).toEqual({ enabled: true, mode: 'scheduled' });
+    expect(status.appRules).toEqual({ 'manual:tipi': { mode: 'disabled' }, 'custom:tipi': { mode: 'custom', time: '23:59' } });
+    expect(status.pauseReason).toContain('256');
+    expect(status.available).toBe(true);
+    expect(automaticUpdateStateSchema.allows(await stored())).toBe(true);
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
+  });
+  it('prunes only target-free orphan checks during uninstall churn, preserving explicit and operation history', async () => {
+    const history = Object.fromEntries(Array.from({ length: 250 }, (_, index) => [`orphan${index}:tipi`, attempt()]));
+    history['orphan0:tipi'] = { ...attempt('failed'), jobId: 'unresolved-job' };
+    history['orphan1:tipi'] = { ...attempt('failed'), targetTag: 'v0.1.0-beta.123' };
+    history['lookup:tipi'] = attempt('failed');
+    history['failed:tipi'] = attempt('failed', 2);
+    history['accepted:tipi'] = { ...attempt('accepted', 2), jobId: 'accepted-job' };
+    history['applying:tipi'] = attempt('applying', 2);
+    history['manual:tipi'] = attempt();
+    history['custom:tipi'] = attempt();
+    await seedHistory(history, { 'manual:tipi': { mode: 'disabled' }, 'custom:tipi': { mode: 'custom', time: '23:59' } });
+    apps.getApps.mockResolvedValue([{ appName: 'new', appStoreSlug: 'tipi', status: 'running' }]);
+    quiet();
+    await automatic.tick();
+    const next = await stored();
+    expect(Object.keys(next.apps).sort()).toEqual([
+      'accepted:tipi',
+      'applying:tipi',
+      'custom:tipi',
+      'failed:tipi',
+      'manual:tipi',
+      'new:tipi',
+      'orphan0:tipi',
+      'orphan1:tipi',
+    ]);
+    for (const urn of ['accepted:tipi', 'applying:tipi', 'failed:tipi', 'manual:tipi', 'custom:tipi', 'orphan0:tipi', 'orphan1:tipi'])
+      expect(next.apps[urn]).toEqual(history[urn]);
+    expect(next.settings.apps.enabled).toBe(true);
+    expect(automaticUpdateStateSchema.allows(next)).toBe(true);
+    expect(lifecycle.updateApp).toHaveBeenCalledExactlyOnceWith({ appUrn: 'new:tipi', performBackup: true });
+  });
+  it('retains a full protected journal and pauses the default rather than dropping history or writing entry 257', async () => {
+    const history = Object.fromEntries(installedApps(256).map((_, index) => [`old${index}:tipi`, attempt('failed', 2)]));
+    await seedHistory(history);
+    apps.getApps.mockResolvedValue([{ appName: 'new', appStoreSlug: 'tipi', status: 'running' }]);
+    quiet();
+    await automatic.tick();
+    expect((await stored()).apps).toEqual(history);
+    expect((await automatic.read()).settings.apps?.enabled).toBe(false);
+    expect((await automatic.read()).pauseReason).toContain('256');
+    await expect(automatic.update({ ...settings(false), apps: { enabled: true } })).rejects.toThrow('256');
+    expect(automaticUpdateStateSchema.allows(await stored())).toBe(true);
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
+    apps.getApps.mockResolvedValue([]);
+    await automatic.update({ ...settings(false), apps: { enabled: true } });
+    expect((await stored()).appPauseReason).toBeUndefined();
+    expect((await automatic.read()).pauseReason).toBeNull();
+    expect((await stored()).apps).toEqual(history);
+  });
+  it('does not replay an accepted target after an offline check, uninstall and reinstall', async () => {
+    apps.getApps.mockResolvedValue([{ appName: 'adguard', appStoreSlug: 'tipi', status: 'running' }]);
+    await automatic.update({ ...settings(false), apps: { enabled: true } });
+    quiet();
+    await automatic.tick();
+    vi.setSystemTime(Date.now() + 24 * 60 * 60_000);
+    marketplace.getAppUpdateInfo.mockResolvedValueOnce(null);
+    await automatic.tick();
+    expect((await automatic.readApp('adguard:tipi')).lastAttempt?.targetVersion).toBe(2);
+    apps.getApps.mockResolvedValue([]);
+    vi.setSystemTime(Date.now() + 24 * 60 * 60_000);
+    await automatic.tick();
+    apps.getApps.mockResolvedValue([{ appName: 'adguard', appStoreSlug: 'tipi', status: 'running' }]);
+    vi.setSystemTime(Date.now() + 24 * 60 * 60_000);
+    await automatic.tick();
+    expect(lifecycle.updateApp).toHaveBeenCalledTimes(1);
+    expect((await automatic.readApp('adguard:tipi')).lastAttempt?.state).toBe('accepted');
+  });
+  it('does not erase in-flight history when an operator changes that app to manual', async () => {
+    let start: () => void = () => {};
+    let finish: (value: { requestId: string }) => void = () => {};
+    const started = new Promise<void>((done) => {
+      start = done;
+    });
+    lifecycle.updateApp.mockImplementationOnce(() => {
+      start();
+      return new Promise((done) => {
+        finish = done;
+      });
+    });
+    await automatic.updateApp('adguard:tipi', { mode: 'global' });
+    quiet();
+    const checking = automatic.tick();
+    await started;
+    await automatic.updateApp('adguard:tipi', { mode: 'disabled' });
+    expect((await automatic.readApp('adguard:tipi')).lastAttempt?.state).toBe('applying');
+    finish({ requestId: 'accepted-after-manual' });
+    await checking;
+    expect((await automatic.readApp('adguard:tipi')).rule.mode).toBe('disabled');
+    expect((await automatic.readApp('adguard:tipi')).lastAttempt?.state).toBe('accepted');
+    await automatic.updateApp('adguard:tipi', { mode: 'global' });
+    vi.setSystemTime(Date.now() + 24 * 60 * 60_000);
+    await automatic.tick();
+    expect(lifecycle.updateApp).toHaveBeenCalledTimes(1);
+  });
+  it('reports full history for an untracked explicit schedule before any marketplace request, without invalidating state', async () => {
+    await seedHistory(
+      Object.fromEntries(installedApps(256).map((_, index) => [`old${index}:tipi`, attempt('accepted', 2)])),
+      { 'new:tipi': { mode: 'global' } },
+      false,
+    );
+    apps.getApps.mockResolvedValue([{ appName: 'new', appStoreSlug: 'tipi', status: 'running' }]);
+    quiet();
+    await automatic.tick();
+    await automatic.tick();
+    expect(marketplace.getAppUpdateInfo).not.toHaveBeenCalled();
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
+    expect((await automatic.read()).pauseReason).toContain('256');
+    expect((await automatic.read()).available).toBe(true);
+    expect(automaticUpdateStateSchema.allows(await stored())).toBe(true);
+  });
+  it('preserves the existing Orbis pause explanation and the app warning across older settings payloads', async () => {
+    await automatic.update({ ...settings(false), apps: { enabled: true } });
+    await automatic.pauseForDowngrade();
+    apps.getApps.mockResolvedValue(installedApps(257));
+    quiet();
+    await automatic.tick();
+    expect((await automatic.read()).pauseReason).toContain('downgrade');
+    expect((await automatic.read()).pauseReason).toContain('256');
+    await automatic.update(settings(false));
+    expect((await automatic.read()).pauseReason).toContain('downgrade');
+    expect((await automatic.read()).pauseReason).toContain('256');
+    expect((await automatic.read()).settings.apps?.enabled).toBe(false);
+    expect((await stored()).appPauseReason).toBeUndefined();
+    expect(JSON.parse(await fs.readFile(warningFile(), 'utf8'))).toEqual({ version: 1, reason: 'capacity' });
+    expect((await fs.stat(warningFile())).mode & 0o777).toBe(0o600);
+    automatic.onModuleDestroy();
+    automatic = create();
+    await automatic.onModuleInit();
+    expect((await automatic.read()).pauseReason).toContain('256');
+    await automatic.update(settings(false));
+    expect((await automatic.read()).pauseReason).toContain('256');
+    apps.getApps.mockResolvedValue([]);
+    await automatic.update({ ...settings(false), apps: { enabled: true } });
+    await expect(fs.stat(warningFile())).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await automatic.read()).pauseReason).toContain('downgrade');
+    expect((await automatic.read()).pauseReason).not.toContain('256');
+  });
+  it('keeps the default off and history intact if warning persistence fails after the capacity pause', async () => {
+    const history = { 'protected:tipi': attempt('accepted', 2) };
+    await seedHistory(history);
+    apps.getApps.mockResolvedValue(installedApps(257));
+    const rename = fs.rename.bind(fs);
+    vi.spyOn(fs, 'rename').mockImplementation(async (source, destination) => {
+      if (String(destination) === warningFile()) throw Object.assign(new Error('Fixture warning failure'), { code: 'EIO' });
+      await rename(source, destination);
+    });
+    quiet();
+    await automatic.tick();
+    expect((await stored()).settings.apps.enabled).toBe(false);
+    expect((await stored()).apps).toEqual(history);
+    expect((await stored()).appPauseReason).toBeUndefined();
+    expect((await automatic.read()).available).toBe(true);
+    expect((await automatic.read()).pauseReason).toContain('256');
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
+  });
+  it('does not enable the default when a warning cannot be cleared durably', async () => {
+    await automatic.update({ ...settings(false), apps: { enabled: true } });
+    apps.getApps.mockResolvedValue(installedApps(257));
+    quiet();
+    await automatic.tick();
+    apps.getApps.mockResolvedValue([]);
+    const unlink = fs.unlink.bind(fs);
+    vi.spyOn(fs, 'unlink').mockImplementation(async (file) => {
+      if (String(file) === warningFile()) throw Object.assign(new Error('Fixture clear failure'), { code: 'EACCES' });
+      await unlink(file);
+    });
+    await expect(automatic.update({ ...settings(false), apps: { enabled: true } })).rejects.toThrow('not changed');
+    expect((await stored()).settings.apps.enabled).toBe(false);
+    expect((await automatic.read()).pauseReason).toContain('256');
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
+  });
+  it('refuses unknown or nonprivate sidecars without overwriting them or changing the settings format', async () => {
+    await automatic.update(settings(false));
+    for (const raw of [
+      '{"version":2,"reason":"capacity"}',
+      '{"version":1,"reason":"capacity","extra":true}',
+      '{"version":1,"reason":"capacity","reason":"capacity"}',
+      'x'.repeat(129),
+    ]) {
+      await fs.writeFile(warningFile(), raw, { mode: 0o600 });
+      automatic.onModuleDestroy();
+      automatic = create();
+      await automatic.onModuleInit();
+      await expect(automatic.update({ ...settings(false), apps: { enabled: true } })).rejects.toThrow('not changed');
+      expect(await fs.readFile(warningFile(), 'utf8')).toBe(raw);
+      expect((await stored()).settings.apps?.enabled ?? false).toBe(false);
+    }
+    await fs.writeFile(warningFile(), '{"version":1,"reason":"capacity"}');
+    await fs.chmod(warningFile(), 0o644);
+    await expect(automatic.update({ ...settings(false), apps: { enabled: true } })).rejects.toThrow('not changed');
+    expect((await stored()).appPauseReason).toBeUndefined();
+  });
+  it('rejects a cluster rule overflow before persistence without disabling all automatic updates as a storage failure', async () => {
+    const rules = Object.fromEntries(installedApps(256).map((_, index) => [`old${index}:tipi`, { mode: 'disabled' }]));
+    await seedHistory({}, rules, false);
+    apps.getApps.mockResolvedValue([{ appName: 'new', appStoreSlug: 'tipi', status: 'running' }]);
+    const previous = await automatic.clusterSnapshot();
+    await expect(
+      automatic.applyClusterSettings({ 'app-updates': [{ urn: 'new:tipi', enabled: true }] }, { 'app-updates': syncHash(previous['app-updates']) }),
+    ).rejects.toThrow('needs review');
+    expect((await stored()).rules).toEqual(rules);
+    expect((await automatic.read()).available).toBe(true);
+    expect(automaticUpdateStateSchema.allows(await stored())).toBe(true);
   });
 
   it('preserves a manual app override through default changes, legacy saves and a server restart', async () => {

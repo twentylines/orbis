@@ -16,7 +16,7 @@ export function StoreCatalogue({
       {apps.map((app, index) => (
         <Fragment key={app.urn}>
           <div ref={index === apps.length - 1 ? lastElementRef : null} className="orbis-store-grid-item">
-            <StoreTile app={app} isLoading={false} />
+            <StoreTile app={app} isLoading={false} catalogueRow />
           </div>
           {index === 7 ? collections : null}
         </Fragment>

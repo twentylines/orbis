@@ -74,7 +74,7 @@
 }
 .system-backups-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
   gap: 16px;
 }
 .system-backups-fields > div {
@@ -153,6 +153,53 @@
 .system-backups-settings .alert .btn {
   margin-top: 12px;
 }
+.system-backups-encryption {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.system-backups-encryption .form-check {
+  margin: 0;
+  line-height: 1.55;
+}
+.system-backups-window-body {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.system-backups-window :is(h3, h4, p) {
+  margin: 0;
+}
+.system-backups-window :is(p, small, output) {
+  color: var(--desktop-muted);
+  line-height: 1.55;
+}
+.system-backups-window :is(.system-backups-form, .system-backups-job) {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.system-backups-window .btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 16px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.45;
+}
+.system-backups-window .system-backups-actions {
+  justify-content: center;
+}
+.system-backups-window .system-backups-actions > .btn {
+  flex: 1 1 160px;
+}
+.system-backups-window .alert {
+  margin: 0;
+}
+
 @keyframes backup-reveal {
   from {
     opacity: 0;
@@ -181,6 +228,9 @@
   }
 }
 body[data-motion="reduced"] :is(.system-backups-form, .system-backups-job) {
+  animation: none;
+}
+.system-backups-window-body[data-reduced="true"] :is(.system-backups-form, .system-backups-job) {
   animation: none;
 }
 
@@ -252,4 +302,17 @@ body[data-motion="reduced"] .system-backups-settings .alert-danger,
 .system-backups-settings[data-reduced="true"] :is(.system-backups-form, .system-backups-job, .alert-danger),
 :root[data-orbis-effects="low"] .system-backups-settings :is(.system-backups-form, .system-backups-job) {
   animation: none;
+}
+
+.system-backups-settings > .host-transfer-entry[data-contained="true"] {
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--desktop-surface) 72%, transparent);
+}
+@media (max-width: 520px) {
+  .system-backups-settings > .host-transfer-entry[data-contained="true"] {
+    padding: 16px;
+  }
 }

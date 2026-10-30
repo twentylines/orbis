@@ -14,6 +14,8 @@ import { preferenceCacheLimit } from '@/desktop/appearance-cache';
 import { AppOpeningSettings } from '@/desktop/app-opening-settings';
 import { presetLabels, resolveWallpaperKey, wallpaperSources } from '@/desktop/wallpaper-presets';
 import { AppearanceRange } from './appearance-controls';
+import { Button } from '@/components/ui/Button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import './appearance.css';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
@@ -25,10 +27,60 @@ const presets: { value: DesktopPreferences['preset']; title: string; description
   { value: 'blush', title: 'Blush', description: 'Rose' },
 ];
 
+export function AppearanceReset({ open, onOpenChange, onReset }: { open: boolean; onOpenChange: (open: boolean) => void; onReset: () => void }) {
+  return (
+    <>
+      <section className="appearance-section" aria-labelledby="appearance-reset">
+        <div>
+          <h2 id="appearance-reset">Reset customisation</h2>
+          <p>Restore the default appearance and workspace settings.</p>
+        </div>
+        <div className="appearance-actions">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(true)}>
+            Reset
+          </Button>
+        </div>
+      </section>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent size="md" className="appearance-reset-dialog" aria-describedby="appearance-reset-description">
+          <DialogHeader>
+            <DialogTitle>Reset customisation?</DialogTitle>
+          </DialogHeader>
+          <DialogDescription id="appearance-reset-description">
+            <p>This restores the defaults for:</p>
+            <ul>
+              <li>Server display name, colours, light/dark mode, text size and spacing.</li>
+              <li>Wallpaper, material effects, motion, clock and dock settings.</li>
+              <li>Home layout and pins, saved window positions and sizes, and app-opening preferences.</li>
+            </ul>
+            <p>Your selected theme pack and uploaded images are kept. Accounts, installed apps and their data are unchanged.</p>
+          </DialogDescription>
+          <DialogFooter className="appearance-reset-actions">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              intent="danger"
+              onClick={() => {
+                onReset();
+                onOpenChange(false);
+              }}
+            >
+              Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export const Appearance = () => {
   const { preferences, activeThemePack, cacheAvailable, update, reset, syncState, updateAppearance } = useDesktopPreferences();
   const [name, setName] = useState(preferences.serverName);
   const [message, setMessage] = useState('');
+  const [resetOpen, setResetOpen] = useState(false);
   const [wallpaperSettingsRevision, setWallpaperSettingsRevision] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const wallpaperKey = resolveWallpaperKey(preferences);
@@ -269,19 +321,18 @@ export const Appearance = () => {
             }}
             hidden
           />
-          <button
-            type="button"
-            onClick={() => {
-              reset();
-              setWallpaperSettingsRevision((revision) => revision + 1);
-              setName(defaultDesktopPreferences.serverName);
-              setMessage('Appearance and workspace restored to defaults.');
-            }}
-          >
-            Restore all defaults
-          </button>
         </div>
       </section>
+      <AppearanceReset
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        onReset={() => {
+          reset();
+          setWallpaperSettingsRevision((revision) => revision + 1);
+          setName(defaultDesktopPreferences.serverName);
+          setMessage('Appearance and workspace restored to defaults.');
+        }}
+      />
       <output className="appearance-feedback" aria-live="polite">
         {message}
       </output>

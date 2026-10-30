@@ -291,3 +291,68 @@ it('preserves unreadable journals and fails closed instead of overwriting them',
   await expect(service.start(1, credentials, passphrase)).rejects.toThrow('storage needs review');
   expect(await fs.readFile(path.join(bad, 'job.json'), 'utf8')).toBe('{broken');
 });
+
+it('creates a fresh-auth one-request grant backed by the actual account-password encrypted archive, without storing credentials', async () => {
+  const requestId = randomUUID();
+  const grant = await service.startTransferExport(1, credentials, credentials.password, requestId, Date.now() + 60_000);
+  const summary = await grant.ready;
+  expect(grant.requestId).toBe(requestId);
+  const opened = await grant.open();
+  const chunks: Buffer[] = [];
+  for await (const chunk of opened.stream) chunks.push(Buffer.from(chunk));
+  const encrypted = Buffer.concat(chunks);
+  expect(encrypted.length).toBe(summary.bytes);
+  expect(encrypted.subarray(0, 8).toString()).toBe('ORBISBK1');
+  expect(auth.verifySensitiveAction).toHaveBeenCalledTimes(1);
+  const archive = path.join(directory, 'grant-opened.tar.gz');
+  const saved = path.join(directory, 'grant-encrypted.orbis');
+  await fs.writeFile(saved, encrypted, { mode: 0o600 });
+  await decryptBackup({ source: saved, destination: archive, passphrase: credentials.password });
+  expect((await fs.stat(archive)).size).toBeGreaterThan(0);
+  await expect(grant.open()).rejects.toThrow('already been claimed');
+  const metadata = await fs.readFile(path.join(directory, 'data', 'backups', 'full', grant.backupId, 'job.json'), 'utf8');
+  expect(metadata).not.toContain(credentials.password);
+  expect(metadata).not.toContain(requestId);
+});
+it('does not mint a transfer grant or start an export when fresh source authentication fails', async () => {
+  auth.verifySensitiveAction.mockRejectedValueOnce(new Error('Denied'));
+  await expect(service.startTransferExport(1, credentials, credentials.password, randomUUID(), Date.now() + 60_000)).rejects.toThrow('Denied');
+  expect((await service.list(1)).jobs).toEqual([]);
+  expect(runtime.stop).not.toHaveBeenCalled();
+});
+it('expires or revokes a sealed grant without a new public unauthenticated download path', async () => {
+  const deadline = Date.now() + 60_000;
+  const grant = await service.startTransferExport(1, credentials, passphrase, randomUUID(), deadline);
+  await grant.ready;
+  vi.spyOn(Date, 'now').mockReturnValue(deadline + 1);
+  await expect(grant.open()).rejects.toThrow('expired');
+  vi.restoreAllMocks();
+  await grant.cancel();
+  await expect(grant.open()).rejects.toThrow('expired');
+  auth.verifySensitiveAction.mockRejectedValueOnce(new Error('Denied'));
+  await expect(service.download(grant.backupId, 1, credentials)).rejects.toThrow('Denied');
+});
+it('refuses changed archive bytes or filesystem identity between grant readiness and opening', async () => {
+  const grant = await service.startTransferExport(1, credentials, passphrase, randomUUID(), Date.now() + 60_000);
+  await grant.ready;
+  await fs.appendFile(path.join(directory, 'data', 'backups', 'full', grant.backupId, 'backup.orbis'), Buffer.from('changed'));
+  await expect(grant.open()).rejects.toThrow('changed');
+});
+it('revokes old in-memory grants during shutdown and never replays them from persisted encrypted-job metadata', async () => {
+  const grant = await service.startTransferExport(1, credentials, passphrase, randomUUID(), Date.now() + 60_000);
+  await grant.ready;
+  await service.onModuleDestroy();
+  await expect(grant.open()).rejects.toThrow('expired');
+  service = createService();
+  expect((await service.list(1)).jobs.some((job) => job.id === grant.backupId)).toBe(true);
+  auth.verifySensitiveAction.mockRejectedValueOnce(new Error('Denied'));
+  await expect(service.download(grant.backupId, 1, credentials)).rejects.toThrow('Denied');
+});
+it('a failed export cannot produce a grant stream and preserves normal app recovery', async () => {
+  runtime.dumpDatabase.mockRejectedValueOnce(new Error('Failed database export'));
+  const grant = await service.startTransferExport(1, credentials, passphrase, randomUUID(), Date.now() + 60_000);
+  await expect(grant.ready).rejects.toThrow('not available');
+  await expect(grant.open()).rejects.toThrow();
+  expect(runtime.resume).toHaveBeenCalledWith([container]);
+  expect((await terminal(grant.backupId))?.status).toBe('failed');
+});

@@ -99,7 +99,7 @@ test('member receiving choices reload without account, hostname, wallpaper uploa
   expect((await checkboxes(markup)).find((box) => box.id.endsWith('-customisation'))?.checked).toBe(true);
   expect(markup).toContain('your account here');
   expect(markup).toContain('Private wallpapers');
-  expect(markup).toContain('Save receiving choices');
+  expect(markup).toContain('>Save</button>');
   expect(markup).not.toContain('type="password"');
   expect(markup).not.toContain('Install');
 });

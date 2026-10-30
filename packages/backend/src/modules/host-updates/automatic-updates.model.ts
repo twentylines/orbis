@@ -31,8 +31,9 @@ const attempt = type({
   'jobId?': 'string <= 120',
 }).onUndeclaredKey('reject');
 export type AutomaticUpdateAttempt = typeof attempt.infer;
+export const automaticAppLimit = 256;
 const validKeys = (entries: Record<string, unknown>) =>
-  Object.keys(entries).length <= 256 &&
+  Object.keys(entries).length <= automaticAppLimit &&
   Object.keys(entries).every((key) => {
     try {
       return key.length <= 180 && Boolean(validateAppUrn(key));

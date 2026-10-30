@@ -1,0 +1,101 @@
+.receiver-request-form,
+.receiver-request-card {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.receiver-request-form p,
+.receiver-request-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.receiver-request-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.receiver-request-actions > .btn {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.receiver-request-fingerprint {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.receiver-request-fingerprint > span {
+  font-size: 0.85em;
+  color: var(--desktop-muted);
+}
+.receiver-request-fingerprint code {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+  user-select: all;
+}
+.receiver-request-notice {
+  width: 100%;
+  justify-content: center;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.receiver-request-list {
+  display: grid;
+  overflow: hidden;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.receiver-request-resume {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.receiver-request-resume-trigger {
+  justify-self: start;
+}
+.receiver-request-resume-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.receiver-request-resume-copy > span,
+.receiver-request-resume-copy > time {
+  color: var(--desktop-muted);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.receiver-request-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.receiver-request-list li > .btn {
+  flex: 0 0 auto;
+}
+.receiver-request-list strong {
+  overflow-wrap: anywhere;
+}
+.receiver-request-card input,
+.receiver-request-form input {
+  scroll-margin-block: 1rem;
+}
+
+.receiver-request-notice > span {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.receiver-request-notice > .btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+}

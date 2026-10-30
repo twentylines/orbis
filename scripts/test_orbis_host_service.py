@@ -43,7 +43,7 @@ class DiscoveryRoutesTests(unittest.TestCase):
         return handler
 
     def test_status_and_interface_routes_are_read_only(self):
-        for path, method in [("/v1/discovery/status", "status"), ("/v1/discovery/interfaces", "inventory")]:
+        for path, method in [("/v1/discovery/status", "policy_status"), ("/v1/discovery/interfaces", "inventory")]:
             handler = self.handler(path)
             getattr(handler.server.service.discovery, method).return_value = {"available": False}
             handler.do_GET()
@@ -54,14 +54,25 @@ class DiscoveryRoutesTests(unittest.TestCase):
         fields = {"interface": "eth0", "origin": "https://source.example", "address": "192.168.50.10", "leaseSeconds": 120}
         handler = self.handler("/v1/discovery/advertise", fields)
         handler.do_POST()
-        handler.server.service.discovery.advertise.assert_called_once_with("eth0", "https://source.example", "192.168.50.10", 120)
+        handler.server.service.discovery.configure.assert_called_once_with("eth0", "https://source.example", "192.168.50.10")
         handler = self.handler("/v1/discovery/advertise", {**fields, "pairingCode": "fixture-only"})
         handler.do_POST()
         handler.server.service.discovery.advertise.assert_not_called()
         self.assertFalse(handler.send_json.call_args.args[1]["available"])
         handler = self.handler("/v1/discovery/disable", {})
         handler.do_POST()
-        handler.server.service.discovery.disable.assert_called_once()
+        handler.server.service.discovery.set_policy.assert_called_once_with(False)
+
+    def test_persistent_policy_and_configuration_routes_never_take_credentials(self):
+        handler = self.handler("/v1/discovery/policy", {"enabled": False})
+        handler.do_POST()
+        handler.server.service.discovery.set_policy.assert_called_once_with(False, None)
+        handler = self.handler("/v1/discovery/configure", {"interface": "eth0", "origin": "https://source.example", "address": "192.168.50.10"})
+        handler.do_POST()
+        handler.server.service.discovery.configure.assert_called_once()
+        handler = self.handler("/v1/discovery/policy", {"enabled": True, "password": "fixture"})
+        handler.do_POST()
+        handler.server.service.discovery.set_policy.assert_not_called()
 
 
 class PlanReviewTimeTests(unittest.TestCase):

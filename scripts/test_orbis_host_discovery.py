@@ -1,8 +1,10 @@
 import importlib.util
 import os
+import json
 import socket
 import struct
 import threading
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -162,6 +164,74 @@ class DiscoveryLeaseTests(unittest.TestCase):
         self.assertEqual(connection.sendto.call_count, 2)
         connection.connect.assert_not_called()
         self.assertLessEqual(now[0], 5)
+
+
+class DiscoveryPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.file = Path(self.directory.name) / "discovery-policy.json"
+        self.factory = mock.Mock(return_value=mock.Mock())
+        self.discovery = D.Discovery(policy_path=self.file, socket_factory=self.factory, interface_reader=lambda: [NIC])
+
+    def test_absence_defaults_allowed_without_socket_or_advertisement(self):
+        with mock.patch.object(D.sys, "platform", "linux"):
+            self.assertEqual(self.discovery.policy_status(), {"available": True, "sharing": None, "policyVersion": 1, "enabled": True})
+        self.factory.assert_not_called()
+        self.assertFalse(self.file.exists())
+
+    def test_opt_out_is_private_durable_restart_safe_and_cannot_be_undone_by_configure(self):
+        self.discovery.set_policy(False)
+        self.assertEqual(json.loads(self.file.read_text()), {"version": 1, "enabled": False})
+        self.assertEqual(self.file.stat().st_mode & 0o777, 0o600)
+        restarted = D.Discovery(policy_path=self.file, socket_factory=self.factory, interface_reader=lambda: [NIC])
+        self.assertFalse(restarted.configure("eth0", "https://source.example", NIC["address"])["enabled"])
+        self.factory.assert_not_called()
+
+    def test_opt_in_requires_valid_endpoint_and_successful_socket_before_persisting(self):
+        self.discovery.set_policy(False)
+        for configuration in [None, {"interface": "other", "origin": "https://source.example", "address": NIC["address"]}, {"interface": "eth0", "origin": "http://source.example", "address": NIC["address"]}]:
+            with self.assertRaises(ValueError):
+                self.discovery.set_policy(True, configuration)
+            self.assertFalse(self.discovery.policy_enabled())
+        self.factory.side_effect = OSError("fixture failure")
+        with self.assertRaises(OSError):
+            self.discovery.set_policy(True, {"interface": "eth0", "origin": "https://source.example", "address": NIC["address"]})
+        self.assertFalse(self.discovery.policy_enabled())
+
+    def test_configure_uses_only_a_bounded_lease_and_disable_is_persisted_before_stop(self):
+        with mock.patch.object(D.threading, "Thread"), mock.patch.object(D.sys, "platform", "linux"):
+            self.assertTrue(self.discovery.configure("eth0", "https://source.example", NIC["address"])["sharing"])
+            self.factory.reset_mock()
+            original = self.discovery.write_policy
+            def save(enabled):
+                self.assertIsNotNone(self.discovery.lease)
+                original(enabled)
+            with mock.patch.object(self.discovery, "write_policy", side_effect=save):
+                self.discovery.set_policy(False)
+            self.assertIsNone(self.discovery.status()["sharing"])
+
+    def test_unknown_duplicate_unsafe_or_future_policy_fails_closed_before_any_socket(self):
+        for raw in [b'{"version":2,"enabled":true}', b'{"version":1,"enabled":true,"origin":"private"}', b'{"version":1,"enabled":false,"enabled":true}', b'x'*1025]:
+            self.file.write_bytes(raw); self.file.chmod(0o600)
+            self.assertFalse(self.discovery.policy_status()["available"])
+            with self.assertRaises(ValueError):
+                self.discovery.configure("eth0", "https://source.example", NIC["address"])
+        self.file.write_text('{"version":1,"enabled":true}');self.file.chmod(0o644)
+        self.assertFalse(self.discovery.policy_status()["available"])
+        self.file.unlink();self.file.symlink_to(Path(self.directory.name)/"missing")
+        self.assertFalse(self.discovery.policy_status()["available"])
+        self.factory.assert_not_called()
+
+    def test_background_renewal_and_visibility_policy_do_not_cancel_a_user_scan(self):
+        with mock.patch.object(D.threading, "Thread"), mock.patch.object(D.sys, "platform", "linux"):
+            self.discovery.configure("eth0", "https://source.example", NIC["address"])
+            self.discovery.configure("eth0", "https://source.example", NIC["address"])
+            self.assertFalse(self.discovery.scan_stop.is_set())
+            self.discovery.set_policy(False)
+            self.assertFalse(self.discovery.scan_stop.is_set())
+            self.discovery.disable()
+            self.assertTrue(self.discovery.scan_stop.is_set())
 
 
 if __name__ == "__main__":

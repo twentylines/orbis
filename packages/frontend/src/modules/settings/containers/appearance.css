@@ -302,6 +302,23 @@
   color: var(--desktop-accent);
   font-size: 0.8125rem;
 }
+.appearance-reset-dialog .modal-body {
+  display: grid;
+  gap: 16px;
+}
+.appearance-reset-dialog .modal-body :is(p, ul) {
+  margin: 0;
+}
+.appearance-reset-dialog .modal-body ul {
+  padding-inline-start: 1.4em;
+}
+.appearance-reset-dialog .modal-body li + li {
+  margin-top: 8px;
+}
+.appearance-reset-dialog .appearance-reset-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .appearance-wallpaper-settings {
   display: grid;
   gap: 14px;

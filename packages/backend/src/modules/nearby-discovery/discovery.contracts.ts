@@ -91,8 +91,12 @@ export function discoveryResponse(value: unknown, kind: 'status' | 'interfaces' 
     };
   }
   const sharing = data.sharing === null ? null : record(data.sharing);
+  if (data.policyVersion !== 1 || typeof data.enabled !== 'boolean' || (!data.enabled && sharing !== null))
+    throw new Error('Persistent nearby discovery is unavailable');
   return {
     available: true as const,
+    policyVersion: 1 as const,
+    enabled: data.enabled,
     sharing:
       sharing === null
         ? null

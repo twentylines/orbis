@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { Readable } from 'node:stream';
 import {
   BadRequestException,
   ConflictException,
@@ -29,6 +30,15 @@ import { fullBackupLimits } from './backup-limits';
 import { restoreStartupRole } from './backup-restore-startup';
 import { acquireRestoreLease } from './backup-restore-lease';
 import { BackupRestoreJournal } from './backup-restore-journal';
+
+export type TransferArchiveGrant = Readonly<{
+  requestId: string;
+  backupId: string;
+  ready: Promise<{ bytes: number }>;
+  progress: () => { stage: string; completedBytes: number; totalBytes: number | null };
+  open: () => Promise<{ stream: Readable; bytes: number }>;
+  cancel: () => Promise<void>;
+}>;
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const savedJob = type({
@@ -68,6 +78,8 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   private ready?: Promise<void>;
   private unavailable = false;
   private startupHeld = false;
+  private closing = false;
+  private readonly transferGrants = new Set<() => Promise<void>>();
 
   constructor(
     private readonly config: ConfigurationService,
@@ -115,6 +127,9 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     return this.initialize();
   }
   async onModuleDestroy() {
+    this.closing = true;
+    await Promise.allSettled([...this.transferGrants].map((cancel) => cancel()));
+    this.transferGrants.clear();
     if (this.active) {
       this.active.abort.abort();
       await this.active.done;
@@ -418,19 +433,120 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       release();
     }
   }
-  async download(id: string, ownerId: number, credentials: { password: string; totpCode?: string }) {
-    await this.initialize();
-    await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+  private async openArchive(id: string, ownerId: number) {
     const job = this.owned(id, ownerId);
     if (this.active?.id === id || job.status !== 'succeeded' || Date.now() - job.createdAt > expiry)
       throw new NotFoundException('This backup is not available. Create a new full backup.');
     const file = await fs.open(path.join(this.directory(id), 'backup.orbis'), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-    const stat = await file.stat();
-    if (!stat.isFile() || stat.mode & 0o077) {
+    try {
+      const stat = await file.stat();
+      if (!stat.isFile() || stat.mode & 0o077) throw new ConflictException('The backup file could not be opened safely.');
+      return { file, stat };
+    } catch (error) {
       await file.close();
-      throw new ConflictException('The backup file could not be opened safely.');
+      throw error;
     }
-    return { stream: file.createReadStream(), bytes: stat.size };
+  }
+  async download(id: string, ownerId: number, credentials: { password: string; totpCode?: string }) {
+    await this.initialize();
+    await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    const opened = await this.openArchive(id, ownerId);
+    return { stream: opened.file.createReadStream(), bytes: opened.stat.size };
+  }
+
+  async startTransferExport(
+    ownerId: number,
+    credentials: { password: string; totpCode?: string },
+    passphrase: string,
+    requestId: string,
+    expiresAt: number,
+  ): Promise<TransferArchiveGrant> {
+    if (this.closing || !uuid.test(requestId) || !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now() || expiresAt > Date.now() + 60 * 60_000)
+      throw new BadRequestException('The approved restore request expired.');
+    const job = await this.start(ownerId, credentials, passphrase);
+    return this.transferGrant(ownerId, job.id, requestId, expiresAt);
+  }
+
+  private transferGrant(ownerId: number, backupId: string, requestId: string, expiresAt: number): TransferArchiveGrant {
+    const operation = this.active?.id === backupId ? this.active.done : Promise.resolve();
+    let revoked = false;
+    let used = false;
+    let output: Readable | undefined;
+    const assertValid = () => {
+      if (this.closing || revoked || Date.now() >= expiresAt) throw new ConflictException('The approved restore request expired.');
+    };
+    const cancel = async () => {
+      revoked = true;
+      this.transferGrants.delete(cancel);
+      clearTimeout(timer);
+      output?.destroy();
+      await this.cancel(backupId, ownerId);
+    };
+    const timer = setTimeout(
+      () => {
+        void cancel().catch(() => undefined);
+      },
+      Math.max(1, expiresAt - Date.now()),
+    );
+    timer.unref();
+    this.transferGrants.add(cancel);
+    const signature = (stat: Awaited<ReturnType<Awaited<ReturnType<typeof fs.open>>['stat']>>) => [
+      stat.dev,
+      stat.ino,
+      stat.size,
+      stat.mtimeMs,
+      stat.ctimeMs,
+      stat.mode,
+      stat.nlink,
+      stat.uid,
+    ];
+    let sealed: ReturnType<typeof signature> | undefined;
+    const ready = operation.then(async () => {
+      assertValid();
+      const opened = await this.openArchive(backupId, ownerId);
+      try {
+        assertValid();
+        if (opened.stat.nlink !== 1 || (process.getuid && opened.stat.uid !== process.getuid()))
+          throw new ConflictException('The backup file could not be opened safely.');
+        sealed = signature(opened.stat);
+        return { bytes: opened.stat.size };
+      } finally {
+        await opened.file.close();
+      }
+    });
+    void ready.catch(() => undefined);
+    return Object.freeze({
+      requestId,
+      backupId,
+      ready,
+      progress: () => {
+        const job = this.owned(backupId, ownerId);
+        return { stage: job.stage, completedBytes: job.completedBytes, totalBytes: job.totalBytes };
+      },
+      open: async () => {
+        assertValid();
+        if (used) throw new ConflictException('This encrypted backup has already been claimed.');
+        used = true;
+        await ready;
+        assertValid();
+        const opened = await this.openArchive(backupId, ownerId);
+        try {
+          assertValid();
+          if (!sealed || signature(opened.stat).some((value, index) => value !== sealed?.[index]))
+            throw new ConflictException('The approved backup changed. Request a new transfer.');
+        } catch (error) {
+          await opened.file.close();
+          throw error;
+        }
+        output = opened.file.createReadStream();
+        output.once('close', () => {
+          clearTimeout(timer);
+          this.transferGrants.delete(cancel);
+        });
+        return { stream: output, bytes: opened.stat.size };
+      },
+      cancel,
+    });
   }
   async remove(id: string, ownerId: number) {
     await this.initialize();
