@@ -12,7 +12,15 @@ import { forwardRef, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
 import { useStorePreview } from '../../pages/store-preview-context';
-import { isMediaPlayer, mediaApps, mediaRecommendations, resolveCuratedApp, type MediaApp } from './store-curation';
+import {
+  installationState,
+  isMediaPlayer,
+  mediaApps,
+  mediaRecommendations,
+  mediaStackCoverage,
+  resolveCuratedApp,
+  type MediaApp,
+} from './store-curation';
 import { recommendationCategories, recommendStoreApps, type StoreRecommendationCategory } from './store-recommendations';
 import { StoreStackReview } from './store-stack-review';
 import './store-recommendations.css';
@@ -29,6 +37,7 @@ const RecommendationCard = forwardRef<HTMLElement, HTMLMotionProps<'section'>>(f
 
 export function StoreDiscover({
   storeId,
+  onBrowse,
   enabled = true,
   hiddenCategories = [],
   onHideCategory,
@@ -77,7 +86,11 @@ export function StoreDiscover({
     staleTime: 300000,
     refetchOnWindowFocus: false,
   });
-  const current = installed.data?.installed.filter((entry) => entry.app.status !== 'missing').map((entry) => entry.info) ?? [];
+  const occupied = installed.data?.installed.filter((entry) => entry.app.status !== 'missing') ?? [];
+  const current = occupied.map((entry) => entry.info);
+  const confirmed = occupied.filter((entry) => installationState(entry.app.status) === 'ready');
+  const mediaIds = new Set(mediaApps.map((entry) => entry.id));
+  const mediaBusy = occupied.some((entry) => mediaIds.has(entry.info.id as MediaApp) && installationState(entry.app.status) === 'busy');
   const known = installed.isSuccess && !installed.isPlaceholderData;
   const media = useQueries({
     queries: mediaApps.map((entry) => ({
@@ -100,14 +113,29 @@ export function StoreDiscover({
     const app = resolveCuratedApp(media[index]?.data?.data ?? [], [entry.id], storeId);
     if (app) catalogue[entry.id] = app;
   });
-  const { resolved, existingPlayer, existingClient } = mediaRecommendations(catalogue, current);
+  const { resolved, existingPlayer, existingClient } = mediaRecommendations(
+    catalogue,
+    confirmed.map((entry) => entry.info),
+  );
   const player = resolved.jellyfin ?? resolved.plex ?? resolved.emby;
   const companions = mediaApps.filter((entry) => !isMediaPlayer(entry.id) && resolved[entry.id]);
-  const showMedia = !hidden.has('media') && media.every((query) => query.isSuccess) && (existingPlayer ? companions.length > 0 : Boolean(player));
+  const coverage = mediaStackCoverage(
+    catalogue,
+    occupied.map((entry) => ({ id: entry.info.id, status: entry.app.status })),
+  );
+  const showMedia =
+    !hidden.has('media') &&
+    !mediaBusy &&
+    !coverage.majorityInstalled &&
+    media.every((query) => query.isSuccess) &&
+    (existingPlayer ? companions.length > 0 : Boolean(player));
   const ready =
     media.every((query) => hidden.has('media') || query.isSuccess || query.isError) &&
     categories.every((query, index) => hidden.has(recommendationCategories[index]?.category ?? 'media') || query.isSuccess || query.isError);
-  const artwork = [existingPlayer ?? player, ...companions.map((entry) => resolved[entry.id])].filter((app): app is AppInfoSimple => Boolean(app));
+  const availablePlayers = existingPlayer
+    ? [existingPlayer]
+    : [resolved.jellyfin, resolved.plex, resolved.emby].filter((app): app is AppInfoSimple => Boolean(app));
+  const artwork = [...availablePlayers, ...companions.map((entry) => resolved[entry.id])].filter((app): app is AppInfoSimple => Boolean(app));
   const suggestions = recommendStoreApps(
     categories.flatMap((query) => (query.isSuccess ? query.data.data : [])),
     current,
@@ -188,9 +216,9 @@ export function StoreDiscover({
           >
             <header className="orbis-store-section-heading">
               <h2>For your server</h2>
-              {suggestions.length > slots || suggestions.some((suggestion) => suggestion.choiceCount > 1) ? (
+              {suggestions.length > slots || suggestions.some((suggestion) => suggestion.choiceCount > suggestion.apps.length) ? (
                 <Button type="button" variant="ghost" onClick={() => setRotation((value) => value + 1)}>
-                  Other suggestions
+                  Refresh
                 </Button>
               ) : null}
             </header>
@@ -228,39 +256,49 @@ export function StoreDiscover({
                       </>,
                     )
                   : null}
-                {cards.map(({ category, title, app }) =>
+                {cards.map(({ category, title, apps }) =>
                   card(
                     category,
                     <>
-                      <StoreCollectionArt apps={[app]} kind={category} />
+                      <StoreCollectionArt apps={apps} kind={category} />
                       <div className="orbis-store-collection-content">
                         <h3>{title}</h3>
-                        <p>
-                          <strong>{app.name}</strong>
-                          {app.short_desc
-                            ? ` · ${app.short_desc}`
-                            : category === 'gaming'
-                              ? ' · Preview this hosting option to check its supported games and requirements.'
-                              : ' · Explore this available app.'}
-                        </p>
-                        <Link
-                          ref={preview?.onCardMount}
-                          className="orbis-store-collection-link"
+                        <ul className="orbis-store-recommendation-apps">
+                          {apps.map((app) => (
+                            <li key={app.urn} className="orbis-store-recommendation-app">
+                              <span>
+                                <strong>{app.name}</strong>
+                                {app.short_desc ? <span className="orbis-store-recommendation-description">{app.short_desc}</span> : null}
+                              </span>
+                              <Link
+                                ref={preview?.onCardMount}
+                                className="orbis-store-collection-link orbis-store-recommendation-preview"
+                                data-recommendation-primary
+                                aria-label={`Preview ${app.name}`}
+                                to={`/app-store/${encodeURIComponent(app.urn.split(':')[1] ?? '')}/${encodeURIComponent(app.id)}${location.search}`}
+                                state={nextStorePreviewHistory(
+                                  location.state as StorePreviewHistory | null,
+                                  location.search,
+                                  location.pathname.startsWith('/app-store/'),
+                                )}
+                                preventScrollReset
+                                data-store-app={app.urn}
+                                aria-controls={preview?.split ? 'store-app-preview' : undefined}
+                                aria-expanded={preview?.split ? preview.selectedUrn === app.urn : undefined}
+                              >
+                                Preview <IconArrowRight size={18} aria-hidden="true" />
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                        <Button
+                          type="button"
+                          className="orbis-store-collection-action orbis-store-recommendation-browse"
                           data-recommendation-primary
-                          aria-label={`Preview ${app.name}`}
-                          to={`/app-store/${encodeURIComponent(app.urn.split(':')[1] ?? '')}/${encodeURIComponent(app.id)}${location.search}`}
-                          state={nextStorePreviewHistory(
-                            location.state as StorePreviewHistory | null,
-                            location.search,
-                            location.pathname.startsWith('/app-store/'),
-                          )}
-                          preventScrollReset
-                          data-store-app={app.urn}
-                          aria-controls={preview?.split ? 'store-app-preview' : undefined}
-                          aria-expanded={preview?.split ? preview.selectedUrn === app.urn : undefined}
+                          onClick={() => onBrowse(category)}
                         >
-                          Preview <IconArrowRight size={18} aria-hidden="true" />
-                        </Link>
+                          Browse {title} <IconArrowRight size={18} aria-hidden="true" />
+                        </Button>
                         {tools(category, title)}
                       </div>
                     </>,
@@ -287,8 +325,14 @@ export function StoreDiscover({
 export function StoreCollectionArt({ apps, kind }: { apps: AppInfoSimple[]; kind: AppCategory }) {
   if (!apps.length) return null;
   return (
-    <div className="orbis-store-collection-art" data-collection-kind={kind} aria-hidden="true">
-      {apps.slice(0, 4).map((app, index) => (
+    <div
+      className="orbis-store-collection-art"
+      data-collection-kind={kind}
+      data-art-count={Math.min(apps.length, 6)}
+      data-stack-grid={kind === 'media' ? '' : undefined}
+      aria-hidden="true"
+    >
+      {apps.slice(0, 6).map((app, index) => (
         <span className="orbis-store-artwork-app" data-art-position={index} key={app.urn}>
           <AppLogo urn={app.urn} size={128} />
         </span>

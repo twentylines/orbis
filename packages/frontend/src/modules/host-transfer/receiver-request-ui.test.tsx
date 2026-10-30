@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
-import { appContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
+import { appContextQueryKey, userContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
+import { UserContextProvider } from '@/context/user-context';
 import { AppContextProvider } from '@/context/app-context';
 import { DesktopTaskLink } from '@/desktop/desktop-task-link';
 import {
@@ -35,18 +36,21 @@ const context = { authority: {}, snapshot, pendingCount: 1, available: true, err
 function render(child: React.ReactNode, provider = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, username: 'operator', operator: true }, userSettings: { domain: 'orbis.home.arpa' } });
+  client.setQueryData(userContextQueryKey(), { isLoggedIn: true });
   client.setQueryData(['tasks'], { tasks: [] });
   try {
     return renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AppContextProvider>
-            {provider ? (
-              <ReceiverRequestProvider>{child}</ReceiverRequestProvider>
-            ) : (
-              <RestoreRequestsContext.Provider value={context}>{child}</RestoreRequestsContext.Provider>
-            )}
-          </AppContextProvider>
+          <UserContextProvider>
+            <AppContextProvider>
+              {provider ? (
+                <ReceiverRequestProvider>{child}</ReceiverRequestProvider>
+              ) : (
+                <RestoreRequestsContext.Provider value={context}>{child}</RestoreRequestsContext.Provider>
+              )}
+            </AppContextProvider>
+          </UserContextProvider>
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -60,6 +64,8 @@ test('receiver source screen starts with discovery/manual HTTPS without code pre
   expect(markup).toContain('name="sourceOrigin"');
   expect(markup).toContain('required=""');
   expect(markup).toContain('Source private HTTPS address');
+  expect(markup.indexOf('name="sourceOrigin"')).toBeLessThan(markup.indexOf('>Refresh</button>'));
+  expect(markup).not.toContain('btn btn-secondary');
   expect(markup).toContain('Its operator will approve');
   expect(markup).not.toContain('one-use');
   expect(markup).not.toContain('Create code');

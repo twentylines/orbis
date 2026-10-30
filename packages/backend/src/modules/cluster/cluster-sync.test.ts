@@ -17,7 +17,7 @@ import { AutomaticUpdatesService } from '../host-updates/automatic-updates.servi
 import { ClusterStateService } from './cluster-state.service';
 import { ClusterSyncService } from './cluster-sync.service';
 import { ClusterSyncStore, restoreDestinationSyncSettings } from './cluster-sync.store';
-import { customisationSchema, projectCustomisation, syncHash, syncPeerSchema, type SyncCategory } from './cluster-sync.schema';
+import { customisationSchema, projectCustomisation, syncHash, syncPeerSchema, syncValueSchemas, type SyncCategory } from './cluster-sync.schema';
 import { clusterRequest, CLUSTER_PROTOCOL, signedHeaders } from './cluster-transport';
 
 import { bindClusterCertificate, clusterCertificate } from './cluster-certificate';
@@ -80,7 +80,7 @@ function service(
 beforeEach(async () => {
   vi.clearAllMocks();
   users.getUserDtoById.mockImplementation(async (id: number) => ({ id, operator: id === 1 || id === 2 }));
-  root = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-cluster-sync-'));
+  root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-cluster-sync-')));
   sourceConfig = config(path.join(root, 'source'), 'UTC');
   targetConfig = config(path.join(root, 'target'), 'Asia/Singapore');
   sourceState = new ClusterStateService(sourceConfig);
@@ -672,5 +672,50 @@ it('uses only bound per-member certificate trust for signed settings sync and bl
     expect(clusterRequest).not.toHaveBeenCalled();
   } finally {
     fixture.remove();
+  }
+});
+
+it('syncs only granted app timing and Core policy, then preserves independent local times through durable restart', async () => {
+  await sourceUpdates.update({ orbis: { enabled: true, mode: 'scheduled' }, schedule: { time: '06:15' }, orbisSchedule: { time: '02:00' } });
+  await sourceUpdates.updateSystem({ enabled: false, schedule: { time: '05:00' } });
+  await targetUpdates.update({ orbis: { enabled: false, mode: 'idle' }, schedule: { time: '23:45' }, orbisSchedule: { time: '20:30' } });
+  await targetUpdates.updateSystem({ enabled: false, schedule: { time: '21:30' } });
+  const expected = await optIn(['orbis-updates', 'schedules']);
+  expect((await run(expected)).status).toBe('synced');
+  expect(await targetUpdates.read()).toMatchObject({
+    settings: { orbis: { enabled: true, mode: 'scheduled' }, schedule: { time: '06:15', timezone: 'Asia/Singapore' } },
+    orbisSchedule: { time: '20:30', timezone: 'Asia/Singapore' },
+  });
+  expect(await targetUpdates.readSystem()).toMatchObject({ settings: { enabled: false, schedule: { time: '21:30', timezone: 'Asia/Singapore' } } });
+  const directory = path.join(root, 'target', 'state', 'automatic-updates');
+  const rawSettings = JSON.parse(await fs.readFile(path.join(directory, 'settings.json'), 'utf8'));
+  const rawSystem = JSON.parse(await fs.readFile(path.join(directory, 'system.json'), 'utf8'));
+  const policy = JSON.parse(await fs.readFile(path.join(directory, 'schedule-policy.json'), 'utf8'));
+  expect(rawSettings.settings.orbis.enabled).toBe(false);
+  expect(rawSystem.enabled).toBe(false);
+  expect(policy).toMatchObject({
+    orbis: { enabled: true, time: '20:30', revision: rawSettings.revision },
+    system: { enabled: false, time: '21:30', revision: rawSystem.revision },
+  });
+  await expect(fs.lstat(path.join(directory, 'schedule-policy.json.pending'))).rejects.toMatchObject({ code: 'ENOENT' });
+  targetUpdates.onModuleDestroy();
+  targetUpdates = updates(targetConfig, targetApps);
+  await targetUpdates.onModuleInit();
+  expect(await targetUpdates.read()).toMatchObject({
+    settings: { orbis: { enabled: true, mode: 'scheduled' }, schedule: { time: '06:15' } },
+    orbisSchedule: { time: '20:30' },
+  });
+  expect(await targetUpdates.readSystem()).toMatchObject({ settings: { enabled: false, schedule: { time: '21:30' } } });
+  expect(host.apply).not.toHaveBeenCalled();
+  expect(host.packageApply).not.toHaveBeenCalled();
+  expect(host.packageRefresh).not.toHaveBeenCalled();
+  expect(lifecycle.updateApp).not.toHaveBeenCalled();
+  const transmitted = JSON.stringify(vi.mocked(clusterRequest).mock.calls.map((call) => call[2]));
+  expect(transmitted).not.toContain('orbisSchedule');
+  expect(transmitted).not.toContain('systemTime');
+});
+it('existing app-schedule grants reject future Core/System timing fields rather than silently widen receiving consent', () => {
+  for (const extra of [{ orbisTime: '03:00' }, { systemTime: '05:00' }, { system: { enabled: true, time: '05:00' } }]) {
+    expect(syncValueSchemas.schedules.allows({ time: '04:00', apps: [], ...extra })).toBe(false);
   }
 });

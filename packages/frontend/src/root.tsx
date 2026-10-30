@@ -16,6 +16,7 @@ import { coreUpdateIsPending } from './desktop/host-update-watch';
 import { claimPreloadRetry } from './components/startup/preload-retry';
 import { recoverNavigation } from './components/startup/navigation-recovery';
 import { startupViewportBootstrap } from './components/startup/startup-surface';
+import { themeApplyHandoffBootstrap, themeApplyPrepaintCss } from './modules/theme-packs/theme-apply-handoff';
 
 export const links: Route.LinksFunction = () => [
   { rel: 'preload', href: '/fonts/source-sans-3-variable.woff2', as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
@@ -85,6 +86,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <title>Orbis</title>
         <meta charSet="UTF-8" />
+        <style data-orbis-theme-reload>{themeApplyPrepaintCss}</style>
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code validates only a bounded public theme identity and timestamp. */}
+        <script data-orbis-theme-reload dangerouslySetInnerHTML={{ __html: themeApplyHandoffBootstrap }} />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Only static code and a fixed allowlist enter this script. */}
         <script data-orbis-appearance dangerouslySetInnerHTML={{ __html: appearanceBootstrap }} />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code reads only a timestamp from this tab's session storage. */}
@@ -95,6 +99,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
+        <div
+          id="orbis-theme-reload-fallback"
+          role="alert"
+          style={{ position: 'fixed', inset: 0, background: '#000', color: '#fff', zIndex: 2147483646 }}
+        >
+          <p>The theme reload did not finish.</p>
+          <div>
+            <a href="/">Retry</a>
+            <a href="/dashboard">Cancel</a>
+          </div>
+        </div>
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code measures the viewport gutter before the loading scene is painted. */}
         <script data-orbis-startup-viewport dangerouslySetInnerHTML={{ __html: startupViewportBootstrap }} />
         <main id="root" tabIndex={-1}>

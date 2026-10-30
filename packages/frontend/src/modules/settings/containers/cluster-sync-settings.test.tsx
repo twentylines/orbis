@@ -54,7 +54,7 @@ test('reloaded saved rules hydrate exact category and keep-in-sync controls', as
   expect(boxes.find((box) => box.id.endsWith('-customisation'))?.checked).toBe(true);
   expect(boxes.find((box) => box.id.endsWith('-schedules'))?.checked).toBe(false);
   expect(markup).toContain('Sync now');
-  expect(markup).toContain('Selected settings synced');
+  expect(markup).not.toContain('Selected settings synced');
   expect(markup).toContain('orbis-checkbox cluster-sync-check');
   expect(markup).toContain('Keep selected settings in sync');
 });
@@ -102,4 +102,47 @@ test('member receiving choices reload without account, hostname, wallpaper uploa
   expect(markup).toContain('>Save</button>');
   expect(markup).not.toContain('type="password"');
   expect(markup).not.toContain('Install');
+});
+
+test('routine sync success captions stay quiet while skipped apps and conflicts remain visible', () => {
+  const base = {
+    hostId: id,
+    revision: 2,
+    categories: ['customisation' as const],
+    automatic: false,
+    status: 'synced' as const,
+    lastAttemptAt: null,
+    usesYourAccount: true,
+    trustCurrent: true,
+  };
+  const success = renderToStaticMarkup(
+    <ClusterSyncHostChoices
+      host={{ ...host, plan: { ...base, results: [{ category: 'customisation', status: 'applied', skippedApps: 0 }] } }}
+      busy={false}
+      run={run}
+    />,
+  );
+  expect(success).not.toContain('Selected settings synced');
+  expect(success).not.toContain('Applied');
+  expect(success).not.toContain('cluster-sync-results');
+  const problems = renderToStaticMarkup(
+    <ClusterSyncHostChoices
+      host={{
+        ...host,
+        plan: {
+          ...base,
+          status: 'partial',
+          results: [
+            { category: 'customisation', status: 'conflict', skippedApps: 0 },
+            { category: 'app-updates', status: 'applied', skippedApps: 2 },
+          ],
+        },
+      }}
+      busy={false}
+      run={run}
+    />,
+  );
+  expect(problems).toContain('Changed locally');
+  expect(problems).toContain('2 unmatched apps skipped');
+  expect(problems).not.toContain('Applied');
 });

@@ -6,7 +6,7 @@ import {
   useDesktopPreferences,
   type DesktopPreferences,
 } from '@/desktop/preferences';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { IconDeviceDesktop, IconMoonStars, IconSunHigh } from '@tabler/icons-react';
 import { WallpaperSettings } from './wallpaper-settings';
 import { MaterialSettings } from './material-settings';
@@ -15,9 +15,10 @@ import { AppOpeningSettings } from '@/desktop/app-opening-settings';
 import { presetLabels, resolveWallpaperKey, wallpaperSources } from '@/desktop/wallpaper-presets';
 import { AppearanceRange } from './appearance-controls';
 import { Button } from '@/components/ui/Button';
-import { StoreRecommendationSettings } from './store-recommendation-settings';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import './appearance.css';
+import { useSettingsSave } from '../pages/settings-save';
+import { usePreferenceNameDraft } from '@/desktop/preference-name-draft';
 
 const presets: { value: DesktopPreferences['preset']; title: string; description: string }[] = [
   { value: 'frost', title: 'Frost', description: 'Pale green' },
@@ -79,27 +80,22 @@ export function AppearanceReset({ open, onOpenChange, onReset }: { open: boolean
 }
 
 export const Appearance = () => {
-  const { preferences, activeThemePack, cacheAvailable, update, reset, syncState, updateAppearance } = useDesktopPreferences();
-  const [name, setName] = useState(preferences.serverName);
+  const { preferences, activeThemePack, cacheAvailable, update, commit, reset, syncState, updateAppearance } = useDesktopPreferences();
+  const { name, setName, acknowledge: acknowledgeName } = usePreferenceNameDraft(preferences.serverName);
   const [message, setMessage] = useState('');
   const [resetOpen, setResetOpen] = useState(false);
   const [wallpaperSettingsRevision, setWallpaperSettingsRevision] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
   const wallpaperKey = resolveWallpaperKey(preferences);
   const uploadedWallpaper = preferences.wallpaperMode === 'custom' && Boolean(preferences.appearance.wallpaperImage);
   const wallpaperPreset = wallpaperKey.startsWith('theme-')
     ? (wallpaperKey.slice(6) as DesktopPreferences['preset'])
     : ({ sandstone: 'stone', tidal: 'ocean', canopy: 'forest' } as const)[preferences.wallpaper];
 
-  useEffect(() => setName(preferences.serverName), [preferences.serverName]);
-
   const changePreset = (preset: DesktopPreferences['preset']) => {
+    setMessage('');
     update(activeThemePack ? { preset } : { preset, appearance: { ...preferences.appearance, accent: null } });
-    setMessage(
-      activeThemePack
-        ? `${presets.find((item) => item.value === preset)?.title} saved as your fallback. Choose Use colour preset above to apply it.`
-        : `${presets.find((item) => item.value === preset)?.title} applied.`,
-    );
   };
 
   const saveName = () => {
@@ -108,11 +104,32 @@ export const Appearance = () => {
       setMessage('Use a name between 1 and 40 characters.');
       return;
     }
+    setMessage('');
     update({ serverName: value });
-    setMessage('Server name updated.');
+    setName(value);
   };
+  const sharedSave = useSettingsSave({
+    section: 'customise',
+    dirty: name !== preferences.serverName,
+    pending: false,
+    prepare: async () => {
+      const serverName = name.trim();
+      if (!serverName || serverName.length > 40) {
+        setMessage('Use a name between 1 and 40 characters.');
+        nameInput.current?.focus();
+        return null;
+      }
+      setMessage('');
+      const submitted = name;
+      return async () => {
+        await commit({ serverName });
+        acknowledgeName(submitted, serverName);
+      };
+    },
+  });
 
   const exportSettings = () => {
+    setMessage('');
     const exported = { ...preferences, appearance: { ...preferences.appearance, wallpaperImage: null } };
     const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -121,11 +138,11 @@ export const Appearance = () => {
     link.download = 'orbis-appearance-workspace.json';
     link.click();
     URL.revokeObjectURL(url);
-    setMessage('Appearance and workspace settings exported.');
   };
 
   const importSettings = async (file?: File) => {
     if (!file) return;
+    setMessage('');
     if (file.size > preferenceCacheLimit) {
       setMessage('The settings file is too large.');
       return;
@@ -137,7 +154,6 @@ export const Appearance = () => {
       update({ ...imported, appearance: { ...imported.appearance, wallpaperImage: null } });
       setWallpaperSettingsRevision((revision) => revision + 1);
       setName(value.serverName);
-      setMessage('Appearance and workspace settings imported.');
     } catch {
       setMessage('This file does not contain valid appearance settings.');
     }
@@ -145,21 +161,14 @@ export const Appearance = () => {
 
   return (
     <div className="appearance">
-      <output className="appearance-note">
-        {syncState === 'saved'
-          ? 'Synced to your account'
-          : syncState === 'saving'
-            ? 'Saving changes…'
-            : syncState === 'loading'
-              ? 'Loading your preferences…'
-              : syncState === 'error'
-                ? cacheAvailable
-                  ? 'Sync unavailable. Changes are cached in this browser.'
-                  : 'Sync unavailable. Changes will be lost when this page closes.'
-                : cacheAvailable
-                  ? 'Saved in this browser'
-                  : 'Changes will be lost when this page closes.'}
-      </output>
+      {syncState === 'saving' || syncState === 'loading' ? (
+        <output className="appearance-note">{syncState === 'saving' ? 'Saving changes…' : 'Loading your preferences…'}</output>
+      ) : null}
+      {syncState === 'error' ? (
+        <output className="appearance-note">
+          {cacheAvailable ? 'Sync unavailable. Changes are cached in this browser.' : 'Sync unavailable. Changes will be lost when this page closes.'}
+        </output>
+      ) : null}
       <section className="appearance-section" aria-labelledby="appearance-server-name">
         <div>
           <h2 id="appearance-server-name">Server name</h2>
@@ -169,24 +178,33 @@ export const Appearance = () => {
           <div>
             <input
               id="desktop-server-name"
+              ref={nameInput}
               aria-labelledby="appearance-server-name"
               value={name}
               maxLength={40}
-              onChange={(event) => setName(event.target.value)}
+              disabled={sharedSave.pending}
+              onChange={(event) => {
+                setName(event.target.value);
+                setMessage('');
+              }}
             />
-            <button type="button" onClick={saveName}>
-              Save
-            </button>
+            {sharedSave.shared ? null : (
+              <button type="button" onClick={saveName}>
+                Save
+              </button>
+            )}
           </div>
         </div>
       </section>
-      <ThemePacksCatalogue />
+      <div id="setting-theme-packs">
+        <ThemePacksCatalogue />
+      </div>
       <section className="appearance-section" aria-labelledby="appearance-preset">
         <div>
           <h2 id="appearance-preset">{activeThemePack ? 'Colour preset fallback' : 'Colour preset'}</h2>
           <p>
             {activeThemePack
-              ? `${activeThemePack.name} is applied. This preset returns when you remove or stop using the pack. Your custom accent stays in place.`
+              ? `${activeThemePack.name} supplies the palette. This preset returns when you remove or stop using the pack. Your custom accent stays in place.`
               : 'Applies to buttons, the logo, panels, menus and notifications. Each preset has light and dark colours.'}
           </p>
         </div>
@@ -231,6 +249,7 @@ export const Appearance = () => {
           <button
             type="button"
             className="appearance-mode appearance-mode-light"
+            data-setting-value="light"
             aria-pressed={preferences.mode === 'light'}
             onClick={() => update({ mode: 'light' })}
           >
@@ -242,6 +261,7 @@ export const Appearance = () => {
           <button
             type="button"
             className="appearance-mode appearance-mode-dark"
+            data-setting-value="dark"
             aria-pressed={preferences.mode === 'dark'}
             onClick={() => update({ mode: 'dark' })}
           >
@@ -283,15 +303,9 @@ export const Appearance = () => {
           </div>
         </div>
       </section>
-      <MaterialSettings key={wallpaperSettingsRevision} />
-      <WallpaperSettings key={wallpaperSettingsRevision} />
+      <MaterialSettings key={`material-${wallpaperSettingsRevision}`} />
+      <WallpaperSettings key={`wallpaper-${wallpaperSettingsRevision}`} />
       <AppOpeningSettings />
-      <StoreRecommendationSettings
-        shown={preferences.showStoreRecommendations}
-        hidden={preferences.hiddenStoreRecommendationCategories}
-        onChange={(showStoreRecommendations) => update({ showStoreRecommendations })}
-        onRestore={() => update({ hiddenStoreRecommendationCategories: [] })}
-      />
       <section className="appearance-section" aria-labelledby="appearance-density">
         <div>
           <h2 id="appearance-density">Density</h2>
@@ -338,7 +352,7 @@ export const Appearance = () => {
           reset();
           setWallpaperSettingsRevision((revision) => revision + 1);
           setName(defaultDesktopPreferences.serverName);
-          setMessage('Appearance and workspace restored to defaults.');
+          setMessage('');
         }}
       />
       <output className="appearance-feedback" aria-live="polite">

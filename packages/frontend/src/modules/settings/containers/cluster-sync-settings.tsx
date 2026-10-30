@@ -21,21 +21,21 @@ import './cluster-sync-settings.css';
 
 const explanations: Record<SyncCategory, string> = {
   customisation: 'Colour, display and dock appearance. Private wallpapers, app pins and window layouts stay local.',
-  'orbis-updates': 'Orbis auto-update policy, including when idle. Daily timing stays local unless selected below.',
+  'orbis-updates': 'Orbis auto-update policy, including when idle. Orbis timing stays local.',
   'app-updates': 'Enable or disable updates for matching installed store apps. Existing enabled schedules stay local.',
-  schedules: 'Daily update time and matching app timings. Each server keeps its timezone; disabled apps stay disabled.',
+  schedules: 'Daily app update time and matching app schedules. Orbis and system timings stay local; disabled apps stay disabled.',
 };
 const statusLabels = {
   idle: 'Changes waiting to sync',
-  synced: 'Selected settings synced',
+  synced: '',
   conflict: 'Local changes need review',
   partial: 'Some categories need review',
   unavailable: 'Server could not confirm sync',
   disabled: 'Sync disabled',
 };
 const resultLabels = {
-  applied: 'Applied',
-  unchanged: 'Unchanged',
+  applied: '',
+  unchanged: '',
   conflict: 'Changed locally · review before retrying',
   refused: 'Receiving is not enabled',
   failed: 'Could not apply · retry after review',
@@ -189,17 +189,21 @@ export function ClusterSyncHostChoices({ host, busy, run }: { host: ClusterSyncH
         </div>
       </form>
       {host.plan?.lastAttemptAt ? <p>Last checked {new Date(host.plan.lastAttemptAt).toLocaleString()}</p> : null}
-      {host.plan?.results.length ? (
+      {host.plan?.results.some((result) => !['applied', 'unchanged'].includes(result.status) || Boolean(result.skippedApps)) ? (
         <ul className="cluster-sync-results">
-          {host.plan.results.map((result) => (
-            <li key={result.category}>
-              <strong>{syncCategoryNames[result.category]}</strong>
-              <span>
-                {resultLabels[result.status]}
-                {result.skippedApps ? ` · ${result.skippedApps} unmatched app${result.skippedApps === 1 ? '' : 's'} skipped` : ''}
-              </span>
-            </li>
-          ))}
+          {host.plan.results
+            .filter((result) => !['applied', 'unchanged'].includes(result.status) || Boolean(result.skippedApps))
+            .map((result) => (
+              <li key={result.category}>
+                <strong>{syncCategoryNames[result.category]}</strong>
+                <span>
+                  {resultLabels[result.status]}
+                  {result.skippedApps
+                    ? `${resultLabels[result.status] ? ' · ' : ''}${result.skippedApps} unmatched app${result.skippedApps === 1 ? '' : 's'} skipped`
+                    : ''}
+                </span>
+              </li>
+            ))}
         </ul>
       ) : null}
     </article>
@@ -209,7 +213,6 @@ export function ClusterSyncSettings() {
   const { user } = useAppContext();
   const visible = useWindowVisible();
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const running = useRef(false);
   const mounted = useRef(true);
@@ -230,17 +233,15 @@ export function ClusterSyncSettings() {
       abort.current?.abort();
     };
   }, []);
-  const run: Run = async (work, success) => {
+  const run: Run = async (work) => {
     if (running.current) return;
     running.current = true;
     setBusy(true);
     setError('');
-    setNotice('');
     const controller = new AbortController();
     abort.current = controller;
     try {
       await work(controller.signal);
-      if (mounted.current) setNotice(success);
     } catch (reason) {
       if (mounted.current) setError(reason instanceof Error ? reason.message : 'Settings sync did not finish. Refresh before retrying.');
     } finally {
@@ -282,7 +283,6 @@ export function ClusterSyncSettings() {
             {error || status.error?.message}
           </p>
         ) : null}
-        {notice ? <output aria-live="polite">{notice}</output> : null}
         {status.data?.role === 'member' ? (
           <Receiving key={status.data.receiving.revision} value={status.data.receiving} busy={busy || status.isError} run={run} />
         ) : null}

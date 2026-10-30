@@ -6,6 +6,7 @@ import { AppearanceRange } from './appearance-controls';
 import { applyAppearanceRuntime } from '@/desktop/appearance-runtime';
 import type { DesktopAppearance } from '@runtipi/common/schemas';
 import { ColourPicker } from '@/components/ui/ColourPicker/ColourPicker';
+import { IconChevronDown } from '@tabler/icons-react';
 
 export function MaterialSettings() {
   const { preferences, resolvedMode, updateAppearance } = useDesktopPreferences();
@@ -90,64 +91,89 @@ export function MaterialSettings() {
       </section>
       <section className="appearance-section" aria-labelledby="appearance-glass">
         <div>
-          <h2 id="appearance-glass">Transparency &amp; blur</h2>
-          <p>Adjust panels, the system bar, dock, menus and notifications.</p>
+          <h2 id="appearance-glass">Surfaces</h2>
+          <p>Choose how much of the wallpaper shows through.</p>
         </div>
         <div className="appearance-material-controls">
-          <div className="appearance-range-grid">
-            <AppearanceRange
-              label="Panel opacity"
-              min={90}
-              max={100}
-              value={value.surfaceOpacity ?? defaults.surface}
-              disabled={opaque}
-              onPreview={preview('surfaceOpacity')}
-              onChange={(surfaceOpacity) => updateAppearance({ surfaceOpacity })}
-            />
-            <AppearanceRange
-              label="Bar and dock opacity"
-              min={80}
-              max={100}
-              value={value.chromeOpacity ?? defaults.chrome}
-              disabled={opaque}
-              onPreview={preview('chromeOpacity')}
-              onChange={(chromeOpacity) => updateAppearance({ chromeOpacity })}
-            />
-            <AppearanceRange
-              label="Panel blur"
-              max={40}
-              unit="px"
-              value={value.glassBlur ?? 28}
-              disabled={opaque}
-              onPreview={preview('glassBlur')}
-              onChange={(glassBlur) => updateAppearance({ glassBlur })}
-            />
-            <AppearanceRange
-              label="Bar and dock blur"
-              max={64}
-              unit="px"
-              value={value.chromeBlur ?? value.glassBlur ?? 28}
-              disabled={opaque}
-              onPreview={preview('chromeBlur')}
-              onChange={(chromeBlur) => updateAppearance({ chromeBlur })}
-            />
-            <AppearanceRange
-              label="Panel tint"
-              max={30}
-              value={value.glassTint ?? 0}
-              onPreview={preview('glassTint')}
-              onChange={(glassTint) => updateAppearance({ glassTint })}
-            />
+          <div id="appearance-transparency">
+            <SelectionGroup as="fieldset" className="appearance-choice" aria-label="Transparency preference">
+              {systemTransparency ? (
+                <button type="button" aria-pressed={value.transparency === 'system'} onClick={() => updateAppearance({ transparency: 'system' })}>
+                  Use device setting
+                </button>
+              ) : null}
+              <button
+                type="button"
+                aria-pressed={value.transparency === 'glass' || (!systemTransparency && value.transparency === 'system')}
+                onClick={() => updateAppearance({ transparency: 'glass' })}
+              >
+                Transparent
+              </button>
+              <button type="button" aria-pressed={value.transparency === 'solid'} onClick={() => updateAppearance({ transparency: 'solid' })}>
+                Solid
+              </button>
+            </SelectionGroup>
           </div>
-          {opaque ? <p>Solid surfaces are enabled. Opacity and blur will apply when transparency is enabled.</p> : null}
-          <div className="appearance-actions">
-            <button
-              type="button"
-              onClick={() => updateAppearance({ surfaceOpacity: null, chromeOpacity: null, glassBlur: null, chromeBlur: null, glassTint: null })}
-            >
-              Reset transparency &amp; blur
-            </button>
-          </div>
+          <details className="appearance-fine-controls">
+            <summary>
+              <span>Fine controls</span>
+              <IconChevronDown size={18} aria-hidden="true" />
+            </summary>
+            <div className="appearance-range-grid">
+              <AppearanceRange
+                label="Panel opacity"
+                min={90}
+                max={100}
+                value={value.surfaceOpacity ?? defaults.surface}
+                disabled={opaque}
+                onPreview={preview('surfaceOpacity')}
+                onChange={(surfaceOpacity) => updateAppearance({ surfaceOpacity })}
+              />
+              <AppearanceRange
+                label="Bar and dock opacity"
+                min={80}
+                max={100}
+                value={value.chromeOpacity ?? defaults.chrome}
+                disabled={opaque}
+                onPreview={preview('chromeOpacity')}
+                onChange={(chromeOpacity) => updateAppearance({ chromeOpacity })}
+              />
+              <AppearanceRange
+                label="Panel blur"
+                max={40}
+                unit="px"
+                value={value.glassBlur ?? 28}
+                disabled={opaque}
+                onPreview={preview('glassBlur')}
+                onChange={(glassBlur) => updateAppearance({ glassBlur })}
+              />
+              <AppearanceRange
+                label="Bar and dock blur"
+                max={64}
+                unit="px"
+                value={value.chromeBlur ?? value.glassBlur ?? 28}
+                disabled={opaque}
+                onPreview={preview('chromeBlur')}
+                onChange={(chromeBlur) => updateAppearance({ chromeBlur })}
+              />
+              <AppearanceRange
+                label="Panel tint"
+                max={30}
+                value={value.glassTint ?? 0}
+                onPreview={preview('glassTint')}
+                onChange={(glassTint) => updateAppearance({ glassTint })}
+              />
+            </div>
+            {opaque ? <p>Solid surfaces are enabled. Opacity and blur will apply when transparency is enabled.</p> : null}
+            <div className="appearance-actions">
+              <button
+                type="button"
+                onClick={() => updateAppearance({ surfaceOpacity: null, chromeOpacity: null, glassBlur: null, chromeBlur: null, glassTint: null })}
+              >
+                Reset
+              </button>
+            </div>
+          </details>
         </div>
       </section>
       <section className="appearance-section" aria-labelledby="appearance-motion">
@@ -166,29 +192,6 @@ export function MaterialSettings() {
           </SelectionGroup>
           {value.lowEffects ? <p>Energy saving also reduces movement.</p> : null}
         </div>
-      </section>
-      <section className="appearance-section" aria-labelledby="appearance-transparency">
-        <div>
-          <h2 id="appearance-transparency">Surfaces</h2>
-          <p>Use solid surfaces when you prefer less background detail.</p>
-        </div>
-        <SelectionGroup as="fieldset" className="appearance-choice" aria-label="Transparency preference">
-          {systemTransparency ? (
-            <button type="button" aria-pressed={value.transparency === 'system'} onClick={() => updateAppearance({ transparency: 'system' })}>
-              Use device setting
-            </button>
-          ) : null}
-          <button
-            type="button"
-            aria-pressed={value.transparency === 'glass' || (!systemTransparency && value.transparency === 'system')}
-            onClick={() => updateAppearance({ transparency: 'glass' })}
-          >
-            Transparent
-          </button>
-          <button type="button" aria-pressed={value.transparency === 'solid'} onClick={() => updateAppearance({ transparency: 'solid' })}>
-            Solid
-          </button>
-        </SelectionGroup>
       </section>
       <section className="appearance-section" aria-labelledby="appearance-effects">
         <div>

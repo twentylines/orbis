@@ -1,5 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { IconCopy, IconPlus, IconServer } from '@tabler/icons-react';
+import { IconCopy, IconPlus, IconServer, IconTrash } from '@tabler/icons-react';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
@@ -8,14 +9,22 @@ import { Input } from '@/components/ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { clusterRequest, useCluster } from '@/desktop/cluster';
 import { useDesktopPreferences } from '@/desktop/preferences';
+import { useWindowVisible } from '@/desktop/window-visibility';
 import { useAppContext } from '@/context/app-context';
 import { copyText } from '@/lib/clipboard';
 import { ClusterSyncSettings } from './cluster-sync-settings';
 import { NearbyServers } from '@/components/nearby-servers/nearby-servers';
 import { NearbyVisibility } from '@/components/nearby-servers/nearby-visibility';
 import { displayCertificateFingerprint, readSourceCertificate, type SourceCertificate } from '@/modules/host-transfer/source-certificate';
-import { createClusterInvitation, pairClusterServer, type ClusterPairRequest } from './cluster-pairing-api';
-import { authorityRequestGate, certificateReadGate, pairingRequest, requestScope, type PairingRequestScope } from './cluster-pairing-state';
+import {
+  createClusterInvitation,
+  connectClusterServer,
+  clusterPairingAccess,
+  type ClusterPairRequest,
+  type ClusterPairConnection,
+} from './cluster-pairing-api';
+import { authorityRequestGate, certificateReadGate, pairingConnectionRequest, requestScope, type PairingRequestScope } from './cluster-pairing-state';
+import { ClusterRemoteAccountDialog } from './cluster-remote-account-dialog';
 import './cluster-settings.css';
 
 type Invitation = { code: string; expiresAt: string };
@@ -86,9 +95,17 @@ export function ClusterPairingCertificate({
 }
 
 export function ClusterSettings() {
+  const visible = useWindowVisible();
   const { user, sessionIdentity } = useAppContext();
   const cluster = useCluster();
   const { preferences } = useDesktopPreferences();
+  const pairingAccess = useQuery({
+    queryKey: ['cluster-pairing-access', user.id, user.username, cluster.data?.localId],
+    queryFn: clusterPairingAccess,
+    enabled: visible && user.operator && cluster.data?.role === 'admin',
+    staleTime: 0,
+    retry: false,
+  });
   const [clusterName, setClusterName] = useState(cluster.data?.name ?? '');
   const [url, setUrl] = useState('');
   const [code, setCode] = useState('');
@@ -103,6 +120,8 @@ export function ClusterSettings() {
   const [peerCertificateName, setPeerCertificateName] = useState('');
   const [confirmPeerCertificate, setConfirmPeerCertificate] = useState(false);
   const [pairError, setPairError] = useState('');
+  const [remoteConnection, setRemoteConnection] = useState<ClusterPairConnection | null>(null);
+  const remoteScope = useRef<PairingRequestScope | null>(null);
   const [inviteError, setInviteError] = useState('');
   const [inviteAuthOpen, setInviteAuthOpen] = useState(false);
   const [invitePassword, setInvitePassword] = useState('');
@@ -120,10 +139,11 @@ export function ClusterSettings() {
     setClusterName(cluster.data?.name ?? '');
   }, [cluster.data?.name]);
   useEffect(() => {
-    if (!invitation) return;
+    if (!invitation || !visible) return;
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [invitation]);
+  }, [invitation, visible]);
   const run = async (action: (scope: PairingRequestScope) => Promise<unknown>, success: string, onError?: (message: string) => void) => {
     const scope = requestScope(authorityRequests.current);
     setBusy(true);
@@ -154,15 +174,23 @@ export function ClusterSettings() {
           name: clusterName.trim(),
           ...(cluster.data?.role === 'standalone' ? { serverName: preferences.serverName } : {}),
         }),
-      cluster.data?.role === 'standalone' ? 'Cluster created. This server is the admin.' : 'Cluster name saved.',
+      cluster.data?.role === 'standalone' ? 'Cluster created. This server is the admin.' : '',
     );
   };
   const pair = (event: FormEvent) => {
     event.preventDefault();
     setPairError('');
+    if (!pairingAccess.data?.available) {
+      setPairError(
+        pairingAccess.data && !pairingAccess.data.available
+          ? pairingAccess.data.message
+          : 'Secure pairing could not be checked. Refresh the connection.',
+      );
+      return;
+    }
     let request: ClusterPairRequest;
     try {
-      request = pairingRequest({
+      request = pairingConnectionRequest({
         url,
         code,
         name: serverName,
@@ -182,15 +210,9 @@ export function ClusterSettings() {
     void run(
       async (scope) => {
         try {
-          await scope.accept(pairClusterServer(request), () => {
-            setCode('');
-            setUrl('');
-            setServerName('');
-            setAllowInsecureLan(false);
-            setCertificateMode('system');
-            setPeerCertificate(null);
-            setPeerCertificateName('');
-            setConfirmPeerCertificate(false);
+          await scope.accept(connectClusterServer(request), (connection) => {
+            remoteScope.current = scope;
+            setRemoteConnection(connection);
           });
         } finally {
           scope.commit(() => {
@@ -199,7 +221,7 @@ export function ClusterSettings() {
           });
         }
       },
-      'Server paired. It is now available in the server selector.',
+      '',
       (detail) => setPairError(detail),
     );
   };
@@ -234,6 +256,8 @@ export function ClusterSettings() {
     );
   };
   const clearPairingTrust = () => {
+    setRemoteConnection(null);
+    remoteScope.current = null;
     certificateReads.current.invalidate();
     setPairPassword('');
     setPairTotp('');
@@ -266,13 +290,6 @@ export function ClusterSettings() {
       setPairError(error instanceof Error ? error.message.replace(/source server/gi, 'other server') : 'The certificate could not be read.');
     }
   };
-  const addressIsHttp = (() => {
-    try {
-      return new URL(url.trim()).protocol === 'http:';
-    } catch {
-      return false;
-    }
-  })();
   const addressIsHttps = (() => {
     try {
       return new URL(url.trim()).protocol === 'https:';
@@ -294,6 +311,8 @@ export function ClusterSettings() {
     setMessage('');
     setFailed(false);
     setPairError('');
+    setRemoteConnection(null);
+    remoteScope.current = null;
     setInviteError('');
     setRemoveId(null);
     setRemoveFailed(false);
@@ -314,6 +333,17 @@ export function ClusterSettings() {
       authorityRequests.current.invalidate();
     };
   }, [sessionIdentity, user.id, user.username, user.operator, cluster.data?.localId, cluster.data?.role]);
+  useEffect(() => {
+    if (visible) return;
+    authorityRequests.current.invalidate();
+    setRemoteConnection(null);
+    remoteScope.current = null;
+    setPairPassword('');
+    setPairTotp('');
+    setInvitePassword('');
+    setInviteTotp('');
+    setBusy(false);
+  }, [visible]);
   const expiresIn = invitation ? Math.max(0, Math.ceil((new Date(invitation.expiresAt).getTime() - now) / 1000)) : 0;
   // biome-ignore lint/correctness/useExhaustiveDependencies: Invitation text and text scaling change measured height without changing the textarea ref.
   useLayoutEffect(() => {
@@ -411,6 +441,20 @@ export function ClusterSettings() {
                 {canManage ? 'Save' : 'Create cluster'}
               </Button>
             </div>
+            {canManage && cluster.data?.servers.length === 1 ? (
+              <Button
+                type="button"
+                variant="outline"
+                intent="danger"
+                disabled={busy}
+                onClick={() => {
+                  setRemoveFailed(false);
+                  setRemoveId('membership');
+                }}
+              >
+                Leave cluster
+              </Button>
+            ) : null}
           </form>
         )}
       </section>
@@ -419,11 +463,26 @@ export function ClusterSettings() {
           <div>
             <h2 id="cluster-pair-heading">Pair a server</h2>
             <p>
-              Create a pairing code on the other server. Use its private HTTPS hostname matching the certificate. Settings sync needs separate
-              approval.
+              Create a code on the other server while it is standalone. Connect using its private HTTPS address, then authorize with that server’s
+              account. Settings sync needs separate approval.
             </p>
           </div>
           <form className="cluster-settings-form cluster-pair-form" onSubmit={pair}>
+            <p>Confirm your account here to connect. The other server’s password is requested after the connection succeeds.</p>
+            {pairingAccess.data?.available ? null : (
+              <div className="cluster-pair-access">
+                <output>
+                  {pairingAccess.isFetching
+                    ? 'Checking secure connection…'
+                    : pairingAccess.data && !pairingAccess.data.available
+                      ? pairingAccess.data.message
+                      : 'Secure pairing could not be checked. Update this server or refresh the connection.'}
+                </output>
+                <Button type="button" variant="outline" disabled={pairingAccess.isFetching || busy} onClick={() => void pairingAccess.refetch()}>
+                  Refresh connection
+                </Button>
+              </div>
+            )}
             <Input
               disabled={busy}
               id="cluster-server-address"
@@ -450,7 +509,11 @@ export function ClusterSettings() {
               className="cluster-settings-control"
               label="Pairing code"
               value={code}
-              onChange={(event) => setCode(event.target.value)}
+              onChange={(event) => {
+                setRemoteConnection(null);
+                remoteScope.current = null;
+                setCode(event.target.value);
+              }}
               autoCapitalize="characters"
               autoComplete="off"
               spellCheck={false}
@@ -468,7 +531,11 @@ export function ClusterSettings() {
                 </>
               }
               value={serverName}
-              onChange={(event) => setServerName(event.target.value)}
+              onChange={(event) => {
+                setRemoteConnection(null);
+                remoteScope.current = null;
+                setServerName(event.target.value);
+              }}
               autoComplete="off"
               maxLength={60}
               placeholder="e.g. Atlas"
@@ -488,28 +555,11 @@ export function ClusterSettings() {
               onFile={(file) => void loadPeerCertificate(file)}
               onConfirm={setConfirmPeerCertificate}
             />
-            {addressIsHttp ? (
-              <div className="cluster-pair-http-warning">
-                <Checkbox
-                  checked={allowInsecureLan}
-                  onCheckedChange={setAllowInsecureLan}
-                  disabled={busy}
-                  label={
-                    <span>
-                      Allow HTTP on my private LAN
-                      <span className="cluster-settings-help">
-                        HTTP sends the pairing code and request without encryption. Use HTTPS when available.
-                      </span>
-                    </span>
-                  }
-                />
-              </div>
-            ) : null}
             <Input
-              disabled={busy}
+              disabled={busy || !pairingAccess.data?.available}
               id="cluster-pair-password"
               className="cluster-settings-control"
-              label="Your account password"
+              label="This server’s account password"
               type="password"
               value={pairPassword}
               onChange={(event) => setPairPassword(event.target.value)}
@@ -517,7 +567,7 @@ export function ClusterSettings() {
               required
             />
             <Input
-              disabled={busy}
+              disabled={busy || !pairingAccess.data?.available}
               id="cluster-pair-totp"
               className="cluster-settings-control"
               label={
@@ -549,13 +599,20 @@ export function ClusterSettings() {
               >
                 Clear
               </Button>
-              <Button type="submit" intent="primary" disabled={busy || !url.trim() || !code.trim() || !pairPassword}>
+              <Button
+                type="submit"
+                intent="primary"
+                disabled={busy || !pairingAccess.data?.available || !url.trim() || !code.trim() || !pairPassword}
+              >
                 <IconPlus size={18} aria-hidden="true" />
-                Pair server
+                Connect
               </Button>
             </div>
           </form>
         </section>
+      ) : null}
+      {canManage ? (
+        <p className="cluster-settings-state">This is an admin server. Generate joining codes on the other server before it belongs to a cluster.</p>
       ) : null}
       {cluster.data?.role === 'standalone' ? (
         <section className="cluster-settings-section" aria-labelledby="cluster-invite-heading">
@@ -570,7 +627,7 @@ export function ClusterSettings() {
                   disabled={busy}
                   id="cluster-invite-password"
                   className="cluster-settings-control"
-                  label="Your account password"
+                  label="This server’s account password"
                   type="password"
                   value={invitePassword}
                   onChange={(event) => setInvitePassword(event.target.value)}
@@ -694,6 +751,7 @@ export function ClusterSettings() {
                     setRemoveId(server.id);
                   }}
                 >
+                  <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" />
                   Remove
                 </Button>
               ) : null}
@@ -709,6 +767,30 @@ export function ClusterSettings() {
         <NearbyVisibility disabled={busy} />
       </section>
       <ClusterSyncSettings />
+      {remoteConnection ? (
+        <ClusterRemoteAccountDialog
+          key={remoteConnection.pendingId}
+          connection={remoteConnection}
+          onClose={() => {
+            setRemoteConnection(null);
+            remoteScope.current = null;
+          }}
+          onPaired={() => {
+            remoteScope.current?.commit(() => {
+              setRemoteConnection(null);
+              remoteScope.current = null;
+              setCode('');
+              setUrl('');
+              setServerName('');
+              clearPairingTrust();
+              setCertificateMode('system');
+              setAllowInsecureLan(false);
+              setMessage('Server paired. It is now available in the server selector.');
+              void cluster.refetch();
+            });
+          }}
+        />
+      ) : null}
       <Dialog
         open={removeId !== null}
         onOpenChange={(open) => {
@@ -732,7 +814,9 @@ export function ClusterSettings() {
           </DialogHeader>
           <DialogDescription>
             {removeId === 'membership'
-              ? 'The admin server will lose access to this server. Your apps and data stay here.'
+              ? member
+                ? 'The admin server will lose access to this server. Your apps and data stay here.'
+                : 'This server will become standalone so it can create a joining code. Your apps and data stay here.'
               : 'Cluster access to this server will be revoked. Its apps and data will stay on that server.'}
           </DialogDescription>
           {removeFailed && removeId !== 'membership' ? (
@@ -793,6 +877,7 @@ export function ClusterSettings() {
                 )
               }
             >
+              {removeId !== 'membership' ? <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" /> : null}
               {removeId === 'membership' ? 'Leave cluster' : 'Remove server'}
             </Button>
           </DialogFooter>

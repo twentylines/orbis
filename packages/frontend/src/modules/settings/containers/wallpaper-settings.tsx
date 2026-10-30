@@ -1,7 +1,7 @@
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { themePresets, presetLabels, presetWallpaperPreviews } from '@/desktop/wallpaper-presets';
 import { Switch } from '@/components/ui/Switch';
-import { IconPhoto, IconUpload } from '@tabler/icons-react';
+import { IconPhoto, IconTrash, IconUpload } from '@tabler/icons-react';
 import { rememberBrowserWallpaper, forgetBrowserWallpaper } from '@/desktop/wallpaper-cache';
 import { checkWallpaper, sendWallpaper, wallpaperRequestError } from '@/desktop/wallpaper-upload';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -245,7 +245,7 @@ export function WallpaperSettings() {
           </button>
           {uploaded || value.wallpaperImage ? (
             <button type="button" disabled={busy} onClick={() => void remove()}>
-              <IconPhoto size={18} aria-hidden="true" />
+              <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" />
               Remove uploaded image
             </button>
           ) : null}

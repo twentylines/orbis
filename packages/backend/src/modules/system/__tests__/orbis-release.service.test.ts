@@ -306,6 +306,15 @@ describe('cumulative critical release priority', () => {
     expect(withCumulativeCriticalPriority(target, 'v1.1.2', [publishedRelease('v1.1.2', true)], 'stable')).toBe(target);
   });
 
+  it('keeps catalogue fallback attention on the same critical patch across ordinary candidates', () => {
+    const fixes = [publishedRelease('v1.1.2', true)];
+    expect(withCumulativeCriticalPriority(publishedRelease('v1.1.3'), 'v1.1.0', fixes, 'stable')).toMatchObject({ criticalThrough: 'v1.1.2' });
+    expect(withCumulativeCriticalPriority(publishedRelease('v1.1.4'), 'v1.1.0', fixes, 'stable')).toMatchObject({ criticalThrough: 'v1.1.2' });
+    expect(
+      withCumulativeCriticalPriority(publishedRelease('v1.1.6'), 'v1.1.0', [...fixes, publishedRelease('v1.1.5', true)], 'stable'),
+    ).toMatchObject({ criticalThrough: 'v1.1.5' });
+  });
+
   it('uses the durable critical-through marker beyond the bounded release catalogue', () => {
     const target = { ...publishedRelease('v1.1.3'), criticalThrough: 'v1.1.2' };
     expect(withCumulativeCriticalPriority(target, 'v1.1.0', [], 'stable')).toMatchObject({ priority: 'critical' });

@@ -1,0 +1,55 @@
+.theme-apply-cover {
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
+  isolation: isolate;
+}
+.theme-apply-cover .theme-apply-depth {
+  position: absolute;
+  inset: 0;
+  min-height: 100%;
+  background: #000;
+  z-index: -1;
+}
+.theme-apply-status {
+  width: min(100%, 34rem);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.theme-apply-status h1 {
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1.35;
+  margin: 0 0 16px;
+}
+.theme-apply-status p,
+.theme-apply-status output {
+  color: #e6e6ec;
+  line-height: 1.6;
+}
+.theme-apply-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+.theme-apply-actions button {
+  min-width: 88px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 1px solid #c6c6d0;
+  border-radius: 8px;
+  background: #15151d;
+  color: #fff;
+  font: inherit;
+}
+.theme-apply-actions button:hover {
+  background: #292936;
+}
+.theme-apply-actions button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+}

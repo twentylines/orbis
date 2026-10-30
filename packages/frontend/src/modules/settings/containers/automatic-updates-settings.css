@@ -90,3 +90,20 @@
 .automatic-updates-save:disabled {
   opacity: 0.6;
 }
+
+.automatic-updates-settings .settings-save-fields {
+  gap: 18px;
+}
+.automatic-updates-settings > header {
+  margin-bottom: 18px;
+}
+.automatic-app-update-switch {
+  display: grid;
+  gap: 12px;
+}
+.settings-store-update-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}

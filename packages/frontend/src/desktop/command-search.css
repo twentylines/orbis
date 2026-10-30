@@ -125,6 +125,12 @@ body:has(.orbis-theme) .desktop-search-surface .desktop-search-input #orbis-comm
   border-radius: 11px;
   background: color-mix(in srgb, var(--desktop-chrome-ink) 8%, transparent);
   color: var(--desktop-chrome-ink);
+  transition:
+    opacity 90ms ease-out,
+    background-color 140ms ease;
+}
+.desktop-search-surface[data-closing="true"] .desktop-search-close {
+  opacity: 0;
 }
 .desktop-search-close:hover {
   background: color-mix(in srgb, var(--desktop-chrome-ink) 14%, transparent);

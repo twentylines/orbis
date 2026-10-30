@@ -5,6 +5,7 @@ import {
   mediaApps,
   mediaPlan,
   mediaRecommendations,
+  mediaStackCoverage,
   missingRecommendations,
   resolveCuratedApp,
   storeView,
@@ -158,6 +159,48 @@ describe('Store collection resolution', () => {
       [],
     );
     expect(Object.keys(filtered.resolved)).toEqual(['bazarr']);
+  });
+  test('media stack roles count player, client, and indexer alternatives once and hide only after a strict majority', () => {
+    const catalogue = {
+      jellyfin: app('jellyfin'),
+      plex: app('plex'),
+      emby: app('emby'),
+      prowlarr: app('prowlarr'),
+      jackett: app('jackett'),
+      qbittorrent: app('qbittorrent'),
+      transmission: app('transmission'),
+      sonarr: app('sonarr'),
+      radarr: app('radarr'),
+      bazarr: app('bazarr'),
+      lidarr: app('lidarr'),
+    };
+    const threeRoles = [
+      { id: 'jellyfin', status: 'running' },
+      { id: 'prowlarr', status: 'stopped' },
+      { id: 'qbittorrent', status: 'running' },
+    ];
+    expect(mediaStackCoverage(catalogue, threeRoles)).toEqual({ availableRoleCount: 7, installedRoleCount: 3, majorityInstalled: false });
+    expect(mediaStackCoverage(catalogue, [...threeRoles, { id: 'sonarr', status: 'running' }])).toEqual({
+      availableRoleCount: 7,
+      installedRoleCount: 4,
+      majorityInstalled: true,
+    });
+  });
+  test('coverage uses only actually available catalogue roles and never counts transitional app status as installed', () => {
+    const catalogue = {
+      jellyfin: app('jellyfin'),
+      plex: app('plex', 'official', { deprecated: true }),
+      emby: app('emby', 'official', { available: false }),
+      sonarr: app('sonarr'),
+      radarr: app('radarr', 'official', { available: false }),
+    };
+    expect(
+      mediaStackCoverage(catalogue, [
+        { id: 'jellyfin', status: 'installing' },
+        { id: 'sonarr', status: 'running' },
+        { id: 'radarr', status: 'running' },
+      ]),
+    ).toEqual({ availableRoleCount: 2, installedRoleCount: 1, majorityInstalled: false });
   });
   test('queued or transitional states never count as an installed, ready app', () => {
     for (const status of ['installing', 'starting', 'updating', 'restoring', 'uninstalling', 'restarting'])
@@ -414,13 +457,14 @@ describe('catalogue-first Store presentation', () => {
     expect(html).not.toContain('<button');
   });
 
-  test('collection art uses at most four actual app icons and never creates art for an empty catalogue', () => {
-    const items = ['jellyfin', 'sonarr', 'radarr', 'prowlarr', 'qbittorrent'].map((id) => app(id, 'community'));
+  test('collection art uses up to six actual app icons and never creates art for an empty catalogue', () => {
+    const items = ['jellyfin', 'sonarr', 'radarr', 'prowlarr', 'qbittorrent', 'transmission', 'bazarr'].map((id) => app(id, 'community'));
     const html = renderToStaticMarkup(createElement(StoreCollectionArt, { apps: items, kind: 'media' }));
-    expect(html.match(/<img /g)?.length).toBe(4);
+    expect(html.match(/<img /g)?.length).toBe(6);
     expect(html).toContain('aria-hidden="true"');
     expect(html).toContain('/api/marketplace/apps/radarr%3Acommunity/image');
-    expect(html).not.toContain('qbittorrent');
+    expect(html).toContain('qbittorrent%3Acommunity');
+    expect(html).not.toContain('bazarr%3Acommunity');
     expect(renderToStaticMarkup(createElement(StoreCollectionArt, { apps: [], kind: 'media' }))).toBe('');
   });
 
@@ -466,5 +510,49 @@ describe('catalogue-first Store presentation', () => {
     expect(html).toContain('/app-store/community/crafty?view=apps&amp;store=community');
     expect(html).not.toContain('Browse all apps');
     client.clear();
+  });
+});
+
+describe('Store card installation controls', () => {
+  const renderCard = (props: Partial<Parameters<typeof StoreTile>[0]>) => {
+    const i18n = createInstance();
+    void i18n.init({ lng: 'en', initImmediate: false, resources: { en: { translation: { APP_CATEGORY_MEDIA: 'Media' } } } });
+    return renderToStaticMarkup(
+      createElement(
+        I18nextProvider,
+        { i18n },
+        createElement(
+          MemoryRouter,
+          {},
+          createElement(StoreTile, {
+            app: app('jellyfin', 'community', { name: 'Jellyfin' }),
+            isLoading: false,
+            quickInstall: true,
+            onInstall: () => undefined,
+            ...props,
+          }),
+        ),
+      ),
+    );
+  };
+  test('installed apps show their state and never offer another installation', () => {
+    const html = renderCard({ installed: true });
+    expect(html).toContain('Installed');
+    expect(html).not.toContain('>Preview ');
+    expect(html).not.toContain('aria-label="Install Jellyfin"');
+  });
+  test('pending operations are not presented as a completed installation or offered twice', () => {
+    const html = renderCard({ pending: true });
+    expect(html).toContain('Pending');
+    expect(html).not.toContain('>Installed ');
+    expect(html).not.toContain('aria-label="Install Jellyfin"');
+  });
+  test('the installation action is a button separate from the app preview link', () => {
+    const html = renderCard({});
+    const link = html.match(/<a\b[^>]*>[\s\S]*?<\/a>/)?.[0];
+    expect(link).toContain('/app-store/community/jellyfin');
+    expect(link).not.toContain('<button');
+    expect(html).toContain('aria-label="Install Jellyfin"');
+    expect(html.indexOf('aria-label="Install Jellyfin"')).toBeGreaterThan(html.indexOf('</a>'));
   });
 });

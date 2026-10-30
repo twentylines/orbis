@@ -371,3 +371,40 @@
 .cluster-remove-dialog button {
   scroll-margin: 16px;
 }
+
+.cluster-account-dialog .cluster-account-fields {
+  padding: 0 24px 20px;
+  gap: 16px;
+  align-items: stretch;
+}
+.cluster-account-dialog .cluster-account-fields > .w-100,
+.cluster-account-dialog .cluster-account-fields > * {
+  min-width: 0;
+  width: 100%;
+}
+.cluster-account-dialog .modal-body strong {
+  overflow-wrap: anywhere;
+}
+
+.cluster-account-dialog .modal-title,
+.cluster-account-dialog .cluster-account-fields .form-label {
+  overflow-wrap: anywhere;
+}
+
+.cluster-pair-access {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+}
+.cluster-pair-access > button {
+  justify-self: start;
+}
+
+.cluster-pair-access > output {
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.65;
+}

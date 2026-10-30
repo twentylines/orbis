@@ -37,7 +37,7 @@ export function validHiddenRecommendationCategories(value: unknown): value is St
     value.every((category) => storeRecommendationCategoryIds.includes(category))
   );
 }
-export type StoreRecommendation = { category: RecommendationCategory; title: string; app: AppInfoSimple; choiceCount: number };
+export type StoreRecommendation = { category: RecommendationCategory; title: string; apps: AppInfoSimple[]; choiceCount: number };
 
 const complements: Record<string, readonly string[]> = {
   ollama: ['open-webui'],
@@ -101,9 +101,11 @@ export function recommendStoreApps(
       (item) => !usedIds.has(item.id) && item.categories.includes(category) && (category !== 'gaming' || gameHosts.has(item.id)),
     );
     const unique = matches.filter((item, index) => matches.findIndex((other) => other.id === item.id) === index);
-    const app = unique[offset % unique.length];
-    if (!app) return [];
-    usedIds.add(app.id);
-    return [{ category, title, app, choiceCount: unique.length }];
+    if (!unique.length) return [];
+    const start = offset % unique.length;
+    const rotated = [...unique.slice(start), ...unique.slice(0, start)];
+    const apps = rotated.slice(0, Math.min(3, rotated.length));
+    for (const app of apps) usedIds.add(app.id);
+    return [{ category, title, apps, choiceCount: unique.length }];
   });
 }

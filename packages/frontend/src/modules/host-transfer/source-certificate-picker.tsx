@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { IconChevronDown, IconUpload, IconX } from '@tabler/icons-react';
+import { IconChevronDown, IconUpload, IconTrash } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
@@ -90,7 +90,7 @@ export function SourceCertificatePicker({ disabled, value, onChange }: Props) {
                 </Button>
                 {value ? (
                   <Button type="button" variant="outline" disabled={disabled} onClick={clear}>
-                    <IconX size={18} aria-hidden="true" /> Remove
+                    <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" /> Remove
                   </Button>
                 ) : null}
               </div>

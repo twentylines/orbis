@@ -48,7 +48,7 @@ const bundled: unknown[] = [
     wallpaper: '6dbaac76b6a77df63379af3ddf8b311e75af57c389a69a921d36eec805398efe',
     assets: [
       {
-        path: 'graphite.webp',
+        path: 'theme-pack-alpine-v1.webp',
         sha256: '6dbaac76b6a77df63379af3ddf8b311e75af57c389a69a921d36eec805398efe',
         mime: 'image/webp',
         bytes: 303372,
@@ -114,7 +114,7 @@ const bundled: unknown[] = [
     wallpaper: '6dbaac76b6a77df63379af3ddf8b311e75af57c389a69a921d36eec805398efe',
     assets: [
       {
-        path: 'graphite.webp',
+        path: 'theme-pack-alpine-v1.webp',
         sha256: '6dbaac76b6a77df63379af3ddf8b311e75af57c389a69a921d36eec805398efe',
         mime: 'image/webp',
         bytes: 303372,
@@ -180,7 +180,7 @@ const bundled: unknown[] = [
     wallpaper: '209416fb881a62165ab4fb3bb939f95af6b9fe40d42f7b926c6bb76cb450221f',
     assets: [
       {
-        path: 'ocean.webp',
+        path: 'theme-pack-tideline-v1.webp',
         sha256: '209416fb881a62165ab4fb3bb939f95af6b9fe40d42f7b926c6bb76cb450221f',
         mime: 'image/webp',
         bytes: 176806,
@@ -246,7 +246,7 @@ const bundled: unknown[] = [
     wallpaper: '209416fb881a62165ab4fb3bb939f95af6b9fe40d42f7b926c6bb76cb450221f',
     assets: [
       {
-        path: 'ocean.webp',
+        path: 'theme-pack-tideline-v1.webp',
         sha256: '209416fb881a62165ab4fb3bb939f95af6b9fe40d42f7b926c6bb76cb450221f',
         mime: 'image/webp',
         bytes: 176806,
@@ -312,7 +312,7 @@ const bundled: unknown[] = [
     wallpaper: '5ad60fb90e61215096b4e9315f750f039b83e050bc1a95c94c3c39fdfd689031',
     assets: [
       {
-        path: 'forest.webp',
+        path: 'theme-pack-woodland-v1.webp',
         sha256: '5ad60fb90e61215096b4e9315f750f039b83e050bc1a95c94c3c39fdfd689031',
         mime: 'image/webp',
         bytes: 205358,
@@ -378,7 +378,7 @@ const bundled: unknown[] = [
     wallpaper: '5ad60fb90e61215096b4e9315f750f039b83e050bc1a95c94c3c39fdfd689031',
     assets: [
       {
-        path: 'forest.webp',
+        path: 'theme-pack-woodland-v1.webp',
         sha256: '5ad60fb90e61215096b4e9315f750f039b83e050bc1a95c94c3c39fdfd689031',
         mime: 'image/webp',
         bytes: 205358,

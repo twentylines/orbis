@@ -144,7 +144,7 @@ export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
                 onClick={(event) => open(credential, event.currentTarget)}
                 aria-label={`Remove ${credential.name}`}
               >
-                <IconTrash size={18} aria-hidden="true" />
+                <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" />
                 Remove
               </Button>
             </li>
@@ -291,6 +291,7 @@ export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
               form={formId}
               disabled={pending || !password || (dialog === 'add' && !name.trim()) || (totpEnabled && !/^\d{6}$/.test(totpCode))}
             >
+              {typeof dialog === 'object' && dialog ? <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" /> : null}
               {dialog === 'add' ? 'Add passkey' : dialog === 'policy' ? 'Save' : 'Remove and sign out'}
             </Button>
           </DialogFooter>

@@ -2,7 +2,6 @@ import type { GetAppDto } from '@/api-client';
 import { getAppQueryKey } from '@/api-client/@tanstack/react-query.gen';
 import type { AppStatus } from '@/types/app.types';
 import { useQueryClient } from '@tanstack/react-query';
-import { produce } from 'immer';
 
 export const useAppStatus = () => {
   const queryClient = useQueryClient();
@@ -16,18 +15,10 @@ export const useAppStatus = () => {
     }
 
     const queryKey = getAppQueryKey({ path: { urn: appUrn } });
-    const data = queryClient.getQueryData(queryKey) as GetAppDto;
-
-    const newData = produce(data, (draft) => {
-      if (!draft.app) {
-        draft.app = { id: appName, urn: appUrn, status } as unknown as GetAppDto['app'];
-        return;
-      }
-
-      draft.app.status = status;
+    queryClient.setQueryData<GetAppDto>(queryKey, (data) => {
+      if (!data?.app) return data;
+      return { ...data, app: { ...data.app, status } };
     });
-
-    queryClient.setQueryData(queryKey, { ...newData });
   };
 
   return {

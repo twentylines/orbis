@@ -287,13 +287,6 @@ export function ReceiverRequestWizard({ onActivityChange, onDismiss }: Props) {
                   </AnimatePresence>
                 </section>
               ) : null}
-              <NearbyServers
-                onSelect={(origin) => {
-                  setAddress(origin);
-                  setCertificate(null);
-                  setError(null);
-                }}
-              />
               <Input
                 name="sourceOrigin"
                 type="url"
@@ -308,6 +301,13 @@ export function ReceiverRequestWizard({ onActivityChange, onDismiss }: Props) {
                 required
                 maxLength={2048}
                 disabled={busy}
+              />
+              <NearbyServers
+                onSelect={(origin) => {
+                  setAddress(origin);
+                  setCertificate(null);
+                  setError(null);
+                }}
               />
               <SourceCertificatePicker key={`${id}:${address}`} disabled={busy} value={certificate} onChange={setCertificate} />
             </>

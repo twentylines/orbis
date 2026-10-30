@@ -16,11 +16,10 @@ export function StoreRecommendationSettings({
   return (
     <section className="appearance-section" aria-labelledby="store-recommendations-heading">
       <div>
-        <h2 id="store-recommendations-heading">Store recommendations</h2>
-        <p>Show suggestions from your enabled app catalogues. Installed apps and hidden categories are excluded.</p>
+        <h2 id="store-recommendations-heading">Suggestions</h2>
       </div>
       <div className="appearance-material-controls">
-        <Switch checked={shown} onCheckedChange={onChange} label="Show Store recommendations" />
+        <Switch checked={shown} onCheckedChange={onChange} label="Show suggestions" />
         {hidden.length ? (
           <div className="appearance-actions">
             <Button type="button" variant="outline" onClick={onRestore}>

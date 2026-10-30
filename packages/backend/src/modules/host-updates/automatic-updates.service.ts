@@ -28,6 +28,8 @@ import { OrbisReleaseChannelsService } from '../system/orbis-release-channels.se
 import { HostUpdatesService, type HostUpdateStatus } from './host-updates.service';
 import {
   automaticUpdateStateSchema,
+  automaticScheduleRequestSchema,
+  automaticScheduleRevisionSchema,
   automaticAppLimit,
   dailyUpdateSlot,
   parseAppUpdateRule,
@@ -38,6 +40,15 @@ import {
   systemUpdateStateSchema,
   type SystemUpdateState,
 } from './automatic-updates.model';
+import {
+  legacyScheduleProjection,
+  readAutomaticSchedulePolicy,
+  readAutomaticSchedulePending,
+  beginAutomaticScheduleSave,
+  finishAutomaticScheduleSave,
+  schedulePolicyFor,
+  type AutomaticSchedulePolicy,
+} from './automatic-schedule-policy';
 
 const QUIET_MS = 10 * 60_000;
 const normalApp = new Set(['running', 'stopped']);
@@ -59,6 +70,10 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private storageError: string | null = null;
   private appPauseReason: string | null = null;
   private systemError: string | null = null;
+  private schedulePolicy: AutomaticSchedulePolicy | null = null;
+  private policyLoaded = false;
+  private storedStateExists = false;
+  private storedSystemExists = false;
   private system: SystemUpdateState = {
     version: 1,
     revision: 0,
@@ -116,6 +131,12 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   private effectiveSchedule() {
     return { time: this.state.settings.schedule.time, timezone: this.serverTimezone() };
   }
+  private effectiveCoreSchedule() {
+    return { time: this.schedulePolicy?.orbis.time ?? this.state.settings.schedule.time, timezone: this.serverTimezone() };
+  }
+  private effectiveSystemSchedule() {
+    return this.schedulePolicy?.system.time ? { time: this.schedulePolicy.system.time, timezone: this.serverTimezone() } : null;
+  }
   private serverTime(timezone: string) {
     return { now: Date.now(), timezone };
   }
@@ -134,6 +155,9 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   }
   private systemFile() {
     return path.join(path.dirname(this.file()), 'system.json');
+  }
+  private scheduleFile() {
+    return path.join(path.dirname(this.file()), 'schedule-policy.json');
   }
   private appWarningFile() {
     return path.join(path.dirname(this.file()), 'app-capacity-warning.json');
@@ -219,8 +243,42 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     }
   }
   private load() {
-    this.loading ??= Promise.all([this.readStored(), this.readSystemStored(), this.readAppWarning()]).then(() => undefined);
+    this.loading ??= Promise.all([this.readStored(), this.readSystemStored(), this.readAppWarning()]).then(async () => {
+      await this.loadSchedulePolicy();
+      this.policyLoaded = true;
+    });
     return this.loading;
+  }
+  private async loadSchedulePolicy() {
+    if (this.storageError) return;
+    try {
+      if (await readAutomaticSchedulePending(`${this.scheduleFile()}.pending`)) throw new Error('A schedule save was interrupted');
+      const policy = await readAutomaticSchedulePolicy(this.scheduleFile());
+      this.schedulePolicy = policy;
+      if (policy) {
+        if (!this.storedStateExists || (!this.storedSystemExists && !this.systemError))
+          throw new Error('Independent schedule policy has no legacy binding');
+        const coreCurrent = policy.orbis.revision === this.state.revision;
+        const systemCurrent = policy.system.revision === this.system.revision;
+        this.state.settings.orbis.enabled = coreCurrent && !this.state.pauseReason && policy.orbis.enabled;
+        this.system.enabled = !this.systemError && systemCurrent && !this.system.pauseReason && policy.system.enabled && policy.system.time !== null;
+        if (!coreCurrent) this.state.pauseReason ??= 'Orbis update settings changed outside this schedule. Review and enable the schedule again.';
+        if (!systemCurrent) this.system.pauseReason ??= 'System update settings changed outside this schedule. Review and enable the schedule again.';
+      } else if (this.system.enabled) {
+        this.system.enabled = false;
+        this.system.revision++;
+        this.system.pauseReason = 'Choose and save a system update time before enabling automatic system updates.';
+      }
+      if (!this.systemError && (policy || this.storedStateExists || this.storedSystemExists)) {
+        await this.persistSchedules(this.state, this.system, 'both');
+      }
+    } catch {
+      this.storageError =
+        'Independent update schedules could not be verified safely. Automatic updates are disabled; review the saved schedule policy.';
+      this.state.settings.orbis.enabled = false;
+      this.system.enabled = false;
+      this.logger.warn(this.storageError);
+    }
   }
   private async readStored() {
     try {
@@ -236,6 +294,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       const parsed = automaticUpdateStateSchema(JSON.parse(await fs.readFile(this.file(), 'utf8')));
       if (parsed instanceof type.errors) throw new Error('Invalid automatic update settings');
       this.state = parsed;
+      this.storedStateExists = true;
       const previous = this.state.orbis;
       const interrupted = previous && ['checking', 'planning', 'applying', 'accepted'].includes(previous.state);
       if (interrupted) {
@@ -274,6 +333,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       const parsed = systemUpdateStateSchema(JSON.parse(await fs.readFile(this.systemFile(), 'utf8')));
       if (parsed instanceof type.errors) throw new Error('Invalid system update settings');
       this.system = parsed;
+      this.storedSystemExists = true;
       if (parsed.attempt && ['checking', 'planning', 'applying'].includes(parsed.attempt.state)) {
         await this.changeSystem((next) => {
           if (!next.attempt) return;
@@ -292,7 +352,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async persist(next: AutomaticUpdateState | SystemUpdateState | typeof appWarningRecord, file = this.file()) {
+  private async persist(next: AutomaticUpdateState | SystemUpdateState | typeof appWarningRecord | AutomaticSchedulePolicy, file = this.file()) {
     const directory = path.dirname(file);
     const temporary = `${file}.${randomUUID()}.tmp`;
     await fs.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -318,6 +378,34 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       await fs.rm(temporary, { force: true });
     }
   }
+  private async persistSchedules(
+    state: AutomaticUpdateState,
+    system: SystemUpdateState,
+    changed: 'apps' | 'system' | 'both',
+    override: { orbisTime?: string; systemTime?: string } = {},
+  ) {
+    const next = schedulePolicyFor(state, system, this.schedulePolicy, override);
+    const previous = await readAutomaticSchedulePolicy(this.scheduleFile());
+    if (JSON.stringify(previous) !== JSON.stringify(this.schedulePolicy)) throw new Error('Independent schedule policy changed outside this process');
+    const legacy = legacyScheduleProjection(state, system);
+    const changedPolicy = JSON.stringify(next) !== JSON.stringify(previous);
+    if (await readAutomaticSchedulePending(`${this.scheduleFile()}.pending`)) throw new Error('A schedule save was interrupted');
+    const pending = changedPolicy ? await beginAutomaticScheduleSave(`${this.scheduleFile()}.pending`, next) : null;
+    if (changed !== 'system' || !this.storedStateExists) {
+      await this.persist(legacy.apps);
+      this.storedStateExists = true;
+    }
+    if ((changed !== 'apps' || !this.storedSystemExists) && !this.systemError) {
+      await this.persist(legacy.system, this.systemFile());
+      this.storedSystemExists = true;
+    }
+    if (changedPolicy) await this.persist(next, this.scheduleFile());
+    if (pending && JSON.stringify(await readAutomaticSchedulePolicy(this.scheduleFile())) !== JSON.stringify(next))
+      throw new Error('Committed schedule policy changed before release');
+    if (pending && !(await finishAutomaticScheduleSave(`${this.scheduleFile()}.pending`, pending)))
+      this.logger.warn('The schedule is committed; its cleanup marker may require review after a power failure.');
+    this.schedulePolicy = next;
+  }
   private async write(save: () => Promise<void>, requireLoaded = true) {
     if (requireLoaded) await this.load();
     const run = this.writes
@@ -332,7 +420,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.writes = run;
     return run;
   }
-  private change(mutate: AppStateMutation, requireLoaded = true) {
+  private change(mutate: AppStateMutation, requireLoaded = true, orbisTime?: string) {
     return this.write(async () => {
       if (this.storageError) throw new ServiceUnavailableException(this.storageError);
       const next = structuredClone(this.state);
@@ -346,7 +434,8 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
         }
       }
       try {
-        await this.persist(next);
+        if (this.policyLoaded) await this.persistSchedules(next, this.system, 'apps', { orbisTime });
+        else await this.persist(next);
       } catch {
         this.storageError = 'Automatic update settings could not be saved safely. Automatic updates are disabled.';
         this.state.settings.orbis.enabled = false;
@@ -366,22 +455,26 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       }
     }, requireLoaded);
   }
-  private changeSystem(mutate: (next: SystemUpdateState) => void, requireLoaded = true) {
+  private changeSystem(mutate: (next: SystemUpdateState) => void, requireLoaded = true, systemTime?: string) {
     return this.write(async () => {
       if (this.systemError) throw new ServiceUnavailableException(this.systemError);
       const next = structuredClone(this.system);
       mutate(next);
       try {
-        await this.persist(next, this.systemFile());
+        if (this.policyLoaded) await this.persistSchedules(this.state, next, 'system', { systemTime });
+        else await this.persist(next, this.systemFile());
       } catch {
         this.systemError = 'System update settings could not be saved safely. Automatic system updates are disabled.';
         this.system.enabled = false;
+        this.storageError = 'An independent schedule save could not finish safely. Automatic updates are paused for local policy review.';
+        this.state.settings.orbis.enabled = false;
         throw new ServiceUnavailableException(this.systemError);
       }
       this.system = next;
     }, requireLoaded);
   }
   private ensureTimer() {
+    if (!this.policyLoaded) return;
     const enabled =
       this.state.settings.orbis.enabled ||
       this.state.settings.apps?.enabled ||
@@ -402,6 +495,9 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     const schedule = this.effectiveSchedule();
     return {
       settings: { ...structuredClone(this.state.settings), schedule },
+      revision: this.state.revision,
+      capabilities: ['independent-schedules.v1'],
+      orbisSchedule: this.effectiveCoreSchedule(),
       appRules: structuredClone(this.state.rules),
       serverTime: this.serverTime(schedule.timezone),
       available: !this.storageError,
@@ -412,33 +508,50 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   }
   async update(raw: unknown) {
     const body = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : undefined;
+    const { orbisSchedule, expectedRevision, ...legacy } = body ?? {};
+    if (orbisSchedule !== undefined && !automaticScheduleRequestSchema.allows(orbisSchedule))
+      throw new BadRequestException('Choose a valid Orbis update time.');
+    if (expectedRevision !== undefined && !automaticScheduleRevisionSchema.allows(expectedRevision))
+      throw new BadRequestException('Refresh update settings before saving.');
     const schedule = body?.schedule;
     const settings = parseAutomaticSettings(
       schedule && typeof schedule === 'object' && !Array.isArray(schedule)
-        ? { ...body, schedule: { ...schedule, timezone: this.serverTimezone() } }
+        ? { ...legacy, schedule: { ...schedule, timezone: this.serverTimezone() } }
         : raw,
     );
     if (this.config.get('demoMode')) throw new BadRequestException('Automatic updates are unavailable in demo mode.');
     const explicitApps = settings.apps !== undefined;
     const installed = settings.apps?.enabled ? await this.storeAppUrns() : undefined;
-    await this.change((next) => {
-      if (installed) {
-        this.pruneOrphanChecks(next, installed);
-        if (this.appCapacityExceeded(next, installed))
-          throw new BadRequestException('Automatic app updates support 256 retained apps. Review installed apps and earlier update attempts first.');
-      }
-      if (settings.apps === undefined && next.settings.apps !== undefined) settings.apps = { ...next.settings.apps };
-      const warning = explicitApps && settings.apps?.enabled ? ('clear-app-warning' as const) : undefined;
-      if (JSON.stringify(next.settings) === JSON.stringify(settings)) return warning;
-      if (settings.orbis.enabled && !next.settings.orbis.enabled) {
-        next.orbis = null;
-        next.pauseReason = null;
-      }
-      if (next.orbis && ['checking', 'planning', 'deferred'].includes(next.orbis.state)) next.orbis = null;
-      next.settings = settings;
-      next.revision++;
-      return warning;
-    });
+    await this.change(
+      (next) => {
+        if (expectedRevision !== undefined && expectedRevision !== next.revision)
+          throw new BadRequestException('Update settings changed. Reload them before saving again.');
+        if (installed) {
+          this.pruneOrphanChecks(next, installed);
+          if (this.appCapacityExceeded(next, installed))
+            throw new BadRequestException(
+              'Automatic app updates support 256 retained apps. Review installed apps and earlier update attempts first.',
+            );
+        }
+        if (settings.apps === undefined && next.settings.apps !== undefined) settings.apps = { ...next.settings.apps };
+        const warning = explicitApps && settings.apps?.enabled ? ('clear-app-warning' as const) : undefined;
+        if (
+          JSON.stringify(next.settings) === JSON.stringify(settings) &&
+          (orbisSchedule === undefined || (orbisSchedule as { time: string }).time === this.effectiveCoreSchedule().time)
+        )
+          return warning;
+        if (settings.orbis.enabled && !next.settings.orbis.enabled) {
+          next.orbis = null;
+          next.pauseReason = null;
+        }
+        if (next.orbis && ['checking', 'planning', 'deferred'].includes(next.orbis.state)) next.orbis = null;
+        next.settings = settings;
+        next.revision++;
+        return warning;
+      },
+      true,
+      (orbisSchedule as { time: string } | undefined)?.time,
+    );
     return this.read();
   }
   async pauseForDowngrade() {
@@ -461,7 +574,9 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     const reason = this.systemError ?? this.storageError;
     const shared = this.effectiveSchedule();
     return {
-      settings: { enabled: this.system.enabled },
+      settings: { enabled: this.system.enabled, schedule: this.effectiveSystemSchedule() },
+      revision: this.system.revision,
+      capabilities: ['independent-schedules.v1'],
       shared,
       serverTime: this.serverTime(shared.timezone),
       available: !reason,
@@ -472,11 +587,16 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
   }
   async updateSystem(raw: unknown) {
     const settings = systemUpdateSettingsSchema(raw);
-    if (settings instanceof type.errors) throw new BadRequestException('Choose whether automatic system updates are enabled.');
+    if (settings instanceof type.errors) throw new BadRequestException('Choose whether automatic system updates are enabled and a valid daily time.');
     if (this.config.get('demoMode')) throw new BadRequestException('Automatic updates are unavailable in demo mode.');
     await this.load();
     if (this.storageError) throw new ServiceUnavailableException(this.storageError);
     const revision = this.system.revision;
+    if (settings.expectedRevision !== undefined && settings.expectedRevision !== revision)
+      throw new BadRequestException('System update settings changed. Reload them before saving again.');
+    const configuredTime = settings.schedule?.time ?? this.schedulePolicy?.system.time;
+    if (settings.enabled && !configuredTime)
+      throw new BadRequestException('Choose and save a system update time before enabling automatic system updates.');
     const settingsRevision = this.state.revision;
     if (settings.enabled) {
       const status = await this.host.status();
@@ -487,21 +607,25 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       if (!inventory.available || inventory.manager !== 'apt')
         throw new BadRequestException(inventory.reason ?? 'Automatic system updates currently require Ubuntu 24.04.');
     }
-    await this.changeSystem((next) => {
-      if (next.revision !== revision || (settings.enabled && this.state.revision !== settingsRevision))
-        throw new BadRequestException('System update settings changed. Reload them before saving again.');
-      if (settings.enabled) {
-        next.pauseReason = null;
-        if (!next.attempt || !['accepted', 'applying', 'planning', 'checking'].includes(next.attempt.state)) {
-          next.attempt = null;
-          next.phase = null;
-          next.settingsRevision = null;
-          next.policyRevision = null;
+    await this.changeSystem(
+      (next) => {
+        if (next.revision !== revision || (settings.enabled && this.state.revision !== settingsRevision))
+          throw new BadRequestException('System update settings changed. Reload them before saving again.');
+        if (settings.enabled) {
+          next.pauseReason = null;
+          if (!next.attempt || !['accepted', 'applying', 'planning', 'checking'].includes(next.attempt.state)) {
+            next.attempt = null;
+            next.phase = null;
+            next.settingsRevision = null;
+            next.policyRevision = null;
+          }
         }
-      }
-      next.enabled = settings.enabled;
-      next.revision++;
-    });
+        next.enabled = settings.enabled;
+        next.revision++;
+      },
+      true,
+      settings.schedule?.time,
+    );
     return this.readSystem();
   }
   private appUrn(raw: unknown) {
@@ -700,6 +824,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
       !this.storageError &&
       !this.systemError &&
       this.system.enabled &&
+      this.effectiveSystemSchedule() !== null &&
       this.system.policyRevision === this.system.revision &&
       this.system.settingsRevision === this.state.revision &&
       installationMode().phase === 'normal'
@@ -1004,10 +1129,12 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     const state = this.state;
     const schedule = this.effectiveSchedule();
     const now = Date.now();
-    const slot = dailyUpdateSlot(schedule, now, state.settings.orbis.mode === 'idle');
-    const systemSlot = dailyUpdateSlot(schedule, now);
+    const slot = dailyUpdateSlot(this.effectiveCoreSchedule(), now, state.settings.orbis.mode === 'idle');
+    const systemSchedule = this.effectiveSystemSchedule();
+    const systemSlot = systemSchedule ? dailyUpdateSlot(systemSchedule, now) : null;
     const systemRevision = this.system.revision;
-    const dueSystem = !this.systemError && this.system.enabled && systemSlot.due && this.system.attempt?.slot !== systemSlot.key;
+    const dueSystem =
+      !this.systemError && this.system.enabled && systemSlot !== null && systemSlot.due && this.system.attempt?.slot !== systemSlot.key;
     const dueCore =
       state.settings.orbis.enabled && slot.due && (state.orbis?.slot !== slot.key || state.orbis.state === 'deferred') && this.quiet(state.revision);
     const appRules = { ...state.rules };
@@ -1040,7 +1167,7 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
         next.policyRevision = systemRevision;
         next.settingsRevision = state.revision;
       });
-      if (this.systemReady()) await this.dispatchSystem('refresh', systemSlot.key);
+      if (this.systemReady() && systemSlot) await this.dispatchSystem('refresh', systemSlot.key);
       return;
     }
     if ((status.available && (status.coreState !== 'running' || busyHost.has(status.job?.state ?? ''))) || this.state.revision !== state.revision)

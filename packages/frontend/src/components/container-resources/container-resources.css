@@ -446,12 +446,13 @@ body:has(.orbis-theme)
   }
 }
 .container-health-overview {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   gap: 8px;
   margin: 16px 0;
 }
 .container-health-overview button {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -465,13 +466,18 @@ body:has(.orbis-theme)
   color: var(--desktop-ink);
   font: inherit;
   font-size: 0.8125rem;
+  line-height: 1.4;
   text-align: left;
 }
 .container-health-overview button[aria-pressed="true"] {
   background: color-mix(in srgb, var(--desktop-accent) 12%, var(--desktop-surface));
   border-color: var(--desktop-accent);
 }
+.container-health-overview button > span {
+  min-width: 0;
+}
 .container-health-overview strong {
+  flex: none;
   font-variant-numeric: tabular-nums;
   font-size: 1rem;
 }

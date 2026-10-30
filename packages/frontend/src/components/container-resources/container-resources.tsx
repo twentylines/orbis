@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { useContainerTelemetry } from '@/desktop/containers';
@@ -10,6 +10,7 @@ import { RestartDialog } from '@/modules/app/components/dialogs/restart-dialog/r
 import { IconBrandDocker, IconChevronRight } from '@tabler/icons-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { ContainerResourceFocus } from './container-resource-focus';
+import { containerHealthFilter, withContainerHealthFilter, type ContainerHealthFilter } from './container-health-filter';
 import { useResourceRanking } from '@/desktop/resource-ranking';
 import * as Accordion from '@radix-ui/react-accordion';
 import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
@@ -54,10 +55,14 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
   const apps = useQuery(getInstalledAppsOptions());
   const { user } = useAppContext();
   const local = useServerPath()('/api/system/containers') === '/api/system/containers';
-  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState(new URLSearchParams(location.search).get('health') === 'attention' ? 'attention' : 'all');
+  const filter = containerHealthFilter(searchParams.get('health'));
   const [limit, setLimit] = useState(12);
+  const changeFilter = (value: ContainerHealthFilter) => {
+    setLimit(12);
+    setSearchParams(withContainerHealthFilter(searchParams, value), { replace: true, preventScrollReset: true });
+  };
   const [restartUrn, setRestartUrn] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string[]>([]);
   const restartApp = apps.data?.installed.find(({ info }) => info.urn === restartUrn);
@@ -125,13 +130,17 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
         </SelectionGroup>
       </div>
       {compact ? null : (
-        <section className="container-health-overview" aria-label="Container status summary">
+        <SelectionGroup as="fieldset" className="container-health-overview">
+          <legend className="visually-hidden">Container status</legend>
+          <button type="button" aria-pressed={filter === 'all'} onClick={() => changeFilter('all')}>
+            <span>All</span>
+            <strong>{containers.length}</strong>
+          </button>
           <button
             type="button"
             aria-pressed={filter === 'attention'}
             onClick={() => {
-              setFilter('attention');
-              setLimit(12);
+              changeFilter(filter === 'attention' ? 'all' : 'attention');
             }}
           >
             <span>Needs attention</span>
@@ -141,8 +150,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
             type="button"
             aria-pressed={filter === 'running'}
             onClick={() => {
-              setFilter('running');
-              setLimit(12);
+              changeFilter(filter === 'running' ? 'all' : 'running');
             }}
           >
             <span>Running</span>
@@ -152,14 +160,13 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
             type="button"
             aria-pressed={filter === 'stopped'}
             onClick={() => {
-              setFilter('stopped');
-              setLimit(12);
+              changeFilter(filter === 'stopped' ? 'all' : 'stopped');
             }}
           >
             <span>Stopped</span>
             <strong>{counts.stopped}</strong>
           </button>
-        </section>
+        </SelectionGroup>
       )}
       {compact ? null : (
         <div className="container-resource-filters">
@@ -177,8 +184,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
           <Select
             value={filter}
             onValueChange={(value) => {
-              setFilter(value);
-              setLimit(12);
+              changeFilter(containerHealthFilter(value));
             }}
           >
             <SelectTrigger fitContent className="container-health-select" value={filter} aria-label="Container status">

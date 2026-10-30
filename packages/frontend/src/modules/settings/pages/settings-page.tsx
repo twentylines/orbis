@@ -1,112 +1,123 @@
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAppContext } from '@/context/app-context';
-import { Suspense, lazy, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { useUserContext } from '@/context/user-context';
+import { Suspense, lazy, useEffect, useRef } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
 import { Appearance } from '../containers/appearance';
 import { ClusterSettings } from '../containers/cluster-settings';
 import { DelayedRouteLoading } from '@/desktop/route-loading';
+import { useWindowVisible } from '@/desktop/window-visibility';
+import { prefersReducedMotion } from '@/desktop/motion-setting';
+import { SettingsWorkspace } from './settings-workspace';
+import { SettingsSaveProvider } from './settings-save';
+import { AppUpdatePolicyProvider } from '../containers/app-update-policy';
+import {
+  resolveSettingsSection,
+  settingAvailable,
+  settingsLocation,
+  settingsCatalogue,
+  type SettingEntry,
+  type SettingsSection,
+} from '../helpers/settings-catalogue';
+import { revealSetting } from '../helpers/reveal-setting';
 
 const UserSettingsContainer = lazy(() => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer })));
 const SecurityContainer = lazy(() => import('../containers/security').then((module) => ({ default: module.SecurityContainer })));
 const LogsContainer = lazy(() => import('../containers/logs').then((module) => ({ default: module.LogsContainer })));
 const About = lazy(() => import('../containers/about').then((module) => ({ default: module.About })));
 
-export default () => {
-  const { t } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get('tab');
+export default function SettingsPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { userSettings, user } = useAppContext();
-  const currentTab = tab && ['appearance', 'settings', 'security', 'cluster', 'appstores', 'logs', 'about'].includes(tab) ? tab : 'appearance';
-  const panels = useRef<HTMLDivElement>(null);
-  const reservedHeight = useRef(0);
-
-  const handleTabChange = (newTab: string) => {
-    const body = panels.current?.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"] > .card-body');
-    if (body) {
-      const style = getComputedStyle(body);
-      reservedHeight.current = body.getBoundingClientRect().height - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom);
-    }
-    setSearchParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        next.set('tab', newTab);
-        return next;
-      },
-      { preventScrollReset: true },
-    );
+  const { sessionAbortSignal } = useUserContext();
+  const visible = useWindowVisible();
+  const access = { operator: user.operator === true, advanced: userSettings.advancedSettings === true };
+  const target = settingsCatalogue.find(
+    (entry) => entry.id === searchParams.get('setting') || (!searchParams.has('setting') && `#${entry.anchor}` === location.hash),
+  );
+  const allowedTarget = target && settingAvailable(target, access) ? target : undefined;
+  const current = allowedTarget?.section ?? resolveSettingsSection(searchParams.get('tab'));
+  const root = useRef<HTMLDivElement>(null);
+  const revealGeneration = useRef(location.key);
+  revealGeneration.current = location.key;
+  const updateLocation = (section: SettingsSection, entry?: SettingEntry) => {
+    void navigate(settingsLocation(location.pathname, location.search, section, entry), { preventScrollReset: true });
   };
+
+  useEffect(() => {
+    const element = root.current;
+    if (!element || !allowedTarget || !visible || revealGeneration.current !== location.key) return;
+    if (revealSetting(element, allowedTarget, prefersReducedMotion())) return;
+    const observer = new MutationObserver(() => {
+      if (revealGeneration.current === location.key && revealSetting(element, allowedTarget, prefersReducedMotion())) observer.disconnect();
+    });
+    observer.observe(element, { childList: true, subtree: true });
+    const timeout = window.setTimeout(() => observer.disconnect(), 5000);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timeout);
+    };
+  }, [allowedTarget, visible, location.key]);
+
   const loading = (
-    <div className="desktop-route-placeholder" style={{ minHeight: reservedHeight.current || undefined }}>
+    <div className="settings-loading">
       <DelayedRouteLoading label="Loading settings…" />
     </div>
   );
-
+  const protect = (node: React.ReactNode) =>
+    user.operator === true ? node : <p className="settings-permission">An operator manages these server settings.</p>;
+  const serverPanel = (section: 'general' | 'updates' | 'backups') => (
+    <Suspense fallback={loading}>
+      <UserSettingsContainer initialValues={userSettings} section={section} />
+    </Suspense>
+  );
   return (
-    <div className="desktop-settings" ref={panels}>
-      <Tabs value={currentTab} onValueChange={handleTabChange}>
-        <TabsList>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="settings">{t('SETTINGS_GENERAL_TAB_TITLE')}</TabsTrigger>
-          <TabsTrigger value="security">{t('SETTINGS_SECURITY_TAB_TITLE')}</TabsTrigger>
-          <TabsTrigger value="cluster">Cluster</TabsTrigger>
-          <TabsTrigger value="appstores" className="d-none d-md-block">
-            {t('SETTINGS_APPSTORES_TAB_TITLE')}
-          </TabsTrigger>
-          <TabsTrigger value="logs" className="d-none d-md-block">
-            {t('SETTINGS_LOGS_TAB_TITLE')}
-          </TabsTrigger>
-          <TabsTrigger value="about" className="d-none d-md-block">
-            About
-          </TabsTrigger>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="nav-link dropdown-toggle d-block d-md-none"
-              data-selection-active={['appstores', 'logs', 'about'].includes(currentTab)}
-            >
-              {t('MORE')}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => handleTabChange('appstores')}>{t('SETTINGS_APPSTORES_TAB_TITLE')}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleTabChange('logs')}>{t('SETTINGS_LOGS_TAB_TITLE')}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleTabChange('about')}>About</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </TabsList>
-        <TabsContent value="appearance">
-          <Appearance />
-        </TabsContent>
-        <TabsContent value="settings">
-          <Suspense fallback={loading}>
-            <UserSettingsContainer initialValues={userSettings} />
-          </Suspense>
-        </TabsContent>
-        <TabsContent value="security">
-          <Suspense fallback={loading}>
-            <SecurityContainer totpEnabled={Boolean(user.totpEnabled)} username={user.username} />
-          </Suspense>
-        </TabsContent>
-        <TabsContent value="cluster">
-          <ClusterSettings />
-        </TabsContent>
-        <TabsContent value="appstores">
-          <Suspense fallback={loading}>
-            <AppStoresContainer />
-          </Suspense>
-        </TabsContent>
-        <TabsContent value="logs">
-          <Suspense fallback={loading}>
-            <LogsContainer />
-          </Suspense>
-        </TabsContent>
-        <TabsContent value="about">
-          <Suspense fallback={loading}>
-            <About />
-          </Suspense>
-        </TabsContent>
-      </Tabs>
+    <div className="desktop-settings" ref={root}>
+      <SettingsSaveProvider signal={sessionAbortSignal} onSection={(section) => updateLocation(section)}>
+        <AppUpdatePolicyProvider>
+          <SettingsWorkspace
+            current={current}
+            access={access}
+            onSection={(section) => updateLocation(section)}
+            onSetting={(entry) => updateLocation(entry.section, entry)}
+            panels={{
+              general: serverPanel('general'),
+              customise: <Appearance />,
+              store: (
+                <Suspense fallback={loading}>
+                  <AppStoresContainer />
+                </Suspense>
+              ),
+              updates: serverPanel('updates'),
+              backups: serverPanel('backups'),
+              security: (
+                <Suspense fallback={loading}>
+                  <SecurityContainer totpEnabled={Boolean(user.totpEnabled)} username={user.username} />
+                </Suspense>
+              ),
+              cluster: protect(
+                <div id="setting-cluster-pairing">
+                  <ClusterSettings />
+                </div>,
+              ),
+              logs: protect(
+                <div id="setting-system-logs">
+                  <Suspense fallback={loading}>
+                    <LogsContainer />
+                  </Suspense>
+                </div>,
+              ),
+              about: (
+                <Suspense fallback={loading}>
+                  <About />
+                </Suspense>
+              ),
+            }}
+          />
+        </AppUpdatePolicyProvider>
+      </SettingsSaveProvider>
     </div>
   );
-};
+}

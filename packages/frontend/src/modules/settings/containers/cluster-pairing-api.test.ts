@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test';
-import { ClusterPairingError, createClusterInvitation, pairClusterServer, type ClusterPairRequest } from './cluster-pairing-api';
+import {
+  ClusterPairingError,
+  createClusterInvitation,
+  pairClusterServer,
+  type ClusterPairRequest,
+  connectClusterServer,
+  completeClusterPairing,
+  clusterPairingAccess,
+} from './cluster-pairing-api';
 
 async function withFetch(response: Response, run: (calls: { url: unknown; init?: RequestInit }[]) => Promise<void>) {
   const original = globalThis.fetch;
@@ -79,7 +87,7 @@ test('only exact known backend pairing messages are surfaced', async () => {
         throw new Error('Expected rejection');
       } catch (error) {
         expect(error).toBeInstanceOf(ClusterPairingError);
-        expect((error as Error).message).toBe('The cluster pairing request did not finish. Check the server address and try again.');
+        expect((error as Error).message).toBe('The pairing code could not be created. Try again and check this server’s status.');
         expect((error as Error).message).not.toContain('secret');
       }
     });
@@ -139,4 +147,91 @@ test('actual sensitive-action HTTP400 translation keys give password and TOTP gu
       await expect(pairClusterServer(pairBody())).rejects.toThrow(guidance);
     });
   }
+});
+
+const connection = () => ({
+  pendingId: 'c'.repeat(64),
+  id: paired.id,
+  name: 'Other',
+  origin: 'https://peer.example.test',
+  totpRequired: true,
+  expiresAt: new Date(Date.now() + 60_000).toISOString(),
+});
+test('connect requests remote authorization only after verified HTTPS succeeds, with no remote password sent', async () => {
+  const body = { ...pairBody(), url: 'https://peer.example.test' };
+  const expected = connection();
+  await withFetch(Response.json(expected), async (calls) => {
+    await expect(connectClusterServer(body)).resolves.toEqual(expected);
+    expect(calls[0]?.url).toBe('/api/cluster/pairing/connect');
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(body);
+  });
+  await withFetch(Response.json(expected), async (calls) => {
+    await expect(connectClusterServer({ ...body, url: 'http://peer.example.test', allowInsecureLan: true })).rejects.toThrow('HTTPS');
+    expect(calls).toHaveLength(0);
+  });
+});
+test('remote credentials go only to the same-origin completion endpoint with the pending binding', async () => {
+  const body = { pendingId: connection().pendingId, password: 'remote-test-password', totpCode: '123456' };
+  await withFetch(Response.json(paired), async (calls) => {
+    await expect(completeClusterPairing(body)).resolves.toEqual(paired);
+    expect(calls[0]?.url).toBe('/api/cluster/pairing/complete');
+    expect(calls[0]?.init?.credentials).toBe('same-origin');
+    expect(calls[0]?.init?.redirect).toBe('error');
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(body);
+  });
+});
+test('changed remote origin, malformed or expired challenge never becomes a credential prompt', async () => {
+  for (const change of [
+    { origin: 'https://unrelated.example' },
+    { pendingId: 'bad' },
+    { totpRequired: 'yes' },
+    { expiresAt: 'invalid' },
+    { expiresAt: new Date(Date.now() - 1000).toISOString() },
+  ]) {
+    await withFetch(Response.json({ ...connection(), ...change }), async () => {
+      await expect(connectClusterServer({ ...pairBody(), url: 'https://peer.example.test' })).rejects.toThrow(ClusterPairingError);
+    });
+  }
+});
+test('Origin, throttling and storage errors use distinct short guidance', async () => {
+  for (const [status, message, expected] of [
+    [403, 'Invalid request origin. private proxy detail', 'server address check'],
+    [429, 'private limiter internals', 'Too many pairing attempts'],
+    [503, 'The pairing code could not be saved. Check server storage permissions and free space.', 'storage permissions'],
+  ] as const)
+    await withFetch(Response.json({ message }, { status }), async () => {
+      await expect(createClusterInvitation(credentials)).rejects.toThrow(expected);
+    });
+});
+
+test('browser HTTP cannot send local or remote account pairing credentials', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', { configurable: true, value: { protocol: 'http:' } });
+  try {
+    await withFetch(Response.json(connection()), async (calls) => {
+      await expect(connectClusterServer({ ...pairBody(), url: 'https://peer.example.test' })).rejects.toThrow('HTTPS');
+      await expect(completeClusterPairing({ pendingId: connection().pendingId, password: 'remote-test-password' })).rejects.toThrow('HTTPS');
+      expect(calls).toHaveLength(0);
+    });
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'location', previous);
+    else Reflect.deleteProperty(globalThis, 'location');
+  }
+});
+
+test('pairing access check is read-only, bounded, same-origin and exposes only setup availability', async () => {
+  const unavailable = { available: false, message: 'Secure pairing needs a private HTTPS connection and trusted proxy setup on this server.' };
+  await withFetch(Response.json(unavailable), async (calls) => {
+    await expect(clusterPairingAccess()).resolves.toEqual(unavailable);
+    expect(calls[0]?.url).toBe('/api/cluster/pairing/access');
+    expect(calls[0]?.init?.body).toBeUndefined();
+    expect(calls[0]?.init?.credentials).toBe('same-origin');
+    expect(calls[0]?.init?.redirect).toBe('error');
+  });
+  await withFetch(Response.json({ available: true }), async () => {
+    await expect(clusterPairingAccess()).resolves.toEqual({ available: true });
+  });
+  await withFetch(Response.json({ available: false, message: 'private ingress details' }), async () => {
+    await expect(clusterPairingAccess()).rejects.toThrow('could not be checked');
+  });
 });

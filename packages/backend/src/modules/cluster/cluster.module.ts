@@ -10,6 +10,8 @@ import { MarketplaceModule } from '../marketplace/marketplace.module';
 import { AppStoreModule } from '../app-stores/app-store.module';
 import { ClusterInstallService } from './cluster-install.service';
 import { ClusterController } from './cluster.controller';
+import { ClusterPairingController } from './cluster-pairing.controller';
+import { ClusterPairingService } from './cluster-pairing.service';
 import { ClusterService } from './cluster.service';
 import { ClusterStateService } from './cluster-state.service';
 import { MonitoringActivityModule } from '@/core/monitoring/monitoring-activity.module';
@@ -35,7 +37,15 @@ import { AuthModule } from '../auth/auth.module';
     DesktopPreferencesModule,
     UserModule,
   ],
-  controllers: [ClusterController, ClusterSyncController],
-  providers: [ClusterService, ClusterStateService, ClusterInstallService, HostUpdatesGuard, ClusterSyncService, ClusterSyncStore],
+  controllers: [ClusterController, ClusterPairingController, ClusterSyncController],
+  providers: [
+    ClusterPairingService,
+    ClusterService,
+    ClusterStateService,
+    ClusterInstallService,
+    HostUpdatesGuard,
+    ClusterSyncService,
+    ClusterSyncStore,
+  ],
 })
 export class ClusterModule {}

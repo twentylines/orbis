@@ -7,7 +7,7 @@ import type { AppInfoSimple } from '@/types/app.types';
 import { IconChevronRight } from '@tabler/icons-react';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { useStorePreview } from '../../pages/store-preview-context';
 import { nextStorePreviewHistory, type StorePreviewHistory } from '../../pages/store-preview-navigation';
 import './store-tile.css';
@@ -17,15 +17,24 @@ export function StoreTile({
   isLoading,
   catalogueRow = false,
   quickInstall = false,
+  installed = false,
+  pending = false,
+  installLoading = false,
+  installDisabled = false,
+  onInstall,
 }: {
   app: AppInfoSimple;
   isLoading: boolean;
   catalogueRow?: boolean;
   quickInstall?: boolean;
+  installed?: boolean;
+  pending?: boolean;
+  installLoading?: boolean;
+  installDisabled?: boolean;
+  onInstall?: (app: AppInfoSimple) => void;
 }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const navigate = useNavigate();
   const preview = useStorePreview();
   const visible = useWindowVisible();
   const id = useId();
@@ -34,14 +43,14 @@ export function StoreTile({
   const [appId, storeId] = app.urn.split(':');
   const path = `/app-store/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}${location.search}`;
   const history = nextStorePreviewHistory(location.state as StorePreviewHistory | null, location.search, location.pathname.startsWith('/app-store/'));
-  const showInstall = quickInstall && !isLoading && app.available && !app.deprecated;
+  const showInstall = quickInstall && Boolean(onInstall) && !installed && !pending && !isLoading && app.available && !app.deprecated;
 
   return (
     <div className="orbis-store-product">
       <Link
         ref={visible ? preview?.onCardMount : undefined}
         aria-labelledby={`${id}-name`}
-        aria-describedby={`${id}-description${app.deprecated || !app.available ? ` ${id}-notice` : ''}`}
+        aria-describedby={`${id}-description${app.deprecated || !app.available ? ` ${id}-notice` : ''}${installed || pending ? ` ${id}-state` : ''}`}
         className={`app-tile orbis-store-tile${catalogueRow ? ' orbis-store-tile-catalogue' : ''}`}
         to={path}
         state={history}
@@ -100,8 +109,8 @@ export function StoreTile({
             {showInstall ? (
               <span className="orbis-store-install-slot" aria-hidden="true" />
             ) : (
-              <span className="orbis-store-tile-action" aria-hidden="true">
-                Preview <IconChevronRight size={16} />
+              <span id={installed || pending ? `${id}-state` : undefined} className="orbis-store-tile-action">
+                {installed ? 'Installed' : pending ? 'Pending' : 'Preview'} <IconChevronRight size={16} aria-hidden="true" />
               </span>
             )}
           </div>
@@ -112,7 +121,9 @@ export function StoreTile({
           type="button"
           className="orbis-store-quick-install"
           aria-label={`Install ${app.name}`}
-          onClick={() => navigate(path, { state: { ...history, storeInstallUrn: app.urn }, preventScrollReset: true })}
+          loading={installLoading}
+          disabled={installDisabled}
+          onClick={() => onInstall?.(app)}
         >
           Install
         </Button>

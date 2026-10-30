@@ -3,6 +3,9 @@ import { BadRequestException } from '@nestjs/common';
 import { validateAppUrn } from '@/common/helpers/app-helpers';
 
 const time = type('string').narrow((value) => /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value));
+export const automaticUpdateTimeSchema = time;
+export const automaticScheduleRequestSchema = type({ time }).onUndeclaredKey('reject');
+export const automaticScheduleRevisionSchema = type('number.integer >= 0').narrow(Number.isSafeInteger);
 const timezone = type('string > 0 & string <= 100').narrow((value) => {
   try {
     new Intl.DateTimeFormat('en', { timeZone: value }).format();
@@ -52,7 +55,11 @@ export const automaticUpdateStateSchema = type({
 }).onUndeclaredKey('reject');
 export type AutomaticUpdateState = typeof automaticUpdateStateSchema.infer;
 
-export const systemUpdateSettingsSchema = type({ enabled: 'boolean' }).onUndeclaredKey('reject');
+export const systemUpdateSettingsSchema = type({
+  enabled: 'boolean',
+  'schedule?': automaticScheduleRequestSchema,
+  'expectedRevision?': automaticScheduleRevisionSchema,
+}).onUndeclaredKey('reject');
 export const systemUpdateStateSchema = type({
   version: '1',
   revision: 'number.integer >= 0',

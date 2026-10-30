@@ -68,3 +68,8 @@
     transition: none;
   }
 }
+
+.orbis-switch > .switch-root,
+.switch-root > .switch-thumb {
+  --orbis-reduced-transition-duration: var(--orbis-control-transition-duration, 0.01ms);
+}

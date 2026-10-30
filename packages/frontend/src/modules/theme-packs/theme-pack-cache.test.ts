@@ -254,10 +254,12 @@ describe('public theme continuity cache', () => {
     storage();
     rememberThemePackCache(pack);
     const choice = { preset: 'frost' as const, wallpaper: 'canopy' as const, wallpaperMode: 'theme' as const };
-    expect(renderToStaticMarkup(createElement(WallpaperLayer, { choice }))).toContain(`/wallpapers/ocean.webp?version=${pack.wallpaper}`);
+    expect(renderToStaticMarkup(createElement(WallpaperLayer, { choice }))).toContain(
+      `/wallpapers/theme-pack-tideline-v1.webp?version=${pack.wallpaper}`,
+    );
     const fixed = renderToStaticMarkup(createElement(WallpaperLayer, { choice: { ...choice, wallpaperMode: 'custom' } }));
-    expect(fixed).toContain('/wallpapers/forest.webp');
-    expect(fixed).not.toContain('/wallpapers/ocean.webp');
+    expect(fixed).toContain('/wallpapers/forest-v2.webp');
+    expect(fixed).not.toContain('/wallpapers/theme-pack-tideline-v1.webp');
     const uploaded = renderToStaticMarkup(
       createElement(WallpaperLayer, {
         choice: { ...choice, wallpaperMode: 'custom', appearance: { wallpaperImage: 'a'.repeat(64), wallpaperX: 70, wallpaperFit: 'contain' } },
@@ -267,7 +269,7 @@ describe('public theme continuity cache', () => {
     expect(uploaded).toContain('data-wallpaper-state="loading"');
     expect(uploaded).not.toContain('/wallpapers/');
     rememberThemePackCache(null);
-    expect(renderToStaticMarkup(createElement(WallpaperLayer, { choice }))).toContain('/wallpapers/frost.webp');
+    expect(renderToStaticMarkup(createElement(WallpaperLayer, { choice }))).toContain('/wallpapers/frost-v2.webp');
   });
 });
 

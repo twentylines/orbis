@@ -37,3 +37,15 @@
     animation: none;
   }
 }
+
+body:has(.orbis-theme) .store-source-warning {
+  padding: 18px 20px;
+  column-gap: 16px;
+}
+.store-source-warning .alert-heading {
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+.store-source-warning .alert-description {
+  line-height: 1.5;
+}

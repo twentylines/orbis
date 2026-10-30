@@ -242,7 +242,7 @@
 }
 .orbis-store-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(18rem, calc((100% - 42px) / 4))), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(15rem, calc((100% - 56px) / 5))), 1fr));
   grid-auto-rows: auto;
   gap: 14px;
   min-width: 0;
@@ -253,17 +253,22 @@
   min-width: 0;
 }
 .orbis-store .orbis-store-tile.app-tile.orbis-store-tile-catalogue {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
   min-height: 0;
-  padding: 0;
+  padding: 16px;
   border-radius: 16px;
 }
 .orbis-store .orbis-store-tile-catalogue .orbis-store-tile-art {
-  min-height: 4rem;
-  gap: 12px;
-  padding: 12px 16px;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+}
+.orbis-store .orbis-store-tile-catalogue .orbis-store-tile-art-backdrop,
+.orbis-store .orbis-store-tile-catalogue .orbis-store-tile-categories {
+  display: none;
 }
 .orbis-store .orbis-store-tile-catalogue .orbis-store-logo {
   --app-logo-size: 3rem;
@@ -274,10 +279,11 @@
   line-height: 1.3;
 }
 .orbis-store .orbis-store-tile-catalogue .orbis-store-tile-copy {
+  align-self: stretch;
   justify-content: flex-start;
   min-width: 0;
   gap: 6px;
-  padding: 12px 16px;
+  padding: 0;
 }
 .orbis-store .orbis-store-tile-catalogue h3 {
   display: -webkit-box;
@@ -288,7 +294,7 @@
   line-height: 1.35;
 }
 .orbis-store .orbis-store-tile-catalogue .orbis-store-tile-description {
-  min-height: 0;
+  min-height: 2.9em;
   line-height: 1.45;
   overflow-wrap: normal;
   word-break: normal;
@@ -299,13 +305,13 @@
 }
 .orbis-store-install-slot,
 .orbis-store-quick-install.btn {
-  width: 7rem;
+  width: 5.5rem;
   min-height: 44px;
 }
 .orbis-store-quick-install.btn {
   position: absolute;
   inset-inline-end: 16px;
-  bottom: 12px;
+  bottom: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { applyAppearanceRuntime } from './appearance-runtime';
+import { appearanceBootstrap, preferenceStorageKey } from './appearance-cache';
 
 const palette = {
   surface: 'rgba(248, 250, 246, 0.92)',
@@ -51,7 +52,15 @@ const actualPalette = (preset: string, dark: boolean) => {
 };
 function apply(
   options: unknown,
-  { dark = false, solidSystem = false, motionSystem = false, blockedMedia = false, paletteReady = true, tokens = {} as Record<string, string> } = {},
+  {
+    dark = false,
+    solidSystem = false,
+    motionSystem = false,
+    blockedMedia = false,
+    paletteReady = true,
+    tokens = {} as Record<string, string>,
+    firstPaint = false,
+  } = {},
 ) {
   const properties = new Map<string, string>([['--orbis-accent', 'stale']]);
   const root = {
@@ -76,7 +85,16 @@ function apply(
       return { matches: query.includes('transparency') ? solidSystem : motionSystem };
     },
   };
-  runInNewContext(`(${applyAppearanceRuntime.toString()})(options,mode)`, { ...environment, options, mode: dark ? 'dark' : 'light' });
+  if (firstPaint)
+    runInNewContext(appearanceBootstrap, {
+      ...environment,
+      requestAnimationFrame: (callback: () => void) => {
+        callback();
+        return 1;
+      },
+      localStorage: { getItem: (key: string) => (key === preferenceStorageKey ? JSON.stringify({ appearance: options }) : null) },
+    });
+  else runInNewContext(`(${applyAppearanceRuntime.toString()})(options,mode)`, { ...environment, options, mode: dark ? 'dark' : 'light' });
   return { properties, dataset: root.dataset };
 }
 const rgb = (value: string) =>
@@ -107,7 +125,7 @@ describe('saved appearance applied before hydration and to live materials', () =
   });
   test('keeps the theme defaults exact and removes stale overrides on reset', () => {
     const result = apply({});
-    expect([...result.properties.keys()].sort()).toEqual(['--orbis-chrome-focus', '--orbis-chrome-muted']);
+    expect([...result.properties.keys()].sort()).toEqual(['--orbis-chrome-focus', '--orbis-chrome-muted', '--orbis-control-transition-duration']);
     expect(result.dataset).toEqual({ orbisMotion: 'full', orbisTransparency: 'glass', orbisEffects: 'full', orbisColourCustom: 'false' });
   });
   test('ignores invalid or CSS-shaped values instead of writing them into styles', () => {
@@ -119,7 +137,7 @@ describe('saved appearance applied before hydration and to live materials', () =
       glassTint: -1,
       lowEffects: 'yes',
     });
-    expect([...result.properties.keys()].sort()).toEqual(['--orbis-chrome-focus', '--orbis-chrome-muted']);
+    expect([...result.properties.keys()].sort()).toEqual(['--orbis-chrome-focus', '--orbis-chrome-muted', '--orbis-control-transition-duration']);
   });
   test('applies saved text sizing before stylesheet readiness and clears it at the default', () => {
     for (const textScale of [85, 125, 150]) {
@@ -218,4 +236,16 @@ describe('saved appearance applied before hydration and to live materials', () =
   test('works when browser media preferences are unavailable', () => {
     expect(apply({ glassBlur: 0 }, { blockedMedia: true }).properties.get('--orbis-glass-filter')).toBe('none');
   });
+});
+
+test('low-effects switches keep cheap transitions while explicit and system reduced motion remain immediate, including first paint', () => {
+  for (const firstPaint of [false, true]) {
+    for (const lowEffects of [false, true]) {
+      expect(apply({ lowEffects }, { firstPaint }).properties.get('--orbis-control-transition-duration')).toBe('180ms');
+      expect(apply({ lowEffects, motion: 'reduced' }, { firstPaint }).properties.get('--orbis-control-transition-duration')).toBe('0.01ms');
+      expect(apply({ lowEffects }, { firstPaint, motionSystem: true }).properties.get('--orbis-control-transition-duration')).toBe('0.01ms');
+    }
+  }
+  expect(apply({ lowEffects: true }).dataset.orbisMotion).toBe('reduced');
+  expect(apply({ lowEffects: true }).properties.get('--orbis-glass-filter')).toBe('none');
 });

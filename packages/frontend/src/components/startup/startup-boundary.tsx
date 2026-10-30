@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { StartupSurface } from './startup-surface';
 import { startupCycleRemaining } from './startup-timing';
+import { useThemeApplyStartup } from '@/modules/theme-packs/use-theme-apply-startup';
+import { ThemeApplyCover } from '@/modules/theme-packs/theme-apply-cover';
 
 const ReadyContext = createContext<(ready: boolean) => void>(() => undefined);
 type SessionTransition = 'signing-in' | 'logging-out';
@@ -18,6 +20,7 @@ export function useStartupReady(ready: boolean) {
 
 export function StartupBoundary({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
+  const themeHandoff = useThemeApplyStartup();
   const [phase, setPhase] = useState<'loading' | 'finishing' | 'revealing' | 'complete'>('loading');
   const surface = useRef<HTMLDivElement>(null);
   const [sessionTransition, setSessionTransition] = useState<SessionTransition | null>(null);
@@ -42,7 +45,7 @@ export function StartupBoundary({ children }: PropsWithChildren) {
   }, [ready, phase]);
 
   useEffect(() => {
-    if (!ready || sessionPending || phase !== 'loading') return;
+    if (!ready || sessionPending || themeHandoff.pending || phase !== 'loading') return;
     const progress = surface.current?.querySelector('.orbis-startup-progress > span');
     const cycle = progress
       ?.getAnimations()
@@ -50,7 +53,7 @@ export function StartupBoundary({ children }: PropsWithChildren) {
     const elapsed = typeof cycle?.currentTime === 'number' ? cycle.currentTime : 0;
     const timer = window.setTimeout(() => setPhase('finishing'), prefersReducedMotion() ? 0 : startupCycleRemaining(elapsed));
     return () => window.clearTimeout(timer);
-  }, [ready, sessionPending, phase]);
+  }, [ready, sessionPending, phase, themeHandoff.pending]);
 
   useEffect(() => {
     if (phase !== 'finishing' && phase !== 'revealing') return;
@@ -66,14 +69,23 @@ export function StartupBoundary({ children }: PropsWithChildren) {
     if (phase === 'revealing') window.dispatchEvent(new Event('orbis-startup-reveal'));
     if (phase === 'complete') {
       setSessionTransition(null);
+      themeHandoff.complete();
       for (const resolve of finished.current.splice(0)) resolve();
     }
-  }, [phase]);
+  }, [phase, themeHandoff.complete]);
 
   return (
     <SessionContext.Provider value={session}>
       <ReadyContext.Provider value={setReady}>
         {children}
+        {themeHandoff.pending ? (
+          <ThemeApplyCover
+            label="Loading your theme…"
+            error={themeHandoff.error ? 'Your theme could not be confirmed. Retry or cancel to return to the workspace.' : undefined}
+            onRetry={themeHandoff.retry}
+            onCancel={themeHandoff.cancel}
+          />
+        ) : null}
         {phase === 'complete' ? null : (
           <StartupSurface
             ref={surface}
@@ -81,6 +93,7 @@ export function StartupBoundary({ children }: PropsWithChildren) {
             initial
             signingIn={sessionTransition === 'signing-in'}
             loggingOff={sessionTransition === 'logging-out'}
+            status={themeHandoff.active && !themeHandoff.pending ? { title: 'Loading theme…', message: 'Preparing your workspace.' } : undefined}
             completing={phase !== 'loading'}
             revealing={phase === 'revealing'}
           />

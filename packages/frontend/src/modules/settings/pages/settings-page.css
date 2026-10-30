@@ -1,0 +1,399 @@
+.desktop-settings {
+  min-width: 0;
+  container: settings / inline-size;
+}
+.settings-workspace {
+  min-width: 0;
+  color: var(--desktop-ink);
+}
+.settings-search {
+  position: relative;
+  z-index: 5;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.settings-search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 34rem);
+  min-height: 46px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 10px;
+  background: var(--desktop-surface);
+  padding: 0 12px;
+}
+.settings-search-field:focus-within {
+  border-color: color-mix(in srgb, var(--desktop-preset-tint) 42%, var(--desktop-line));
+  background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
+}
+.settings-search-field:has(input:focus-visible):not([data-pointer-focus="true"]) {
+  outline: 2px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.settings-search-field > svg {
+  color: var(--desktop-muted);
+  flex: none;
+}
+.settings-search-field input {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--desktop-ink);
+  font: inherit;
+  outline: none;
+  padding: 8px 0;
+}
+.desktop-settings .settings-search-field input:is(:focus, :focus-visible) {
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+}
+.settings-search-field > button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--desktop-muted);
+}
+.settings-search-results {
+  position: absolute;
+  z-index: 10;
+  inset: calc(100% - 12px) auto auto 0;
+  width: min(100%, 34rem);
+  max-height: min(26rem, 55dvh);
+  overflow: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  border: 1px solid var(--desktop-line);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px #0002;
+}
+.settings-search-results button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+.settings-search-results button:hover {
+  background: color-mix(in srgb, var(--desktop-preset-tint) 12%, var(--desktop-surface));
+}
+.settings-search-results strong,
+.settings-search-results small {
+  display: block;
+}
+.settings-search-results small {
+  margin-top: 3px;
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+}
+.settings-search-results svg {
+  flex: none;
+  color: var(--desktop-muted);
+}
+.settings-search-empty {
+  padding: 14px 12px;
+  color: var(--desktop-muted);
+}
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  gap: clamp(24px, 3cqi, 44px);
+  padding-top: 22px;
+  min-width: 0;
+  min-height: min(38rem, 65dvh);
+}
+.settings-sidebar {
+  min-width: 0;
+  padding-right: 20px;
+  border-right: 1px solid var(--desktop-line);
+}
+.settings-category-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 12px;
+}
+.settings-category-list > button {
+  min-width: 0;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--desktop-muted);
+  font: inherit;
+  text-align: start;
+  line-height: 1.35;
+}
+.settings-category-list strong {
+  display: block;
+  color: var(--desktop-ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.settings-category-list small {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.settings-category-list > [aria-pressed="true"] strong {
+  color: var(--desktop-ink);
+}
+.settings-mobile-navigation {
+  display: none;
+}
+.settings-content {
+  min-width: 0;
+}
+.settings-content-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 24px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--desktop-line);
+}
+.settings-content-heading h2 {
+  font-size: clamp(1.375rem, 1.8cqi, 1.75rem);
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+.settings-content-heading > .btn {
+  min-width: 5.5rem;
+  min-height: 44px;
+  flex: none;
+}
+.settings-save-fields {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.settings-save-feedback {
+  margin-bottom: 20px;
+}
+.settings-content-heading p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 0.875rem;
+}
+.settings-category-panel {
+  min-width: 0;
+}
+.settings-category-panel[hidden] {
+  display: none;
+}
+.settings-category-panel > .card-body,
+.settings-category-panel > div > .card-body {
+  padding: 0;
+}
+.settings-category-panel :is(section, [id]) {
+  scroll-margin-block: 24px;
+}
+.settings-category-panel .appearance {
+  padding-top: 0;
+}
+.settings-category-panel .appearance-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.settings-category-panel .appearance-section {
+  grid-template-columns: minmax(9rem, 15rem) minmax(0, 1fr);
+  gap: 24px;
+}
+.settings-category-panel :is(.automatic-updates-settings, .release-channel-settings, .system-backups-settings, .cluster-settings) {
+  margin-top: 0;
+}
+.settings-category-panel .automatic-updates-settings + .automatic-updates-settings {
+  margin-top: 24px;
+}
+.settings-loading {
+  min-height: 18rem;
+  display: grid;
+  place-content: center;
+}
+.settings-permission {
+  padding: 12px 0;
+  color: var(--desktop-muted);
+}
+.settings-general-form {
+  max-width: 48rem;
+}
+.settings-general-form > .d-flex > svg {
+  display: none;
+}
+.settings-general-form h2 {
+  font-size: 1.125rem;
+}
+.settings-general-form form {
+  display: grid;
+  gap: 4px;
+}
+.settings-general-form form > button[type="submit"] {
+  justify-self: start;
+  min-width: 6rem;
+}
+.settings-category-panel [data-setting-focus] {
+  outline-offset: 4px;
+}
+@container settings (max-width: 61rem) {
+  .settings-layout {
+    grid-template-columns: minmax(10rem, 12rem) minmax(0, 1fr);
+    gap: 24px;
+  }
+  .settings-sidebar {
+    padding-right: 14px;
+  }
+  .settings-category-list small {
+    display: none;
+  }
+  .settings-category-list > button {
+    min-height: 46px;
+  }
+  .settings-category-panel .appearance-section {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .settings-category-panel .appearance-section p {
+    max-width: 60ch;
+  }
+}
+@container settings (max-width: 43rem) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+    min-height: 0;
+    padding-top: 18px;
+  }
+  .settings-sidebar {
+    display: none;
+  }
+  .settings-mobile-navigation {
+    display: block;
+  }
+  .settings-search {
+    padding-bottom: 18px;
+  }
+  .settings-search-field {
+    width: 100%;
+  }
+  .settings-content-heading {
+    margin-bottom: 20px;
+    padding-bottom: 18px;
+  }
+  .settings-content-heading h2 {
+    font-size: 1.375rem;
+  }
+  .settings-content-heading p {
+    display: none;
+  }
+  .settings-category-panel .appearance-section {
+    padding-block: 22px;
+  }
+}
+
+.settings-update-groups > :first-child .release-channel-settings {
+  padding-top: 0;
+  border-top: 0;
+}
+.settings-update-groups > .automatic-updates-settings {
+  margin-top: 28px;
+}
+.settings-store-groups > #setting-app-updates {
+  margin-bottom: 28px;
+}
+
+.settings-search-field input::-webkit-search-cancel-button {
+  display: none;
+}
+.settings-search-field input {
+  appearance: none;
+  -webkit-appearance: none;
+}
+@container settings (min-width: 43.01rem) {
+  .settings-sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: calc(100dvh - 14rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding: 8px;
+  }
+}
+
+.desktop-route-window[data-window-navigation="page"] .settings-category-panel :is(section, [id]) {
+  scroll-margin-block-start: 8rem;
+}
+
+.settings-category-list > button {
+  min-height: 46px;
+}
+.settings-content-heading h2 {
+  margin-bottom: 0;
+}
+
+.settings-search-results {
+  scroll-padding: 8px;
+}
+.settings-mobile-navigation .orbis-select-value {
+  white-space: normal;
+  overflow-wrap: normal;
+}
+
+.settings-category-panel > section:first-child,
+.settings-category-panel > :first-child > section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-header-status {
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.settings-header-status-label {
+  display: block;
+}
+.settings-header-status-label[data-dirty="false"] {
+  visibility: hidden;
+}
+.settings-header-status-short {
+  display: none;
+}
+@media (max-width: 760px) {
+  .settings-header-status-full {
+    display: none;
+  }
+  .settings-header-status-short {
+    display: inline;
+  }
+}

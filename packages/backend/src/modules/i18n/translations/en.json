@@ -546,7 +546,7 @@
   "SETTINGS_GENERAL_ADVANCED_SETTINGS_MODAL_TITLE": "Enable advanced settings?",
   "SETTINGS_GENERAL_ADVANCED_SETTINGS_MODAL_SUBTITLE": "Incorrect network or server settings can prevent Orbis from working. Enable advanced settings?",
   "SETTINGS_GENERAL_SAVE_ALERT_TITLE": "Unsaved changes",
-  "SETTINGS_GENERAL_SAVE_ALERT_SUBTITLE": "Select Update settings to apply your changes.",
+  "SETTINGS_GENERAL_SAVE_ALERT_SUBTITLE": "Select Save to apply your changes.",
   "SETTINGS_SECURITY_2FA_DISABLE_SUCCESS": "Two-factor authentication disabled",
   "SETTINGS_SECURITY_2FA_ENABLE_SUCCESS": "Two-factor authentication enabled",
   "SETTINGS_SECURITY_2FA_SUBTITLE": "Require a code from an authenticator app when logging in.",

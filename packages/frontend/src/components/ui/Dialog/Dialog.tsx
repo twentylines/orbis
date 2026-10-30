@@ -3,7 +3,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import clsx from 'clsx';
 import type * as React from 'react';
-import { Children, createContext, Fragment, isValidElement, useContext, useRef } from 'react';
+import { Children, createContext, Fragment, isValidElement, useContext, useRef, useState, useLayoutEffect } from 'react';
 import { IconX } from '@tabler/icons-react';
 import { Button } from '../Button';
 import { InlineFeedback, type AlertProps } from '../Alert/Alert';
@@ -18,10 +18,38 @@ type ModalProps = {
   type?: ModalType;
 };
 
-const Dialog = DialogPrimitive.Root;
+export const DialogOpenContext = createContext(false);
+export function updateDialogOpen(controlled: boolean, next: boolean, setInternal: (value: boolean) => void, onChange?: (value: boolean) => void) {
+  if (!controlled) setInternal(next);
+  onChange?.(next);
+}
+const Dialog = ({ open: supplied, defaultOpen = false, onOpenChange, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) => {
+  const [internal, setInternal] = useState(defaultOpen);
+  const open = supplied ?? internal;
+  return (
+    <DialogOpenContext.Provider value={open}>
+      <DialogPrimitive.Root {...props} open={open} onOpenChange={(next) => updateDialogOpen(supplied !== undefined, next, setInternal, onOpenChange)}>
+        {children}
+      </DialogPrimitive.Root>
+    </DialogOpenContext.Provider>
+  );
+};
+export function retainDialogChildren(snapshot: { current: React.ReactNode }, open: boolean, children: React.ReactNode) {
+  if (open) snapshot.current = children;
+  return snapshot.current;
+}
+function RetainedDialogContents({ children }: { children: React.ReactNode }) {
+  const open = useContext(DialogOpenContext);
+  const snapshot = useRef<React.ReactNode>(null);
+  useLayoutEffect(() => {
+    if (open) retainDialogChildren(snapshot, true, children);
+  }, [open, children]);
+  return open ? children : retainDialogChildren(snapshot, false, children);
+}
 const DialogTrigger = DialogPrimitive.Trigger;
 
 const DialogPortal = DialogPrimitive.Portal;
+export const DialogVisibilityContext = createContext(true);
 const DialogCloseContext = createContext({ disabled: false, inHeader: false });
 
 const DialogCloseButton = () => {
@@ -102,9 +130,14 @@ const DialogContent = ({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> &
   ModalProps & { closeDisabled?: boolean; restoreFocusTo?: React.RefObject<HTMLElement | null> }) => {
+  const visible = useContext(DialogVisibilityContext);
+  const open = useContext(DialogOpenContext);
+  const visibility = useRef(visible);
+  visibility.current = visible;
   const opener = useRef<HTMLElement | null>(null);
   const focusFallback = useRef<HTMLElement | null>(null);
   const hasHeader = containsDialogHeader(children);
+  if (!visible) return null;
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -112,6 +145,7 @@ const DialogContent = ({
         className={clsx('modal-content', 'orbis-dialog-content', 'orbis-modal-frame', className)}
         data-size={size}
         {...props}
+        inert={!open || props.inert}
         data-focus-surface="parent"
         onInteractOutside={(event) => {
           if (event.target instanceof Element && event.target.closest('.orbis-notifications')) event.preventDefault();
@@ -130,6 +164,10 @@ const DialogContent = ({
           }
         }}
         onCloseAutoFocus={(event) => {
+          if (!visibility.current) {
+            event.preventDefault();
+            return;
+          }
           onCloseAutoFocus?.(event);
           if (event.defaultPrevented) return;
           const available = (element: HTMLElement | null | undefined) =>
@@ -150,12 +188,14 @@ const DialogContent = ({
           }
         }}
       >
-        <DialogCloseContext.Provider value={{ disabled: closeDisabled, inHeader: hasHeader }}>
-          <div data-testid="modal-status" className={clsx('modal-status', type ? `bg-${type}` : 'd-none')} />
-          {children}
-          {hasHeader ? null : <DialogCloseButton />}
-          <span hidden aria-hidden="true" ref={observeDialogSize} />
-        </DialogCloseContext.Provider>
+        <RetainedDialogContents>
+          <DialogCloseContext.Provider value={{ disabled: closeDisabled, inHeader: hasHeader }}>
+            <div data-testid="modal-status" className={clsx('modal-status', type ? `bg-${type}` : 'd-none')} />
+            {children}
+            {hasHeader ? null : <DialogCloseButton />}
+            <span hidden aria-hidden="true" ref={observeDialogSize} />
+          </DialogCloseContext.Provider>
+        </RetainedDialogContents>
       </DialogPrimitive.Content>
     </DialogPortal>
   );

@@ -18,12 +18,12 @@ export const presetLabels: Record<ThemePreset, string> = {
   blush: 'Blush',
 };
 export const presetWallpaperSources: Record<ThemePreset, string> = {
-  frost: '/wallpapers/frost.webp',
-  graphite: '/wallpapers/graphite.webp',
-  forest: '/wallpapers/forest.webp',
-  stone: '/wallpapers/orbis-horizon.webp',
-  ocean: '/wallpapers/ocean.webp',
-  blush: '/wallpapers/blush.webp',
+  frost: '/wallpapers/frost-v2.webp',
+  graphite: '/wallpapers/graphite-v2.webp',
+  forest: '/wallpapers/forest-v2.webp',
+  stone: '/wallpapers/stone-v2.webp',
+  ocean: '/wallpapers/ocean-v3.webp',
+  blush: '/wallpapers/blush-v3.webp',
 };
 export const presetWallpaperPreviews = Object.fromEntries(
   themePresets.map((preset) => [preset, presetWallpaperSources[preset].replace('.webp', '-preview.webp')]),

@@ -20,6 +20,32 @@ export const mediaApps: { id: MediaApp; name: string; purpose: string }[] = [
   { id: 'transmission', name: 'Transmission', purpose: 'A download client to connect to your library tools.' },
 ];
 
+const mediaStackRoles: { role: string; ids: readonly MediaApp[] }[] = [
+  { role: 'player', ids: mediaPlayers },
+  { role: 'indexer', ids: ['prowlarr', 'jackett'] },
+  { role: 'download-client', ids: ['qbittorrent', 'transmission'] },
+  { role: 'tv', ids: ['sonarr'] },
+  { role: 'movies', ids: ['radarr'] },
+  { role: 'subtitles', ids: ['bazarr'] },
+  { role: 'music', ids: ['lidarr'] },
+];
+
+export function mediaStackCoverage(catalogue: Partial<Record<MediaApp, AppInfoSimple>>, installed: readonly { id: string; status?: string }[]) {
+  const installedIds = new Set(installed.filter((app) => installationState(app.status) === 'ready').map((app) => app.id));
+  const availableRoles = mediaStackRoles.filter(({ ids }) =>
+    ids.some((id) => {
+      const app = catalogue[id];
+      return app?.available && !app.deprecated;
+    }),
+  );
+  const installedRoles = availableRoles.filter(({ ids }) => ids.some((id) => installedIds.has(id)));
+  return {
+    availableRoleCount: availableRoles.length,
+    installedRoleCount: installedRoles.length,
+    majorityInstalled: availableRoles.length > 0 && installedRoles.length * 2 > availableRoles.length,
+  };
+}
+
 export function resolveCuratedApp(apps: AppInfoSimple[], ids: readonly string[], storeId?: string): AppInfoSimple | undefined {
   return ids.flatMap((id) =>
     apps.filter((app) => app.id === id && app.available && !app.deprecated && (!storeId || app.urn.split(':')[1] === storeId)),

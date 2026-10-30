@@ -18,6 +18,7 @@ import {
   IconDeviceDesktopAnalytics,
   IconClock,
   IconPin,
+  IconTrash,
   IconGripVertical,
   IconArrowUp,
   IconArrowDown,
@@ -716,6 +717,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
                 type="button"
                 onClick={() => saveWorkspace({ ...workspace, pinnedApps: workspace.pinnedApps.filter((urn) => installedUrns.has(urn)) })}
               >
+                <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" />
                 Remove {missingPins.length} unavailable pin{missingPins.length === 1 ? '' : 's'}
               </button>
             ) : null}

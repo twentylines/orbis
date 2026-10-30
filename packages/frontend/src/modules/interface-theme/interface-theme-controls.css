@@ -1,0 +1,71 @@
+.interface-theme-controls,
+.interface-theme-group,
+.interface-theme-control {
+  min-width: 0;
+}
+.interface-theme-group {
+  display: grid;
+  gap: 1.25rem;
+}
+.interface-theme-controls > output {
+  display: block;
+  margin-block: 0.75rem;
+}
+.interface-theme-control {
+  display: grid;
+  gap: 0.5rem;
+}
+.interface-theme-control > label {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+.interface-theme-input-row,
+.interface-theme-number {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.interface-theme-control input {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--desktop-line);
+  border-radius: 0.5rem;
+  background: var(--desktop-surface);
+  color: var(--desktop-ink);
+  font: inherit;
+}
+.interface-theme-control input[type="text"] {
+  flex: 1 1 10rem;
+  width: 10rem;
+}
+.interface-theme-control input[type="color"] {
+  width: 3rem;
+  padding: 0.25rem;
+  cursor: pointer;
+}
+.interface-theme-control input[type="range"] {
+  flex: 1 1 12rem;
+  width: 12rem;
+  padding-inline: 0;
+  accent-color: var(--desktop-accent);
+  cursor: pointer;
+}
+.interface-theme-number > span {
+  flex-basis: 100%;
+  color: var(--desktop-muted);
+}
+.interface-theme-control input:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 3px;
+}
+.interface-theme-control input:disabled {
+  cursor: not-allowed;
+}
+.interface-theme-control p {
+  margin: 0;
+  overflow-wrap: break-word;
+}

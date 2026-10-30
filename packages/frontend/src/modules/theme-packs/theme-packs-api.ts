@@ -25,4 +25,5 @@ export async function themePacksRequest(action = '', method = 'GET', body?: unkn
   if (method !== 'GET') window.dispatchEvent(new Event(themePacksChanged));
   return value;
 }
-export const selectThemePack = (selected: ThemePackReference | null) => themePacksRequest('/selection', 'PUT', { selected });
+export const selectThemePack = (selected: ThemePackReference | null, signal?: AbortSignal) =>
+  themePacksRequest('/selection', 'PUT', { selected }, signal);

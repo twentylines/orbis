@@ -2,6 +2,19 @@
   min-width: 0;
   container-type: inline-size;
 }
+.desktop-updates-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 44px;
+  margin-bottom: 24px;
+}
+.desktop-updates-toolbar > .desktop-update-link {
+  min-height: 44px;
+  margin: 0;
+}
 .desktop-updates-tabs {
   display: inline-grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -12,6 +25,9 @@
   border: 1px solid var(--desktop-line);
   border-radius: 14px;
   background: var(--desktop-surface);
+}
+.desktop-updates-toolbar > .desktop-updates-tabs {
+  margin-bottom: 0;
 }
 .desktop-updates-tabs button {
   display: inline-flex;
@@ -47,7 +63,6 @@
   color: var(--desktop-ink);
   background: color-mix(in srgb, var(--desktop-preset-tint) 10%, var(--desktop-surface));
 }
-.desktop-downgrade > summary:focus-visible,
 .desktop-downgrade-confirm input:focus-visible {
   outline: 3px solid var(--desktop-accent);
   outline-offset: 3px;
@@ -608,22 +623,21 @@ p.desktop-host-package-versions {
   overflow-wrap: anywhere;
 }
 .desktop-update-build-details {
+  display: grid;
+  gap: 8px;
   margin-top: 16px;
   border-top: 1px solid var(--desktop-line);
-  padding-top: 12px;
+  padding-top: 14px;
 }
-.desktop-update-build-details summary {
-  width: fit-content;
-  max-width: 100%;
+.desktop-update-build-details h4 {
+  margin: 0 0 2px;
+  color: var(--desktop-ink);
+  font-size: inherit;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.desktop-update-build-details .desktop-update-image > span {
   color: var(--desktop-muted);
-  cursor: pointer;
-}
-.desktop-update-build-details summary:focus-visible {
-  outline: 3px solid var(--desktop-focus);
-  outline-offset: 3px;
-}
-.desktop-update-build-details[open] > summary {
-  margin-bottom: 12px;
 }
 .desktop-update-image {
   display: flex;
@@ -862,17 +876,23 @@ body:has(.orbis-theme) .desktop-package-review .desktop-host-package-plan textar
   border-top: 1px solid var(--desktop-line);
   padding-top: 1.25rem;
 }
-.desktop-downgrade > summary {
-  cursor: pointer;
-  font-weight: 600;
-  min-height: 44px;
-  padding-block: 0.625rem;
+.desktop-downgrade > h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
   line-height: 1.5;
 }
 .desktop-downgrade-content {
   display: grid;
-  gap: 1rem;
-  padding-top: 1rem;
+  gap: 14px;
+  padding-top: 12px;
+}
+.desktop-downgrade-retry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .desktop-downgrade-content p {
   margin: 0;
@@ -1065,7 +1085,7 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
 .desktop-orbis-release-notes .desktop-release-history h3 {
   font-size: 0.9375rem;
   line-height: 1.5;
-  margin: 0 0 18px;
+  margin: 0 0 14px;
 }
 .desktop-orbis-release-notes .desktop-update-release {
   margin-top: 0;
@@ -1078,6 +1098,13 @@ body:has(.orbis-theme) .desktop-update-review-dialog > .modal-body:focus-visible
   border: 0;
   background: transparent;
   margin: 0 0 18px;
+}
+.desktop-orbis-release-summary .installed-versions {
+  gap: 10px;
+}
+.desktop-orbis-release-summary .installed-versions > div {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8em), 1fr));
+  gap: 3px 12px;
 }
 .desktop-orbis-release-summary > .desktop-update-action {
   width: 100%;

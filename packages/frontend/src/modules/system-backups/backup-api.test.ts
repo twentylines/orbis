@@ -159,7 +159,7 @@ const uploaded = {
   totalBytes: 100,
   uploadedBytes: 100,
   message: 'Uploaded.',
-};
+} as const;
 
 test('upload streams the File directly and waits for exact server byte confirmation', async () => {
   await withUpload(async () => {
@@ -301,4 +301,83 @@ test('native attachment POST clears credential fields and exposes no success cla
     if (originalInput) Object.defineProperty(globalThis, 'HTMLInputElement', originalInput);
     else Reflect.deleteProperty(globalThis, 'HTMLInputElement');
   }
+});
+
+test('known account-auth, archive-key, storage and status failures have distinct fixed guidance', async () => {
+  for (const [status, body, expected] of [
+    [400, 'AUTH_ERROR_INVALID_PASSWORD', 'current account password is incorrect'],
+    [400, 'AUTH_ERROR_TOTP_INVALID_CODE', 'authentication code is incorrect or expired'],
+    [400, 'The backup could not be opened. Check its passphrase and file.', 'archive could not be opened'],
+    [400, 'There is not enough free storage to receive this backup.', 'not enough free storage to upload'],
+    [409, 'Backup import storage needs review. No server data has been changed.', 'Backup import storage needs review'],
+    [409, 'Review this backup again before preparing its restore.', 'Review this backup again'],
+  ] as const) {
+    await withFetch(Response.json({ message: body, intlParams: { ignored: 'private-value' } }, { status }), async () => {
+      await expect(backupRequest('/export', 'POST', {})).rejects.toThrow(expected);
+    });
+  }
+});
+test('unknown, wrong-status, oversized and malformed400 bodies never echo server text', async () => {
+  const bodies = [
+    new Response('{"message":', { status: 400 }),
+    Response.json({ message: ['AUTH_ERROR_INVALID_PASSWORD'] }, { status: 400 }),
+    Response.json({ message: 'AUTH_ERROR_INVALID_PASSWORD extra private-value' }, { status: 400 }),
+    Response.json({ message: 'AUTH_ERROR_INVALID_PASSWORD', padding: 'x'.repeat(16 * 1024) }, { status: 400 }),
+    Response.json({ message: 'AUTH_ERROR_INVALID_PASSWORD' }, { status: 500 }),
+  ];
+  for (const response of bodies)
+    await withFetch(response, async () => {
+      try {
+        await backupRequest('/export', 'POST', {});
+        throw new Error('Expected failure');
+      } catch (error) {
+        expect(error).toBeInstanceOf(BackupApiError);
+        expect((error as Error).message).not.toContain('private-value');
+        expect((error as Error).message).not.toContain('current account password is incorrect');
+      }
+    });
+});
+test('oversized400 streaming error is cancelled before parsing any auth guidance', async () => {
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    type: 'bytes',
+    start(controller) {
+      controller.enqueue(new Uint8Array(16 * 1024 + 1));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  await withFetch(new Response(body, { status: 400 }), async () => {
+    await expect(backupRequest('/export', 'POST', {})).rejects.toThrow('Check your password');
+  });
+  expect(cancelled).toBe(true);
+});
+
+test('a complete upload returns its exact server acknowledgement for the next key-entry step', async () => {
+  await withUpload(async () => {
+    const promise = uploadBackup(id, file, new AbortController().signal, () => undefined);
+    UploadRequest.current.responseText = JSON.stringify(uploaded);
+    UploadRequest.current.onload?.();
+    expect(await promise).toEqual(uploaded);
+  });
+  await withUpload(async () => {
+    const promise = uploadBackup(id, file, new AbortController().signal, () => undefined);
+    UploadRequest.current.responseText = JSON.stringify({ ...uploaded, id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' });
+    UploadRequest.current.onload?.();
+    await expect(promise).rejects.toThrow('complete upload could not be verified');
+  });
+});
+test('upload error classification uses the same bounded allowlist without echoing upstream details', async () => {
+  for (const [text, expected] of [
+    [JSON.stringify({ message: 'There is not enough free storage to receive this backup.' }), 'not enough free storage to upload'],
+    [JSON.stringify({ message: 'private-value-must-not-echo' }), 'Check your password'],
+  ] as const)
+    await withUpload(async () => {
+      const promise = uploadBackup(id, file, new AbortController().signal, () => undefined);
+      UploadRequest.current.status = 400;
+      UploadRequest.current.responseText = text;
+      UploadRequest.current.onload?.();
+      await expect(promise).rejects.toThrow(expected);
+    });
 });

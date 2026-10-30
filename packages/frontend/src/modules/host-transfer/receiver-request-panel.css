@@ -99,3 +99,15 @@
   flex: 0 0 auto;
   min-height: 44px;
 }
+
+.host-transfer-window .receiver-request-form .nearby-servers {
+  margin-block: 0;
+  gap: 10px;
+}
+.host-transfer-window .receiver-request-form .nearby-servers > p {
+  font-size: 0.875rem;
+}
+
+.orbis-dialog-content.host-transfer-window .host-transfer-window-body {
+  padding-top: 0;
+}

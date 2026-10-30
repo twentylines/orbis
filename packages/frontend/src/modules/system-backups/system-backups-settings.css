@@ -1,10 +1,54 @@
 .system-backups-settings {
+  container-type: inline-size;
   display: grid;
   gap: 20px;
   min-width: 0;
   margin-top: 32px;
   padding-top: 28px;
   border-top: 1px solid var(--desktop-line);
+}
+.system-backups-job[data-ready="true"] {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 12px;
+}
+.system-backups-job[data-ready="true"] > :is(h4, p) {
+  grid-column: 1;
+}
+.system-backups-job[data-ready="true"] > .system-backups-download-ready {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+.system-backups-job[data-ready="true"] > .system-backups-download-ready > p {
+  display: none;
+}
+.system-backups-job[data-ready="true"] > .system-backups-actions {
+  grid-column: 3;
+  grid-row: 1 / 3;
+}
+.system-backups-job[data-ready="true"] .btn {
+  min-width: 6.5rem;
+}
+@container (max-width: 600px) {
+  .system-backups-job[data-ready="true"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .system-backups-job[data-ready="true"] > :is(h4, p) {
+    grid-column: 1 / -1;
+  }
+  .system-backups-job[data-ready="true"] > .system-backups-download-ready {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .system-backups-job[data-ready="true"] > .system-backups-actions {
+    grid-column: 2;
+    grid-row: 3;
+  }
+  .system-backups-job[data-ready="true"] .btn {
+    min-width: 0;
+    width: 100%;
+  }
 }
 .system-backups-settings :is(h2, h3, h4, p) {
   margin: 0;
@@ -315,4 +359,47 @@ body[data-motion="reduced"] .system-backups-settings .alert-danger,
   .system-backups-settings > .host-transfer-entry[data-contained="true"] {
     padding: 16px;
   }
+}
+
+.system-backups-download-ready {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 20px;
+  min-width: 0;
+}
+
+.system-backups-archive-key {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.system-backups-archive-key > .orbis-selection-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 4px;
+}
+.system-backups-archive-key > .orbis-selection-group > button {
+  flex: 1 1 12rem;
+  min-width: 0;
+  white-space: normal;
+}
+.system-backups-download-ready > p {
+  flex: 1 1 14rem;
+  color: var(--desktop-ink);
+}
+.system-backups-download-ready > .btn {
+  flex: 0 0 auto;
+  min-width: 7rem;
+}
+@media (max-width: 520px) {
+  .system-backups-download-ready > .btn {
+    flex: 1 1 100%;
+  }
+}
+.system-backups-remove-icon {
+  color: var(--desktop-negative);
+  flex: none;
 }

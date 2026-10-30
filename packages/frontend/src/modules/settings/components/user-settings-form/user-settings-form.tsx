@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { useDisclosure } from '@/lib/hooks/use-disclosure';
-import { IconAdjustmentsAlt, IconAdjustmentsCode, IconInfoCircle, IconUser } from '@tabler/icons-react';
+import { IconAdjustmentsCode } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type React from 'react';
 import { Suspense, lazy, useEffect } from 'react';
@@ -13,12 +13,11 @@ import validator from 'validator';
 import { type } from 'arktype';
 import { AdvancedSettingsModal } from '../advanced-settings-modal/advanced-settings-modal';
 import './user-settings-form.css';
-import { Alert, AlertDescription, AlertHeading, AlertIcon } from '@/components/ui/Alert/Alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { THEME_COLOR_ENUM } from '../color-selector/color-selector';
 import { THEME_BASE_ENUM, type ThemeBase } from '../theme-base-selector/theme-base-selector';
-import { Link } from 'react-router';
 import { TimeZoneSuspense } from '@/components/timezone-selector/timezone.suspense';
+import { useSettingsSave } from '../../pages/settings-save';
 
 const TimeZoneSelector = lazy(() =>
   import('@/components/timezone-selector/timezone-selector').then((module) => ({
@@ -82,7 +81,7 @@ export type SettingsFormValues = {
 
 interface IProps {
   currentBaseTheme?: ThemeBase;
-  onSubmit: (values: SettingsFormValues) => void;
+  onSubmit: (values: SettingsFormValues) => void | Promise<void>;
   initialValues?: Partial<SettingsFormValues>;
   loading?: boolean;
   submitErrors?: Record<string, string>;
@@ -112,6 +111,7 @@ export const UserSettingsForm = (props: IProps) => {
     handleSubmit,
     setError,
     control,
+    reset,
     formState: { errors, isDirty },
   } = useForm<SettingsFormValues>({ values: initialValues });
 
@@ -138,12 +138,31 @@ export const UserSettingsForm = (props: IProps) => {
         for (const [path, issue] of Object.entries(result.byPath ?? {})) {
           setError(path as keyof SettingsFormValues, { message: issue.message });
         }
-        return;
+        return false;
       }
 
-      onSubmit(result as SettingsFormValues);
+      return true;
     }
+    return false;
   };
+
+  const sharedSave = useSettingsSave({
+    section: 'general',
+    dirty: isDirty,
+    pending: Boolean(loading),
+    prepare: async () => {
+      let snapshot: SettingsFormValues | null = null;
+      await handleSubmit((values) => {
+        if (validate(values)) snapshot = structuredClone(values);
+      })();
+      if (!snapshot) return null;
+      const values: SettingsFormValues = snapshot;
+      return async () => {
+        await onSubmit(values);
+        reset(values);
+      };
+    },
+  });
 
   const downloadCertificate = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -151,31 +170,21 @@ export const UserSettingsForm = (props: IProps) => {
   };
 
   return (
-    <>
-      {isDirty && (
-        <Alert variant="info" className="fade-in">
-          <AlertIcon>
-            <IconInfoCircle stroke={2} />
-          </AlertIcon>
-          <div>
-            <AlertHeading>{t('SETTINGS_GENERAL_SAVE_ALERT_TITLE')}</AlertHeading>
-            <AlertDescription>{t('SETTINGS_GENERAL_SAVE_ALERT_SUBTITLE')}</AlertDescription>
-          </div>
-        </Alert>
-      )}
-      <div className="d-flex mb-2">
-        <IconUser className="me-2" />
-        <h2 className="text-2xl font-bold mb-0">{t('SETTINGS_GENERAL_USER_SETTINGS')}</h2>
-      </div>
-      <p>
-        <Link to="/settings?tab=appearance">Open appearance settings</Link>
-      </p>
-      <form className="flex flex-col mt-2" onSubmit={handleSubmit(validate)}>
-        <div className="d-flex mb-2">
-          <IconAdjustmentsAlt className="me-2" />
-          <h2 className="text-2xl font-bold mb-0">{t('SETTINGS_GENERAL_TITLE')}</h2>
-        </div>
-        <p className="mb-4">{t('SETTINGS_GENERAL_SUBTITLE')}</p>
+    <form
+      className="flex flex-col mt-2"
+      onSubmit={handleSubmit(async (values) => {
+        if (sharedSave.shared) return sharedSave.save?.();
+        if (validate(values)) {
+          try {
+            await onSubmit(values);
+            reset(values);
+          } catch {
+            // The owning mutation presents the error and retains this draft.
+          }
+        }
+      })}
+    >
+      <fieldset className="settings-save-fields" disabled={loading || sharedSave.pending}>
         <div className="mb-3">
           <Controller
             control={control}
@@ -183,6 +192,7 @@ export const UserSettingsForm = (props: IProps) => {
             defaultValue={false}
             render={({ field: { onChange, value, ref, ...rest } }) => (
               <Switch
+                id="setting-guestDashboard"
                 className="mb-3"
                 ref={ref}
                 checked={value}
@@ -208,6 +218,7 @@ export const UserSettingsForm = (props: IProps) => {
             defaultValue={false}
             render={({ field: { onChange, value, ref, ...rest } }) => (
               <Switch
+                id="setting-allowErrorMonitoring"
                 className="mb-3"
                 ref={ref}
                 checked={value}
@@ -233,6 +244,7 @@ export const UserSettingsForm = (props: IProps) => {
             defaultValue={false}
             render={({ field: { onChange, value, ref, ...rest } }) => (
               <Switch
+                id="setting-allowAutoThemes"
                 className="mb-3"
                 ref={ref}
                 checked={value}
@@ -266,6 +278,7 @@ export const UserSettingsForm = (props: IProps) => {
                   advancedSettingsDisclosure={advancedSettingsDisclosure}
                 />
                 <Switch
+                  id="setting-advancedSettings"
                   className="mb-3"
                   ref={ref}
                   checked={value}
@@ -294,6 +307,7 @@ export const UserSettingsForm = (props: IProps) => {
         <div className="mb-3">
           <Input
             {...register('appsRepoUrl')}
+            id="setting-appsRepoUrl"
             label={
               <>
                 {t('SETTINGS_GENERAL_APPS_REPO')}
@@ -314,7 +328,9 @@ export const UserSettingsForm = (props: IProps) => {
             defaultValue="Etc/GMT"
             render={({ field: { onChange, value } }) => (
               <Suspense fallback={<TimeZoneSuspense />}>
-                <TimeZoneSelector onChange={onChange} timeZone={value} />
+                <div id="setting-time-zone">
+                  <TimeZoneSelector onChange={onChange} timeZone={value} />
+                </div>
               </Suspense>
             )}
           />
@@ -322,6 +338,7 @@ export const UserSettingsForm = (props: IProps) => {
         <div className="mb-3">
           <Input
             {...register('localDomain')}
+            id="setting-localDomain"
             label={
               <>
                 {t('SETTINGS_GENERAL_LOCAL_DOMAIN')}
@@ -335,7 +352,7 @@ export const UserSettingsForm = (props: IProps) => {
             placeholder="tipi.lan"
             disabled={initialValues?.advancedSettings === false}
           />
-          <Button className="mt-2 mb-2" onClick={downloadCertificate}>
+          <Button id="setting-certificate" className="mt-2 mb-2" onClick={downloadCertificate}>
             {t('SETTINGS_GENERAL_DOWNLOAD_CERTIFICATE')}
           </Button>
         </div>
@@ -353,6 +370,7 @@ export const UserSettingsForm = (props: IProps) => {
                 defaultValue={false}
                 render={({ field: { onChange, value, ref, ...rest } }) => (
                   <Switch
+                    id="setting-persistTraefikConfig"
                     className="mb-3"
                     ref={ref}
                     checked={value}
@@ -374,6 +392,7 @@ export const UserSettingsForm = (props: IProps) => {
             <div className="mb-3">
               <Input
                 {...register('domain')}
+                id="setting-domain"
                 label={
                   <>
                     {t('SETTINGS_GENERAL_DOMAIN')}
@@ -390,6 +409,7 @@ export const UserSettingsForm = (props: IProps) => {
             <div className="mb-3">
               <Input
                 {...register('internalIp')}
+                id="setting-internalIp"
                 label={
                   <>
                     {t('SETTINGS_GENERAL_INTERNAL_IP')}
@@ -406,6 +426,7 @@ export const UserSettingsForm = (props: IProps) => {
             <div className="mb-3">
               <Input
                 {...register('listenIp')}
+                id="setting-listenIp"
                 label={
                   <>
                     {t('SETTINGS_GENERAL_LISTEN_IP')}
@@ -424,6 +445,7 @@ export const UserSettingsForm = (props: IProps) => {
                 {...register('port', {
                   valueAsNumber: true,
                 })}
+                id="setting-port"
                 label={
                   <>
                     {t('SETTINGS_GENERAL_PORT')}
@@ -444,6 +466,7 @@ export const UserSettingsForm = (props: IProps) => {
                 {...register('sslPort', {
                   valueAsNumber: true,
                 })}
+                id="setting-sslPort"
                 label={
                   <>
                     {t('SETTINGS_GENERAL_SSL_PORT')}
@@ -465,6 +488,7 @@ export const UserSettingsForm = (props: IProps) => {
                   valueAsNumber: true,
                   required: true,
                 })}
+                id="setting-eventsTimeout"
                 label={
                   <>
                     {t('SETTINGS_GENERAL_EVENTS_TIMEOUT')}
@@ -485,6 +509,7 @@ export const UserSettingsForm = (props: IProps) => {
                   valueAsNumber: true,
                   required: true,
                 })}
+                id="setting-maxBackups"
                 label={
                   <>
                     {t('SETTINGS_GENERAL_MAX_BACKUPS')}
@@ -504,6 +529,7 @@ export const UserSettingsForm = (props: IProps) => {
             <div className="mb-3">
               <Input
                 {...register('appDataPath')}
+                id="setting-appDataPath"
                 label={
                   <>
                     {t('SETTINGS_GENERAL_APP_DATA_PATH')}
@@ -520,6 +546,7 @@ export const UserSettingsForm = (props: IProps) => {
             <div className="mb-3">
               <Input
                 {...register('forwardAuthUrl')}
+                id="setting-forwardAuthUrl"
                 label={
                   <>
                     {t('SETTINGS_GENERAL_FORWARD_AUTH_URL')}
@@ -540,7 +567,7 @@ export const UserSettingsForm = (props: IProps) => {
                 defaultValue="info"
                 render={({ field: { onChange, value } }) => (
                   <Select value={value} defaultValue="info" onValueChange={onChange}>
-                    <SelectTrigger className="mb-3" name="logLevel" label={t('SETTINGS_GENERAL_LOG_LEVEL')}>
+                    <SelectTrigger id="setting-logLevel" className="mb-3" name="logLevel" label={t('SETTINGS_GENERAL_LOG_LEVEL')}>
                       <SelectValue placeholder="Log level" />
                     </SelectTrigger>
                     <SelectContent>
@@ -556,10 +583,12 @@ export const UserSettingsForm = (props: IProps) => {
             </div>
           </div>
         )}
-        <Button loading={loading} type="submit" intent="success">
-          {t('SAVE')}
-        </Button>
-      </form>
-    </>
+        {sharedSave.shared ? null : (
+          <Button loading={loading} type="submit" intent="success">
+            {t('SAVE')}
+          </Button>
+        )}
+      </fieldset>
+    </form>
   );
 };

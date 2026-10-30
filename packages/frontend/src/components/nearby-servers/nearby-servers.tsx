@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { initialNearbySearch, NearbySearch } from './nearby-search';
@@ -14,9 +15,9 @@ export function NearbyResult({ item, disabled, onSelect }: { item: NearbyCandida
         <span>{item.kind === 'address' ? 'Unverified · HTTPS required' : 'Unverified'}</span>
       </div>
       {item.kind === 'address' ? null : (
-        <button type="button" className="btn btn-secondary" disabled={disabled} onClick={onSelect}>
+        <Button type="button" variant="outline" disabled={disabled} onClick={onSelect}>
           Select
-        </button>
+        </Button>
       )}
     </li>
   );
@@ -63,9 +64,9 @@ export function NearbyServers({ onSelect }: { onSelect: (origin: string) => void
             </SelectContent>
           </Select>
         ) : null}
-        <button type="button" className="btn btn-secondary" disabled={busy || !visible} onClick={() => void controller.refresh()}>
+        <Button type="button" variant="outline" disabled={busy || !visible} onClick={() => void controller.refresh()}>
           Refresh
-        </button>
+        </Button>
       </div>
       <output aria-live="polite">{busy ? 'Searching…' : message}</output>
       {candidates.length ? (

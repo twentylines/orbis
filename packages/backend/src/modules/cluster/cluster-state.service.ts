@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { type } from 'arktype';
 import { ConfigurationService } from '@/core/config/configuration.service';
-import { clusterOrigin, CLUSTER_PROTOCOL, digest, equalSecret, signedHeaders } from './cluster-transport';
+import { clusterOrigin, CLUSTER_PROTOCOL, digest, accountPairingCodeHash, equalSecret, signedHeaders } from './cluster-transport';
 import { clusterCertificateTrustSchema } from './cluster-certificate';
 
 const peerSchema = type({
@@ -23,7 +23,7 @@ const stateSchema = type({
   serverName: 'string',
   'admin?': { id: 'string', name: 'string', secret: 'string' },
   peers: peerSchema.array().atMostLength(12),
-  'invite?': { hash: 'string', expiresAt: 'number' },
+  'invite?': { hash: 'string', expiresAt: 'number', 'ownerId?': 'number', 'authVersion?': '2' },
   nonces: type({ value: 'string', expiresAt: 'number' }).array(),
 });
 export type ClusterState = typeof stateSchema.infer;
@@ -137,18 +137,26 @@ export class ClusterStateService {
     });
   }
 
-  invite() {
+  invite(ownerId?: number) {
     return this.transaction((state) => {
       if (state.role !== 'standalone') throw new ConflictException('This server already belongs to a cluster. Leave it before pairing.');
+      if (ownerId !== undefined && (!Number.isSafeInteger(ownerId) || ownerId <= 0))
+        throw new BadRequestException('An operator account is required for pairing.');
       const code = randomBytes(12).toString('hex').toUpperCase();
       const expiresAt = Date.now() + 5 * 60_000;
-      state.invite = { hash: digest(code), expiresAt };
+      state.invite = {
+        hash: ownerId === undefined ? digest(code) : accountPairingCodeHash(code),
+        expiresAt,
+        ...(ownerId === undefined ? {} : { ownerId, authVersion: 2 as const }),
+      };
       return { code, expiresAt: new Date(expiresAt).toISOString() };
     });
   }
 
   accept(body: Record<string, unknown>) {
     return this.transaction((state) => {
+      if (state.invite?.authVersion === 2 || state.invite?.ownerId !== undefined)
+        throw new UnauthorizedException('Authorize pairing with the other server account.');
       if (
         body.protocol !== CLUSTER_PROTOCOL ||
         state.role !== 'standalone' ||

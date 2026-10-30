@@ -26,6 +26,7 @@ export const taskRecordSchema = type({
   updatedAt: timestamp,
   startedAt: timestamp.or('null'),
   finishedAt: timestamp.or('null'),
+  attentionRevision: type('number.integer >= 0 & number <= 2147483647').optional(),
 });
 
 export const taskHistorySchema = type({
@@ -39,3 +40,12 @@ export const taskHistorySchema = type({
 export type TaskRecord = typeof taskRecordSchema.infer;
 export type TaskAction = typeof taskActionSchema.infer;
 export type TaskHistory = typeof taskHistorySchema.infer;
+
+export const taskAttentionKey = (task: TaskRecord) =>
+  ['failed', 'interrupted', 'unconfirmed'].includes(task.status) ? `${task.id}:${task.status}:${task.attentionRevision ?? 0}` : null;
+export const taskAttentionKeysSchema = type('string')
+  .narrow((key) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}:(failed|interrupted|unconfirmed):(?:0|[1-9]\d{0,9})$/i.test(key))
+  .array()
+  .atMostLength(4096)
+  .narrow((keys) => new Set(keys).size === keys.length);
+export const taskAttentionLedgerSchema = type({ version: '1', keys: taskAttentionKeysSchema }).onUndeclaredKey('reject');

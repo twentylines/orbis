@@ -86,7 +86,7 @@ describe('server automatic update scheduling', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-24T03:20:00Z'));
     vi.stubEnv('ORBIS_VERSION', 'v0.1.0-beta.91');
-    directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-automatic-test-'));
+    directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-automatic-test-')));
     serverZone = 'UTC';
     config.get
       .mockReset()
@@ -715,6 +715,130 @@ describe('server automatic update scheduling', () => {
     expect((await automatic.read()).available).toBe(false);
     expect(releases.latest).not.toHaveBeenCalled();
     expect(lifecycle.updateApp).not.toHaveBeenCalled();
+  });
+
+  it('persists independent Core time while legacy app-time saves, rules and restart retain their own intent', async () => {
+    await automatic.updateApp('manual:tipi', { mode: 'disabled' });
+    await automatic.updateApp('custom:tipi', { mode: 'custom', time: '06:00' });
+    await automatic.update({ ...settings(true, 'scheduled', '04:00'), orbisSchedule: { time: '03:00' } });
+    const revision = (await automatic.read()).revision;
+    await automatic.update({ ...settings(true, 'scheduled', '07:00'), expectedRevision: revision });
+    expect(await automatic.read()).toMatchObject({
+      capabilities: ['independent-schedules.v1'],
+      orbisSchedule: { time: '03:00' },
+      settings: { schedule: { time: '07:00' } },
+    });
+    const raw = await stored();
+    expect(raw.settings.orbis.enabled).toBe(false);
+    expect(automaticUpdateStateSchema.allows(raw)).toBe(true);
+    expect(raw.rules).toEqual({ 'manual:tipi': { mode: 'disabled' }, 'custom:tipi': { mode: 'custom', time: '06:00' } });
+    automatic.onModuleDestroy();
+    automatic = create();
+    await automatic.onModuleInit();
+    expect(await automatic.read()).toMatchObject({
+      settings: { orbis: { enabled: true }, schedule: { time: '07:00' } },
+      orbisSchedule: { time: '03:00' },
+    });
+    await expect(automatic.update({ ...settings(false), expectedRevision: revision })).rejects.toThrow('settings changed');
+  });
+  it('migrates a legacy enabled Core schedule once, then leaves strict legacy readers OFF', async () => {
+    const folder = path.join(directory, 'state', 'automatic-updates');
+    await fs.mkdir(folder, { recursive: true, mode: 0o700 });
+    await fs.writeFile(
+      path.join(folder, 'settings.json'),
+      JSON.stringify({
+        version: 1,
+        revision: 4,
+        settings: settings(true, 'scheduled', '05:00'),
+        rules: {},
+        apps: {},
+        orbis: null,
+        pauseReason: null,
+      }),
+      { mode: 0o600 },
+    );
+    automatic.onModuleDestroy();
+    automatic = create();
+    await automatic.onModuleInit();
+    expect(await automatic.read()).toMatchObject({ settings: { orbis: { enabled: true } }, orbisSchedule: { time: '05:00' } });
+    expect((await stored()).settings.orbis.enabled).toBe(false);
+    expect(JSON.parse(await fs.readFile(path.join(folder, 'system.json'), 'utf8')).enabled).toBe(false);
+    expect(host.apply).not.toHaveBeenCalled();
+  });
+  it('a partial consent write cannot enable a legacy reader or lose retained app attempts', async () => {
+    await seedHistory({ 'retained:tipi': attempt('accepted', 2) }, {}, false);
+    const before = await stored();
+    const rename = fs.rename;
+    const failure = vi.spyOn(fs, 'rename').mockImplementation(async (source, target) => {
+      if (String(target).endsWith('/schedule-policy.json')) throw new Error('Controlled policy write failure');
+      return rename(source, target);
+    });
+    await expect(automatic.update({ ...settings(true, 'scheduled', '04:00'), orbisSchedule: { time: '03:00' } })).rejects.toThrow('saved safely');
+    failure.mockRestore();
+    expect((await stored()).settings.orbis.enabled).toBe(false);
+    expect((await stored()).apps).toEqual(before.apps);
+    automatic.onModuleDestroy();
+    automatic = create();
+    await automatic.onModuleInit();
+    quiet();
+    await automatic.tick();
+    expect((await automatic.read()).settings.orbis.enabled).toBe(false);
+    expect(host.apply).not.toHaveBeenCalled();
+    expect((await stored()).apps).toEqual(before.apps);
+  });
+  it('legacy config changes invalidate independent consent and require explicit re-enable', async () => {
+    await automatic.update({ ...settings(true, 'scheduled', '04:00'), orbisSchedule: { time: '02:00' } });
+    const raw = await stored();
+    raw.revision++;
+    raw.settings.schedule.time = '07:00';
+    await fs.writeFile(path.join(directory, 'state/automatic-updates/settings.json'), JSON.stringify(raw));
+    automatic.onModuleDestroy();
+    automatic = create();
+    await automatic.onModuleInit();
+    const read = await automatic.read();
+    expect(read.settings.orbis.enabled).toBe(false);
+    expect(read.pauseReason).toContain('outside this schedule');
+    expect(read.orbisSchedule.time).toBe('02:00');
+    await automatic.update({ ...read.settings, orbis: { ...read.settings.orbis, enabled: true }, expectedRevision: read.revision });
+    expect((await automatic.read()).settings.orbis.enabled).toBe(true);
+  });
+  it('future independent-policy schema stays untouched and never falls back to a shared-time enabled grant', async () => {
+    await automatic.update(settings(true));
+    const file = path.join(directory, 'state/automatic-updates/schedule-policy.json');
+    const raw = '{"version":2}';
+    await fs.writeFile(file, raw);
+    automatic.onModuleDestroy();
+    automatic = create();
+    await automatic.onModuleInit();
+    quiet();
+    await automatic.tick();
+    expect((await automatic.read()).available).toBe(false);
+    expect((await automatic.readSystem()).settings.enabled).toBe(false);
+    expect(host.apply).not.toHaveBeenCalled();
+    expect(await fs.readFile(file, 'utf8')).toBe(raw);
+  });
+
+  it('an error after publishing the enabled policy leaves a durable pending guard and stays paused on restart', async () => {
+    await automatic.update(settings(false));
+    const rename = fs.rename;
+    const failure = vi.spyOn(fs, 'rename').mockImplementation(async (source, target) => {
+      await rename(source, target);
+      if (String(target).endsWith('/schedule-policy.json')) throw new Error('Controlled error after policy rename');
+    });
+    await expect(automatic.update({ ...settings(true, 'scheduled', '04:00'), orbisSchedule: { time: '03:00' } })).rejects.toThrow('saved safely');
+    failure.mockRestore();
+    const folder = path.join(directory, 'state/automatic-updates');
+    expect(JSON.parse(await fs.readFile(path.join(folder, 'schedule-policy.json'), 'utf8')).orbis.enabled).toBe(true);
+    expect((await fs.stat(path.join(folder, 'schedule-policy.json.pending'))).mode & 0o077).toBe(0);
+    expect((await stored()).settings.orbis.enabled).toBe(false);
+    automatic.onModuleDestroy();
+    automatic = create();
+    await automatic.onModuleInit();
+    quiet();
+    await automatic.tick();
+    expect((await automatic.read()).available).toBe(false);
+    expect((await automatic.read()).settings.orbis.enabled).toBe(false);
+    expect(host.apply).not.toHaveBeenCalled();
   });
 });
 

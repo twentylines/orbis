@@ -1,9 +1,26 @@
-import { BadRequestException, ForbiddenException, Body, Controller, Delete, Get, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { HostUpdatesGuard } from '../host-updates/host-updates.guard';
 import { ClusterService } from './cluster.service';
 import { ClusterStateService } from './cluster-state.service';
+import { ClusterPairingExceptionFilter, pairingInput } from './cluster-pairing.controller';
 
 @Controller('cluster')
 export class ClusterController {
@@ -37,18 +54,25 @@ export class ClusterController {
   }
 
   @Post('invite')
+  @UseFilters(ClusterPairingExceptionFilter)
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   @UseGuards(AuthGuard, HostUpdatesGuard)
   invite(@Req() request: Request, @Body() body: Record<string, unknown>) {
-    return this.cluster.invite(body, this.operator(request));
+    const actor = this.operator(request);
+    return this.cluster.invite(pairingInput(request, body), actor);
   }
 
   @Post('pair')
+  @UseFilters(ClusterPairingExceptionFilter)
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   @UseGuards(AuthGuard, HostUpdatesGuard)
   pair(@Req() request: Request, @Body() body: Record<string, unknown>) {
-    return this.cluster.pair(body, this.operator(request));
+    const actor = this.operator(request);
+    return this.cluster.pair(pairingInput(request, body), actor);
   }
 
   @Post('accept')
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   accept(@Body() body: Record<string, unknown>) {
     return this.state.accept(body);
   }

@@ -13,19 +13,19 @@ export const publicThemePackWallpapers = {
   alpine: {
     name: 'Alpine',
     hash: '6dbaac76b6a77df63379af3ddf8b311e75af57c389a69a921d36eec805398efe',
-    path: '/wallpapers/graphite.webp',
+    path: '/wallpapers/theme-pack-alpine-v1.webp',
     bytes: 303372,
   },
   tideline: {
     name: 'Tideline',
     hash: '209416fb881a62165ab4fb3bb939f95af6b9fe40d42f7b926c6bb76cb450221f',
-    path: '/wallpapers/ocean.webp',
+    path: '/wallpapers/theme-pack-tideline-v1.webp',
     bytes: 176806,
   },
   woodland: {
     name: 'Woodland',
     hash: '5ad60fb90e61215096b4e9315f750f039b83e050bc1a95c94c3c39fdfd689031',
-    path: '/wallpapers/forest.webp',
+    path: '/wallpapers/theme-pack-woodland-v1.webp',
     bytes: 205358,
   },
 } as const;

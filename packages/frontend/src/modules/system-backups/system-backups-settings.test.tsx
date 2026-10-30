@@ -4,8 +4,19 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { appContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
 import { AppContextProvider } from '@/context/app-context';
 import { startExport } from './backup-api';
-import type { BackupSnapshot, ImportJob, RestoreJob } from './contracts';
-import { BackupEncryptionFields, backupEncryptionPassphrase, SystemBackupsSettings } from './system-backups-settings';
+import { Dialog, retainDialogChildren } from '@/components/ui/Dialog/Dialog';
+import { backupRemovalContents, BackupRemoveTrigger } from './backup-removal-confirmation';
+import { placeBackupRemoval, restoreBackupRemovalFocus } from './backup-removal-position';
+import type { BackupSnapshot, ExportJob, ImportJob, RestoreJob } from './contracts';
+import {
+  BackupDownloadReady,
+  BackupEncryptionFields,
+  BackupArchiveKeyFields,
+  BackupFormError,
+  prepareBackupSubmission,
+  backupEncryptionPassphrase,
+  SystemBackupsSettings,
+} from './system-backups-settings';
 
 function render(
   job: RestoreJob | null = null,
@@ -14,11 +25,12 @@ function render(
   imports: ImportJob[] = [],
   initialImportId?: string,
   statusError = false,
+  exports: ExportJob[] = [],
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true, totpEnabled: true } });
   const snapshot: BackupSnapshot = {
-    exports: { available: true, retentionHours: 24, jobs: [] },
+    exports: { available: true, retentionHours: 24, jobs: exports },
     imports: { available: true, retentionHours: 24, jobs: imports },
     restore: { job },
   };
@@ -236,4 +248,255 @@ test('server restore actions are grouped within full backup and recovery, withou
   expect(settings).toContain('aria-label="Restore from another server"');
   expect(settings.lastIndexOf('Restore from another server')).toBeLessThan(settings.lastIndexOf('</section>'));
   expect(render(null, true, action)).not.toContain('aria-label="Restore from another server"');
+});
+
+const completedExport: ExportJob = {
+  id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  createdAt: 1,
+  updatedAt: 2,
+  message: 'Complete.',
+  status: 'succeeded',
+  stage: 'complete',
+  completedBytes: 128,
+  totalBytes: 128,
+  needsRecovery: false,
+  restartRequired: false,
+};
+test('a completed backup exposes one clear Download action for saving the encrypted archive locally', () => {
+  const markup = render(null, false, undefined, [], undefined, false, [completedExport]);
+  expect(markup).toContain('Save the encrypted backup to your computer.');
+  expect(markup.match(/>Download<\/button>/g)).toHaveLength(1);
+  expect(markup).toContain('system-backups-download-ready');
+  expect(markup).not.toContain('/download');
+  expect(markup).not.toContain('Download requested.');
+});
+test('download readiness stays absent for unfinished or failed exports and disabled while status is uncertain', () => {
+  for (const status of ['running', 'failed', 'cancelled', 'interrupted'] as const)
+    expect(
+      renderToStaticMarkup(
+        <BackupDownloadReady
+          job={{ ...completedExport, status }}
+          disabled={false}
+          onDownload={() => {
+            throw new Error('Unexpected action.');
+          }}
+        />,
+      ),
+    ).toBe('');
+  const markup = renderToStaticMarkup(
+    <BackupDownloadReady
+      job={completedExport}
+      disabled
+      onDownload={() => {
+        throw new Error('Unexpected action.');
+      }}
+    />,
+  );
+  expect(markup).toContain('disabled=""');
+  expect(markup).toContain('Download');
+  expect(markup).not.toContain('password');
+});
+
+type SubmitOptions = Parameters<typeof prepareBackupSubmission>[2];
+function submitFixture(values: FormData) {
+  const secrets = ['password', 'totpCode', 'passphrase', 'repeatPassphrase'].map((name) => ({ name, value: String(values.get(name) ?? '') }));
+  const selectedFile = { name: 'encrypted.orbis', size: 100 };
+  const calls: string[] = [];
+  const form = {
+    querySelectorAll(selector: string) {
+      calls.push(selector);
+      return secrets as unknown as NodeListOf<HTMLInputElement>;
+    },
+    reset() {
+      throw new Error('The complete draft must not be reset.');
+    },
+  };
+  const options: SubmitOptions = {
+    kind: 'export',
+    totpEnabled: false,
+    useAccountPassword: false,
+    archiveKeyMode: null,
+    fileValid: true,
+    restoreValid: true,
+  };
+  return { form, secrets, selectedFile, calls, options };
+}
+test('actual submit preparation rejects missing fresh auth before clearing any draft or selected file', () => {
+  for (const [password, code, required, field] of [
+    ['', '', false, 'password'],
+    ['x'.repeat(1025), '', false, 'password'],
+    ['local password', '', true, 'totpCode'],
+    ['local password', '12345', true, 'totpCode'],
+    ['local password', '123 56', false, 'totpCode'],
+  ] as const) {
+    const values = encryptionValues(password, 'separate backup key');
+    values.set('totpCode', code);
+    const fixture = submitFixture(values);
+    const before = fixture.secrets.map((entry) => entry.value);
+    try {
+      prepareBackupSubmission(fixture.form, values, { ...fixture.options, totpEnabled: required });
+      throw new Error('Expected local validation failure');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BackupFormError);
+      expect((error as BackupFormError).field).toBe(field);
+    }
+    expect(fixture.calls).toHaveLength(0);
+    expect(fixture.secrets.map((entry) => entry.value)).toEqual(before);
+    expect(fixture.selectedFile).toEqual({ name: 'encrypted.orbis', size: 100 });
+  }
+});
+test('local key mismatch, missing explicit legacy mode, file and restore confirmation leave all secrets intact', () => {
+  for (const [change, values, field] of [
+    [{}, encryptionValues('local password', 'separate backup key', 'different backup key'), 'repeatPassphrase'],
+    [{}, encryptionValues('local password', 'short'), 'passphrase'],
+    [{ kind: 'review' }, encryptionValues('local password', 'archive backup key'), 'keyMode'],
+    [{ kind: 'upload', fileValid: false }, encryptionValues('local password'), 'file'],
+    [{ kind: 'restore', restoreValid: false }, encryptionValues('local password'), 'confirmation'],
+  ] as const) {
+    const fixture = submitFixture(values);
+    const before = fixture.secrets.map((entry) => entry.value);
+    try {
+      prepareBackupSubmission(fixture.form, values, { ...fixture.options, ...change });
+      throw new Error('Expected failure');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BackupFormError);
+      expect((error as BackupFormError).field).toBe(field);
+    }
+    expect(fixture.calls).toHaveLength(0);
+    expect(fixture.secrets.map((entry) => entry.value)).toEqual(before);
+  }
+});
+test('dispatch preparation preserves exact local auth and separate key while clearing only secret inputs', () => {
+  const password = '  local password  ';
+  const key = '  independent archive key  ';
+  const values = encryptionValues(password, key);
+  values.set('totpCode', '001234');
+  const fixture = submitFixture(values);
+  const result = prepareBackupSubmission(fixture.form, values, { ...fixture.options, totpEnabled: true });
+  expect(result).toEqual({ credentials: { password, totpCode: '001234' }, passphrase: key });
+  expect(fixture.secrets.every((entry) => entry.value === '')).toBe(true);
+  expect(fixture.calls).toEqual(['input[type="password"], input[name="totpCode"]']);
+  expect(fixture.selectedFile.name).toBe('encrypted.orbis');
+  const legacy = encryptionValues('different local password', 'original source password');
+  for (const archiveKeyMode of ['account-password', 'passphrase'] as const) {
+    const other = submitFixture(legacy);
+    expect(prepareBackupSubmission(other.form, legacy, { ...other.options, kind: 'review', archiveKeyMode }).passphrase).toBe(
+      'original source password',
+    );
+  }
+});
+test('legacy archive key choice is explicit and its labels never claim detected metadata', () => {
+  const fields = (mode: Parameters<typeof BackupArchiveKeyFields>[0]['mode']) =>
+    renderToStaticMarkup(<BackupArchiveKeyFields id="legacy" mode={mode} disabled={false} onChange={() => {}} />);
+  const unknown = fields(null);
+  expect(unknown).toContain('Existing backups do not record this choice');
+  expect(unknown).not.toContain('name="passphrase"');
+  expect(unknown).not.toContain('aria-pressed="true"');
+  expect(fields('account-password')).toContain('Original account password');
+  expect(fields('passphrase')).toContain('Backup passphrase');
+  for (const mode of ['account-password', 'passphrase'] as const) {
+    expect(fields(mode)).toContain('name="passphrase"');
+    expect(fields(mode)).not.toContain('name="password"');
+  }
+});
+
+test('backup removal stays out of the job list until its anchored confirmation opens', () => {
+  const markup = render(null, false, undefined, [selectedImport, unrelatedImport]);
+  expect(markup.match(/data-backup-removal-trigger="true"/g)).toHaveLength(2);
+  expect(markup.match(/backup-removal-trash/g)).toHaveLength(2);
+  expect(markup).not.toContain('Remove uploaded backup?');
+  expect(markup).not.toContain('permanently deletes');
+  const trigger = renderToStaticMarkup(<BackupRemoveTrigger disabled onClick={() => {}} />);
+  expect(trigger).toContain('disabled=""');
+  expect(trigger).toContain('aria-hidden="true"');
+});
+
+test('backup confirmation preserves the selected archive and nearby error throughout closing', () => {
+  const snapshot = { current: null as React.ReactNode };
+  const prompt = backupRemovalContents({
+    kind: 'import',
+    busy: false,
+    disabled: false,
+    error: 'Deletion failed. Try again.',
+    onCancel: () => {},
+    onRemove: () => {},
+  });
+  retainDialogChildren(snapshot, true, prompt);
+  const closed = retainDialogChildren(
+    snapshot,
+    false,
+    backupRemovalContents({ kind: 'export', busy: false, disabled: false, error: null, onCancel: () => {}, onRemove: () => {} }),
+  );
+  const markup = renderToStaticMarkup(<Dialog open>{closed}</Dialog>);
+  expect(markup).toContain('Remove uploaded backup?');
+  expect(markup).not.toContain('Remove server backup copy?');
+  expect(markup).toContain('Files already saved on your device are unaffected.');
+  expect(markup).toContain('backup-removal-error');
+  expect(markup).toContain('Deletion failed. Try again.');
+  expect(markup).toContain('>Cancel</button>');
+  expect(markup).toContain('backup-removal-trash');
+  expect(markup).toContain('btn-outline-danger');
+});
+
+test('backup confirmation locks both matching actions while deletion is pending', () => {
+  const markup = renderToStaticMarkup(
+    <Dialog open>
+      {backupRemovalContents({ kind: 'export', busy: true, disabled: false, error: null, onCancel: () => {}, onRemove: () => {} })}
+    </Dialog>,
+  );
+  expect(markup.match(/disabled=""/g)).toHaveLength(2);
+  expect(markup).toContain('aria-busy="true"');
+  expect(markup).toContain('Remove server backup copy?');
+  const blocked = renderToStaticMarkup(
+    <Dialog open>
+      {backupRemovalContents({ kind: 'import', busy: false, disabled: true, error: null, onCancel: () => {}, onRemove: () => {} })}
+    </Dialog>,
+  );
+  expect(blocked.match(/disabled=""/g)).toHaveLength(1);
+});
+
+test('backup popout follows the clicked row and flips above a bottom row', () => {
+  const bounds = { left: 0, top: 40, right: 1000, bottom: 700 };
+  expect(placeBackupRemoval({ left: 700, top: 200, right: 780, bottom: 244 }, { width: 320, height: 230 }, bounds)).toEqual({
+    left: 460,
+    top: 252,
+    width: 320,
+    maxHeight: 440,
+    side: 'bottom',
+  });
+  expect(placeBackupRemoval({ left: 700, top: 620, right: 780, bottom: 664 }, { width: 320, height: 230 }, bounds)).toEqual({
+    left: 460,
+    top: 382,
+    width: 320,
+    maxHeight: 564,
+    side: 'top',
+  });
+});
+
+test('backup popout clamps narrow and enlarged layouts to the visible scrolling boundary', () => {
+  for (const bounds of [
+    { left: 0, top: 44, right: 320, bottom: 580 },
+    { left: 24, top: 100, right: 414, bottom: 420 },
+  ]) {
+    const position = placeBackupRemoval({ left: 240, top: 330, right: 320, bottom: 374 }, { width: 320, height: 720 }, bounds);
+    expect(position.left).toBeGreaterThanOrEqual(bounds.left + 8);
+    expect(position.left + position.width).toBeLessThanOrEqual(bounds.right - 8);
+    expect(position.top).toBeGreaterThanOrEqual(bounds.top + 8);
+    expect(position.top + Math.min(720, position.maxHeight)).toBeLessThanOrEqual(bounds.bottom - 8);
+    expect(position.maxHeight).toBeGreaterThan(140);
+  }
+});
+
+test('backup dismissal preserves scroll and skips a removed or disabled opener', () => {
+  const calls: unknown[] = [];
+  const element = (connected: boolean, disabled = false) =>
+    ({
+      isConnected: connected,
+      matches: () => disabled,
+      getClientRects: () => [1],
+      focus: (options: unknown) => calls.push(options),
+    }) as unknown as HTMLElement;
+  expect(restoreBackupRemovalFocus([element(false), element(true, true), element(true)])).toBe(true);
+  expect(calls).toEqual([{ preventScroll: true }]);
+  expect(restoreBackupRemovalFocus([null, element(false)])).toBe(false);
 });

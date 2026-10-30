@@ -1,6 +1,29 @@
 .appearance {
   padding: 8px 0 20px;
 }
+.theme-packs-settings {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.theme-packs-settings > label {
+  flex: 1 1 200px;
+  max-width: 28rem;
+}
+.theme-packs-settings .orbis-select-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.theme-packs-settings svg {
+  flex: none;
+}
+.theme-packs-settings > .theme-packs-feedback {
+  flex: 1 1 100%;
+}
 .appearance-note {
   display: block;
   color: var(--desktop-muted);
@@ -281,13 +304,13 @@
   background-size: cover;
 }
 .appearance-wallpaper-sandstone {
-  background-image: url("/wallpapers/orbis-horizon-preview.webp");
+  background-image: url("/wallpapers/stone-v2-preview.webp");
 }
 .appearance-wallpaper-tidal {
-  background-image: url("/wallpapers/ocean-preview.webp");
+  background-image: url("/wallpapers/ocean-v3-preview.webp");
 }
 .appearance-wallpaper-canopy {
-  background-image: url("/wallpapers/forest-preview.webp");
+  background-image: url("/wallpapers/forest-v2-preview.webp");
 }
 .appearance-choice,
 .appearance-actions {
@@ -617,4 +640,48 @@ fieldset.appearance-choice {
 .appearance-low-effects .orbis-switch {
   min-height: 44px;
   margin: 0;
+}
+.appearance-fine-controls {
+  min-width: 0;
+  border-radius: 10px;
+  background: var(--desktop-surface);
+}
+.appearance-fine-controls > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 12px;
+  border-radius: inherit;
+  list-style: none;
+  cursor: pointer;
+}
+.appearance-fine-controls > summary::-webkit-details-marker {
+  display: none;
+}
+.appearance-fine-controls > summary:hover {
+  background: color-mix(in srgb, var(--desktop-preset-tint) 10%, transparent);
+}
+.appearance-fine-controls > summary > svg {
+  flex: none;
+  transition: transform 180ms ease;
+}
+.appearance-fine-controls[open] > summary > svg {
+  transform: rotate(180deg);
+}
+.appearance-fine-controls > .appearance-range-grid {
+  padding: 12px;
+  animation: orbis-feedback-enter 180ms ease both;
+}
+.appearance-fine-controls > .appearance-actions {
+  padding: 0 12px 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .appearance-fine-controls > summary > svg {
+    transition: none;
+  }
+  .appearance-fine-controls > .appearance-range-grid {
+    animation: none;
+  }
 }

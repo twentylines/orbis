@@ -1,5 +1,4 @@
-import type { CSSProperties } from 'react';
-import { IconRocket } from '@tabler/icons-react';
+import { DepthTravel } from './depth-travel';
 import { useReducedMotion } from '@/desktop/motion-preferences';
 import { formatBackupBytes, progressPercent } from '@/modules/system-backups/contracts';
 import './recovery-progress.css';
@@ -18,24 +17,7 @@ export function RecoveryProgress({ label, completed = 0, total = null, settled =
   const reduced = useReducedMotion();
   return (
     <div className="recovery-progress" data-reduced={Boolean(reduced)} data-active={!settled} data-known={percentage !== undefined}>
-      {journey ? (
-        <div className="recovery-flight" aria-hidden="true" style={{ '--recovery-position': `${percentage ?? 50}%` } as CSSProperties}>
-          <div className="recovery-stars">
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-          </div>
-          <span className="recovery-planet recovery-planet-origin" />
-          <span className="recovery-route" />
-          <span className="recovery-ship">
-            <IconRocket size={28} stroke={1.6} />
-          </span>
-          <span className="recovery-planet recovery-planet-destination" />
-        </div>
-      ) : null}
+      {journey ? <DepthTravel active={!settled} className="recovery-flight" /> : null}
       <div className="recovery-progress-heading">
         <span>{label}</span>
         <span>{percentage === undefined ? 'Working…' : `${percentage}%`}</span>

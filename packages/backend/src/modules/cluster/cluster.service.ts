@@ -1,5 +1,12 @@
 import { randomBytes } from 'node:crypto';
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { AppsService } from '../apps/apps.service';
 import { AppLifecycleService } from '../app-lifecycle/app-lifecycle.service';
@@ -71,7 +78,13 @@ export class ClusterService {
   async invite(body: Record<string, unknown>, userId: number) {
     this.fields(body, ['password', 'totpCode']);
     await this.approveTrust(userId, body);
-    return this.state.invite();
+    try {
+      return await this.state.invite(userId);
+    } catch (error) {
+      if (['EACCES', 'EPERM', 'ENOSPC', 'EROFS', 'EIO'].includes((error as NodeJS.ErrnoException)?.code ?? ''))
+        throw new ServiceUnavailableException('The pairing code could not be saved. Check server storage permissions and free space.');
+      throw error;
+    }
   }
 
   async pair(body: Record<string, unknown>, userId: number) {

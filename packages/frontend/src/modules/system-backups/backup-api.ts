@@ -6,6 +6,7 @@ import {
   parseBackupResponse,
   restoreStatusSchema,
   type BackupSnapshot,
+  type ImportJob,
 } from './contracts';
 
 export type BackupCredentials = { password: string; totpCode?: string };
@@ -18,8 +19,49 @@ const restoreConflictMessages = new Set([
   'Another container is writing Orbis data. Stop it before creating a full backup.',
   'Full restore requires supported writable bind storage. No server data has been changed.',
   'This controller cannot prepare an isolated restore worker. No server data has been changed.',
+  'Backup import storage needs review. No server data has been changed.',
+  'Review this backup again before preparing its restore.',
+  'Wait for the current backup upload or review to finish.',
+  'Finish the current backup or recover its apps before starting another.',
 ]);
 const conflictBodyLimit = 16 * 1024;
+const safeBadRequestMessages = new Map([
+  ['AUTH_ERROR_INVALID_PASSWORD', 'The current account password is incorrect. Use the password for this server, not the backup key.'],
+  ['AUTH_ERROR_TOTP_INVALID_CODE', 'The authentication code is incorrect or expired. Enter a new code for this account.'],
+  ['Confirm this action with your account password.', 'Enter this server’s current account password to confirm the action.'],
+  [
+    'Provide your password, authentication code if enabled, and a backup passphrase of at least 12 characters.',
+    'Check the current account password and authentication code. The backup key must contain 12 to 1024 characters.',
+  ],
+  ['Use a backup passphrase between 12 and 1024 characters.', 'Use a backup key between 12 and 1024 characters.'],
+  [
+    'The backup could not be opened. Check its passphrase and file.',
+    'The archive could not be opened. Check its original password or separate passphrase and file.',
+  ],
+  ['Choose a complete encrypted Orbis backup.', 'Choose a complete encrypted Orbis backup file.'],
+  ['Choose an encrypted Orbis backup file.', 'Choose an encrypted Orbis backup file.'],
+  ['The backup upload did not finish. Choose the file again.', 'The backup upload did not finish. Choose the file again.'],
+  ['There is not enough free storage to receive this backup.', 'There is not enough free storage to upload this backup. Free space before retrying.'],
+  [
+    'There is not enough free storage to open this backup. Free space and retry its review.',
+    'There is not enough free storage to open this backup. Free space before verifying it again.',
+  ],
+]);
+
+export function safeBackupErrorMessage(status: number, text: string): string | undefined {
+  if (text.length > conflictBodyLimit || new TextEncoder().encode(text).byteLength > conflictBodyLimit) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const message = (parsed as { message?: unknown }).message;
+    if (typeof message !== 'string') return undefined;
+    if (status === 400) return safeBadRequestMessages.get(message);
+    if (status === 409 && restoreConflictMessages.has(message)) return message;
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
 
 export class BackupApiError extends Error {
   constructor(
@@ -27,7 +69,7 @@ export class BackupApiError extends Error {
     public readonly recognizedSafeMessage?: string,
   ) {
     super(
-      status === 409 && recognizedSafeMessage
+      (status === 400 || status === 409) && recognizedSafeMessage
         ? recognizedSafeMessage
         : status === 401
           ? 'Sign in again to continue. Backup status will be checked after sign-in.'
@@ -46,7 +88,7 @@ export class BackupApiError extends Error {
   }
 }
 
-async function recognizedConflictMessage(response: Response): Promise<string | undefined> {
+async function recognizedErrorMessage(response: Response): Promise<string | undefined> {
   const body = response.body;
   if (!body) return undefined;
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -71,10 +113,7 @@ async function recognizedConflictMessage(response: Response): Promise<string | u
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
-    const message = (parsed as { message?: unknown }).message;
-    return typeof message === 'string' && restoreConflictMessages.has(message) ? message : undefined;
+    return safeBackupErrorMessage(response.status, new TextDecoder().decode(bytes));
   } catch {
     try {
       await reader?.cancel();
@@ -103,7 +142,7 @@ export async function backupRequest(path: string, method = 'GET', body?: unknown
     ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   });
   if (!response.ok) {
-    const safeMessage = response.status === 409 ? await recognizedConflictMessage(response) : undefined;
+    const safeMessage = response.status === 400 || response.status === 409 ? await recognizedErrorMessage(response) : undefined;
     throw new BackupApiError(response.status, safeMessage);
   }
   try {
@@ -131,7 +170,12 @@ export async function createImport(credentials: BackupCredentials, signal?: Abor
   return parseBackupResponse(importJobSchema, await backupRequest('/imports', 'POST', credentials, signal));
 }
 
-export function uploadBackup(id: string, file: File, signal: AbortSignal, onProgress: (completed: number, total: number) => void): Promise<void> {
+export function uploadBackup(
+  id: string,
+  file: File,
+  signal: AbortSignal,
+  onProgress: (completed: number, total: number) => void,
+): Promise<ImportJob> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('PUT', endpoint(`/imports/${id}/file`));
@@ -143,13 +187,14 @@ export function uploadBackup(id: string, file: File, signal: AbortSignal, onProg
     request.upload.onprogress = (event) => onProgress(event.loaded, event.lengthComputable ? event.total : file.size);
     request.onload = () => {
       clean();
-      if (request.status < 200 || request.status >= 300) return reject(new BackupApiError(request.status));
+      if (request.status < 200 || request.status >= 300)
+        return reject(new BackupApiError(request.status, safeBackupErrorMessage(request.status, request.responseText)));
       try {
         const result = parseBackupResponse(importJobSchema, JSON.parse(request.responseText));
-        if (result.status !== 'uploaded' || result.uploadedBytes !== file.size)
+        if (result.id !== id || result.status !== 'uploaded' || result.uploadedBytes !== file.size)
           throw new Error('The server has not confirmed the complete upload. Refresh status.');
         onProgress(file.size, file.size);
-        resolve();
+        resolve(result);
       } catch {
         reject(new Error('The complete upload could not be verified. Refresh status before retrying.'));
       }

@@ -1,9 +1,11 @@
+import { useAppContext } from '@/context/app-context';
+import { searchSettings, settingsPath, settingsSections, resolveSettingsSection } from '@/modules/settings/helpers/settings-catalogue';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { getInstalledAppsOptions, searchAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import * as Dialog from '@radix-ui/react-dialog';
-import { IconArrowUpRight, IconSearch, IconX } from '@tabler/icons-react';
+import { IconArrowUpRight, IconSearch, IconSettings, IconX } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import {
   useCallback,
@@ -39,9 +41,9 @@ const destinationDetails: Record<string, string> = {
   'Task centre': 'Active operations and task history',
   'Device history': 'Storage activity and network history',
   'Drive health': 'SMART warnings, drive wear and disk self-tests',
-  Appearance: 'Themes, wallpapers, text size and motion',
+  Customise: 'Colours, wallpaper, text size and workspace',
   Security: 'Password, passkeys and two-factor authentication',
-  'Server settings': 'Server name, domain and network preferences',
+  General: 'Server, time zone and network preferences',
   'App stores': 'Manage app repositories and sources',
   'System logs': 'Read Orbis and server diagnostics',
 };
@@ -52,6 +54,8 @@ const appPath = (urn: string, catalogue = false) => {
 const reducedMotion = () => prefersReducedMotion();
 
 export function CommandSearch() {
+  const { user, userSettings } = useAppContext();
+  const settingsAccess = { operator: user.operator === true, advanced: userSettings.advancedSettings === true };
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [search, setSearch] = useState('');
@@ -280,6 +284,12 @@ export function CommandSearch() {
   const needle = query.toLocaleLowerCase();
   const terms = needle.split(/\s+/).filter(Boolean);
   const sections: SearchResult[] = desktopSearchSections
+    .filter(
+      ({ path }) =>
+        !path.startsWith('/settings?tab=') ||
+        settingsAccess.operator ||
+        !['general', 'updates', 'backups', 'cluster', 'logs'].includes(resolveSettingsSection(new URLSearchParams(path.split('?')[1]).get('tab'))),
+    )
     .filter((section) => terms.every((term) => `${section.label} ${section.keywords}`.toLocaleLowerCase().includes(term)))
     .filter(
       ({ path }) =>
@@ -319,8 +329,22 @@ export function CommandSearch() {
             icon: <AppLogo urn={info.urn} size={32} alt="" />,
           }))
       : [];
+  const settingResults: SearchResult[] =
+    query && (scope === 'all' || scope === 'settings')
+      ? searchSettings(query, settingsAccess).map((entry) => ({
+          id: `setting-${entry.id}`,
+          path: settingsPath(entry),
+          label: entry.label,
+          detail: `Settings · ${settingsSections.find((section) => section.id === entry.section)?.label}`,
+          icon: <IconSettings size={22} aria-hidden="true" />,
+        }))
+      : [];
+  const destinationGroup = { name: query ? 'Pages and tools' : scope === 'all' ? 'Quick destinations' : 'Pages and tools', items: sections };
+  const settingsGroup = { name: 'Settings', items: settingResults };
   const groups = [
-    { name: query ? 'Pages and tools' : scope === 'all' ? 'Quick destinations' : 'Pages and tools', items: sections },
+    ...(sections.some((section) => section.label.toLocaleLowerCase() === needle)
+      ? [destinationGroup, settingsGroup]
+      : [settingsGroup, destinationGroup]),
     { name: 'Installed apps', items: scope === 'all' || scope === 'apps' ? installedResults : [] },
     { name: 'App Store', items: scope === 'all' || scope === 'store' ? storeResults : [] },
   ];

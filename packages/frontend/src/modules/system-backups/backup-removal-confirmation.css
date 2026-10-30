@@ -1,0 +1,73 @@
+.backup-removal-trash {
+  flex: none;
+  color: var(--desktop-negative);
+}
+.modal-content.orbis-dialog-content.backup-removal-dialog {
+  transform: none;
+  transform-origin: top right;
+  min-width: 0;
+  scroll-padding-block: 12px;
+}
+.orbis-dialog-content.backup-removal-dialog[data-placement="top"] {
+  transform-origin: bottom right;
+}
+.orbis-dialog-content.backup-removal-dialog .orbis-dialog-header,
+body:has(.orbis-theme) .orbis-dialog-content.backup-removal-dialog .orbis-dialog-header {
+  min-height: 0;
+  gap: 12px;
+  padding: 14px 18px;
+}
+.orbis-dialog-content.backup-removal-dialog .modal-title {
+  font-size: 1rem;
+  line-height: 1.45;
+}
+.orbis-dialog-content.backup-removal-dialog .backup-removal-copy {
+  padding: 0 18px 16px;
+  line-height: 1.6;
+}
+.orbis-dialog-content.backup-removal-dialog .backup-removal-actions {
+  padding: 0 18px 18px;
+  gap: 10px;
+}
+.orbis-dialog-content.backup-removal-dialog .backup-removal-actions > .btn {
+  flex: 1 1 8rem;
+  min-width: max-content;
+  max-width: 100%;
+  min-height: 44px;
+}
+.backup-removal-dialog .backup-removal-error {
+  margin: 0 18px 16px;
+  line-height: 1.55;
+}
+.orbis-dialog-content.backup-removal-dialog[data-state="open"] {
+  animation: backup-removal-in 160ms ease-out;
+}
+.orbis-dialog-content.backup-removal-dialog[data-state="closed"] {
+  pointer-events: none;
+  animation: backup-removal-out 140ms ease-in;
+}
+@keyframes backup-removal-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes backup-removal-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-dialog-content.backup-removal-dialog[data-state] {
+    animation: none;
+  }
+}

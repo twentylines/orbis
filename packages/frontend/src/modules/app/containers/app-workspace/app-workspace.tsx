@@ -19,7 +19,7 @@ import './app-workspace.css';
 type Props = { info: AppInfo; app?: AppDetails | null; metadata: AppMetadata; logo?: ReactNode };
 
 export function AppWorkspace({ info, app, metadata, logo }: Props) {
-  const { userSettings, user } = useAppContext();
+  const { userSettings } = useAppContext();
   const { t } = useTranslation();
   const location = useLocation();
   const preview = useStorePreview();
@@ -71,14 +71,7 @@ export function AppWorkspace({ info, app, metadata, logo }: Props) {
           </div>
         </div>
         <div className="app-workspace-controls">
-          <AppActions
-            app={app}
-            metadata={metadata}
-            info={info}
-            localDomain={userSettings.localDomain}
-            sslPort={userSettings.sslPort}
-            allowQuickInstall={user.operator}
-          />
+          <AppActions app={app} metadata={metadata} info={info} localDomain={userSettings.localDomain} sslPort={userSettings.sslPort} />
         </div>
       </header>
       <dl className="app-workspace-facts">

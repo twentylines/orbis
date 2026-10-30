@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test';
-import { authorityRequestGate, certificateReadGate, pairingRequest, requestScope, type PairingDraft } from './cluster-pairing-state';
+import {
+  authorityRequestGate,
+  certificateReadGate,
+  pairingConnectionRequest,
+  pairingRequest,
+  requestScope,
+  type PairingDraft,
+} from './cluster-pairing-state';
 const certificate = { pem: 'public-certificate-only', sha256: 'a'.repeat(64), confirmed: false };
 const draft = (overrides: Partial<PairingDraft> = {}): PairingDraft => ({
   url: 'https://peer.home.arpa',
@@ -165,4 +172,9 @@ test('same numeric account id cannot retain an old request across username or se
     gate.bind({ ...next });
     expect(current.current()).toBe(true);
   }
+});
+
+test('account pairing cannot opt into HTTP even though existing legacy peers remain supported', () => {
+  expect(() => pairingConnectionRequest(draft({ url: 'http://peer.home.arpa', certificateMode: 'system', allowInsecureLan: true }))).toThrow('HTTPS');
+  expect(pairingConnectionRequest(draft())).toEqual(pairingRequest(draft()));
 });

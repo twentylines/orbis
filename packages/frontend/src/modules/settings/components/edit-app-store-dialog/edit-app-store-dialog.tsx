@@ -11,7 +11,6 @@ import { useMutation } from '@tanstack/react-query';
 import { type } from 'arktype';
 import { useId } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { AppStoreError } from '../app-stores-table/app-store-error';
 import { revealTableAction } from '@/components/multi-service-form/elements/reveal-table-action';
@@ -35,7 +34,6 @@ export const EditAppStoreDialog = ({ appStore }: Props) => {
     ...updateAppStoreMutation(),
     onSuccess: () => {
       editAppStoreDisclosure.close();
-      toast.success(t('APP_STORE_EDIT_DIALOG_SUCCESS'));
     },
   });
 

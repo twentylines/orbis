@@ -92,6 +92,7 @@
   gap: 12px;
   width: 100%;
   min-width: 0;
+  min-height: 44px;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -100,6 +101,17 @@
   text-align: left;
   font: inherit;
   cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease;
+}
+.cluster-summary-select:hover {
+  color: var(--desktop-accent);
+}
+.cluster-summary-select:focus-visible {
+  outline: 3px solid var(--desktop-focus);
+  outline-offset: 4px;
+  border-radius: 8px;
 }
 .cluster-summary-select > svg {
   flex: none;

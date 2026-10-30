@@ -20,8 +20,12 @@ export const SecurityContainer = (props: { totpEnabled: boolean; username?: stri
       <p className="text-muted">
         Choose the identifier you use to sign in. An email address is optional; password recovery is managed on the server.
       </p>
-      <ChangeUsernameForm username={username} />
-      <PasskeySettings totpEnabled={totpEnabled} />
+      <div id="setting-username">
+        <ChangeUsernameForm username={username} />
+      </div>
+      <div id="setting-passkeys">
+        <PasskeySettings totpEnabled={totpEnabled} />
+      </div>
       <div className="settings-security-heading">
         <IconKey aria-hidden="true" />
         <h2 title={t('SETTINGS_SECURITY_CHANGE_PASSWORD_TITLE')}>
@@ -29,7 +33,9 @@ export const SecurityContainer = (props: { totpEnabled: boolean; username?: stri
         </h2>
       </div>
       <p className="text-muted">{t('SETTINGS_SECURITY_CHANGE_PASSWORD_SUBTITLE')}</p>
-      <ChangePasswordForm />
+      <div id="setting-password">
+        <ChangePasswordForm />
+      </div>
       <div className="settings-security-heading">
         <IconLock aria-hidden="true" />
         <h2 title={t('SETTINGS_SECURITY_2FA_TITLE')}>
@@ -37,7 +43,9 @@ export const SecurityContainer = (props: { totpEnabled: boolean; username?: stri
         </h2>
       </div>
       <p className="text-muted">{t('SETTINGS_SECURITY_2FA_SUBTITLE')}</p>
-      <OtpForm totpEnabled={totpEnabled} />
+      <div id="setting-two-factor">
+        <OtpForm totpEnabled={totpEnabled} />
+      </div>
     </div>
   );
 };

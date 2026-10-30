@@ -4,7 +4,7 @@ export const syncCategoryNames = {
   customisation: 'Customisation',
   'orbis-updates': 'Orbis updates',
   'app-updates': 'App updates',
-  schedules: 'Schedules',
+  schedules: 'App schedules',
 } as const;
 export type SyncCategory = keyof typeof syncCategoryNames;
 export const syncCategoryKeys = Object.keys(syncCategoryNames) as SyncCategory[];

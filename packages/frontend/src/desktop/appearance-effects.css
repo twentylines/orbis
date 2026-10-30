@@ -13,7 +13,7 @@
   /* biome-ignore lint/complexity/noImportantStyles: Stop persistent decorative animation while preserving final states. */
   animation-iteration-count: 1 !important;
   /* biome-ignore lint/complexity/noImportantStyles: Override component transitions for the saved accessibility preference. */
-  transition-duration: 0.01ms !important;
+  transition-duration: var(--orbis-reduced-transition-duration, 0.01ms) !important;
   /* biome-ignore lint/complexity/noImportantStyles: Keyboard focus reveal must remain immediate with reduced motion. */
   scroll-behavior: auto !important;
 }

@@ -46,15 +46,17 @@ export function withCumulativeCriticalPriority(
   ) {
     return gt(target.criticalThrough, installed) ? { ...target, priority: 'critical' } : target;
   }
-  const hasUnappliedCriticalRelease = published.some(
-    (release) =>
-      release.priority === 'critical' &&
-      releaseAllowedOnChannel(release.tag, channel) &&
-      valid(release.tag) &&
-      gt(release.tag, installed) &&
-      lte(release.tag, target.tag),
-  );
-  return hasUnappliedCriticalRelease ? { ...target, priority: 'critical' } : target;
+  const latestCritical = published
+    .filter(
+      (release) =>
+        release.priority === 'critical' &&
+        releaseAllowedOnChannel(release.tag, channel) &&
+        valid(release.tag) &&
+        gt(release.tag, installed) &&
+        lte(release.tag, target.tag),
+    )
+    .sort((left, right) => rcompare(left.tag, right.tag))[0];
+  return latestCritical ? { ...target, priority: 'critical', criticalThrough: latestCritical.tag } : target;
 }
 
 export function parseOrbisReleaseNotes(notes: string): {

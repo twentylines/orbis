@@ -32,9 +32,19 @@ describe('opt-in scheduled system updates', () => {
   let directory: string;
   let automatic: AutomaticUpdatesService;
   let activity: MonitoringActivityService;
-  const host = { status: vi.fn(), packages: vi.fn(), packageJob: vi.fn(), packageRefresh: vi.fn(), packagePlan: vi.fn(), packageApply: vi.fn() };
+  const host = {
+    status: vi.fn(),
+    packages: vi.fn(),
+    packageJob: vi.fn(),
+    packageRefresh: vi.fn(),
+    packagePlan: vi.fn(),
+    packageApply: vi.fn(),
+    plan: vi.fn(),
+    apply: vi.fn(),
+  };
   const config = { get: vi.fn() };
-  const apps = { getApps: vi.fn() };
+  const apps = { getApps: vi.fn(), getAppByUrn: vi.fn() };
+  const marketplace = { getAppUpdateInfo: vi.fn() };
   const releases = { latest: vi.fn() };
   const channels = { read: vi.fn(async () => ({ version: 1 as const, channel: 'nightly' as const, revision: 'initial' })) };
   const lifecycle = { updateApp: vi.fn() };
@@ -45,14 +55,14 @@ describe('opt-in scheduled system updates', () => {
       releases as never,
       activity,
       apps as never,
-      {} as never,
+      marketplace as never,
       lifecycle as never,
       { warn: vi.fn() } as never,
       channels as never,
     );
   const file = (name = 'system.json') => path.join(directory, 'state/automatic-updates', name);
-  const ready = async () => {
-    await automatic.updateSystem({ enabled: true });
+  const ready = async (time = '03:00') => {
+    await automatic.updateSystem({ enabled: true, schedule: { time } });
     vi.setSystemTime(Date.now() + 11 * 60_000);
   };
   const reload = async () => {
@@ -65,7 +75,7 @@ describe('opt-in scheduled system updates', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-25T03:05:00Z'));
     vi.stubEnv('ORBIS_VERSION', healthy.currentTag);
-    directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-system-schedule-'));
+    directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-system-schedule-')));
     config.get
       .mockReset()
       .mockImplementation((key: string) => (key === 'directories' ? { dataDir: directory } : key === 'userSettings' ? { timeZone: 'UTC' } : false));
@@ -77,6 +87,8 @@ describe('opt-in scheduled system updates', () => {
     host.packagePlan.mockResolvedValue({ planId: installId, selected: [candidate], operations: [{ ...candidate, action: 'upgrade' }] });
     host.packageApply.mockResolvedValue({ jobId: installId, state: 'queued' });
     apps.getApps.mockReset().mockResolvedValue([]);
+    apps.getAppByUrn.mockReset().mockResolvedValue({ status: 'running', version: 1, ignoredVersion: null });
+    marketplace.getAppUpdateInfo.mockReset().mockResolvedValue({ latestVersion: 2 });
     releases.latest.mockReset();
     lifecycle.updateApp.mockReset();
     activity = new MonitoringActivityService();
@@ -116,20 +128,20 @@ describe('opt-in scheduled system updates', () => {
     expect(releases.latest).not.toHaveBeenCalled();
     expect(lifecycle.updateApp).not.toHaveBeenCalled();
   });
-  it('uses the shared scheduled time while browsers are active, rather than Orbis-only idle scheduling', async () => {
+  it('uses its independent configured time while browsers are active, rather than the apps time or Orbis-only idle scheduling', async () => {
     await automatic.update({ ...globalSettings, schedule: { time: '05:00', timezone: 'UTC' } });
-    await ready();
+    await ready('04:00');
     const disconnect = activity.connect();
     await automatic.tick();
     expect(host.packageRefresh).not.toHaveBeenCalled();
-    vi.setSystemTime(new Date('2026-10-25T05:01:00Z'));
+    vi.setSystemTime(new Date('2026-10-25T04:01:00Z'));
     await automatic.tick();
     expect(host.packageRefresh).toHaveBeenCalledTimes(1);
     disconnect();
   });
   it('uses the current server timezone for the system schedule even when stored policy used another zone', async () => {
     await automatic.update({ ...globalSettings, schedule: { time: '05:00', timezone: 'UTC' } });
-    await ready();
+    await ready('05:00');
     config.get.mockImplementation((key: string) =>
       key === 'directories' ? { dataDir: directory } : key === 'userSettings' ? { timeZone: 'Asia/Singapore' } : false,
     );
@@ -245,7 +257,7 @@ describe('opt-in scheduled system updates', () => {
           resolve = done;
         }),
     );
-    const enabling = automatic.updateSystem({ enabled: true });
+    const enabling = automatic.updateSystem({ enabled: true, schedule: { time: '03:00' } });
     await vi.waitFor(() => expect(host.status).toHaveBeenCalledTimes(1));
     await automatic.updateSystem({ enabled: false });
     resolve(healthy);
@@ -260,7 +272,7 @@ describe('opt-in scheduled system updates', () => {
           resolve = done;
         }),
     );
-    const enabling = automatic.updateSystem({ enabled: true });
+    const enabling = automatic.updateSystem({ enabled: true, schedule: { time: '03:00' } });
     await vi.waitFor(() => expect(host.status).toHaveBeenCalledTimes(1));
     await automatic.pauseForDowngrade();
     resolve(healthy);
@@ -320,5 +332,102 @@ describe('opt-in scheduled system updates', () => {
     await automatic.updateSystem({ enabled: false });
     await expect(automatic.updateSystem({ enabled: true })).rejects.toThrow('host service');
     expect((await automatic.readSystem()).settings.enabled).toBe(false);
+  });
+
+  it('requires an explicitly configured system time before any enablement host probe', async () => {
+    await expect(automatic.updateSystem({ enabled: true })).rejects.toThrow('Choose and save a system update time');
+    expect(host.status).not.toHaveBeenCalled();
+    expect((await automatic.readSystem()).settings.schedule).toBeNull();
+    await automatic.updateSystem({ enabled: false, schedule: { time: '05:00' } });
+    expect(host.status).not.toHaveBeenCalled();
+    expect((await automatic.readSystem()).settings).toMatchObject({ enabled: false, schedule: { time: '05:00' } });
+    await automatic.updateSystem({ enabled: true });
+    expect((await automatic.readSystem()).settings).toMatchObject({ enabled: true, schedule: { time: '05:00' } });
+    const stored = JSON.parse(await fs.readFile(file(), 'utf8'));
+    expect(stored.enabled).toBe(false);
+  });
+  it('pauses legacy enabled system policy without silently adopting the apps default time', async () => {
+    const folder = path.dirname(file());
+    await fs.mkdir(folder, { recursive: true, mode: 0o700 });
+    await fs.writeFile(
+      file(),
+      JSON.stringify({
+        version: 1,
+        revision: 3,
+        enabled: true,
+        phase: null,
+        settingsRevision: null,
+        policyRevision: null,
+        attempt: null,
+        pauseReason: null,
+      }),
+      { mode: 0o600 },
+    );
+    await reload();
+    await automatic.tick();
+    expect(await automatic.readSystem()).toMatchObject({
+      settings: { enabled: false, schedule: null },
+      pauseReason: expect.stringContaining('Choose and save'),
+    });
+    expect(host.packageRefresh).not.toHaveBeenCalled();
+    expect(JSON.parse(await fs.readFile(file(), 'utf8')).enabled).toBe(false);
+  });
+  it('rejects stale system revision and independent time edits stop refresh-to-install continuation', async () => {
+    await ready();
+    await automatic.tick();
+    const read = await automatic.readSystem();
+    await expect(automatic.updateSystem({ enabled: true, expectedRevision: read.revision - 1 })).rejects.toThrow('settings changed');
+    await automatic.updateSystem({ enabled: true, schedule: { time: '07:00' }, expectedRevision: read.revision });
+    await automatic.tick();
+    expect(host.packageApply).not.toHaveBeenCalled();
+  });
+  it('a partial system consent write leaves legacy OFF and cannot resurrect enabled policy after restart', async () => {
+    await ready();
+    const rename = fs.rename;
+    const failure = vi.spyOn(fs, 'rename').mockImplementation(async (source, target) => {
+      if (String(target).endsWith('/schedule-policy.json')) throw new Error('Controlled system consent write failure');
+      return rename(source, target);
+    });
+    await expect(automatic.updateSystem({ enabled: true, schedule: { time: '06:00' } })).rejects.toThrow('saved safely');
+    failure.mockRestore();
+    expect(JSON.parse(await fs.readFile(file(), 'utf8')).enabled).toBe(false);
+    await reload();
+    await automatic.tick();
+    expect((await automatic.readSystem()).settings.enabled).toBe(false);
+    expect(host.packageRefresh).not.toHaveBeenCalled();
+  });
+
+  it('actually admits Core03, apps04 and system05 independently and serializes simultaneous ticks', async () => {
+    releases.latest.mockResolvedValue({
+      tag: 'v0.1.0-beta.99',
+      imageManifestUrl: 'https://github.com/twentylines/orbis/releases/download/v0.1.0-beta.99/release-manifest.json',
+    });
+    host.plan.mockResolvedValue({ planId: 'core-plan', currentTag: healthy.currentTag, targetTag: 'v0.1.0-beta.99', appsMustBeStopped: false });
+    host.apply.mockResolvedValue({ jobId: 'core-job' });
+    lifecycle.updateApp.mockResolvedValue({ requestId: 'app-job' });
+    apps.getApps.mockResolvedValue([{ appName: 'media', appStoreSlug: 'store', status: 'running', version: 1 }]);
+    await automatic.update({
+      orbis: { enabled: true, mode: 'scheduled' },
+      apps: { enabled: true },
+      schedule: { time: '04:00' },
+      orbisSchedule: { time: '03:00' },
+    });
+    await ready('05:00');
+    await Promise.all(Array.from({ length: 8 }, () => automatic.tick()));
+    expect(host.apply).toHaveBeenCalledTimes(1);
+    expect(lifecycle.updateApp).not.toHaveBeenCalled();
+    expect(host.packageRefresh).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date('2026-10-25T04:01:00Z'));
+    await Promise.all(Array.from({ length: 8 }, () => automatic.tick()));
+    expect(host.apply).toHaveBeenCalledTimes(1);
+    expect(lifecycle.updateApp).toHaveBeenCalledExactlyOnceWith({ appUrn: 'media:store', performBackup: true });
+    expect(host.packageRefresh).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date('2026-10-25T05:01:00Z'));
+    await Promise.all(Array.from({ length: 8 }, () => automatic.tick()));
+    expect(host.packageRefresh).toHaveBeenCalledTimes(1);
+    expect(host.apply).toHaveBeenCalledTimes(1);
+    expect(lifecycle.updateApp).toHaveBeenCalledTimes(1);
+    await automatic.tick();
+    expect(host.packageApply).toHaveBeenCalledTimes(1);
   });
 });

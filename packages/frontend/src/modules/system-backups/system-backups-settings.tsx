@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
+import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { RecoveryProgress } from '@/components/recovery-progress/recovery-progress';
 import { Alert, InlineFeedback } from '@/components/ui/Alert/Alert';
@@ -29,6 +30,8 @@ import {
   type RestoreJob,
 } from './contracts';
 import { isAcceptedRestoreReconnect, shouldStopBackupStatusPolling } from './backup-reconnection';
+import { BackupRemoveTrigger, BackupRemovalConfirmation, type BackupRemovalTarget } from './backup-removal-confirmation';
+import type { BackupRemovalRect } from './backup-removal-position';
 import './system-backups-settings.css';
 
 type Action =
@@ -78,6 +81,18 @@ const submitLabels: Record<Action['kind'], string> = {
   'recover-restore': 'Recover',
 };
 
+export function BackupDownloadReady({ job, disabled, onDownload }: { job: ExportJob; disabled: boolean; onDownload: () => void }) {
+  if (job.status !== 'succeeded') return null;
+  return (
+    <div className="system-backups-download-ready">
+      <p>Save the encrypted backup to your computer.</p>
+      <Button type="button" intent="primary" disabled={disabled} onClick={onDownload}>
+        Download
+      </Button>
+    </div>
+  );
+}
+
 export function backupEncryptionPassphrase(values: FormData, kind: 'export' | 'review', useAccountPassword: boolean): string {
   const account = kind === 'export' && useAccountPassword;
   const passphrase = String(values.get(account ? 'password' : 'passphrase') ?? '');
@@ -92,6 +107,106 @@ export function backupEncryptionPassphrase(values: FormData, kind: 'export' | 'r
     throw new Error('The backup passphrases did not match. Enter them again.');
   }
   return passphrase;
+}
+
+type ArchiveKeyMode = 'account-password' | 'passphrase';
+type BackupField = 'password' | 'totpCode' | 'passphrase' | 'repeatPassphrase' | 'keyMode' | 'confirmation' | 'file';
+export class BackupFormError extends Error {
+  constructor(
+    public readonly field: BackupField,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+export function prepareBackupSubmission(
+  form: Pick<HTMLFormElement, 'querySelectorAll'>,
+  values: FormData,
+  options: {
+    kind: Action['kind'];
+    totpEnabled: boolean;
+    useAccountPassword: boolean;
+    archiveKeyMode: ArchiveKeyMode | null;
+    fileValid: boolean;
+    restoreValid: boolean;
+  },
+) {
+  const password = values.get('password');
+  const code = values.get('totpCode');
+  if (typeof password !== 'string' || !password.length || password.length > 1024)
+    throw new BackupFormError('password', 'Enter this server’s current account password.');
+  if ((options.totpEnabled || (code !== null && code !== '')) && (typeof code !== 'string' || !/^\d{6}$/.test(code)))
+    throw new BackupFormError('totpCode', 'Enter the six-digit authentication code for this account.');
+  let passphrase = '';
+  if (options.kind === 'review' && !options.archiveKeyMode) throw new BackupFormError('keyMode', 'Choose how this backup was encrypted.');
+  if (options.kind === 'export' || options.kind === 'review') {
+    const keyField = options.kind === 'export' && options.useAccountPassword ? 'password' : 'passphrase';
+    if (typeof values.get(keyField) !== 'string') throw new BackupFormError(keyField, 'Enter the backup key.');
+    try {
+      passphrase = backupEncryptionPassphrase(values, options.kind, options.useAccountPassword);
+    } catch (error) {
+      const repeat = error instanceof Error && error.message === 'The backup passphrases did not match. Enter them again.';
+      throw new BackupFormError(repeat ? 'repeatPassphrase' : keyField, error instanceof Error ? error.message : 'Check the backup key.');
+    }
+  }
+  if (options.kind === 'upload' && !options.fileValid) throw new BackupFormError('file', 'Choose a complete encrypted Orbis backup file.');
+  if (options.kind === 'restore' && !options.restoreValid)
+    throw new BackupFormError('confirmation', 'Verify this backup again and confirm replacement before restoring.');
+  for (const field of form.querySelectorAll<HTMLInputElement>('input[type="password"], input[name="totpCode"]')) field.value = '';
+  return { credentials: { password, ...(typeof code === 'string' && code ? { totpCode: code } : {}) } satisfies BackupCredentials, passphrase };
+}
+
+export function BackupArchiveKeyFields({
+  mode,
+  disabled,
+  onChange,
+  id,
+}: {
+  mode: ArchiveKeyMode | null;
+  disabled: boolean;
+  onChange: (mode: ArchiveKeyMode) => void;
+  id: string;
+}) {
+  return (
+    <div className="system-backups-archive-key">
+      <p id={`${id}-key-label`}>How was this backup encrypted?</p>
+      <SelectionGroup role="group" aria-labelledby={`${id}-key-label`}>
+        <Button
+          id={`${id}-keyMode`}
+          type="button"
+          variant="outline"
+          aria-pressed={mode === 'account-password'}
+          disabled={disabled}
+          onClick={() => onChange('account-password')}
+        >
+          Account password
+        </Button>
+        <Button type="button" variant="outline" aria-pressed={mode === 'passphrase'} disabled={disabled} onClick={() => onChange('passphrase')}>
+          Separate passphrase
+        </Button>
+      </SelectionGroup>
+      {mode ? (
+        <Input
+          name="passphrase"
+          id={`${id}-passphrase`}
+          label={mode === 'account-password' ? 'Original account password' : 'Backup passphrase'}
+          type="password"
+          autoComplete="off"
+          minLength={12}
+          maxLength={1024}
+          required
+          disabled={disabled}
+        />
+      ) : null}
+      <p>
+        {mode === 'account-password'
+          ? 'Use the account password from when this backup was created.'
+          : mode === 'passphrase'
+            ? 'Use the separate passphrase chosen when this backup was created.'
+            : 'Existing backups do not record this choice. Choose the key you used when creating it.'}
+      </p>
+    </div>
+  );
 }
 
 export function BackupEncryptionFields({
@@ -237,11 +352,19 @@ export function SystemBackupsSettings({
   const [action, setAction] = useState<Action | null>(() => (restoreOnly && embedded && !initialImportId ? { kind: 'upload' } : null));
   const [file, setFile] = useState<File | null>(null);
   const [useAccountPassword, setUseAccountPassword] = useState(true);
+  const [archiveKeyMode, setArchiveKeyMode] = useState<ArchiveKeyMode | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardJob, setWizardJob] = useState<{ kind: 'export' | 'import'; id: string } | null>(null);
   const [wizardPurpose, setWizardPurpose] = useState<Action['kind'] | null>(null);
   const [busy, setBusy] = useState(false);
-  const [removal, setRemoval] = useState<{ kind: 'export' | 'import'; id: string } | null>(null);
+  const [removal, setRemoval] = useState<BackupRemovalTarget | null>(null);
+  const [removalError, setRemovalError] = useState<string | null>(null);
+  const [removalAnchorRect, setRemovalAnchorRect] = useState<BackupRemovalRect | null>(null);
+  const removalAnchor = useRef<HTMLElement | null>(null);
+  const removalFallback = useRef<HTMLElement | null>(null);
+  const removalDeleted = useRef(false);
+  const removalActive = useRef(false);
+  const section = useRef<HTMLElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [upload, setUpload] = useState<{ completed: number; total: number; confirmed: boolean } | null>(null);
@@ -263,6 +386,7 @@ export function SystemBackupsSettings({
     setNotice(null);
     setUpload(null);
     setUseAccountPassword(true);
+    setArchiveKeyMode(null);
     setWizardJob(
       'job' in next && ['review', 'restore', 'download', 'recover-export'].includes(next.kind)
         ? { kind: next.kind === 'download' || next.kind === 'recover-export' ? 'export' : 'import', id: next.job.id }
@@ -271,6 +395,7 @@ export function SystemBackupsSettings({
     setWizardPurpose(next.kind);
     if (!embedded) setWizardOpen(true);
     setAction(next);
+    removalActive.current = false;
     setRemoval(null);
   };
   useEffect(() => {
@@ -287,7 +412,7 @@ export function SystemBackupsSettings({
         ? actionKeyboard.current
         : document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible');
       credentialsForm.current?.querySelector<HTMLElement>(keyboard ? 'input:not([type=hidden]):not([type=file])' : 'h3')?.focus();
-    } else if ((embedded || !wizardOpen) && actionOpener.current?.isConnected) actionOpener.current.focus();
+    } else if (!removalActive.current && (embedded || !wizardOpen) && actionOpener.current?.isConnected) actionOpener.current.focus();
   }, [action, embedded, wizardOpen]);
   const data = status.data;
   useEffect(() => {
@@ -295,6 +420,7 @@ export function SystemBackupsSettings({
     const job = data?.imports.jobs.find((entry) => entry.id === initialImportId);
     if (!job || job.uploadedBytes <= 0 || ['uploading', 'reviewing', 'preparing'].includes(job.status)) return;
     seededImport.current = initialImportId;
+    setArchiveKeyMode(null);
     setAction({ kind: 'review', job });
     setWizardJob({ kind: 'import', id: job.id });
     setWizardPurpose('review');
@@ -324,7 +450,7 @@ export function SystemBackupsSettings({
     Boolean(data?.exports.jobs.some((job) => job.status === 'running' || job.needsRecovery || job.restartRequired)) ||
     Boolean(data?.imports.jobs.some((job) => ['uploading', 'reviewing', 'preparing'].includes(job.status)));
   const refresh = () => void status.refetch();
-  const run = async (work: (signal: AbortSignal) => Promise<void>) => {
+  const run = async (work: (signal: AbortSignal) => Promise<void>, options?: { onError?: (message: string) => void; refresh?: boolean }) => {
     if (running.current) return;
     running.current = true;
     setBusy(true);
@@ -335,33 +461,82 @@ export function SystemBackupsSettings({
     try {
       await work(controller.signal);
     } catch (failure) {
-      if (mounted.current) setError(failure instanceof Error ? failure.message : 'The backup action failed. Refresh status before retrying.');
+      if (mounted.current)
+        (options?.onError ?? setError)(failure instanceof Error ? failure.message : 'The backup action failed. Refresh status before retrying.');
     } finally {
       if (mounted.current) {
         setBusy(false);
-        refresh();
+        if (options?.refresh !== false) refresh();
       }
       abort.current = null;
       running.current = false;
     }
   };
+  const openRemoval = (target: BackupRemovalTarget, opener: HTMLButtonElement) => {
+    const triggers = [...(section.current?.querySelectorAll<HTMLButtonElement>('[data-backup-removal-trigger]') ?? [])];
+    const index = triggers.indexOf(opener);
+    removalAnchor.current = opener;
+    removalFallback.current = triggers[index + 1] ?? triggers[index - 1] ?? section.current;
+    removalDeleted.current = false;
+    removalActive.current = true;
+    setRemovalAnchorRect(opener.getBoundingClientRect());
+    setRemovalError(null);
+    setAction(null);
+    setRemoval(target);
+  };
+  const closeRemoval = () => {
+    if (running.current) return;
+    removalActive.current = false;
+    setRemoval(null);
+    setRemovalError(null);
+  };
+  const confirmRemoval = () => {
+    if (!removal || running.current || status.isError || restoreActive) return;
+    const selected = removal;
+    setRemovalError(null);
+    void run(
+      async (signal) => {
+        await backupRequest(`${selected.kind === 'import' ? '/imports' : ''}/${selected.id}`, 'DELETE', undefined, signal);
+        removalDeleted.current = true;
+        await status.refetch();
+        if (mounted.current) {
+          removalActive.current = false;
+          setRemoval(null);
+          setRemovalError(null);
+        }
+      },
+      { onError: setRemovalError, refresh: false },
+    );
+  };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!action || running.current) return;
     const form = event.currentTarget;
     const values = new FormData(form);
-    const password = String(values.get('password') ?? '');
-    const totpCode = String(values.get('totpCode') ?? '');
     const confirmation = String(values.get('confirmation') ?? '');
-    const credentials: BackupCredentials = { password, ...(totpCode ? { totpCode } : {}) };
-    form.reset();
-    if (!action) return;
-    let passphrase = '';
+    let submission: ReturnType<typeof prepareBackupSubmission>;
     try {
-      if (action.kind === 'export' || action.kind === 'review') passphrase = backupEncryptionPassphrase(values, action.kind, useAccountPassword);
+      submission = prepareBackupSubmission(form, values, {
+        kind: action.kind,
+        totpEnabled: Boolean(user?.totpEnabled),
+        useAccountPassword,
+        archiveKeyMode,
+        fileValid: Boolean(file && file.size >= 52),
+        restoreValid:
+          action.kind !== 'restore' || (confirmation === 'replace-server' && canRestore(action.job, Date.now()) && Boolean(action.job.review)),
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Check the backup password or passphrase.');
+      if (reason instanceof BackupFormError) {
+        const target =
+          reason.field === 'keyMode' || reason.field === 'file'
+            ? form.querySelector<HTMLElement>(`[id="${id}-${reason.field}"]`)
+            : form.querySelector<HTMLElement>(`[name="${reason.field}"]`);
+        target?.focus();
+      }
       return;
     }
+    const { credentials, passphrase } = submission;
     const selected = action;
     void run(async (signal) => {
       if (selected.kind === 'export') {
@@ -372,14 +547,18 @@ export function SystemBackupsSettings({
         const job = await createImport(credentials, signal);
         if (mounted.current) setWizardJob({ kind: 'import', id: job.id });
         setUpload({ completed: 0, total: file.size, confirmed: false });
-        await uploadBackup(job.id, file, signal, (completed, total) => {
+        const uploadedJob = await uploadBackup(job.id, file, signal, (completed, total) => {
           if (mounted.current) setUpload({ completed, total, confirmed: false });
         });
         if (mounted.current) {
           setUpload({ completed: file.size, total: file.size, confirmed: true });
           setFile(null);
-          setNotice('Upload complete. Verify the archive before restoring.');
+          setArchiveKeyMode(null);
+          setAction({ kind: 'review', job: uploadedJob });
+          setWizardPurpose('review');
+          setNotice('Upload complete. Enter the archive key to continue.');
         }
+        return;
       } else if (selected.kind === 'download') {
         downloadCleanup.current?.();
         downloadCleanup.current = downloadBackup(selected.job.id, credentials, (message) => {
@@ -419,18 +598,14 @@ export function SystemBackupsSettings({
   const phraseNeeded = action?.kind === 'review';
   const destructive = action?.kind === 'restore';
   const renderExportJob = (job: ExportJob, inWizard = false) => (
-    <article className="system-backups-job" key={job.id}>
+    <article className="system-backups-job" data-ready={(job.status === 'succeeded' && !job.needsRecovery) || undefined} key={job.id}>
       <h4>{new Date(job.createdAt).toLocaleString()}</h4>
       <p>{job.message}</p>
-      {job.status === 'running' || job.status === 'succeeded' ? (
-        <RecoveryProgress
-          label={job.status === 'succeeded' ? 'Backup ready' : `Backup · ${stageLabels[job.stage] ?? 'Checking progress'}`}
-          completed={job.completedBytes}
-          total={job.totalBytes}
-          settled={job.status === 'succeeded'}
-        />
+      {job.status === 'running' ? (
+        <RecoveryProgress label={`Backup · ${stageLabels[job.stage] ?? 'Checking progress'}`} completed={job.completedBytes} total={job.totalBytes} />
       ) : null}
       {job.restartRequired ? <p role="alert">Apps have recovered. Restart Orbis to finish recovery before making further changes.</p> : null}
+      <BackupDownloadReady job={job} disabled={busy || status.isError} onDownload={() => chooseAction({ kind: 'download', job })} />
       <div className="system-backups-actions">
         {job.status === 'running' ? (
           <Button variant="outline" disabled={busy || status.isError} onClick={() => simpleAction(`/${job.id}/cancel`)}>
@@ -442,22 +617,11 @@ export function SystemBackupsSettings({
             Recover
           </Button>
         ) : null}
-        {job.status === 'succeeded' ? (
-          <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'download', job })}>
-            Download
-          </Button>
-        ) : null}
         {!inWizard && job.status !== 'running' && !job.needsRecovery ? (
-          <Button
-            variant="outline"
+          <BackupRemoveTrigger
             disabled={busy || status.isError}
-            onClick={() => {
-              setAction(null);
-              setRemoval({ kind: 'export', id: job.id });
-            }}
-          >
-            Remove
-          </Button>
+            onClick={(event) => openRemoval({ kind: 'export', id: job.id }, event.currentTarget)}
+          />
         ) : null}
       </div>
     </article>
@@ -497,16 +661,10 @@ export function SystemBackupsSettings({
           </Button>
         ) : null}
         {inWizard || ['uploading', 'reviewing', 'preparing'].includes(job.status) ? null : (
-          <Button
-            variant="outline"
+          <BackupRemoveTrigger
             disabled={busy || restoreActive || status.isError}
-            onClick={() => {
-              setAction(null);
-              setRemoval({ kind: 'import', id: job.id });
-            }}
-          >
-            Remove
-          </Button>
+            onClick={(event) => openRemoval({ kind: 'import', id: job.id }, event.currentTarget)}
+          />
         )}
       </div>
     </article>
@@ -573,6 +731,7 @@ export function SystemBackupsSettings({
               />
               <div className="system-backups-file-picker">
                 <Button
+                  id={`${id}-file`}
                   type="button"
                   variant="outline"
                   disabled={busy}
@@ -607,6 +766,7 @@ export function SystemBackupsSettings({
               </label>
             </>
           ) : null}
+          {phraseNeeded ? <p>Confirm with this server’s current account password. The archive key is entered separately.</p> : null}
           <div className="system-backups-fields">
             <Input
               name="password"
@@ -632,20 +792,20 @@ export function SystemBackupsSettings({
                 disabled={busy}
               />
             ) : null}
-            {phraseNeeded ? (
-              <Input
-                name="passphrase"
-                id={`${id}-passphrase`}
-                label="Original account password or backup passphrase"
-                type="password"
-                autoComplete="off"
-                minLength={12}
-                maxLength={1024}
-                required
-                disabled={busy}
-              />
-            ) : null}
           </div>
+          {phraseNeeded ? (
+            <BackupArchiveKeyFields
+              id={id}
+              mode={archiveKeyMode}
+              disabled={busy}
+              onChange={(mode) => {
+                const field = credentialsForm.current?.querySelector<HTMLInputElement>('input[name="passphrase"]');
+                if (field) field.value = '';
+                setArchiveKeyMode(mode);
+                setError(null);
+              }}
+            />
+          ) : null}
           {action.kind === 'export' ? (
             <BackupEncryptionFields
               id={id}
@@ -657,7 +817,6 @@ export function SystemBackupsSettings({
               }}
             />
           ) : null}
-          {phraseNeeded ? <p>Use the original server account password chosen for this backup, or its separate backup passphrase.</p> : null}
           <div className="system-backups-actions">
             {embedded && action.kind === 'upload' ? null : (
               <Button
@@ -732,7 +891,14 @@ export function SystemBackupsSettings({
     setWizardOpen(false);
   };
   return (
-    <section className="system-backups-settings" data-embedded={embedded} data-reduced={Boolean(reduced)} aria-labelledby={`${id}-title`}>
+    <section
+      ref={section}
+      tabIndex={-1}
+      className="system-backups-settings"
+      data-embedded={embedded}
+      data-reduced={Boolean(reduced)}
+      aria-labelledby={`${id}-title`}
+    >
       {guidedImportId && !status.isError ? (
         <h3 id={`${id}-title`} className="visually-hidden">
           Encrypted backup
@@ -811,30 +977,6 @@ export function SystemBackupsSettings({
       {restoreOnly && data?.exports.jobs.some((job) => job.status === 'running' || job.needsRecovery || job.restartRequired) ? (
         <InlineFeedback>Finish the existing full backup or its app recovery in Settings before starting a restore.</InlineFeedback>
       ) : null}
-      {removal ? (
-        <div className="system-backups-form">
-          <h3>{removal.kind === 'export' ? 'Remove server backup copy?' : 'Remove uploaded backup?'}</h3>
-          <p>This permanently deletes the server’s stored archive and its review. Files already saved on your device are unaffected.</p>
-          <div className="system-backups-actions">
-            <Button
-              type="button"
-              intent="danger"
-              disabled={busy || status.isError || restoreActive}
-              onClick={() =>
-                void run(async (signal) => {
-                  await backupRequest(`${removal.kind === 'import' ? '/imports' : ''}/${removal.id}`, 'DELETE', undefined, signal);
-                  if (mounted.current) setRemoval(null);
-                })
-              }
-            >
-              Remove
-            </Button>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => setRemoval(null)}>
-              Keep
-            </Button>
-          </div>
-        </div>
-      ) : null}
       {embedded ? credentialPanel : null}
       {!restoreOnly && data?.exports.jobs.length ? (
         <div className="system-backups-jobs">
@@ -901,6 +1043,18 @@ export function SystemBackupsSettings({
           </DialogContent>
         </Dialog>
       )}
+      <BackupRemovalConfirmation
+        target={removal}
+        anchor={removalAnchor}
+        anchorRect={removalAnchorRect}
+        fallback={removalFallback}
+        deleted={removalDeleted}
+        busy={busy}
+        disabled={status.isError || restoreActive}
+        error={removalError}
+        onCancel={closeRemoval}
+        onRemove={confirmRemoval}
+      />
     </section>
   );
 }

@@ -478,58 +478,63 @@ function LocalUpdates() {
 
   return (
     <div className="desktop-updates">
-      <SelectionGroup className="desktop-updates-tabs" role="tablist" aria-label="Update categories">
-        {(
-          [
-            {
-              key: 'orbis',
-              label: 'Orbis',
-              Icon: IconRefresh,
-              count: build.data && latest ? Number(Boolean(newerOrbisRelease(latest, build.data.version))) : null,
-            },
-            { key: 'apps', label: 'Apps', Icon: IconPackage, count: apps.data ? available.length : null },
-            { key: 'system', label: 'System', Icon: IconServerCog, count: systemPackages.data?.packageCount ?? null },
-          ] as const
-        ).map(({ key, label, Icon, count }, index, tabs) => (
-          <button
-            type="button"
-            role="tab"
-            key={key}
-            id={`${tabsId}-${key}-tab`}
-            aria-controls={`${tabsId}-${key}-panel`}
-            aria-selected={section === key}
-            aria-label={count !== null ? `${label}, ${count} available updates` : label}
-            tabIndex={section === key ? 0 : -1}
-            onClick={() => setSection(key)}
-            onKeyDown={(event) => {
-              const nextIndex =
-                event.key === 'ArrowRight'
-                  ? (index + 1) % tabs.length
-                  : event.key === 'ArrowLeft'
-                    ? (index + tabs.length - 1) % tabs.length
-                    : event.key === 'Home'
-                      ? 0
-                      : event.key === 'End'
-                        ? tabs.length - 1
-                        : null;
-              if (nextIndex === null) return;
-              event.preventDefault();
-              const next = tabs[nextIndex];
-              if (!next) return;
-              setSection(next.key);
-              document.getElementById(`${tabsId}-${next.key}-tab`)?.focus();
-            }}
-          >
-            <Icon size={18} aria-hidden="true" />
-            <span>{label}</span>
-            {count !== null ? (
-              <span className="desktop-updates-tab-count" aria-hidden="true">
-                {count}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </SelectionGroup>
+      <div className="desktop-updates-toolbar">
+        <SelectionGroup className="desktop-updates-tabs" role="tablist" aria-label="Update categories">
+          {(
+            [
+              {
+                key: 'orbis',
+                label: 'Orbis',
+                Icon: IconRefresh,
+                count: build.data && latest ? Number(Boolean(newerOrbisRelease(latest, build.data.version))) : null,
+              },
+              { key: 'apps', label: 'Apps', Icon: IconPackage, count: apps.data ? available.length : null },
+              { key: 'system', label: 'System', Icon: IconServerCog, count: systemPackages.data?.packageCount ?? null },
+            ] as const
+          ).map(({ key, label, Icon, count }, index, tabs) => (
+            <button
+              type="button"
+              role="tab"
+              key={key}
+              id={`${tabsId}-${key}-tab`}
+              aria-controls={`${tabsId}-${key}-panel`}
+              aria-selected={section === key}
+              aria-label={count !== null ? `${label}, ${count} available updates` : label}
+              tabIndex={section === key ? 0 : -1}
+              onClick={() => setSection(key)}
+              onKeyDown={(event) => {
+                const nextIndex =
+                  event.key === 'ArrowRight'
+                    ? (index + 1) % tabs.length
+                    : event.key === 'ArrowLeft'
+                      ? (index + tabs.length - 1) % tabs.length
+                      : event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                          ? tabs.length - 1
+                          : null;
+                if (nextIndex === null) return;
+                event.preventDefault();
+                const next = tabs[nextIndex];
+                if (!next) return;
+                setSection(next.key);
+                document.getElementById(`${tabsId}-${next.key}-tab`)?.focus();
+              }}
+            >
+              <Icon size={18} aria-hidden="true" />
+              <span>{label}</span>
+              {count !== null && count > 0 ? (
+                <span className="desktop-updates-tab-count" aria-hidden="true">
+                  {count}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </SelectionGroup>
+        <Link className="desktop-update-link" to="/settings?tab=updates">
+          Settings
+        </Link>
+      </div>
       <div className="desktop-updates-grid">
         <section
           className="desktop-updates-card"
@@ -669,7 +674,7 @@ function LocalUpdates() {
                       onClick={() => void channels.refetch()}
                       disabled={channels.isFetching}
                     >
-                      {channels.isFetching ? 'Checking channel…' : 'Retry channel check'}
+                      {channels.isFetching ? 'Checking channel…' : 'Retry'}
                     </button>
                   </>
                 ) : null}
@@ -688,7 +693,7 @@ function LocalUpdates() {
                       onClick={() => void releases.refetch()}
                       disabled={releases.isFetching}
                     >
-                      {releases.isFetching ? 'Checking releases…' : 'Retry release check'}
+                      {releases.isFetching ? 'Checking releases…' : 'Retry'}
                     </button>
                   </>
                 ) : null}
@@ -725,9 +730,14 @@ function LocalUpdates() {
                       runtipi={build.data.runtipiCompatibility || version.current}
                       channel={channels.isError ? 'unavailable' : (channels.data?.current ?? (channels.isPending ? 'loading' : 'unavailable'))}
                     />
-                    <details className="desktop-update-build-details">
-                      <summary>Build details</summary>
-                      {build.data.commit ? <span>Commit {build.data.commit.slice(0, 12)}</span> : null}
+                    <section className="desktop-update-build-details" aria-label="Build details">
+                      <h4>Build details</h4>
+                      {build.data.commit ? (
+                        <div className="desktop-update-image">
+                          <span>Commit</span>
+                          <code>{build.data.commit.slice(0, 12)}</code>
+                        </div>
+                      ) : null}
                       {build.data.imageDigest ? (
                         <div className="desktop-update-image">
                           <span>Image</span>
@@ -736,7 +746,7 @@ function LocalUpdates() {
                       ) : (
                         <span>Image digest unavailable.</span>
                       )}
-                    </details>
+                    </section>
                   </>
                 ) : null}
               </div>

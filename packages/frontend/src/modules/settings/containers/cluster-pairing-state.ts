@@ -87,3 +87,9 @@ export function pairingRequest(draft: PairingDraft): ClusterPairRequest {
     ...(certificate ? { peerCertificatePem: certificate.pem, peerCertificateSha256: certificate.sha256, confirmPeerCertificate: true as const } : {}),
   };
 }
+
+export function pairingConnectionRequest(draft: PairingDraft): ClusterPairRequest {
+  const request = pairingRequest(draft);
+  if (!request.url.startsWith('https://') || request.allowInsecureLan) throw new Error('Use HTTPS for account pairing.');
+  return request;
+}

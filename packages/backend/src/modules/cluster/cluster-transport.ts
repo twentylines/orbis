@@ -4,11 +4,20 @@ import type { LookupAddress } from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
 import { isIP } from 'node:net';
-import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  HttpException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { ClusterCertificate } from './cluster-certificate';
 
 export const CLUSTER_PROTOCOL = 'orbis.cluster.v1';
+export const PAIRING_AUTH_PROTOCOL = 'orbis.cluster.account-pairing.v1';
 export const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+export const accountPairingCodeHash = (code: string) => digest(`${PAIRING_AUTH_PROTOCOL}\n${code.toUpperCase().replace(/\s/g, '')}`);
 export function equalSecret(left: string, right: string) {
   const a = Buffer.from(left);
   const b = Buffer.from(right);
@@ -57,13 +66,20 @@ export function signedHeaders(id: string, secret: string, body: string, timestam
 // Resolve once and pin that address for this connection; never follow redirects.
 export async function clusterRequest<T>(
   origin: string,
-  endpoint: '/api/cluster/accept' | '/api/cluster/peer' | '/api/cluster/settings-sync/peer',
+  endpoint:
+    | '/api/cluster/accept'
+    | '/api/cluster/peer'
+    | '/api/cluster/settings-sync/peer'
+    | '/api/cluster/pairing/challenge'
+    | '/api/cluster/pairing/authorize',
   body: object,
   headers = {},
   insecureLan = false,
   certificate?: ClusterCertificate,
 ): Promise<T> {
   const url = clusterOrigin(origin, insecureLan);
+  const accountPairing = endpoint.startsWith('/api/cluster/pairing/');
+  if (accountPairing && url.protocol !== 'https:') throw new BadRequestException('Use HTTPS for account pairing.');
   if (certificate && url.protocol !== 'https:') throw new BadRequestException('A confirmed peer certificate requires HTTPS.');
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const deadline = Date.now() + 12_000;
@@ -106,6 +122,40 @@ export async function clusterRequest<T>(
         response.on('error', reject);
         response.on('end', () => {
           if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+            if (accountPairing) {
+              const status = response.statusCode;
+              let expired = false;
+              let needsIngress = false;
+              try {
+                const payload: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+                needsIngress =
+                  !!payload &&
+                  typeof payload === 'object' &&
+                  'message' in payload &&
+                  payload.message === 'Secure pairing needs a private HTTPS connection and trusted proxy setup on this server.';
+                expired =
+                  !!payload &&
+                  typeof payload === 'object' &&
+                  'message' in payload &&
+                  payload.message === 'Pairing code or authorization expired. Generate a new code on the other server.';
+              } catch {
+                /* Only exact public setup and expiry messages are recognized. */
+              }
+              reject(
+                needsIngress
+                  ? new ForbiddenException('The other server needs private HTTPS and trusted proxy setup before pairing.')
+                  : expired
+                    ? new UnauthorizedException('Pairing code or authorization expired. Generate a new code on the other server.')
+                    : status === 429
+                      ? new HttpException('Too many pairing attempts. Wait five minutes and generate a new code.', 429)
+                      : status === 401 || status === 403
+                        ? new UnauthorizedException('The other server could not authorize pairing. Check its password and authentication code.')
+                        : status === 404 || status === 409
+                          ? new ConflictException('Update both servers and generate a new pairing code.')
+                          : new ServiceUnavailableException('Pairing was not confirmed. Check cluster status on both servers before reconnecting.'),
+              );
+              return;
+            }
             let message = `The paired server refused the request (${response.statusCode ?? 'no response'}).`;
             if ([400, 403, 404, 409, 422, 429].includes(response.statusCode ?? 0)) {
               try {

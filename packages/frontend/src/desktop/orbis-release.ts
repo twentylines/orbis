@@ -10,6 +10,7 @@ export type OrbisRelease = {
   imageManifestUrl: string | null;
   kind?: 'feature' | 'maintenance';
   priority?: 'critical';
+  criticalThrough?: string;
 };
 export type OrbisReleaseCatalog = { releases: OrbisRelease[]; complete: boolean };
 export type OrbisReleaseHistory = OrbisReleaseCatalog & { truncated: boolean; context?: OrbisRelease | null };

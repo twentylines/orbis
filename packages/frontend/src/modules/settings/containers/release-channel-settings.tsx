@@ -217,16 +217,9 @@ export function ReleaseChannelSettings() {
       <div className="release-channel-row">
         <div className="release-channel-heading">
           <h2 id={`${id}-title`}>Release channel</h2>
-          <p id={`${id}-description`}>Stable for regular use. Nightly for testing.</p>
         </div>
         {status.data && !status.isError ? (
-          <fieldset
-            className="release-channel-switch"
-            aria-labelledby={`${id}-title`}
-            aria-describedby={`${id}-description`}
-            aria-busy={busy}
-            data-channel={current}
-          >
+          <fieldset className="release-channel-switch" aria-labelledby={`${id}-title`} aria-busy={busy} data-channel={current}>
             <button
               type="button"
               aria-pressed={current === 'stable'}

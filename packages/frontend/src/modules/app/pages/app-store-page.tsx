@@ -2,7 +2,12 @@ import { useDesktopPreferences } from '@/desktop/preferences';
 import type { StoreRecommendationCategory } from '../components/store-discover/store-recommendations';
 import { useAppContext } from '@/context/app-context';
 import { useTasks } from '@/desktop/tasks';
-import { getEnabledAppStoresOptions, getInstalledAppsOptions, searchAppsInfiniteOptions } from '@/api-client/@tanstack/react-query.gen';
+import {
+  getAppOptions,
+  getEnabledAppStoresOptions,
+  getInstalledAppsOptions,
+  searchAppsInfiniteOptions,
+} from '@/api-client/@tanstack/react-query.gen';
 import { RefreshAppStoresButton } from '@/components/refresh-app-stores/refresh-app-stores';
 import { Input } from '@/components/ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
@@ -14,9 +19,9 @@ import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { useInfiniteScroll } from '@/lib/hooks/use-infinite-scroll';
 import { iconForCategory } from '@/modules/app/helpers/table-helpers';
 import { useAppStoreState } from '@/stores/app-store';
-import type { AppCategory } from '@/types/app.types';
+import type { AppCategory, AppInfo, AppInfoSimple } from '@/types/app.types';
 import { IconArrowRight, IconSearch, IconX } from '@tabler/icons-react';
-import { keepPreviousData, useInfiniteQuery, useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useWindowVisible, WindowVisibilityContext } from '@/desktop/window-visibility';
 import { storeView, storeEditorialFits } from '../components/store-discover/store-curation';
@@ -28,6 +33,8 @@ import { StoreCatalogue } from './store-catalogue';
 import { nextStorePreviewHistory, type StorePreviewHistory } from './store-preview-navigation';
 import './app-store-page.css';
 import { ThemePacksCatalogue } from '@/modules/theme-packs/theme-packs-catalogue';
+import { InstallDialog } from '../components/dialogs/install-dialog/install-dialog';
+import toast from 'react-hot-toast';
 
 export const AppStorePageSuspense = () => <DelayedRouteLoading label="Loading app catalogue…" />;
 
@@ -61,11 +68,67 @@ function LocalStore() {
   };
   const { user } = useAppContext();
   const installed = useQuery({ ...getInstalledAppsOptions(), enabled: visible && browsing && user.operator, staleTime: 5000 });
-  const installedApps = new Set(installed.data?.installed.filter((entry) => entry.app.status !== 'missing').map((entry) => entry.info.urn) ?? []);
+  const installedApps = new Set(
+    installed.data?.installed.filter((entry) => !['missing', 'installing'].includes(entry.app.status)).map((entry) => entry.info.urn) ?? [],
+  );
   const tasks = useTasks();
+  const pendingApps = new Set(installed.data?.installed.filter((entry) => entry.app.status === 'installing').map((entry) => entry.info.urn) ?? []);
   for (const task of tasks.data?.tasks ?? []) {
-    if (['queued', 'running', 'unconfirmed'].includes(task.status)) installedApps.add(task.appUrn);
+    if (['queued', 'running', 'unconfirmed'].includes(task.status)) pendingApps.add(task.appUrn);
   }
+  const queryClient = useQueryClient();
+  const [install, setInstall] = useState<{ info: AppInfo; open: boolean } | null>(null);
+  const [installLoadingUrn, setInstallLoadingUrn] = useState<string | null>(null);
+  const installGeneration = useRef(0);
+  const installScope = `${visible}:${location.pathname}:${location.search}`;
+  const scopeNow = useRef(installScope);
+  const previousScope = useRef(installScope);
+  scopeNow.current = installScope;
+  useEffect(() => {
+    if (previousScope.current === installScope) return;
+    previousScope.current = installScope;
+    installGeneration.current++;
+    setInstall((value) => (value ? { ...value, open: false } : value));
+    setInstallLoadingUrn(null);
+  }, [installScope]);
+  useEffect(
+    () => () => {
+      installGeneration.current++;
+    },
+    [],
+  );
+  const openInstall = async (app: AppInfoSimple) => {
+    if (!user.operator || !visible || installLoadingUrn) return;
+    const scope = installScope;
+    const generation = ++installGeneration.current;
+    setInstallLoadingUrn(app.urn);
+    try {
+      const [details, freshTasks] = await Promise.all([
+        queryClient.fetchQuery({ ...getAppOptions({ path: { urn: app.urn } }), staleTime: 0 }),
+        tasks.refetch(),
+      ]);
+      if (generation !== installGeneration.current || scopeNow.current !== scope) return;
+      if (freshTasks.isError || !freshTasks.data) throw new Error('Task status unavailable');
+      if (freshTasks.data.tasks.some((task) => task.appUrn === app.urn && ['queued', 'running', 'unconfirmed'].includes(task.status))) {
+        toast.error('An operation is already in progress for this app.');
+        return;
+      }
+      if (details.app && details.app.status !== 'missing') {
+        toast.error(details.app.status === 'installing' ? 'Installation is already in progress.' : 'This app is already installed.');
+        void queryClient.invalidateQueries({ queryKey: getInstalledAppsOptions().queryKey });
+        return;
+      }
+      if (!details.info.available || details.info.deprecated) {
+        toast.error('This app is unavailable for installation.');
+        return;
+      }
+      setInstall({ info: details.info, open: true });
+    } catch {
+      if (generation === installGeneration.current && scopeNow.current === scope) toast.error('Installation options could not be loaded. Try again.');
+    } finally {
+      if (generation === installGeneration.current && scopeNow.current === scope) setInstallLoadingUrn(null);
+    }
+  };
   const [editorialFits, setEditorialFits] = useState(false);
   useLayoutEffect(() => {
     const element = surface.current;
@@ -322,6 +385,9 @@ function LocalStore() {
                     collectionsAfter={editorialFits ? 8 : 16}
                     canInstall={user.operator && installed.isSuccess && tasks.isSuccess && !tasks.isError}
                     installedApps={installedApps}
+                    pendingApps={pendingApps}
+                    installLoadingUrn={installLoadingUrn}
+                    onInstall={openInstall}
                     collections={
                       <WindowVisibilityContext.Provider value={showEditorial}>
                         <StoreDiscover
@@ -361,6 +427,14 @@ function LocalStore() {
         }
         discover={<StoreDiscover {...recommendationProps} key={selectedStore ?? 'all'} storeId={selectedStore} onBrowse={browse} />}
       />
+      {install ? (
+        <InstallDialog
+          key={install.info.urn}
+          info={install.info}
+          isOpen={install.open}
+          onClose={() => setInstall((value) => (value ? { ...value, open: false } : value))}
+        />
+      ) : null}
     </section>
   );
 }

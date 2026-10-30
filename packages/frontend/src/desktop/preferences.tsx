@@ -4,8 +4,9 @@ import '@/modules/theme-packs/theme-pack-runtime.css';
 import { applyAppearanceRuntime } from './appearance-runtime';
 import { transitionAppearance } from './theme-motion';
 import { MotionPreferences } from './motion-preferences';
-import { useLayoutEffect, createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { useLayoutEffect, createContext, useContext, useEffect, useRef, useState, type PropsWithChildren, useMemo, useCallback } from 'react';
 import { useUserContext } from '@/context/user-context';
+import { PreferenceSaveQueue } from './preference-save-queue';
 import { useStartupReady } from '@/components/startup/startup-boundary';
 import { useLocation } from 'react-router';
 import toast from 'react-hot-toast';
@@ -178,6 +179,7 @@ type PreferenceContext = {
   activeThemePack: { id: string; version: string; name: string } | null;
   cacheAvailable: boolean;
   update: (value: Partial<DesktopPreferences>) => void;
+  commit: (value: Partial<DesktopPreferences>) => Promise<void>;
   updateAppearance: (value: Partial<DesktopAppearance>) => void;
   wallpaperRevision: number;
   refreshWallpaper: () => void;
@@ -193,11 +195,17 @@ const Context = createContext<PreferenceContext | null>(null);
 const LOAD_NOTICE = 'desktop-preferences-load';
 
 export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
-  const { isLoggedIn } = useUserContext();
+  const { isLoggedIn, sessionEpoch, sessionAbortSignal } = useUserContext();
   const { pathname } = useLocation();
   const themePack = useThemePack(isLoggedIn);
   const [cache] = useState(readPreferenceCache);
   const [preferences, setPreferences] = useState(cache.preferences);
+  const currentPreferences = useRef(preferences);
+  const replacePreferences = useCallback((value: DesktopPreferences | ((previous: DesktopPreferences) => DesktopPreferences)) => {
+    const next = typeof value === 'function' ? value(currentPreferences.current) : value;
+    currentPreferences.current = next;
+    setPreferences(next);
+  }, []);
   const [preview, setPreview] = useState<DesktopPreferences | null>(null);
   const displayed = preview ?? preferences;
   const displayedWallpaper = resolveWallpaperKey(displayed);
@@ -205,8 +213,9 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const resolvedMode = useResolvedColourMode(displayed.mode);
   const [cacheAvailable, setCacheAvailable] = useState(cache.available);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [loadStateSession, setLoadStateSession] = useState<object | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
-  const booting = isLoggedIn && (!initialLoadComplete || workspaceLoading);
+  const booting = isLoggedIn && (!initialLoadComplete || loadStateSession !== sessionEpoch || workspaceLoading);
   useStartupReady(!booting && !(isLoggedIn && ['/login', '/register', '/reset-password'].includes(pathname)));
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState(false);
@@ -217,8 +226,42 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const appearancePainted = useRef(false);
   const remoteRefresh = useRef<(() => void) | null>(null);
   const revision = useRef(0);
+  const fieldEdits = useRef(new Map<keyof DesktopPreferences, number>());
   const acknowledgedRevision = useRef(0);
-  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const saveQueue = useMemo(() => new PreferenceSaveQueue(sessionAbortSignal), [sessionAbortSignal]);
+  const currentSession = useRef(sessionEpoch);
+  currentSession.current = sessionEpoch;
+  const loadedSession = useRef<object | null>(null);
+  const mounted = useRef(true);
+  const isCurrentSession = useCallback(
+    () => mounted.current && currentSession.current === sessionEpoch && !sessionAbortSignal.aborted,
+    [sessionEpoch, sessionAbortSignal],
+  );
+  const canEdit = () => mounted.current && currentSession.current === sessionEpoch && (!isLoggedIn || !sessionAbortSignal.aborted);
+  const canSave = useCallback(
+    () => isCurrentSession() && isLoggedIn && loadedSession.current === sessionEpoch,
+    [isCurrentSession, isLoggedIn, sessionEpoch],
+  );
+  const requestSignal = useCallback(() => AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(20_000)]), [sessionAbortSignal]);
+
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    currentSession.current = sessionEpoch;
+    loadedSession.current = null;
+    completingSetup.current = false;
+    revision.current = 0;
+    fieldEdits.current.clear();
+    acknowledgedRevision.current = 0;
+    setServerReady(false);
+    setInitialLoadComplete(false);
+    setPreview(null);
+  }, [sessionEpoch]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -248,7 +291,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   }, [displayed.appearance, displayed.preset, displayedWallpaper, displayed.mode, displayed.wallpaperMode, resolvedMode, themePack]);
 
   useEffect(() => {
-    if (isLoggedIn && !initialLoadComplete) return;
+    if (isLoggedIn && (!initialLoadComplete || loadStateSession !== sessionEpoch)) return;
     try {
       const stored = JSON.stringify(preferences);
       localStorage.setItem(STORAGE_KEY, stored);
@@ -257,10 +300,10 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     } catch {
       setCacheAvailable(false);
     }
-  }, [initialLoadComplete, isLoggedIn, preferences]);
+  }, [initialLoadComplete, isLoggedIn, preferences, loadStateSession, sessionEpoch]);
 
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (!isLoggedIn || sessionAbortSignal.aborted) {
       setServerReady(false);
       setRequiresOnboarding(true);
       setSyncState('local');
@@ -278,7 +321,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     setLoadError(false);
     Promise.all(
       ['/api/desktop-preferences', '/api/desktop-preferences/onboarding'].map(async (url) => {
-        const response = await fetch(url, { credentials: 'include', signal: controller.signal });
+        const response = await fetch(url, { credentials: 'include', signal: AbortSignal.any([controller.signal, sessionAbortSignal]) });
         if (!response.ok) throw new Error('Preference load failed');
         return response.json() as Promise<unknown>;
       }),
@@ -288,40 +331,44 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         if (!setup || typeof setup !== 'object' || !('complete' in setup) || typeof setup.complete !== 'boolean') {
           throw new Error('Invalid setup status');
         }
-        if (controller.signal.aborted) throw new Error('Preference load expired');
+        if (disposed || controller.signal.aborted || !isCurrentSession()) return;
         if (revision.current === loadRevision && canReplace) {
           acknowledgedRevision.current = loadRevision;
-          setPreferences(normalisePreferences(value));
+          replacePreferences(normalisePreferences(value));
         }
+        loadedSession.current = sessionEpoch;
         setServerReady(true);
         setRequiresOnboarding(!setup.complete);
         setSyncState(acknowledgedRevision.current === revision.current ? 'saved' : 'saving');
       })
       .catch(() => {
-        if (!disposed) {
+        if (!disposed && isCurrentSession()) {
           setLoadError(true);
           setSyncState('error');
         }
       })
       .finally(() => {
         window.clearTimeout(timer);
-        if (!disposed) setInitialLoadComplete(true);
+        if (!disposed && isCurrentSession()) {
+          setLoadStateSession(sessionEpoch);
+          setInitialLoadComplete(true);
+        }
       });
     return () => {
       disposed = true;
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [isLoggedIn, loadAttempt]);
+  }, [isLoggedIn, loadAttempt, sessionEpoch, sessionAbortSignal, isCurrentSession, replacePreferences]);
 
   useEffect(() => {
-    if (!isLoggedIn || !serverReady) return;
+    if (!canSave() || !serverReady) return;
     let disposed = false;
     let reading = false;
     let waiting = false;
     const controller = new AbortController();
     const refresh = async () => {
-      if (disposed) return;
+      if (disposed || !canSave()) return;
       if (reading || revision.current !== acknowledgedRevision.current) {
         waiting = true;
         return;
@@ -332,13 +379,19 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       try {
         const response = await fetch('/api/desktop-preferences', {
           credentials: 'include',
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
+          signal: AbortSignal.any([controller.signal, sessionAbortSignal, AbortSignal.timeout(10_000)]),
         });
         if (!response.ok) return;
         const value: unknown = await response.json();
-        if (!disposed && isPreferences(value) && revision.current === currentRevision && acknowledgedRevision.current === currentRevision) {
+        if (
+          !disposed &&
+          canSave() &&
+          isPreferences(value) &&
+          revision.current === currentRevision &&
+          acknowledgedRevision.current === currentRevision
+        ) {
           const next = normalisePreferences(value);
-          setPreferences((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
+          replacePreferences((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
         }
       } catch {
         // The saved browser appearance remains available while the server reconnects.
@@ -361,17 +414,17 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       window.removeEventListener(preferenceChangeEvent, changed);
       if (remoteRefresh.current === refresh) remoteRefresh.current = null;
     };
-  }, [isLoggedIn, serverReady]);
+  }, [serverReady, sessionAbortSignal, canSave, replacePreferences]);
 
   useEffect(() => {
     if (isLoggedIn) return;
     const stored = (event: StorageEvent) => {
-      if (event.key !== STORAGE_KEY) return;
-      setPreferences(readCachedDesktopPreferences());
+      if (event.key !== STORAGE_KEY || currentSession.current !== sessionEpoch) return;
+      replacePreferences(readCachedDesktopPreferences());
     };
     window.addEventListener('storage', stored);
     return () => window.removeEventListener('storage', stored);
-  }, [isLoggedIn]);
+  }, [isLoggedIn, replacePreferences, sessionEpoch]);
 
   useEffect(() => {
     if (loadError) {
@@ -401,107 +454,158 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   }, [loadError]);
 
   useEffect(() => {
-    if (!isLoggedIn || !serverReady || acknowledgedRevision.current === revision.current) return;
+    if (preferences !== currentPreferences.current || !canSave() || !serverReady || acknowledgedRevision.current === revision.current) return;
     let superseded = false;
     const saveRevision = revision.current;
     setSyncState('saving');
     const timer = window.setTimeout(() => {
       const save = async () => {
-        if (superseded || saveRevision !== revision.current) return;
+        if (superseded || !canSave() || saveRevision !== revision.current) return;
         try {
           const response = await fetch('/api/desktop-preferences', {
             method: 'PUT',
             credentials: 'include',
             keepalive: true,
-            signal: AbortSignal.timeout(20_000),
+            signal: requestSignal(),
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(preferences),
+            body: JSON.stringify(currentPreferences.current),
           });
+          if (!isCurrentSession()) return;
           if (!response.ok) throw new Error('Preference save failed');
           acknowledgedRevision.current = saveRevision;
           if (!superseded && revision.current === saveRevision) setSyncState('saved');
           remoteRefresh.current?.();
         } catch {
-          if (!superseded && revision.current === saveRevision) setSyncState('error');
+          if (isCurrentSession() && !superseded && revision.current === saveRevision) setSyncState('error');
         }
       };
-      saveQueue.current = saveQueue.current.then(save, save);
+      void saveQueue.enqueue(save).catch(() => undefined);
     }, 300);
     return () => {
       superseded = true;
       window.clearTimeout(timer);
     };
-  }, [preferences, serverReady, isLoggedIn]);
+  }, [preferences, serverReady, saveQueue, canSave, isCurrentSession, requestSignal]);
 
   const update = (value: Partial<DesktopPreferences>) => {
-    if (completingSetup.current) return;
-    if (!isPreferences({ ...preferences, ...value })) return;
+    if (!canEdit() || completingSetup.current) return;
+    if (!isPreferences({ ...currentPreferences.current, ...value })) return;
     revision.current += 1;
+    for (const key of Object.keys(value)) fieldEdits.current.set(key as keyof DesktopPreferences, revision.current);
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
-    setPreferences((previous) => {
+    replacePreferences((previous) => {
       const next = { ...previous, ...value };
       return isPreferences(next) ? next : previous;
     });
   };
 
+  const commit = async (value: Partial<DesktopPreferences>) => {
+    if (!canSave() || !serverReady || completingSetup.current || !isPreferences({ ...currentPreferences.current, ...value }))
+      throw new Error('These settings cannot be saved yet. Try again.');
+    const expectedRevision = revision.current;
+    setSyncState('saving');
+    const write = async () => {
+      if (!canSave()) throw new Error('Your session changed. Reload your settings before saving.');
+      if (revision.current !== expectedRevision) throw new Error('Settings changed while saving. Try again.');
+      const baseline = currentPreferences.current;
+      const submittedFieldEdits = new Map(fieldEdits.current);
+      const next = { ...baseline, ...value };
+      if (!isPreferences(next)) throw new Error('Invalid settings. Try again.');
+      const response = await fetch('/api/desktop-preferences', {
+        method: 'PUT',
+        credentials: 'include',
+        signal: requestSignal(),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      });
+      if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
+      if (!response.ok) throw new Error('The settings could not be saved. Try again.');
+      const unchanged = revision.current === expectedRevision;
+      revision.current++;
+      if (unchanged) acknowledgedRevision.current = revision.current;
+      replacePreferences((previous) => {
+        const patch = Object.fromEntries(
+          Object.entries(value).filter(
+            ([key]) => fieldEdits.current.get(key as keyof DesktopPreferences) === submittedFieldEdits.get(key as keyof DesktopPreferences),
+          ),
+        );
+        return { ...previous, ...patch };
+      });
+      setSyncState(unchanged ? 'saved' : 'saving');
+      remoteRefresh.current?.();
+    };
+    const pending = saveQueue.enqueue(write);
+    try {
+      await pending;
+    } catch (error) {
+      if (isCurrentSession()) setSyncState('error');
+      throw error;
+    }
+  };
+
   const reset = () => {
-    if (completingSetup.current) return;
+    if (!canEdit() || completingSetup.current) return;
     revision.current += 1;
+    for (const key of Object.keys(defaultDesktopPreferences)) fieldEdits.current.set(key as keyof DesktopPreferences, revision.current);
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
-    setPreferences({ ...defaultDesktopPreferences, workspace: { ...defaultDesktopPreferences.workspace } });
+    replacePreferences({ ...defaultDesktopPreferences, workspace: { ...defaultDesktopPreferences.workspace } });
   };
 
   const updateAppearance = (value: Partial<DesktopAppearance>) => {
-    if (completingSetup.current || !desktopAppearanceSchema.allows(value)) return;
+    if (!canEdit() || completingSetup.current || !desktopAppearanceSchema.allows(value)) return;
     revision.current += 1;
+    fieldEdits.current.set('appearance', revision.current);
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
-    setPreferences((previous) => ({ ...previous, appearance: { ...previous.appearance, ...value } }));
+    replacePreferences((previous) => ({ ...previous, appearance: { ...previous.appearance, ...value } }));
   };
 
   const updateWindow = (id: DesktopWindowId, value: DesktopWindowState) => {
-    if (completingSetup.current) return;
+    if (!canEdit() || completingSetup.current) return;
     if (!desktopWindowsSchema.allows({ [id]: value })) return;
     revision.current += 1;
+    fieldEdits.current.set('windows', revision.current);
     setSyncState(isLoggedIn ? (serverReady ? 'saving' : syncState === 'loading' ? 'loading' : 'error') : 'local');
-    setPreferences((previous) => ({ ...previous, windows: { ...previous.windows, [id]: value } }));
+    replacePreferences((previous) => ({ ...previous, windows: { ...previous.windows, [id]: value } }));
   };
 
-  const completeOnboarding = async (serverName: string, draft = preferences) => {
+  const completeOnboarding = async (serverName: string, draft = currentPreferences.current) => {
     const next = { ...draft, serverName: serverName.trim() };
-    if (!isLoggedIn || !serverReady || !isPreferences(next) || completingSetup.current) throw new Error('Setup cannot be saved yet. Try again.');
+    if (!canSave() || !serverReady || !isPreferences(next) || completingSetup.current) throw new Error('Setup cannot be saved yet. Try again.');
     completingSetup.current = true;
     const saveRevision = ++revision.current;
     setSyncState('saving');
     const save = async () => {
+      if (!canSave()) throw new Error('Your session changed. Reload your settings before saving.');
       const saved = await fetch('/api/desktop-preferences', {
         method: 'PUT',
         credentials: 'include',
-        signal: AbortSignal.timeout(20_000),
+        signal: requestSignal(),
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(next),
       });
+      if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
       if (!saved.ok) throw new Error('Server settings could not be saved. Try again.');
       const completed = await fetch('/api/desktop-preferences/onboarding', {
         method: 'POST',
         credentials: 'include',
-        signal: AbortSignal.timeout(20_000),
+        signal: requestSignal(),
       });
       if (!completed.ok || (await completed.json()).complete !== true) throw new Error('Setup could not be completed. Try again.');
+      if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
       acknowledgedRevision.current = saveRevision;
-      setPreferences(next);
+      replacePreferences(next);
       setPreview(null);
       setRequiresOnboarding(false);
       setSyncState('saved');
     };
-    const pending = saveQueue.current.then(save, save);
-    saveQueue.current = pending.catch(() => undefined);
+    const pending = saveQueue.enqueue(save);
     try {
       await pending;
     } catch (error) {
-      setSyncState('error');
+      if (isCurrentSession()) setSyncState('error');
       throw error;
     } finally {
-      completingSetup.current = false;
+      if (isCurrentSession()) completingSetup.current = false;
     }
   };
 
@@ -513,6 +617,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         activeThemePack: themePack ? { id: themePack.id, version: themePack.version, name: themePack.name } : null,
         cacheAvailable,
         update,
+        commit,
         updateAppearance,
         wallpaperRevision,
         refreshWallpaper: () => setWallpaperRevision((value) => value + 1),
@@ -526,7 +631,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       }}
     >
       <MotionPreferences reduced={displayed.appearance.motion === 'reduced' || displayed.appearance.lowEffects}>
-        {isLoggedIn && !initialLoadComplete ? null : children}
+        {isLoggedIn && (!initialLoadComplete || loadStateSession !== sessionEpoch) ? null : children}
       </MotionPreferences>
     </Context.Provider>
   );
@@ -554,6 +659,7 @@ export function DesktopPreferencesPreview({
         preferences: value,
         resolvedMode,
         update: (patch) => onChange({ ...value, ...patch }),
+        commit: async (patch) => onChange({ ...value, ...patch }),
         updateAppearance: (patch) => onChange({ ...value, appearance: { ...value.appearance, ...patch } }),
       }}
     >

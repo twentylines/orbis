@@ -107,6 +107,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   const systemSolid = media('(prefers-reduced-transparency: reduce)');
   const solid = low || options.transparency === 'solid' || (options.transparency !== 'glass' && systemSolid);
   const systemReduced = media('(prefers-reduced-motion: reduce)');
+  root.style.setProperty('--orbis-control-transition-duration', options.motion === 'reduced' || systemReduced ? '0.01ms' : '180ms');
   root.dataset.orbisMotion = low || options.motion === 'reduced' || systemReduced ? 'reduced' : 'full';
   root.dataset.orbisTransparency = solid ? 'solid' : 'glass';
   root.dataset.orbisEffects = low ? 'low' : 'full';
