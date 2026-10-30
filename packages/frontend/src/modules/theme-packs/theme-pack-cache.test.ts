@@ -26,6 +26,7 @@ import {
 import { cacheThemePackSelection, useThemePack } from './use-theme-pack';
 import { normaliseDesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
 import { WallpaperLayer } from '@/desktop/wallpaper-layer';
+import { wallpaperSources } from '@/desktop/wallpaper-presets';
 
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
@@ -258,7 +259,7 @@ describe('public theme continuity cache', () => {
       `/wallpapers/theme-pack-tideline-v1.webp?version=${pack.wallpaper}`,
     );
     const fixed = renderToStaticMarkup(createElement(WallpaperLayer, { choice: { ...choice, wallpaperMode: 'custom' } }));
-    expect(fixed).toContain('/wallpapers/forest-v2.webp');
+    expect(fixed).toContain(wallpaperSources.canopy);
     expect(fixed).not.toContain('/wallpapers/theme-pack-tideline-v1.webp');
     const uploaded = renderToStaticMarkup(
       createElement(WallpaperLayer, {

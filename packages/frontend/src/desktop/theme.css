@@ -142,7 +142,7 @@ html[data-desktop-wallpaper="tidal"]:has(.orbis-startup) {
 .orbis-theme[data-desktop-wallpaper="canopy"],
 body:has(.orbis-theme[data-desktop-wallpaper="canopy"]),
 html[data-desktop-wallpaper="canopy"]:has(.orbis-startup) {
-  --desktop-wallpaper: url("/wallpapers/forest-v2.webp");
+  --desktop-wallpaper: url("/wallpapers/forest-v3.webp");
 }
 
 html[data-desktop-preset="frost"] {
@@ -804,7 +804,7 @@ body:has(.orbis-theme[data-desktop-wallpaper="theme-graphite"]) {
 html[data-desktop-wallpaper="theme-forest"],
 .orbis-theme[data-desktop-wallpaper="theme-forest"],
 body:has(.orbis-theme[data-desktop-wallpaper="theme-forest"]) {
-  --desktop-wallpaper: url("/wallpapers/forest-v2.webp");
+  --desktop-wallpaper: url("/wallpapers/forest-v3.webp");
 }
 html[data-desktop-wallpaper="theme-stone"],
 .orbis-theme[data-desktop-wallpaper="theme-stone"],
