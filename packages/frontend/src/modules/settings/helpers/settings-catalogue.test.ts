@@ -80,3 +80,9 @@ test('category navigation explicitly clears old hash and setting without droppin
   expect(params.get('tab')).toBe('updates');
   expect(params.get('keep')).toBe('draft');
 });
+
+test('HTTPS setup appears only for HTTP access and keeps its real dedicated anchor', () => {
+  const http = searchSettings('https setup', { operator: true, http: true });
+  expect(http.some((entry) => entry.id === 'https-setup' && entry.section === 'https' && entry.anchor === 'setting-https-setup')).toBe(true);
+  expect(searchSettings('https setup', { operator: true, http: false }).some((entry) => entry.id === 'https-setup')).toBe(false);
+});

@@ -101,9 +101,3 @@
   display: grid;
   gap: 12px;
 }
-.settings-store-update-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 20px;
-}

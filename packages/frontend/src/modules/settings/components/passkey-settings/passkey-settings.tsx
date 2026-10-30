@@ -16,7 +16,8 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconFingerprint, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useEffect, useId, useRef, useState } from 'react';
-import { SecureAccessSetup } from '../secure-access/secure-access';
+import { Link } from 'react-router';
+import { httpsSettingsPath, httpsSetupVisible } from '@/desktop/secure-access';
 
 export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
   const listOptions = passkeyListOptions();
@@ -119,7 +120,11 @@ export function PasskeySettings({ totpEnabled }: { totpEnabled: boolean }) {
         Use your device, password manager or security key to sign in. Passkeys sign you in directly unless you choose extra verification below. Your
         password stays available and follows your account’s two-factor settings.
       </p>
-      <SecureAccessSetup available={available} checking={list.isFetching} onCheck={() => list.refetch()} />
+      {httpsSetupVisible(typeof window === 'undefined' ? '' : window.location.protocol) ? (
+        <p className="settings-passkey-note">
+          Passkeys need HTTPS. <Link to={httpsSettingsPath}>Set up HTTPS</Link>
+        </p>
+      ) : null}
       {list.isPending && <output>Reading your passkeys…</output>}
       {list.isError && (
         <div className="settings-passkey-error">

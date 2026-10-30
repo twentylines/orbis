@@ -45,8 +45,38 @@ export function publicSecureAccessOrigin(hostname: unknown, sslPort: unknown = 4
 export async function readLocalCertificate(signal: AbortSignal): Promise<Blob> {
   const response = await fetch('/api/system/certificate', { signal, credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
   if (!response.ok) throw new Error('The local certificate is not available. Check certificate setup on the server, then try again.');
-  const content = await response.text();
-  if (content.length > 65536 || !/^-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----\s*$/.test(content) || /PRIVATE KEY/.test(content))
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('The local certificate is unavailable.');
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      length += chunk.value.byteLength;
+      if (length > 65536) {
+        await reader.cancel();
+        throw new Error('The public certificate exceeds the download limit.');
+      }
+      chunks.push(chunk.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  const certificate = /-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----/g;
+  const blocks = content.match(certificate);
+  if (!blocks?.length || blocks.length > 16 || content.replace(certificate, '').trim() || /PRIVATE KEY/.test(content))
     throw new Error('The server did not return a usable public certificate. No file was downloaded.');
   return new Blob([content], { type: 'application/x-pem-file' });
 }
+
+export const httpsSettingsPath = '/settings?tab=https';
+export const httpsSetupVisible = (protocol: string) => protocol === 'http:';
+export const hasHttpsConnection = (protocol: string, secureContext: boolean) => protocol === 'https:' && secureContext;

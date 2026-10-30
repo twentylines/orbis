@@ -15,3 +15,14 @@
 .nearby-visibility :is(button, input):focus-visible {
   scroll-margin-block: 20px;
 }
+
+.nearby-visibility-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.nearby-visibility-actions > .btn {
+  margin: 0;
+  min-height: 44px;
+}

@@ -183,7 +183,7 @@
   letter-spacing: -0.025em;
   margin: 0;
 }
-.settings-content-heading > .btn {
+.settings-save-actions > .btn {
   min-width: 5.5rem;
   min-height: 44px;
   flex: none;
@@ -396,4 +396,47 @@
   .settings-header-status-short {
     display: inline;
   }
+}
+
+.settings-heading-container {
+  min-width: 0;
+  container: settings-save-header / inline-size;
+}
+.settings-save-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex: none;
+  min-width: 0;
+}
+.settings-save-activity {
+  color: var(--desktop-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-align: end;
+}
+.settings-save-activity > [data-saving="false"] {
+  visibility: hidden;
+}
+@container settings-save-header (max-width: 32rem) {
+  .settings-content-heading {
+    position: relative;
+    padding-bottom: calc(1.5em + 12px);
+  }
+  .settings-save-activity {
+    position: absolute;
+    inset-inline-end: 0;
+    bottom: 6px;
+  }
+}
+
+.settings-store-update-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+.settings-store-update-controls .automatic-app-update-switch > .form-check {
+  margin-block: 0;
 }

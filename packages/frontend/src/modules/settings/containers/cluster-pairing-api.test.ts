@@ -38,12 +38,13 @@ function pairBody(overrides: Partial<ClusterPairRequest> = {}): ClusterPairReque
   return { ...credentials, url: 'https://peer.private', code: 'A'.repeat(24), ...certificate, ...overrides };
 }
 
-test('invite uses fresh credentials in a same-origin bounded POST and validates its response', async () => {
+test('invite sends no credentials in a same-origin bounded POST and validates its response', async () => {
   await withFetch(Response.json({ code: 'A'.repeat(24), expiresAt: '2026-10-29T10:00:00.000Z' }), async (calls) => {
-    await expect(createClusterInvitation(credentials)).resolves.toEqual({ code: 'A'.repeat(24), expiresAt: '2026-10-29T10:00:00.000Z' });
+    await expect(createClusterInvitation()).resolves.toEqual({ code: 'A'.repeat(24), expiresAt: '2026-10-29T10:00:00.000Z' });
     expect(calls[0]?.url).toBe('/api/cluster/invite');
     expect(calls[0]?.init).toMatchObject({ method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
-    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(credentials);
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({});
+    expect(String(calls[0]?.init?.body)).not.toMatch(/password|totp/);
     expect(String(calls[0]?.url)).not.toContain(credentials.password);
   });
 });
@@ -73,7 +74,7 @@ test('only exact known backend pairing messages are surfaced', async () => {
       { status: 503 },
     ),
     async () => {
-      await expect(createClusterInvitation(credentials)).rejects.toThrow('Use a hostname matching its HTTPS certificate');
+      await expect(createClusterInvitation()).rejects.toThrow('Use a hostname matching its HTTPS certificate');
     },
   );
   for (const response of [
@@ -83,7 +84,7 @@ test('only exact known backend pairing messages are surfaced', async () => {
   ]) {
     await withFetch(response, async () => {
       try {
-        await createClusterInvitation(credentials);
+        await createClusterInvitation();
         throw new Error('Expected rejection');
       } catch (error) {
         expect(error).toBeInstanceOf(ClusterPairingError);
@@ -105,7 +106,7 @@ test('oversized responses are cancelled and malformed success shapes are refused
     },
   });
   await withFetch(new Response(body, { status: 503 }), async () => {
-    await expect(createClusterInvitation(credentials)).rejects.toThrow(ClusterPairingError);
+    await expect(createClusterInvitation()).rejects.toThrow(ClusterPairingError);
   });
   expect(cancelled).toBe(true);
   await withFetch(Response.json({ paired: true, id: 'private', name: 'Peer' }), async () => {
@@ -115,11 +116,11 @@ test('oversized responses are cancelled and malformed success shapes are refused
 
 test('fresh authentication and operator failures return actionable safe messages', async () => {
   for (const [status, message] of [
-    [401, 'Confirm your account password'],
+    [401, 'Sign in with an operator account'],
     [403, 'operator browser session'],
   ] as const) {
     await withFetch(Response.json({ message: 'private authentication implementation detail' }, { status }), async () => {
-      await expect(createClusterInvitation(credentials)).rejects.toThrow(message);
+      await expect(createClusterInvitation()).rejects.toThrow(message);
     });
   }
 });
@@ -141,7 +142,7 @@ test('actual sensitive-action HTTP400 translation keys give password and TOTP gu
     ['AUTH_ERROR_TOTP_INVALID_CODE', 'current six-digit authentication code'],
   ] as const) {
     await withFetch(Response.json({ message }, { status: 400 }), async () => {
-      await expect(createClusterInvitation(credentials)).rejects.toThrow(guidance);
+      await expect(createClusterInvitation()).rejects.toThrow('could not be created');
     });
     await withFetch(Response.json({ message }, { status: 400 }), async () => {
       await expect(pairClusterServer(pairBody())).rejects.toThrow(guidance);
@@ -200,7 +201,7 @@ test('Origin, throttling and storage errors use distinct short guidance', async 
     [503, 'The pairing code could not be saved. Check server storage permissions and free space.', 'storage permissions'],
   ] as const)
     await withFetch(Response.json({ message }, { status }), async () => {
-      await expect(createClusterInvitation(credentials)).rejects.toThrow(expected);
+      await expect(createClusterInvitation()).rejects.toThrow(expected);
     });
 });
 
@@ -234,4 +235,13 @@ test('pairing access check is read-only, bounded, same-origin and exposes only s
   await withFetch(Response.json({ available: false, message: 'private ingress details' }), async () => {
     await expect(clusterPairingAccess()).rejects.toThrow('could not be checked');
   });
+});
+
+test('legacy password-required invitation response requests an update instead of asking for hidden credentials', async () => {
+  await withFetch(
+    Response.json({ message: 'Confirm pairing with your account password and authentication code if enabled.' }, { status: 400 }),
+    async () => {
+      await expect(createClusterInvitation()).rejects.toThrow('Update this server and reload');
+    },
+  );
 });

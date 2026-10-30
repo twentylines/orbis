@@ -8,7 +8,9 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
+import tempfile
 
 
 def load(name):
@@ -22,6 +24,7 @@ BUILD = load("orbis-installer-bundle")
 BOOT = load("install-orbis")
 POLICY = load("orbis-release-policy")
 BASE = "https://github.com/twentylines/orbis/releases/"
+LEGACY_CHANNEL_BOOTSTRAPS = {"v0.1.0-beta.125": "5b0a23548769d6046d12e0273e135fddbcbf1a63f2d1c537ccc7987da59d892f"}
 LIMITS = {"install-orbis.py": 1024 * 1024, "release-manifest.json": 16 * 1024, BUILD.MANIFEST: 64 * 1024, BUILD.ARCHIVE: 8 * 1024 * 1024}
 
 
@@ -109,20 +112,54 @@ def site(repository, releases, output, fetch=BOOT.fetch, *, channel="stable"):
     return {"channel": channel, "tag": tag, "commit": release["commit"], "launcherSha256": BUILD.sha(downloaded[BUILD.LAUNCHER])}
 
 
+def channel_site(repository, releases, output, fetch=BOOT.fetch):
+    catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": None}}
+    with tempfile.TemporaryDirectory(prefix="orbis-channel-site-") as folder:
+        staged = Path(folder) / "public"
+        staged.mkdir()
+        for channel in ("stable", "nightly"):
+            try:
+                newest(releases, channel)
+            except NoPublishedRelease:
+                continue
+            checked = site(repository, releases, staged / channel, fetch, channel=channel)
+            catalog["channels"][channel] = {key: checked[key] for key in ("tag", "commit", "launcherSha256")}
+        record = catalog["channels"]["nightly"]
+        if record is None:
+            raise NoPublishedRelease("No published Orbis release is available")
+        source = BUILD.committed_files(repository, record["commit"])["scripts/install-orbis.py"]
+        if source.count(b"CHANNEL_CATALOG = None") != 1 or source.count(b"EXPECTED_RELEASE = None") != 1:
+            if source.count(b"CHANNEL_CATALOG = None") == 0 and source.count(b"EXPECTED_RELEASE = None") == 1 and LEGACY_CHANNEL_BOOTSTRAPS.get(record["tag"]) == BUILD.sha(source):
+                raise NoPublishedRelease(f"Verified release {record['tag']} predates channel-aware installation")
+            raise ValueError("The newest published installer does not support channel selection yet")
+        bootstrap = source.replace(b"CHANNEL_CATALOG = None", ("CHANNEL_CATALOG = " + repr(catalog)).encode())
+        compile(bootstrap, "install", "exec")
+        (staged / "install").write_bytes(bootstrap)
+        (staged / "channels.json").write_text(json.dumps(catalog, indent=2) + "\n")
+        (staged / ".nojekyll").touch()
+        (staged / "index.html").write_text('<!doctype html><meta charset="utf-8"><title>Orbis</title><h1>Orbis</h1><p>Run the installer to choose Stable or Nightly.</p>\n')
+        shutil.copytree(staged, output)
+    return {"channels": catalog["channels"], "launcherSha256": BUILD.sha(bootstrap)}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("releases", type=Path, help="GitHub release-list JSON, fetched with repository read access")
     parser.add_argument("output", type=Path, help="new directory containing only the public installer endpoint")
     parser.add_argument("--channel", choices=("stable", "nightly"), default="stable", help="select Stable (default) or Nightly")
+    parser.add_argument("--channels", action="store_true", help="publish one interactive installer and both verified channel endpoints")
     parser.add_argument("--if-available", action="store_true", help="preserve the deployed endpoint when this channel has no release yet")
     parser.add_argument("--github-output", type=Path, help="append the verified availability flag to a workflow output file")
     args = parser.parse_args(argv)
     try:
-        result = {"available": True, **site(Path(__file__).resolve().parent.parent, json.loads(args.releases.read_text()), args.output, channel=args.channel)}
-    except NoPublishedRelease:
+        repository = Path(__file__).resolve().parent.parent
+        releases = json.loads(args.releases.read_text())
+        checked = channel_site(repository, releases, args.output) if args.channels else site(repository, releases, args.output, channel=args.channel)
+        result = {"available": True, **checked}
+    except NoPublishedRelease as error:
         if not args.if_available:
             raise
-        result = {"available": False, "channel": args.channel, "reason": "No published release in this channel; the existing endpoint is unchanged."}
+        result = {"available": False, "channel": args.channel, "reason": str(error) + ". The existing endpoint is unchanged."}
     if args.github_output:
         with args.github_output.open("a") as output:
             output.write("available=" + str(result["available"]).lower() + "\n")

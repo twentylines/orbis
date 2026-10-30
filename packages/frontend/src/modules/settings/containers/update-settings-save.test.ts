@@ -19,6 +19,8 @@ const scenarios = [
   'global-session-error',
   'global-session-new-save',
   'global-unmount',
+  'global-activity',
+  'global-background-activity',
 ];
 for (const scenario of scenarios) {
   test(`mounted update settings lifetime: ${scenario}`, async () => {

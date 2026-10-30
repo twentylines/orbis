@@ -5,12 +5,13 @@ export const settingsSections = [
   { id: 'updates', label: 'Updates', detail: 'Releases and schedules' },
   { id: 'backups', label: 'Backup & recovery', detail: 'Archives and transfers' },
   { id: 'security', label: 'Security', detail: 'Account and sign-in' },
+  { id: 'https', label: 'HTTPS', detail: 'Private secure access' },
   { id: 'cluster', label: 'Cluster', detail: 'Paired servers and sync' },
   { id: 'logs', label: 'Logs', detail: 'Server diagnostics' },
   { id: 'about', label: 'About', detail: 'Software and hardware' },
 ] as const;
 export type SettingsSection = (typeof settingsSections)[number]['id'];
-export type SettingsAccess = { operator: boolean; advanced?: boolean };
+export type SettingsAccess = { operator: boolean; advanced?: boolean; http?: boolean };
 export type SettingEntry = {
   id: string;
   label: string;
@@ -19,6 +20,7 @@ export type SettingEntry = {
   aliases: string;
   operator?: boolean;
   advanced?: boolean;
+  httpOnly?: boolean;
   focus?: string;
   exactAliases?: readonly string[];
   controlLabel?: string;
@@ -328,6 +330,14 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     aliases: 'username account email login sign in name',
   },
   { id: 'password', label: 'Password', section: 'security', anchor: 'setting-password', aliases: 'password change account credentials' },
+  {
+    id: 'https-setup',
+    label: 'HTTPS setup',
+    section: 'https',
+    anchor: 'setting-https-setup',
+    aliases: 'https ssl secure local certificate cert trust setup',
+    httpOnly: true,
+  },
   { id: 'passkeys', label: 'Passkeys', section: 'security', anchor: 'setting-passkeys', aliases: 'passkey fingerprint touch face biometric login' },
   {
     id: 'two-factor',
@@ -418,7 +428,7 @@ export function searchSettings(query: string, access: SettingsAccess, limit = 12
   if (!needle) return [];
   const terms = needle.split(' ').filter(Boolean).slice(0, 8);
   return settingsCatalogue
-    .filter((entry) => (!entry.operator || access.operator) && (!entry.advanced || access.advanced))
+    .filter((entry) => settingAvailable(entry, access))
     .map((entry, index) => {
       const label = normalise(entry.label);
       const aliases = normalise(entry.aliases);
@@ -453,7 +463,7 @@ export function searchSettings(query: string, access: SettingsAccess, limit = 12
 }
 export const settingsPath = (entry: SettingEntry) => `/settings?tab=${entry.section}&setting=${entry.id}`;
 export const settingAvailable = (entry: SettingEntry, access: SettingsAccess) =>
-  (!entry.operator || access.operator) && (!entry.advanced || access.advanced);
+  (!entry.operator || access.operator) && (!entry.advanced || access.advanced) && (!entry.httpOnly || access.http === true);
 
 export function retainSettingsSections(previous: ReadonlySet<SettingsSection>, current: SettingsSection): ReadonlySet<SettingsSection> {
   return previous.has(current) ? previous : new Set([...previous, current]);

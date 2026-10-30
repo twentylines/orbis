@@ -55,7 +55,11 @@ const reducedMotion = () => prefersReducedMotion();
 
 export function CommandSearch() {
   const { user, userSettings } = useAppContext();
-  const settingsAccess = { operator: user.operator === true, advanced: userSettings.advancedSettings === true };
+  const settingsAccess = {
+    operator: user.operator === true,
+    advanced: userSettings.advancedSettings === true,
+    http: typeof window !== 'undefined' && window.location.protocol === 'http:',
+  };
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [search, setSearch] = useState('');

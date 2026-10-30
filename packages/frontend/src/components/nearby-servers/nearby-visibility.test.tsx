@@ -92,3 +92,17 @@ test('a confirmed address-only lease needs no HTTPS name but never accepts an or
     });
   }
 });
+
+test('unavailable discovery keeps only a known capability code and treats an absent endpoint as unsupported', async () => {
+  for (const reasonCode of ['host-unavailable', 'unsupported', 'https-required', 'interface-unavailable'] as const) {
+    await withFetch([Response.json({ available: false, reasonCode, reason: '/private/host/diagnostic' })], async () => {
+      expect(await readNearbyVisibility()).toEqual({ available: false, sharing: null, reasonCode });
+    });
+  }
+  await withFetch([Response.json({ available: false, reasonCode: '/private/host/diagnostic' })], async () => {
+    expect(await readNearbyVisibility()).toEqual({ available: false, sharing: null });
+  });
+  await withFetch([new Response('', { status: 404 })], async () => {
+    expect(await readNearbyVisibility()).toEqual({ available: false, sharing: null, reasonCode: 'unsupported' });
+  });
+});

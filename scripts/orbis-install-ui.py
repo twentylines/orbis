@@ -3,7 +3,9 @@
 
 import contextlib
 import os
+import math
 import re
+import signal
 import shutil
 import sys
 import threading
@@ -18,6 +20,39 @@ WORDMARK = (
     r"| |_| |  _ <| |_) || | ___) |",
     r" \___/|_| \_\____/|___|____/ ",
 )
+
+
+def display_release(tag):
+    match = re.fullmatch(r"v?(\d+\.\d+\.\d+)(?:-(beta|rc)\.(\d+))?", tag) if isinstance(tag, str) else None
+    if match is None:
+        return "version unavailable"
+    return match[1] if match[2] is None else f"{match[1]} {match[2]} {match[3]}"
+
+
+def spaceflight(width, tick):
+    """Decorative perspective only; operation progress is displayed separately."""
+    width = max(1, min(96, width))
+    height, center = 6, width // 2
+    cells = [[" " for _ in range(width)] for _ in range(height)]
+    for index in range(36):
+        depth = ((index * 37 - tick * 2) % 97 + 3) / 100
+        x = center + round((((index * 53) % 101) - 50) / depth)
+        y = 2 + round((((index * 17) % 23) - 11) / (6 * depth))
+        if 0 <= x < width and 0 <= y < height:
+            cells[y][x] = "." if depth > 0.65 else "+" if depth > 0.3 else "*"
+    for row in (4, 5):
+        distance = (row - 2) * max(3, width // 8)
+        for x, value in ((center - distance, "/"), (center + distance, "\\")):
+            if 0 <= x < width:
+                cells[row][x] = value
+    ship = ("   /\\   ", "  /__\\  ", " /|__|\\ ", "<_|__|_>")
+    drift = round(math.sin(tick / 12))
+    for row, line in enumerate(ship, 1):
+        for column, value in enumerate(line):
+            x = center - len(line) // 2 + column + drift
+            if value != " " and 0 <= x < width:
+                cells[row][x] = value
+    return ["".join(row).rstrip() for row in cells]
 
 
 class PullProgress:
@@ -79,7 +114,22 @@ class Presentation:
             pass
         return shutil.get_terminal_size((80, 24)).columns or 80
 
+    def height(self):
+        try:
+            return os.get_terminal_size(self.stream.fileno()).lines
+        except (AttributeError, OSError, ValueError):
+            return shutil.get_terminal_size((80, 24)).lines
+
+    def redraw(self, previous, lines):
+        if previous:
+            self.write("\r" + (f"\033[{previous - 1}A" if previous > 1 else ""))
+            self.write("\n".join("\033[2K" for _ in range(previous)))
+            self.write((f"\033[{previous - 1}A" if previous > 1 else "") + "\r")
+        self.write("\n".join(lines))
+        return len(lines)
+
     def banner(self, release):
+        release = display_release(release)
         if self.tty and self.width() < 32:
             self.write(self.paint("Orbis", "1;36") + f"\n{release}\n")
             return
@@ -137,19 +187,31 @@ class Presentation:
             return
         stopped = threading.Event()
         started = time.monotonic()
+        rows = 0
+        previous_handlers = {}
+
+        def terminate(signum, _frame):
+            raise SystemExit(128 + signum)
 
         def draw():
+            nonlocal rows
             tick = 1
             while not stopped.wait(0.1):
                 summary = detail() if detail else None
-                self.write("\r\033[2K" + self.frame(label, tick, time.monotonic() - started, detail=summary, fraction=getattr(detail, "fraction", None)))
+                scene = [self.paint(line, "36") for line in spaceflight(self.width() - 1, tick)] if self.width() >= 72 and self.height() >= 18 else []
+                rows = self.redraw(rows, [*scene, self.frame(label, tick, time.monotonic() - started, detail=summary, fraction=getattr(detail, "fraction", None))])
                 tick += 1
 
         worker = threading.Thread(target=draw, name="orbis-installer-display", daemon=True)
         success = False
         try:
+            if threading.current_thread() is threading.main_thread():
+                for signum in (signal.SIGTERM, signal.SIGHUP):
+                    previous_handlers[signum] = signal.signal(signum, terminate)
             self.write(textwrap.fill(heading, width=max(16, self.width() - 1), subsequent_indent="  ", break_long_words=False, break_on_hyphens=False) + "\n")
-            self.write("\033[?25l" + self.frame(label, 0))
+            self.write("\033[?25l")
+            scene = [self.paint(line, "36") for line in spaceflight(self.width() - 1, 0)] if self.width() >= 72 and self.height() >= 18 else []
+            rows = self.redraw(0, [*scene, self.frame(label, 0)])
             worker.start()
             yield
             success = completed is None or completed()
@@ -157,9 +219,11 @@ class Presentation:
             stopped.set()
             if worker.ident is not None:
                 worker.join()
+            for signum, previous in previous_handlers.items():
+                signal.signal(signum, previous)
             if success:
                 self.completed += 1
             # Keep the cursor usable after failure, cancellation or interruption.
-            self.write("\r\033[2K\033[?25h")
             status = "[ok]" if success else "[stopped]"
-            self.write(self.frame(label, 0, time.monotonic() - started, status) + "\n")
+            self.redraw(rows, [self.frame(label, 0, time.monotonic() - started, status)])
+            self.write("\033[?25h\n")

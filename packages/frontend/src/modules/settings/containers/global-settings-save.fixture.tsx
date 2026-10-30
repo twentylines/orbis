@@ -61,12 +61,16 @@ Object.assign(globalThis, {
   IS_REACT_ACT_ENVIRONMENT: true,
 });
 const { createRoot } = await import('react-dom/client');
-const { SettingsSaveProvider, SettingsSaveButton, SettingsSaveFeedback, useSettingsSave } = await import('../pages/settings-save');
+const { SettingsSaveProvider, SettingsSaveButton, SettingsSaveActivity, SettingsSaveFeedback, useSettingsSave } = await import(
+  '../pages/settings-save'
+);
 const scenario = process.argv[2] ?? '';
 let controller = new AbortController();
 let account = 'A';
 let save: (() => Promise<void>) | undefined;
 let loading = false;
+let activity = false;
+let backgroundSaving = false;
 let error: unknown = null;
 const sections: string[] = [];
 const eventsSeen: string[] = [];
@@ -113,6 +117,7 @@ function Probe() {
   });
   save = shared.save;
   loading = SettingsSaveButton()?.props.loading ?? false;
+  activity = SettingsSaveActivity()?.props.pending ?? false;
   error = SettingsSaveFeedback()?.props.children ?? null;
   return null;
 }
@@ -138,7 +143,7 @@ const container = {
 const root = createRoot(container as unknown as HTMLElement);
 const render = () =>
   root.render(
-    <SettingsSaveProvider signal={controller.signal} onSection={(section) => sections.push(section)}>
+    <SettingsSaveProvider backgroundSaving={backgroundSaving} signal={controller.signal} onSection={(section) => sections.push(section)}>
       <Probe />
     </SettingsSaveProvider>,
   );
@@ -159,62 +164,99 @@ const start = async () => {
 };
 try {
   await flush(render);
-  const old = await start();
-  expect(loading).toBe(true);
-  if (scenario === 'global-unmount') {
-    await flush(() => root.unmount());
-    unmounted = true;
-    await flush(async () => {
-      oldPrepare.resolve(null);
-      await old.pending;
+  if (scenario === 'global-background-activity') {
+    expect(activity).toBe(false);
+    await flush(() => {
+      backgroundSaving = true;
+      render();
     });
+    expect(activity).toBe(true);
+    expect(loading).toBe(false);
+    expect(eventsSeen).toEqual([]);
+    await flush(() => {
+      backgroundSaving = false;
+      render();
+    });
+    expect(activity).toBe(false);
+    await flush(() => {
+      backgroundSaving = true;
+      controller.abort();
+      render();
+    });
+    expect(activity).toBe(false);
+    expect(loading).toBe(false);
     expect(sections).toEqual([]);
-  } else {
-    controller.abort(new DOMException('Session ended', 'AbortError'));
-    controller = new AbortController();
-    account = 'B';
-    await flush(render);
+  } else if (scenario === 'global-activity') {
+    expect(activity).toBe(false);
+    const current = await start();
+    expect(activity).toBe(true);
+    expect(loading).toBe(true);
+    await flush(async () => {
+      oldCommit.resolve();
+      await current.pending;
+    });
+    expect(activity).toBe(false);
     expect(loading).toBe(false);
     expect(error).toBeNull();
-    if (scenario === 'global-session-prepare') {
+    expect(eventsSeen).toEqual(['prepare-A-general', 'prepare-A-updates', 'commit-A-general', 'commit-A-updates']);
+  } else {
+    const old = await start();
+    expect(loading).toBe(true);
+    if (scenario === 'global-unmount') {
+      await flush(() => root.unmount());
+      unmounted = true;
       await flush(async () => {
-        oldPrepare.resolve(async () => {
-          eventsSeen.push('unexpected-old-commit');
-        });
+        oldPrepare.resolve(null);
         await old.pending;
       });
-      expect(eventsSeen).toEqual(['prepare-A-general']);
       expect(sections).toEqual([]);
-    } else if (scenario === 'global-session-error') {
-      const fresh = await start();
-      await fresh.pending;
-      expect(error).toBe('Check the highlighted settings before saving.');
-      expect(sections).toEqual(['general']);
-      await flush(async () => {
-        oldCommit.reject(new Error('Private old-session error'));
-        await old.pending;
-      });
-      expect(error).toBe('Check the highlighted settings before saving.');
-      expect(sections).toEqual(['general']);
-      expect(eventsSeen).not.toContain('commit-A-updates');
-    } else if (scenario === 'global-session-new-save') {
-      const fresh = await start();
-      expect(loading).toBe(true);
-      await flush(async () => {
-        oldCommit.resolve();
-        await old.pending;
-      });
-      expect(loading).toBe(true);
-      expect(error).toBeNull();
-      expect(sections).toEqual([]);
-      expect(eventsSeen).not.toContain('commit-A-updates');
-      await flush(async () => {
-        freshCommit.resolve();
-        await fresh.pending;
-      });
+    } else {
+      controller.abort(new DOMException('Session ended', 'AbortError'));
+      controller = new AbortController();
+      account = 'B';
+      await flush(render);
       expect(loading).toBe(false);
-      expect(eventsSeen).toContain('commit-B-updates');
-    } else throw new Error('Unknown fixture scenario');
+      expect(error).toBeNull();
+      if (scenario === 'global-session-prepare') {
+        await flush(async () => {
+          oldPrepare.resolve(async () => {
+            eventsSeen.push('unexpected-old-commit');
+          });
+          await old.pending;
+        });
+        expect(eventsSeen).toEqual(['prepare-A-general']);
+        expect(sections).toEqual([]);
+      } else if (scenario === 'global-session-error') {
+        const fresh = await start();
+        await fresh.pending;
+        expect(error).toBe('Check the highlighted settings before saving.');
+        expect(sections).toEqual(['general']);
+        await flush(async () => {
+          oldCommit.reject(new Error('Private old-session error'));
+          await old.pending;
+        });
+        expect(error).toBe('Check the highlighted settings before saving.');
+        expect(sections).toEqual(['general']);
+        expect(eventsSeen).not.toContain('commit-A-updates');
+      } else if (scenario === 'global-session-new-save') {
+        const fresh = await start();
+        expect(loading).toBe(true);
+        await flush(async () => {
+          oldCommit.resolve();
+          await old.pending;
+        });
+        expect(loading).toBe(true);
+        expect(error).toBeNull();
+        expect(sections).toEqual([]);
+        expect(eventsSeen).not.toContain('commit-A-updates');
+        await flush(async () => {
+          freshCommit.resolve();
+          await fresh.pending;
+        });
+        expect(loading).toBe(false);
+        expect(eventsSeen).toContain('commit-B-updates');
+      } else throw new Error('Unknown fixture scenario');
+    }
   }
   process.stdout.write(JSON.stringify({ scenario, mountedReact: true, network: false, layout: false }));
 } finally {

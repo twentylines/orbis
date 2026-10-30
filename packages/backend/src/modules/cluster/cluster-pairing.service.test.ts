@@ -273,9 +273,9 @@ it('authenticated invitation issuance binds its exact actor and reports storage 
     ...([remoteState, ...Array.from({ length: 17 }, () => ({})), localAuth] as unknown as ConstructorParameters<typeof ClusterService>),
   );
   const save = vi.spyOn(remoteState, 'invite').mockRejectedValueOnce(Object.assign(new Error('private storage details'), { code: 'EACCES' }));
-  await expect(issuer.invite({ password: 'local-only' }, 1)).rejects.toThrow('storage permissions');
+  await expect(issuer.invite({}, 1)).rejects.toThrow('storage permissions');
   expect(save).toHaveBeenCalledWith(1);
-  await issuer.invite({ password: 'local-only' }, 1);
+  await issuer.invite({}, 1);
   expect((await remoteState.read()).invite).toMatchObject({ ownerId: 1, authVersion: 2 });
 });
 

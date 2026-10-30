@@ -76,8 +76,8 @@ export class ClusterService {
   }
 
   async invite(body: Record<string, unknown>, userId: number) {
-    this.fields(body, ['password', 'totpCode']);
-    await this.approveTrust(userId, body);
+    this.fields(body, []);
+    if (!Number.isSafeInteger(userId) || userId <= 0) throw new BadRequestException('An operator account is required for pairing.');
     try {
       return await this.state.invite(userId);
     } catch (error) {

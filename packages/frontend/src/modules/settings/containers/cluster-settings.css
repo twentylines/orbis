@@ -408,3 +408,7 @@
   font-size: 0.8125rem;
   line-height: 1.65;
 }
+
+.cluster-invite-dialog .cluster-invite-error {
+  margin: 0 var(--orbis-dialog-gutter) 16px;
+}

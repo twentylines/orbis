@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ClusterPairingCertificate } from './cluster-settings';
+import { Dialog, retainDialogChildren } from '@/components/ui/Dialog/Dialog';
+import type { ReactNode } from 'react';
+import { clusterInvitationContents, ClusterPairingCertificate } from './cluster-settings';
 const props = {
   mode: 'peer' as const,
   https: true,
@@ -46,4 +48,34 @@ test('HTTP and pending pairing cannot upload or approve a certificate', async ()
     expect(disabled).toEqual([true, true]);
     expect(markup).not.toContain('<select');
   }
+});
+
+test('basic invitation confirmation has no password or MFA fields and explains where access is approved', () => {
+  const markup = renderToStaticMarkup(
+    <Dialog open>{clusterInvitationContents({ busy: false, error: '', onClose: () => {}, onGenerate: () => {} })}</Dialog>,
+  );
+  expect(markup).toContain('Creating a code gives it no access.');
+  expect(markup).toContain('five minutes');
+  expect(markup).toContain('confirm this server’s account');
+  expect(markup).toContain('>Cancel</button>');
+  expect(markup).toContain('>Generate code</button>');
+  expect(markup).not.toContain('<input');
+  expect(markup).not.toContain('type="password"');
+  expect(markup).not.toContain('one-time-code');
+});
+
+test('Cancel retains the populated invitation dialog and its error throughout the shared exit', () => {
+  const snapshot = { current: null as ReactNode };
+  const contents = clusterInvitationContents({ busy: false, error: 'Code could not be created.', onClose: () => {}, onGenerate: () => {} });
+  retainDialogChildren(snapshot, true, contents);
+  const closing = retainDialogChildren(snapshot, false, null);
+  const markup = renderToStaticMarkup(<Dialog open={false}>{closing}</Dialog>);
+  expect(markup).toContain('five minutes');
+  expect(markup).toContain('Code could not be created.');
+  expect(markup).toContain('>Cancel</button>');
+  const busy = renderToStaticMarkup(
+    <Dialog open>{clusterInvitationContents({ busy: true, error: '', onClose: () => {}, onGenerate: () => {} })}</Dialog>,
+  );
+  expect(busy.match(/disabled=""/g)).toHaveLength(2);
+  expect(busy).toContain('aria-busy="true"');
 });

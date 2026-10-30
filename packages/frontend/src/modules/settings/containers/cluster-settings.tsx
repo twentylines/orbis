@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { IconCopy, IconPlus, IconServer, IconTrash } from '@tabler/icons-react';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { Button } from '@/components/ui/Button';
@@ -94,6 +94,82 @@ export function ClusterPairingCertificate({
   );
 }
 
+export function clusterInvitationContents({
+  busy,
+  error,
+  onClose,
+  onGenerate,
+}: {
+  busy: boolean;
+  error: string;
+  onClose: () => void;
+  onGenerate: () => void;
+}) {
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Create a pairing code?</DialogTitle>
+      </DialogHeader>
+      <DialogDescription>
+        The code expires in five minutes. The admin server must confirm this server’s account before pairing. Creating a code gives it no access.
+      </DialogDescription>
+      {error ? <InlineFeedback className="cluster-invite-error">{error}</InlineFeedback> : null}
+      <DialogFooter>
+        <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="button" intent="primary" disabled={busy} aria-busy={busy} onClick={onGenerate}>
+          Generate code
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+export function ClusterInvitationDialog({
+  open,
+  busy,
+  error,
+  opener,
+  onClose,
+  onGenerate,
+}: {
+  open: boolean;
+  busy: boolean;
+  error: string;
+  opener: RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+  onGenerate: () => void;
+}) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose();
+      }}
+    >
+      <DialogContent
+        size="sm"
+        className="cluster-invite-dialog"
+        closeDisabled={busy}
+        onEscapeKeyDown={(event) => {
+          if (busy) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (busy) event.preventDefault();
+        }}
+        onCloseAutoFocus={(event) => {
+          if (opener.current?.isConnected) {
+            event.preventDefault();
+            opener.current.focus({ preventScroll: true });
+          }
+        }}
+      >
+        {clusterInvitationContents({ busy, error, onClose, onGenerate })}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ClusterSettings() {
   const visible = useWindowVisible();
   const { user, sessionIdentity } = useAppContext();
@@ -123,9 +199,8 @@ export function ClusterSettings() {
   const [remoteConnection, setRemoteConnection] = useState<ClusterPairConnection | null>(null);
   const remoteScope = useRef<PairingRequestScope | null>(null);
   const [inviteError, setInviteError] = useState('');
-  const [inviteAuthOpen, setInviteAuthOpen] = useState(false);
-  const [invitePassword, setInvitePassword] = useState('');
-  const [inviteTotp, setInviteTotp] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const inviteTrigger = useRef<HTMLButtonElement>(null);
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
   const invitationField = useRef<HTMLTextAreaElement>(null);
@@ -225,31 +300,21 @@ export function ClusterSettings() {
       (detail) => setPairError(detail),
     );
   };
-  const createInvite = (event: FormEvent) => {
-    event.preventDefault();
+  const closeInvite = () => {
+    if (busy) return;
+    setInviteOpen(false);
     setInviteError('');
-    if (!invitePassword) {
-      setInviteError('Enter your account password to create a pairing code.');
-      return;
-    }
-    const credentials = { password: invitePassword, ...(inviteTotp ? { totpCode: inviteTotp } : {}) };
-    setInvitePassword('');
-    setInviteTotp('');
+  };
+  const createInvite = () => {
+    setInviteError('');
     void run(
       async (scope) => {
-        try {
-          await scope.accept(createClusterInvitation(credentials), (next) => {
-            setNow(Date.now());
-            setInvitation(next);
-            setCopyMessage('');
-            setInviteAuthOpen(false);
-          });
-        } finally {
-          scope.commit(() => {
-            setInvitePassword('');
-            setInviteTotp('');
-          });
-        }
+        await scope.accept(createClusterInvitation(), (next) => {
+          setNow(Date.now());
+          setInvitation(next);
+          setCopyMessage('');
+          setInviteOpen(false);
+        });
       },
       'Pairing code created. Enter it on the admin server.',
       (detail) => setInviteError(detail),
@@ -321,9 +386,7 @@ export function ClusterSettings() {
     setPeerCertificateName('');
     setPairPassword('');
     setPairTotp('');
-    setInvitePassword('');
-    setInviteTotp('');
-    setInviteAuthOpen(false);
+    setInviteOpen(false);
     setInvitation(null);
     setCode('');
     setCertificateMode('system');
@@ -340,8 +403,6 @@ export function ClusterSettings() {
     remoteScope.current = null;
     setPairPassword('');
     setPairTotp('');
-    setInvitePassword('');
-    setInviteTotp('');
     setBusy(false);
   }, [visible]);
   const expiresIn = invitation ? Math.max(0, Math.ceil((new Date(invitation.expiresAt).getTime() - now) / 1000)) : 0;
@@ -618,69 +679,23 @@ export function ClusterSettings() {
         <section className="cluster-settings-section" aria-labelledby="cluster-invite-heading">
           <div>
             <h2 id="cluster-invite-heading">Join another cluster</h2>
-            <p>Create a one-use code for the admin server. Pairing grants that server access to this server’s apps, status and updates.</p>
+            <p>
+              Create a one-use code for the admin server. Pairing needs this server’s account approval before it grants access to apps, status and
+              updates.
+            </p>
           </div>
           <div className="cluster-settings-form">
-            {inviteAuthOpen ? (
-              <form className="cluster-invite-auth" onSubmit={createInvite}>
-                <Input
-                  disabled={busy}
-                  id="cluster-invite-password"
-                  className="cluster-settings-control"
-                  label="This server’s account password"
-                  type="password"
-                  value={invitePassword}
-                  onChange={(event) => setInvitePassword(event.target.value)}
-                  autoComplete="current-password"
-                  required
-                />
-                <Input
-                  disabled={busy}
-                  id="cluster-invite-totp"
-                  className="cluster-settings-control"
-                  label={
-                    <>
-                      Authentication code <span>(if enabled)</span>
-                    </>
-                  }
-                  value={inviteTotp}
-                  onChange={(event) => setInviteTotp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                  autoComplete="one-time-code"
-                  inputMode="numeric"
-                  maxLength={6}
-                />
-                {inviteError ? <InlineFeedback className="cluster-pair-error">{inviteError}</InlineFeedback> : null}
-                <div className="cluster-pair-actions">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => {
-                      setInviteError('');
-                      setInviteAuthOpen(false);
-                      setInvitePassword('');
-                      setInviteTotp('');
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" intent="primary" disabled={busy || !invitePassword}>
-                    Generate code
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <Button
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setInviteError('');
-                  setInviteAuthOpen(true);
-                }}
-              >
-                Generate pairing code
-              </Button>
-            )}
+            <Button
+              ref={inviteTrigger}
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setInviteError('');
+                setInviteOpen(true);
+              }}
+            >
+              Generate pairing code
+            </Button>
             {invitation ? (
               <div className="cluster-invitation">
                 <label htmlFor="cluster-invitation-code">Pairing code</label>
@@ -766,6 +781,14 @@ export function ClusterSettings() {
         </div>
         <NearbyVisibility disabled={busy} />
       </section>
+      <ClusterInvitationDialog
+        open={inviteOpen}
+        busy={busy}
+        error={inviteError}
+        opener={inviteTrigger}
+        onClose={closeInvite}
+        onGenerate={createInvite}
+      />
       <ClusterSyncSettings />
       {remoteConnection ? (
         <ClusterRemoteAccountDialog

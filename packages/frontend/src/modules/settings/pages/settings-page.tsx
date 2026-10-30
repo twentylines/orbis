@@ -1,5 +1,6 @@
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
+import { useDesktopPreferences } from '@/desktop/preferences';
 import { Suspense, lazy, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
@@ -9,6 +10,8 @@ import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { SettingsWorkspace } from './settings-workspace';
+import { HttpsSettings } from '../containers/https-settings';
+import { httpsSetupVisible } from '@/desktop/secure-access';
 import { SettingsSaveProvider } from './settings-save';
 import { AppUpdatePolicyProvider } from '../containers/app-update-policy';
 import {
@@ -32,13 +35,32 @@ export default function SettingsPage() {
   const location = useLocation();
   const { userSettings, user } = useAppContext();
   const { sessionAbortSignal } = useUserContext();
+  const { syncState } = useDesktopPreferences();
   const visible = useWindowVisible();
-  const access = { operator: user.operator === true, advanced: userSettings.advancedSettings === true };
+  const access = {
+    operator: user.operator === true,
+    advanced: userSettings.advancedSettings === true,
+    http: httpsSetupVisible(typeof window === 'undefined' ? '' : window.location.protocol),
+  };
   const target = settingsCatalogue.find(
     (entry) => entry.id === searchParams.get('setting') || (!searchParams.has('setting') && `#${entry.anchor}` === location.hash),
   );
   const allowedTarget = target && settingAvailable(target, access) ? target : undefined;
-  const current = allowedTarget?.section ?? resolveSettingsSection(searchParams.get('tab'));
+  const requested =
+    searchParams.get('secure_setup') === '1'
+      ? access.http
+        ? 'https'
+        : 'security'
+      : (allowedTarget?.section ?? resolveSettingsSection(searchParams.get('tab')));
+  const current = requested === 'https' && !access.http ? 'security' : requested;
+  useEffect(() => {
+    if (searchParams.get('secure_setup') !== '1') return;
+    const params = new URLSearchParams(searchParams);
+    params.delete('secure_setup');
+    params.delete('setting');
+    params.set('tab', access.http ? 'https' : 'security');
+    void navigate({ pathname: location.pathname, search: `?${params}`, hash: '' }, { replace: true, preventScrollReset: true });
+  }, [access.http, searchParams, navigate, location.pathname]);
   const root = useRef<HTMLDivElement>(null);
   const revealGeneration = useRef(location.key);
   revealGeneration.current = location.key;
@@ -75,7 +97,7 @@ export default function SettingsPage() {
   );
   return (
     <div className="desktop-settings" ref={root}>
-      <SettingsSaveProvider signal={sessionAbortSignal} onSection={(section) => updateLocation(section)}>
+      <SettingsSaveProvider backgroundSaving={syncState === 'saving'} signal={sessionAbortSignal} onSection={(section) => updateLocation(section)}>
         <AppUpdatePolicyProvider>
           <SettingsWorkspace
             current={current}
@@ -92,6 +114,7 @@ export default function SettingsPage() {
               ),
               updates: serverPanel('updates'),
               backups: serverPanel('backups'),
+              https: <HttpsSettings />,
               security: (
                 <Suspense fallback={loading}>
                   <SecurityContainer totpEnabled={Boolean(user.totpEnabled)} username={user.username} />

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type } from 'arktype';
+import { Link } from 'react-router';
+import { httpsSettingsPath, httpsSetupVisible } from '@/desktop/secure-access';
+import { nearbyAdvertisingMessage, nearbyUnavailableCode, nearbyUnavailableMessage, type NearbyUnavailableCode } from './nearby-visibility-reason';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
 import { useWindowVisible } from '@/desktop/window-visibility';
@@ -16,7 +19,7 @@ const status = type({
   enabled: 'boolean',
   sharing: lease.or(addressLease).or('null'),
 });
-export type NearbyVisibilityState = { available: false; sharing: null } | typeof status.infer;
+export type NearbyVisibilityState = { available: false; sharing: null; reasonCode?: NearbyUnavailableCode } | typeof status.infer;
 export async function readNearbyVisibility(signal?: AbortSignal): Promise<NearbyVisibilityState> {
   const response = await fetch('/api/nearby-discovery', {
     credentials: 'same-origin',
@@ -24,9 +27,18 @@ export async function readNearbyVisibility(signal?: AbortSignal): Promise<Nearby
     redirect: 'error',
     signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20_000)]),
   });
-  if (!response.ok) throw new Error(nearbyFallback);
-  const raw: unknown = await response.json();
-  if (raw && typeof raw === 'object' && 'available' in raw && raw.available === false) return { available: false, sharing: null };
+  if (response.status === 404) return { available: false, sharing: null, reasonCode: 'unsupported' };
+  if (!response.ok) throw new Error(nearbyUnavailableMessage());
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    throw new Error(nearbyUnavailableMessage());
+  }
+  if (raw && typeof raw === 'object' && 'available' in raw && raw.available === false) {
+    const reasonCode = nearbyUnavailableCode('reasonCode' in raw ? raw.reasonCode : undefined);
+    return { available: false, sharing: null, ...(reasonCode ? { reasonCode } : {}) };
+  }
   const value = status(raw);
   if (
     value instanceof type.errors ||
@@ -125,27 +137,30 @@ export function NearbyVisibility({ disabled = false }: { disabled?: boolean }) {
       <output aria-live="polite">
         {message ||
           (state?.available
-            ? state.enabled
-              ? state.sharing
-                ? 'This server is advertising on its private LAN.'
-                : 'Discovery is allowed but not advertising. Check the host service and private LAN connection.'
-              : 'Nearby discovery is off.'
+            ? nearbyAdvertisingMessage(state)
             : state
-              ? nearbyFallback
+              ? nearbyUnavailableMessage(state.reasonCode)
               : busy
                 ? 'Checking nearby discovery…'
                 : 'Nearby discovery status has not been confirmed.')}
       </output>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={disabled || busy || !visible}
-        onClick={() => {
-          void run();
-        }}
-      >
-        Refresh
-      </Button>
+      <div className="nearby-visibility-actions">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled || busy || !visible}
+          onClick={() => {
+            void run();
+          }}
+        >
+          Refresh
+        </Button>
+        {typeof window !== 'undefined' && httpsSetupVisible(window.location.protocol) ? (
+          <Button asChild variant="ghost">
+            <Link to={httpsSettingsPath}>Set up HTTPS</Link>
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

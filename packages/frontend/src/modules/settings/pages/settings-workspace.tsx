@@ -6,6 +6,7 @@ import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { DialogVisibilityContext } from '@/components/ui/Dialog/Dialog';
 import { WindowVisibilityContext } from '@/desktop/window-visibility';
 import { RouteHeaderToolbar } from '@/desktop/route-header-toolbar';
+import { SecureConnectionIndicator } from '@/components/secure-connection-indicator';
 import { useReducedMotion } from '@/desktop/motion-preferences';
 import {
   searchSettings,
@@ -16,7 +17,7 @@ import {
   type SettingsSection,
 } from '../helpers/settings-catalogue';
 import './settings-page.css';
-import { SettingsSaveButton, SettingsSaveFeedback, SettingsSaveStatus } from './settings-save';
+import { SettingsSaveButton, SettingsSaveActivity, SettingsSaveFeedback, SettingsSaveStatus } from './settings-save';
 
 export function SettingsPanel({ active, children, id, label }: { active: boolean; children: ReactNode; id: string; label: string }) {
   const parentVisible = useContext(WindowVisibilityContext);
@@ -68,10 +69,12 @@ export function SettingsWorkspace({
     setQuery('');
     onSetting(entry);
   };
+  const sections = settingsSections.filter((entry) => entry.id !== 'https' || access.http === true);
   const section = settingsSections.find((entry) => entry.id === current) ?? settingsSections[0];
   return (
     <div className="settings-workspace">
       <RouteHeaderToolbar>
+        <SecureConnectionIndicator compact />
         <SettingsSaveStatus />
       </RouteHeaderToolbar>
       <search
@@ -174,7 +177,7 @@ export function SettingsWorkspace({
       <div className="settings-layout">
         <nav className="settings-sidebar" aria-label="Settings categories">
           <SelectionGroup className="settings-category-list">
-            {settingsSections.map((entry) => (
+            {sections.map((entry) => (
               <button key={entry.id} type="button" aria-pressed={current === entry.id} onClick={() => onSection(entry.id)}>
                 <strong>{entry.label}</strong>
               </button>
@@ -193,7 +196,7 @@ export function SettingsWorkspace({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {settingsSections.map((entry) => (
+              {sections.map((entry) => (
                 <SelectItem key={entry.id} value={entry.id}>
                   {entry.label}
                 </SelectItem>
@@ -202,10 +205,15 @@ export function SettingsWorkspace({
           </Select>
         </div>
         <div className="settings-content">
-          <header className="settings-content-heading">
-            <h2>{section.label}</h2>
-            <SettingsSaveButton />
-          </header>
+          <div className="settings-heading-container">
+            <header className="settings-content-heading">
+              <h2>{section.label}</h2>
+              <div className="settings-save-actions">
+                <SettingsSaveActivity />
+                <SettingsSaveButton />
+              </div>
+            </header>
+          </div>
           <SettingsSaveFeedback />
           {settingsSections
             .filter((entry) => visited.has(entry.id) || entry.id === current)

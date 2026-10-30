@@ -2,10 +2,12 @@
 """Download and verify the installer attached to this exact Orbis release."""
 
 import argparse
+import ast
 import hashlib
 import io
 import json
 import os
+import platform
 import re
 import stat
 import sys
@@ -17,10 +19,70 @@ from urllib.request import Request, urlopen
 
 
 EXPECTED_RELEASE = None
+CHANNEL_CATALOG = None
+CHANNEL_METADATA_URL = "https://twentylines.github.io/orbis/channels.json"
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
 ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|packaging/systemd/orbis-host\.service")
 REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "packaging/systemd/orbis-host.service"}
+
+
+def require_supported_host():
+    if sys.platform != "linux" or os.geteuid() != 0 or sys.version_info < (3, 10):
+        raise ValueError("Run this installer as root on Linux with Python 3.10 or newer")
+    if sys.maxsize < 2**63 - 1 or platform.machine().lower() not in {"aarch64", "arm64", "x86_64", "amd64"}:
+        raise ValueError("Orbis requires 64-bit ARM64 or AMD64 Linux. 32-bit Raspberry Pi OS is unsupported; use a 64-bit Raspberry Pi OS or Ubuntu installation")
+
+
+def release_channel(tag):
+    if not isinstance(tag, str) or len(tag) > 80 or not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:beta|rc)\.(?:0|[1-9][0-9]*))?", tag) or any(int(number) > 9_007_199_254_740_991 for number in re.findall(r"[0-9]+", tag)):
+        raise ValueError("The selected release tag is invalid")
+    return "nightly" if "-" in tag else "stable"
+
+
+def display_release(tag):
+    release_channel(tag)
+    return tag[1:].replace("-beta.", " beta ").replace("-rc.", " rc ")
+
+
+def select_channel(catalog, requested=None, ask=None):
+    if not isinstance(catalog, dict) or set(catalog) != {"schema", "channels"} or catalog["schema"] != "orbis.installer-channels.v1":
+        raise ValueError("The published installer channel list is invalid")
+    channels = catalog["channels"]
+    if not isinstance(channels, dict) or set(channels) != {"stable", "nightly"}:
+        raise ValueError("The published installer channel list is invalid")
+    for name, record in channels.items():
+        if record is None:
+            continue
+        if not isinstance(record, dict) or set(record) != {"tag", "commit", "launcherSha256"}:
+            raise ValueError("The published installer release identity is invalid")
+        kind = release_channel(record["tag"])
+        if (name == "stable" and kind != "stable") or not re.fullmatch(r"[0-9a-f]{40}", str(record["commit"])) or not re.fullmatch(r"[0-9a-f]{64}", str(record["launcherSha256"])):
+            raise ValueError("The published installer release identity is invalid")
+    prompted = requested is None
+    if prompted:
+        if ask is None:
+            raise ValueError("Choose --channel stable or --channel nightly for unattended installation")
+        labels = [f"  {index}. {name.title()} — {display_release(channels[name]['tag']) if channels[name] else 'not available yet'}" for index, name in enumerate(("stable", "nightly"), 1)]
+        answer = ask("Choose an update channel. This does not enable automatic updates.\n" + "\n".join(labels) + "\nNightly can contain incomplete features or regressions.\nChannel [1/2]: ").strip().lower()
+        requested = {"1": "stable", "2": "nightly", "stable": "stable", "nightly": "nightly"}.get(answer)
+    if requested not in channels:
+        raise ValueError("Choose Stable or Nightly")
+    if channels[requested] is None:
+        raise ValueError(f"{requested.title()} is not available yet. No other channel was selected")
+    return requested, channels[requested], prompted
+
+
+def verify_selected_launcher(data, record):
+    if sha(data) != record["launcherSha256"]:
+        raise ValueError("The selected installer does not match its published channel")
+    values = [node.value for node in ast.parse(data).body if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "EXPECTED_RELEASE" for target in node.targets)]
+    if len(values) != 1:
+        raise ValueError("The selected installer has no unique release identity")
+    identity = ast.literal_eval(values[0])
+    if not isinstance(identity, dict) or set(identity) != {"tag", "commit", "manifestSha256"} or any(identity.get(key) != record[key] for key in ("tag", "commit")) or not re.fullmatch(r"[0-9a-f]{64}", str(identity.get("manifestSha256"))):
+        raise ValueError("The selected installer has a different release identity")
+    return identity
 
 
 def sha(data):
@@ -103,16 +165,54 @@ def private_directory(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, default=Path("/var/lib/orbis/installer"))
+    parser.add_argument("--channel", choices=("stable", "nightly"))
     args, remaining = parser.parse_known_args()
-    if sys.platform != "linux" or os.geteuid() != 0 or sys.version_info < (3, 10):
-        raise ValueError("Run this installer as root on Linux with Python 3.10 or newer")
+    require_supported_host()
     if any(arg.split("=", 1)[0] in {"--manifest", "--state-dir"} for arg in remaining):
         raise ValueError("The release launcher supplies its own manifest and state directory")
+    if EXPECTED_RELEASE is None:
+        if not isinstance(CHANNEL_CATALOG, dict):
+            raise ValueError("Download the installer from the published Orbis installer endpoint")
+        catalog = json.loads(fetch(CHANNEL_METADATA_URL, 16 * 1024))
+        terminal = writer = None
+        try:
+            if args.channel is None and "--yes" not in remaining:
+                terminal = open("/dev/tty", "r", encoding="utf-8")
+                writer = open("/dev/tty", "w", encoding="utf-8")
+
+            def ask(question):
+                writer.write(question); writer.flush()
+                answer = terminal.readline()
+                if not answer:
+                    raise ValueError("Installation cancelled")
+                return answer
+
+            channel, record, prompted = select_channel(catalog, args.channel, ask if terminal else None)
+        finally:
+            if terminal:
+                terminal.close()
+            if writer:
+                writer.close()
+        if channel == "nightly" and "--accept-nightly" not in remaining:
+            if "--yes" in remaining:
+                raise ValueError("Unattended Nightly installation requires --accept-nightly")
+            if prompted:
+                remaining.append("--accept-nightly")
+        data = fetch(f"https://github.com/twentylines/orbis/releases/download/{record['tag']}/install-orbis.py", 1024 * 1024)
+        verify_selected_launcher(data, record)
+        destination = Path(tempfile.mkdtemp(prefix="selected-", dir=private_directory(args.work_dir)))
+        launcher = destination / "install-orbis.py"
+        launcher.write_bytes(data); launcher.chmod(0o600)
+        os.execv(sys.executable, [sys.executable, str(launcher), "--work-dir", str(args.work_dir), "--channel", channel, *remaining])
+        return
     if not isinstance(EXPECTED_RELEASE, dict):
-        raise ValueError("Download install-orbis.py from a published Orbis release")
+        raise ValueError("Download the installer from a published Orbis release")
     identity = EXPECTED_RELEASE
+    channel = args.channel or release_channel(identity.get("tag"))
+    if channel == "stable" and release_channel(identity.get("tag")) != "stable":
+        raise ValueError("This release is not available on Stable")
     base = f"https://github.com/twentylines/orbis/releases/download/{identity['tag']}/"
-    print(f"Downloading Orbis {identity['tag']} installer…", flush=True)
+    print(f"Downloading Orbis {display_release(identity['tag'])} installer…", flush=True)
     manifest_data = fetch(base + MANIFEST, 64 * 1024)
     manifest = verify_manifest(manifest_data, identity)
     release_data = fetch(base + "release-manifest.json", 16 * 1024)
@@ -136,7 +236,7 @@ def main():
     package_manifest.write_bytes(manifest_data)
     package_manifest.chmod(0o600)
     print(f"Verified installer. Recovery files: {destination}", flush=True)
-    os.execv(sys.executable, [sys.executable, str(destination / "scripts/orbis-install.py"), "--manifest", str(release_file), "--state-dir", str(destination / "transactions"), *remaining])
+    os.execv(sys.executable, [sys.executable, str(destination / "scripts/orbis-install.py"), "--manifest", str(release_file), "--state-dir", str(destination / "transactions"), "--channel", channel, *remaining])
 
 
 if __name__ == "__main__":

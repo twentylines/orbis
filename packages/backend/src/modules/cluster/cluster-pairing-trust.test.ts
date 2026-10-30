@@ -47,21 +47,35 @@ const pair = () => ({
   confirmPeerCertificate: true,
 });
 
-it('requires fresh credentials for both issuing a pairing code and pairing, before creating trust or sending a code', async () => {
-  for (const body of [{}, { password: '' }, { ...credentials, totpCode: 'bad' }]) {
-    await expect(service.invite(body, 1)).rejects.toThrow('Confirm pairing');
+it('issues only actor-bound account codes without another password while access pairing still requires fresh authentication', async () => {
+  for (const body of [{}, { password: '' }, { ...credentials, totpCode: 'bad' }])
     await expect(service.pair({ ...body, url: 'https://source.example.test', code: 'A'.repeat(24) }, 1)).rejects.toThrow('Confirm pairing');
-  }
+  for (const body of [credentials, { ownerId: 2 }, { authVersion: 1 }, { allowLegacy: true }])
+    await expect(service.invite(body, 1)).rejects.toThrow('only the requested');
+  for (const actor of [undefined, 0, -1, 1.5, Number.NaN]) await expect(service.invite({}, actor as number)).rejects.toThrow('operator account');
   expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
-  expect(clusterRequest).not.toHaveBeenCalled();
-  const invitation = await service.invite(credentials, 1);
+  const invitation = await service.invite({}, 1);
   expect(invitation.code).toMatch(/^[A-F0-9]{24}$/);
-  expect(auth.verifySensitiveAction).toHaveBeenCalledWith(1, credentials.password, credentials.totpCode);
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  expect((await state.read()).invite).toMatchObject({ ownerId: 1, authVersion: 2 });
+  expect((await state.read()).invite?.hash).not.toBe(createHash('sha256').update(invitation.code).digest('hex'));
+  await expect(
+    state.accept({
+      protocol: CLUSTER_PROTOCOL,
+      code: invitation.code,
+      adminId: memberId,
+      secret: 'a'.repeat(64),
+      clusterName: 'Fixture',
+      adminName: 'Other',
+    }),
+  ).rejects.toThrow('Authorize pairing with the other server account');
+  expect((await state.read()).role).toBe('standalone');
+  expect(clusterRequest).not.toHaveBeenCalled();
   auth.verifySensitiveAction.mockRejectedValueOnce(new Error('Fresh authentication failed'));
   await expect(service.pair(pair(), 1)).rejects.toThrow('Fresh authentication failed');
   expect(clusterRequest).not.toHaveBeenCalled();
   auth.verifySensitiveAction.mockResolvedValueOnce({ id: 1, operator: false });
-  await expect(service.invite(credentials, 1)).rejects.toThrow('operator account');
+  await expect(service.pair(pair(), 1)).rejects.toThrow('operator account');
 });
 
 it('persists only the exact verified member certificate after pairing succeeds, and never sends credentials/certificates in protocol bodies', async () => {

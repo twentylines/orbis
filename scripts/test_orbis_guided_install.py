@@ -1,5 +1,6 @@
 import contextlib
 import copy
+import ast
 import hashlib
 import importlib.util
 import io
@@ -34,6 +35,45 @@ NIGHTLY_MANIFEST = {**MANIFEST, "tag": "v1.0.1-beta.1"}
 HEALTHY = {"state": "running", "health": "healthy", "image": MANIFEST["image"] + "@" + MANIFEST["digest"]}
 
 
+class DockerPrerequisiteTests(unittest.TestCase):
+    def test_missing_docker_has_official_actionable_help_without_executing_any_command(self):
+        reader = mock.Mock()
+        with mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE.subprocess, "run") as execute:
+            with self.assertRaisesRegex(ValueError, "Docker was not found") as failure:
+                GUIDE.require_docker_prerequisites(reader)
+        self.assertIn("https://docs.docker.com/engine/install/debian/", str(failure.exception))
+        self.assertIn("https://docs.docker.com/engine/install/ubuntu/", str(failure.exception))
+        self.assertIn("never upgraded", str(failure.exception))
+        reader._read.assert_not_called(); execute.assert_not_called()
+
+    def test_missing_or_legacy_compose_rejects_without_package_or_service_changes(self):
+        for result in (None, "1.29.2", "unknown", ValueError("No plugin")):
+            reader = mock.Mock()
+            if isinstance(result, Exception): reader._read.side_effect = result
+            else: reader._read.return_value = result
+            with self.subTest(result=result), mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/docker"), mock.patch.object(GUIDE.subprocess, "run") as execute:
+                with self.assertRaisesRegex(ValueError, "Docker Compose plugin"):
+                    GUIDE.require_docker_prerequisites(reader)
+                execute.assert_not_called()
+            reader._read.assert_called_once_with(["compose", "version", "--short"])
+
+    def test_existing_docker25_api_and_modern_compose_need_no_prerequisite_mutation(self):
+        reader = mock.Mock()
+        reader.socket.return_value = "/run/docker.sock"
+        for compose in ("v2.35.1", "5.6.1"):
+            reader._read.side_effect = [compose, "1.44"]
+            with mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/docker"), mock.patch.object(Path, "is_socket", return_value=True), mock.patch.object(GUIDE.subprocess, "run") as execute:
+                GUIDE.require_docker_prerequisites(reader)
+                self.assertEqual(GUIDE.REPLACE.Engine(reader).version, "1.44")
+                execute.assert_not_called()
+        reader._read.side_effect = ["2.35.1", "1.43"]
+        with mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/docker"), mock.patch.object(Path, "is_socket", return_value=True), mock.patch.object(GUIDE.subprocess, "run") as execute:
+            GUIDE.require_docker_prerequisites(reader)
+            with self.assertRaisesRegex(ValueError, "API 1.44"):
+                GUIDE.REPLACE.Engine(reader)
+            execute.assert_not_called()
+
+
 class GuidedTests(unittest.TestCase):
     def test_release_channel_acknowledgement_only_prompts_for_nightly_and_yes_does_not_imply_consent(self):
         ask = mock.Mock(return_value="y")
@@ -63,47 +103,56 @@ class GuidedTests(unittest.TestCase):
         verify.assert_not_called()
 
     def test_successful_nightly_install_commits_channel_only_after_installer_returns(self):
-        with tempfile.TemporaryDirectory() as folder:
-            parent = Path(folder).resolve()
-            root = parent / "server"
-            root.mkdir()
-            state = parent / "private"
-            state.mkdir()
-            manifest_file = parent / "manifest.json"
-            manifest_file.write_text(json.dumps(NIGHTLY_MANIFEST))
-            argv = ["installer", "--manifest", str(manifest_file), "--state-dir", str(state), "--yes",
-                    "--accept-nightly", "--root", str(root), "--without-host-service", "--host-writers-stopped"]
-            install = mock.Mock()
-
-            def finish_install(*_args, **_kwargs):
-                self.assertEqual(GUIDE.CHANNELS.read_channel(root)["channel"], "stable")
-                return {"result": "orbis-installed"}
-
-            install.side_effect = finish_install
-            new = SimpleNamespace(IMAGES={}, choose_ports=lambda *args: (80, 443), install=install)
-            enable = SimpleNamespace(require_scoped_cleanup=mock.Mock())
-            private = SimpleNamespace(private_directory=lambda _path: state)
-            modules = {
-                "orbis-install-new.py": new,
-                "orbis-host-service-enable.py": enable,
-                "install-orbis.py": private,
-            }
-            display = SimpleNamespace(
-                banner=mock.Mock(), set_remaining_steps=mock.Mock(),
-                step=lambda *_args, **_kwargs: contextlib.nullcontext(),
-            )
-            report = {"installations": [], "unassignedManagedContainers": []}
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), \
-                 mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), \
-                 mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value=report), \
-                 mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: modules[name]), \
-                 mock.patch.object(GUIDE.UI, "Presentation", return_value=display), mock.patch.object(GUIDE.UI, "PullProgress"), \
-                 mock.patch.object(GUIDE, "prepare_backup_tools"), mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/rsync"), \
-                 mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), \
-                 contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(GUIDE.main(), 0)
-            self.assertEqual(install.call_count, 1)
-            self.assertEqual(GUIDE.CHANNELS.read_channel(root)["channel"], "nightly")
+        for selected_manifest, failed in ((NIGHTLY_MANIFEST, False), (MANIFEST, False), (MANIFEST, True)):
+            with tempfile.TemporaryDirectory() as folder:
+                parent = Path(folder).resolve()
+                root = parent / "server"
+                root.mkdir()
+                state = parent / "private"
+                state.mkdir()
+                manifest_file = parent / "manifest.json"
+                manifest_file.write_text(json.dumps(selected_manifest))
+                argv = ["installer", "--manifest", str(manifest_file), "--state-dir", str(state), "--yes",
+                        "--accept-nightly", "--channel", "nightly", "--root", str(root), "--without-host-service", "--host-writers-stopped"]
+                install = mock.Mock()
+    
+                def finish_install(*_args, **_kwargs):
+                    self.assertEqual(GUIDE.CHANNELS.read_channel(root)["channel"], "stable")
+                    if failed:
+                        raise RuntimeError("Controlled install failure")
+                    return {"result": "orbis-installed"}
+    
+                install.side_effect = finish_install
+                new = SimpleNamespace(IMAGES={}, choose_ports=lambda *args: (80, 443), install=install)
+                enable = SimpleNamespace(require_scoped_cleanup=mock.Mock())
+                private = SimpleNamespace(private_directory=lambda _path: state)
+                modules = {
+                    "orbis-install-new.py": new,
+                    "orbis-host-service-enable.py": enable,
+                    "install-orbis.py": private,
+                }
+                display = SimpleNamespace(
+                    banner=mock.Mock(), set_remaining_steps=mock.Mock(),
+                    step=lambda *_args, **_kwargs: contextlib.nullcontext(),
+                )
+                report = {"installations": [], "unassignedManagedContainers": []}
+                output = io.StringIO()
+                with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), \
+                     mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker"), \
+                     mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value=report), \
+                     mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: modules[name]), \
+                     mock.patch.object(GUIDE.UI, "Presentation", return_value=display), mock.patch.object(GUIDE.UI, "PullProgress"), \
+                     mock.patch.object(GUIDE, "prepare_backup_tools"), mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/rsync"), \
+                     mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), \
+                     contextlib.redirect_stdout(output):
+                    if failed:
+                        with self.assertRaisesRegex(RuntimeError, "Controlled install failure"): GUIDE.main()
+                    else:
+                        self.assertEqual(GUIDE.main(), 0)
+                self.assertEqual(install.call_count, 1)
+                self.assertEqual(GUIDE.CHANNELS.read_channel(root)["channel"], "stable" if failed else "nightly")
+                completion = f"Orbis {GUIDE.UI.display_release(selected_manifest['tag'])} is installed at {root}."
+                self.assertEqual(completion in output.getvalue(), not failed)
 
     def test_present_backup_tool_does_not_touch_the_package_manager(self):
         with mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/rsync"), mock.patch.object(GUIDE.subprocess, "run") as execute:
@@ -144,7 +193,7 @@ class GuidedTests(unittest.TestCase):
             argv = ["installer", "--manifest", str(manifest), "--state-dir", str(root / "private"), "--inspect"]
             output = io.StringIO()
             report = {"installations": [], "unassignedManagedContainers": []}
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value=report), mock.patch.object(GUIDE.UI, "Presentation") as display, contextlib.redirect_stdout(output):
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value=report), mock.patch.object(GUIDE.UI, "Presentation") as display, contextlib.redirect_stdout(output):
                 self.assertEqual(GUIDE.main(), 0)
                 self.assertEqual(json.loads(output.getvalue()), report)
                 display.assert_not_called()
@@ -156,7 +205,7 @@ class GuidedTests(unittest.TestCase):
             selected = {"installRoot": str(root), "product": "runtipi", "version": "4.10.1", "reviewRequired": []}
             argv = ["installer", "--manifest", str(manifest), "--state-dir", str(root / "private"), "--yes", "--root", str(root), "--mode", "keep"]
             message = "Unassigned: notes (123456789abc): Compose paths conflict"
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value={"installations": [selected]}), mock.patch.object(GUIDE.APPS, "require_assigned", side_effect=ValueError(message)), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release") as verify, mock.patch.object(GUIDE.subprocess, "run") as execute:
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value={"installations": [selected]}), mock.patch.object(GUIDE.APPS, "require_assigned", side_effect=ValueError(message)), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release") as verify, mock.patch.object(GUIDE.subprocess, "run") as execute:
                 with self.assertRaisesRegex(ValueError, "notes.*Compose paths conflict"):
                     GUIDE.main()
                 verify.assert_not_called()
@@ -185,7 +234,7 @@ class GuidedTests(unittest.TestCase):
                 new = SimpleNamespace(IMAGES={}, choose_ports=lambda *args: (80, 443), install=mock.Mock(side_effect=install))
                 modules = {"orbis-install-new.py": new, "orbis-host-service-enable.py": SimpleNamespace(require_scoped_cleanup=mock.Mock()), "install-orbis.py": SimpleNamespace(private_directory=lambda path: path)}
                 output = io.StringIO()
-                with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value={"installations": [selected] if existing else [], "unassignedManagedContainers": []}), mock.patch.object(GUIDE.APPS, "require_assigned"), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: modules[name]), mock.patch.object(GUIDE, "prepare_backup_tools", side_effect=lambda _: ready.append("rsync")), mock.patch.object(GUIDE, "replacement", side_effect=install), contextlib.redirect_stdout(output):
+                with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value={"installations": [selected] if existing else [], "unassignedManagedContainers": []}), mock.patch.object(GUIDE.APPS, "require_assigned"), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(GUIDE.shutil, "which", return_value=None), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: modules[name]), mock.patch.object(GUIDE, "prepare_backup_tools", side_effect=lambda _: ready.append("rsync")), mock.patch.object(GUIDE, "replacement", side_effect=install), contextlib.redirect_stdout(output):
                     self.assertEqual(GUIDE.main(), 0)
                 self.assertIn("Open Orbis in your browser:\n  http://192.0.2.40\n", output.getvalue())
                 self.assertNotIn("http://192.0.2.40:80", output.getvalue())
@@ -245,7 +294,7 @@ class GuidedTests(unittest.TestCase):
             manifest = root / "manifest.json"; manifest.write_text(json.dumps(MANIFEST))
             argv = ["installer", "--manifest", str(manifest), "--state-dir", str(root / "private"), "--yes", "--root", str(root / "new")]
             report = {"installations": [], "unassignedManagedContainers": [{"container": {"name": "orphan", "id": "a" * 64}, "ownershipReasons": ["No confirmed controller"]}]}
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value=report), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release") as verify, mock.patch.object(GUIDE.subprocess, "run") as execute:
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker"), mock.patch.object(GUIDE.REPLACE, "Engine"), mock.patch.object(GUIDE.APPS.DETECT, "discover", return_value=report), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release") as verify, mock.patch.object(GUIDE.subprocess, "run") as execute:
                 with self.assertRaisesRegex(ValueError, "orphan.*aaaaaaaaaaaa.*No confirmed controller"):
                     GUIDE.main()
                 verify.assert_not_called()
@@ -577,11 +626,85 @@ class CompletionAddressTests(unittest.TestCase):
                 selected = {'installRoot': str(root), 'product': 'orbis', 'reviewRequired': []}
                 argv = ['installer', '--manifest', str(manifest), '--state-dir', str(root / 'private'), '--yes', '--root', str(root), '--without-host-service']
                 output = io.StringIO()
-                with mock.patch.object(sys, 'argv', argv), mock.patch.object(GUIDE.sys, 'platform', 'linux'), mock.patch.object(GUIDE.os, 'geteuid', return_value=0), mock.patch.object(GUIDE.APPS, 'Docker'), mock.patch.object(GUIDE.REPLACE, 'Engine'), mock.patch.object(GUIDE.APPS.DETECT, 'discover', return_value={'installations': [selected]}), mock.patch.object(GUIDE, 'update_existing', side_effect=RuntimeError('Declared failure') if failure else None, return_value={'result': 'up-to-date'}), contextlib.redirect_stdout(output):
+                with mock.patch.object(sys, 'argv', argv), mock.patch.object(GUIDE.sys, 'platform', 'linux'), mock.patch.object(GUIDE.os, 'geteuid', return_value=0), mock.patch.object(GUIDE, 'require_docker_prerequisites'), mock.patch.object(GUIDE.APPS, 'Docker'), mock.patch.object(GUIDE.REPLACE, 'Engine'), mock.patch.object(GUIDE.APPS.DETECT, 'discover', return_value={'installations': [selected]}), mock.patch.object(GUIDE, 'update_existing', side_effect=RuntimeError('Declared failure') if failure else None, return_value={'result': 'up-to-date'}), contextlib.redirect_stdout(output):
                     if failure:
                         with self.assertRaisesRegex(RuntimeError, 'Declared failure'): GUIDE.main()
                     else: self.assertEqual(GUIDE.main(), 0)
                 self.assertEqual('http://192.0.2.40:8080' in output.getvalue(), not failure)
+
+
+
+class ExplicitChannelTests(unittest.TestCase):
+    def test_32_bit_guided_entry_stops_before_manifest_or_docker_inspection(self):
+        argv = ["installer", "--manifest", "/nonexistent/manifest.json", "--state-dir", "/nonexistent/state"]
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.BOOT.platform, "machine", return_value="aarch64"), mock.patch.object(GUIDE.sys, "maxsize", 2**31 - 1), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker") as docker, mock.patch.object(GUIDE, "prepare_backup_tools") as packages:
+            with self.assertRaisesRegex(ValueError, "64-bit"):
+                GUIDE.main()
+            docker.assert_not_called(); packages.assert_not_called()
+
+    def test_selecting_nightly_for_a_stable_artifact_still_requires_nightly_consent(self):
+        with self.assertRaisesRegex(ValueError, "Nightly installation was not approved"):
+            GUIDE.acknowledge_release_channel(MANIFEST, channel="nightly")
+        with contextlib.redirect_stdout(io.StringIO()):
+            GUIDE.acknowledge_release_channel(MANIFEST, accepted=True, channel="nightly")
+
+    def test_stable_channel_cannot_install_prerelease_before_any_docker_inspection(self):
+        with tempfile.TemporaryDirectory() as folder:
+            manifest = Path(folder) / "manifest.json"; manifest.write_text(json.dumps(NIGHTLY_MANIFEST))
+            argv = ["installer", "--manifest", str(manifest), "--state-dir", str(Path(folder) / "state"), "--channel", "stable", "--yes"]
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker") as docker:
+                with self.assertRaisesRegex(ValueError, "selected update channel"): GUIDE.main()
+                docker.assert_not_called()
+
+    def test_same_tag_different_digest_stops_before_all_installer_mutations(self):
+        current = {**MANIFEST, "digest": "sha256:" + "d" * 64}
+        channel = {"channel": "stable", "revision": "initial"}
+        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel), upgrade=mock.Mock())
+        display = SimpleNamespace(set_remaining_steps=mock.Mock(), step=mock.Mock())
+        with mock.patch.object(GUIDE, "load", return_value=upgrade), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release") as verify, mock.patch.object(GUIDE, "prepare_backup_tools") as packages, mock.patch.object(GUIDE, "host_request") as request:
+            with self.assertRaisesRegex(ValueError, "same release tag"):
+                GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), MANIFEST, display)
+        verify.assert_not_called(); packages.assert_not_called(); request.assert_not_called(); upgrade.upgrade.assert_not_called(); display.step.assert_not_called()
+
+    def test_stale_helper_capabilities_stop_before_channel_change_or_core_plan(self):
+        current = {**MANIFEST, "tag": "v1.0.0", "digest": "sha256:" + "d" * 64}
+        channel = {"channel": "stable", "revision": "initial"}
+        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel), SETUP=SimpleNamespace(SOCKET_FILE=Path("/unused/socket")), upgrade=mock.Mock())
+        enable = SimpleNamespace(enable=mock.Mock())
+        display = SimpleNamespace(set_remaining_steps=lambda _: None, step=lambda *_: contextlib.nullcontext())
+        for capabilities in (None, [], ["restart.v1"], "restart.v1 packages.refresh.v1 release-channels.v1"):
+            with self.subTest(capabilities=capabilities), mock.patch.object(GUIDE, "load", side_effect=lambda name, _: upgrade if name == "orbis-host-service-upgrade.py" else enable), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE, "prepare_backup_tools"), mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/rsync"), mock.patch.object(GUIDE, "host_request", return_value={"capabilities": capabilities}) as request:
+                with self.assertRaises(GUIDE.HostServiceCompatibilityError) as failure:
+                    GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), MANIFEST, display, selected_channel="nightly")
+                self.assertEqual(failure.exception.code, "host-service-capabilities-unsupported")
+                request.assert_called_once_with(Path("/unused/socket"), "/v1/status")
+        source = ast.parse(Path(__file__).with_name("orbis-host-service.py").read_text())
+        declared = [{value.value for value in node.elts if isinstance(value, ast.Constant) and isinstance(value.value, str)} for node in ast.walk(source) if isinstance(node, ast.List)]
+        required = {"restart.v1", "packages.refresh.v1", "release-channels.v1"}
+        self.assertGreaterEqual(sum(required.issubset(values) for values in declared), 2)
+        GUIDE.require_helper_capabilities({"capabilities": sorted(required)})
+
+    def test_nightly_policy_keeps_following_nightly_when_latest_artifact_is_stable(self):
+        current = {**MANIFEST, "tag": "v1.0.0", "digest": "sha256:" + "d" * 64}
+        channel = {"channel": "nightly", "revision": "initial"}
+        upgrade = SimpleNamespace(SERVICE=SimpleNamespace(installed_manifest=lambda *_: current, read_channel=lambda *_: channel), SETUP=SimpleNamespace(SOCKET_FILE=Path("/unused/socket")), upgrade=mock.Mock())
+        enable = SimpleNamespace(enable=mock.Mock())
+        identifier = "a-test-job"
+        calls = []
+        def request(_socket, path, data=None):
+            calls.append((path, data))
+            if path == "/v1/plan": return {"planId": identifier, "targetTag": MANIFEST["tag"], "targetDigest": MANIFEST["digest"]}
+            if path == "/v1/apply": return {"jobId": identifier}
+            if path == "/v1/status" and len(calls) == 1: return {"capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1"], "currentDigest": current["digest"], "imageMatches": True, "coreHealth": "healthy", "job": None}
+            if path == "/v1/status": return {"capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1"], "job": {"id": identifier, "state": "complete"}, "currentDigest": MANIFEST["digest"], "imageMatches": True, "coreHealth": "healthy"}
+            raise AssertionError("Unexpected channel mutation")
+        display = SimpleNamespace(set_remaining_steps=lambda _: None, step=lambda *_: contextlib.nullcontext())
+        with mock.patch.object(GUIDE, "load", side_effect=lambda name, _: upgrade if name == "orbis-host-service-upgrade.py" else enable), mock.patch.object(GUIDE.REPLACE.UPDATE, "verify_release"), mock.patch.object(GUIDE, "prepare_backup_tools"), mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/rsync"), mock.patch.object(GUIDE, "host_request", side_effect=request):
+            result = GUIDE.update_existing(Path("/unused"), SimpleNamespace(context="test"), MANIFEST, display, selected_channel="nightly")
+        self.assertEqual(result["result"], "orbis-updated")
+        self.assertEqual(calls[0], ("/v1/status", None))
+        self.assertEqual(calls[1], ("/v1/plan", {"tag": MANIFEST["tag"]}))
+        self.assertEqual(channel["channel"], "nightly")
 
 
 if __name__ == "__main__":

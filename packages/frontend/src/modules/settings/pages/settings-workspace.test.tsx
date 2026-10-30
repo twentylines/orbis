@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { DialogContent, DialogVisibilityContext } from '@/components/ui/Dialog/Dialog';
 import { WindowVisibilityContext } from '@/desktop/window-visibility';
 import { SettingsPanel, SettingsWorkspace } from './settings-workspace';
-import { SettingsSaveProvider } from './settings-save';
+import { SettingsSaveProvider, SettingsSavingIndicator } from './settings-save';
 import { settingsSections, type SettingsSection } from '../helpers/settings-catalogue';
 
 function VisibilityProbe() {
@@ -112,6 +112,19 @@ test('search and the single section Save keep their existing locations when the 
   const sectionHeader = markup.match(/<header class="settings-content-heading">[\s\S]*?<\/header>/)?.[0] ?? '';
   expect(sectionHeader).toContain('<h2>General</h2>');
   expect(sectionHeader).toContain('>Save</button>');
+  expect(sectionHeader).toContain('settings-save-actions');
+  expect(sectionHeader).toContain('settings-save-activity');
   expect(markup).not.toContain('<h1');
   expect(markup).not.toContain('settings-header-status');
+});
+
+test('save activity retains its reserved content while the polite announcement follows actual pending state', () => {
+  const idle = renderToStaticMarkup(<SettingsSavingIndicator pending={false} />);
+  const pending = renderToStaticMarkup(<SettingsSavingIndicator pending />);
+  expect(idle).toContain('data-saving="false" aria-hidden="true">Saving changes…');
+  expect(pending).toContain('data-saving="true" aria-hidden="true">Saving changes…');
+  expect(idle).toContain('class="visually-hidden"></span>');
+  expect(pending).toContain('class="visually-hidden">Saving changes…</span>');
+  expect(idle).toContain('aria-live="polite"');
+  expect(pending).toContain('aria-live="polite"');
 });

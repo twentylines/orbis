@@ -161,9 +161,7 @@ export const Appearance = () => {
 
   return (
     <div className="appearance">
-      {syncState === 'saving' || syncState === 'loading' ? (
-        <output className="appearance-note">{syncState === 'saving' ? 'Saving changes…' : 'Loading your preferences…'}</output>
-      ) : null}
+      {syncState === 'loading' ? <output className="appearance-note">Loading your preferences…</output> : null}
       {syncState === 'error' ? (
         <output className="appearance-note">
           {cacheAvailable ? 'Sync unavailable. Changes are cached in this browser.' : 'Sync unavailable. Changes will be lost when this page closes.'}

@@ -81,3 +81,24 @@ test('downloads only a bounded public certificate response and preserves cancell
     await expect(readLocalCertificate(signal)).rejects.toThrow();
   }
 });
+
+test('public certificate stream stops at64KiB and rejects noncertificate trailing instructions', async () => {
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(40000));
+      controller.enqueue(new Uint8Array(40000));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  globalThis.fetch = Object.assign(async () => new Response(body), { preconnect: originalFetch.preconnect });
+  await expect(readLocalCertificate(new AbortController().signal)).rejects.toThrow('exceeds');
+  expect(cancelled).toBe(true);
+  const cert = '-----BEGIN CERTIFICATE-----\nYWJj\n-----END CERTIFICATE-----\n';
+  for (const content of [`${cert}run this command`, `<html>${cert}</html>`]) {
+    globalThis.fetch = Object.assign(async () => new Response(content), { preconnect: originalFetch.preconnect });
+    await expect(readLocalCertificate(new AbortController().signal)).rejects.toThrow('usable public certificate');
+  }
+});

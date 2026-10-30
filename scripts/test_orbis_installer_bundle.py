@@ -1,4 +1,5 @@
 import copy
+import contextlib
 import importlib.util
 import io
 import json
@@ -42,6 +43,23 @@ class BundleTests(unittest.TestCase):
                 archive.addfile(entry, io.BytesIO(content) if content is not None else None)
         data = output.getvalue()
         return data, {**self.manifest, "archiveBytes": len(data), "archiveSha256": BUILD.sha(data)}
+
+    def test_platform_guard_accepts_only_64_bit_arm64_or_amd64_linux(self):
+        for machine in ("aarch64", "arm64", "x86_64", "amd64"):
+            with self.subTest(machine=machine), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.platform, "machine", return_value=machine), mock.patch.object(BOOT.sys, "maxsize", 2**63 - 1):
+                BOOT.require_supported_host()
+
+    def test_unsupported_cpu_or_32_bit_userland_stops_before_network_or_private_writes(self):
+        for machine, maximum in (("armv7l", 2**31 - 1), ("aarch64", 2**31 - 1), ("i686", 2**63 - 1), ("riscv64", 2**63 - 1)):
+            with self.subTest(machine=machine, maximum=maximum), mock.patch.object(BOOT.sys, "argv", ["installer"]), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.platform, "machine", return_value=machine), mock.patch.object(BOOT.sys, "maxsize", maximum), mock.patch.object(BOOT, "fetch") as fetch, mock.patch.object(BOOT, "private_directory") as private:
+                with self.assertRaisesRegex(ValueError, "64-bit"):
+                    BOOT.main()
+                fetch.assert_not_called(); private.assert_not_called()
+
+    def test_channel_prompt_uses_human_versions_with_canonical_selection_unchanged(self):
+        self.assertEqual(BOOT.display_release("v1.2.3"), "1.2.3")
+        self.assertEqual(BOOT.display_release("v0.1.0-beta.126"), "0.1.0 beta 126")
+        with self.assertRaises(ValueError): BOOT.display_release("v1.0.0\nprivate")
 
     def test_reproducible_archive_and_pinned_launcher(self):
         self.assertEqual(self.assets, BUILD.build(dict(reversed(list(self.files.items()))), self.release_bytes))
@@ -195,6 +213,76 @@ class BundleTests(unittest.TestCase):
                 BOOT.main()
             create.assert_not_called()
             execute.assert_not_called()
+
+
+
+class ChannelLauncherTests(unittest.TestCase):
+    def setUp(self):
+        self.record = {"tag": "v0.1.0-beta.127", "commit": "a" * 40, "launcherSha256": "b" * 64}
+        self.catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": self.record}}
+
+    def test_explicit_unavailable_stable_never_selects_nightly_and_unattended_needs_channel(self):
+        with self.assertRaisesRegex(ValueError, "Stable is not available"):
+            BOOT.select_channel(self.catalog, "stable")
+        with self.assertRaisesRegex(ValueError, "--channel"):
+            BOOT.select_channel(self.catalog)
+        prompt = mock.Mock(return_value="2")
+        self.assertEqual(BOOT.select_channel(self.catalog, ask=prompt), ("nightly", self.record, True))
+        self.assertIn("not available yet", prompt.call_args.args[0])
+        self.assertIn("does not enable automatic updates", prompt.call_args.args[0])
+        self.assertIn("regressions", prompt.call_args.args[0])
+
+    def test_catalog_rejects_unknown_or_mismatched_identity_and_allows_stable_on_nightly(self):
+        stable = {**self.record, "tag": "v1.0.0"}
+        catalog = {**self.catalog, "channels": {"stable": stable, "nightly": stable}}
+        self.assertEqual(BOOT.select_channel(catalog, "nightly")[0], "nightly")
+        for record in [{**self.record, "extra": True}, {**self.record, "tag": "v01.0.0"}, {**self.record, "commit": "main"}, {**self.record, "launcherSha256": "short"}]:
+            with self.subTest(record=record), self.assertRaises(ValueError):
+                BOOT.select_channel({**self.catalog, "channels": {"stable": None, "nightly": record}}, "nightly")
+        with self.assertRaises(ValueError):
+            BOOT.select_channel({**self.catalog, "channels": {"stable": self.record, "nightly": self.record}}, "stable")
+
+    def test_latest_is_fetched_once_then_exact_hashed_identity_is_execed_with_selected_policy(self):
+        identity = {"tag": self.record["tag"], "commit": self.record["commit"], "manifestSha256": "c" * 64}
+        data = BUILD.release_launcher(Path(BOOT.__file__).read_bytes(), identity)
+        record = {**self.record, "launcherSha256": BUILD.sha(data)}
+        current = {**self.catalog, "channels": {"stable": None, "nightly": record}}
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(BOOT, "EXPECTED_RELEASE", None), mock.patch.object(BOOT, "CHANNEL_CATALOG", self.catalog), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.sys, "argv", ["install", "--channel", "nightly", "--yes", "--accept-nightly", "--root", "/opt/orbis/server"]), mock.patch.object(BOOT, "fetch", side_effect=[json.dumps(current).encode(), data]) as fetch, mock.patch.object(BOOT, "private_directory", return_value=Path(folder)), mock.patch.object(BOOT.os, "execv", side_effect=SystemExit(0)) as execute:
+            with self.assertRaises(SystemExit): BOOT.main()
+            self.assertEqual(fetch.call_count, 2)
+            self.assertEqual(fetch.call_args_list[0].args[0], BOOT.CHANNEL_METADATA_URL)
+            self.assertEqual(fetch.call_args_list[1].args[0], "https://github.com/twentylines/orbis/releases/download/" + record["tag"] + "/install-orbis.py")
+            args = execute.call_args.args[1]
+            self.assertEqual(args[args.index("--channel") + 1], "nightly")
+            self.assertEqual(Path(args[1]).read_bytes(), data)
+            self.assertEqual(Path(args[1]).stat().st_mode & 0o777, 0o600)
+
+    def test_exact_release_launcher_hands_selected_nightly_to_guided_stable_artifact(self):
+        release = {"schema": "orbis.release.v1", "image": "ghcr.io/twentylines/orbis", "tag": "v1.0.0", "commit": "a" * 40, "digest": "sha256:" + "b" * 64, "installationProtocol": "orbis.installation-state.v1", "runtipiCompatibility": "4.10.1"}
+        release_bytes = json.dumps(release).encode()
+        files = {name: b"# bounded test source\n" for name in BUILD.REQUIRED}
+        files["scripts/install-orbis.py"] = Path(BOOT.__file__).read_bytes()
+        assets = BUILD.build(files, release_bytes)
+        identity = {"tag": release["tag"], "commit": release["commit"], "manifestSha256": BUILD.sha(assets[BUILD.MANIFEST])}
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(BOOT, "EXPECTED_RELEASE", identity), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.sys, "argv", ["install", "--channel", "nightly", "--yes", "--accept-nightly"]), mock.patch.object(BOOT, "fetch", side_effect=[assets[BUILD.MANIFEST], release_bytes, assets[BUILD.ARCHIVE]]) as fetch, mock.patch.object(BOOT, "private_directory", return_value=Path(folder)), mock.patch.object(BOOT.os, "execv") as execute:
+            with contextlib.redirect_stdout(io.StringIO()): BOOT.main()
+            args = execute.call_args.args[1]
+            self.assertEqual(fetch.call_count, 3)
+            self.assertTrue(args[1].endswith("scripts/orbis-install.py"))
+            self.assertEqual(args[args.index("--channel") + 1], "nightly")
+            self.assertIn("--accept-nightly", args)
+            self.assertEqual(json.loads(Path(args[args.index("--manifest") + 1]).read_bytes()), release)
+
+    def test_unconfirmed_unattended_nightly_and_changed_launcher_never_create_or_exec_files(self):
+        for extra, payload in [([], b"unused"), (["--accept-nightly"], b"changed")]:
+            with self.subTest(extra=extra), mock.patch.object(BOOT, "EXPECTED_RELEASE", None), mock.patch.object(BOOT, "CHANNEL_CATALOG", self.catalog), mock.patch.object(BOOT.sys, "platform", "linux"), mock.patch.object(BOOT.os, "geteuid", return_value=0), mock.patch.object(BOOT.sys, "argv", ["install", "--channel", "nightly", "--yes", *extra]), mock.patch.object(BOOT, "fetch", side_effect=[json.dumps(self.catalog).encode(), payload]), mock.patch.object(BOOT, "private_directory") as create, mock.patch.object(BOOT.os, "execv") as execute:
+                with self.assertRaises(ValueError): BOOT.main()
+                create.assert_not_called(); execute.assert_not_called()
+
+    def test_launcher_hash_alone_cannot_substitute_other_tag_or_ambiguous_identity(self):
+        for data in [b"EXPECTED_RELEASE = {'tag': 'v2.0.0'}", b"EXPECTED_RELEASE = None\nEXPECTED_RELEASE = None", b"EXPECTED_RELEASE = dict(tag='v0.1.0-beta.127')"]:
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                BOOT.verify_selected_launcher(data, {**self.record, "launcherSha256": BUILD.sha(data)})
 
 
 if __name__ == "__main__":

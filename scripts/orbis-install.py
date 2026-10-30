@@ -31,10 +31,26 @@ HOST = REPLACE.HOST
 APPS = REPLACE.APPS
 UI = load("orbis-install-ui.py", "orbis_guided_ui")
 CHANNELS = load("orbis-host-service.py", "orbis_guided_channels")
+BOOT = load("install-orbis.py", "orbis_guided_platform")
 
 
-def acknowledge_release_channel(manifest, accepted=False, ask=None):
-    if HOST.PLAN.POLICY.is_stable_release_tag(manifest["tag"]):
+DOCKER_INSTALL_HELP = "Install Docker Engine and the Docker Compose plugin first, then rerun this installer. For 64-bit Raspberry Pi OS or Debian: https://docs.docker.com/engine/install/debian/ ; for Ubuntu: https://docs.docker.com/engine/install/ubuntu/ . Existing Docker packages are never upgraded by this installer."
+
+
+def require_docker_prerequisites(reader):
+    if shutil.which("docker") is None:
+        raise ValueError("Docker was not found. " + DOCKER_INSTALL_HELP)
+    try:
+        version = reader._read(["compose", "version", "--short"])
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        raise ValueError("The Docker Compose plugin could not be used. " + DOCKER_INSTALL_HELP) from error
+    match = re.fullmatch(r"v?(\d+)\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version) if isinstance(version, str) else None
+    if match is None or int(match[1]) < 2:
+        raise ValueError("A supported Docker Compose plugin was not found. " + DOCKER_INSTALL_HELP)
+
+
+def acknowledge_release_channel(manifest, accepted=False, ask=None, *, channel=None):
+    if (channel or ("stable" if HOST.PLAN.POLICY.is_stable_release_tag(manifest["tag"]) else "nightly")) == "stable":
         return
     warning = "Nightly builds can contain incomplete features or regressions. Returning to Stable requires a compatible Stable installation."
     if accepted:
@@ -230,7 +246,7 @@ def replacement(root, reader, manifest, state, mode, confirm, display=None, *, b
     APPS.write_journal(review_path, review)
     storage = review["checkpoint"]["storage"]
     count = len(storage["preservedAppContainers"]) if backup_scope == "controller" else list(review["checkpoint"]["roles"].values()).count("app")
-    print(f"\nInstallation: {root}\nRelease: {manifest['tag']}\nMode: {mode.title()}\nApp containers: {count}\nBackup: {backup}\n")
+    print(f"\nInstallation: {root}\nRelease: {UI.display_release(manifest['tag'])}\nMode: {mode.title()}\nApp containers: {count}\nBackup: {backup}\n")
     if mode == "fresh":
         print("Fresh removes dashboard accounts, saved links and workspace preferences. Apps and their data are retained. Existing logins will be revoked.")
     else:
@@ -291,15 +307,28 @@ def host_request(socket_path, endpoint, body=None):
         connection.close()
 
 
-def update_existing(root, reader, target, display, *, without_host_service=False):
+class HostServiceCompatibilityError(ValueError):
+    code = "host-service-capabilities-unsupported"
+
+
+def require_helper_capabilities(status):
+    required = {"restart.v1", "packages.refresh.v1", "release-channels.v1"}
+    actual = status.get("capabilities") if isinstance(status, dict) else None
+    if not isinstance(actual, list) or not all(isinstance(value, str) for value in actual) or not required.issubset(actual):
+        raise HostServiceCompatibilityError("The host service did not confirm the required update capabilities. Repair or upgrade it before retrying; no core update was started")
+
+
+def update_existing(root, reader, target, display, *, without_host_service=False, selected_channel=None):
     upgrade = load("orbis-host-service-upgrade.py", "orbis_guided_helper_upgrade")
     current = upgrade.SERVICE.installed_manifest(root, reader.context)
     channel = upgrade.SERVICE.read_channel(root)
-    target_nightly = not HOST.PLAN.POLICY.is_stable_release_tag(target["tag"])
+    target_nightly = (selected_channel or ("stable" if HOST.PLAN.POLICY.is_stable_release_tag(target["tag"]) else "nightly")) == "nightly"
     if without_host_service and (channel["channel"] == "nightly" or target_nightly):
         raise ValueError("Nightly updates and returning to Stable require the host service; no update was made")
     if release_order(target["tag"]) < release_order(current["tag"]):
-        raise ValueError(f"Installed {current['tag']} is newer than this installer. Use the latest installer; no downgrade was made")
+        raise ValueError(f"Installed {UI.display_release(current['tag'])} is newer than this installer. Use the latest installer; no downgrade was made")
+    if current["tag"] == target["tag"] and current["digest"] != target["digest"]:
+        raise ValueError("The same release tag has a different digest; inspect its published identity before updating")
     display.set_remaining_steps((2 if without_host_service else 4) + (0 if shutil.which("rsync") else 1))
     with display.step("Verifying the Orbis release"):
         REPLACE.UPDATE.verify_release(target)
@@ -310,16 +339,16 @@ def update_existing(root, reader, target, display, *, without_host_service=False
             enable.enable(root, reader.context, Path(__file__).parent)
             upgrade.upgrade(root, reader.context, Path(__file__).parent, str(root))
     socket_path = upgrade.SETUP.SOCKET_FILE
+    if not without_host_service:
+        require_helper_capabilities(host_request(socket_path, "/v1/status"))
     if target_nightly and channel["channel"] != "nightly":
         host_request(socket_path, "/v1/channel", {"channel": "nightly", "revision": channel["revision"], "acknowledgeNightly": True})
         channel = upgrade.SERVICE.read_channel(root)
     if current["digest"] == target["digest"]:
         if channel["channel"] == "nightly" and not target_nightly:
             host_request(socket_path, "/v1/channel", {"channel": "stable", "revision": channel["revision"]})
-        print(f"Orbis {current['tag']} is up to date at {root}.")
+        print(f"Orbis {UI.display_release(current['tag'])} is up to date at {root}.")
         return {"result": "up-to-date", "releaseTag": current["tag"]}
-    if current["tag"] == target["tag"]:
-        raise ValueError("The same release tag has a different digest; inspect its published identity before updating")
     if without_host_service:
         private = load("install-orbis.py", "orbis_guided_update_private")
         snapshots = private.private_directory(Path("/var/lib/orbis/snapshots"))
@@ -372,6 +401,7 @@ def main():
     parser.add_argument("--inspect", action="store_true")
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--accept-nightly", action="store_true", help="acknowledge Nightly risks and follow Nightly updates")
+    parser.add_argument("--channel", choices=("stable", "nightly"), help="keep following the selected release channel")
     parser.add_argument("--host-writers-stopped", action="store_true")
     parser.add_argument("--without-host-service", action="store_true")
     parser.add_argument("--no-animation", action="store_true", help="show static installation progress")
@@ -380,10 +410,13 @@ def main():
     parser.add_argument("--https-port", type=int, default=443)
     parser.add_argument("--server-ip")
     args = parser.parse_args()
-    if sys.platform != "linux" or os.geteuid() != 0 or sys.version_info < (3, 10):
-        raise ValueError("Run the installer as root on Linux with Python 3.10 or newer")
+    BOOT.require_supported_host()
     manifest = HOST.PLAN.require_installation_protocol(json.loads(args.manifest.read_text()))
+    channel = args.channel or ("stable" if HOST.PLAN.POLICY.is_stable_release_tag(manifest["tag"]) else "nightly")
+    if not HOST.PLAN.POLICY.release_allowed_on_channel(manifest["tag"], channel):
+        raise ValueError("This release is not available on the selected update channel")
     reader = APPS.Docker(args.docker_context)
+    require_docker_prerequisites(reader)
     REPLACE.Engine(reader)
     if args.inspect:
         report = APPS.DETECT.discover(reader)
@@ -408,7 +441,7 @@ def main():
                 raise ValueError("An interactive terminal is required")
             return tty.ask(question)
 
-        acknowledge_release_channel(manifest, args.accept_nightly, None if args.yes else ask)
+        acknowledge_release_channel(manifest, args.accept_nightly, None if args.yes else ask, channel=channel)
 
         supplied_root = safe_root(args.root) if args.root else None
         roots = {item["installRoot"] for item in report["installations"] if item.get("installRoot")}
@@ -426,7 +459,7 @@ def main():
         if selected and selected["product"] == "orbis":
             if args.mode:
                 raise ValueError("Orbis is already installed. Use Settings for resets or Updates for a core update")
-            result = update_existing(root, reader, manifest, display, without_host_service=args.without_host_service)
+            result = update_existing(root, reader, manifest, display, without_host_service=args.without_host_service, selected_channel=channel)
             print(json.dumps(result, indent=2))
             show_browser_address(root)
             return 0
@@ -484,14 +517,13 @@ def main():
             result = replacement(root, reader, manifest, state, mode, confirm, display, backup_scope=args.backup_scope)
         else:
             result = new.install(root, reader, manifest, state, args, confirm, display=display)
-        if not HOST.PLAN.POLICY.is_stable_release_tag(manifest["tag"]):
-            channel = CHANNELS.read_channel(root)
-            if channel["channel"] != "nightly":
-                CHANNELS.save_channel(root, "nightly", str(uuid.uuid4()))
+        saved_channel = CHANNELS.read_channel(root)
+        if saved_channel["channel"] != channel or saved_channel["revision"] == "initial":
+            CHANNELS.save_channel(root, channel, str(uuid.uuid4()))
         if not args.without_host_service:
             with display.step("Enabling system administration"):
                 enable.enable(root, reader.context, Path(__file__).parent)
-        print(f"\nOrbis {manifest['tag']} is installed at {root}.")
+        print(f"\nOrbis {UI.display_release(manifest['tag'])} is installed at {root}.")
         print(json.dumps(result, indent=2))
         show_browser_address(root)
         return 0

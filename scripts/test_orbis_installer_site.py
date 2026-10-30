@@ -182,5 +182,96 @@ class InstallerEndpointTests(unittest.TestCase):
                 SITE.newest(value)
 
 
+
+class CombinedChannelEndpointTests(unittest.TestCase):
+    setUp = InstallerEndpointTests.setUp
+    record = InstallerEndpointTests.record
+    def combined(self, rows=None, assets=None):
+        assets = self.assets if assets is None else assets
+        def fetch(url, limit):
+            content = assets[url.rsplit("/", 1)[1]]
+            self.assertLessEqual(len(content), limit)
+            return content
+        with mock.patch.object(SITE, "tag_commit", return_value=self.release["commit"]), mock.patch.object(SITE.BUILD, "committed_files", return_value=self.files):
+            return SITE.channel_site(Path(self.temp.name), rows or [self.selected], self.output, fetch)
+
+    run_cli = InstallerEndpointTests.run_cli
+
+    def legacy_candidate(self, tag="v0.1.0-beta.125", source=b"EXPECTED_RELEASE = None\n"):
+        self.release["tag"] = tag
+        self.files["scripts/install-orbis.py"] = source
+        self.assets = {**SITE.BUILD.build(self.files, json.dumps(self.release).encode()), "release-manifest.json": json.dumps(self.release).encode()}
+        self.selected = self.record(tag)
+        self.selected["assets"] = [{"name": name, "browser_download_url": SITE.BASE + "download/" + tag + "/" + name, "state": "uploaded", "size": len(data), "digest": "sha256:" + SITE.BUILD.sha(data)} for name, data in self.assets.items()]
+
+    def cli_with_verified_fixture(self, *options):
+        actual = SITE.channel_site
+        def fetch(url, limit):
+            value = self.assets[url.rsplit("/", 1)[1]]
+            self.assertLessEqual(len(value), limit)
+            return value
+        with mock.patch.object(SITE, "tag_commit", return_value=self.release["commit"]), mock.patch.object(SITE.BUILD, "committed_files", return_value=self.files), mock.patch.object(SITE, "channel_site", side_effect=lambda repository, releases, output: actual(repository, releases, output, fetch)):
+            return self.run_cli([self.selected], "--channels", *options)
+
+    def test_only_exact_verified_legacy_launcher_can_skip_deployment_with_optional_flag(self):
+        self.legacy_candidate()
+        source = self.files["scripts/install-orbis.py"]
+        self.output.mkdir(); (self.output / "install").write_bytes(b"previous verified endpoint")
+        (self.output / "latest.json").write_bytes(b"previous verified metadata")
+        before = {p.name: p.read_bytes() for p in self.output.iterdir()}
+        outputs = Path(self.temp.name) / "workflow-output"
+        with mock.patch.object(SITE, "LEGACY_CHANNEL_BOOTSTRAPS", {self.release["tag"]: SITE.BUILD.sha(source)}):
+            value = self.cli_with_verified_fixture("--if-available", "--github-output", str(outputs))
+        self.assertFalse(value["available"])
+        self.assertIn("predates channel-aware", value["reason"])
+        self.assertEqual(outputs.read_text(), "available=false\n")
+        self.assertEqual({p.name: p.read_bytes() for p in self.output.iterdir()}, before)
+
+    def test_legacy_launcher_remains_an_error_without_explicit_optional_flag(self):
+        self.legacy_candidate()
+        with mock.patch.object(SITE, "LEGACY_CHANNEL_BOOTSTRAPS", {self.release["tag"]: SITE.BUILD.sha(self.files["scripts/install-orbis.py"])}), self.assertRaises(SITE.NoPublishedRelease):
+            self.cli_with_verified_fixture()
+        self.assertFalse(self.output.exists())
+
+    def test_optional_flag_never_hides_a_new_or_changed_or_malformed_channel_candidate(self):
+        legacy_hash = SITE.BUILD.sha(b"EXPECTED_RELEASE = None\n")
+        cases = [("v0.1.0-beta.126", b"EXPECTED_RELEASE = None\n"), ("v0.1.0-beta.125", b"EXPECTED_RELEASE = None\n# changed\n"), ("v0.1.0-beta.125", b"EXPECTED_RELEASE = None\nCHANNEL_CATALOG = None\nCHANNEL_CATALOG = None\n")]
+        for tag, source in cases:
+            self.legacy_candidate(tag, source)
+            with self.subTest(tag=tag, source=source), mock.patch.object(SITE, "LEGACY_CHANNEL_BOOTSTRAPS", {"v0.1.0-beta.125": legacy_hash}), self.assertRaises(ValueError) as failure:
+                self.cli_with_verified_fixture("--if-available")
+            self.assertNotIsInstance(failure.exception, SITE.NoPublishedRelease)
+            self.assertFalse(self.output.exists())
+
+    def test_combined_endpoint_embeds_verified_available_channels_and_generic_source_only(self):
+        result = self.combined()
+        self.assertEqual(result["channels"]["stable"]["tag"], "v1.0.0")
+        self.assertEqual(result["channels"]["nightly"]["tag"], "v1.0.0")
+        namespace = {"__name__": "imported_bootstrap"}
+        exec(compile((self.output / "install").read_bytes(), "install", "exec"), namespace)
+        self.assertIsNone(namespace["EXPECTED_RELEASE"])
+        self.assertEqual(namespace["CHANNEL_CATALOG"]["channels"], result["channels"])
+        self.assertEqual((self.output / "stable/install").read_bytes(), self.assets["install-orbis.py"])
+        self.assertEqual((self.output / "nightly/install").read_bytes(), self.assets["install-orbis.py"])
+        self.assertEqual({p.name for p in self.output.iterdir()}, {"install", "channels.json", "stable", "nightly", "index.html", ".nojekyll"})
+
+    def test_only_nightly_publishes_usable_root_without_inventing_stable(self):
+        self.release["tag"] = "v1.0.1-beta.127"
+        self.assets = {**SITE.BUILD.build(self.files, json.dumps(self.release).encode()), "release-manifest.json": json.dumps(self.release).encode()}
+        self.selected = self.record(self.release["tag"])
+        self.selected["assets"] = [{"name": name, "browser_download_url": SITE.BASE + "download/" + self.selected["tag_name"] + "/" + name, "state": "uploaded", "size": len(data), "digest": "sha256:" + SITE.BUILD.sha(data)} for name, data in self.assets.items()]
+        result = self.combined()
+        self.assertIsNone(result["channels"]["stable"])
+        self.assertFalse((self.output / "stable").exists())
+        self.assertTrue((self.output / "install").is_file())
+        self.assertTrue((self.output / "nightly/install").is_file())
+
+    def test_incomplete_newest_channel_prevents_all_publication_not_fallback(self):
+        newer = self.record("v1.0.1-beta.128")
+        with self.assertRaisesRegex(ValueError, "missing a unique"):
+            self.combined([self.selected, newer])
+        self.assertFalse(self.output.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

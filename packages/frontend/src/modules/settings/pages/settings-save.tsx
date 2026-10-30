@@ -9,6 +9,7 @@ type SettingsSaveContextValue = {
   save: () => Promise<void>;
   dirty: boolean;
   pending: boolean;
+  activity: boolean;
   error: string | null;
 };
 const SettingsSaveContext = createContext<SettingsSaveContextValue | null>(null);
@@ -17,10 +18,12 @@ export function SettingsSaveProvider({
   children,
   onSection,
   signal,
+  backgroundSaving = false,
 }: {
   children: ReactNode;
   onSection: (section: SettingsSection) => void;
   signal?: AbortSignal;
+  backgroundSaving?: boolean;
 }) {
   const entries = useRef(new Map<string, SettingsSaveEntry>());
   const [, refresh] = useState(0);
@@ -86,6 +89,7 @@ export function SettingsSaveProvider({
         save,
         dirty,
         pending: saving || [...entries.current.values()].some((entry) => entry.pending),
+        activity: !signal?.aborted && (backgroundSaving || saving || [...entries.current.values()].some((entry) => entry.pending)),
         error,
       }}
     >
@@ -113,6 +117,22 @@ export function SettingsSaveButton() {
       Save
     </Button>
   );
+}
+
+export function SettingsSavingIndicator({ pending }: { pending: boolean }) {
+  return (
+    <output className="settings-save-activity" aria-live="polite" aria-atomic="true">
+      <span data-saving={pending} aria-hidden="true">
+        Saving changes…
+      </span>
+      <span className="visually-hidden">{pending ? 'Saving changes…' : ''}</span>
+    </output>
+  );
+}
+
+export function SettingsSaveActivity() {
+  const context = useContext(SettingsSaveContext);
+  return context ? <SettingsSavingIndicator pending={context.activity} /> : null;
 }
 
 export function SettingsSaveFeedback() {

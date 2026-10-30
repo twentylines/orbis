@@ -9,6 +9,7 @@ import { Link, useLocation } from 'react-router';
 import { AuthError } from './auth-stages';
 import { signInAccountIdentifier, signInIdentifierMessage, signInPassword, signInPasswordMessage } from '../account-identifier';
 import { PasskeySignIn } from './passkey-sign-in';
+import { SecureConnectionIndicator } from '@/components/secure-connection-indicator';
 
 type FormValues = { username: string; password: string };
 
@@ -62,7 +63,10 @@ export const LoginForm: React.FC<IProps> = ({
 
   return (
     <>
-      <h2 className="desktop-auth-heading">{t('AUTH_LOGIN_TITLE', { type: loginType })}</h2>
+      <h2 className="desktop-auth-heading">
+        {t('AUTH_LOGIN_TITLE', { type: loginType })}
+        <SecureConnectionIndicator compact />
+      </h2>
       <form onSubmit={handleSubmit(onSubmit)} onChange={onEdit}>
         <Input
           {...register('username')}

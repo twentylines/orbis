@@ -8,9 +8,17 @@ curl -fsSL https://twentylines.github.io/orbis/install | sudo python3
 
 After successful setup, the installer prints the address to open in your browser. Standard HTTP port 80 is omitted; a custom dashboard port is included. The initial LAN address is for setup and password sign-in. Passkeys require a configured, trusted HTTPS hostname.
 
-The address serves the verified installer from the newest published Stable release. It updates after release publication; no version number is needed. On an existing Orbis installation, rerunning this command upgrades the host helper and installs a newer compatible Stable release, retaining accounts, settings and apps. It never downgrades an installed build or leaves Nightly automatically. Nightly installers are attached to their individual releases and require explicit risk acknowledgement. For an existing Runtipi installation, the installer offers Keep or Fresh. Requirements and recovery details are below.
+The channel-aware installer offers **Stable** or **Nightly** from verified published releases. If Stable is unavailable, it says so; selecting Nightly requires acknowledgement. No version number is needed. An existing Orbis installation retains its accounts, settings and apps and follows the channel you explicitly select. The installer rejects downgrades and requires the host service for Nightly or returning to Stable. For an existing Runtipi installation, it offers Keep or Fresh.
 
-During pre-v1 development, the default endpoint remains on the last verified legacy installer until a Stable release is approved. To enable Nightly now, download `install-orbis.py` from [beta 113](https://github.com/twentylines/orbis/releases/tag/v0.1.0-beta.113) and run it on the server. Review the Nightly warning before confirming; unattended installation additionally requires `--accept-nightly`.
+Until the first channel-aware release is published, the default endpoint can remain on its last verified legacy installer. The source change alone does not update that endpoint. Individual releases also provide their exact `install-orbis.py`; unattended channel selection requires `--channel stable` or `--channel nightly`, with `--accept-nightly` for Nightly.
+
+## Raspberry Pi and Linux prerequisites
+
+Use **64-bit Raspberry Pi OS or Ubuntu** on ARM64 hardware. A 64-bit kernel with a 32-bit userland is unsupported, as are older 32-bit Pi models. Python 3.10 or newer and a running systemd host are required; Debian Bookworm provides Python 3.11.
+
+Install a local rootful Docker Engine with **API 1.44 or newer** (Docker 25 or newer) and the **Docker Compose plugin** before starting Orbis. Follow Docker’s official [Debian instructions for 64-bit Raspberry Pi OS and Debian](https://docs.docker.com/engine/install/debian/) or [Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/). Verify that `sudo docker version` reaches the local daemon and `sudo docker compose version` reports the plugin. An older distribution Docker package may need a separately reviewed upgrade. Orbis does not install, replace or upgrade Docker packages automatically.
+
+The installer also needs `iproute2` for LAN address discovery. It can install the required `rsync` backup tool on Debian or Ubuntu when missing; other systems need rsync 3.1.3 or newer already installed. Keep dashboard ports 80 and 443 free, or choose an available port when prompted. Monitoring tools are managed separately in Monitor.
 
 ## Inspect an existing installation
 
@@ -57,7 +65,7 @@ The Linux installer uses a terminal for discovery, replacement choices and confi
 
 Releases that include `install-orbis.py` also provide `orbis-installer-manifest.json` and `orbis-installer.tar.gz`. The launcher is bound to that release's source commit, image manifest and archive hash. It checks every packaged file before running the installer. No repository checkout is required; prompts read the terminal even when the launcher is supplied through a pipe.
 
-The supported host is 64-bit Linux with systemd, Python 3.10 or newer, a local rootful Docker Engine with API 1.44 or newer, Docker Compose, Git and rsync 3.1.3 or newer. Run with root privileges. The installer accepts an explicit Docker context and refuses remote Docker endpoints for host filesystem operations.
+The supported host is 64-bit ARM64 or AMD64 Linux with systemd, Python 3.10 or newer, a local rootful Docker Engine with API 1.44 or newer, the Docker Compose plugin, iproute2 and rsync 3.1.3 or newer. Run with root privileges. The installer accepts an explicit Docker context and refuses remote Docker endpoints for host filesystem operations.
 
 The terminal installer shows the Orbis logo and one animated progress bar. The count tracks completed installation stages; image downloads also show the number of layers ready when Docker provides it. Neither count estimates download percentages. Use `--no-animation` for static progress or `--no-color` to disable colours. `NO_COLOR`, CI environments, unattended runs and piped output use plain progress without cursor animations. Inspection output remains JSON.
 

@@ -112,16 +112,20 @@ async function post(path: '/invite' | '/pair' | '/pairing/connect' | '/pairing/c
     if (response.status === 429) throw new ClusterPairingError(429, 'Too many pairing attempts. Wait five minutes and generate a new code.');
     if (response.status === 403 && typeof message === 'string' && message.startsWith('Invalid request origin.'))
       throw new ClusterPairingError(403, 'This request was blocked by the server address check. Check your reverse proxy settings.');
-    if (response.status === 400 && message === 'AUTH_ERROR_INVALID_PASSWORD')
+    if (path === '/invite' && response.status === 400 && message === 'Confirm pairing with your account password and authentication code if enabled.')
+      throw new ClusterPairingError(400, 'Update this server and reload this page before creating a pairing code.');
+    if (path !== '/invite' && response.status === 400 && message === 'AUTH_ERROR_INVALID_PASSWORD')
       throw new ClusterPairingError(400, 'Check your account password and try again.');
-    if (response.status === 400 && message === 'AUTH_ERROR_TOTP_INVALID_CODE')
+    if (path !== '/invite' && response.status === 400 && message === 'AUTH_ERROR_TOTP_INVALID_CODE')
       throw new ClusterPairingError(400, 'Enter a current six-digit authentication code and try again.');
     throw new ClusterPairingError(
       response.status,
       typeof message === 'string' && safeMessages.has(message)
         ? message
         : response.status === 401
-          ? 'Confirm your account password and authentication code, then try again.'
+          ? path === '/invite'
+            ? 'Sign in with an operator account to create a pairing code.'
+            : 'Confirm your account password and authentication code, then try again.'
           : response.status === 403
             ? 'Use an operator browser session on this server to manage pairing.'
             : path === '/invite'
@@ -132,8 +136,8 @@ async function post(path: '/invite' | '/pair' | '/pairing/connect' | '/pairing/c
   return result;
 }
 
-export async function createClusterInvitation(credentials: ClusterFreshAuth): Promise<ClusterInvitation> {
-  const result = await post('/invite', credentials);
+export async function createClusterInvitation(): Promise<ClusterInvitation> {
+  const result = await post('/invite', {});
   if (
     !result ||
     typeof result !== 'object' ||

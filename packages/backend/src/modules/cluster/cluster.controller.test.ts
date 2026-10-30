@@ -27,9 +27,9 @@ describe('cluster installation authorization', () => {
     app = module.createNestApplication();
     app.use(((req, _res, next) => {
       const credential = req.headers.authorization;
-      if (credential === 'Bearer operator' || credential === 'Bearer guest' || credential === 'Bearer cli') {
+      if (credential === 'Bearer operator' || credential === 'Bearer guest' || credential === 'Bearer cli' || credential === 'Bearer forward') {
         req.user = { id: 1, operator: credential !== 'Bearer guest' };
-        req.authMethod = credential === 'Bearer cli' ? 'cli' : 'session';
+        req.authMethod = credential === 'Bearer cli' ? 'cli' : credential === 'Bearer forward' ? 'forward-auth' : 'session';
       }
       next();
     }) as NestMiddleware['use']);
@@ -44,14 +44,14 @@ describe('cluster installation authorization', () => {
   const payload = { action: 'install-app', payload: { urn: 'tools:target', form: { port: 18765 } } };
 
   it.each(['invite', 'pair'])('protects new %s trust with operator session, same origin and exact actor forwarding', async (action) => {
-    const body = {
-      password: 'disposable-pairing-password',
-      totpCode: '123456',
-      ...(action === 'pair' ? { url: 'https://peer.example.test', code: 'A'.repeat(24) } : {}),
-    };
+    const body =
+      action === 'pair'
+        ? { password: 'disposable-pairing-password', totpCode: '123456', url: 'https://peer.example.test', code: 'A'.repeat(24) }
+        : {};
     const endpoint = `/cluster/${action}`;
     const base = request(app.getHttpServer());
     expect((await base.post(endpoint).send(body)).status).toBe(401);
+    expect((await base.post(endpoint).set('Authorization', 'Bearer forward').send(body)).status).toBe(401);
     for (const role of ['guest', 'cli'])
       expect(
         (

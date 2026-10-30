@@ -25,6 +25,15 @@ class TerminalStream(io.StringIO):
 
 
 class InstallerPresentationTests(unittest.TestCase):
+    def test_human_release_names_do_not_change_channel_or_invent_beta_labels(self):
+        for tag, expected in (("v1.2.3", "1.2.3"), ("v0.1.0-beta.126", "0.1.0 beta 126"), ("v1.0.0-rc.2", "1.0.0 rc 2")):
+            self.assertEqual(UI.display_release(tag), expected)
+            output = io.StringIO()
+            UI.Presentation(stream=output).banner(tag)
+            self.assertIn(expected, output.getvalue())
+            self.assertNotIn("-beta.", output.getvalue())
+        self.assertEqual(UI.display_release("bad\x1b[2Jversion"), "version unavailable")
+
     def test_piped_unattended_and_accessibility_output_stays_plain_and_readable(self):
         cases = [
             (io.StringIO(), {"TERM": "xterm-256color"}, True),
@@ -51,7 +60,7 @@ class InstallerPresentationTests(unittest.TestCase):
                     self.assertLessEqual(len(ui.frame("Reviewing app ownership and backup storage", tick)), width - 1)
                 output.seek(0); output.truncate()
                 ui.banner("v0.1.0-beta.68")
-                self.assertIn("v0.1.0-beta.68", output.getvalue())
+                self.assertIn("0.1.0 beta 68", output.getvalue())
                 if width < 32:
                     self.assertTrue(output.getvalue().startswith("Orbis\n"))
                 elif width < 64:
@@ -228,6 +237,45 @@ class InstallerPresentationTests(unittest.TestCase):
         with ui.step("Starting Orbis"):
             pass
         self.assertEqual(output.getvalue(), "[1/2] Verifying the release...\n[2/2] Starting Orbis...\n")
+
+
+
+class SpaceflightTests(unittest.TestCase):
+    def test_perspective_is_bounded_deterministic_decorative_and_resizes(self):
+        for width in (1, 20, 71, 80, 100, 400):
+            for tick in (0, 1, 50, 10**6):
+                rows = UI.spaceflight(width, tick)
+                self.assertEqual(len(rows), 6)
+                self.assertTrue(all(len(row) <= min(width, 96) for row in rows))
+                self.assertEqual(rows, UI.spaceflight(width, tick))
+                self.assertNotIn("%", "".join(rows))
+        self.assertNotEqual(UI.spaceflight(80, 1), UI.spaceflight(80, 12))
+
+    def test_large_terminal_scene_stays_seven_live_rows_and_compacts_on_resize(self):
+        output = TerminalStream(); ui = UI.Presentation(stream=output, environ={"TERM": "xterm"}, color=False)
+        width = [80]
+        original = ui.redraw; counts = []
+        def draw(previous, lines):
+            counts.append(len(lines)); return original(previous, lines)
+        with mock.patch.object(ui, "width", side_effect=lambda: width[0]), mock.patch.object(ui, "height", return_value=24), mock.patch.object(ui, "redraw", side_effect=draw):
+            with ui.step("Checking the real operation"):
+                time.sleep(0.13); width[0] = 30; time.sleep(0.13)
+        self.assertIn(7, counts); self.assertEqual(counts[-1], 1)
+        self.assertLessEqual(max(counts), 7)
+        self.assertIn("[ok]", output.getvalue())
+        self.assertTrue(output.getvalue().endswith("\033[?25h\n"))
+
+    def test_sigterm_restores_cursor_and_handler_before_process_exit(self):
+        import signal
+        output = TerminalStream(); ui = UI.Presentation(stream=output, environ={"TERM": "xterm"}, color=False)
+        previous = signal.getsignal(signal.SIGTERM)
+        with self.assertRaises(SystemExit) as raised:
+            with ui.step("Waiting for real work"):
+                signal.raise_signal(signal.SIGTERM)
+        self.assertEqual(raised.exception.code, 143)
+        self.assertIs(signal.getsignal(signal.SIGTERM), previous)
+        self.assertIn("[stopped]", output.getvalue()); self.assertNotIn("[ok]", output.getvalue())
+        self.assertTrue(output.getvalue().endswith("\033[?25h\n"))
 
 
 if __name__ == "__main__":
