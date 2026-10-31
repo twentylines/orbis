@@ -6,6 +6,8 @@ transport boundary; the web API must separately authenticate its user.
 """
 
 import argparse
+import base64
+import hashlib
 import http.server
 import importlib.util
 import json
@@ -49,6 +51,140 @@ PLAN_TTL_SECONDS = 15 * 60
 BODY_LIMIT = 64 * 1024
 PACKAGE_OUTPUT_BYTES = 8192
 RESTART_PLAN_TTL_SECONDS = 120
+CONTROLLER_CONFIG_FILES = ("docker-compose.yml", ".env", "user-config/tipi-compose.yml", "orbis-host-compose.yml", "orbis-compose.yml")
+CONTROLLER_CONFIG_FILE_LIMIT = 1024 * 1024
+CONTROLLER_CONFIG_TOTAL_LIMIT = 4 * 1024 * 1024
+
+
+def capture_stat(details):
+    return (details.st_dev, details.st_ino, details.st_uid, details.st_gid, details.st_mode,
+            details.st_nlink, details.st_size, details.st_mtime_ns, details.st_ctime_ns)
+
+
+def read_capture_job(file: Path):
+    if file.parent.resolve(strict=True) != file.parent:
+        raise ValueError("host capture operation state is invalid")
+    try:
+        descriptor = os.open(file, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    try:
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != os.geteuid()
+                or stat.S_IMODE(before.st_mode) & 0o077 or before.st_size > 65536):
+            raise ValueError("host capture operation state is invalid")
+        data = os.read(descriptor, 65537)
+        if len(data) != before.st_size or capture_stat(before) != capture_stat(os.fstat(descriptor)) or capture_stat(before) != capture_stat(file.lstat()):
+            raise ValueError("host capture operation state changed")
+        value = json.loads(data)
+        if not isinstance(value, dict):
+            raise ValueError("host capture operation state is invalid")
+        return value
+    finally:
+        os.close(descriptor)
+
+
+@contextmanager
+def controller_config_files(root: Path):
+    descriptors = []
+    def opened(name, flags, parent=None):
+        descriptor = os.open(name, flags | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+        descriptors.append(descriptor)
+        return descriptor
+    try:
+        if root.resolve(strict=True) != root:
+            raise ValueError("controller configuration root is invalid")
+        root_fd = opened(root, os.O_RDONLY | os.O_DIRECTORY)
+        root_stat = os.fstat(root_fd)
+        trusted_owners = {os.geteuid(), root_stat.st_uid}
+        directories = [(root, None, root_fd, root_stat)]
+        if stat.S_IMODE(root_stat.st_mode) & 0o022 or capture_stat(root_stat) != capture_stat(root.lstat()):
+            raise ValueError("controller configuration root is not protected")
+        try:
+            user_fd = opened("user-config", os.O_RDONLY | os.O_DIRECTORY, root_fd)
+        except FileNotFoundError:
+            user_fd = None
+        if user_fd is not None:
+            user_stat = os.fstat(user_fd)
+            if user_stat.st_uid not in trusted_owners or stat.S_IMODE(user_stat.st_mode) & 0o022:
+                raise ValueError("controller configuration directory is not protected")
+            directories.append(("user-config", root_fd, user_fd, user_stat))
+        state_fd = opened(HOST.STATE_NAME, os.O_RDONLY, root_fd)
+        state_stat = os.fstat(state_fd)
+        if (not stat.S_ISREG(state_stat.st_mode) or state_stat.st_nlink != 1 or state_stat.st_uid not in trusted_owners
+                or stat.S_IMODE(state_stat.st_mode) & 0o077 or state_stat.st_size > 16384):
+            raise ValueError("controller enrollment is not protected")
+        state_bytes = os.read(state_fd, 16385)
+        if len(state_bytes) != state_stat.st_size:
+            raise ValueError("controller enrollment changed")
+        enrollment = json.loads(state_bytes)
+        files = []
+        seals = [(root_fd, HOST.STATE_NAME, state_fd, state_stat)]
+        total = 0
+        for relative in CONTROLLER_CONFIG_FILES:
+            parent = user_fd if relative.startswith("user-config/") else root_fd
+            name = relative.split("/")[-1]
+            try:
+                details = os.stat(name, dir_fd=parent, follow_symlinks=False) if parent is not None else None
+            except FileNotFoundError:
+                details = None
+            if details is None:
+                if relative in {"docker-compose.yml", ".env", "orbis-compose.yml"}:
+                    raise ValueError("required controller configuration is absent")
+                files.append({"path": relative, "present": False})
+                seals.append((parent, name, None, None))
+                continue
+            mode = stat.S_IMODE(details.st_mode)
+            if (not stat.S_ISREG(details.st_mode) or details.st_nlink != 1 or details.st_uid not in trusted_owners
+                    or mode & 0o7022 or details.st_size > CONTROLLER_CONFIG_FILE_LIMIT):
+                raise ValueError("controller configuration file is unsafe")
+            descriptor = opened(name, os.O_RDONLY, parent)
+            if capture_stat(os.fstat(descriptor)) != capture_stat(details):
+                raise ValueError("controller configuration changed")
+            data = bytearray()
+            while True:
+                deadline = HOST.CAPTURE_READ_DEADLINE.get()
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise ValueError("controller configuration capture timed out")
+                block = os.read(descriptor, min(65536, CONTROLLER_CONFIG_FILE_LIMIT + 1 - len(data)))
+                if not block:
+                    break
+                data.extend(block)
+                if len(data) > CONTROLLER_CONFIG_FILE_LIMIT:
+                    raise ValueError("controller configuration exceeds its limit")
+            total += len(data)
+            if len(data) != details.st_size or total > CONTROLLER_CONFIG_TOTAL_LIMIT:
+                raise ValueError("controller configuration exceeds its limit")
+            files.append({"path": relative, "present": True, "bytes": len(data), "mode": mode,
+                          "uid": details.st_uid, "gid": details.st_gid, "device": str(details.st_dev), "inode": str(details.st_ino),
+                          "mtimeNs": str(details.st_mtime_ns), "ctimeNs": str(details.st_ctime_ns),
+                          "sha256": hashlib.sha256(data).hexdigest(), "data": base64.b64encode(data).decode("ascii")})
+            seals.append((parent, name, descriptor, details))
+        root_identity = {"device": str(root_stat.st_dev), "inode": str(root_stat.st_ino), "uid": root_stat.st_uid,
+                         "gid": root_stat.st_gid, "mode": stat.S_IMODE(root_stat.st_mode),
+                         "pathSha256": hashlib.sha256(str(root).encode()).hexdigest()}
+        yield root_identity, files, enrollment
+        for parent, name, descriptor, before in seals:
+            if parent is None:
+                if (root / "user-config").exists() or (root / "user-config").is_symlink():
+                    raise ValueError("controller configuration changed")
+                continue
+            try:
+                after = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                after = None
+            if before is None:
+                if after is not None:
+                    raise ValueError("controller configuration changed")
+            elif after is None or capture_stat(before) != capture_stat(after) or capture_stat(before) != capture_stat(os.fstat(descriptor)):
+                raise ValueError("controller configuration changed")
+        for name, parent, descriptor, before in directories:
+            after = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            if capture_stat(before) != capture_stat(after) or capture_stat(before) != capture_stat(os.fstat(descriptor)):
+                raise ValueError("controller configuration directory changed")
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
 
 
 def plan_is_current(created_at: object, lifetime: int) -> bool:
@@ -313,6 +449,75 @@ class HostService:
         previous = read_private(self.job_file)
         if previous and previous.get("state") in {"running", "recovering", "interrupted"}:
             raise ValueError("finish or recover the current host update before changing release channels")
+
+    def controller_capture_identity(self, expected_id: str, expected_image: str, enrollment: dict) -> dict:
+        template = ('{"id":{{json .Id}},"imageId":{{json .Image}},"imageReference":{{json .Config.Image}},'
+                    '"project":{{json (index .Config.Labels "com.docker.compose.project")}},'
+                    '"service":{{json (index .Config.Labels "com.docker.compose.service")}},'
+                    '"workingDirectory":{{json (index .Config.Labels "com.docker.compose.project.working_dir")}},'
+                    '"running":{{json .State.Running}},"restarting":{{json .State.Restarting}},"paused":{{json .State.Paused}},'
+                    '"startedAt":{{json .State.StartedAt}},"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}"none"{{end}}}')
+        result = HOST.docker(self.context, ["inspect", "--format", template, "runtipi"], self.root)
+        if result.returncode or len(result.stdout) > 16384:
+            raise ValueError("controller identity is unavailable")
+        value = json.loads(result.stdout)
+        if (not isinstance(value, dict) or value.get("id") != expected_id or value.get("imageId") != expected_image
+                or value.get("imageReference") != f"{PLAN.IMAGE}@{enrollment['digest']}"
+                or value.get("project") != "runtipi" or value.get("service") != "runtipi"
+                or value.get("workingDirectory") != str(self.root) or value.get("running") is not True
+                or value.get("restarting") is not False or value.get("paused") is not False or value.get("health") != "healthy"
+                or not isinstance(value.get("startedAt"), str) or not 1 <= len(value["startedAt"]) <= 80):
+            raise ValueError("controller identity is not healthy and enrolled")
+        return {key: value[key] for key in ("id", "imageId", "imageReference", "project", "service", "startedAt")} | {
+            "releaseTag": enrollment["tag"], "releaseDigest": enrollment["digest"]}
+
+    def capture_controller_config(self, point_id: str, controller_id: str, image_id: str) -> dict:
+        if (not isinstance(point_id, str) or str(uuid.UUID(point_id)) != point_id or uuid.UUID(point_id).version != 4
+                or not isinstance(controller_id, str) or not re.fullmatch(r"[a-f0-9]{64}", controller_id)
+                or not isinstance(image_id, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id)):
+            raise ValueError("controller capture identity is invalid")
+        if not self.lock.acquire(blocking=False):
+            raise ValueError("another host operation is in progress")
+        try:
+            with HOST.host_lock(self.root):
+                return self._capture_controller_config_locked(point_id, controller_id, image_id)
+        finally:
+            self.lock.release()
+
+    def _capture_controller_config_locked(self, point_id: str, controller_id: str, image_id: str) -> dict:
+        token = HOST.CAPTURE_READ_DEADLINE.set(time.monotonic() + 15)
+        try:
+            self.require_controller_capture_idle()
+            with controller_config_files(self.root) as (root_identity, files, enrollment):
+                hashes = {item["path"]: item.get("sha256") for item in files if item["path"] != "orbis-host-compose.yml" or item["present"]}
+                if (not isinstance(enrollment, dict) or set(enrollment) != {"schema", "root", "dockerContext", "tag", "digest", "files"}
+                        or enrollment.get("schema") != "orbis.host.v1" or enrollment.get("root") != str(self.root)
+                        or enrollment.get("dockerContext") != self.context or enrollment.get("files") != hashes
+                        or not isinstance(enrollment.get("tag"), str) or not PLAN.TAG.fullmatch(enrollment["tag"])
+                        or not isinstance(enrollment.get("digest"), str) or not PLAN.DIGEST.fullmatch(enrollment["digest"])):
+                    raise ValueError("controller configuration is not enrolled")
+                before = self.controller_capture_identity(controller_id, image_id, enrollment)
+                self.require_controller_capture_idle()
+                after = self.controller_capture_identity(controller_id, image_id, enrollment)
+                if before != after:
+                    raise ValueError("controller identity changed")
+                descriptor = {"version": 1, "pointId": point_id, "controller": before, "rootIdentity": root_identity,
+                              "files": [{key: value for key, value in item.items() if key != "data"} for item in files]}
+                digest = hashlib.sha256(b"orbis.controller-config.v1\n" + json.dumps(descriptor, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+                result = {**descriptor, "files": files, "configurationSetSha256": digest}
+            return result
+        finally:
+            HOST.CAPTURE_READ_DEADLINE.reset(token)
+
+    def require_controller_capture_idle(self) -> None:
+        if self.busy or self.maintenance_file.exists() or self.maintenance_file.is_symlink():
+            raise ValueError("another host operation is in progress")
+        for file, settled in ((self.job_file, {"complete", "rolled-back", "failed"}),
+                              (self.package_job_file, {"complete"}),
+                              (self.restart_job_file, {"complete", "failed"})):
+            job = read_capture_job(file)
+            if job is not None and job.get("state") not in settled:
+                raise ValueError("another host operation requires completion or recovery")
 
     def select_channel(self, channel: str, revision: str, acknowledge_nightly: bool = False) -> dict:
         with self.lock:
@@ -680,7 +885,7 @@ class HostService:
                         job["message"] = "Stable is installed, but its channel change needs recovery. Refresh status to retry."
                         write_private(self.job_file, job)
                         return {
-                            "available": True, "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1"],
+                            "available": True, "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1"],
                             "enrolled": enrolled, "currentTag": saved.get("tag"), "currentDigest": saved.get("digest"),
                             "coreState": core.get("state"), "coreHealth": core.get("health"), "imageMatches": True,
                             "job": {key: job.get(key) for key in ("id", "state", "targetTag", "startedAt", "finishedAt", "message")},
@@ -698,7 +903,7 @@ class HostService:
                 write_private(self.job_file, job)
         return {
             "available": True,
-            "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1"],
+            "capabilities": ["restart.v1", "packages.refresh.v1", "release-channels.v1", "controller-config.v1"],
             "enrolled": enrolled,
             "currentTag": saved.get("tag") if saved else None,
             "currentDigest": saved.get("digest") if saved else None,
@@ -964,6 +1169,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(503, {"error": "package changelog is unavailable"})
 
     def do_POST(self) -> None:
+        if self.path == "/v1/controller-config/capture":
+            try:
+                data = self.body()
+                if set(data) != {"pointId", "controllerId", "imageId"}:
+                    raise ValueError("controller capture fields are invalid")
+                result = self.server.service.capture_controller_config(data["pointId"], data["controllerId"], data["imageId"])
+                self.send_json(200, result)
+            except (OSError, ValueError, RuntimeError, TypeError, subprocess.SubprocessError):
+                self.send_json(409, {"error": "Controller configuration capture is unavailable. Verify enrollment, file protection and current operations."})
+            return
         if self.path in {"/v1/discovery/scan", "/v1/discovery/advertise", "/v1/discovery/disable", "/v1/discovery/policy", "/v1/discovery/configure", "/v1/discovery/configure-address", "/v1/discovery/suspend"}:
             try:
                 data = self.body()

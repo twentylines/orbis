@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -33,6 +34,7 @@ PLAN = load_script("orbis-release-plan.py", "orbis_release_plan")
 STAGE = load_script("orbis-stage-release.py", "orbis_stage_release")
 STATE_NAME = ".orbis-host-state.json"
 LOCK_DESCRIPTOR = ContextVar("orbis_host_lock_descriptor", default=None)
+CAPTURE_READ_DEADLINE = ContextVar("orbis_host_capture_read_deadline", default=None)
 
 
 @contextmanager
@@ -56,6 +58,12 @@ def host_lock(root: Path):
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     descriptor = LOCK_DESCRIPTOR.get()
     options = {"pass_fds": (descriptor,)} if descriptor is not None else {}
+    deadline = CAPTURE_READ_DEADLINE.get()
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError("controller configuration capture timed out")
+        options["timeout"] = remaining
     return subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False, **options)
 
 

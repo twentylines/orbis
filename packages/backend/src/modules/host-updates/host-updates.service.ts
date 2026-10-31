@@ -11,6 +11,12 @@ import {
 } from '@runtipi/common/schemas/orbis-release-channel';
 import { OrbisReleaseChannelsService } from '../system/orbis-release-channels.service';
 import { DriveHealthService } from '../system/drive-health.service';
+import {
+  controllerCaptureSocketIdentity,
+  decodeControllerConfigurationCapture,
+  validateControllerCaptureIdentity,
+  type ControllerCaptureIdentity,
+} from './host-controller-config';
 
 const PLAN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PACKAGE_NAME = /^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?$/;
@@ -151,6 +157,7 @@ export class HostUpdatesService {
       | '/v1/restart/plan'
       | '/v1/restart/apply'
       | '/v1/drives/test'
+      | '/v1/controller-config/capture'
       | `/v1/packages/changelog?name=${string}`,
     body?: object,
   ): Promise<T> {
@@ -160,20 +167,23 @@ export class HostUpdatesService {
       const request = http.request(
         {
           socketPath,
+          signal: endpoint === '/v1/controller-config/capture' ? AbortSignal.timeout(30_000) : undefined,
           path: endpoint,
           method: payload === undefined ? 'GET' : 'POST',
           timeout:
-            endpoint === '/v1/plan'
-              ? 90_000
-              : endpoint === '/v1/packages/plan' || endpoint === '/v1/packages/apply' || endpoint === '/v1/packages/refresh'
-                ? 60_000
-                : endpoint.startsWith('/v1/packages/changelog')
-                  ? 25_000
-                  : endpoint === '/v1/drives/test'
-                    ? 35_000
-                    : endpoint === '/v1/packages'
-                      ? 30_000
-                      : 10_000,
+            endpoint === '/v1/controller-config/capture'
+              ? 30_000
+              : endpoint === '/v1/plan'
+                ? 90_000
+                : endpoint === '/v1/packages/plan' || endpoint === '/v1/packages/apply' || endpoint === '/v1/packages/refresh'
+                  ? 60_000
+                  : endpoint.startsWith('/v1/packages/changelog')
+                    ? 25_000
+                    : endpoint === '/v1/drives/test'
+                      ? 35_000
+                      : endpoint === '/v1/packages'
+                        ? 30_000
+                        : 10_000,
           headers: payload === undefined ? {} : { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
         },
         (res) => {
@@ -181,7 +191,16 @@ export class HostUpdatesService {
           let size = 0;
           res.on('data', (chunk: Buffer) => {
             size += chunk.length;
-            if (size > (endpoint === '/v1/packages' ? 1024 * 1024 : endpoint === '/v1/packages/plan' ? 256 * 1024 : MAX_RESPONSE_BYTES)) {
+            if (
+              size >
+              (endpoint === '/v1/controller-config/capture'
+                ? 6 * 1024 * 1024
+                : endpoint === '/v1/packages'
+                  ? 1024 * 1024
+                  : endpoint === '/v1/packages/plan'
+                    ? 256 * 1024
+                    : MAX_RESPONSE_BYTES)
+            ) {
               res.destroy(new Error('Host service response was too large'));
               return;
             }
@@ -225,6 +244,21 @@ export class HostUpdatesService {
       return await this.call<HostUpdateStatus>('/v1/status');
     } catch {
       return { available: false, reason: 'The Orbis host service is unavailable.' };
+    }
+  }
+  async captureControllerConfiguration(identity: ControllerCaptureIdentity) {
+    try {
+      validateControllerCaptureIdentity(identity);
+      const expected = Object.freeze({ pointId: identity.pointId, controllerId: identity.controllerId, imageId: identity.imageId });
+      const socket = this.requireSocket();
+      const before = await controllerCaptureSocketIdentity(socket);
+      const response = await this.call<unknown>('/v1/controller-config/capture', expected);
+      if ((await controllerCaptureSocketIdentity(socket)) !== before) throw new Error('Host socket identity changed.');
+      return decodeControllerConfigurationCapture(response, expected);
+    } catch {
+      throw new ServiceUnavailableException(
+        'Controller configuration capture requires a healthy enrolled host service with controller-config.v1 support and a protected socket.',
+      );
     }
   }
 
