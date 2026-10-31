@@ -37,3 +37,14 @@ test('rejects corrupt recent history and bounds retained entries to 200', () => 
   expect(Object.keys(next)).toHaveLength(200);
   expect(next['app-5']).toBeUndefined();
 });
+
+test('app library finds punctuation-free names, typo corrections and incomplete names before unrelated results', () => {
+  const inventory = [
+    { key: 'pi', name: 'Pi-hole' },
+    { key: 'jelly', name: 'Jellyfin' },
+    { key: 'other', name: 'Other' },
+  ];
+  for (const query of ['pihole', 'pihloe', 'pihol']) {
+    expect(selectLibraryApps(inventory, { search: query, category: '', sort: 'az' }, {}).map((app) => app.key)).toEqual(['pi']);
+  }
+});

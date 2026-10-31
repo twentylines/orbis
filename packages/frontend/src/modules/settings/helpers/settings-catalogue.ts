@@ -1,3 +1,4 @@
+import { createSearchMatcher, normaliseSearch } from '@runtipi/common/types';
 export const settingsSections = [
   { id: 'general', label: 'General', detail: 'Server and network' },
   { id: 'customise', label: 'Customisation', detail: 'Colours and workspace' },
@@ -386,68 +387,17 @@ export const settingsCatalogue: readonly SettingEntry[] = [
   },
 ];
 
-const normalise = (value: string) =>
-  value
-    .slice(0, 160)
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-function distance(a: string, b: string): number {
-  if (Math.abs(a.length - b.length) > 2) return 3;
-  const rows = Array.from({ length: a.length + 1 }, () => Array<number>(b.length + 1).fill(0));
-  const read = (i: number, j: number) => rows[i]?.[j] ?? 0;
-  for (let i = 0; i <= a.length; i++) {
-    const row = rows[i];
-    if (row) row[0] = i;
-  }
-  for (let j = 0; j <= b.length; j++) {
-    const row = rows[0];
-    if (row) row[j] = j;
-  }
-  for (let i = 1; i <= a.length; i++)
-    for (let j = 1; j <= b.length; j++) {
-      const row = rows[i];
-      if (!row) continue;
-      row[j] = Math.min(read(i - 1, j) + 1, read(i, j - 1) + 1, read(i - 1, j - 1) + (a[i - 1] === b[j - 1] ? 0 : 1));
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) row[j] = Math.min(row[j] ?? 0, read(i - 2, j - 2) + 1);
-    }
-  return read(a.length, b.length);
-}
 export function searchSettings(query: string, access: SettingsAccess, limit = 12): SettingEntry[] {
-  const needle = normalise(query).slice(0, 80);
+  const needle = normaliseSearch(query.slice(0, 160)).slice(0, 80);
   if (!needle) return [];
-  const terms = needle.split(' ').filter(Boolean).slice(0, 8);
+  const match = createSearchMatcher(query);
   return settingsCatalogue
     .filter((entry) => settingAvailable(entry, access))
-    .map((entry, index) => {
-      const label = normalise(entry.label);
-      const aliases = normalise(entry.aliases);
-      const candidates = `${label} ${aliases}`.split(' ').filter((word) => word.length <= 32);
-      let score = 0;
-      if (label === needle) score = 1000;
-      else if (entry.exactAliases?.some((alias) => normalise(alias) === needle)) score = 975;
-      else if (label.replaceAll(' ', '') === needle.replaceAll(' ', '')) score = 950;
-      else {
-        const values = terms.map((term) =>
-          Math.max(
-            0,
-            ...candidates.map((word) =>
-              word === term
-                ? 100
-                : word.startsWith(term)
-                  ? 75
-                  : term.length >= 3 && distance(term, word) <= (term.length >= 5 ? 2 : 1)
-                    ? 50 - distance(term, word) * 10
-                    : 0,
-            ),
-          ),
-        );
-        if (values.every((value) => value > 0)) score = values.reduce((total, value) => total + value, 0) / terms.length;
-      }
-      return { entry, score, index };
-    })
+    .map((entry, index) => ({
+      entry,
+      index,
+      score: entry.exactAliases?.some((alias) => normaliseSearch(alias) === needle) ? 975 : match(entry.label, entry.aliases),
+    }))
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, Math.max(0, Math.min(20, Math.trunc(limit) || 0)))

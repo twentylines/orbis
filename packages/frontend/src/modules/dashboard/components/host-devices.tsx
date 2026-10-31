@@ -1,3 +1,4 @@
+import { createSearchMatcher } from '@runtipi/common/types';
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import { Fragment, memo, useEffect, useRef, useState } from 'react';
@@ -102,10 +103,11 @@ export const HostDevices = memo(function HostDevices() {
   const stale = query.isError || ready?.stale;
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState<'all' | 'filesystems' | 'network' | 'disks'>('all');
-  const term = search.trim().toLocaleLowerCase();
-  const filesystems = ready?.filesystems.filter((disk) => `${disk.mount} ${disk.filesystem}`.toLocaleLowerCase().includes(term)) ?? [];
-  const network = ready?.network.filter((item) => item.interface.toLocaleLowerCase().includes(term)) ?? [];
-  const disks = ready?.disks.filter((disk) => disk.device.toLocaleLowerCase().includes(term)) ?? [];
+  const term = search.trim();
+  const match = createSearchMatcher(search);
+  const filesystems = ready?.filesystems.filter((disk) => match(disk.mount, disk.filesystem) > 0) ?? [];
+  const network = ready?.network.filter((item) => match(item.interface) > 0) ?? [];
+  const disks = ready?.disks.filter((disk) => match(disk.device) > 0) ?? [];
   const matching =
     (kind === 'all' || kind === 'filesystems' ? filesystems.length : 0) +
     (kind === 'all' || kind === 'network' ? network.length : 0) +

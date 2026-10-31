@@ -743,6 +743,15 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
   width: 100%;
   max-width: 100%;
 }
+.desktop-installed-grid > .app-link {
+  display: flex;
+  align-items: stretch;
+}
+.desktop-installed-grid > .app-link > :is(.app-tile, .app-link-tile) {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
 .desktop-installed-grid > .button-tile {
   display: flex;
   align-items: stretch;

@@ -1,3 +1,4 @@
+import { createSearchMatcher } from '@runtipi/common/types';
 import type { ThemePackManifest } from '@runtipi/common/schemas/theme-pack';
 
 export function compareThemeVersions(left: string, right: string) {
@@ -20,8 +21,12 @@ export function themeCatalogue(catalogue: ThemePackManifest[], search = '') {
     const current = latest.get(pack.id);
     if (!current || compareThemeVersions(pack.version, current.version) > 0) latest.set(pack.id, pack);
   }
-  const words = search.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const match = createSearchMatcher(search);
   return [...latest.values()]
-    .filter((pack) => words.every((word) => `${pack.name} ${pack.description} ${pack.author}`.toLocaleLowerCase().includes(word)))
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .filter((pack) => match(pack.name, `${pack.description} ${pack.author}`) > 0)
+    .sort(
+      (left, right) =>
+        match(right.name, `${right.description} ${right.author}`) - match(left.name, `${left.description} ${left.author}`) ||
+        left.name.localeCompare(right.name),
+    );
 }

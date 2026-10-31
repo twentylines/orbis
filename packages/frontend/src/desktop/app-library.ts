@@ -1,3 +1,4 @@
+import { createSearchMatcher } from '@runtipi/common/types';
 export type LibrarySort = 'az' | 'za' | 'opened' | 'installed';
 export type LibraryFilters = { search: string; category: string; sort: LibrarySort };
 export type LibraryApp = { key: string; name: string; categories?: readonly string[]; installedAt?: number; searchText?: string };
@@ -6,14 +7,18 @@ export type OpenedApps = Record<string, number>;
 const names = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 const installedTime = (app: LibraryApp) => (typeof app.installedAt === 'number' && Number.isFinite(app.installedAt) ? app.installedAt : 0);
 export function selectLibraryApps<T extends LibraryApp>(apps: readonly T[], filters: LibraryFilters, opened: OpenedApps) {
-  const search = filters.search.trim().toLocaleLowerCase();
+  const search = filters.search.trim();
+  const match = createSearchMatcher(search);
+  const scores = new Map(apps.map((app) => [app, match(app.name, app.searchText)]));
   return apps
     .filter((app) => {
       const category =
         !filters.category || (filters.category === 'uncategorized' ? !app.categories?.length : app.categories?.includes(filters.category));
-      return category && (!search || `${app.name} ${app.searchText ?? ''}`.toLocaleLowerCase().includes(search));
+      return category && (scores.get(app) ?? 0) > 0;
     })
     .sort((a, b) => {
+      const relevance = search ? (scores.get(b) ?? 0) - (scores.get(a) ?? 0) : 0;
+      if (relevance) return relevance;
       const alphabetical = names.compare(a.name, b.name) || names.compare(a.key, b.key);
       if (filters.sort === 'za') return -alphabetical;
       if (filters.sort === 'installed') return installedTime(b) - installedTime(a) || alphabetical;

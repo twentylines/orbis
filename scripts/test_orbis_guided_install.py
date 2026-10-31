@@ -298,6 +298,12 @@ class GuidedTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Multiple controllers"):
             GUIDE.select_installation(report, Path("/opt/a"))
 
+    def test_interactive_installation_selection_reprompts_after_invalid_choice(self):
+        report = {"installations": [{"installRoot": "/opt/a", "product": "runtipi"}, {"installRoot": "/opt/b", "product": "runtipi"}]}
+        ask = mock.Mock(side_effect=["0", "9" * 5000, "bad", "2"])
+        self.assertIs(GUIDE.select_installation(report, ask=ask), report["installations"][1])
+        self.assertEqual(ask.call_count, 4)
+
     def test_review_refresh_ignores_only_derived_size_and_hash_fields(self):
         value = {"reviewId": "old", "mode": "keep", "checkpoint": {"reviewId": "old", "roles": {"core": "controller"}, "storage": {"reviewId": "old", "estimatedBytes": 50, "resources": [{"source": "/opt/data", "inode": 1}]}}}
         original = copy.deepcopy(value)
@@ -621,6 +627,20 @@ class CompletionAddressTests(unittest.TestCase):
 
 
 class ExplicitChannelTests(unittest.TestCase):
+    def test_launcher_channel_selection_reprompts_after_invalid_choice(self):
+        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": {"tag": "v1.2.3", "commit": "a" * 40, "launcherSha256": "b" * 64}, "nightly": {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "launcherSha256": "d" * 64}}}
+        ask = mock.Mock(side_effect=["0", "stable"])
+        self.assertEqual(GUIDE.BOOT.select_channel(catalog, ask=ask), ("stable", catalog["channels"]["stable"], True))
+        self.assertEqual(ask.call_count, 2)
+
+    def test_interactive_unavailable_channel_reprompts_but_explicit_channel_fails(self):
+        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "launcherSha256": "d" * 64}}}
+        ask = mock.Mock(side_effect=["1", "2"])
+        self.assertEqual(GUIDE.BOOT.select_channel(catalog, ask=ask), ("nightly", catalog["channels"]["nightly"], True))
+        self.assertEqual(ask.call_count, 2)
+        with self.assertRaisesRegex(ValueError, "Stable is not available yet"):
+            GUIDE.BOOT.select_channel(catalog, requested="stable")
+
     def test_32_bit_guided_entry_stops_before_manifest_or_docker_inspection(self):
         argv = ["installer", "--manifest", "/nonexistent/manifest.json", "--state-dir", "/nonexistent/state"]
         with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.BOOT.platform, "machine", return_value="aarch64"), mock.patch.object(GUIDE.sys, "maxsize", 2**31 - 1), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker") as docker, mock.patch.object(GUIDE, "prepare_backup_tools") as packages:

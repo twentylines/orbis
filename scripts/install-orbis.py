@@ -67,8 +67,17 @@ def select_channel(catalog, requested=None, ask=None):
         if ask is None:
             raise ValueError("Choose --channel stable or --channel nightly for unattended installation")
         labels = [f"  {index}. {name.title()} — {display_release(channels[name]['tag']) if channels[name] else 'not available yet'}" for index, name in enumerate(("stable", "nightly"), 1)]
-        answer = ask("Choose an update channel. This does not enable automatic updates.\n" + "\n".join(labels) + "\nNightly can contain incomplete features or regressions.\nChannel [1/2]: ").strip().lower()
-        requested = {"1": "stable", "2": "nightly", "stable": "stable", "nightly": "nightly"}.get(answer)
+        prompt = "Choose an update channel. This does not enable automatic updates.\n" + "\n".join(labels) + "\nNightly can contain incomplete features or regressions.\nChannel [1/2]: "
+        choices = {"1": "stable", "2": "nightly", "stable": "stable", "nightly": "nightly"}
+        while True:
+            requested = choices.get(ask(prompt).strip().lower())
+            if requested is None:
+                print("Enter 1 for Stable or 2 for Nightly.", file=sys.stderr)
+                continue
+            if channels[requested] is None:
+                print(f"{requested.title()} is not available yet. Choose an available channel.", file=sys.stderr)
+                continue
+            break
     if requested not in channels:
         raise ValueError("Choose Stable or Nightly")
     if channels[requested] is None:

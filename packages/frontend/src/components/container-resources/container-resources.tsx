@@ -1,3 +1,4 @@
+import { createSearchMatcher } from '@runtipi/common/types';
 import { useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -72,7 +73,8 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
   const heading = useRef<HTMLHeadingElement>(null);
   const names = new Map(apps.data?.installed.map(({ info }) => [info.urn, info.name]));
   const containers = (telemetry.data?.containers ?? []).filter((item) => !appUrn || item.appUrn === appUrn);
-  const searchTerm = search.trim().toLocaleLowerCase();
+  const searchTerm = search.trim();
+  const match = createSearchMatcher(search);
   const ordered = containers
     .filter(
       (item) =>
@@ -83,7 +85,7 @@ export function ContainerResources({ compact = false, appUrn }: { compact?: bool
             : filter === 'running'
               ? item.state === 'running'
               : item.state !== 'running')) &&
-          `${item.name} ${item.appUrn ? (names.get(item.appUrn) ?? '') : ''}`.toLocaleLowerCase().includes(searchTerm)),
+          match(item.name, item.appUrn ? (names.get(item.appUrn) ?? '') : '') > 0),
     )
     .sort((left, right) => (right[sort] ?? -1) - (left[sort] ?? -1) || left.name.localeCompare(right.name));
   const ranking = useResourceRanking(ordered, list);

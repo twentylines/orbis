@@ -1,3 +1,4 @@
+import { createSearchMatcher } from '@runtipi/common/types';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Button } from '@/components/ui/Button';
@@ -52,9 +53,8 @@ export function AppSplitPicker({
       launchUrl: primaryAppAddress(appDestinations(entry, userSettings, window.location.hostname), window.location.origin),
     });
   }
-  const choices = [...requests.values()]
-    .filter((item) => item.urn !== anchor && item.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const match = createSearchMatcher(search);
+  const choices = [...requests.values()].filter((item) => item.urn !== anchor && match(item.name) > 0).sort((a, b) => a.name.localeCompare(b.name));
   useLayoutEffect(() => {
     if (present) input.current?.focus({ preventScroll: true });
   }, [present]);

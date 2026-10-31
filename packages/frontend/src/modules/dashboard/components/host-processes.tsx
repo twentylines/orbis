@@ -1,3 +1,4 @@
+import { createSearchMatcher } from '@runtipi/common/types';
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import type { HostProcesses } from '@runtipi/common/schemas';
@@ -43,8 +44,9 @@ export const HostProcessesView = memo(function HostProcessesView({ limit }: { li
   const displayed = showingPreviousCpu ? lastCpuSample : ready;
   const stale = query.isError || Boolean(ready?.stale) || showingPreviousCpu;
   const ranked = displayed ? (sort === 'cpuPercent' ? displayed.byCpu : displayed.byMemory) : [];
-  const term = search.trim().toLocaleLowerCase();
-  const rows = term ? ranked.filter((row) => `${row.name} ${row.pid}`.toLocaleLowerCase().includes(term)) : ranked;
+  const term = search.trim();
+  const match = createSearchMatcher(search);
+  const rows = ranked.filter((row) => match(row.name, String(row.pid)) > 0);
   const visibleRows = limit && !expanded ? rows.slice(0, limit) : rows;
   const maximum = Math.max(1, ...rows.map((row) => row[sort] ?? 0));
   const heading = useRef<HTMLHeadingElement>(null);

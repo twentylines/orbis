@@ -1,3 +1,4 @@
+import { createSearchMatcher } from '@runtipi/common/types';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -98,10 +99,8 @@ export function DriveHealthView() {
   const confirmedDrive = data?.drives.find((drive) => drive.id === confirmation?.drive.id);
   const confirmationIssue = driveSelfTestIssue(confirmation?.kind, confirmedDrive, delayed);
   const needingAttention = data?.drives.filter((drive) => drive.health === 'warning' || drive.health === 'failed') ?? [];
-  const drives =
-    data?.drives.filter(
-      (drive) => (!attention || needingAttention.includes(drive)) && `${drive.model} ${drive.device}`.toLowerCase().includes(search.toLowerCase()),
-    ) ?? [];
+  const match = createSearchMatcher(search);
+  const drives = data?.drives.filter((drive) => (!attention || needingAttention.includes(drive)) && match(drive.model, drive.device) > 0) ?? [];
   const active = drives.find((drive) => drive.id === selected) ?? drives[0];
   const requestTest = (drive: DriveHealth, kind: 'short' | 'extended' | 'abort') => {
     test.reset();

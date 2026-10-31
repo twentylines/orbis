@@ -5,8 +5,7 @@ import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
-import type { AppUrn } from '@runtipi/common/types';
-import MiniSearch from 'minisearch';
+import { createSearchMatcher, type AppUrn } from '@runtipi/common/types';
 import { AppStoreFilesManager } from '../app-stores/app-store-files-manager';
 import { AppStoreService, RESERVED_APP_STORE_SLUGS } from '../app-stores/app-store.service';
 
@@ -31,7 +30,6 @@ const filterApp =
 export class MarketplaceService {
   private stores: Map<string, AppStoreFilesManager> = new Map();
   private appsAvailable: AppList | null = null;
-  private miniSearch: MiniSearch<AppList[number]> | null = null;
   private cacheTimeout = 1000 * 60 * 15; // 15 minutes
   private cacheLastUpdated = 0;
 
@@ -147,9 +145,6 @@ export class MarketplaceService {
    */
   private invalidateCache() {
     this.appsAvailable = null;
-    if (this.miniSearch) {
-      this.miniSearch.removeAll();
-    }
   }
 
   /**
@@ -165,18 +160,6 @@ export class MarketplaceService {
       const apps = await this.getAllAppFromStores();
 
       this.appsAvailable = this.filterApps(apps);
-
-      this.miniSearch = new MiniSearch<(typeof this.appsAvailable)[number]>({
-        fields: ['name', 'short_desc', 'categories'],
-        storeFields: ['urn'],
-        idField: 'urn',
-        searchOptions: {
-          boost: { name: 2 },
-          fuzzy: 0.2,
-          prefix: true,
-        },
-      });
-      this.miniSearch.addAll(this.appsAvailable);
 
       this.cacheLastUpdated = Date.now();
     }
@@ -205,10 +188,13 @@ export class MarketplaceService {
       filteredApps = filteredApps.filter((app) => app.categories.some((c) => c === category));
     }
 
-    if (search && this.miniSearch) {
-      const result = this.miniSearch.search(search);
-      const searchIds = result.map((app) => app.id);
-      filteredApps = filteredApps.filter((app) => searchIds.includes(app.urn)).sort((a, b) => searchIds.indexOf(a.urn) - searchIds.indexOf(b.urn));
+    if (search?.trim()) {
+      const match = createSearchMatcher(search);
+      filteredApps = filteredApps
+        .map((app) => ({ app, score: match(app.name, `${app.short_desc} ${app.categories.join(' ')} ${app.urn}`) }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score || sortApps(a.app, b.app))
+        .map(({ app }) => app);
     }
 
     const start = cursor ? filteredApps.findIndex((app) => app.urn === cursor) : 0;

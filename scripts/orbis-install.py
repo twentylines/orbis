@@ -160,10 +160,11 @@ def select_installation(report, root=None, ask=None):
     print("Installations found:")
     for index, item in enumerate(installations, 1):
         print(f"  {index}. {item['product']} {item.get('version') or ''} — {item.get('installRoot') or 'unconfirmed root'}")
-    answer = ask("Select an installation number: ").strip()
-    if not answer.isdigit() or not 1 <= int(answer) <= len(installations):
-        raise ValueError("No installation was selected")
-    return installations[int(answer) - 1]
+    while True:
+        answer = ask("Select an installation number: ").strip()
+        if answer.isascii() and answer.isdigit() and len(answer) <= len(str(len(installations))) and 1 <= int(answer) <= len(installations):
+            return installations[int(answer) - 1]
+        print(f"Enter a number from 1 to {len(installations)} to select an installation.", file=sys.stderr)
 
 
 def semantic_review(value):
@@ -477,9 +478,11 @@ def main():
             if args.yes:
                 raise ValueError("Unattended Runtipi replacement requires --mode keep or --mode fresh")
             print(f"\nDetected Runtipi {selected['version']} at {root}\n  1. Keep accounts, settings and apps\n  2. Start fresh with new accounts; retain apps and data")
-            answer = ask("Replacement choice [1]: ").strip()
-            if answer not in {"", "1", "2"}:
-                raise ValueError("Choose Keep or Fresh")
+            while True:
+                answer = ask("Replacement choice [1]: ").strip()
+                if answer in {"", "1", "2"}:
+                    break
+                print("Enter 1 to keep the existing accounts, settings and apps, or 2 to start fresh.", file=sys.stderr)
             mode = "fresh" if answer == "2" else "keep"
         if not selected and mode is not None:
             raise ValueError("No Runtipi installation matches the requested replacement mode")

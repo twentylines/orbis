@@ -54,6 +54,15 @@ html[data-desktop-local-wallpaper="true"] .orbis-startup {
 .orbis-theme > .desktop-wallpaper-layer .desktop-wallpaper-shade {
   background: var(--desktop-wallpaper-tint);
 }
+html:not([data-desktop-mode="dark"]) .desktop > .desktop-wallpaper-layer .desktop-wallpaper-shade {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--desktop-base-surface) 72%, transparent),
+      color-mix(in srgb, var(--desktop-base-surface) 62%, transparent) 48%,
+      color-mix(in srgb, var(--desktop-base-surface) 42%, transparent)
+    ), var(--desktop-wallpaper-tint);
+}
 .orbis-startup > .desktop-wallpaper-layer .desktop-wallpaper-shade {
   background: var(--orbis-startup-shade);
 }

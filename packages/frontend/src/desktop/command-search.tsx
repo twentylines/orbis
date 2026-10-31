@@ -1,3 +1,4 @@
+import { createSearchMatcher } from '@runtipi/common/types';
 import { useAppContext } from '@/context/app-context';
 import { searchSettings, settingsPath, settingsSections, resolveSettingsSection } from '@/modules/settings/helpers/settings-catalogue';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
@@ -286,7 +287,7 @@ export function CommandSearch() {
   }, [open, close, openSearch]);
 
   const needle = query.toLocaleLowerCase();
-  const terms = needle.split(/\s+/).filter(Boolean);
+  const match = createSearchMatcher(query);
   const sections: SearchResult[] = desktopSearchSections
     .filter(
       ({ path }) =>
@@ -294,7 +295,8 @@ export function CommandSearch() {
         settingsAccess.operator ||
         !['general', 'updates', 'backups', 'cluster', 'logs'].includes(resolveSettingsSection(new URLSearchParams(path.split('?')[1]).get('tab'))),
     )
-    .filter((section) => terms.every((term) => `${section.label} ${section.keywords}`.toLocaleLowerCase().includes(term)))
+    .filter((section) => match(section.label, section.keywords) > 0)
+    .sort((a, b) => match(b.label, b.keywords) - match(a.label, a.keywords))
     .filter(
       ({ path }) =>
         scope === 'all' ||
@@ -312,7 +314,8 @@ export function CommandSearch() {
       icon: <Icon size={22} aria-hidden="true" />,
     }));
   const installedResults: SearchResult[] = (installed.data?.installed ?? [])
-    .filter(({ info }) => info.available && `${info.name} ${info.short_desc} ${info.urn}`.toLocaleLowerCase().includes(needle))
+    .filter(({ info }) => info.available && match(info.name, `${info.short_desc} ${info.urn}`) > 0)
+    .sort((a, b) => match(b.info.name, b.info.short_desc) - match(a.info.name, a.info.short_desc))
     .slice(0, query || scope === 'apps' ? 24 : 6)
     .map(({ info }) => ({
       id: info.urn,
