@@ -26,6 +26,27 @@
 .orbis-store-recommendations .orbis-store-section-heading button:hover {
   background: color-mix(in srgb, var(--desktop-action) 12%, transparent);
 }
+.orbis-store-recommendation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.orbis-store-recommendations .orbis-store-recommendation-actions > button {
+  flex: 1 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--desktop-accent);
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+}
 .orbis-store-recommendations > .orbis-store-collections {
   position: relative;
 }
@@ -79,7 +100,7 @@
 .orbis-store-discover.orbis-store-recommendations .orbis-store-collection-art[data-stack-grid] {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, max-content);
   align-content: center;
   justify-items: center;
   gap: 10px;
@@ -87,14 +108,40 @@
   min-height: 11rem;
   padding: 16px;
 }
-.orbis-store-discover.orbis-store-recommendations .orbis-store-collection-art[data-stack-grid] .orbis-store-artwork-app {
+.orbis-store-discover.orbis-store-recommendations .orbis-store-collection-art[data-stack-grid][data-art-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: max-content;
+}
+.orbis-store-discover.orbis-store-recommendations .orbis-store-collection-art[data-stack-grid][data-art-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: max-content;
+}
+.orbis-store-discover.orbis-store-recommendations .orbis-store-collection-art[data-stack-grid][data-art-count="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: max-content;
+}
+.orbis-store-discover.orbis-store-recommendations .orbis-store-collection-art[data-stack-grid][data-art-count="4"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, max-content);
+}
+.orbis-store-discover.orbis-store-recommendations .orbis-store-collection-art[data-stack-grid][data-art-count] .orbis-store-artwork-app {
+  position: relative;
+  inset: auto;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  aspect-ratio: 1;
+  transform: none;
+  --app-logo-size: 100%;
+}
+.orbis-store-discover.orbis-store-recommendations .orbis-store-collection-art[data-stack-grid] .orbis-store-artwork-motion {
   position: relative;
   inset: auto;
   display: grid;
   width: min(100%, 3.75rem);
   aspect-ratio: 1;
-  transform: none;
-  --app-logo-size: 100%;
+  justify-self: center;
 }
 .orbis-store-discover.orbis-store-recommendations .orbis-store-collection-art[data-stack-grid] .orbis-store-artwork-app[data-art-position="3"] {
   display: grid;

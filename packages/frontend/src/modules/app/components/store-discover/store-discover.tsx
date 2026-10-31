@@ -35,11 +35,44 @@ const RecommendationCard = forwardRef<HTMLElement, HTMLMotionProps<'section'>>(f
   return <motion.section {...props} ref={ref} inert={!present} aria-hidden={!present || undefined} />;
 });
 
+export function suggestionItemMotion(reduced: boolean, visible: boolean) {
+  const duration = reduced || !visible ? 0 : sectionMotionTiming.content / 1000;
+  const offset = duration ? 4 : 0;
+  return {
+    initial: { opacity: duration ? 0 : 1, y: offset },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: offset ? -offset : 0 },
+    transition: { duration, ease: [0.32, 0.08, 0.24, 1] as const },
+  };
+}
+
+export function suggestionSurfaceMotion(presentation: 'page' | 'editorial', reduced: boolean, visible: boolean, animateEntry = true) {
+  const duration = reduced || !visible ? 0 : sectionMotionTiming.content / 1000;
+  const editorial = presentation === 'editorial';
+  return {
+    layout: editorial ? ('position' as const) : undefined,
+    initial: animateEntry ? (editorial ? { opacity: 0, y: 4 } : { opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, y: 4 }) : false,
+    animate: editorial ? { opacity: 1, y: 0 } : { opacity: 1, height: 'auto' as const, paddingTop: 12, paddingBottom: 12, y: 0 },
+    exit: editorial ? { opacity: 0, y: -4 } : { opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, y: -4 },
+    transition: { duration, ease: [0.32, 0.08, 0.24, 1] as const },
+  };
+}
+
+export function disableStoreRecommendations(update: (patch: { showStoreRecommendations: boolean }) => void) {
+  update({ showStoreRecommendations: false });
+}
+
+const RecommendationRow = forwardRef<HTMLLIElement, HTMLMotionProps<'li'>>(function RecommendationRow(props, ref) {
+  const present = useIsPresent();
+  return <motion.li {...props} ref={ref} inert={!present} aria-hidden={!present || undefined} />;
+});
+
 export function StoreDiscover({
   storeId,
   onBrowse,
   enabled = true,
   hiddenCategories = [],
+  onDisableSuggestions,
   onHideCategory,
   seed,
   presentation = 'page',
@@ -49,6 +82,7 @@ export function StoreDiscover({
   onCollections?: () => void;
   enabled?: boolean;
   hiddenCategories?: readonly StoreRecommendationCategory[];
+  onDisableSuggestions?: () => void;
   onHideCategory?: (category: StoreRecommendationCategory) => void;
   seed?: string;
   presentation?: 'page' | 'editorial';
@@ -58,6 +92,8 @@ export function StoreDiscover({
   const params = useParams<{ appId: string }>();
   const preview = useStorePreview();
   const reduced = useReducedMotion();
+  const reduceMotion = Boolean(reduced);
+  const motionDuration = reduceMotion || !visible ? 0 : sectionMotionTiming.content / 1000;
   const [viewSeed, setViewSeed] = useState<string | null>(seed ?? null);
   useEffect(() => {
     if (viewSeed !== null) return;
@@ -65,7 +101,9 @@ export function StoreDiscover({
     setViewSeed((current) => current ?? value);
   }, [viewSeed]);
   const root = useRef<HTMLDivElement>(null);
+  const hasShownSurface = useRef(false);
   const [rotation, setRotation] = useState(0);
+  const refreshButton = useRef<HTMLButtonElement>(null);
   const [dismissed, setDismissed] = useState<StoreRecommendationCategory[]>([]);
   useEffect(() => {
     if (location.pathname === '/app-store' || location.pathname.startsWith('/app-store/')) return;
@@ -146,6 +184,10 @@ export function StoreDiscover({
   );
   const slots = showMedia ? 1 : 2;
   const cards = suggestions.slice(0, slots);
+  const showSurface = active && known && ready && viewSeed !== null && (showMedia || cards.length > 0);
+  useEffect(() => {
+    if (showSurface) hasShownSurface.current = true;
+  }, [showSurface]);
   const focusAfterDismiss = (category: StoreRecommendationCategory) => {
     const focused = document.activeElement;
     if (
@@ -163,6 +205,20 @@ export function StoreDiscover({
     focusAfterDismiss(category);
     if (permanent) onHideCategory?.(category);
     else setDismissed((previous) => (previous.includes(category) ? previous : [...previous, category]));
+  };
+  const disableSuggestions = () => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && root.current?.contains(focused)) {
+      root.current?.closest('.orbis-store')?.querySelector<HTMLElement>('.orbis-store-search input')?.focus({ preventScroll: true });
+    }
+    onDisableSuggestions?.();
+  };
+  const refreshSuggestions = () => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && root.current?.querySelector('.orbis-store-collections')?.contains(focused)) {
+      refreshButton.current?.focus({ preventScroll: true });
+    }
+    setRotation((value) => value + 1);
   };
   const tools = (category: StoreRecommendationCategory, title: string) => (
     <div className="orbis-store-recommendation-tools">
@@ -190,8 +246,8 @@ export function StoreDiscover({
       layout="position"
       initial={false}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0, scale: reduced ? 1 : 0.98 }}
-      transition={{ duration: reduced ? 0 : sectionMotionTiming.content / 1000, ease: [0.32, 0.08, 0.24, 1] }}
+      exit={{ opacity: 0, y: reduced || !visible ? 0 : -4 }}
+      transition={{ duration: motionDuration, ease: [0.32, 0.08, 0.24, 1] }}
       className={`orbis-store-collection orbis-store-collection-${category}`}
       data-recommendation-category={category}
     >
@@ -200,15 +256,12 @@ export function StoreDiscover({
   );
   return (
     <>
-      <AnimatePresence initial={false}>
-        {active && known && ready && viewSeed !== null && (showMedia || cards.length) ? (
+      <AnimatePresence initial={false} mode="popLayout">
+        {showSurface ? (
           <RecommendationSurface
             key="recommendations"
             ref={root}
-            initial={false}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: reduced ? 0 : sectionMotionTiming.content / 1000 }}
+            {...suggestionSurfaceMotion(presentation, reduceMotion, visible, hasShownSurface.current)}
             className={`orbis-store-discover orbis-store-recommendations${presentation === 'editorial' ? ' orbis-store-editorial' : ''}`}
             role="complementary"
             aria-label="App recommendations"
@@ -216,19 +269,26 @@ export function StoreDiscover({
           >
             <header className="orbis-store-section-heading">
               <h2>For your server</h2>
-              {suggestions.length > slots || suggestions.some((suggestion) => suggestion.choiceCount > suggestion.apps.length) ? (
-                <Button type="button" variant="ghost" onClick={() => setRotation((value) => value + 1)}>
-                  Refresh
-                </Button>
-              ) : null}
+              <div className="orbis-store-recommendation-actions">
+                {suggestions.length > slots || suggestions.some((suggestion) => suggestion.choiceCount > suggestion.apps.length) ? (
+                  <Button ref={refreshButton} type="button" variant="ghost" onClick={refreshSuggestions}>
+                    Refresh
+                  </Button>
+                ) : null}
+                {onDisableSuggestions ? (
+                  <Button type="button" variant="ghost" onClick={disableSuggestions}>
+                    Do not show suggestions
+                  </Button>
+                ) : null}
+              </div>
             </header>
-            <motion.div layout className="orbis-store-collections" transition={{ duration: reduced ? 0 : sectionMotionTiming.content / 1000 }}>
+            <motion.div layout className="orbis-store-collections" transition={{ duration: motionDuration, ease: [0.32, 0.08, 0.24, 1] }}>
               <AnimatePresence initial={false} mode="popLayout">
                 {showMedia
                   ? card(
                       'media',
                       <>
-                        <StoreCollectionArt apps={artwork} kind="media" />
+                        <StoreCollectionArt apps={artwork} kind="media" reduced={reduceMotion} visible={visible} />
                         <div className="orbis-store-collection-content">
                           <h3>Media library</h3>
                           <p>
@@ -260,36 +320,44 @@ export function StoreDiscover({
                   card(
                     category,
                     <>
-                      <StoreCollectionArt apps={apps} kind={category} />
+                      <StoreCollectionArt apps={apps} kind={category} reduced={reduceMotion} visible={visible} />
                       <div className="orbis-store-collection-content">
                         <h3>{title}</h3>
                         <ul className="orbis-store-recommendation-apps">
-                          {apps.map((app) => (
-                            <li key={app.urn} className="orbis-store-recommendation-app">
-                              <span>
-                                <strong>{app.name}</strong>
-                                {app.short_desc ? <span className="orbis-store-recommendation-description">{app.short_desc}</span> : null}
-                              </span>
-                              <Link
-                                ref={preview?.onCardMount}
-                                className="orbis-store-collection-link orbis-store-recommendation-preview"
-                                data-recommendation-primary
-                                aria-label={`Preview ${app.name}`}
-                                to={`/app-store/${encodeURIComponent(app.urn.split(':')[1] ?? '')}/${encodeURIComponent(app.id)}${location.search}`}
-                                state={nextStorePreviewHistory(
-                                  location.state as StorePreviewHistory | null,
-                                  location.search,
-                                  location.pathname.startsWith('/app-store/'),
-                                )}
-                                preventScrollReset
-                                data-store-app={app.urn}
-                                aria-controls={preview?.split ? 'store-app-preview' : undefined}
-                                aria-expanded={preview?.split ? preview.selectedUrn === app.urn : undefined}
+                          <AnimatePresence initial={false} mode="popLayout">
+                            {apps.map((app) => (
+                              <RecommendationRow
+                                key={app.urn}
+                                {...suggestionItemMotion(reduceMotion, visible)}
+                                layout="position"
+                                className="orbis-store-recommendation-app"
+                                data-recommendation-key={app.urn}
                               >
-                                Preview <IconArrowRight size={18} aria-hidden="true" />
-                              </Link>
-                            </li>
-                          ))}
+                                <span>
+                                  <strong>{app.name}</strong>
+                                  {app.short_desc ? <span className="orbis-store-recommendation-description">{app.short_desc}</span> : null}
+                                </span>
+                                <Link
+                                  ref={preview?.onCardMount}
+                                  className="orbis-store-collection-link orbis-store-recommendation-preview"
+                                  data-recommendation-primary
+                                  aria-label={`Preview ${app.name}`}
+                                  to={`/app-store/${encodeURIComponent(app.urn.split(':')[1] ?? '')}/${encodeURIComponent(app.id)}${location.search}`}
+                                  state={nextStorePreviewHistory(
+                                    location.state as StorePreviewHistory | null,
+                                    location.search,
+                                    location.pathname.startsWith('/app-store/'),
+                                  )}
+                                  preventScrollReset
+                                  data-store-app={app.urn}
+                                  aria-controls={preview?.split ? 'store-app-preview' : undefined}
+                                  aria-expanded={preview?.split ? preview.selectedUrn === app.urn : undefined}
+                                >
+                                  Preview <IconArrowRight size={18} aria-hidden="true" />
+                                </Link>
+                              </RecommendationRow>
+                            ))}
+                          </AnimatePresence>
                         </ul>
                         <Button
                           type="button"
@@ -322,21 +390,35 @@ export function StoreDiscover({
   );
 }
 
-export function StoreCollectionArt({ apps, kind }: { apps: AppInfoSimple[]; kind: AppCategory }) {
+export function StoreCollectionArt({
+  apps,
+  kind,
+  reduced = false,
+  visible = true,
+}: {
+  apps: AppInfoSimple[];
+  kind: AppCategory;
+  reduced?: boolean;
+  visible?: boolean;
+}) {
   if (!apps.length) return null;
   return (
     <div
       className="orbis-store-collection-art"
       data-collection-kind={kind}
       data-art-count={Math.min(apps.length, 6)}
-      data-stack-grid={kind === 'media' ? '' : undefined}
+      data-stack-grid={kind === 'media' || apps.length > 1 ? '' : undefined}
       aria-hidden="true"
     >
-      {apps.slice(0, 6).map((app, index) => (
-        <span className="orbis-store-artwork-app" data-art-position={index} key={app.urn}>
-          <AppLogo urn={app.urn} size={128} />
-        </span>
-      ))}
+      <AnimatePresence initial={false} mode="popLayout">
+        {apps.slice(0, 6).map((app, index) => (
+          <motion.span {...suggestionItemMotion(reduced, visible)} className="orbis-store-artwork-motion" data-art-position={index} key={app.urn}>
+            <span className="orbis-store-artwork-app" data-art-position={index}>
+              <AppLogo urn={app.urn} size={128} />
+            </span>
+          </motion.span>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }

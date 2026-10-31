@@ -241,6 +241,7 @@
   outline-offset: 3px;
 }
 .orbis-store-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, max(15rem, calc((100% - 56px) / 5))), 1fr));
   grid-auto-rows: auto;
@@ -455,6 +456,10 @@
   background: transparent;
   filter: drop-shadow(0 10px 12px rgb(0 0 0 / 0.12));
   --app-logo-size: 7rem;
+}
+.orbis-store-artwork-motion {
+  position: absolute;
+  inset: 0;
 }
 .orbis-store-artwork-app[data-art-position="0"] {
   inset-inline-start: 12%;

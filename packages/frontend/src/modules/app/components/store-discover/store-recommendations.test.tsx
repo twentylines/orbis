@@ -13,7 +13,8 @@ import { MemoryRouter } from 'react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createAppQueryClient } from '@/lib/query-client';
 import { getInstalledAppsOptions, searchAppsOptions } from '@/api-client/@tanstack/react-query.gen';
-import { StoreDiscover } from './store-discover';
+import { disableStoreRecommendations, StoreCollectionArt, StoreDiscover, suggestionItemMotion, suggestionSurfaceMotion } from './store-discover';
+import { StoreCatalogue, storeCataloguePositionMotion } from '@/modules/app/pages/store-catalogue';
 import { mediaApps } from './store-curation';
 import { StoreRecommendationSettings } from '@/modules/settings/containers/store-recommendation-settings';
 import { StorePreviewContext, type StorePreview } from '../../pages/store-preview-context';
@@ -128,7 +129,80 @@ describe('catalogue-aware recommendations', () => {
   });
 });
 
+describe('recommendation transitions', () => {
+  test('content changes use bounded opacity and translation without scaling text', () => {
+    const motion = suggestionItemMotion(false, true);
+    expect(motion.initial).toEqual({ opacity: 0, y: 4 });
+    expect(motion.animate).toEqual({ opacity: 1, y: 0 });
+    expect(motion.exit).toEqual({ opacity: 0, y: -4 });
+    expect(motion.transition.duration).toBeGreaterThan(0);
+    expect(motion).not.toHaveProperty('scale');
+  });
+
+  test('reduced motion and hidden documents settle new and exiting content immediately', () => {
+    for (const motion of [suggestionItemMotion(true, true), suggestionItemMotion(false, false)]) {
+      expect(motion.transition.duration).toBe(0);
+      expect(motion.initial).toEqual({ opacity: 1, y: 0 });
+      expect(motion.exit).toEqual({ opacity: 0, y: 0 });
+    }
+  });
+
+  test('editorial entry and exit use position-only layout while page presentation collapses its padding', () => {
+    const editorial = suggestionSurfaceMotion('editorial', false, true);
+    expect(editorial.layout).toBe('position');
+    expect(editorial.initial).toEqual({ opacity: 0, y: 4 });
+    expect(editorial.animate).toEqual({ opacity: 1, y: 0 });
+    expect(editorial.exit).toEqual({ opacity: 0, y: -4 });
+    expect(editorial.exit).not.toHaveProperty('height');
+    expect(suggestionSurfaceMotion('editorial', false, true, false).initial).toBe(false);
+
+    const page = suggestionSurfaceMotion('page', false, true);
+    expect(page.initial).toMatchObject({ height: 0, paddingTop: 0, paddingBottom: 0 });
+    expect(page.animate).toMatchObject({ height: 'auto', paddingTop: 12, paddingBottom: 12 });
+    expect(page.exit).toMatchObject({ height: 0, paddingTop: 0, paddingBottom: 0 });
+  });
+
+  test('catalogue reflow uses bounded position-only motion and disables it when hidden or reduced', () => {
+    expect(storeCataloguePositionMotion(false, true)).toMatchObject({
+      layout: 'position',
+      transition: { duration: expect.any(Number), ease: [0.32, 0.08, 0.24, 1] },
+    });
+    expect(storeCataloguePositionMotion(true, true).transition.duration).toBe(0);
+    expect(storeCataloguePositionMotion(false, false).transition.duration).toBe(0);
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(StoreCatalogue, {
+          apps: [app('one', 'ai'), app('two', 'ai')],
+          collections: createElement('div', { className: 'orbis-store-editorial' }, 'suggestions'),
+          collectionsAfter: 1,
+          lastElementRef: () => {},
+        }),
+      ),
+    );
+    expect(html.match(/class="orbis-store-grid-item"/g)).toHaveLength(2);
+    expect(html.indexOf('orbis-store-editorial')).toBeGreaterThan(html.indexOf('orbis-store-grid-item'));
+    expect(html.lastIndexOf('orbis-store-grid-item')).toBeGreaterThan(html.indexOf('orbis-store-editorial'));
+  });
+});
+
 describe('recommendation preferences', () => {
+  test('the Store hide button writes the global preference used by Settings', () => {
+    let update: { showStoreRecommendations: boolean } | undefined;
+    disableStoreRecommendations((next) => {
+      update = next;
+    });
+    const saved = normalisePreferences({ ...defaultDesktopPreferences, ...update });
+    expect(saved.showStoreRecommendations).toBe(false);
+
+    const settings = renderToStaticMarkup(
+      createElement(StoreRecommendationSettings, { shown: saved.showStoreRecommendations, hidden: [], onChange: () => {}, onRestore: () => {} }),
+    );
+    expect(settings).toContain('aria-checked="false"');
+  });
+
   test('legacy preferences default to shown and unhidden; account import/export preserves independent choices', () => {
     const { showStoreRecommendations: _shown, hiddenStoreRecommendationCategories: _hidden, ...legacy } = defaultDesktopPreferences;
     expect(isPreferences(legacy)).toBe(true);
@@ -202,6 +276,7 @@ function renderSuggestions({
           { value: preview },
           createElement(StoreDiscover, {
             onBrowse: () => {},
+            onDisableSuggestions: () => {},
             enabled,
             hiddenCategories: hidden,
             onHideCategory: () => {},
@@ -234,6 +309,9 @@ test('real recommendation cards contain full category actions, real preview link
   expect(html.match(/orbis-store-recommendation-preview/g)).toHaveLength(3);
   expect(html).toContain('Browse Game hosting');
   expect(html).toContain('Refresh');
+  expect(html).toContain('Do not show suggestions');
+  expect(html.match(/data-recommendation-key=/g)).toHaveLength(3);
+  expect(html).toContain('data-recommendation-key="valheim:enabled"');
   expect(html).not.toContain('Other suggestions');
   expect(html).toContain('Don&#x27;t show again');
   expect(html).toContain('Dismiss Game hosting suggestions for this visit');
@@ -261,6 +339,25 @@ test('media art shows up to six real stack icons and the media section hides aft
       installedStatus: 'installing',
     }),
   ).not.toContain('Media library');
+});
+
+test('game artwork uses centered single-icon positioning and a non-overlapping grid for multiple choices', () => {
+  const single = renderToStaticMarkup(createElement(StoreCollectionArt, { apps: [app('crafty', 'gaming')], kind: 'gaming' }));
+  expect(single).toContain('data-collection-kind="gaming" data-art-count="1"');
+  expect(single).not.toContain('data-stack-grid');
+  expect(single).toContain('class="orbis-store-artwork-app" data-art-position="0"');
+
+  const three = renderToStaticMarkup(
+    createElement(StoreCollectionArt, {
+      apps: [app('crafty', 'gaming'), app('valheim', 'gaming'), app('pufferpanel', 'gaming')],
+      kind: 'gaming',
+    }),
+  );
+  expect(three).toContain('data-collection-kind="gaming" data-art-count="3" data-stack-grid=""');
+  expect(three.match(/class="orbis-store-artwork-app" data-art-position=/g)).toHaveLength(3);
+  expect(three).toContain('class="orbis-store-artwork-app" data-art-position="0"');
+  expect(three).toContain('class="orbis-store-artwork-app" data-art-position="1"');
+  expect(three).toContain('class="orbis-store-artwork-app" data-art-position="2"');
 });
 
 test('an open split preview hides the entire recommendation section', () => {

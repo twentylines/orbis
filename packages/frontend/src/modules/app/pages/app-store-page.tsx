@@ -27,7 +27,7 @@ import { useWindowVisible, WindowVisibilityContext } from '@/desktop/window-visi
 import { storeView, storeEditorialFits } from '../components/store-discover/store-curation';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation, useParams, useSearchParams } from 'react-router';
-import { StoreDiscover } from '../components/store-discover/store-discover';
+import { disableStoreRecommendations, StoreDiscover } from '../components/store-discover/store-discover';
 import { StoreViewTransition } from '../components/store-discover/store-view-transition';
 import { StoreCatalogue } from './store-catalogue';
 import { nextStorePreviewHistory, type StorePreviewHistory } from './store-preview-navigation';
@@ -61,6 +61,7 @@ function LocalStore() {
   const recommendationProps = {
     enabled: preferences.showStoreRecommendations,
     hiddenCategories: preferences.hiddenStoreRecommendationCategories,
+    onDisableSuggestions: () => disableStoreRecommendations(update),
     onHideCategory: (category: StoreRecommendationCategory) =>
       update({
         hiddenStoreRecommendationCategories: [...new Set([...preferences.hiddenStoreRecommendationCategories, category])],
@@ -389,7 +390,7 @@ function LocalStore() {
                     installLoadingUrn={installLoadingUrn}
                     onInstall={openInstall}
                     collections={
-                      <WindowVisibilityContext.Provider value={showEditorial}>
+                      <WindowVisibilityContext.Provider value={visible && browsing && !params.appId && !hasFilters}>
                         <StoreDiscover
                           {...recommendationProps}
                           presentation="editorial"
