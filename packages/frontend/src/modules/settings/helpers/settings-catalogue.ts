@@ -1,4 +1,4 @@
-import { createSearchMatcher, normaliseSearch } from '@runtipi/common/types';
+import { createSearchMatcher, normaliseSearch } from '@runtipi/common/search';
 export const settingsSections = [
   { id: 'general', label: 'General', detail: 'Server and network' },
   { id: 'customise', label: 'Customisation', detail: 'Colours and workspace' },

@@ -5,7 +5,8 @@ import { ConfigurationService } from '@/core/config/configuration.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { Injectable } from '@nestjs/common';
-import { createSearchMatcher, type AppUrn } from '@runtipi/common/types';
+import { createSearchMatcher } from '@runtipi/common/search';
+import type { AppUrn } from '@runtipi/common/types';
 import { AppStoreFilesManager } from '../app-stores/app-store-files-manager';
 import { AppStoreService, RESERVED_APP_STORE_SLUGS } from '../app-stores/app-store.service';
 

@@ -1,4 +1,4 @@
-import { createSearchMatcher } from '@runtipi/common/types';
+import { createSearchMatcher } from '@runtipi/common/search';
 import { useServerPath } from '@/desktop/cluster-data';
 import { useQuery } from '@tanstack/react-query';
 import type { HostProcesses } from '@runtipi/common/schemas';

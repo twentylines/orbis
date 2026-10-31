@@ -1,4 +1,4 @@
-import { createSearchMatcher } from '@runtipi/common/types';
+import { createSearchMatcher } from '@runtipi/common/search';
 import type { ThemePackManifest } from '@runtipi/common/schemas/theme-pack';
 
 export function compareThemeVersions(left: string, right: string) {

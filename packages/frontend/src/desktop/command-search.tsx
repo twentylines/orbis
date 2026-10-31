@@ -1,4 +1,4 @@
-import { createSearchMatcher } from '@runtipi/common/types';
+import { createSearchMatcher } from '@runtipi/common/search';
 import { useAppContext } from '@/context/app-context';
 import { searchSettings, settingsPath, settingsSections, resolveSettingsSection } from '@/modules/settings/helpers/settings-catalogue';
 import { prefersReducedMotion } from '@/desktop/motion-setting';

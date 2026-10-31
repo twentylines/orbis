@@ -1,4 +1,4 @@
-import { createSearchMatcher } from '@runtipi/common/types';
+import { createSearchMatcher } from '@runtipi/common/search';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AppLogo } from '@/components/app-logo/app-logo';
 import { Button } from '@/components/ui/Button';

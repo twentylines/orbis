@@ -1,4 +1,4 @@
-import { createSearchMatcher } from '@runtipi/common/types';
+import { createSearchMatcher } from '@runtipi/common/search';
 export type LibrarySort = 'az' | 'za' | 'opened' | 'installed';
 export type LibraryFilters = { search: string; category: string; sort: LibrarySort };
 export type LibraryApp = { key: string; name: string; categories?: readonly string[]; installedAt?: number; searchText?: string };

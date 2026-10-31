@@ -9,6 +9,11 @@
     "README.md"
   ],
   "exports": {
+    "./search": {
+      "types": "./dist/types/search.d.ts",
+      "import": "./dist/types/search.js",
+      "default": "./dist/types/search.js"
+    },
     "./schemas/*": {
       "types": "./dist/schemas/*.d.ts",
       "import": "./dist/schemas/*.js",
@@ -27,6 +32,9 @@
   },
   "typesVersions": {
     "*": {
+      "search": [
+        "dist/types/search.d.ts"
+      ],
       "schemas/*": [
         "dist/schemas/*.d.ts"
       ],
