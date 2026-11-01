@@ -60,6 +60,13 @@ def tag_commit(repository, tag):
     return subprocess.check_output(["git", "rev-parse", "--verify", f"refs/tags/{tag}^{{commit}}"], cwd=repository, text=True).strip()
 
 
+def head_commit(repository):
+    commit = subprocess.check_output(["git", "rev-parse", "--verify", "HEAD^{commit}"], cwd=repository, text=True).strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("A full committed HEAD is required")
+    return commit
+
+
 def required_sources(source):
     tree = ast.parse(source["scripts/orbis-installer-bundle.py"])
     values = [node.value for node in tree.body if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "REQUIRED" for target in node.targets)]
@@ -127,11 +134,11 @@ def channel_site(repository, releases, output, fetch=BOOT.fetch):
         record = catalog["channels"]["nightly"]
         if record is None:
             raise NoPublishedRelease("No published Orbis release is available")
-        source = BUILD.committed_files(repository, record["commit"])["scripts/install-orbis.py"]
+        source = BUILD.committed_files(repository, head_commit(repository))["scripts/install-orbis.py"]
         if source.count(b"CHANNEL_CATALOG = None") != 1 or source.count(b"EXPECTED_RELEASE = None") != 1:
             if source.count(b"CHANNEL_CATALOG = None") == 0 and source.count(b"EXPECTED_RELEASE = None") == 1 and LEGACY_CHANNEL_BOOTSTRAPS.get(record["tag"]) == BUILD.sha(source):
                 raise NoPublishedRelease(f"Verified release {record['tag']} predates channel-aware installation")
-            raise ValueError("The newest published installer does not support channel selection yet")
+            raise ValueError("The committed installer does not support channel selection")
         bootstrap = source.replace(b"CHANNEL_CATALOG = None", ("CHANNEL_CATALOG = " + repr(catalog)).encode())
         compile(bootstrap, "install", "exec")
         (staged / "install").write_bytes(bootstrap)

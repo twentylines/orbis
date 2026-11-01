@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 import importlib.util
 import io
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -192,7 +193,7 @@ class CombinedChannelEndpointTests(unittest.TestCase):
             content = assets[url.rsplit("/", 1)[1]]
             self.assertLessEqual(len(content), limit)
             return content
-        with mock.patch.object(SITE, "tag_commit", return_value=self.release["commit"]), mock.patch.object(SITE.BUILD, "committed_files", return_value=self.files):
+        with mock.patch.object(SITE, "head_commit", return_value="b" * 40), mock.patch.object(SITE, "tag_commit", return_value=self.release["commit"]), mock.patch.object(SITE.BUILD, "committed_files", return_value=self.files):
             return SITE.channel_site(Path(self.temp.name), rows or [self.selected], self.output, fetch)
 
     run_cli = InstallerEndpointTests.run_cli
@@ -210,7 +211,7 @@ class CombinedChannelEndpointTests(unittest.TestCase):
             value = self.assets[url.rsplit("/", 1)[1]]
             self.assertLessEqual(len(value), limit)
             return value
-        with mock.patch.object(SITE, "tag_commit", return_value=self.release["commit"]), mock.patch.object(SITE.BUILD, "committed_files", return_value=self.files), mock.patch.object(SITE, "channel_site", side_effect=lambda repository, releases, output: actual(repository, releases, output, fetch)):
+        with mock.patch.object(SITE, "head_commit", return_value="b" * 40), mock.patch.object(SITE, "tag_commit", return_value=self.release["commit"]), mock.patch.object(SITE.BUILD, "committed_files", return_value=self.files), mock.patch.object(SITE, "channel_site", side_effect=lambda repository, releases, output: actual(repository, releases, output, fetch)):
             return self.run_cli([self.selected], "--channels", *options)
 
     def test_only_exact_verified_legacy_launcher_can_skip_deployment_with_optional_flag(self):
@@ -254,6 +255,45 @@ class CombinedChannelEndpointTests(unittest.TestCase):
         self.assertEqual((self.output / "stable/install").read_bytes(), self.assets["install-orbis.py"])
         self.assertEqual((self.output / "nightly/install").read_bytes(), self.assets["install-orbis.py"])
         self.assertEqual({p.name for p in self.output.iterdir()}, {"install", "channels.json", "stable", "nightly", "index.html", ".nojekyll"})
+
+    def test_bootstrap_uses_committed_head_while_release_assets_use_release_commit(self):
+        repository = Path(self.temp.name) / "repository"
+        repository.mkdir()
+        def git(*args):
+            return subprocess.check_output(["git", *args], cwd=repository, stderr=subprocess.DEVNULL, text=True).strip()
+        git("init", "-q")
+        git("config", "user.email", "test@example.invalid")
+        git("config", "user.name", "Test")
+        for name, data in self.files.items():
+            path = repository / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        git("add", ".")
+        git("commit", "-qm", "release")
+        release_commit = git("rev-parse", "HEAD")
+        self.release["commit"] = release_commit
+        self.assets = {**SITE.BUILD.build(self.files, json.dumps(self.release).encode()), "release-manifest.json": json.dumps(self.release).encode()}
+        self.selected["assets"] = [{"name": name, "browser_download_url": SITE.BASE + "download/" + self.release["tag"] + "/" + name, "state": "uploaded", "size": len(data), "digest": "sha256:" + SITE.BUILD.sha(data)} for name, data in self.assets.items()]
+        launcher = repository / "scripts/install-orbis.py"
+        launcher.write_bytes(launcher.read_bytes() + b"\n# committed bootstrap update\n")
+        git("add", "scripts/install-orbis.py")
+        git("commit", "-qm", "bootstrap update")
+        launcher.write_bytes(launcher.read_bytes() + b"\n# uncommitted change\n")
+        with mock.patch.object(SITE, "tag_commit", return_value=release_commit):
+            SITE.channel_site(repository, [self.selected], self.output, lambda url, limit: self.assets[url.rsplit("/", 1)[1]])
+        root = (self.output / "install").read_bytes()
+        self.assertIn(b"# committed bootstrap update", root)
+        self.assertNotIn(b"# uncommitted change", root)
+        self.assertEqual((self.output / "stable/install").read_bytes(), self.assets["install-orbis.py"])
+        self.assertEqual((self.output / "nightly/install").read_bytes(), self.assets["install-orbis.py"])
+
+    def test_invalid_committed_head_templates_fail_closed(self):
+        for source in (b"EXPECTED_RELEASE = None\n", b"EXPECTED_RELEASE = None\nCHANNEL_CATALOG = None\nCHANNEL_CATALOG = None\n", b"EXPECTED_RELEASE = None\nCHANNEL_CATALOG = None\ninvalid syntax !\n"):
+            def sources(repository, commit):
+                return self.files if commit == self.release["commit"] else {"scripts/install-orbis.py": source}
+            with self.subTest(source=source), mock.patch.object(SITE, "head_commit", return_value="b" * 40), mock.patch.object(SITE, "tag_commit", return_value=self.release["commit"]), mock.patch.object(SITE.BUILD, "committed_files", side_effect=sources), self.assertRaises((ValueError, SyntaxError)):
+                SITE.channel_site(Path(self.temp.name), [self.selected], self.output, lambda url, limit: self.assets[url.rsplit("/", 1)[1]])
+            self.assertFalse(self.output.exists())
 
     def test_only_nightly_publishes_usable_root_without_inventing_stable(self):
         self.release["tag"] = "v1.0.1-beta.127"

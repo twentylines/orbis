@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/installer-site.yml'
       - 'scripts/publish-installer-site.py'
+      - 'scripts/install-orbis.py'
       - 'scripts/test_orbis_installer_site.py'
   workflow_run:
     workflows: ['Orbis release']
