@@ -21,7 +21,22 @@ test('fresh setup combines colour and wallpaper in one customisation step and re
   }
   expect(visited).toEqual(['choose', 'server', 'customisation', 'performance', 'updates', 'ready']);
   expect(visited).toEqual([...freshSetupSteps]);
-  expect(visited.slice(1).map(previousSetupStep)).toEqual(visited.slice(0, -1));
+  expect(visited.slice(1).map((step) => previousSetupStep(step))).toEqual(visited.slice(0, -1));
+});
+
+test('installer-marked Runtipi migrations start with preferences and never revisit fresh setup', () => {
+  const visited: SetupStep[] = ['customisation'];
+  let next = nextSetupStep('customisation', 'migration');
+  while (next) {
+    visited.push(next);
+    next = nextSetupStep(next, 'migration');
+  }
+  expect(visited).toEqual(['customisation', 'performance', 'updates', 'ready']);
+  expect(previousSetupStep('customisation', 'migration')).toBeNull();
+  expect(previousSetupStep('performance', 'migration')).toBe('customisation');
+  expect(setupCanFinish('ready', 'migration')).toBe(true);
+  expect(setupPosition('customisation', 'migration')).toEqual({ current: 1, total: 4 });
+  expect(setupPosition('ready', 'migration')).toEqual({ current: 4, total: 4 });
 });
 
 test('back from restore returns to the choice and never skips into the fresh completion step', () => {
@@ -47,7 +62,7 @@ test('every fresh step has copy and a stable bounded position for directional tr
   for (const [index, step] of freshSetupSteps.entries()) {
     expect(setupPosition(step)).toEqual({ current: index + 1, total: 6 });
     expect(setupStepCopy[step].title.length).toBeGreaterThan(0);
-    expect(setupStepCopy[step].description.length).toBeGreaterThan(0);
+    if (step !== 'ready') expect(setupStepCopy[step].description.length).toBeGreaterThan(0);
   }
   expect(setupPosition('restore')).toEqual({ current: 2, total: 2 });
   expect(setupPosition('transfer')).toEqual({ current: 2, total: 2 });

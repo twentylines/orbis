@@ -178,12 +178,12 @@ function SetupStepPanel({
 }
 
 export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolean }) => {
-  const { preferences, completeOnboarding, syncState } = useDesktopPreferences();
+  const { preferences, completeOnboarding, syncState, onboardingOrigin } = useDesktopPreferences();
   const { user } = useAppContext();
   const [draft, setDraft] = useState(preferences);
   const [name, setName] = useState(preferences.serverName);
-  const [step, setStep] = useState<SetupStep>('choose');
-  const [entry, setEntry] = useState<SetupEntry>(null);
+  const [step, setStep] = useState<SetupStep>(onboardingOrigin === 'runtipi' ? 'customisation' : 'choose');
+  const [entry, setEntry] = useState<SetupEntry>(onboardingOrigin === 'runtipi' ? 'migration' : null);
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [direction, setDirection] = useState(1);
   const [errorMonitoring, setErrorMonitoring] = useState(allowErrorMonitoring);
@@ -284,13 +284,13 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     };
   }, [stepElement]);
 
-  const position = setupPosition(step);
+  const position = setupPosition(step, entry);
   const recoveryStep = step === 'restore' || step === 'transfer';
   const go = (next: SetupStep | null) => {
     if (saving || restoreBusy || transitionLock.current || next === null || next === step) return;
     transitionLock.current = true;
     setTransitioning(true);
-    setDirection(setupPosition(next).current > position.current ? 1 : -1);
+    setDirection(setupPosition(next, entry).current > position.current ? 1 : -1);
     setError('');
     setStep(next);
   };
@@ -387,7 +387,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                   <h2 ref={heading} id="setup-heading" tabIndex={-1}>
                     {setupStepCopy[step].title}
                   </h2>
-                  <p>{setupStepCopy[step].description}</p>
+                  {setupStepCopy[step].description ? <p>{setupStepCopy[step].description}</p> : null}
                 </div>
                 {step === 'restore' ? <SystemBackupsSettings restoreOnly embedded onActivityChange={setRestoreBusy} /> : null}
                 {step === 'transfer' ? <HostTransferPanel mode="receive" embedded onActivityChange={setRestoreBusy} /> : null}
@@ -708,8 +708,8 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
             <Button
               type="button"
               variant="ghost"
-              onClick={() => go(previousSetupStep(step))}
-              disabled={step === 'choose' || saving || restoreBusy || transitioning}
+              onClick={() => go(previousSetupStep(step, entry))}
+              disabled={previousSetupStep(step, entry) === null || saving || restoreBusy || transitioning}
             >
               <IconArrowLeft size={18} aria-hidden="true" />
               Back

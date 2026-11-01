@@ -1,6 +1,7 @@
 export const freshSetupSteps = ['choose', 'server', 'customisation', 'performance', 'updates', 'ready'] as const;
+export const migrationSetupSteps = ['customisation', 'performance', 'updates', 'ready'] as const;
 export type SetupStep = (typeof freshSetupSteps)[number] | 'restore' | 'transfer';
-export type SetupEntry = 'fresh' | 'restore' | 'transfer' | null;
+export type SetupEntry = 'fresh' | 'restore' | 'transfer' | 'migration' | null;
 
 export const setupStepCopy: Record<SetupStep, { title: string; description: string }> = {
   choose: { title: 'Welcome to Orbis', description: 'Start fresh, restore an encrypted backup, or transfer from another server.' },
@@ -8,7 +9,7 @@ export const setupStepCopy: Record<SetupStep, { title: string; description: stri
   customisation: { title: 'Customisation', description: 'Choose your colours, display mode and wallpaper.' },
   performance: { title: 'Performance', description: 'Choose the balance that suits your devices. Your apps keep all their features.' },
   updates: { title: 'Updates', description: 'Keep updates manual, or choose what Orbis may update automatically.' },
-  ready: { title: 'Ready when you are', description: 'Review your choices before opening your workspace.' },
+  ready: { title: 'Ready', description: '' },
   restore: {
     title: 'Restore your server',
     description:
@@ -23,20 +24,21 @@ export const setupStepCopy: Record<SetupStep, { title: string; description: stri
 export function nextSetupStep(step: SetupStep, entry: SetupEntry): SetupStep | null {
   if (step === 'choose') return entry === 'restore' ? 'restore' : entry === 'transfer' ? 'transfer' : entry === 'fresh' ? 'server' : null;
   if (step === 'restore' || step === 'transfer' || step === 'ready') return null;
-  return freshSetupSteps[freshSetupSteps.indexOf(step) + 1] ?? null;
+  const steps: readonly SetupStep[] = entry === 'migration' ? migrationSetupSteps : freshSetupSteps;
+  return steps[steps.indexOf(step) + 1] ?? null;
 }
 
-export function previousSetupStep(step: SetupStep): SetupStep | null {
+export function previousSetupStep(step: SetupStep, entry: SetupEntry = 'fresh'): SetupStep | null {
   if (step === 'restore' || step === 'transfer') return 'choose';
-  return freshSetupSteps[freshSetupSteps.indexOf(step) - 1] ?? null;
+  const steps: readonly SetupStep[] = entry === 'migration' ? migrationSetupSteps : freshSetupSteps;
+  return steps[steps.indexOf(step) - 1] ?? null;
 }
 
-export function setupPosition(step: SetupStep) {
-  return step === 'restore' || step === 'transfer'
-    ? { current: 2, total: 2 }
-    : { current: freshSetupSteps.indexOf(step) + 1, total: freshSetupSteps.length };
+export function setupPosition(step: SetupStep, entry: SetupEntry = 'fresh') {
+  const steps: readonly SetupStep[] = entry === 'migration' ? migrationSetupSteps : freshSetupSteps;
+  return step === 'restore' || step === 'transfer' ? { current: 2, total: 2 } : { current: steps.indexOf(step) + 1, total: steps.length };
 }
 
 export function setupCanFinish(step: SetupStep, entry: SetupEntry): boolean {
-  return step === 'ready' && entry === 'fresh';
+  return step === 'ready' && (entry === 'fresh' || entry === 'migration');
 }

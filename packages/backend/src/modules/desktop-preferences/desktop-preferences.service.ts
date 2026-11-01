@@ -50,12 +50,38 @@ export class DesktopPreferencesService {
     return path.join(dataDir, 'state', 'onboarding', `${userId}.json`);
   }
 
+  private async migratedFromRuntipi() {
+    const file = path.join(this.config.get('directories').dataDir, '.orbis-onboarding-origin.json');
+    try {
+      const handle = await fs.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+      try {
+        const info = await handle.stat();
+        if (!info.isFile() || info.nlink !== 1 || info.size > 128 || info.mode & 0o022) return false;
+        const value: unknown = JSON.parse(await handle.readFile('utf8'));
+        return (
+          typeof value === 'object' &&
+          value !== null &&
+          Object.keys(value).length === 2 &&
+          'version' in value &&
+          value.version === 1 &&
+          'source' in value &&
+          value.source === 'runtipi'
+        );
+      } finally {
+        await handle.close();
+      }
+    } catch {
+      return false;
+    }
+  }
+
   async onboarding(userId: number) {
     try {
       const value: unknown = JSON.parse(await fs.readFile(this.onboardingFile(userId), 'utf8'));
       return { complete: typeof value === 'object' && value !== null && 'version' in value && value.version === 1 };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return { complete: false };
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError)
+        return { complete: false, ...((await this.migratedFromRuntipi()) ? { entry: 'runtipi' as const } : {}) };
       throw error;
     }
   }

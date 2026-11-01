@@ -187,6 +187,7 @@ type PreferenceContext = {
   reset: () => void;
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
   requiresOnboarding: boolean;
+  onboardingOrigin: 'fresh' | 'runtipi';
   completeOnboarding: (serverName: string, draft?: DesktopPreferences) => Promise<void>;
   setPreview: (value: DesktopPreferences | null) => void;
   setWorkspaceLoading: (loading: boolean) => void;
@@ -221,6 +222,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const [loadError, setLoadError] = useState(false);
   const [serverReady, setServerReady] = useState(false);
   const [requiresOnboarding, setRequiresOnboarding] = useState(true);
+  const [onboardingOrigin, setOnboardingOrigin] = useState<'fresh' | 'runtipi'>('fresh');
   const completingSetup = useRef(false);
   const [syncState, setSyncState] = useState<PreferenceContext['syncState']>('local');
   const appearancePainted = useRef(false);
@@ -306,6 +308,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     if (!isLoggedIn || sessionAbortSignal.aborted) {
       setServerReady(false);
       setRequiresOnboarding(true);
+      setOnboardingOrigin('fresh');
       setSyncState('local');
       setInitialLoadComplete(false);
       setLoadAttempt(0);
@@ -339,6 +342,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         loadedSession.current = sessionEpoch;
         setServerReady(true);
         setRequiresOnboarding(!setup.complete);
+        setOnboardingOrigin('entry' in setup && setup.entry === 'runtipi' ? 'runtipi' : 'fresh');
         setSyncState(acknowledgedRevision.current === revision.current ? 'saved' : 'saving');
       })
       .catch(() => {
@@ -625,6 +629,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         reset,
         syncState,
         requiresOnboarding,
+        onboardingOrigin,
         completeOnboarding,
         setPreview,
         setWorkspaceLoading,

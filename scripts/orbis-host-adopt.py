@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,33 @@ STOCK_IMAGE = "ghcr.io/runtipi/runtipi:v4.10.1"
 STOCK_RELEASE = "runtipi:v4.10.1"
 JOURNAL_SCHEMA = "orbis.adoption.v1"
 TERMINAL_STAGES = {"complete", "rolled-back", "aborted"}
+ONBOARDING_ORIGIN = b'{"version":1,"source":"runtipi"}\n'
+
+
+def mark_migrated_onboarding(root: Path) -> None:
+    directory = root / "data"
+    info = directory.lstat()
+    if not stat.S_ISDIR(info.st_mode):
+        raise ValueError("the installation data directory must be a real directory")
+    target = directory / ".orbis-onboarding-origin.json"
+    descriptor, name = tempfile.mkstemp(prefix=".orbis-onboarding-", dir=directory)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            os.fchmod(stream.fileno(), 0o644)
+            stream.write(ONBOARDING_ORIGIN)
+            stream.flush()
+            os.fsync(stream.fileno())
+        # Publish without replacing any pre-existing file or following a link.
+        os.link(temporary, target)
+        temporary.unlink()
+        parent = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def journal_path(snapshot: Path) -> Path:
@@ -258,6 +286,7 @@ def apply_adoption(root: Path, target: dict[str, str], context: str, snapshot: P
             ):
                 raise RuntimeError("Orbis did not reach its reviewed image and healthy state")
             HOST.write_state(root, HOST.installation_fingerprint(root, target, context))
+            mark_migrated_onboarding(root)
             record["stage"] = "complete"
             write_journal(snapshot, record)
             return {

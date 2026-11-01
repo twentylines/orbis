@@ -126,6 +126,25 @@ describe('desktop preferences', () => {
     await fs.rm(stored);
   });
 
+  it('shortens onboarding only for an authenticated installer-marked Runtipi migration', async () => {
+    const marker = path.join(directory, '.orbis-onboarding-origin.json');
+    const status = () => request(app.getHttpServer()).get('/desktop-preferences/onboarding').set('Authorization', 'Bearer test');
+    try {
+      await fs.writeFile(marker, JSON.stringify({ version: 1, source: 'runtipi' }), { mode: 0o644 });
+      expect((await status()).body).toEqual({ complete: false, entry: 'runtipi' });
+      expect((await request(app.getHttpServer()).get('/desktop-preferences/onboarding')).status).toBe(401);
+      await fs.writeFile(marker, JSON.stringify({ version: 1, source: 'docker' }));
+      expect((await status()).body).toEqual({ complete: false });
+      await fs.writeFile(marker, JSON.stringify({ version: 1, source: 'runtipi', authentication: true }));
+      expect((await status()).body).toEqual({ complete: false });
+      await fs.rm(marker);
+      await fs.symlink(path.join(directory, 'state', 'desktop', '7.json'), marker);
+      expect((await status()).body).toEqual({ complete: false });
+    } finally {
+      await fs.rm(marker, { force: true });
+    }
+  });
+
   it('persists validated preferences per user and rejects invalid values', async () => {
     await fs.rm(path.join(directory, 'state', 'desktop', '7.json'), { force: true });
     const initial = await request(app.getHttpServer()).get('/desktop-preferences').set('Authorization', 'Bearer test');

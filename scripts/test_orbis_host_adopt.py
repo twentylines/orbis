@@ -122,6 +122,7 @@ class OrbisHostAdoptionTests(unittest.TestCase):
         self.assertEqual(ADOPT.SNAPSHOT.verify(self.snapshot, self.root)["release"], ADOPT.STOCK_RELEASE)
         self.assertEqual(ADOPT.HOST.saved_state(self.root), ADOPT.HOST.installation_fingerprint(self.root, TARGET, "test-daemon"))
         self.assertEqual(ADOPT.read_journal(self.snapshot, self.root, "test-daemon", TARGET)["stage"], "complete")
+        self.assertEqual((self.root / 'data' / '.orbis-onboarding-origin.json').read_bytes(), ADOPT.ONBOARDING_ORIGIN)
 
     def test_failed_orbis_start_restores_stock_database_and_image(self):
         fake = FakeDocker(self.root, fail_target_start=True)
@@ -133,7 +134,23 @@ class OrbisHostAdoptionTests(unittest.TestCase):
         self.assertEqual((self.root / "data" / "postgres" / "record").read_text(), "stock database fixture\n")
         self.assertFalse((self.root / "orbis-compose.yml").exists())
         self.assertIsNone(ADOPT.HOST.saved_state(self.root))
+        self.assertFalse((self.root / 'data' / '.orbis-onboarding-origin.json').exists())
         self.assertEqual(ADOPT.read_journal(self.snapshot, self.root, "test-daemon", TARGET)["stage"], "rolled-back")
+
+    def test_onboarding_marker_cannot_replace_an_existing_file_or_follow_a_data_link(self):
+        marker = self.root / "data" / ".orbis-onboarding-origin.json"
+        marker.write_text("existing")
+        with self.assertRaises(FileExistsError):
+            ADOPT.mark_migrated_onboarding(self.root)
+        self.assertEqual(marker.read_text(), "existing")
+        other = self.root.parent / "other"
+        other.mkdir()
+        linked = self.root.parent / "linked"
+        linked.mkdir()
+        (linked / "data").symlink_to(other)
+        with self.assertRaises(ValueError):
+            ADOPT.mark_migrated_onboarding(linked)
+        self.assertEqual(list(other.iterdir()), [])
 
     def test_snapshot_failure_before_copy_restores_stock_without_sidecar(self):
         fake = FakeDocker(self.root)
