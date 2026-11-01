@@ -85,6 +85,24 @@ def select_channel(catalog, requested=None, ask=None):
     return requested, channels[requested], prompted
 
 
+def select_verified_channel_launcher(catalog, requested=None, ask=None, fetch_launcher=None):
+    fetch_launcher = fetch_launcher or (lambda record: fetch(
+        f"https://github.com/twentylines/orbis/releases/download/{record['tag']}/install-orbis.py",
+        1024 * 1024,
+    ))
+    while True:
+        channel, record, prompted = select_channel(catalog, requested, ask)
+        try:
+            data = fetch_launcher(record)
+            identity = verify_selected_launcher(data, record)
+            return channel, record, prompted, data, identity
+        except (OSError, ValueError) as error:
+            if not prompted or ask is None:
+                raise
+            print(f"Could not load the {channel.title()} installer: {error}. Choose a channel to retry.", file=sys.stderr)
+            requested = None
+
+
 def verify_selected_launcher(data, record):
     if sha(data) != record["launcherSha256"]:
         raise ValueError("The selected installer does not match its published channel")
@@ -199,7 +217,7 @@ def main():
                     raise ValueError("Installation cancelled")
                 return answer
 
-            channel, record, prompted = select_channel(catalog, args.channel, ask if terminal else None)
+            channel, record, prompted, data, identity = select_verified_channel_launcher(catalog, args.channel, ask if terminal else None)
         finally:
             if terminal:
                 terminal.close()
@@ -210,8 +228,6 @@ def main():
                 raise ValueError("Unattended Nightly installation requires --accept-nightly")
             if prompted:
                 remaining.append("--accept-nightly")
-        data = fetch(f"https://github.com/twentylines/orbis/releases/download/{record['tag']}/install-orbis.py", 1024 * 1024)
-        verify_selected_launcher(data, record)
         destination = Path(tempfile.mkdtemp(prefix="selected-", dir=private_directory(args.work_dir)))
         launcher = destination / "install-orbis.py"
         launcher.write_bytes(data); launcher.chmod(0o600)
