@@ -49,6 +49,7 @@ import { HostTransferModule } from './modules/host-transfer/host-transfer.module
 import { BackupMaintenanceInterceptor, backupMaintenanceMiddleware } from './common/backup-maintenance';
 import { ResetModule } from './modules/system-reset/reset.module';
 import { CapsulesModule } from './modules/time-machine-capsules/capsules.module';
+import { ThemeFrameworkCatalogueModule } from './modules/theme-framework-catalogue/theme-framework-catalogue.module';
 
 const DEFAULT_THROTTLE_TTL = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 300;
@@ -88,6 +89,7 @@ const imports: NonNullable<ModuleMetadata['imports']> = [
   SystemBackupsModule,
   HostTransferModule,
   ThemePacksModule,
+  ThemeFrameworkCatalogueModule,
   NearbyDiscoveryModule,
   ResetModule,
   CapsulesModule,
