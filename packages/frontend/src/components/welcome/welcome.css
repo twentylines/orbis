@@ -214,6 +214,9 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   padding: 0;
   min-width: 0;
 }
+.orbis-setup-choice-note {
+  margin-top: -12px;
+}
 .orbis-setup-intro h2:has(svg) {
   display: flex;
   flex-wrap: wrap;
@@ -345,6 +348,7 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   gap: 12px;
   padding: 20px;
   background: var(--desktop-code-background);
+  border: 1px solid color-mix(in srgb, var(--desktop-line) 78%, var(--desktop-ink));
   border-radius: 14px;
 }
 .orbis-setup-schedule > label {
@@ -580,22 +584,6 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   }
 }
 
-.desktop-auth.desktop-auth-setup {
-  --auth-gutter: clamp(20px, 3vw, 36px);
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  place-items: center;
-  min-height: 100dvh;
-  padding: 20px;
-  background: #030508;
-}
-.orbis-setup-space {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-}
 .desktop-auth.desktop-auth-setup .desktop-auth-container {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -606,20 +594,6 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   max-height: calc(100dvh - 40px);
   min-height: 0;
   padding: 0;
-}
-.desktop-auth-setup .desktop-auth-identity {
-  padding: 0;
-  border: 0;
-  color: #edf0f3;
-}
-.desktop-auth-setup .desktop-auth-product {
-  color: inherit;
-  font-size: 1.4rem;
-}
-.desktop-auth-setup .desktop-auth-brand {
-  --desktop-ink: #edf0f3;
-  --desktop-accent: color-mix(in srgb, var(--desktop-base-accent) 40%, #e0e7eb);
-  gap: 14px;
 }
 .desktop-auth-setup .orbis-setup-header {
   margin-inline: 1px;
@@ -715,9 +689,6 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   margin: 0;
 }
 @media (max-width: 640px) {
-  .desktop-auth.desktop-auth-setup {
-    padding: 20px 12px;
-  }
   .desktop-auth.desktop-auth-setup .desktop-auth-container {
     height: auto;
     max-height: calc(100dvh - 40px);

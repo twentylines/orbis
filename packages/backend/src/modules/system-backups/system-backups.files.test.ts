@@ -33,11 +33,16 @@ const queueBase = {
 const queueCapture = { verify: vi.fn(async () => ({ ...queueBase, checkedAt: Date.now() })), release: vi.fn() };
 const queues = { pauseForBackup: vi.fn(async () => ({ ...queueCapture, initial: { ...queueBase, checkedAt: Date.now() } })) };
 const logger = { warn: vi.fn() };
+const accountSecurity = {
+  read: vi.fn().mockResolvedValue({ version: 1, revision: 0, requireCaptureAuthentication: true, requireRestoreAuthentication: false }),
+};
 const database = { execute: vi.fn().mockResolvedValue({ rows: [{ bytes: '1024' }] }) };
 let config: { get: (key: string) => unknown };
 const createService = () =>
   new SystemBackupsService(
-    ...([config, auth, apps, tasks, host, runtime, logger, database, queues] as unknown as ConstructorParameters<typeof SystemBackupsService>),
+    ...([config, auth, apps, tasks, host, runtime, logger, database, queues, accountSecurity] as unknown as ConstructorParameters<
+      typeof SystemBackupsService
+    >),
   );
 
 async function terminal(id: string) {
@@ -54,6 +59,7 @@ async function terminal(id: string) {
 beforeEach(async () => {
   vi.clearAllMocks();
   auth.operatorActionContext.mockReset().mockResolvedValue(creationActor);
+  accountSecurity.read.mockResolvedValue({ version: 1, revision: 0, requireCaptureAuthentication: true, requireRestoreAuthentication: false });
   runtime.verifyStopped.mockImplementation(async (plan) =>
     plan.containers.map((item: { id: string; project: string }) => ({ ...item, running: false })),
   );
@@ -134,6 +140,16 @@ it('creation-session download reuses exactly the creation proof once without sto
   later.stream.destroy();
   expect(auth.verifySensitiveAction).toHaveBeenCalledTimes(2);
 });
+it('creation-session download rejects a changed archive without asking for or replaying credentials', async () => {
+  const ready = creationArchiveFixture();
+  const job = await service.startForSession(1, credentials, passphrase, creationRequest);
+  await ready(job.id);
+  const archive = path.join(directory, 'data/backups/full', job.id, 'backup.orbis');
+  await fs.appendFile(archive, Buffer.from('changed'));
+  await expect(service.downloadCreated(job.id, 1, creationRequest)).rejects.toThrow('changed');
+  expect(auth.verifySensitiveAction).toHaveBeenCalledTimes(1);
+  await expect(service.downloadCreated(job.id, 1, creationRequest)).rejects.toThrow('approval expired');
+});
 it('creation-session approval rejects other accounts/sessions and account security changes without becoming a reusable URL grant', async () => {
   const ready = creationArchiveFixture();
   const job = await service.startForSession(1, credentials, passphrase, creationRequest);
@@ -160,7 +176,7 @@ it('creation-session approval expires after its ready window and disappears on b
 it('creation-session proof changes during creation or opening never release the archive', async () => {
   creationArchiveFixture();
   auth.operatorActionContext.mockResolvedValueOnce(creationActor).mockResolvedValueOnce({ ...creationActor, securityBinding: 'c'.repeat(64) });
-  await expect(service.startForSession(1, credentials, passphrase, creationRequest)).rejects.toThrow('session changed');
+  await expect(service.startForSession(1, credentials, passphrase, creationRequest)).rejects.toThrow('session or security setting changed');
   expect((await service.list(1)).jobs).toHaveLength(0);
   auth.operatorActionContext.mockResolvedValue(creationActor);
   const job = await service.startForSession(1, credentials, passphrase, creationRequest);

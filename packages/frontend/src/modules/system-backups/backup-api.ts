@@ -26,6 +26,7 @@ const restoreConflictMessages = new Set([
   'Wait for the current backup upload or review to finish.',
   'Finish the current backup or recover its apps before starting another.',
   'The saved restore archive could not be verified. Its recovery files have been preserved.',
+  'This saved archive belongs to another account. Sign in with its owner or choose an encrypted backup file.',
 ]);
 const conflictBodyLimit = 16 * 1024;
 const safeBadRequestMessages = new Map([
@@ -138,6 +139,7 @@ const root = '/api/system-backups';
 function endpoint(path: string) {
   if (
     !/^\/(?:imports|restores|export|settings|[a-f0-9-]{36})(?:\/[a-f0-9-]{36})?(?:\/(?:file|review|cancel|recover|download|import))?$/.test(path) &&
+    !/^\/restores\/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\/reuse$/.test(path) &&
     path !== ''
   )
     throw new Error('Invalid backup action.');
@@ -175,7 +177,10 @@ export async function readBackups(signal?: AbortSignal): Promise<BackupSnapshot>
   };
 }
 export async function startExport(credentials: BackupCredentials, passphrase: string, signal?: AbortSignal) {
-  return parseBackupResponse(exportJobSchema, await backupRequest('/export', 'POST', { ...credentials, passphrase }, signal));
+  return parseBackupResponse(
+    exportJobSchema,
+    await backupRequest('/export', 'POST', { ...(credentials.password ? credentials : {}), passphrase }, signal),
+  );
 }
 export async function createImport(signal?: AbortSignal) {
   return parseBackupResponse(importJobSchema, await backupRequest('/imports', 'POST', {}, signal));
@@ -231,7 +236,7 @@ export function uploadBackup(
 let downloadSequence = 0;
 export function downloadBackup(
   id: string,
-  credentials: BackupCredentials | { creationSession: true },
+  credentials: Partial<BackupCredentials> | { creationSession: true },
   onError: (message: string) => void,
   kind: 'backup' | 'capture' = 'backup',
 ): () => void {
@@ -258,7 +263,7 @@ export function downloadBackup(
     if (!submitted) return;
     try {
       const content = frame.contentDocument?.body?.textContent?.trim();
-      if (content) onError('The download could not start. Check your credentials and refresh backup status before retrying.');
+      if (content) onError('The download could not start. Check backup status and try again.');
     } catch {
       onError('The download could not be confirmed. Check the browser download status.');
     }
@@ -272,7 +277,7 @@ export function downloadBackup(
 }
 
 export async function importSavedBackup(id: string, credentials: BackupCredentials, signal?: AbortSignal) {
-  return parseBackupResponse(importJobSchema, await backupRequest(`/${id}/import`, 'POST', credentials, signal));
+  return parseBackupResponse(importJobSchema, await backupRequest(`/${id}/import`, 'POST', credentials.password ? credentials : {}, signal));
 }
 export async function readBackupRetention(signal?: AbortSignal) {
   return parseBackupResponse(backupRetentionSchema, await backupRequest('/settings', 'GET', undefined, signal));

@@ -101,8 +101,10 @@ export function SystemUpdatesSettings() {
     prepare,
   });
   return (
-    <section id="setting-system-updates" className="automatic-updates-system" aria-labelledby={`${id}-title`}>
-      <h3 id={`${id}-title`}>System packages</h3>
+    <section id="setting-system-updates" className="automatic-updates-settings automatic-updates-system" aria-labelledby={`${id}-title`}>
+      <header>
+        <h2 id={`${id}-title`}>System packages</h2>
+      </header>
       {status.isPending ? <output>Reading system update settings…</output> : null}
       {status.isError ? (
         <p role="alert">

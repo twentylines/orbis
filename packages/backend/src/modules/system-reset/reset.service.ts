@@ -78,7 +78,8 @@ export class ResetService {
     const passwordMethod = value.method === 'password';
     const allowed = ['accounts', 'confirmation', 'method', 'totpCode', ...(passwordMethod ? ['password'] : ['challengeId', 'response'])];
     if (
-      value.confirmation !== 'RESET ORBIS' ||
+      typeof value.confirmation !== 'string' ||
+      !/^reset orbis$/i.test(value.confirmation.trim()) ||
       !['password', 'passkey'].includes(String(value.method)) ||
       Object.keys(value).some((key) => !allowed.includes(key))
     )

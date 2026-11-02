@@ -80,9 +80,15 @@ test('every fresh step has copy and a stable bounded position for directional tr
 });
 
 test('customisation offers colour and display controls while custom wallpaper stays in Settings', () => {
-  const html = renderToStaticMarkup(createElement(SetupCustomisation, { draft: defaultDesktopPreferences, onChange: () => undefined }));
+  const draft = { ...defaultDesktopPreferences, mode: 'system' as const };
+  const html = renderToStaticMarkup(createElement(SetupCustomisation, { draft, onChange: () => undefined }));
   for (const label of ['Colour', 'Display mode']) expect(html).toContain(`<legend>${label}</legend>`);
-  expect(html).toContain('You can add custom wallpapers later in Settings.');
+  expect(setupStepCopy.customisation.description).toContain('You can add custom wallpapers later in Settings.');
+  expect(html).not.toContain('You can add custom wallpapers later in Settings.');
+  const oledSection = html.slice(html.indexOf('class="orbis-colour-mode-oled"'));
+  expect(oledSection.indexOf('Use OLED blacks')).toBeGreaterThanOrEqual(0);
+  expect(oledSection.indexOf('Applies whenever the active colour mode is dark.')).toBeGreaterThan(oledSection.indexOf('Use OLED blacks'));
+  expect(html.indexOf('System follows this browser’s light or dark preference.')).toBeGreaterThan(html.indexOf('<legend>Display mode</legend>'));
   expect(html).not.toContain('Match wallpaper to colour preset');
   expect(defaultDesktopPreferences.wallpaperMode).toBe('theme');
   expect(html).not.toContain('type="file"');

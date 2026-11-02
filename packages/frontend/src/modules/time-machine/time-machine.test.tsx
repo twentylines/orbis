@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { HistoricalHomePreview as HistoricalHome } from './historical-home-preview';
-import { HistoricalDateRuler, HistoricalPointStack } from './time-machine-journey';
+import { HistoricalDateRuler, HistoricalPointStack, HistoricalTimelineBody } from './time-machine-journey';
 import {
   chronologicalPoints,
   historicalAssetPath,
@@ -299,4 +299,35 @@ test('rapid past, reversal and endpoint jumps admit only the current and immedia
     previous = current;
   }
   expect(pointPreviewAdmitted('point-1', null, null)).toBe(false);
+});
+
+test('mounted Time Machine polling serializes reads, recovers automatically and pauses without losing drafts', async () => {
+  const child = Bun.spawn([process.execPath, new URL('./time-machine-poll.fixture.tsx', import.meta.url).pathname], {
+    env: { ...process.env },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+  expect(JSON.parse(stdout)).toMatchObject({
+    mountedReact: true,
+    maximumPollingReads: 1,
+    automaticErrorRecovery: true,
+    hiddenAndUnmountedPause: true,
+    draftPreserved: true,
+  });
+});
+
+test('an empty timeline uses the full scene body without mounting an empty date column', () => {
+  const props = { selected: null, wallpaper: null, assetFailed: false, assetLoading: false, onSelect: () => undefined };
+  const empty = renderToStaticMarkup(<HistoricalTimelineBody {...props} points={[]} />);
+  expect(empty).toContain('class="tm-journey-layout" data-empty="true"');
+  expect(empty).toContain('No saved points');
+  expect(empty).not.toContain('class="tm-timeline"');
+  expect(empty).not.toContain('aria-label="Saved dates"');
+  const point = historicalPoint();
+  const populated = renderToStaticMarkup(<HistoricalTimelineBody {...props} points={[point]} selected={point.id} />);
+  expect(populated).toContain('data-empty="false"');
+  expect(populated).toContain('aria-label="Saved dates"');
+  expect(populated).not.toContain('No saved points');
 });

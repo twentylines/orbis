@@ -4,6 +4,7 @@ import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { createContext, useContext, useLayoutEffect, useEffect, useRef, useState, useCallback } from 'react';
 import { PreferenceSession } from '@/desktop/preference-save-queue';
 import { clearAccountQueries } from '@/lib/query-client';
+import { rememberAuthenticatedSession } from '@/components/startup/auth-session-navigation';
 
 interface UserContextValue extends UserContextDto {
   refreshUserContext: () => Promise<void>;
@@ -39,6 +40,15 @@ export const UserContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useLayoutEffect(() => {
     if (currentSession.current.authenticated !== userContext.isLoggedIn) changeSession(userContext.isLoggedIn);
   }, [userContext.isLoggedIn, changeSession]);
+  useLayoutEffect(() => {
+    if (userContext.isLoggedIn) {
+      try {
+        rememberAuthenticatedSession(window.sessionStorage);
+      } catch {
+        /* Storage is optional. */
+      }
+    }
+  }, [userContext.isLoggedIn]);
 
   const refreshUserContext = async () => {
     await queryClient.invalidateQueries({ queryKey });

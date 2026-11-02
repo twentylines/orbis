@@ -27,6 +27,7 @@ import { recordRetainedRestoreAdmission } from './time-machine-restore-admission
 import { AuthGuard } from '../auth/auth.guard';
 import { DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
 import { AccountSecurityService } from '../auth/account-security.service';
+import { ResetState } from '../system-reset/reset-state';
 import { GUARDS_METADATA, HEADERS_METADATA } from '@nestjs/common/constants';
 
 let directory: string;
@@ -894,6 +895,7 @@ it('routes only exact point-bound restore grants to the protected activation pat
   const manifestSha256 = 'a'.repeat(64);
   const activate = vi.spyOn(machine, 'activateAuthorized').mockResolvedValue({
     job: {
+      requiresFreshAuthentication: true,
       id: randomUUID(),
       status: 'running',
       phase: 'allocated',
@@ -1791,4 +1793,36 @@ it('requires a private point-bound provisional review and unchanged protected co
   ).rejects.toMatchObject({ response: { code: 'review-expired' } });
   local.value = { ...local.value, expiresAt: Date.now() - 1 };
   await expect(internal.authorizationBinding(point.id, 1, original.reviewId)).rejects.toMatchObject({ response: { code: 'review-expired' } });
+});
+
+it('removes an ordinary point with the current session by default and enforces the opted-in backup policy', async () => {
+  await machine.list(1);
+  const first = await store().create(1);
+  await store().fail(first.point, 'capture-failed');
+  await machine.removeForSession(first.point.id, 1, {} as Request);
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  const second = await store().create(1);
+  await new AccountSecurityService(config as never).update(1, { expectedRevision: 0, requireCaptureAuthentication: true }, async () => undefined);
+  await expect(machine.removeForSession(second.point.id, 1, {} as Request)).rejects.toThrow('account password');
+  expect(await store().load(second.point.id)).toBeDefined();
+});
+it('reset presentation hides ordinary old Time Machine references while preserving actual interrupted recovery blockers', async () => {
+  await machine.list(1);
+  const old = await store().create(1);
+  await store().fail(old.point, 'capture-failed');
+  const recovery = await store().create(1);
+  await store().update({ ...recovery.point, status: 'interrupted', issue: 'capture-interrupted' });
+  await new ResetState(data).save({
+    version: 1,
+    id: randomUUID(),
+    controller: 'fixture',
+    users: [1],
+    accounts: 'keep',
+    phase: 'complete',
+    createdAt: Date.now() + 10,
+  });
+  const listed = await machine.list(1);
+  expect(listed.points.map((point) => point.id)).toEqual([recovery.point.id]);
+  expect((await store().load(old.point.id)).status).toBe('failed');
+  expect((await store().load(recovery.point.id)).status).toBe('interrupted');
 });

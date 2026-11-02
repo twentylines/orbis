@@ -1,6 +1,13 @@
 import { useSignInBoot } from '@/components/startup/use-sign-in-boot';
 import { firstSetupAfterSignIn } from '@/components/startup/sign-in-onboarding';
-import { safeReturnTo } from '@/desktop/secure-access';
+import {
+  currentAuthenticatedSessionId,
+  endDesktopSessionEvent,
+  forgetAuthenticatedSession,
+  rememberAuthenticatedSession,
+  signInDestination,
+} from '@/components/startup/auth-session-navigation';
+import { clearNavigation } from '@/components/startup/navigation-recovery';
 import { userContext } from '@/api-client';
 import { loginMutation, verifyTotpMutation } from '@/api-client/@tanstack/react-query.gen';
 import { useUserContext } from '@/context/user-context';
@@ -66,7 +73,9 @@ export async function clientLoader() {
       return;
     }
 
-    return redirect(safeReturnTo(new URL(window.location.href).searchParams.get('return_to')) ?? '/dashboard');
+    return redirect(
+      signInDestination(new URL(window.location.href).searchParams.get('return_to'), window.history.state?.usr, currentAuthenticatedSessionId()),
+    );
   }
 }
 
@@ -91,9 +100,9 @@ export default () => {
   );
 
   const [searchParams] = useSearchParams();
-  const { pathname } = useLocation();
   const redirect_url = searchParams.get('redirect_url');
-  const returnTo = safeReturnTo(searchParams.get('return_to')) ?? '/dashboard';
+  const { pathname, state: navigationState } = useLocation();
+  const returnTo = signInDestination(searchParams.get('return_to'), navigationState, currentAuthenticatedSessionId());
   const app = searchParams.get('app');
 
   const { t } = useTranslation();
@@ -131,6 +140,14 @@ export default () => {
     const firstSetup = await firstSetupAfterSignIn();
     if (!boot.isActive()) return;
     boot.begin(firstSetup);
+    try {
+      forgetAuthenticatedSession(window.sessionStorage);
+      rememberAuthenticatedSession(window.sessionStorage);
+      if (returnTo === '/dashboard') clearNavigation(window.sessionStorage);
+    } catch {
+      /* Storage is optional. */
+    }
+    if (returnTo === '/dashboard') window.dispatchEvent(new Event(endDesktopSessionEvent));
     setUserContext({ isLoggedIn: true });
     void refreshUserContext();
     await boot.finish();

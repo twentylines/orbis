@@ -204,7 +204,7 @@ export async function saveTimeMachinePreferences(body: unknown, signal: AbortSig
   if (!timeMachinePreferencesUpdateSchema.allows(body)) throw new Error('Review the Time Machine settings before saving.');
   return parseTimeMachine(timeMachinePreferencesSchema, await request('/preferences', 'PUT', body, signal));
 }
-export async function removeTimeMachinePoint(id: string, credentials: BackupCredentials, signal: AbortSignal) {
+export async function removeTimeMachinePoint(id: string, credentials: Partial<BackupCredentials>, signal: AbortSignal) {
   parseTimeMachine(removeResponseSchema, await request(`${pointPath(id)}/remove`, 'POST', credentials, signal));
 }
 export async function reviewTimeMachinePoint(

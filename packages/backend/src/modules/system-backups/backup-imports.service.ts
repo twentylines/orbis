@@ -33,6 +33,7 @@ import { BackupSourcePinnedError, createBackupSourceSeal, pinBackupSource, type 
 import type { TimeMachineRestoreBinding } from '@runtipi/common/schemas/time-machine-restore';
 import { consumeRetainedRestorePermit, requireRetainedRestoreReceipt, type RetainedRestorePermit } from './time-machine-restore-admission';
 import { reuseRestoreArchive } from './backup-restore-reuse';
+import { ResetState } from '../system-reset/reset-state';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const retention = 24 * 60 * 60_000;
@@ -269,10 +270,18 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
   async list(ownerId: number) {
     await this.initialize();
     if (!this.unavailable) await this.expire();
+    const reset = await new ResetState(this.config.get('directories').dataDir).active();
     return {
       available: !this.unavailable,
       retentionHours: 24,
-      jobs: [...this.jobs.values()].filter((job) => job.ownerId === ownerId && job.origin !== 'time-machine').map((job) => this.publicJob(job)),
+      jobs: [...this.jobs.values()]
+        .filter(
+          (job) =>
+            job.ownerId === ownerId &&
+            job.origin !== 'time-machine' &&
+            (reset?.phase !== 'complete' || job.createdAt >= reset.createdAt || job.id === this.active?.id),
+        )
+        .map((job) => this.publicJob(job)),
     };
   }
   async create(ownerId: number, credentials: Credentials) {

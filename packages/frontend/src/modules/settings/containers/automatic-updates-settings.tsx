@@ -211,12 +211,16 @@ export function AutomaticUpdatesSettings({ mode = 'all' }: { mode?: 'all' | 'app
           </fieldset>
         </form>
       ) : null}
-      {mode === 'all' ? (
-        <>
-          <AutomaticUpdatesSettings mode="apps" />
-          <SystemUpdatesSettings />
-        </>
-      ) : null}
     </section>
+  );
+}
+
+export function UpdateSchedules() {
+  return (
+    <>
+      <AutomaticUpdatesSettings />
+      <AutomaticUpdatesSettings mode="apps" />
+      <SystemUpdatesSettings />
+    </>
   );
 }

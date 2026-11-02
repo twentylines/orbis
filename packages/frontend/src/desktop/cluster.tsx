@@ -1,5 +1,5 @@
 import { useReducedMotion } from '@/desktop/motion-preferences';
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { IconPlus, IconSwitchHorizontal, IconX } from '@tabler/icons-react';
@@ -12,6 +12,7 @@ import { RackDeck } from './rack-deck';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
 import { useHostUpdateWatch } from './host-update-watch';
 import { coreWatchIsActive, coreUpdateTitle } from './core-update-state';
+import { ClusterContext } from './cluster-context';
 import './cluster.css';
 
 export type ClusterServer = { id: string; name: string; url: string; role: 'admin' | 'member'; local: boolean; certificateSha256?: string };
@@ -24,7 +25,7 @@ export type Cluster = {
   admin?: { id: string; name: string };
 };
 export type ServerReading = { cpu: number | null; memory: number | null; online?: boolean };
-type ClusterContextValue = {
+export type ClusterContextValue = {
   data: Cluster | undefined;
   selectedId: string;
   selectedServer: ClusterServer | undefined;
@@ -34,7 +35,6 @@ type ClusterContextValue = {
   isError: boolean;
   refetch: () => Promise<unknown>;
 };
-const ClusterContext = createContext<ClusterContextValue | null>(null);
 export const clusterQueryKey = ['orbis-cluster'] as const;
 
 export async function clusterRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {

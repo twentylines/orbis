@@ -445,6 +445,31 @@ export function HistoricalDateRuler({
   );
 }
 
+export function HistoricalTimelineBody({
+  points,
+  selected,
+  wallpaper,
+  assetFailed,
+  assetLoading,
+  onSelect,
+  dates,
+}: {
+  points: readonly TimeMachinePoint[];
+  selected: string | null;
+  wallpaper: string | null;
+  assetFailed: boolean;
+  assetLoading: boolean;
+  onSelect: (id: string) => void;
+  dates?: React.RefObject<HTMLElement | null>;
+}) {
+  return (
+    <div className="tm-journey-layout" data-empty={points.length === 0}>
+      <HistoricalPointStack points={points} selected={selected} wallpaper={wallpaper} assetFailed={assetFailed} assetLoading={assetLoading} />
+      {points.length ? <HistoricalDateRuler points={points} selected={selected} onSelect={onSelect} dates={dates} /> : null}
+    </div>
+  );
+}
+
 export function TimeMachineJourney({
   open,
   onOpenChange,
@@ -564,16 +589,15 @@ export function TimeMachineJourney({
           Saved Home projections. Browsing changes no server data. Use older and newer controls or the dated timeline to choose a point.
         </DialogDescription>
         {toolbar ? <div className="tm-journey-toolbar">{toolbar}</div> : null}
-        <div className="tm-journey-layout">
-          <HistoricalPointStack
-            points={ordered}
-            selected={selected}
-            wallpaper={wallpaper.url}
-            assetFailed={wallpaper.failed}
-            assetLoading={wallpaper.loading}
-          />
-          <HistoricalDateRuler points={ordered} selected={selected} onSelect={onSelect} dates={dates} />
-        </div>
+        <HistoricalTimelineBody
+          points={ordered}
+          selected={selected}
+          wallpaper={wallpaper.url}
+          assetFailed={wallpaper.failed}
+          assetLoading={wallpaper.loading}
+          onSelect={onSelect}
+          dates={dates}
+        />
         <div className="tm-controls">
           <div className="tm-travel-buttons">
             <Button
@@ -591,9 +615,11 @@ export function TimeMachineJourney({
           </div>
           <output className="tm-selected-date" aria-live="polite">
             <span>{point ? pointDate(point) : 'No saved point selected'}</span>
-            <span className="tm-keyboard-hint" aria-hidden="true">
-              <kbd>↑</kbd> Older <kbd>↓</kbd> Newer
-            </span>
+            {ordered.length > 1 ? (
+              <span className="tm-keyboard-hint" aria-hidden="true">
+                <kbd>↑</kbd> Older <kbd>↓</kbd> Newer
+              </span>
+            ) : null}
           </output>
           <div className="tm-point-actions">
             <Button variant="outline" disabled={!point || busy || (Boolean(onRestore) && point.status !== 'sealed')} onClick={onRestore ?? onInspect}>

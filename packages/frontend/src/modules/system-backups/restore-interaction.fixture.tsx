@@ -102,6 +102,7 @@ let imported: ImportJob = {
   message: '',
 };
 let transferMode: 'wait' | 'complete' = 'wait';
+let reuseDenied = false;
 const requests: { path: string; body?: unknown }[] = [];
 const accepted: RestoreJob = {
   id: restoredId,
@@ -116,6 +117,11 @@ const accepted: RestoreJob = {
 };
 const request = async (path: string, _method = 'GET', body?: unknown) => {
   requests.push({ path, body });
+  if (path.endsWith('/reuse') && reuseDenied)
+    throw new originalApi.BackupApiError(
+      409,
+      'This saved archive belongs to another account. Sign in with its owner or choose an encrypted backup file.',
+    );
   if (path.endsWith('/reuse')) imported = { ...imported, id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', status: 'uploaded', uploadedBytes: 100 };
   if (path.endsWith('/cancel')) imported = { ...imported, status: 'cancelled' };
   if (path.endsWith('/review'))
@@ -179,6 +185,7 @@ mock.module('@/components/recovery-progress/use-restore-departure', () => ({
   useRestoreDeparture: (job: RestoreJob | null) => ({ departing: job?.status === 'rolled-back', storageFailed: false }),
 }));
 const { SystemBackupsSettings } = await import('./system-backups-settings');
+const { DialogContent } = await import('@/components/ui/Dialog');
 const { RecoveryScene } = await import('@/components/recovery-progress/recovery-scene');
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (url: string) => {
@@ -201,6 +208,7 @@ const form = {
 let tree: ReactNode = null;
 let dismissed = 0;
 let generation = 0;
+let embedded = true;
 let initialImportId: string | undefined;
 function flatten(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   return Children.toArray(node).flatMap((child) =>
@@ -209,8 +217,8 @@ function flatten(node: ReactNode): ReactElement<Record<string, unknown>>[] {
 }
 function Probe() {
   tree = SystemBackupsSettings({
-    restoreOnly: true,
-    embedded: true,
+    restoreOnly: embedded,
+    embedded,
     recoveryScene: true,
     initialImportId,
     onDismiss: () => {
@@ -329,12 +337,58 @@ try {
   expect(flatten(tree).some((element) => element.type === 'input' && element.props.type === 'file')).toBe(true);
   expect(flatten(tree).some((element) => element.props.children === 'Restore')).toBe(true);
   expect(requests.filter((item) => item.path === '/restores')).toHaveLength(2);
+  reuseDenied = true;
+  initialImportId = undefined;
+  generation++;
+  snapshot.restore = { job: { ...accepted, status: 'rolled-back', phase: 'rolled-back', stage: 'complete', canCancel: false } };
+  update();
+  await flush(render);
+  await flush(() =>
+    handler(
+      flatten(tree).find((element) => element.props.children === 'Restore saved backup'),
+      'onClick',
+    )(),
+  );
+  secret.value = 'archive-key';
+  await flush(submit);
+  expect(flatten(tree).some((element) => element.type === 'input' && element.props.type === 'file')).toBe(true);
+  expect(flatten(tree).some((element) => element.props.children === 'Restore')).toBe(true);
+  expect(requests.filter((item) => item.path === '/restores')).toHaveLength(2);
+  embedded = false;
+  generation++;
+  snapshot.restore = { job: null };
+  snapshot.imports = { ...snapshot.imports, jobs: [] };
+  update();
+  await flush(render);
+  await flush(() =>
+    handler(
+      flatten(tree).find((element) => element.props.children === 'Restore'),
+      'onClick',
+    )(),
+  );
+  expect(flatten(tree).find((element) => element.type === DialogContent)?.props.hideClose).toBe(true);
+  expect(flatten(tree).some((element) => element.props.children === 'Cancel')).toBe(true);
+  secret.value = 'unsaved key';
+  snapshot.exports = { ...snapshot.exports, resetGeneration: { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', createdAt: Date.now() + 1 } };
+  await flush(update);
+  expect(flatten(tree).some((element) => element.type === 'form')).toBe(false);
+  expect(secret.value).toBe('');
+  await flush(() =>
+    handler(
+      flatten(tree).find((element) => element.props.children === 'Restore'),
+      'onClick',
+    )(),
+  );
+  expect(flatten(tree).some((element) => element.type === 'input' && element.props.type === 'file')).toBe(true);
   process.stdout.write(
     JSON.stringify({
       mountedReact: true,
       duplicateCancel: false,
       explicitRestoreRequests: 2,
       retainedArchiveRetry: true,
+      ownershipRefusalReturnsPicker: true,
+      resetHidesOldDraft: true,
+      duplicateDialogClose: false,
       rollbackIdleUnlocked: true,
       emptyGuidedUploadRetry: true,
       layout: false,

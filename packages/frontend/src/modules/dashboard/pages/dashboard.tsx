@@ -30,7 +30,7 @@ import {
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type DragEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type DragEvent } from 'react';
 import { Link } from 'react-router';
 import './dashboard.css';
 import { useCluster } from '@/desktop/cluster';
@@ -102,8 +102,17 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     }
   });
   const heading = useRef<HTMLHeadingElement>(null);
-  const headingText = useWallpaperText<HTMLDivElement>();
-  const appsHeadingText = useWallpaperText<HTMLDivElement>();
+  const headingText = useWallpaperText<HTMLHeadingElement>();
+  const summaryText = useWallpaperText<HTMLParagraphElement>();
+  const appsHeadingText = useWallpaperText<HTMLHeadingElement>();
+  const appsLinkText = useWallpaperText<HTMLAnchorElement>();
+  const setHeading = useCallback(
+    (element: HTMLHeadingElement | null) => {
+      heading.current = element;
+      headingText(element);
+    },
+    [headingText],
+  );
   useEffect(() => {
     if (focusOnMount) heading.current?.focus({ preventScroll: true });
   }, [focusOnMount]);
@@ -300,12 +309,14 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const widgets: Record<WidgetId, ReactNode> = {
     applications: (
       <section className="workspace-apps" aria-labelledby="workspace-apps-title">
-        <div className="workspace-section-heading" ref={appsHeadingText}>
+        <div className="workspace-section-heading">
           <div>
-            <h2 id="workspace-apps-title">Applications</h2>
+            <h2 id="workspace-apps-title" ref={appsHeadingText}>
+              Applications
+            </h2>
           </div>
           <div className="workspace-home-app-actions">
-            <Link to="/apps">
+            <Link to="/apps" ref={appsLinkText}>
               View all <IconArrowRight size={18} aria-hidden="true" />
             </Link>
           </div>
@@ -502,9 +513,9 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   return (
     <div className="workspace">
       <div className="workspace-heading">
-        <div ref={headingText}>
+        <div className="workspace-heading-copy">
           <h1
-            ref={heading}
+            ref={setHeading}
             tabIndex={focusOnMount ? -1 : undefined}
             data-long-name={longServerName}
             title={preferences.serverName}
@@ -512,7 +523,9 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
           >
             <WrapWords text={preferences.serverName} />
           </h1>
-          <p className="workspace-subline">{apps.data ? `${installed.length} installed · ${running} running` : 'Loading applications'}</p>
+          <p className="workspace-subline" ref={summaryText}>
+            {apps.data ? `${installed.length} installed · ${running} running` : 'Loading applications'}
+          </p>
         </div>
         <div className="workspace-actions">
           <button

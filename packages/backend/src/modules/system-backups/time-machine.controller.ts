@@ -5,7 +5,7 @@ import { timeMachineHashSchema, timeMachineIdSchema } from '@runtipi/common/sche
 import { timeMachineRestoreActivateSchema } from '@runtipi/common/schemas/time-machine-restore';
 import { type } from 'arktype';
 import { AuthGuard } from '../auth/auth.guard';
-import { backupCredentials, backupOperator } from './backup-access';
+import { backupCredentials, backupOperator, optionalBackupCredentials } from './backup-access';
 import { TimeMachineService } from './time-machine.service';
 import { timeMachineConflict } from './time-machine-policy';
 
@@ -140,7 +140,7 @@ export class TimeMachineController {
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   remove(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
-    return this.timeMachine.remove(id, backupOperator(request), backupCredentials(body));
+    return this.timeMachine.removeForSession(id, backupOperator(request), request, optionalBackupCredentials(body));
   }
   @Post('points/:id/restore-review')
   @HttpCode(202)

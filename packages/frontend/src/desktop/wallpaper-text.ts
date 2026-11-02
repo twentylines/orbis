@@ -21,7 +21,8 @@ export function useWallpaperText<T extends HTMLElement>() {
   useLayoutEffect(() => {
     if (!target || !sample) return;
     let frame = 0;
-    const base = getComputedStyle(target.closest('.desktop') ?? document.documentElement).backgroundColor;
+    const desktop = target.closest('.desktop') ?? document.documentElement;
+    const base = getComputedStyle(desktop).backgroundColor;
     let background: [number, number, number] = [16, 24, 27];
     try {
       const canvas = document.createElement('canvas');
@@ -40,23 +41,36 @@ export function useWallpaperText<T extends HTMLElement>() {
     const measure = () => {
       frame = 0;
       const rect = target.getBoundingClientRect();
-      const colour = wallpaperTextColour(sample, { width: window.innerWidth, height: window.innerHeight }, rect, background);
-      if (colour) target.style.setProperty('--workspace-heading-ink', colour);
+      const modeDim = Number.parseFloat(getComputedStyle(desktop).getPropertyValue('--workspace-wallpaper-dim')) || 0;
+      const colour = wallpaperTextColour(
+        { ...sample, dim: 1 - (1 - sample.dim) * (1 - modeDim) },
+        { width: window.innerWidth, height: window.innerHeight },
+        rect,
+        background,
+      );
+      if (colour) {
+        target.style.setProperty('--workspace-heading-ink', colour);
+        target.style.setProperty('--workspace-heading-edge', colour === '#ffffff' ? '#10181b' : '#ffffff');
+      }
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(measure);
     };
     const observer = new ResizeObserver(schedule);
     observer.observe(target);
+    const modeObserver = new MutationObserver(schedule);
+    modeObserver.observe(desktop, { attributes: true, attributeFilter: ['data-desktop-mode'] });
     window.addEventListener('resize', schedule, { passive: true });
     window.addEventListener('scroll', schedule, { passive: true, capture: true });
     measure();
     return () => {
       observer.disconnect();
+      modeObserver.disconnect();
       window.removeEventListener('resize', schedule);
       window.removeEventListener('scroll', schedule, true);
       cancelAnimationFrame(frame);
       target.style.removeProperty('--workspace-heading-ink');
+      target.style.removeProperty('--workspace-heading-edge');
     };
   }, [sample, target]);
   return setTarget;

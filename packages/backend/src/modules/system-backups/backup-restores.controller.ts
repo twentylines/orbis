@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, HttpCode, Param, Post, Req,
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
-import { backupCredentials, backupOperator } from './backup-access';
+import { backupCredentials, backupOperator, optionalBackupCredentials } from './backup-access';
 import { BackupRestoresService } from './backup-restores.service';
 
 export function restoreRequest(body: unknown) {
@@ -56,7 +56,7 @@ export class BackupRestoresController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async cancel(@Req() request: Request, @Param('id') id: string, @Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const owner = backupOperator(request);
-    const result = await this.restores.cancel(id, owner, backupCredentials(body));
+    const result = await this.restores.cancel(id, owner, optionalBackupCredentials(body), request);
     if (result.job) this.afterResponse(response, result.job.id);
     return result;
   }
@@ -74,7 +74,7 @@ export class BackupRestoresController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async recover(@Req() request: Request, @Param('id') id: string, @Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const owner = backupOperator(request);
-    const result = await this.restores.recover(id, owner, backupCredentials(body), request);
+    const result = await this.restores.recover(id, owner, optionalBackupCredentials(body), request);
     if (result.job && !('rootManaged' in result)) this.afterResponse(response, result.job.id);
     return { job: result.job };
   }

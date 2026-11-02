@@ -2,10 +2,16 @@ import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { useDesktopPreferences } from '@/desktop/preferences';
 import { resolveWallpaperKey } from '@/desktop/wallpaper-presets';
 import { DesktopWallpaper } from '@/desktop/wallpaper';
+import { DepthTravel } from '@/components/recovery-progress/depth-travel';
 import { IconMoon, IconSun } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
 import { useLayoutEffect, useRef, type PropsWithChildren, type ReactNode } from 'react';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
+import './layout.css';
+
+export function authLayoutScene(setup: boolean, scene?: ReactNode) {
+  return scene ?? (setup ? <DepthTravel mode="ambient" variant="onboarding" className="orbis-setup-space" /> : <DesktopWallpaper />);
+}
 
 function revealAuthFocus(target: EventTarget) {
   if (!(target instanceof HTMLElement)) return;
@@ -64,19 +70,21 @@ export const AuthLayout = ({
       data-setup-saving={(setup && busy) || undefined}
       onFocusCapture={(event) => revealAuthFocus(event.target)}
     >
-      {scene ?? <DesktopWallpaper />}
-      <div className="desktop-auth-toolbar">
-        <Button
-          size="icon"
-          variant="outline"
-          disabled={busy}
-          aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
-          onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
-        >
-          {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
-        </Button>
-      </div>
-      <div ref={container} className="container container-tight desktop-auth-container">
+      {authLayoutScene(setup, scene)}
+      {setup ? null : (
+        <div className="desktop-auth-toolbar">
+          <Button
+            size="icon"
+            variant="outline"
+            disabled={busy}
+            aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+            onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
+          >
+            {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
+          </Button>
+        </div>
+      )}
+      <div ref={container} className="container container-tight desktop-auth-container" inert={setup && busy}>
         {setup ? (
           <>
             <header className="desktop-auth-identity">

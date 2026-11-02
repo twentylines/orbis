@@ -17,7 +17,7 @@ import {
   type SettingsSection,
 } from '../helpers/settings-catalogue';
 import './settings-page.css';
-import { SettingsSaveButton, SettingsSaveFeedback, SettingsSaveStatus } from './settings-save';
+import { SettingsSaveActions, SettingsSaveButton, SettingsSaveFeedback, SettingsSaveStatus } from './settings-save';
 
 export function SettingsPanel({ active, children, id, label }: { active: boolean; children: ReactNode; id: string; label: string }) {
   const parentVisible = useContext(WindowVisibilityContext);
@@ -222,9 +222,9 @@ export function SettingsWorkspace({
           <div className="settings-heading-container">
             <header className="settings-content-heading">
               <h2>{pending ? <output>Loading Updates…</output> : section.label}</h2>
-              <div className="settings-save-actions">
+              <SettingsSaveActions>
                 <SettingsSaveButton hideWhenClean={active === 'about'} />
-              </div>
+              </SettingsSaveActions>
             </header>
           </div>
           <SettingsSaveFeedback />

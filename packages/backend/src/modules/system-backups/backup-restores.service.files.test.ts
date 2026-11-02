@@ -4,7 +4,7 @@ import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import type Dockerode from 'dockerode';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { BackupRestoresService } from './backup-restores.service';
+import { BackupRestoresService, restorePredatesCompletedReset } from './backup-restores.service';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { BackupRequirementError } from './backup-files';
 import {
@@ -21,6 +21,7 @@ import { captureRestoreStartupRole, waitForRestoreStartup } from './backup-resto
 import * as operationStatus from '@/common/restoration-root-status';
 import { TimeMachineStore } from './time-machine-store';
 import type { Request } from 'express';
+import { ResetState } from '../system-reset/reset-state';
 
 // This service suite uses real journals and maintenance locks; Docker, authentication and reviewed-source handoff are declared boundaries.
 const boundary = vi.hoisted(() => ({
@@ -334,6 +335,7 @@ it('reviews, binds and starts only the protected retained transaction after acco
   const verifyAccount = vi.fn().mockResolvedValue(undefined);
   vi.spyOn(service, 'retainedStatus').mockResolvedValue({
     job: {
+      requiresFreshAuthentication: true,
       id: journal.state.id,
       status: 'running',
       phase: 'allocated',
@@ -450,6 +452,7 @@ it('continues checking a lost begin without requiring a process restart', async 
   const active = await journal();
   const status = vi.spyOn(service, 'retainedStatus').mockResolvedValue({
     job: {
+      requiresFreshAuthentication: true,
       id: active.state.id,
       status: 'rolled-back',
       phase: 'rolled-back',
@@ -1066,4 +1069,61 @@ it('serializes overlapping archive reuse and releases the guard after the first 
   await expect(first).resolves.toHaveProperty('status', 'uploaded');
   await expect(service.reuse(value.state.id, 7, {} as Request)).resolves.toHaveProperty('status', 'uploaded');
   expect(reuse).toHaveBeenCalledTimes(2);
+});
+
+it('explains a saved archive ownership mismatch without offering recovery or copying it', async () => {
+  const { value, reuse } = await reusableJournal();
+  boundary.bootstrap.mockResolvedValue({ ownerId: 1 });
+  await expect(service.reuse(value.state.id, 7, {} as Request)).rejects.toThrow(
+    'This saved archive belongs to another account. Sign in with its owner or choose an encrypted backup file.',
+  );
+  expect(reuse).not.toHaveBeenCalled();
+});
+
+it('hides only settled restore presentation from a confirmed later reset and preserves the journal', async () => {
+  const value = await journal();
+  await fs.writeFile(path.join(value.directory, 'restore.json'), JSON.stringify({ ...value.state, phase: 'rolled-back', decision: 'rollback' }), {
+    mode: 0o600,
+  });
+  await outcome(value, 'rolled-back');
+  const before = await fs.readFile(path.join(value.directory, 'restore.json'), 'utf8');
+  await new ResetState(root).save({
+    version: 1,
+    id: randomUUID(),
+    controller: 'fixture',
+    users: [7],
+    accounts: 'keep',
+    phase: 'complete',
+    createdAt: Date.now() + 10,
+  });
+  expect(await service.status()).toEqual({ job: null });
+  expect(await fs.readFile(path.join(value.directory, 'restore.json'), 'utf8')).toBe(before);
+});
+it('reset history filtering never hides active, held, uncertain or newly settled operations', () => {
+  const job = { status: 'rolled-back', needsRecovery: false, progressUnavailable: false, updatedAt: 100 };
+  const reset = { phase: 'complete', createdAt: 200 };
+  expect(restorePredatesCompletedReset(job, reset)).toBe(true);
+  for (const changed of [
+    { ...job, status: 'running' },
+    { ...job, needsRecovery: true },
+    { ...job, progressUnavailable: true },
+    { ...job, updatedAt: 201 },
+    { ...job, updatedAt: undefined },
+  ])
+    expect(restorePredatesCompletedReset(changed, reset)).toBe(false);
+  expect(restorePredatesCompletedReset(job, { ...reset, phase: 'recovery' })).toBe(false);
+});
+
+it('ordinary restore cancellation uses the owner session unless restore authentication is enabled', async () => {
+  const value = await journal();
+  const policy = {
+    read: vi.fn().mockResolvedValue({ version: 1, revision: 0, requireCaptureAuthentication: false, requireRestoreAuthentication: false }),
+  };
+  Reflect.set(service, 'security', policy);
+  boundary.bootstrap.mockResolvedValue({ ownerId: 7, identity: {} });
+  await service.cancel(value.state.id, 7, undefined, {} as Request);
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  expect(await fs.stat(path.join(value.directory, 'cancel.json'))).toBeDefined();
+  policy.read.mockResolvedValue({ version: 1, revision: 1, requireCaptureAuthentication: false, requireRestoreAuthentication: true });
+  await expect(service.cancel(value.state.id, 7, undefined, {} as Request)).rejects.toThrow('account password');
 });

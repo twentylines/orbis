@@ -1,3 +1,4 @@
+import { endDesktopSessionEvent } from '@/components/startup/auth-session-navigation';
 import {
   createContext,
   useCallback,
@@ -70,6 +71,11 @@ export function AppLauncherProvider({ children }: PropsWithChildren) {
     }
   }, [opened, recentStorageKey]);
   const [state, dispatch] = useReducer(appWindowReducer, { windows: [], section });
+  useEffect(() => {
+    const clear = () => dispatch({ type: 'reset-session' });
+    window.addEventListener(endDesktopSessionEvent, clear);
+    return () => window.removeEventListener(endDesktopSessionEvent, clear);
+  }, []);
   const latestState = useRef(state);
   latestState.current = state;
   const workspace = appWorkspace(state);

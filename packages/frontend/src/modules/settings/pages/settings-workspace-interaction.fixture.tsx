@@ -57,9 +57,10 @@ Object.assign(globalThis, {
 
 const { createRoot } = await import('react-dom/client');
 const { RouteHeaderToolbar, RouteHeaderToolbarContext } = await import('@/desktop/route-header-toolbar');
+const { WindowVisibilityContext } = await import('@/desktop/window-visibility');
 const { SettingsSearch, SettingsWorkspace, SettingsPanel } = await import('./settings-workspace');
 const { settingsSections } = await import('../helpers/settings-catalogue');
-const { SettingsSaveProvider, SettingsSaveButton, useSettingsSave } = await import('./settings-save');
+const { SettingsSaveActions, SettingsSaveProvider, SettingsSaveButton, SettingsHeaderAction, useSettingsSave } = await import('./settings-save');
 
 const target = { nodeType: 1, ownerDocument: doc } as unknown as HTMLElement;
 const container = {
@@ -89,7 +90,11 @@ let saveButton: ReactElement<Record<string, unknown>> | null = null;
 let workspace: ReactElement | null = null;
 let category: 'store' | 'updates' = 'store';
 let pending = false;
+let headerActionVisible = true;
+let headerAction: PortalSnapshot | null = null;
+let setHeaderTarget: ((target: HTMLElement | null) => void) | null = null;
 const eventsSeen: string[] = [];
+const headerActionMoves: string[] = [];
 
 function flatten(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   return Children.toArray(node).flatMap((child) =>
@@ -98,6 +103,12 @@ function flatten(node: ReactNode): ReactElement<Record<string, unknown>>[] {
 }
 
 function Probe() {
+  const actionSlot = SettingsSaveActions({ children: null });
+  const targetSlot = Children.toArray(actionSlot.props.children).find(
+    (child): child is ReactElement<Record<string, unknown>> => isValidElement<Record<string, unknown>>(child) && child.type === 'span',
+  );
+  setHeaderTarget = targetSlot ? (Reflect.get(targetSlot.props, 'ref') as (target: HTMLElement | null) => void) : null;
+  headerAction = SettingsHeaderAction({ children: <button type="button">Refresh</button> }) as PortalSnapshot | null;
   workspace = SettingsWorkspace({
     current: category,
     pending,
@@ -132,9 +143,11 @@ function Probe() {
 const render = () =>
   root.render(
     <RouteHeaderToolbarContext.Provider value={target}>
-      <SettingsSaveProvider onSection={() => eventsSeen.push('failed')}>
-        <Probe />
-      </SettingsSaveProvider>
+      <WindowVisibilityContext.Provider value={headerActionVisible}>
+        <SettingsSaveProvider onSection={() => eventsSeen.push('failed')}>
+          <Probe />
+        </SettingsSaveProvider>
+      </WindowVisibilityContext.Provider>
     </RouteHeaderToolbarContext.Provider>,
   );
 const flush = async (action: () => void | Promise<void>) =>
@@ -143,10 +156,30 @@ const flush = async (action: () => void | Promise<void>) =>
     await Bun.sleep(2);
   });
 const getPortal = () => portal as unknown as PortalSnapshot;
+const getHeaderAction = () => headerAction as unknown as PortalSnapshot | null;
 
 try {
   await flush(render);
   expect(getPortal().containerInfo).toBe(target);
+  if (!setHeaderTarget) throw new Error('Settings Save action slot target is missing');
+  await flush(() => setHeaderTarget?.(target));
+  expect(getHeaderAction()?.containerInfo).toBe(target);
+  const headerButton = getHeaderAction()?.children as ReactElement<Record<string, unknown>>;
+  expect(headerButton.type).toBe('button');
+  expect(headerButton.props.type).toBe('button');
+  expect(headerButton.props.children).toBe('Refresh');
+  headerActionMoves.push('header');
+  headerActionVisible = false;
+  await flush(render);
+  expect(headerAction).toBeNull();
+  headerActionMoves.push('hidden');
+  headerActionVisible = true;
+  await flush(render);
+  expect(getHeaderAction()?.containerInfo).toBe(target);
+  headerActionMoves.push('restored');
+  await flush(() => setHeaderTarget?.(null));
+  expect(headerAction).toBeNull();
+  headerActionMoves.push('removed');
   category = 'updates';
   pending = true;
   await flush(render);
@@ -204,7 +237,7 @@ try {
   const clickSave = currentSaveButton.props.onClick as () => void;
   await flush(clickSave);
   expect(eventsSeen).toEqual(['prepare', 'commit']);
-  process.stdout.write(JSON.stringify({ mountedReact: true, portalTarget: true, network: false, layout: false, eventsSeen }));
+  process.stdout.write(JSON.stringify({ mountedReact: true, portalTarget: true, network: false, layout: false, eventsSeen, headerActionMoves }));
 } finally {
   await flush(() => root.unmount());
 }

@@ -28,6 +28,8 @@ export function StartupSurface({
   initial = false,
   freshAppearance = false,
   setupSpace = false,
+  prepareWallpaper = false,
+  setupHandoff = false,
   children,
 }: {
   ref?: Ref<HTMLDivElement>;
@@ -42,6 +44,8 @@ export function StartupSurface({
   initial?: boolean;
   freshAppearance?: boolean;
   setupSpace?: boolean;
+  prepareWallpaper?: boolean;
+  setupHandoff?: boolean;
   children?: ReactNode;
 }) {
   const surface = useRef<HTMLDivElement>(null);
@@ -82,6 +86,7 @@ export function StartupSurface({
       ref={surface}
       className={`orbis-startup${current ? ' orbis-theme' : ''}${setupSpace ? ' orbis-startup-setup-space' : ''}${loggingOff ? ' orbis-logout-surface' : signingIn ? ' orbis-login-surface' : status ? ' orbis-update-surface' : ''}${overlay ? ' orbis-startup-overlay' : ''}`}
       data-session-state={loggingOff || resumingLogout ? 'logging-out' : signingIn ? 'signing-in' : status ? 'updating' : 'loading'}
+      data-setup-handoff={setupHandoff || undefined}
       data-revealing={revealing || undefined}
       data-completing={completing || undefined}
       data-initial-startup={initial || undefined}
@@ -92,11 +97,8 @@ export function StartupSurface({
       data-desktop-preset={current?.preset}
       data-desktop-wallpaper={current ? resolveWallpaperKey(current) : undefined}
     >
-      {setupSpace ? (
-        <DepthTravel variant="onboarding" mode="ambient" className="orbis-startup-space-field" />
-      ) : current ? (
-        <WallpaperLayer choice={current} />
-      ) : null}
+      {(!setupSpace || prepareWallpaper) && current ? <WallpaperLayer choice={current} /> : null}
+      {setupSpace || setupHandoff ? <DepthTravel variant="onboarding" mode="ambient" className="orbis-startup-space-field" /> : null}
       <div className="orbis-startup-scene" aria-hidden="true">
         <span />
         <span />

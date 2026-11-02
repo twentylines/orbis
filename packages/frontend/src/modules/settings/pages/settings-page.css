@@ -209,6 +209,14 @@
   min-height: 44px;
   flex: none;
 }
+.settings-save-secondary-actions {
+  display: contents;
+}
+.settings-save-secondary-actions > .btn {
+  min-width: 5.5rem;
+  min-height: 44px;
+  flex: none;
+}
 .settings-save-fields {
   display: flex;
   flex-direction: column;
@@ -381,6 +389,75 @@
   margin-top: 0;
 }
 
+@media (min-width: 1100px) and (min-height: 640px) {
+  .desktop-main:has(> .desktop-route-page[data-route-section="settings"]:not([hidden])) {
+    min-height: 0;
+    padding-bottom: calc(var(--orbis-dock-height, 78px) + 44px);
+  }
+  .desktop .desktop-route-page[data-route-section="settings"] {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - var(--orbis-bar-bottom, 88px) - var(--orbis-dock-height, 78px) - 68px);
+    min-height: 0;
+  }
+  .desktop .desktop-route-page[data-route-section="settings"][hidden] {
+    display: none;
+  }
+  .desktop-route-page[data-route-section="settings"] .desktop-page-heading {
+    flex: none;
+  }
+  .desktop-route-page[data-route-section="settings"] :is(.desktop-window-content, .desktop-route-content, .desktop-route-children) {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .desktop-route-page[data-route-section="settings"] .desktop-settings {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .desktop-route-page[data-route-section="settings"] .settings-workspace {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .desktop-route-page[data-route-section="settings"] .settings-layout {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+    align-items: stretch;
+  }
+  .desktop-route-page[data-route-section="settings"] .settings-sidebar {
+    position: static;
+    align-self: stretch;
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding: 8px;
+  }
+  .desktop-route-page[data-route-section="settings"] .settings-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .desktop-route-page[data-route-section="settings"] .settings-content-heading {
+    flex: none;
+  }
+  .desktop-route-page[data-route-section="settings"] .settings-category-panel {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scroll-padding-block: 24px;
+  }
+}
+
 .settings-heading-container {
   min-width: 0;
   container: settings-save-header / inline-size;
@@ -411,6 +488,12 @@
 }
 .settings-store-update-controls .automatic-app-update-switch > .form-check {
   margin-block: 0;
+}
+.settings-category-panel .orbis-switch.form-check {
+  margin-block: 0;
+}
+.settings-category-panel .appearance-material-controls > .orbis-switch {
+  min-height: 44px;
 }
 
 .settings-category-panel

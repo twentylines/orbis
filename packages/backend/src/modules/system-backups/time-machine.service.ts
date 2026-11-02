@@ -19,6 +19,8 @@ import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { AuthService } from '../auth/auth.service';
 import { AccountSecurityService } from '../auth/account-security.service';
+import { authorizeBackupActionSession } from './backup-session-authorization';
+import { ResetState } from '../system-reset/reset-state';
 import { backupCredentials } from './backup-access';
 import { SystemBackupsService } from './system-backups.service';
 import { TimeMachineStore, type StoredTimeMachinePoint, type TimeMachineDraftMetadata } from './time-machine-store';
@@ -195,7 +197,16 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     await this.initialize();
     if (this.unavailable) return { version: 1, available: false, points: [], activeCaptureId: null };
     try {
-      const points = (await this.store.list()).filter((point) => point.ownerId === ownerId);
+      const reset = await new ResetState(this.dataDirectory).active();
+      const points = (await this.store.list()).filter(
+        (point) =>
+          point.ownerId === ownerId &&
+          (reset?.phase !== 'complete' ||
+            point.createdAt >= reset.createdAt ||
+            point.status === 'capturing' ||
+            point.status === 'interrupted' ||
+            point.id === this.active?.id),
+      );
       return {
         version: 1,
         available: true,
@@ -565,6 +576,16 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     await this.initialize();
     this.available();
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    return this.removeOwned(id, ownerId);
+  }
+  async removeForSession(id: string, ownerId: number, request: Request, credentials?: Credentials) {
+    const actor = await authorizeBackupActionSession(this.auth, this.captureSecurity, request, ownerId, credentials);
+    await this.initialize();
+    this.available();
+    await authorizeBackupActionSession(this.auth, this.captureSecurity, request, ownerId, credentials, 'backup', actor);
+    return this.removeOwned(id, ownerId);
+  }
+  private async removeOwned(id: string, ownerId: number) {
     if (this.active || this.reviewing || this.exporting || this.removing) throw timeMachineConflict('operation-busy');
     this.removing = true;
     try {

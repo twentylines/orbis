@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/Button';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -12,6 +13,8 @@ import type { SettingsSection } from '../helpers/settings-catalogue';
 
 type SettingsSaveContextValue = {
   register: (id: string, entry: SettingsSaveEntry) => () => void;
+  headerTarget: HTMLElement | null;
+  setHeaderTarget: (target: HTMLElement | null) => void;
   save: () => Promise<void>;
   dirty: boolean;
   pending: boolean;
@@ -32,6 +35,7 @@ export function SettingsSaveProvider({
   backgroundSaving?: boolean;
 }) {
   const entries = useRef(new Map<string, SettingsSaveEntry>());
+  const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
   const [, refresh] = useState(0);
   const currentSignal = useRef(signal);
   currentSignal.current = signal;
@@ -92,6 +96,8 @@ export function SettingsSaveProvider({
     <SettingsSaveContext.Provider
       value={{
         register,
+        headerTarget,
+        setHeaderTarget,
         save,
         dirty,
         pending: saving || [...entries.current.values()].some((entry) => entry.pending),
@@ -102,6 +108,30 @@ export function SettingsSaveProvider({
       {children}
     </SettingsSaveContext.Provider>
   );
+}
+
+export function SettingsSaveActions({ children }: { children: ReactNode }) {
+  const context = useContext(SettingsSaveContext);
+  return (
+    <div className="settings-save-actions">
+      <span className="settings-save-secondary-actions" ref={context?.setHeaderTarget} />
+      {children}
+    </div>
+  );
+}
+
+export function settingsHeaderActionPortal(children: ReactNode, target: HTMLElement | null, visible: boolean) {
+  return target && visible ? createPortal(children, target) : null;
+}
+
+export function SettingsHeaderAction({ children }: { children: ReactNode }) {
+  const context = useContext(SettingsSaveContext);
+  const visible = useContext(WindowVisibilityContext);
+  return settingsHeaderActionPortal(children, context?.headerTarget ?? null, visible);
+}
+
+export function useSettingsHeaderActionAvailable() {
+  return useContext(SettingsSaveContext) !== null;
 }
 
 export function useSettingsSave(entry: SettingsSaveEntry) {

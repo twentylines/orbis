@@ -18,10 +18,6 @@ export function retryErrorPage(onReset: () => void, location: Pick<Location, 're
   }
 }
 
-export function openErrorWorkspace(location: Pick<Location, 'assign'> = window.location) {
-  location.assign('/dashboard');
-}
-
 export const FallbackSurface = ({ children }: PropsWithChildren) => {
   useStartupReady(true);
   const preferences = readCachedDesktopPreferences();
@@ -48,23 +44,13 @@ export const ErrorPage = ({ error, onReset }: ErrorPageProps) => {
         </span>
         <div className="orbis-error-copy">
           <h1 id="orbis-error-title">Unable to load this page</h1>
-          <p>Retry, or return to the workspace.</p>
+          <p>Retry to reload this page.</p>
         </div>
         <div className="orbis-error-actions">
           <Button intent="primary" onClick={() => retryErrorPage(onReset)}>
             <IconReload size={18} aria-hidden="true" />
             Retry
           </Button>
-          <a
-            href="/dashboard"
-            className="btn btn-outline-primary"
-            onClick={(event) => {
-              event.preventDefault();
-              openErrorWorkspace();
-            }}
-          >
-            Open workspace
-          </a>
         </div>
         <section className="orbis-error-details" aria-label="Error details">
           <dl>

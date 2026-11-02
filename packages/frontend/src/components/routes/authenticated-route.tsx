@@ -11,6 +11,7 @@ import { DashboardLayout, DashboardLayoutSuspense } from '../layouts/dashboard/l
 import { SSEProvider } from '../providers/sse/sse-provider';
 import { RouteWrapper } from './route-wrapper';
 import { safeReturnTo } from '@/desktop/secure-access';
+import { authenticatedSessionId } from '@/components/startup/auth-session-navigation';
 
 export default () => {
   const { isLoggedIn, isGuestDashboardEnabled } = useUserContext();
@@ -18,7 +19,19 @@ export default () => {
 
   if (!isLoggedIn && !isGuestDashboardEnabled) {
     const target = safeReturnTo(pathname + search + hash);
-    return <Navigate to={target ? `/login?${new URLSearchParams({ return_to: target })}` : '/login'} replace />;
+    let sessionId: string | null = null;
+    try {
+      sessionId = authenticatedSessionId(window.sessionStorage);
+    } catch {
+      /* Storage is optional. */
+    }
+    return (
+      <Navigate
+        to={target ? `/login?${new URLSearchParams({ return_to: target })}` : '/login'}
+        state={sessionId && target ? { orbisSessionRecovery: target, orbisSessionId: sessionId } : null}
+        replace
+      />
+    );
   }
 
   if (isGuestDashboardEnabled && !isLoggedIn) {

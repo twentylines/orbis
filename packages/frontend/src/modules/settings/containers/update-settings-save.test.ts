@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test';
+import { Children, isValidElement } from 'react';
+import { AutomaticUpdatesSettings, UpdateSchedules } from './automatic-updates-settings';
+import { SystemUpdatesSettings } from './system-updates-settings';
 const scenarios = [
   'policy-shared-draft',
   'policy-queued-session',
@@ -42,3 +45,13 @@ for (const scenario of scenarios) {
     expect(JSON.parse(stdout)).toEqual({ scenario, mountedReact: true, network: false, layout: false });
   });
 }
+
+test('Orbis, app and system schedules are peer cards rather than nested inside one schedule', () => {
+  const sections = Children.toArray(UpdateSchedules().props.children);
+  expect(sections).toHaveLength(3);
+  const [orbis, apps, system] = sections;
+  expect(isValidElement(orbis) && orbis.type).toBe(AutomaticUpdatesSettings);
+  expect(isValidElement<{ mode?: string }>(apps) && apps.type).toBe(AutomaticUpdatesSettings);
+  expect(isValidElement<{ mode?: string }>(apps) && apps.props.mode).toBe('apps');
+  expect(isValidElement(system) && system.type).toBe(SystemUpdatesSettings);
+});

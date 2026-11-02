@@ -6,8 +6,8 @@ import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
 import { markResetAccepted, readOperationStatus } from '@/components/recovery-progress/operation-status';
 import { browserPasskeyReason, cancelPasskeyCeremony, passkeyErrorMessage, passkeyListOptions } from '@/modules/auth/passkeys/passkey-api';
-import { resetPasskeyOptions, resetProofMethod, submitReset, type ResetAccounts } from './reset-api';
-import { openResetOnboarding } from './reset-completion';
+import { resetPasskeyOptions, resetProofMethod, submitReset, validResetConfirmation, type ResetAccounts, type AcceptedReset } from './reset-api';
+import { openResetOnboarding, rememberResetCompletion } from './reset-completion';
 import './system-reset.css';
 export function ResetAccountChoices({ value, onChange }: { value: ResetAccounts | null; onChange: (value: ResetAccounts) => void }) {
   return (
@@ -81,8 +81,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
         if (controller.signal.aborted) return;
         setReconnecting(false);
         if (status.state === 'idle' && status.supported) {
-          openResetOnboarding();
-          return;
+          if (openResetOnboarding(status)) return;
         }
       } catch {
         if (!controller.signal.aborted) setReconnecting(true);
@@ -96,7 +95,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
     };
   }, [accepted]);
   const reset = async () => {
-    if (busy || proofMethod === 'checking' || !accounts || confirmation !== 'RESET ORBIS') return;
+    if (busy || proofMethod === 'checking' || !accounts || !validResetConfirmation(confirmation)) return;
     const values = new FormData(form.current ?? undefined);
     const password = String(values.get('password') ?? '');
     const totpCode = String(values.get('totpCode') ?? '');
@@ -106,8 +105,9 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
     pending.current = controller;
     try {
       const method = proofMethod;
+      let receipt: AcceptedReset;
       if (method === 'password')
-        await submitReset(accounts, confirmation, { method, password, ...(totpCode ? { totpCode } : {}) }, controller.signal, recovery);
+        receipt = await submitReset(accounts, confirmation, { method, password, ...(totpCode ? { totpCode } : {}) }, controller.signal, recovery);
       else {
         const reason = browserPasskeyReason();
         if (reason) throw new Error(reason);
@@ -122,7 +122,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
           throw new Error(passkeyErrorMessage(failure));
         });
         controller.signal.throwIfAborted();
-        await submitReset(
+        receipt = await submitReset(
           accounts,
           confirmation,
           { method, challengeId: options.challengeId, response, ...(totpCode ? { totpCode } : {}) },
@@ -130,6 +130,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
           recovery,
         );
       }
+      rememberResetCompletion(receipt);
       markResetAccepted();
       setAccepted(true);
     } catch (failure) {
@@ -221,6 +222,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
                   autoComplete="off"
                   value={confirmation}
                   onChange={(event) => setConfirmation(event.target.value)}
+                  error={confirmation && !validResetConfirmation(confirmation) ? 'Enter RESET ORBIS to enable Reset.' : undefined}
                   disabled={busy}
                 />
                 {proofMethod === 'checking' ? <output>Checking sign-in options…</output> : null}
@@ -280,7 +282,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
               type="submit"
               form={formId}
               intent="danger"
-              disabled={busy || proofMethod === 'checking' || confirmation !== 'RESET ORBIS'}
+              disabled={busy || proofMethod === 'checking' || !validResetConfirmation(confirmation)}
               aria-busy={busy}
             >
               Reset

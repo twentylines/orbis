@@ -6,7 +6,7 @@ import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { type SettingsFormValues, UserSettingsForm } from '../components/user-settings-form/user-settings-form';
-import { AutomaticUpdatesSettings } from './automatic-updates-settings';
+import { UpdateSchedules } from './automatic-updates-settings';
 import { ReleaseChannelSettings } from './release-channel-settings';
 import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
@@ -43,7 +43,7 @@ export const UserSettingsContainer = ({ initialValues, section = 'general' }: Pr
         <div id="setting-release-channel">
           <ReleaseChannelSettings />
         </div>
-        <AutomaticUpdatesSettings />
+        <UpdateSchedules />
       </div>
     );
   if (section === 'backups')

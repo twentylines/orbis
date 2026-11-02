@@ -34,6 +34,11 @@ describe('wallpaper text contrast', () => {
     expect(wallpaperTextColour(image, viewport, region, base)).toBe('#ffffff');
     expect(wallpaperTextColour(image, viewport, { ...region, left: 480 }, base)).toBe('#10181b');
   });
+  test('a small link on a dark rock stays readable beside a heading on bright sky', () => {
+    const image = sample((x) => (x < 13 ? [185, 185, 185, 255] : [18, 18, 18, 255]));
+    expect(wallpaperTextColour(image, viewport, { left: 40, top: 100, width: 200, height: 40 }, base)).toBe('#10181b');
+    expect(wallpaperTextColour(image, viewport, { left: 680, top: 100, width: 100, height: 40 }, base)).toBe('#ffffff');
+  });
   test('honours cover cropping and the saved horizontal position', () => {
     const image = sample((x) => (x < 8 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
     const narrow = { width: 200, height: 800 };

@@ -22,6 +22,7 @@ export type AppWindow = {
 type Workspace = { active?: string; ratio?: number; pickerDismissed?: boolean; split?: { anchor: string; side: 'left' | 'right'; partner?: string } };
 export type AppWindowState = { windows: AppWindow[]; section?: string; workspaces?: Record<string, Workspace> };
 type Action =
+  | { type: 'reset-session' }
   | { type: 'open'; request: AppLaunchRequest }
   | { type: 'focus' | 'minimize' | 'minimized' | 'close' | 'closed' | 'remove'; urn: string }
   | { type: 'place'; urn: string; mode: AppWindowMode; partner?: string }
@@ -52,6 +53,8 @@ export function appWindowReducer(state: AppWindowState, action: Action): AppWind
       }),
     );
   switch (action.type) {
+    case 'reset-session':
+      return { windows: [], section: '/dashboard' };
     case 'open': {
       const existing = state.windows.find(({ request }) => request.urn === action.request.urn);
       const next: AppWindow = existing

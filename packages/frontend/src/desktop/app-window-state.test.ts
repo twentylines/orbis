@@ -158,3 +158,10 @@ test('snapping two visible windows places the partner on the other side and rest
   expect(appWorkspace(state).split).toEqual({ anchor: second.urn, side: 'left' });
   expect(appWorkspace(state).pickerDismissed).toBe(false);
 });
+
+test('ending a desktop session clears open and minimized windows and section workspaces', () => {
+  const active = reduce(open(open({ windows: [], section: '/settings' }), second), { type: 'hide' });
+  expect(active.windows).toHaveLength(2);
+  expect(active.windows.every((window) => window.status === 'minimized')).toBe(true);
+  expect(reduce(active, { type: 'reset-session' })).toEqual({ windows: [], section: '/dashboard' });
+});

@@ -1,5 +1,4 @@
 import { DepthTravel } from '@/components/recovery-progress/depth-travel';
-import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
 import { useStartupSession } from '@/components/startup/startup-boundary';
 import { acknowledgeWelcome } from '@/api-client';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
@@ -37,6 +36,7 @@ import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-s
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
 import { readManualProtection, saveManualProtection } from '@/modules/time-machine-capsules/protection-choice';
 import { timeMachinePreferencesQueryKey } from '@/modules/time-machine/time-machine-preferences-query';
+import { TimeMachineApiError } from '@/modules/time-machine/time-machine-api';
 import { nextSetupStep, previousSetupStep, setupCanFinish, setupPosition, setupStepCopy, type SetupEntry, type SetupStep } from './setup-navigation';
 import {
   acknowledgeSetupCapture,
@@ -47,8 +47,10 @@ import {
   priorUnconfirmedSetupCapture,
   setupCaptureCanContinue,
   setupCaptureRequested,
+  SetupCaptureNotStartedError,
   SetupCaptureTerminalError,
 } from './setup-capture';
+import { recordSetupFailureTask } from './setup-capture-task';
 import './welcome.css';
 
 const defaultAutomatic: AutomaticUpdateSettings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
@@ -83,19 +85,16 @@ export function SetupCustomisation({ draft, onChange }: { draft: DesktopPreferen
       </fieldset>
       <fieldset className="orbis-setup-choice-group">
         <legend>Display mode</legend>
+        {draft.mode === 'system' ? (
+          <p className="orbis-setup-help orbis-setup-choice-note">System follows this browser’s light or dark preference.</p>
+        ) : null}
         <ColourModeChoice
           compact
           mode={draft.mode}
           oledDark={draft.appearance.oledDark}
           onChange={({ mode, oledDark }) => onChange({ ...draft, mode, appearance: { ...draft.appearance, oledDark } })}
         />
-        <p className="orbis-setup-help">
-          {draft.appearance.oledDark
-            ? 'OLED blacks are used whenever dark mode is active.'
-            : 'System follows this browser’s light or dark preference.'}
-        </p>
       </fieldset>
-      <p className="orbis-setup-help">You can add custom wallpapers later in Settings.</p>
     </>
   );
 }
@@ -349,6 +348,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     savingLock.current = true;
     setSaving(true);
     setSavingStep('Saving preferences');
+    startupSession.begin('preparing-orbis', true, 'Saving preferences');
     setError('');
     const completedDraft = { ...draft, serverName: name.trim() };
     const automaticToSave = automaticUpdateSettingsForSave(automatic);
@@ -369,11 +369,14 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
           try {
             const saved = await saveManualProtection(protectionDraft, AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(20_000)]));
             queryClient.setQueryData(timeMachinePreferencesQueryKey(user.id), saved);
-          } catch {
+          } catch (reason) {
             sessionAbortSignal.throwIfAborted();
-            queryClient.setQueryData(['setup-capture-notice', user.id], {
-              message: 'The Time Machine preference could not be saved. Review it in Settings.',
-            });
+            const safeReason =
+              reason instanceof TimeMachineApiError
+                ? reason.message
+                : 'The preference could not be saved. Review Time Machine settings and try again.';
+            if (onboardingGeneration)
+              recordSetupFailureTask(user.id, onboardingGeneration, 'preferences-save-failed', new Date().toISOString(), undefined, safeReason);
           }
         },
       });
@@ -412,12 +415,20 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
             } catch (reason) {
               sessionAbortSignal.throwIfAborted();
               if (!setupCaptureCanContinue(reason)) throw reason;
-              if (reason instanceof SetupCaptureTerminalError && receipt) acknowledgeSetupCapture(user.id, receipt, 'failed', storage);
-              queryClient.setQueryData(['setup-capture-notice', user.id], { message: reason.message });
+              if (receipt && reason instanceof SetupCaptureTerminalError) {
+                recordSetupFailureTask(user.id, receipt.attemptId, 'capture-failed');
+                try {
+                  acknowledgeSetupCapture(user.id, receipt, 'failed', storage);
+                } catch {
+                  // The existing receipt remains available for a later status check.
+                }
+              } else if (receipt && reason instanceof SetupCaptureNotStartedError) {
+                recordSetupFailureTask(user.id, receipt.attemptId, 'capture-not-started');
+              }
             }
           }
           setSavingStep('Preparing Orbis');
-          startupSession.begin('preparing-orbis', true);
+          startupSession.setSetupStage('Preparing Orbis');
           await prepareSetupHome(
             () => import('@/modules/dashboard/pages/dashboard'),
             () => queryClient.fetchQuery({ ...getInstalledAppsOptions(), staleTime: 10_000, retry: false }),
@@ -432,7 +443,11 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       await finishSetup(
         tasks,
         receipts.current,
-        (stage) => setSavingStep(stage === 'Preparing Orbis' ? stage : 'Saving preferences'),
+        (stage) => {
+          const label = stage === 'Preparing Orbis' ? stage : 'Saving preferences';
+          setSavingStep(label);
+          startupSession.setSetupStage(label);
+        },
         async (destination, options) => {
           await navigate(destination, options);
           await startupSession.finish();
@@ -902,7 +917,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
             )}
           </footer>
         </section>
-        <RecoveryScene open={saving} variant="onboarding" title={savingStep || 'Saving preferences'} active={saving} sharedBackdrop />
       </AuthLayout>
     </DesktopPreferencesPreview>
   );

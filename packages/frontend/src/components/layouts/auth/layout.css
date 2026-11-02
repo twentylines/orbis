@@ -1,0 +1,35 @@
+.desktop-auth.desktop-auth-setup {
+  --auth-gutter: clamp(20px, 3vw, 36px);
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 20px;
+  background: #030508;
+}
+.desktop-auth-setup .desktop-auth-identity {
+  padding: 0;
+  border: 0;
+  color: #edf0f3;
+}
+.desktop-auth-setup .desktop-auth-product {
+  color: inherit;
+  font-size: 1.4rem;
+}
+.desktop-auth-setup .desktop-auth-brand {
+  --desktop-ink: #edf0f3;
+  --desktop-accent: color-mix(in srgb, var(--desktop-base-accent) 40%, #e0e7eb);
+  gap: 14px;
+}
+.orbis-setup-space {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+@media (max-width: 640px) {
+  .desktop-auth.desktop-auth-setup {
+    padding: 20px 12px;
+  }
+}

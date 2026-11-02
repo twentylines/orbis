@@ -19,6 +19,7 @@ import { useSectionMotion } from '@/desktop/section-motion';
 import { RouteSurface } from '@/desktop/route-surface';
 import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { clearNavigation, rememberNavigation } from '@/components/startup/navigation-recovery';
+import { endDesktopSessionEvent, forgetAuthenticatedSession } from '@/components/startup/auth-session-navigation';
 import { AppLauncherProvider, MinimizedApps } from '@/desktop/app-launcher';
 import { HostUpdateProvider, useHostUpdateWatch } from '@/desktop/host-update-watch';
 import { coreWatchIsActive } from '@/desktop/core-update-state';
@@ -26,7 +27,7 @@ import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Button } from '@/components/ui/Button';
 import { DockActivity } from '@/desktop/desktop-activity';
-import { DockGlass } from '@/desktop/dock-companion';
+import { DockGlass, useDockStartupReveal } from '@/desktop/dock-companion';
 import { DockSelection } from '@/desktop/dock-selection';
 import { useNavigationWarmup } from '@/desktop/navigation-warmup';
 import { OrbisUpdateIcon, OrbisUpdateNotice } from '@/desktop/orbis-update-notice';
@@ -79,6 +80,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const desktop = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const dock = useRef<HTMLElement>(null);
+  useDockStartupReveal(desktop, !requiresOnboarding);
   const warmNavigation = useNavigationWarmup();
   useLayoutEffect(() => {
     if (requiresOnboarding) return;
@@ -150,7 +152,16 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     startupSession.begin('logging-out');
     const exit = animateSessionExit(desktop.current, Boolean(reduceMotion));
     try {
-      await Promise.all([logout({ throwOnError: true }), exit.finished]);
+      const request = logout({ throwOnError: true }).then(() => {
+        try {
+          forgetAuthenticatedSession(window.sessionStorage);
+          clearNavigation(window.sessionStorage);
+        } catch {
+          /* Storage is optional. */
+        }
+        window.dispatchEvent(new Event(endDesktopSessionEvent));
+      });
+      await Promise.all([request, exit.finished]);
       await endSession();
       void navigate('/login', { replace: true });
       void startupSession.finish();

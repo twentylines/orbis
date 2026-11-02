@@ -6,7 +6,7 @@ export type SetupEntry = 'fresh' | 'restore' | 'transfer' | 'migration' | null;
 export const setupStepCopy: Record<SetupStep, { title: string; description: string }> = {
   choose: { title: 'Welcome to Orbis', description: 'Start fresh, restore an encrypted backup, or transfer from another server.' },
   server: { title: 'Your server', description: 'Give this server a name. You can change every choice later in Settings.' },
-  customisation: { title: 'Customisation', description: 'Choose your colours and display mode.' },
+  customisation: { title: 'Customisation', description: 'Choose your colours and display mode. You can add custom wallpapers later in Settings.' },
   performance: { title: 'Performance', description: 'Choose the balance that suits your devices. Your apps keep all their features.' },
   updates: { title: 'Updates', description: 'Keep updates manual, or choose what Orbis may update automatically.' },
   'time-machine': { title: 'Time Machine', description: 'Save Orbis settings, appearance and managed app data in a point you can return to.' },

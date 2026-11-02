@@ -15,6 +15,7 @@ import { readRetainedRestoreReceipt, type RetainedRestorePermit } from './time-m
 import type { AuthService } from '../auth/auth.service';
 import type { PasskeyService } from '../auth/passkey.service';
 import type { Request } from 'express';
+import { ResetState } from '../system-reset/reset-state';
 
 let root: string;
 let service: BackupImportsService;
@@ -688,4 +689,23 @@ it('reuses a pinned archive through fresh decryption and rejects a different rev
       .update(await fs.readFile(file))
       .digest('hex'),
   ).toBe(before);
+});
+
+it('a completed reset hides previous import drafts without deleting their files and accepts a new attempt', async () => {
+  const old = await service.createUpload(1);
+  const now = old.createdAt + 1000;
+  await new ResetState(path.join(root, 'live')).save({
+    version: 1,
+    id: randomUUID(),
+    controller: 'fixture',
+    users: [1],
+    accounts: 'keep',
+    phase: 'complete',
+    createdAt: now,
+  });
+  expect((await service.list(1)).jobs).toEqual([]);
+  expect(await fs.stat(path.join(directory(old.id), 'job.json'))).toBeDefined();
+  vi.spyOn(Date, 'now').mockReturnValue(now + 1);
+  const next = await service.createUpload(1);
+  expect((await service.list(1)).jobs.map((job) => job.id)).toEqual([next.id]);
 });

@@ -17,6 +17,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   type OnModuleInit,
   type OnModuleDestroy,
 } from '@nestjs/common';
@@ -30,6 +31,8 @@ import { DATABASE, type Database } from '@/core/database/database.module';
 import { LoggerService } from '@/core/logger/logger.service';
 import { AppsRepository } from '../apps/apps.repository';
 import { AuthService } from '../auth/auth.service';
+import { AccountSecurityService } from '../auth/account-security.service';
+import { authorizeBackupActionSession } from './backup-session-authorization';
 import { TasksService } from '../tasks/tasks.service';
 import { HostUpdatesService } from '../host-updates/host-updates.service';
 import { BackupRuntimeService, type BackupRuntimePlan } from './backup-runtime.service';
@@ -40,6 +43,7 @@ import { restoreStartupRole } from './backup-restore-startup';
 import { acquireRestoreLease } from './backup-restore-lease';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { BackupRetentionPolicy, backupExpiresAt } from './backup-retention-policy';
+import { ResetState } from '../system-reset/reset-state';
 
 export type TransferArchiveGrant = Readonly<{
   requestId: string;
@@ -50,7 +54,14 @@ export type TransferArchiveGrant = Readonly<{
   cancel: () => Promise<void>;
 }>;
 type DownloadActor = Awaited<ReturnType<AuthService['operatorActionContext']>>;
-type CreationDownload = { actor: DownloadActor; grant: TransferArchiveGrant; ready: boolean; expiresAt: number; timer?: NodeJS.Timeout };
+type CreationDownload = {
+  actor: DownloadActor;
+  policyRevision: number;
+  grant: TransferArchiveGrant;
+  ready: boolean;
+  expiresAt: number;
+  timer?: NodeJS.Timeout;
+};
 const sameDownloadActor = (one: DownloadActor, two: DownloadActor) =>
   one.userId === two.userId && one.sessionBinding === two.sessionBinding && one.securityBinding === two.securityBinding;
 
@@ -107,6 +118,7 @@ const dataRoots = ['state', 'apps', 'repos', 'media', 'user-config', 'traefik'];
 export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   private jobs = new Map<string, Job>();
   private readonly retention: BackupRetentionPolicy;
+  private readonly backupSecurity: AccountSecurityService;
   private retentionWork: Promise<unknown> = Promise.resolve();
   private withRetention<T>(work: () => Promise<T>): Promise<T> {
     const result = this.retentionWork.then(work);
@@ -131,7 +143,9 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     private readonly logger: LoggerService,
     @Inject(DATABASE) private readonly database: Database,
     private readonly queues: QueueFactory,
+    @Optional() security?: AccountSecurityService,
   ) {
+    this.backupSecurity = security ?? new AccountSecurityService(config);
     this.retention = new BackupRetentionPolicy(path.join(config.get('directories').dataDir, 'backups', 'settings'));
   }
 
@@ -267,11 +281,22 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   }
   async list(ownerId: number) {
     await this.initialize();
+    const reset = await new ResetState(this.config.get('directories').dataDir).active();
     return {
+      ...(reset?.phase === 'complete' ? { resetGeneration: { id: reset.id, createdAt: reset.createdAt } } : {}),
       available: !this.unavailable,
       retentionHours: this.unavailable ? 24 : (await this.retention.read()).retentionHours,
       jobs: [...this.jobs.values()]
-        .filter((job) => job.ownerId === ownerId)
+        .filter(
+          (job) =>
+            job.ownerId === ownerId &&
+            (reset?.phase !== 'complete' ||
+              job.createdAt >= reset.createdAt ||
+              job.status === 'succeeded' ||
+              job.resumePending.length ||
+              job.restartRequired ||
+              job.id === this.active?.id),
+        )
         .map((job) => safeJob(this.active?.id === job.id ? { ...job, status: 'running' } : job)),
     };
   }
@@ -301,17 +326,13 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
     return this.begin(ownerId, passphrase);
   }
-  async startForSession(ownerId: number, credentials: { password: string; totpCode?: string }, passphrase: string, request: Request) {
+  async startForSession(ownerId: number, credentials: { password: string; totpCode?: string } | undefined, passphrase: string, request: Request) {
     await this.initialize();
-    const before = await this.auth.operatorActionContext(request);
-    if (before.userId !== ownerId) throw new ForbiddenException('Sign in again before creating this backup.');
-    await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
-    const actor = await this.auth.operatorActionContext(request);
-    if (!sameDownloadActor(before, actor)) throw new ForbiddenException('Your account or session changed. Confirm this backup again.');
+    const actor = await authorizeBackupActionSession(this.auth, this.backupSecurity, request, ownerId, credentials);
     const job = await this.begin(ownerId, passphrase);
     const expiresAt = Date.now() + 60 * 60_000;
     const grant = this.transferGrant(ownerId, job.id, randomUUID(), expiresAt, false);
-    const approval: CreationDownload = { actor, grant, ready: false, expiresAt };
+    const approval: CreationDownload = { actor, policyRevision: actor.revision, grant, ready: false, expiresAt };
     const expire = () => this.revokeCreationDownload(job.id, approval);
     approval.timer = setTimeout(expire, 60 * 60_000);
     approval.timer.unref();
@@ -643,6 +664,14 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   async recover(id: string, ownerId: number, credentials: { password: string; totpCode?: string }) {
     await this.initialize();
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    return this.recoverOwned(id, ownerId);
+  }
+  async recoverForSession(id: string, ownerId: number, request: Request, credentials?: { password: string; totpCode?: string }) {
+    await authorizeBackupActionSession(this.auth, this.backupSecurity, request, ownerId, credentials);
+    await this.initialize();
+    return this.recoverOwned(id, ownerId);
+  }
+  private async recoverOwned(id: string, ownerId: number) {
     const job = this.owned(id, ownerId);
     if (this.active) throw new ConflictException('Wait for the active backup to finish.');
     const release = await acquireBackupMaintenance(new AbortController().signal);
@@ -678,14 +707,27 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     const opened = await this.openArchive(id, ownerId);
     return { stream: opened.file.createReadStream(), bytes: opened.stat.size };
   }
+  async downloadForSession(id: string, ownerId: number, request: Request, credentials?: { password: string; totpCode?: string }) {
+    const actor = await authorizeBackupActionSession(this.auth, this.backupSecurity, request, ownerId, credentials);
+    await this.initialize();
+    const opened = await this.openArchive(id, ownerId);
+    try {
+      await authorizeBackupActionSession(this.auth, this.backupSecurity, request, ownerId, credentials, 'backup', actor);
+      return { stream: opened.file.createReadStream(), bytes: opened.stat.size };
+    } catch (error) {
+      await opened.file.close();
+      throw error;
+    }
+  }
   async downloadCreated(id: string, ownerId: number, request: Request) {
     await this.initialize();
     const job = this.owned(id, ownerId);
     const actor = await this.auth.operatorActionContext(request);
     const approval = this.creationDownloads.get(id);
+    const policy = await this.backupSecurity.read(ownerId);
     const denied = () => new ForbiddenException('The creation download approval expired. Confirm the download with your account password.');
     if (!approval || actor.userId !== ownerId || actor.sessionBinding !== approval.actor.sessionBinding) throw denied();
-    if (!sameDownloadActor(actor, approval.actor) || Date.now() >= approval.expiresAt) {
+    if (!sameDownloadActor(actor, approval.actor) || policy.revision !== approval.policyRevision || Date.now() >= approval.expiresAt) {
       this.revokeCreationDownload(id, approval);
       throw denied();
     }

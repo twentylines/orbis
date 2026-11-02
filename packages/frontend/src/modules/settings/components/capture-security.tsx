@@ -69,13 +69,14 @@ function CaptureSecuritySession({ ownerId, operator, totpEnabled }: { ownerId: n
         <h2>Backup security</h2>
       </div>
       <Switch
-        label="Require authentication for captures"
+        label="Require authentication for backup actions"
         checked={enabled}
         onCheckedChange={setDraft}
         disabled={saving || policy.isPending || policy.isError}
       />
       <p className="text-muted">
-        For this account’s manual Time Machine captures. When enabled, enter your password and authentication code if configured.
+        For backup creation, downloads, saved backup imports, app recovery, and Time Machine capture or removal. Enter your password and
+        authentication code when enabled.
       </p>
       <Switch
         label="Require authentication for backup restores"
@@ -84,7 +85,8 @@ function CaptureSecuritySession({ ownerId, operator, totpEnabled }: { ownerId: n
         disabled={saving || policy.isPending || policy.isError}
       />
       <p className="text-muted">
-        When enabled, restoring an uploaded backup requires your current account password and authentication code if configured.
+        When enabled, starting, stopping or recovering an uploaded-backup restore requires your current account password and authentication code if
+        configured.
       </p>
       {relaxing ? (
         <>
@@ -112,7 +114,7 @@ function CaptureSecuritySession({ ownerId, operator, totpEnabled }: { ownerId: n
       ) : null}
       {policy.isError ? (
         <InlineFeedback>
-          <p>Capture security could not be loaded.</p>
+          <p>Backup security could not be loaded.</p>
           <Button type="button" variant="outline" onClick={() => void policy.refetch()}>
             Retry
           </Button>

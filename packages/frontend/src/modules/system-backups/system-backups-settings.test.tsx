@@ -346,6 +346,7 @@ function submitFixture(values: FormData) {
   };
   const options: SubmitOptions = {
     kind: 'export',
+    backupProofRequired: true,
     totpEnabled: false,
     useAccountPassword: false,
     archiveKeyMode: null,
@@ -354,7 +355,7 @@ function submitFixture(values: FormData) {
   };
   return { form, secrets, selectedFile, calls, options };
 }
-test('actual submit preparation rejects missing fresh auth before clearing any draft or selected file', () => {
+test('opted-in submit preparation rejects missing fresh auth before clearing any draft or selected file', () => {
   for (const [password, code, required, field] of [
     ['', '', false, 'password'],
     ['x'.repeat(1025), '', false, 'password'],
@@ -602,4 +603,41 @@ test('retention uses the shared select and global Save without a duplicate local
   expect(markup).toContain('Existing backups keep at least their current expiry date');
   expect(markup).not.toMatch(/>Save<\/button>/);
   client.clear();
+});
+
+test('default backup actions reuse sign-in while encryption keeps its separate entered key', () => {
+  for (const kind of ['download', 'recover-export'] as const) {
+    const values = new FormData();
+    const fixture = submitFixture(values);
+    expect(prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind, backupProofRequired: false, totpEnabled: true })).toEqual({
+      credentials: { password: '' },
+      passphrase: '',
+    });
+  }
+  for (const useAccountPassword of [false, true]) {
+    const key = 'disposable encryption key';
+    const values = encryptionValues(useAccountPassword ? key : '', key);
+    const fixture = submitFixture(values);
+    const result = prepareBackupSubmission(fixture.form, values, {
+      ...fixture.options,
+      backupProofRequired: false,
+      useAccountPassword,
+      totpEnabled: true,
+    });
+    expect(result).toEqual({ credentials: { password: '' }, passphrase: key });
+  }
+});
+
+test('stopping and recovering an ordinary restore use session authorization unless explicitly opted in', () => {
+  for (const kind of ['cancel-restore', 'recover-restore'] as const) {
+    const values = new FormData();
+    const fixture = submitFixture(values);
+    expect(prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind, restoreProofRequired: false, totpEnabled: true })).toEqual({
+      credentials: { password: '' },
+      passphrase: '',
+    });
+    expect(() => prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind, restoreProofRequired: true })).toThrow(
+      'current account password',
+    );
+  }
 });

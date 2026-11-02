@@ -47,6 +47,21 @@ const matchingOutcome = (phase: string, status?: string) => status === (phase ==
 type Credentials = { password: string; totpCode?: string };
 const failed = () => new ConflictException('Restore recovery needs review. Your server data and backup have been preserved.');
 
+export function restorePredatesCompletedReset(
+  job: { status: string; needsRecovery: boolean; progressUnavailable: boolean; updatedAt?: number },
+  reset: { phase: string; createdAt: number } | null,
+) {
+  return Boolean(
+    reset?.phase === 'complete' &&
+      ['succeeded', 'rolled-back'].includes(job.status) &&
+      !job.needsRecovery &&
+      !job.progressUnavailable &&
+      typeof job.updatedAt === 'number' &&
+      job.updatedAt > 0 &&
+      job.updatedAt < reset.createdAt,
+  );
+}
+
 @Injectable()
 export class BackupRestoresService implements OnModuleDestroy {
   private startup?: Promise<void>;
@@ -346,7 +361,7 @@ export class BackupRestoresService implements OnModuleDestroy {
                   : ['files', 'database', 'sealing', 'prepared', 'checking'].includes(stage)
                     ? 'Preparing configuration and app data.'
                     : 'Restoring configuration and app data.';
-    return {
+    const result = {
       job: {
         id: state.id,
         status,
@@ -367,6 +382,13 @@ export class BackupRestoresService implements OnModuleDestroy {
         ...(progress?.check ? { check: progress.check } : {}),
       },
     };
+    try {
+      const reset = await new ResetState(this.directories().data).active();
+      if (restorePredatesCompletedReset(result.job, reset)) return { job: null };
+    } catch {
+      /* An uncertain reset never hides restore evidence. */
+    }
+    return result;
   }
   async prepare(importId: string, ownerId: number, credentials: Credentials, manifestSha256: string) {
     if (!uuid.test(importId) || !/^[a-f0-9]{64}$/.test(manifestSha256)) throw new NotFoundException('Reviewed backup not found.');
@@ -611,6 +633,7 @@ export class BackupRestoresService implements OnModuleDestroy {
         progressUnavailable: checking,
         canCancel: false,
         canRecover: recovery && (status.recoverable || terminal),
+        requiresFreshAuthentication: true as const,
       },
     };
   }
@@ -777,15 +800,20 @@ export class BackupRestoresService implements OnModuleDestroy {
       this.recoveringRetained = false;
     }
   }
-  async cancel(id: string, ownerId: number, credentials: Credentials) {
-    await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+  async cancel(id: string, ownerId: number, credentials: Credentials | undefined, request?: Request) {
+    if (request) await authorizeBackupRestoreSession(this.auth, this.security, request, ownerId, credentials);
+    else {
+      if (!credentials) throw failed();
+      await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    }
     if (this.preparing) throw new ConflictException('Wait for restore preparation to finish before cancelling.');
     const journal = await this.active(id);
     if (await this.isRetainedJournal(journal)) throw new ConflictException('Use protected restore recovery for this operation.');
     if (settled(journal.state.phase) || journal.state.decision === 'commit')
       throw new ConflictException('This restore is finishing or already settled.');
     await this.ownController(journal);
-    await readRestoreBootstrap(journal);
+    const bootstrap = await readRestoreBootstrap(journal);
+    if (request && bootstrap.ownerId !== ownerId) throw failed();
     await requestRestoreCancellation(journal);
     return this.status();
   }
@@ -813,7 +841,8 @@ export class BackupRestoresService implements OnModuleDestroy {
       )
         throw failed();
       const bootstrap = await readRestoreBootstrap(journal);
-      if (bootstrap.ownerId !== ownerId) throw failed();
+      if (bootstrap.ownerId !== ownerId)
+        throw new ConflictException('This saved archive belongs to another account. Sign in with its owner or choose an encrypted backup file.');
       await this.ownController(journal);
       const status = await this.status();
       if (
@@ -864,14 +893,19 @@ export class BackupRestoresService implements OnModuleDestroy {
       this.preparing = false;
     }
   }
-  async recover(id: string, ownerId: number, credentials: Credentials, request?: Request) {
+  async recover(id: string, ownerId: number, credentials: Credentials | undefined, request?: Request) {
     const actor = request ? await this.auth.operatorActionContext(request) : undefined;
     if (actor && actor.userId !== ownerId) throw failed();
-    await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
     await this.prepareStartup();
     if (this.preparing) throw new ConflictException('Wait for restore preparation to finish before recovering.');
     const journal = await this.active(id);
-    if (await this.isRetainedJournal(journal)) {
+    const retained = await this.isRetainedJournal(journal);
+    if (request && !retained) await authorizeBackupRestoreSession(this.auth, this.security, request, ownerId, credentials);
+    else {
+      if (!credentials) throw failed();
+      await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    }
+    if (retained) {
       if (!request || !actor) throw failed();
       const receipt = await readRetainedRestoreReceipt(journal);
       if (!receipt || receipt.ownerId !== ownerId) throw failed();

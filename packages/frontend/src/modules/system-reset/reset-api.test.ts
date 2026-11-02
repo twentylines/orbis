@@ -1,9 +1,14 @@
+import { markResetAccepted } from '@/components/recovery-progress/operation-status';
+import { operationContinuityStorageName } from '@/components/recovery-progress/operation-continuity';
 import { expect, test } from 'bun:test';
 import { resetPayload, submitReset } from './reset-api';
-import { resetCompletion } from './reset-completion';
+import { resetCompletion, rememberResetCompletion, clearCompletedResetContinuity } from './reset-completion';
 const proof = { method: 'password' as const, password: 'test-only' };
-test('requires an explicit account choice and exact final confirmation', () => {
-  expect(() => resetPayload('keep', 'reset orbis', proof)).toThrow();
+test('requires an explicit account choice and the confirmation words, ignoring case and outer whitespace', () => {
+  expect(() => resetPayload('keep', 'reset', proof)).toThrow();
+  for (const confirmation of ['reset orbis', ' ReSeT oRbIs  ', '\tRESET ORBIS\n'])
+    expect(resetPayload('keep', confirmation, proof)).toEqual({ accounts: 'keep', confirmation: 'RESET ORBIS', ...proof });
+  for (const confirmation of ['reset orbis now', 'reset  orbis', 'resetorbis']) expect(() => resetPayload('keep', confirmation, proof)).toThrow();
   expect(() => resetPayload('invalid' as 'keep', 'RESET ORBIS', proof)).toThrow();
   expect(resetPayload('remove', 'RESET ORBIS', proof)).toEqual({ accounts: 'remove', confirmation: 'RESET ORBIS', ...proof });
 });
@@ -69,4 +74,58 @@ test('reset completion navigates when browser storage is blocked and permits a f
   finish();
   finish();
   expect(navigations).toBe(2);
+});
+
+const resetId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const oldId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const idle = { state: 'idle' as const, supported: true };
+function resetStorage(operation: 'restore' | 'update' | 'downgrade' = 'restore') {
+  const entries = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      entries.set(key, value);
+    },
+    removeItem: (key: string) => {
+      entries.delete(key);
+    },
+  };
+  const prior = JSON.stringify({ version: 1, jobId: oldId, operation, phase: 'departing', savedAt: 1000 });
+  storage.setItem(operationContinuityStorageName, prior);
+  rememberResetCompletion({ id: resetId, state: 'resetting' }, storage, 2000);
+  markResetAccepted(storage);
+  return { storage, prior };
+}
+test('confirmed reset completion clears only the exact prior browser operation bound to its accepted receipt', () => {
+  for (const operation of ['restore', 'update', 'downgrade'] as const) {
+    const { storage } = resetStorage(operation);
+    expect(clearCompletedResetContinuity(idle, resetId, storage, 3000)).toBe(true);
+    expect(storage.getItem(operationContinuityStorageName)).toBeNull();
+    expect(storage.getItem('orbis-reset-accepted')).toBeNull();
+    expect(clearCompletedResetContinuity(idle, resetId, storage, 3000)).toBe(false);
+  }
+});
+test('unknown, held, unsupported and unavailable authority cannot clear browser continuity', () => {
+  for (const authority of [
+    { state: 'checking' as const, supported: true },
+    { state: 'recovery' as const, supported: true },
+    { state: 'restoring' as const, supported: true },
+    { state: 'updating' as const, supported: true },
+    { state: 'idle' as const, supported: false },
+    { state: 'idle' as const, supported: true, unavailable: true },
+  ]) {
+    const { storage, prior } = resetStorage();
+    expect(clearCompletedResetContinuity(authority, resetId, storage, 3000)).toBe(false);
+    expect(storage.getItem(operationContinuityStorageName)).toBe(prior);
+    expect(storage.getItem('orbis-reset-accepted')).toBe('1');
+  }
+});
+test('a different reset receipt or a changed/newer browser operation is never cleared as the previous operation', () => {
+  const { storage, prior } = resetStorage();
+  expect(clearCompletedResetContinuity(idle, oldId, storage, 3000)).toBe(false);
+  expect(storage.getItem(operationContinuityStorageName)).toBe(prior);
+  const newer = JSON.stringify({ version: 1, jobId: resetId, operation: 'restore', phase: 'running', savedAt: 2500 });
+  storage.setItem(operationContinuityStorageName, newer);
+  expect(clearCompletedResetContinuity(idle, resetId, storage, 3000)).toBe(true);
+  expect(storage.getItem(operationContinuityStorageName)).toBe(newer);
 });

@@ -9,6 +9,18 @@
   z-index: -1;
   pointer-events: none;
 }
+.orbis-startup[data-setup-handoff="true"] .orbis-startup-space-field {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbis-startup[data-setup-handoff="true"] .orbis-startup-space-field {
+    transition: none;
+  }
+}
+:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"]) .orbis-startup[data-setup-handoff="true"] .orbis-startup-space-field {
+  transition: none;
+}
 
 .orbis-startup-setup-space .orbis-startup-space-content {
   display: grid;

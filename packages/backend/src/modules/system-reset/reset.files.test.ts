@@ -184,6 +184,17 @@ it('rejects malformed scope, unconfirmed requests and failed fresh authenticatio
   expect(await new ResetState(root).read()).toBeNull();
   expect(mutations).toEqual([]);
 });
+it('accepts the confirmation words regardless of case and outer whitespace but still requires fresh authentication', async () => {
+  auth.verifySensitiveAction.mockRejectedValue(new Error('fresh authentication required'));
+  for (const confirmation of ['reset orbis', '  ReSeT oRbIs  ', '\tRESET ORBIS\n'])
+    await expect(service.accept(request, { ...body(), confirmation })).rejects.toThrow('fresh authentication required');
+  expect(auth.verifySensitiveAction).toHaveBeenCalledTimes(3);
+  for (const confirmation of ['reset  orbis', 'reset orbis now', null])
+    await expect(service.accept(request, { ...body(), confirmation })).rejects.toThrow();
+  expect(auth.verifySensitiveAction).toHaveBeenCalledTimes(3);
+  expect(await new ResetState(root).read()).toBeNull();
+  expect(mutations).toEqual([]);
+});
 it('rejects a session/security change during fresh confirmation', async () => {
   auth.operatorActionContext.mockResolvedValueOnce(actor).mockResolvedValue({ ...actor, securityBinding: 'c'.repeat(64) });
   await expect(service.accept(request, body())).rejects.toThrow('sign-in changed');

@@ -28,11 +28,14 @@ const acceptedSchema = type({ '+': 'reject', id: 'string.uuid', state: "'resetti
 export type AcceptedReset = typeof acceptedSchema.infer;
 type PasswordProof = { method: 'password'; password: string; totpCode?: string };
 type PasskeyProof = { method: 'passkey'; challengeId: string; response: AuthenticationResponseJSON; totpCode?: string };
+export function validResetConfirmation(value: string) {
+  return /^reset orbis$/i.test(value.trim());
+}
 export function resetPayload(accounts: ResetAccounts, confirmation: string, proof: PasswordProof | PasskeyProof) {
-  if (!['keep', 'remove'].includes(accounts) || confirmation !== 'RESET ORBIS') throw new Error('Type RESET ORBIS to confirm.');
+  if (!['keep', 'remove'].includes(accounts) || !validResetConfirmation(confirmation)) throw new Error('Type RESET ORBIS to confirm.');
   if (proof.method === 'password' && (!proof.password || proof.password.length > 1024)) throw new Error('Enter your current account password.');
   if (proof.totpCode !== undefined && !/^\d{6}$/.test(proof.totpCode)) throw new Error('Enter the six-digit authentication code.');
-  return { accounts, confirmation, ...proof };
+  return { accounts, confirmation: 'RESET ORBIS', ...proof };
 }
 async function request(path: '' | '/recover' | '/passkey-options', body: unknown, signal: AbortSignal) {
   const response = await fetch(`/api/system-reset${path}`, {

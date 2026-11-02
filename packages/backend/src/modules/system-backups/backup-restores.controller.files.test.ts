@@ -96,14 +96,14 @@ it('does not strand a handoff when disconnect happened during preparation', asyn
   expect(service.launch).toHaveBeenCalledTimes(1);
   expect(res.listenerCount('finish') + res.listenerCount('close')).toBe(0);
 });
-it.each(['cancel', 'recover'] as const)('keeps %s gated on fresh credentials and a flushed response', async (action) => {
+it.each(['cancel', 'recover'] as const)('keeps %s bound to session authorization and a flushed response', async (action) => {
   const { controller, service, result } = fixture();
   const res = response();
   const id = randomUUID();
   await controller[action](operator, id, { password: 'fixture', totpCode: '123456' }, res as unknown as Response);
   const credentials = { password: 'fixture', totpCode: '123456', passphrase: undefined };
   if (action === 'recover') expect(service.recover).toHaveBeenCalledWith(id, 7, credentials, operator);
-  else expect(service.cancel).toHaveBeenCalledWith(id, 7, credentials);
+  else expect(service.cancel).toHaveBeenCalledWith(id, 7, credentials, operator);
   expect(service.launch).not.toHaveBeenCalled();
   res.emit('finish');
   expect(service.launch).toHaveBeenCalledExactlyOnceWith(result.job.id);
@@ -136,4 +136,13 @@ it('reuses an exact journal only for its session owner and rejects path or crede
   expect(service.reuse).toHaveBeenCalledExactlyOnceWith(id, 7, operator);
   for (const body of [{ path: 'foreign' }, { password: 'unneeded' }, { ownerId: 8 }, []])
     expect(() => controller.reuse(operator, id, body)).toThrow('without extra');
+});
+
+it('passes session-only cancellation and ordinary recovery without inventing credentials', async () => {
+  for (const action of ['cancel', 'recover'] as const) {
+    const { controller, service } = fixture();
+    const id = randomUUID();
+    await controller[action](operator, id, {}, response() as unknown as Response);
+    expect(service[action]).toHaveBeenCalledWith(id, 7, undefined, operator);
+  }
 });

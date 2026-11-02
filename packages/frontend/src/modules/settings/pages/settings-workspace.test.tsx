@@ -5,7 +5,7 @@ import { DialogContent, DialogVisibilityContext } from '@/components/ui/Dialog/D
 import { WindowVisibilityContext } from '@/desktop/window-visibility';
 import { ColourModeChoice } from '@/desktop/colour-mode-choice';
 import { SettingsPanel, SettingsSearch, SettingsWorkspace } from './settings-workspace';
-import { SettingsSaveProvider, SettingsSavingIndicator } from './settings-save';
+import { SettingsSaveProvider, SettingsSavingIndicator, settingsHeaderActionPortal } from './settings-save';
 import { settingsCatalogue, settingsSections, type SettingsSection } from '../helpers/settings-catalogue';
 
 function VisibilityProbe() {
@@ -131,8 +131,23 @@ test('settings search renders as a header control while section Save stays in it
   expect(sectionHeader).toContain('<h2>General</h2>');
   expect(sectionHeader).toContain('>Save</button>');
   expect(sectionHeader).toContain('settings-save-actions');
+  expect(sectionHeader.indexOf('settings-save-secondary-actions')).toBeLessThan(sectionHeader.indexOf('>Save</button>'));
   expect(markup).not.toContain('<h1');
   expect(markup).not.toContain('settings-header-status');
+});
+
+test('a secondary header action follows the active section slot and disappears while hidden or unmounted', () => {
+  const backupTarget = { nodeType: 1, ownerDocument: {} } as unknown as HTMLElement;
+  const otherTarget = { nodeType: 1, ownerDocument: {} } as unknown as HTMLElement;
+  const action = <button type="button">Refresh</button>;
+  const active = settingsHeaderActionPortal(action, backupTarget, true);
+  expect(active && Reflect.get(active, 'containerInfo')).toBe(backupTarget);
+  expect(active && Reflect.get(active, 'children')).toBe(action);
+
+  expect(settingsHeaderActionPortal(action, backupTarget, false)).toBeNull();
+  expect(Reflect.get(settingsHeaderActionPortal(action, otherTarget, true) as object, 'containerInfo')).toBe(otherTarget);
+  expect(Reflect.get(settingsHeaderActionPortal(action, backupTarget, true) as object, 'containerInfo')).toBe(backupTarget);
+  expect(settingsHeaderActionPortal(action, null, true)).toBeNull();
 });
 
 test('OLED search target resolves to the separate switch control', () => {
@@ -160,7 +175,14 @@ test('React-mounted handlers query through the portal target, clear and blur, an
   });
   const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   expect({ code, stderr }).toEqual({ code: 0, stderr: '' });
-  expect(JSON.parse(stdout)).toEqual({ mountedReact: true, portalTarget: true, network: false, layout: false, eventsSeen: ['prepare', 'commit'] });
+  expect(JSON.parse(stdout)).toEqual({
+    mountedReact: true,
+    portalTarget: true,
+    network: false,
+    layout: false,
+    eventsSeen: ['prepare', 'commit'],
+    headerActionMoves: ['header', 'hidden', 'restored', 'removed'],
+  });
 });
 
 test('save activity retains its reserved content while the polite announcement follows actual pending state', () => {

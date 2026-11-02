@@ -1,17 +1,15 @@
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
-import { useDisclosure } from '@/lib/hooks/use-disclosure';
 import { IconAdjustmentsCode } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type React from 'react';
 import { Suspense, lazy, useEffect } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'react-tooltip';
 import validator from 'validator';
 import { type } from 'arktype';
-import { AdvancedSettingsModal } from '../advanced-settings-modal/advanced-settings-modal';
 import './user-settings-form.css';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { THEME_COLOR_ENUM } from '../color-selector/color-selector';
@@ -90,7 +88,6 @@ interface IProps {
 export const UserSettingsForm = (props: IProps) => {
   const { onSubmit, initialValues, loading, submitErrors } = props;
   const { t } = useTranslation();
-  const advancedSettingsDisclosure = useDisclosure();
 
   const validateFields = (values: SettingsFormValues) => {
     const errors: { [K in keyof SettingsFormValues]?: string } = {};
@@ -114,6 +111,7 @@ export const UserSettingsForm = (props: IProps) => {
     reset,
     formState: { errors, isDirty },
   } = useForm<SettingsFormValues>({ values: initialValues });
+  const advancedSettings = useWatch({ control, name: 'advancedSettings' }) ?? false;
 
   useEffect(() => {
     if (submitErrors) {
@@ -244,25 +242,12 @@ export const UserSettingsForm = (props: IProps) => {
             defaultValue={false}
             render={({ field: { onChange, value, ref, ...rest } }) => (
               <div>
-                <AdvancedSettingsModal
-                  onEnable={() => {
-                    advancedSettingsDisclosure.close();
-                    onChange(true);
-                  }}
-                  advancedSettingsDisclosure={advancedSettingsDisclosure}
-                />
                 <Switch
                   id="setting-advancedSettings"
                   className="mb-3"
                   ref={ref}
                   checked={value}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      advancedSettingsDisclosure.open();
-                    } else {
-                      onChange(false);
-                    }
-                  }}
+                  onCheckedChange={onChange}
                   {...rest}
                   label={
                     <>
@@ -324,13 +309,13 @@ export const UserSettingsForm = (props: IProps) => {
             }
             error={errors.localDomain?.message}
             placeholder="tipi.lan"
-            disabled={initialValues?.advancedSettings === false}
+            disabled={!advancedSettings}
           />
           <Button id="setting-certificate" className="mt-2 mb-2" onClick={downloadCertificate}>
             {t('SETTINGS_GENERAL_DOWNLOAD_CERTIFICATE')}
           </Button>
         </div>
-        {initialValues?.advancedSettings && (
+        {advancedSettings && (
           <div>
             <div className="d-flex mb-2">
               <IconAdjustmentsCode className="me-2" />

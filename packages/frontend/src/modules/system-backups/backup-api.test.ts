@@ -441,3 +441,28 @@ test('retention reads and writes validated revision-bound settings', async () =>
     expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ retentionHours: 720, revision: 1 });
   });
 });
+
+test('saved archive account mismatch gives a bounded explanation without suggesting recovery', async () => {
+  const message = 'This saved archive belongs to another account. Sign in with its owner or choose an encrypted backup file.';
+  await withFetch(Response.json({ message }, { status: 409 }), async () => {
+    await expect(backupRequest(`/restores/${id}/reuse`, 'POST', {})).rejects.toThrow(message);
+  });
+});
+
+test('retained archive reuse reaches the exact same-origin production resolver without weakening path checks', async () => {
+  await withFetch(Response.json({ id, status: 'uploaded' }), async (calls) => {
+    await backupRequest(`/restores/${id}/reuse`, 'POST', {});
+    expect(calls[0]?.url).toBe(`/api/system-backups/restores/${id}/reuse`);
+    expect(calls[0]?.init).toMatchObject({ method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', body: '{}' });
+  });
+  await withFetch(Response.json({}), async (calls) => {
+    for (const invalid of [
+      `/imports/${id}/reuse`,
+      `/restores/${'-'.repeat(36)}/reuse`,
+      `/restores/${id}/reuse?owner=7`,
+      `/restores/${id}/reuse/extra`,
+    ])
+      await expect(backupRequest(invalid, 'POST', {})).rejects.toThrow('Invalid backup action');
+    expect(calls).toHaveLength(0);
+  });
+});

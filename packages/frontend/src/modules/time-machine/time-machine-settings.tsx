@@ -202,11 +202,12 @@ function TimeMachineSettingsSession({
   };
   const [selection, setSelection] = useState<string | null>(null);
   const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
+  const [captureLabel, setCaptureLabel] = useState('');
   const [activationPending, setActivationPending] = useState(false);
   const [action, setAction] = useState<{ kind: 'capture' | 'remove' | 'inspect' | 'authorize'; point?: TimeMachinePoint } | null>(null);
-  const captureProofRequired = action?.kind !== 'capture' || capturePolicy.data?.requireCaptureAuthentication === true;
+  const captureProofRequired = capturePolicy.data?.requireCaptureAuthentication === true;
   useEffect(() => {
-    if (action?.kind === 'capture') void capturePolicy.refetch();
+    if (action?.kind === 'capture' || action?.kind === 'remove') void capturePolicy.refetch();
   }, [action?.kind, capturePolicy.refetch]);
   const [review, setReview] = useState<Review | null>(null);
   const [actionError, setActionError] = useState('');
@@ -268,13 +269,6 @@ function TimeMachineSettingsSession({
     }
   };
   useEffect(() => {
-    if (!visible) {
-      form.current?.reset();
-      setAction(null);
-      setActionError('');
-    }
-  }, [visible]);
-  useEffect(() => {
     if (settingsMode === 'setup') setGallery(false);
     else if (settingsMode === 'active' && openTimeline) setGallery(true);
   }, [settingsMode, openTimeline]);
@@ -283,6 +277,7 @@ function TimeMachineSettingsSession({
     form.current?.reset();
     setActionError('');
     setReview(null);
+    if (kind === 'capture') setCaptureLabel('');
     setAction({ kind, point: kind === 'capture' ? undefined : point });
   };
   const closeAction = () => {
@@ -410,7 +405,12 @@ function TimeMachineSettingsSession({
   };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!action || busy || (action.kind === 'capture' && (!capturePolicy.data || capturePolicy.isError || capturePolicy.isFetching))) return;
+    if (
+      !action ||
+      busy ||
+      (['capture', 'remove'].includes(action.kind) && (!capturePolicy.data || capturePolicy.isError || capturePolicy.isFetching))
+    )
+      return;
     const fields = new FormData(event.currentTarget);
     const credentials = {
       password: String(fields.get('password') ?? ''),
@@ -428,7 +428,11 @@ function TimeMachineSettingsSession({
             (signal) => captureTimeMachine(label, captureProofRequired ? credentials : {}, signal),
             'Capture accepted. Its progress is reported by the server.',
           )
-        : action.point && (await machine.perform((signal) => removeTimeMachinePoint(action.point?.id ?? '', credentials, signal), 'Point removed.'));
+        : action.point &&
+          (await machine.perform(
+            (signal) => removeTimeMachinePoint(action.point?.id ?? '', captureProofRequired ? credentials : {}, signal),
+            'Point removed.',
+          ));
     if (accepted) {
       if (action.kind === 'capture') void queryClient.invalidateQueries({ queryKey: ['time-machine-activity'] });
       setAction(null);
@@ -440,11 +444,6 @@ function TimeMachineSettingsSession({
   if (user.operator !== true) return <p>An operator manages Time Machine for this server.</p>;
   return (
     <section id="setting-time-machine" className="tm-settings" aria-label="Time Machine">
-      <header className="tm-settings-heading">
-        <Button variant="outline" onClick={() => void machine.retry()} disabled={busy}>
-          Refresh
-        </Button>
-      </header>
       <TimeMachineStorageStatus visible={visible} />
       {snapshot ? null : <output>{error ? 'Time Machine status is unavailable.' : 'Reading Time Machine…'}</output>}
       {error ? <InlineFeedback>{error}</InlineFeedback> : null}
@@ -477,13 +476,15 @@ function TimeMachineSettingsSession({
             <TimeMachineSetupView pending={busy || activationPending} onEnable={() => void activate()} />
           ) : (
             <>
-              <Switch label="Enable Time Machine" checked={enabled} disabled={busy} onCheckedChange={setEnabledDraft} />
-              <p>
-                Manual points include the database, configuration and managed app data. Operating system snapshots are not included.{' '}
-                {snapshot.capabilities.restore.supported
-                  ? 'Each restore requires verification and fresh authorization.'
-                  : 'Open a point to inspect this server’s current restore blockers.'}
-              </p>
+              <div className="tm-enabled-preference">
+                <Switch label="Enable Time Machine" checked={enabled} disabled={busy} onCheckedChange={setEnabledDraft} />
+                <p>
+                  Manual points include the database, configuration and managed app data. Operating system snapshots are not included.{' '}
+                  {snapshot.capabilities.restore.supported
+                    ? 'Each restore requires verification and fresh authorization.'
+                    : 'Open a point to inspect this server’s current restore blockers.'}
+                </p>
+              </div>
               <div className="tm-settings-actions">
                 <Button intent="primary" onClick={() => setGallery(true)} disabled={!snapshot.list.available}>
                   <IconHistory size={20} aria-hidden="true" />
@@ -719,7 +720,15 @@ function TimeMachineSettingsSession({
           ) : (
             <form ref={form} className="tm-dialog-body" onSubmit={(event) => void submit(event)}>
               {action?.kind === 'capture' ? (
-                <Input name="label" label="Capture name" placeholder="Before updating Jellyfin" maxLength={240} disabled={busy} />
+                <Input
+                  name="label"
+                  label="Capture name"
+                  placeholder="Before updating Jellyfin"
+                  maxLength={240}
+                  disabled={busy}
+                  value={captureLabel}
+                  onChange={(event) => setCaptureLabel(event.currentTarget.value)}
+                />
               ) : action?.point ? (
                 <strong>{pointDate(action.point)}</strong>
               ) : null}
@@ -748,7 +757,7 @@ function TimeMachineSettingsSession({
                   ) : null}
                 </>
               ) : null}
-              {action?.kind === 'capture' && capturePolicy.isError ? (
+              {capturePolicy.isError ? (
                 <InlineFeedback>
                   <p>Capture security could not be loaded.</p>
                   <Button type="button" variant="outline" onClick={() => void capturePolicy.refetch()}>
@@ -782,7 +791,7 @@ function TimeMachineSettingsSession({
                   disabled={
                     busy ||
                     !machine.canMutate ||
-                    (action?.kind === 'capture' && (!capturePolicy.data || capturePolicy.isError || capturePolicy.isFetching))
+                    (['capture', 'remove'].includes(action?.kind ?? '') && (!capturePolicy.data || capturePolicy.isError || capturePolicy.isFetching))
                   }
                 >
                   {action?.kind === 'remove' ? <IconTrash className="tm-trash" size={18} aria-hidden="true" /> : null}

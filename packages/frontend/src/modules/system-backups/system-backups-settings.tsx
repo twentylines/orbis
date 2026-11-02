@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox/Checkbox';
 import { BackupRetentionSettings } from './backup-retention-settings';
+import { SettingsHeaderAction, useSettingsHeaderActionAvailable } from '@/modules/settings/pages/settings-save';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select/Select';
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
@@ -158,12 +159,16 @@ export function prepareBackupSubmission(
     restoreValid: boolean;
     uploadFromServer?: boolean;
     restoreProofRequired?: boolean;
+    backupProofRequired?: boolean;
   },
 ) {
   const password = values.get('password');
   const code = values.get('totpCode');
   const needsCredentials =
-    !['upload', 'review', 'restore', 'reuse'].includes(options.kind) || options.restoreProofRequired === true || options.uploadFromServer === true;
+    (['export', 'download', 'recover-export'].includes(options.kind)
+      ? options.backupProofRequired === true
+      : options.restoreProofRequired === true) ||
+    (options.uploadFromServer === true && options.backupProofRequired === true);
   if (needsCredentials && (typeof password !== 'string' || !password.length || password.length > 1024))
     throw new BackupFormError('password', 'Enter this server’s current account password.');
   if (needsCredentials && (options.totpEnabled || (code !== null && code !== '')) && (typeof code !== 'string' || !/^\d{6}$/.test(code)))
@@ -188,8 +193,8 @@ export function prepareBackupSubmission(
   for (const field of form.querySelectorAll<HTMLInputElement>('input[type="password"], input[name="totpCode"]')) field.value = '';
   return {
     credentials: {
-      password: typeof password === 'string' ? password : '',
-      ...(typeof code === 'string' && code ? { totpCode: code } : {}),
+      password: needsCredentials && typeof password === 'string' ? password : '',
+      ...(needsCredentials && typeof code === 'string' && code ? { totpCode: code } : {}),
     } satisfies BackupCredentials,
     passphrase,
   };
@@ -379,6 +384,7 @@ export function SystemBackupsSettings({
 }: BackupSettingsProps = {}) {
   const id = useId();
   const reduced = useReducedMotion();
+  const hasSettingsHeaderActions = useSettingsHeaderActionAvailable();
   const { user } = useAppContext();
   const accountSecurity = useQuery({
     queryKey: accountSecurityKey(user.id),
@@ -435,10 +441,13 @@ export function SystemBackupsSettings({
   const cancelPreparationRequested = useRef(false);
   const preparationWork = useRef<Promise<void> | null>(null);
   const retryArchiveKey = useRef<{ restoreId: string; passphrase: string } | null>(null);
+  const formOpenedAt = useRef(Date.now());
+  const observedReset = useRef<string | null | undefined>(undefined);
   const seededImport = useRef<string | null>(null);
   const actionOpener = useRef<HTMLElement | null>(null);
   const actionKeyboard = useRef(false);
   const chooseAction = (next: Action) => {
+    formOpenedAt.current = Date.now();
     if (next.kind !== 'reuse') retryArchiveKey.current = null;
     actionOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     actionKeyboard.current = actionOpener.current?.matches(':focus-visible') ?? false;
@@ -516,6 +525,34 @@ export function SystemBackupsSettings({
   const importRunning = activeImport && ['uploading', 'reviewing', 'preparing'].includes(activeImport.status) ? activeImport : undefined;
   const showImportSummary = !guidedImportId || !action || ['uploading', 'reviewing', 'preparing'].includes(selectedImport?.status ?? '');
   const restoreActive = Boolean(restore && (!terminalRestore || restore.needsRecovery));
+  useEffect(() => {
+    const reset = data?.exports.resetGeneration;
+    if (
+      !reset ||
+      observedReset.current === reset.id ||
+      restoreActive ||
+      data?.restore.job?.needsRecovery ||
+      busy ||
+      importRunning ||
+      data?.exports.jobs.some((job) => job.status === 'running' || job.needsRecovery || job.restartRequired)
+    )
+      return;
+    observedReset.current = reset.id;
+    if (formOpenedAt.current >= reset.createdAt) return;
+    abort.current?.abort();
+    awaitingRestore.current = false;
+    retryArchiveKey.current = null;
+    credentialsForm.current?.reset();
+    setRestoreAttempt(null);
+    setFile(null);
+    setUpload(null);
+    setWizardJob(null);
+    setWizardOpen(false);
+    setError(null);
+    setNotice(null);
+    setGuidedImportCleared(true);
+    setAction(embedded && restoreOnly ? { kind: 'upload' } : null);
+  }, [data, restoreActive, busy, importRunning, embedded, restoreOnly]);
   const continuity = useRestoreDeparture(restore?.status === 'rolled-back' ? null : restore, status.isError);
   useEffect(() => {
     if (restore && ['ready', 'running', 'recovery-required'].includes(restore.status)) awaitingRestore.current = true;
@@ -620,7 +657,10 @@ export function SystemBackupsSettings({
         archiveKeyMode,
         fileValid: restoreSource === 'server' ? Boolean(selectedSavedBackup) : Boolean(file && file.size >= 52),
         uploadFromServer: action.kind === 'upload' && restoreSource === 'server',
-        restoreProofRequired: accountSecurity.data?.requireRestoreAuthentication === true,
+        restoreProofRequired:
+          accountSecurity.data?.requireRestoreAuthentication === true ||
+          ((action.kind === 'cancel-restore' || action.kind === 'recover-restore') && action.job.requiresFreshAuthentication === true),
+        backupProofRequired: accountSecurity.data?.requireCaptureAuthentication === true,
         restoreValid: action.kind !== 'restore' || (canRestore(action.job, Date.now()) && Boolean(action.job.review)),
       });
     } catch (reason) {
@@ -744,13 +784,24 @@ export function SystemBackupsSettings({
             selected.kind === 'recover-export'
               ? `/${selected.job.id}/recover`
               : `/restores/${selected.job.id}/${selected.kind === 'cancel-restore' ? 'cancel' : 'recover'}`;
-          await backupRequest(path, 'POST', credentials, signal);
+          await backupRequest(path, 'POST', credentials.password ? credentials : {}, signal);
         }
         if (mounted.current) setAction(null);
       },
       {
         onError: (message) => {
           if (!awaitingRestore.current && newAttempt) setRestoreAttempt(null);
+          if (
+            selected.kind === 'reuse' &&
+            message === 'This saved archive belongs to another account. Sign in with its owner or choose an encrypted backup file.'
+          ) {
+            retryArchiveKey.current = null;
+            setGuidedImportCleared(true);
+            setAction({ kind: 'upload' });
+            setWizardJob(null);
+            setWizardPurpose('upload');
+            setUpload(null);
+          }
           setError(message);
         },
       },
@@ -864,15 +915,30 @@ export function SystemBackupsSettings({
   const unavailable = !data || !data.exports.available || !data.imports.available || status.isError;
   const phraseNeeded =
     action?.kind === 'review' || action?.kind === 'upload' || (action?.kind === 'reuse' && retryArchiveKey.current?.restoreId !== action.job.id);
-  const needsCredentials = Boolean(
-    action &&
-      (!['upload', 'review', 'restore', 'reuse'].includes(action.kind) ||
-        accountSecurity.data?.requireRestoreAuthentication ||
-        (action.kind === 'upload' && restoreSource === 'server')),
-  );
+  const needsCredentials =
+    Boolean(
+      action &&
+        (['export', 'download', 'recover-export'].includes(action.kind)
+          ? accountSecurity.data?.requireCaptureAuthentication
+          : accountSecurity.data?.requireRestoreAuthentication ||
+            (action.kind === 'upload' && restoreSource === 'server' && accountSecurity.data?.requireCaptureAuthentication)),
+    ) || Boolean((action?.kind === 'cancel-restore' || action?.kind === 'recover-restore') && action.job.requiresFreshAuthentication);
+  const accountEncryption = action?.kind === 'export' && useAccountPassword;
   const destructive = action?.kind === 'restore';
   const downloadCreated = (job: ExportJob, opener: HTMLButtonElement) => {
     const keyboard = opener.matches(':focus-visible');
+    if (accountSecurity.isPending || accountSecurity.isError) {
+      setError('Account security could not be checked. Retry before downloading.');
+      return;
+    }
+    if (!accountSecurity.data?.requireCaptureAuthentication) {
+      downloadCleanup.current?.();
+      downloadCleanup.current = downloadBackup(job.id, {}, (message) => {
+        if (mounted.current) setError(message);
+      });
+      setNotice('Download requested. Your browser shows its progress and confirms when the file has been saved.');
+      return;
+    }
     const confirmLaterDownload = () => {
       chooseAction({ kind: 'download', job });
       actionOpener.current = opener;
@@ -1097,19 +1163,19 @@ export function SystemBackupsSettings({
               </p>
             </>
           ) : null}
-          {needsCredentials ? (
+          {needsCredentials || accountEncryption ? (
             <div className="system-backups-fields">
               <Input
                 name="password"
                 id={`${id}-password`}
-                label="Current account password"
+                label={needsCredentials ? 'Current account password' : 'Account password for backup encryption'}
                 type="password"
                 autoComplete="current-password"
                 maxLength={1024}
                 required
                 disabled={busy}
               />
-              {user?.totpEnabled ? (
+              {needsCredentials && user?.totpEnabled ? (
                 <Input
                   name="totpCode"
                   id={`${id}-totpCode`}
@@ -1137,7 +1203,7 @@ export function SystemBackupsSettings({
               disabled={busy}
             />
           ) : null}
-          {['upload', 'review', 'restore', 'reuse'].includes(action.kind) && accountSecurity.isError ? (
+          {accountSecurity.isError ? (
             <InlineFeedback>
               Account security could not be checked.{' '}
               <Button type="button" variant="outline" onClick={() => void accountSecurity.refetch()}>
@@ -1180,7 +1246,8 @@ export function SystemBackupsSettings({
               disabled={
                 busy ||
                 unavailable ||
-                (['upload', 'review', 'restore', 'reuse'].includes(action.kind) && (accountSecurity.isPending || accountSecurity.isError)) ||
+                accountSecurity.isPending ||
+                accountSecurity.isError ||
                 (['export', 'upload', 'review', 'restore', 'reuse'].includes(action.kind) && working) ||
                 (action.kind === 'upload' && restoreSource === 'upload' && !file) ||
                 (destructive && !canRestore(action.job, Date.now()))
@@ -1306,32 +1373,42 @@ export function SystemBackupsSettings({
           </>
         }
       />
-      {guidedImportId && !status.isError ? (
-        <h3 id={`${id}-title`} className="visually-hidden">
-          Encrypted backup
-        </h3>
-      ) : (
-        <div className="system-backups-heading">
-          {embedded ? (
-            <h3 id={`${id}-title`} className={guidedImportId ? 'visually-hidden' : undefined}>
-              Encrypted backup
-            </h3>
-          ) : (
-            <h2 id={`${id}-title`}>{restoreOnly ? 'Restore a backup' : 'Full backup & recovery'}</h2>
-          )}
-          <Button variant="outline" type="button" onClick={refresh} disabled={status.isFetching || busy}>
-            Refresh
-          </Button>
-        </div>
-      )}
-      {embedded ? null : (
-        <p>
-          {restoreOnly
-            ? 'Verify the encrypted archive before replacing this server’s configuration and managed app data.'
-            : 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Apps pause while their data is copied to keep it consistent.'}
-        </p>
-      )}
-      {status.isPending ? <output>Reading backup capabilities…</output> : null}
+      <div className="system-backups-overview">
+        {guidedImportId && !status.isError ? (
+          <h3 id={`${id}-title`} className="visually-hidden">
+            Encrypted backup
+          </h3>
+        ) : (
+          <div className="system-backups-heading">
+            {embedded ? (
+              <h3 id={`${id}-title`} className={guidedImportId ? 'visually-hidden' : undefined}>
+                Encrypted backup
+              </h3>
+            ) : (
+              <h2 id={`${id}-title`}>{restoreOnly ? 'Restore a backup' : 'Full backup & recovery'}</h2>
+            )}
+            {hasSettingsHeaderActions && !embedded ? (
+              <SettingsHeaderAction>
+                <Button variant="outline" type="button" onClick={refresh} disabled={status.isFetching || busy}>
+                  Refresh
+                </Button>
+              </SettingsHeaderAction>
+            ) : (
+              <Button variant="outline" type="button" onClick={refresh} disabled={status.isFetching || busy}>
+                Refresh
+              </Button>
+            )}
+          </div>
+        )}
+        {embedded ? null : (
+          <p>
+            {restoreOnly
+              ? 'Verify the encrypted archive before replacing this server’s configuration and managed app data.'
+              : 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Apps pause while their data is copied to keep it consistent.'}
+          </p>
+        )}
+        {status.isPending ? <output>Reading backup capabilities…</output> : null}
+      </div>
       {status.isError ? (
         <InlineFeedback>
           {reconnectingAcceptedRestore
@@ -1427,6 +1504,11 @@ export function SystemBackupsSettings({
           }}
         >
           <DialogContent
+            hideClose={
+              Boolean(action && action.kind !== 'cancel-restore') ||
+              Boolean(restoringInWizard && restore?.canCancel) ||
+              Boolean(wizardImport && ['uploading', 'reviewing'].includes(wizardImport.status))
+            }
             size="md"
             className="system-backups-window"
             closeDisabled={wizardLocked}

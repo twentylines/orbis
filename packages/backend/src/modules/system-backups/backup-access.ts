@@ -22,3 +22,9 @@ export function backupCredentials(body: unknown, passphrase = false) {
     throw new BadRequestException('Provide your password, authentication code if enabled, and a backup passphrase of at least 8 characters.');
   return { password: value.password, totpCode: value.totpCode as string | undefined, passphrase: value.passphrase as string };
 }
+export function optionalBackupCredentials(body: unknown): { password: string; totpCode?: string } | undefined {
+  if (body === undefined) return undefined;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BadRequestException('Choose a valid backup authorization.');
+  if (!Object.keys(body).length) return undefined;
+  return backupCredentials(body);
+}

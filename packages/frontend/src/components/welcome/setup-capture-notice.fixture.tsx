@@ -19,9 +19,6 @@ mock.module('./setup-capture', () => ({
   reconcileSetupCapture: () => {
     throw Error('Unexpected capture');
   },
-  retrySetupCaptureIfEnabled: () => {
-    throw Error('Unexpected retry');
-  },
 }));
 mock.module('@tanstack/react-query', () => ({
   useQueryClient: () => ({ setQueryData: () => undefined }),
@@ -50,9 +47,8 @@ expect(statusEnabled).toBe(false);
 fetching = false;
 const shown = render();
 expect(statusEnabled).toBe(true);
-expect(shown).toContain('The setup capture is not confirmed');
-expect(shown).toContain('Retry');
+expect(shown).toBe('');
 enabled = false;
 expect(render()).toBe('');
 expect(statusEnabled).toBe(false);
-process.stdout.write(JSON.stringify({ disabledSuppressed: true, fetchingSuppressed: true, reenabledVisible: true }));
+process.stdout.write(JSON.stringify({ hiddenDuringFetch: true, hiddenAfterReenable: true, statusStillChecked: true }));

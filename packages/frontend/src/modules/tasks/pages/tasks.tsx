@@ -1,5 +1,5 @@
 import { SourceRestoreRequests } from '@/modules/host-transfer/source-restore-requests';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { IconActivity, IconArrowUpRight, IconCheck, IconClock, IconAlertTriangle } from '@tabler/icons-react';
 import { useTasks, taskLabels, taskStates, taskIsActive } from '@/desktop/tasks';
@@ -9,17 +9,29 @@ import type { TaskRecord } from '@runtipi/common/schemas';
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { useTimeMachineActivity } from '@/modules/time-machine/use-time-machine-activity';
 import { TimeMachineCaptureProgress } from '@/modules/time-machine/capture-progress';
+import { useAppContext } from '@/context/app-context';
+import { dismissSetupFailureTask, mergeSetupCaptureTasks, setupFailureTasks, type SetupFailureTask } from '@/components/welcome/setup-capture-task';
 import './tasks.css';
 
 export default function Tasks() {
+  const { user } = useAppContext();
   const tasks = useTasks();
   const captures = useTimeMachineActivity();
   const apps = useQuery(getInstalledAppsOptions());
   const [filter, setFilter] = useState('all');
+  const [setupFailureState, setSetupFailureState] = useState(() => ({ ownerId: user.id, tasks: setupFailureTasks(user.id) }));
   const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const refreshSetupFailures = () => setSetupFailureState({ ownerId: user.id, tasks: setupFailureTasks(user.id) });
+    refreshSetupFailures();
+    window.addEventListener('storage', refreshSetupFailures);
+    return () => window.removeEventListener('storage', refreshSetupFailures);
+  }, [user.id]);
   const requestedApp = params.get('app');
   const appScope = requestedApp && requestedApp.length <= 180 && /^[^:]+:[^:]+$/.test(requestedApp) ? requestedApp : null;
-  const records = (tasks.data?.tasks ?? []).filter((task) => !appScope || task.appUrn === appScope);
+  const serverRecords = tasks.data?.tasks ?? [];
+  const setupFailures = setupFailureState.ownerId === user.id ? setupFailureState.tasks : setupFailureTasks(user.id);
+  const records = mergeSetupCaptureTasks(serverRecords, setupFailures).filter((task) => !appScope || task.appUrn === appScope);
   const names = new Map(apps.data?.installed.map(({ info }) => [info.urn, info.name]));
   const active = records.filter(taskIsActive);
   const activeCount = active.length + (!appScope && captures.activity ? 1 : 0);
@@ -139,6 +151,8 @@ export default function Tasks() {
         ) : null}
         {visible.map((task) => {
           const [appId, storeId] = task.appUrn.split(':');
+          const setupFailure = isSetupFailureTask(task) ? task : null;
+          const preferenceFailure = setupFailure?.setupFailureOutcome === 'preferences-save-failed';
           return (
             <li key={task.id} data-status={task.status}>
               <details>
@@ -154,17 +168,32 @@ export default function Tasks() {
                   </span>
                   <span className="task-identity">
                     <strong>
-                      {taskLabels[task.action]} <span>{names.get(task.appUrn) ?? task.displayName ?? appId}</span>
+                      {setupFailure ? (preferenceFailure ? 'Save' : 'Capture') : taskLabels[task.action]}{' '}
+                      <span>
+                        {setupFailure
+                          ? preferenceFailure
+                            ? 'Time Machine preferences'
+                            : 'Time Machine setup'
+                          : (names.get(task.appUrn) ?? task.displayName ?? appId)}
+                      </span>
                     </strong>
                     <small>
-                      {storeId} · <time dateTime={task.createdAt}>{new Date(task.createdAt).toLocaleString()}</time>
+                      {setupFailure ? 'Setup' : storeId} · <time dateTime={task.createdAt}>{new Date(task.createdAt).toLocaleString()}</time>
                     </small>
                   </span>
                   <span className="task-state">{taskStates[task.status]}</span>
                   <IconArrowUpRight className="task-disclosure" size={18} aria-hidden="true" />
                 </summary>
                 <div className="task-details">
-                  <p>{explain(task)}</p>
+                  <p>
+                    {setupFailure
+                      ? preferenceFailure
+                        ? (setupFailure.setupFailureReason ?? 'The preference could not be saved. Review Time Machine settings and try again.')
+                        : setupFailure.setupFailureOutcome === 'capture-failed'
+                          ? 'The setup capture failed. You can start a new capture in Time Machine.'
+                          : 'The setup capture did not start, so no capture was created. You can try again in Time Machine.'
+                      : explain(task)}
+                  </p>
                   <dl>
                     <div>
                       <dt>Started</dt>
@@ -180,10 +209,27 @@ export default function Tasks() {
                     </div>
                   </dl>
                   <div className="task-links">
-                    <Link to={names.has(task.appUrn) ? `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}` : '/apps'}>
-                      {names.has(task.appUrn) ? 'Open application' : 'View applications'}
-                    </Link>
+                    {setupFailure ? (
+                      <Link to="/settings?tab=time-machine">{preferenceFailure ? 'Review Time Machine settings' : 'Open Time Machine'}</Link>
+                    ) : (
+                      <Link to={names.has(task.appUrn) ? `/apps/${encodeURIComponent(storeId ?? '')}/${encodeURIComponent(appId ?? '')}` : '/apps'}>
+                        {names.has(task.appUrn) ? 'Open application' : 'View applications'}
+                      </Link>
+                    )}
                     <Link to="/settings?tab=logs">Open Orbis logs</Link>
+                    {setupFailure ? (
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        aria-label={`Dismiss ${preferenceFailure ? 'Time Machine preference' : 'Time Machine setup capture'} failure`}
+                        onClick={() => {
+                          if (dismissSetupFailureTask(user.id, setupFailure.id))
+                            setSetupFailureState({ ownerId: user.id, tasks: setupFailureTasks(user.id) });
+                        }}
+                      >
+                        Dismiss
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </details>
@@ -193,4 +239,8 @@ export default function Tasks() {
       </ol>
     </div>
   );
+}
+
+function isSetupFailureTask(task: TaskRecord | SetupFailureTask): task is SetupFailureTask {
+  return 'setupFailureOutcome' in task;
 }

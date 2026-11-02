@@ -19,12 +19,12 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
   const reveal = useRef<{ animation: Animation; target: number } | null>(null);
   const { preferences } = useDesktopPreferences();
   const desktop = useDesktopWindows();
-  const fixedCatalogue = desktop && /^\/(?:apps|app-store)(?:\/|$)/.test(section);
+  const fixedCatalogue = desktop && /^\/(?:apps|app-store|settings)(?:\/|$)/.test(section);
   const sizeKey = `${section}:${window.innerWidth}:${preferences.appearance.textScale}`;
   const reserve = useMemo(() => sizes.get(sizeKey) ?? Math.max(280, window.innerHeight - 210), [sizeKey]);
   useLayoutEffect(() => {
     const view = surface.current;
-    // These catalogues size their scrolling panes from the viewport, not their contents.
+    // These pages size their scrolling panes from the viewport, not their contents.
     if (!view || fixedCatalogue) return;
     const animateTo = (from: number, height: number, duration = sectionMotionTiming.surface as number) => {
       reveal.current?.animation.cancel();

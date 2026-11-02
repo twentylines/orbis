@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { openErrorWorkspace, retryErrorPage } from './error-page';
+import { retryErrorPage } from './error-page';
 
 test('Retry resets the boundary and reloads the current document', () => {
   const events: string[] = [];
@@ -8,7 +8,6 @@ test('Retry resets the boundary and reloads the current document', () => {
   });
   expect(events).toEqual(['reset', 'reload']);
 });
-
 test('Retry reloads even if resetting the boundary itself throws', () => {
   const events: string[] = [];
   expect(() =>
@@ -23,10 +22,4 @@ test('Retry reloads even if resetting the boundary itself throws', () => {
     ),
   ).toThrow('reset failed');
   expect(events).toEqual(['reset', 'reload']);
-});
-
-test('Open workspace assigns the fixed dashboard path without router state', () => {
-  const destinations: string[] = [];
-  openErrorWorkspace({ assign: (path) => destinations.push(String(path)) });
-  expect(destinations).toEqual(['/dashboard']);
 });

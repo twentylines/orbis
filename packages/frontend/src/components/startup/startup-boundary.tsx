@@ -10,11 +10,13 @@ import { showSetupSpace } from './sign-in-onboarding';
 const ReadyContext = createContext<(ready: boolean) => void>(() => undefined);
 type SessionTransition = 'signing-in' | 'logging-out' | 'preparing-orbis';
 const SessionContext = createContext<{
-  begin: (transition?: SessionTransition, firstSetup?: boolean) => void;
+  begin: (transition?: SessionTransition, firstSetup?: boolean, setupStage?: string) => void;
+  setSetupStage: (stage: string) => void;
   finish: () => Promise<void>;
   setFirstSetup: (value: boolean) => void;
 }>({
   begin: () => undefined,
+  setSetupStage: () => undefined,
   finish: async () => undefined,
   setFirstSetup: () => undefined,
 });
@@ -36,11 +38,13 @@ export function StartupBoundary({ children }: PropsWithChildren) {
   transitionRef.current = sessionTransition;
   const [sessionPending, setSessionPending] = useState(false);
   const [firstSetup, setFirstSetup] = useState(false);
+  const [setupStage, setSetupStage] = useState('Preparing Orbis');
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const finished = useRef<Array<() => void>>([]);
-  const begin = useCallback((transition: SessionTransition = 'signing-in', firstSetup?: boolean) => {
+  const begin = useCallback((transition: SessionTransition = 'signing-in', firstSetup?: boolean, stage?: string) => {
     transitionRef.current = transition;
+    if (transition === 'preparing-orbis') setSetupStage(stage ?? 'Preparing Orbis');
     if (firstSetup !== undefined) setFirstSetup(firstSetup);
     setSessionTransition(transition);
     setSessionPending(true);
@@ -54,7 +58,7 @@ export function StartupBoundary({ children }: PropsWithChildren) {
   const reportFirstSetup = useCallback((value: boolean) => {
     if (transitionRef.current !== 'signing-in' && transitionRef.current !== 'preparing-orbis') setFirstSetup(value);
   }, []);
-  const session = useMemo(() => ({ begin, finish, setFirstSetup: reportFirstSetup }), [begin, finish, reportFirstSetup]);
+  const session = useMemo(() => ({ begin, finish, setFirstSetup: reportFirstSetup, setSetupStage }), [begin, finish, reportFirstSetup]);
 
   useLayoutEffect(() => {
     if (!ready && phase === 'complete') setPhase('loading');
@@ -94,6 +98,7 @@ export function StartupBoundary({ children }: PropsWithChildren) {
     }
   }, [phase, themeHandoff.complete, operationBoot.complete]);
 
+  const setupHandoff = sessionTransition === 'preparing-orbis' && phase !== 'loading';
   return (
     <SessionContext.Provider value={session}>
       <ReadyContext.Provider value={setReady}>
@@ -112,12 +117,14 @@ export function StartupBoundary({ children }: PropsWithChildren) {
             overlay
             initial
             freshAppearance={operationBoot.operation === 'restore'}
-            setupSpace={showSetupSpace(firstSetup, sessionTransition, operationBoot.operation, themeHandoff.active)}
+            setupSpace={showSetupSpace(firstSetup, sessionTransition, operationBoot.operation, themeHandoff.active) && !setupHandoff}
+            prepareWallpaper={sessionTransition === 'preparing-orbis'}
+            setupHandoff={setupHandoff}
             signingIn={sessionTransition === 'signing-in'}
             loggingOff={sessionTransition === 'logging-out'}
-            label={sessionTransition === 'preparing-orbis' ? 'Preparing Orbis' : undefined}
+            label={sessionTransition === 'preparing-orbis' && !setupHandoff ? setupStage : undefined}
             status={themeHandoff.active && !themeHandoff.pending ? { title: 'Loading theme…', message: 'Preparing your workspace.' } : undefined}
-            completing={phase !== 'loading'}
+            completing={phase !== 'loading' && !setupHandoff}
             revealing={phase === 'revealing'}
           />
         )}

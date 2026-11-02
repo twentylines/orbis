@@ -51,6 +51,7 @@ export const restoreJobSchema = type({
   progressUnavailable: 'boolean',
   canCancel: 'boolean',
   canRecover: 'boolean',
+  'requiresFreshAuthentication?': 'true',
   'updatedAt?': 'number > 0',
   'check?': 'string <= 40',
   'preparation?': {
@@ -60,7 +61,12 @@ export const restoreJobSchema = type({
     totalRecords: type(count).or('null'),
   },
 });
-export const exportListSchema = type({ available: 'boolean', retentionHours: count, jobs: exportJobSchema.array().atMostLength(32) });
+export const exportListSchema = type({
+  available: 'boolean',
+  retentionHours: count,
+  jobs: exportJobSchema.array().atMostLength(32),
+  'resetGeneration?': { id: uuid, createdAt: 'number.integer > 0' },
+});
 export const importListSchema = type({ available: 'boolean', retentionHours: count, jobs: importJobSchema.array().atMostLength(32) });
 export const restoreStatusSchema = type({ job: restoreJobSchema.or('null') });
 export type ExportJob = typeof exportJobSchema.infer;

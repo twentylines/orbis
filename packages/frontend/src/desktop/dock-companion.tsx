@@ -3,6 +3,32 @@ import { prefersReducedMotion } from './motion-setting';
 import { dockMotionDuration, sectionMotionEasing } from './section-motion-geometry';
 import { canJoinDockPills } from './dock-motion-geometry';
 
+export function replayStartupChrome(root: HTMLElement, reduced: boolean) {
+  if (reduced) return;
+  for (const [selector, name] of [
+    ['.desktop-system-bar', 'orbis-chrome-enter'],
+    ['.desktop-dock', 'orbis-dock-enter'],
+  ] as const) {
+    const element = root.querySelector<HTMLElement>(selector);
+    if (!element || typeof element.getAnimations !== 'function') continue;
+    const animation = element.getAnimations().find((item) => 'animationName' in item && item.animationName === name);
+    if (!animation) continue;
+    animation.currentTime = 0;
+    animation.play();
+  }
+}
+
+export function useDockStartupReveal(root: React.RefObject<HTMLElement | null>, enabled: boolean) {
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    const reveal = () => {
+      if (root.current) replayStartupChrome(root.current, prefersReducedMotion() || document.documentElement.dataset.orbisEffects === 'low');
+    };
+    window.addEventListener('orbis-startup-reveal', reveal);
+    return () => window.removeEventListener('orbis-startup-reveal', reveal);
+  }, [enabled, root]);
+}
+
 const shapeEvent = 'orbis-dock-shape';
 
 export function DockCompanion({

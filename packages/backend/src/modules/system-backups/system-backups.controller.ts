@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { SystemBackupsService } from './system-backups.service';
 import { BackupImportsService } from './backup-imports.service';
-import { backupCredentials as credentials, backupOperator } from './backup-access';
+import { optionalBackupCredentials, backupOperator } from './backup-access';
 
 @Controller('system-backups')
 @UseGuards(AuthGuard)
@@ -34,7 +34,7 @@ export class SystemBackupsController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async importSaved(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
     const owner = backupOperator(request);
-    const archive = await this.backups.download(id, owner, credentials(body));
+    const archive = await this.backups.downloadForSession(id, owner, request, optionalBackupCredentials(body));
     return this.imports.receiveServerExport(owner, archive.stream, archive.bytes);
   }
   @Post('export')
@@ -42,8 +42,11 @@ export class SystemBackupsController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   start(@Req() request: Request, @Body() body: unknown) {
     const owner = backupOperator(request);
-    const value = credentials(body, true);
-    return this.backups.startForSession(owner, value, value.passphrase, request);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BadRequestException('Enter the backup encryption key.');
+    const { passphrase, ...proof } = body as Record<string, unknown>;
+    if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
+      throw new BadRequestException('Use a backup passphrase between 8 and 1024 characters.');
+    return this.backups.startForSession(owner, optionalBackupCredentials(proof), passphrase, request);
   }
   @Post(':id/cancel')
   @HttpCode(200)
@@ -54,7 +57,7 @@ export class SystemBackupsController {
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   recover(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
-    return this.backups.recover(id, backupOperator(request), credentials(body));
+    return this.backups.recoverForSession(id, backupOperator(request), request, optionalBackupCredentials(body));
   }
   @Post(':id/download')
   @HttpCode(200)
@@ -66,7 +69,7 @@ export class SystemBackupsController {
       throw new BadRequestException('Choose a valid backup download authorization.');
     const result = creationSession
       ? await this.backups.downloadCreated(id, owner, request)
-      : await this.backups.download(id, owner, credentials(body));
+      : await this.backups.downloadForSession(id, owner, request, optionalBackupCredentials(body));
     const disconnected = () => result.stream.destroy();
     response.once('close', disconnected);
     result.stream.once('close', () => response.removeListener('close', disconnected));

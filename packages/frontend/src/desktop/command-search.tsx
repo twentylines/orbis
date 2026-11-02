@@ -52,7 +52,6 @@ const appPath = (urn: string, catalogue = false) => {
   const [appId = '', storeId = ''] = urn.split(':');
   return `/${catalogue ? 'app-store' : 'apps'}/${encodeURIComponent(storeId)}/${encodeURIComponent(appId)}`;
 };
-const searchEasing = 'cubic-bezier(0.32, 0, 0.18, 1)';
 const reducedMotion = () => prefersReducedMotion();
 
 export function CommandSearch() {
@@ -154,7 +153,6 @@ export function CommandSearch() {
       }
       const current = getComputedStyle(element);
       const pose = {
-        opacity: current.opacity,
         left: current.left,
         top: current.top,
         width: current.width,
@@ -170,12 +168,11 @@ export function CommandSearch() {
       const resultFrom = resultPose ? { opacity: resultPose.opacity, transform: resultPose.transform } : null;
       const backdropFrom = backdrop.current ? getComputedStyle(backdrop.current).opacity : '1';
       cancelMotions();
-      const options = { duration: 460, easing: searchEasing, fill: 'forwards' as const };
+      const options = { duration: 360, easing: 'cubic-bezier(.32, 0, .18, 1)', fill: 'forwards' as const };
       const exit = element.animate(
         [
           pose,
           {
-            opacity: 0,
             left: `${origin.left - bounds.left}px`,
             top: `${origin.top - bounds.top}px`,
             width: `${origin.width}px`,
@@ -192,16 +189,9 @@ export function CommandSearch() {
       exit.id = 'orbis-search-bar-close';
       motions.current = [exit];
       if (dropdown.current && resultFrom) {
-        motions.current.push(
-          dropdown.current.animate([resultFrom, { opacity: 0, transform: 'translateY(-8px)' }], {
-            ...options,
-            duration: 340,
-            delay: 100,
-          }),
-        );
+        motions.current.push(dropdown.current.animate([resultFrom, { opacity: 0, transform: 'translateY(-8px)' }], { ...options, duration: 180 }));
       }
-      if (backdrop.current)
-        motions.current.push(backdrop.current.animate([{ opacity: backdropFrom }, { opacity: 0 }], { ...options, duration: 260 }));
+      if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: backdropFrom }, { opacity: 0 }], options));
       const started = document.timeline.currentTime;
       if (started !== null) for (const motion of motions.current) motion.startTime = started;
       void exit.finished.then(finishClose, () => undefined);
@@ -225,7 +215,6 @@ export function CommandSearch() {
       const enter = element.animate(
         [
           {
-            opacity: 0,
             left: `${origin.left - bounds.left}px`,
             top: `${origin.top - bounds.top}px`,
             width: `${origin.width}px`,
@@ -237,7 +226,6 @@ export function CommandSearch() {
             columnGap: originStyle.columnGap,
           },
           {
-            opacity: 1,
             left: '0px',
             top: '0px',
             width: `${bounds.width}px`,
@@ -249,7 +237,7 @@ export function CommandSearch() {
             columnGap: targetGap,
           },
         ],
-        { duration: 460, easing: searchEasing },
+        { duration: 460, easing: 'cubic-bezier(.32, 0, .18, 1)' },
       );
       enter.id = 'orbis-search-bar-open';
       motions.current = [enter];
@@ -262,14 +250,14 @@ export function CommandSearch() {
           {
             duration: 340,
             delay: 100,
-            easing: searchEasing,
+            easing: 'cubic-bezier(.32, 0, .18, 1)',
             fill: 'backwards',
           },
         );
         results.id = 'orbis-search-results-open';
         motions.current.push(results);
       }
-      if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: searchEasing }));
+      if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260 }));
       const started = document.timeline.currentTime;
       if (started !== null) for (const motion of motions.current) motion.startTime = started;
     }
@@ -453,28 +441,33 @@ export function CommandSearch() {
             <div className="desktop-search-content">
               <div ref={header} className="desktop-search-input">
                 <IconSearch size={20} aria-hidden="true" />
-                <input
-                  ref={input}
-                  id="orbis-command-query"
-                  data-focus-surface="parent"
-                  value={closing ? '' : search}
-                  type="search"
-                  autoComplete="off"
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search apps, settings and server tools"
-                  aria-label="Search Orbis"
-                  aria-controls="desktop-search-results"
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && firstResult) {
-                      event.preventDefault();
-                      close(firstResult.path);
-                    }
-                    if (event.key === 'ArrowDown') {
-                      event.preventDefault();
-                      panel.current?.querySelector<HTMLButtonElement>('[data-search-result]')?.focus();
-                    }
-                  }}
-                />
+                <span className="desktop-search-query">
+                  <input
+                    ref={input}
+                    id="orbis-command-query"
+                    data-focus-surface="parent"
+                    value={search}
+                    type="search"
+                    autoComplete="off"
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search apps, settings and server tools"
+                    aria-label="Search Orbis"
+                    aria-controls="desktop-search-results"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && firstResult) {
+                        event.preventDefault();
+                        close(firstResult.path);
+                      }
+                      if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        panel.current?.querySelector<HTMLButtonElement>('[data-search-result]')?.focus();
+                      }
+                    }}
+                  />
+                  <span className="desktop-search-closing-label" aria-hidden="true">
+                    Search
+                  </span>
+                </span>
                 <button type="button" className="desktop-search-close" aria-label="Close search" onClick={() => close()}>
                   <IconX size={22} aria-hidden="true" />
                 </button>

@@ -32,7 +32,7 @@ it.each([
 it('destroys the download source on disconnect and removes its listener after closing', async () => {
   const stream = new PassThrough();
   const download = vi.fn().mockResolvedValue({ stream, bytes: 100 });
-  const controller = new SystemBackupsController({ download } as unknown as SystemBackupsService, {} as BackupImportsService);
+  const controller = new SystemBackupsController({ downloadForSession: download } as unknown as SystemBackupsService, {} as BackupImportsService);
   const response = Object.assign(new EventEmitter(), { setHeader: vi.fn() });
   await controller.download(operator, 'fixture-id', { password: 'fixture' }, response as unknown as Response);
   expect(response.listenerCount('close')).toBe(1);
@@ -44,7 +44,10 @@ it('destroys the download source on disconnect and removes its listener after cl
 it('creation-session downloads use only the existing owner-bound session route and reject mixed authorization fields', async () => {
   const downloadCreated = vi.fn().mockResolvedValue({ stream: new PassThrough(), bytes: 100 });
   const download = vi.fn();
-  const controller = new SystemBackupsController({ downloadCreated, download } as unknown as SystemBackupsService, {} as BackupImportsService);
+  const controller = new SystemBackupsController(
+    { downloadCreated, downloadForSession: download } as unknown as SystemBackupsService,
+    {} as BackupImportsService,
+  );
   const response = Object.assign(new EventEmitter(), { setHeader: vi.fn() });
   await controller.download(operator, 'fixture-id', { creationSession: 'true' }, response as unknown as Response);
   expect(downloadCreated).toHaveBeenCalledWith('fixture-id', 7, operator);
@@ -64,7 +67,7 @@ it('creation-session downloads use only the existing owner-bound session route a
 it('closes a file opened after the client already disconnected during reauthentication', async () => {
   const stream = new PassThrough();
   const controller = new SystemBackupsController(
-    { download: vi.fn().mockResolvedValue({ stream, bytes: 100 }) } as unknown as SystemBackupsService,
+    { downloadForSession: vi.fn().mockResolvedValue({ stream, bytes: 100 }) } as unknown as SystemBackupsService,
     {} as BackupImportsService,
   );
   const response = Object.assign(new EventEmitter(), { destroyed: true, setHeader: vi.fn() });
@@ -77,11 +80,11 @@ it('saved imports use the owner and fresh credentials before receiving the encry
   const download = vi.fn().mockResolvedValue({ stream, bytes: 52 });
   const receiveServerExport = vi.fn().mockResolvedValue({ status: 'uploaded' });
   const controller = new SystemBackupsController(
-    { download } as unknown as SystemBackupsService,
+    { downloadForSession: download } as unknown as SystemBackupsService,
     { receiveServerExport } as unknown as BackupImportsService,
   );
   await expect(controller.importSaved(operator, 'fixture-id', { password: 'fresh', totpCode: '123456' })).resolves.toEqual({ status: 'uploaded' });
-  expect(download).toHaveBeenCalledWith('fixture-id', 7, expect.objectContaining({ password: 'fresh', totpCode: '123456' }));
+  expect(download).toHaveBeenCalledWith('fixture-id', 7, operator, expect.objectContaining({ password: 'fresh', totpCode: '123456' }));
   expect(receiveServerExport).toHaveBeenCalledWith(7, stream, 52);
   download.mockRejectedValueOnce(new Error('fresh authorization required'));
   await expect(controller.importSaved(operator, 'fixture-id', { password: 'stale' })).rejects.toThrow('authorization');
@@ -98,4 +101,20 @@ it('retention settings require an operator session before writing policy', () =>
     controller.updateSettings({ authMethod: 'session', user: { id: 7, operator: false } } as Request, { revision: 0, retentionHours: 24 }),
   ).toThrow('operator session');
   expect(updateSettings).not.toHaveBeenCalled();
+});
+
+it('accepts a session-only export with an explicit encryption key and downloads/imports without account proof', async () => {
+  const startForSession = vi.fn();
+  const downloadForSession = vi.fn().mockImplementation(async () => ({ stream: new PassThrough(), bytes: 52 }));
+  const receiveServerExport = vi.fn().mockResolvedValue({ status: 'uploaded' });
+  const controller = new SystemBackupsController(
+    { startForSession, downloadForSession } as unknown as SystemBackupsService,
+    { receiveServerExport } as unknown as BackupImportsService,
+  );
+  controller.start(operator, { passphrase: 'disposable encryption key' });
+  expect(startForSession).toHaveBeenCalledWith(7, undefined, 'disposable encryption key', operator);
+  await controller.download(operator, 'fixture-id', {}, Object.assign(new EventEmitter(), { setHeader: vi.fn() }) as unknown as Response);
+  expect(downloadForSession).toHaveBeenCalledWith('fixture-id', 7, operator, undefined);
+  await controller.importSaved(operator, 'fixture-id', {});
+  expect(receiveServerExport).toHaveBeenCalledOnce();
 });

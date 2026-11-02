@@ -118,8 +118,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       if (!current) return;
       if (next.state === 'resetting') observedReset.current = true;
       if (observedReset.current && next.state === 'idle' && next.supported && !next.unavailable) {
-        openResetOnboarding();
-        return;
+        if (openResetOnboarding(next)) return;
       }
       if (next.state !== 'idle') observed.current = true;
       const storage = operationContinuityStorage();

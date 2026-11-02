@@ -4,12 +4,24 @@ import type { AuthService } from '../auth/auth.service';
 import type { AccountSecurityService } from '../auth/account-security.service';
 
 type Credentials = { password: string; totpCode?: string };
+const verifiedActions = new WeakMap<object, 'backup' | 'restore'>();
 export async function authorizeBackupRestoreSession(
   auth: AuthService,
   security: AccountSecurityService | undefined,
   request: Request,
   ownerId: number,
   credentials: Credentials | undefined,
+  expected?: { userId: number; sessionBinding: string; securityBinding: string; revision: number },
+) {
+  return authorizeBackupActionSession(auth, security, request, ownerId, credentials, 'restore', expected);
+}
+export async function authorizeBackupActionSession(
+  auth: AuthService,
+  security: AccountSecurityService | undefined,
+  request: Request,
+  ownerId: number,
+  credentials: Credentials | undefined,
+  action: 'backup' | 'restore' = 'backup',
   expected?: { userId: number; sessionBinding: string; securityBinding: string; revision: number },
 ) {
   if (!security) throw new ForbiddenException('Account security is unavailable.');
@@ -24,8 +36,9 @@ export async function authorizeBackupRestoreSession(
         expected.revision !== policy.revision))
   )
     throw new ForbiddenException('The operator session or security setting changed.');
-  if (policy.requireRestoreAuthentication) {
-    if (!credentials?.password) throw new ForbiddenException('Confirm this restore with your account password.');
+  const requiresProof = action === 'restore' ? policy.requireRestoreAuthentication : policy.requireCaptureAuthentication;
+  if (requiresProof && (!expected || verifiedActions.get(expected) !== action)) {
+    if (!credentials?.password) throw new ForbiddenException('Confirm this backup action with your account password.');
     await auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
     const checked = await auth.operatorActionContext(request);
     const latest = await security.read(ownerId);
@@ -37,5 +50,7 @@ export async function authorizeBackupRestoreSession(
     )
       throw new ForbiddenException('The operator session or security setting changed.');
   }
-  return { ...actor, revision: policy.revision };
+  const authorization = { ...actor, revision: policy.revision };
+  if (requiresProof) verifiedActions.set(authorization, action);
+  return authorization;
 }
