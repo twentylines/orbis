@@ -82,6 +82,8 @@ export type LocalCaptureHooks = {
   beforeQuiesce: (plan: LocalCapturePlan, signal: AbortSignal) => Promise<void>;
 };
 
+const backupStartupErrorCodes = new Set(['ENOENT', 'EACCES', 'EPERM', 'EIO', 'ENOSPC', 'EROFS', 'EBUSY', 'ENOTEMPTY', 'EMFILE', 'ENFILE']);
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const savedJob = type({
   version: '1',
@@ -200,12 +202,16 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     return this.ready;
   }
   private async load() {
+    let stage = 'retention-policy';
     try {
       const policy = await this.retention.read();
+      stage = 'storage-root';
       await privateBackupDirectory(this.root());
       for (const id of await fs.readdir(this.root())) {
+        stage = 'storage-entry';
         if (!uuid.test(id)) throw new BackupRequirementError('Unexpected full backup storage entry.');
         await privateBackupDirectory(this.directory(id));
+        stage = 'journal-access';
         const file = path.join(this.directory(id), 'job.json');
         const stat = await fs.lstat(file);
         if (
@@ -216,6 +222,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
           (process.getuid && stat.uid !== process.getuid())
         )
           throw new BackupRequirementError('Unsafe backup journal.');
+        stage = 'journal-schema';
         const job = savedJob(JSON.parse(await fs.readFile(file, 'utf8')));
         if (
           job instanceof type.errors ||
@@ -225,6 +232,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
         )
           throw new BackupRequirementError('Invalid backup journal.');
         this.jobs.set(id, job);
+        stage = 'journal-reconcile';
         if (job.expiresAt !== backupExpiresAt(job.createdAt, policy.retentionHours, job.expiresAt)) await this.save(job);
         if (job.restartRequired && !job.resumePending.length) {
           job.restartRequired = false;
@@ -239,14 +247,20 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
           job.message = 'This backup was interrupted. Review app recovery before starting another backup.';
           await this.save(job);
         }
+        stage = 'plaintext-cleanup';
         await this.cleanPlaintext(job);
       }
+      stage = 'retention-expiry';
       await this.expire();
       setBackupRecoveryRequired([...this.jobs.values()].some((job) => job.resumePending.length > 0));
-    } catch {
+    } catch (error) {
       setBackupRecoveryRequired(true);
       this.unavailable = true;
-      this.logger.warn('Full backup storage needs review. New exports are disabled; existing files have been preserved.');
+      const code = error instanceof Error ? Object.getOwnPropertyDescriptor(error, 'code')?.value : undefined;
+      const reason = typeof code === 'string' && backupStartupErrorCodes.has(code) ? code : 'UNKNOWN';
+      this.logger.warn(
+        `Full backup storage needs review. New exports are disabled; existing files have been preserved. Startup stage: ${stage}; reason: ${reason}.`,
+      );
     }
   }
   private expire() {

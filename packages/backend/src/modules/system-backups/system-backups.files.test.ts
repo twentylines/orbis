@@ -420,7 +420,60 @@ it('preserves unreadable journals and fails closed instead of overwriting them',
   expect((await service.list(1)).available).toBe(false);
   await expect(service.start(1, credentials, passphrase)).rejects.toThrow('storage needs review');
   expect(await fs.readFile(path.join(bad, 'job.json'), 'utf8')).toBe('{broken');
+  expect(JSON.stringify(logger.warn.mock.calls)).toContain('Startup stage: journal-schema; reason: UNKNOWN.');
 });
+
+it.each(['EBUSY', 'ENOTEMPTY', 'unrecognized-private-code'])(
+  'reports only fixed startup cleanup diagnostics for %s and preserves the failed-closed state',
+  async (code) => {
+    const id = randomUUID();
+    const root = path.join(directory, 'data', 'backups', 'full', id);
+    const content = path.join(root, 'content');
+    await fs.mkdir(content, { recursive: true, mode: 0o700 });
+    const now = Date.now();
+    const journal = JSON.stringify({
+      version: 1,
+      id,
+      ownerId: 1,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: now + 86400000,
+      status: 'succeeded',
+      stage: 'complete',
+      completedBytes: 64,
+      totalBytes: 64,
+      message: 'Complete',
+      resumePending: [],
+      restartRequired: false,
+    });
+    const archive = Buffer.alloc(64, 7);
+    await fs.writeFile(path.join(root, 'job.json'), journal, { mode: 0o600 });
+    await fs.writeFile(path.join(root, 'backup.orbis'), archive, { mode: 0o600 });
+    const remove = fs.rm.bind(fs);
+    let refused = 0;
+    vi.spyOn(fs, 'rm').mockImplementation(async (target, options) => {
+      if (target === content) {
+        refused++;
+        throw Object.assign(new Error('private filesystem failure details'), { code, path: content });
+      }
+      return remove(target, options);
+    });
+    expect((await service.list(1)).available).toBe(false);
+    expect((await service.list(1)).available).toBe(false);
+    expect(refused).toBe(1);
+    expect(backupMaintenanceActive()).toBe(true);
+    await expect(service.start(1, credentials, passphrase)).rejects.toThrow('storage needs review');
+    expect(await fs.readFile(path.join(root, 'job.json'), 'utf8')).toBe(journal);
+    expect(await fs.readFile(path.join(root, 'backup.orbis'))).toEqual(archive);
+    expect((await fs.stat(content)).isDirectory()).toBe(true);
+    expect(runtime.resume).not.toHaveBeenCalled();
+    const logged = JSON.stringify(logger.warn.mock.calls);
+    const reason = code === 'unrecognized-private-code' ? 'UNKNOWN' : code;
+    expect(logged).toContain(`Startup stage: plaintext-cleanup; reason: ${reason}.`);
+    for (const privateValue of [content, 'private filesystem failure details', 'unrecognized-private-code'])
+      expect(logged).not.toContain(privateValue);
+  },
+);
 
 it('creates a fresh-auth one-request grant backed by the actual account-password encrypted archive, without storing credentials', async () => {
   const requestId = randomUUID();
