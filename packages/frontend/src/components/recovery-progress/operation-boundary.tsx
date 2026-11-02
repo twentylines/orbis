@@ -10,17 +10,26 @@ import { advanceCoreUpdate, coreJobIsActive, validCoreUpdate, type CoreUpdateSta
 import { OperationStartupContext } from '@/components/startup/operation-startup';
 import { StartupSurface } from '@/components/startup/startup-surface';
 import { RecoveryScene } from './recovery-scene';
-import { armStartedOperation, readOperationContinuity, operationContinuityStorage, type MaintenanceOperation } from './operation-continuity';
+import {
+  armStartedOperation,
+  clearMatchingRestoreContinuity,
+  readOperationContinuity,
+  operationContinuityStorage,
+  type MaintenanceOperation,
+} from './operation-continuity';
 import { useOperationDeparture } from './use-operation-departure';
 import { restorePresentation } from './restore-presentation';
 import {
   confirmResetSnapshot,
   hasAcceptedReset,
   loadOperationStatus,
+  operationAllowsDeparture,
   operationIsWaiting,
+  readOperationStatus,
   operationShowsContent,
   operationUsesSpace,
   resetSceneVisible,
+  rollbackCanContinue,
   type OperationSnapshot,
 } from './operation-status';
 import { SystemResetWizard } from '@/modules/system-reset/system-reset';
@@ -66,7 +75,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
   const [actionBusy, setActionBusy] = useState(false);
   const [authAction, setAuthAction] = useState<'recover' | 'cancel' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const observed = useRef(false);
+  const observed = useRef(Boolean(initialMarker.current));
   const observedReset = useRef(hasAcceptedReset());
   const [resetRecovery, setResetRecovery] = useState(false);
   const startedId = useRef<string | null>(null);
@@ -93,7 +102,10 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
           : null,
     [job, core, activeKind],
   );
-  const continuity = useOperationDeparture(operationJob, !snapshot || snapshot.state !== 'idle' || Boolean(snapshot.unavailable));
+  const continuity = useOperationDeparture(
+    operationJob?.status === 'rolled-back' ? null : operationJob,
+    !snapshot || snapshot.state !== 'idle' || Boolean(snapshot.unavailable),
+  );
   useEffect(() => {
     if (!visible) return;
     let current = true;
@@ -102,7 +114,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       const shared = await loadOperationStatus(attempt > 0);
       if (!current) return;
       if (shared.state === 'resetting' || hasAcceptedReset()) observedReset.current = true;
-      const next = await confirmResetSnapshot(shared, observedReset.current);
+      let next = await confirmResetSnapshot(shared, observedReset.current);
       if (!current) return;
       if (next.state === 'resetting') observedReset.current = true;
       if (observedReset.current && next.state === 'idle' && next.supported && !next.unavailable) {
@@ -133,16 +145,27 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
         try {
           const raw = await backupRequest('/restores', 'GET', undefined, AbortSignal.timeout(8000));
           if (!current) return;
-          if (restoreStatusSchema.allows(raw)) {
-            const confirmed = raw.job;
-            if (confirmed && marker?.jobId === confirmed.id && marker.operation === 'restore' && ['running', 'departing'].includes(marker.phase))
-              startedId.current = confirmed.id;
-            if (confirmed?.status === 'running' && !confirmed.needsRecovery && storage && armStartedOperation(confirmed.id, 'restore', storage))
-              startedId.current = confirmed.id;
-            setJob(confirmed);
-          }
+          if (!restoreStatusSchema.allows(raw)) throw new Error('Restore status is unavailable.');
+          const confirmed = raw.job;
+          if (confirmed && marker?.jobId === confirmed.id && marker.operation === 'restore' && ['running', 'departing'].includes(marker.phase))
+            startedId.current = confirmed.id;
+          if (confirmed?.status === 'running' && !confirmed.needsRecovery && storage && armStartedOperation(confirmed.id, 'restore', storage))
+            startedId.current = confirmed.id;
+          if (
+            next.state === 'idle' &&
+            (!operationAllowsDeparture(next) ||
+              !confirmed ||
+              confirmed.id !== startedId.current ||
+              confirmed.needsRecovery ||
+              !['succeeded', 'rolled-back'].includes(confirmed.status))
+          )
+            next = { state: 'checking', supported: true, unavailable: true };
+          setJob(confirmed);
         } catch {
-          if (current && next.state === 'idle') setJob(null);
+          if (current && next.state === 'idle') {
+            setJob(null);
+            next = { state: 'checking', supported: true, unavailable: true };
+          }
         }
       } else if (observed.current && (kind === 'update' || kind === 'downgrade')) {
         try {
@@ -179,11 +202,12 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       released.current = false;
       return;
     }
+    if (job?.status === 'rolled-back') return;
     if (observed.current && !released.current) {
       released.current = true;
       void revalidator.revalidate();
     }
-  }, [snapshot?.state, revalidator]);
+  }, [snapshot?.state, job?.status, revalidator]);
   const requestAction = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!job || actionBusy) return;
@@ -207,6 +231,32 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       setAttempt((value) => value + 1);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'The request could not be confirmed. Check status before retrying.');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+  const continueRollback = async () => {
+    if (!job || job.status !== 'rolled-back' || job.needsRecovery || job.id !== startedId.current || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const raw = await backupRequest('/restores', 'GET', undefined, AbortSignal.timeout(8000));
+      if (!restoreStatusSchema.allows(raw) || raw.job?.id !== job.id || raw.job.status !== 'rolled-back' || raw.job.needsRecovery)
+        throw new Error('The restore result could not be confirmed. Check again.');
+      const fresh = await readOperationStatus();
+      if (!rollbackCanContinue(raw.job, startedId.current, fresh)) throw new Error('The server is still checking the restore. Try again.');
+      const storage = operationContinuityStorage();
+      if (!storage || !clearMatchingRestoreContinuity(job.id, storage)) throw new Error('The restore marker could not be confirmed. Check again.');
+      initialMarker.current = null;
+      operation.current = null;
+      startedId.current = null;
+      observed.current = false;
+      setJob(null);
+      setSnapshot(fresh);
+      setAttempt((value) => value + 1);
+      void revalidator.revalidate();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'The restore result could not be confirmed. Check again.');
     } finally {
       setActionBusy(false);
     }
@@ -309,7 +359,11 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
         title={waiting ? 'Checking server' : title}
         status={waiting ? undefined : status}
         variant={kind}
-        detail={waiting ? 'Waiting for the server to respond. Checking will continue automatically.' : undefined}
+        detail={
+          waiting
+            ? 'Waiting for the server to respond. Checking will continue automatically.'
+            : (actionError ?? (job?.status === 'rolled-back' ? 'The restore did not complete. Your previous state was restored.' : undefined))
+        }
         progress={restoration?.progress ?? server.progress}
         active={waiting || ['restoring', 'updating', 'downgrading'].includes(server.state)}
         departing={continuity.departing}
@@ -351,7 +405,15 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
                   Sign in
                 </a>
               ) : null}
-              {matchingTerminal && !continuity.departing ? <Button onClick={() => window.location.assign('/')}>Open server</Button> : null}
+              {matchingTerminal && !continuity.departing ? (
+                job?.status === 'rolled-back' ? (
+                  <Button disabled={actionBusy} onClick={() => void continueRollback()}>
+                    Continue
+                  </Button>
+                ) : (
+                  <Button onClick={() => window.location.assign('/')}>Open server</Button>
+                )
+              ) : null}
             </>
           )
         }

@@ -5,6 +5,7 @@ import {
   hasAcceptedReset,
   clearAcceptedReset,
   resetSceneVisible,
+  rollbackCanContinue,
   parseOperationStatus,
   readOperationStatus,
   operationSnapshotAfter,
@@ -168,4 +169,15 @@ test('a cached idle cannot complete an accepted reset without a fresh supported 
     }),
   ).toEqual(shared);
   expect(called).toBe(false);
+});
+
+test('rollback Continue requires the matching failed restore and fresh supported idle', () => {
+  const job = { id: 'job', status: 'rolled-back', needsRecovery: false };
+  const idle = { state: 'idle' as const, supported: true };
+  expect(rollbackCanContinue(job, 'job', idle)).toBe(true);
+  expect(rollbackCanContinue(job, 'other', idle)).toBe(false);
+  expect(rollbackCanContinue({ ...job, needsRecovery: true }, 'job', idle)).toBe(false);
+  expect(rollbackCanContinue({ ...job, status: 'succeeded' }, 'job', idle)).toBe(false);
+  expect(rollbackCanContinue(job, 'job', { state: 'checking', supported: true, unavailable: true })).toBe(false);
+  expect(rollbackCanContinue(job, 'job', { state: 'idle', supported: false })).toBe(false);
 });

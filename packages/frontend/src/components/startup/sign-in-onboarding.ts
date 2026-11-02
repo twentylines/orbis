@@ -16,5 +16,5 @@ export async function firstSetupAfterSignIn(
 }
 
 export function showSetupSpace(firstSetup: boolean, transition: string | null, operation: string | null, themeHandoff: boolean) {
-  return firstSetup && transition !== 'preparing-orbis' && transition !== 'logging-out' && !operation && !themeHandoff;
+  return !themeHandoff && transition !== 'logging-out' && (operation === 'restore' || (firstSetup && !operation));
 }

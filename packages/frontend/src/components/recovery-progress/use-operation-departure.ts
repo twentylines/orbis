@@ -19,7 +19,7 @@ export function useOperationDeparture(job: OperationJob | null | undefined, reco
   const onReload = useRef(beforeReload);
   onReload.current = beforeReload;
   useEffect(() => {
-    if (!job || reloaded.current || reconnecting) return;
+    if (!job || reloaded.current || reconnecting || (job.operation === 'restore' && job.status === 'rolled-back')) return;
     let current = true;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const observe = async () => {
@@ -59,7 +59,12 @@ export function useOperationDeparture(job: OperationJob | null | undefined, reco
     };
   }, [job, reconnecting]);
   const confirmed = Boolean(
-    departure && job?.id === departure.jobId && !job.needsRecovery && !reconnecting && ['succeeded', 'rolled-back'].includes(job.status),
+    departure &&
+      job?.id === departure.jobId &&
+      !job.needsRecovery &&
+      !reconnecting &&
+      !(job.operation === 'restore' && job.status === 'rolled-back') &&
+      ['succeeded', 'rolled-back'].includes(job.status),
   );
   useEffect(() => {
     if (!departure || !confirmed || reloaded.current) return;

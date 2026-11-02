@@ -5,6 +5,16 @@ type CaptureStorage = Pick<Storage, 'getItem' | 'setItem'>;
 export type SetupCaptureReceipt = { version: 1; attemptId: string; phase: 'pending' | 'submitted' | 'accepted' | 'failed' | 'skipped' };
 export class SetupCaptureNotStartedError extends Error {}
 export class SetupCaptureTerminalError extends Error {}
+export const setupCaptureCanContinue = (reason: unknown): reason is SetupCaptureTerminalError | SetupCaptureNotStartedError =>
+  reason instanceof SetupCaptureTerminalError || reason instanceof SetupCaptureNotStartedError;
+export function setupCaptureRequested(operator: boolean, draft: boolean | null, saved: boolean | undefined) {
+  return operator && (draft ?? saved ?? false);
+}
+export async function retrySetupCaptureIfEnabled(readEnabled: () => Promise<boolean>, retry: () => Promise<void>) {
+  if (!(await readEnabled())) return false;
+  await retry();
+  return true;
+}
 const attemptPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const receiptKey = (ownerId: number) => `orbis-setup-capture-v1:${ownerId}`;
 export function setupCaptureStorage(generation: string | null = null, suppliedStorage?: Storage | null): CaptureStorage | null {

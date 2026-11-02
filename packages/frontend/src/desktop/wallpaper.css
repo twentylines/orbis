@@ -54,14 +54,14 @@ html[data-desktop-local-wallpaper="true"] .orbis-startup {
 .orbis-theme > .desktop-wallpaper-layer .desktop-wallpaper-shade {
   background: var(--desktop-wallpaper-tint);
 }
-html:not([data-desktop-mode="dark"]) .desktop > .desktop-wallpaper-layer .desktop-wallpaper-shade {
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--desktop-base-surface) 30%, transparent),
-      color-mix(in srgb, var(--desktop-base-surface) 16%, transparent) 36%,
-      transparent 70%
-    ), color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
+.desktop > .desktop-wallpaper-layer .desktop-wallpaper-shade {
+  background: none;
+}
+@supports (-webkit-touch-callout: none) {
+  .desktop.orbis-theme[data-desktop-wallpaper]:has(> .desktop-wallpaper-layer) {
+    background-image:
+      linear-gradient(rgb(0 0 0 / var(--orbis-wallpaper-dim, 0)), rgb(0 0 0 / var(--orbis-wallpaper-dim, 0))), var(--orbis-wallpaper-image, none);
+  }
 }
 .orbis-startup > .desktop-wallpaper-layer .desktop-wallpaper-shade {
   background: var(--orbis-startup-shade);

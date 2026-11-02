@@ -88,7 +88,7 @@ describe('frozen runtime dependency packaging', () => {
       ['prebuilds/binding.node', 'native runtime fixture'],
       ['.editorconfig', 'excluded'],
       ['LICENSE', 'retained license'],
-    ]) {
+    ] as const) {
       mkdirSync(resolve(alpha, file, '..'), { recursive: true });
       writeFileSync(join(alpha, file), content);
     }

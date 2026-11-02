@@ -52,7 +52,7 @@ export function StartupBoundary({ children }: PropsWithChildren) {
     return new Promise<void>((resolve) => finished.current.push(resolve));
   }, []);
   const reportFirstSetup = useCallback((value: boolean) => {
-    if (transitionRef.current !== 'signing-in') setFirstSetup(value);
+    if (transitionRef.current !== 'signing-in' && transitionRef.current !== 'preparing-orbis') setFirstSetup(value);
   }, []);
   const session = useMemo(() => ({ begin, finish, setFirstSetup: reportFirstSetup }), [begin, finish, reportFirstSetup]);
 
@@ -67,9 +67,12 @@ export function StartupBoundary({ children }: PropsWithChildren) {
       ?.getAnimations()
       .find((animation) => animation instanceof CSSAnimation && animation.animationName === 'orbis-startup-flow');
     const elapsed = typeof cycle?.currentTime === 'number' ? cycle.currentTime : 0;
-    const timer = window.setTimeout(() => setPhase('finishing'), prefersReducedMotion() ? 0 : startupCycleRemaining(elapsed));
+    const timer = window.setTimeout(
+      () => setPhase('finishing'),
+      prefersReducedMotion() || sessionTransition === 'preparing-orbis' ? 0 : startupCycleRemaining(elapsed),
+    );
     return () => window.clearTimeout(timer);
-  }, [ready, sessionPending, phase, themeHandoff.pending]);
+  }, [ready, sessionPending, phase, themeHandoff.pending, sessionTransition]);
 
   useEffect(() => {
     if (phase !== 'finishing' && phase !== 'revealing') return;

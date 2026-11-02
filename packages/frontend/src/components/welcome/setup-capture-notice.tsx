@@ -7,17 +7,41 @@ import { useUserContext } from '@/context/user-context';
 import { Button } from '@/components/ui/Button';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { readOnboardingCapture, TimeMachineApiError } from '@/modules/time-machine/time-machine-api';
-import { acknowledgeSetupCapture, readSetupCapture, reconcileSetupCapture, setupCaptureStorage, priorUnconfirmedSetupCapture } from './setup-capture';
+import { readManualProtection } from '@/modules/time-machine-capsules/protection-choice';
+import { timeMachinePreferencesQueryKey } from '@/modules/time-machine/time-machine-preferences-query';
+import {
+  acknowledgeSetupCapture,
+  retrySetupCaptureIfEnabled,
+  readSetupCapture,
+  reconcileSetupCapture,
+  setupCaptureStorage,
+  priorUnconfirmedSetupCapture,
+} from './setup-capture';
 import './setup-capture-notice.css';
 
 export function SetupCaptureNotice() {
   const { user } = useAppContext();
-  return <SetupCaptureNoticeSession key={user.id} ownerId={user.id} operator={user.operator} />;
+  const { onboardingGeneration } = useDesktopPreferences();
+  return (
+    <SetupCaptureNoticeSession
+      key={`${user.id}:${onboardingGeneration ?? 'initial'}`}
+      ownerId={user.id}
+      operator={user.operator}
+      onboardingGeneration={onboardingGeneration}
+    />
+  );
 }
 
-function SetupCaptureNoticeSession({ ownerId, operator }: { ownerId: number; operator: boolean }) {
+function SetupCaptureNoticeSession({
+  ownerId,
+  operator,
+  onboardingGeneration,
+}: {
+  ownerId: number;
+  operator: boolean;
+  onboardingGeneration: string | null;
+}) {
   const { sessionAbortSignal } = useUserContext();
-  const { onboardingGeneration } = useDesktopPreferences();
   const currentStorage = useMemo(() => setupCaptureStorage(onboardingGeneration), [onboardingGeneration]);
   const [prior] = useState(() => {
     try {
@@ -44,25 +68,40 @@ function SetupCaptureNoticeSession({ ownerId, operator }: { ownerId: number; ope
     }
   });
   const [retrying, setRetrying] = useState(false);
+  const protection = useQuery({
+    queryKey: timeMachinePreferencesQueryKey(ownerId),
+    queryFn: ({ signal }) => readManualProtection(AbortSignal.any([signal, sessionAbortSignal])),
+    enabled: operator,
+    retry: false,
+  });
+  const captureEnabled = operator && !protection.isFetching && !protection.isError && protection.data?.enabled === true;
   const notice = useQuery<{ message: string }>({ queryKey: ['setup-capture-notice', ownerId], enabled: false });
   const key = ['setup-capture-status', ownerId, receipt?.attemptId];
   const status = useQuery({
     queryKey: key,
-    enabled: operator && Boolean(receipt),
+    enabled: captureEnabled && Boolean(receipt),
     queryFn: ({ signal }) => readOnboardingCapture(receipt?.attemptId ?? '', AbortSignal.any([signal, sessionAbortSignal])),
     retry: false,
     refetchOnWindowFocus: false,
     refetchInterval: (query) => (query.state.data?.status === 'capturing' ? 2500 : false),
   });
   useEffect(() => {
-    if (!prior || !receipt || receipt.phase === 'accepted' || (status.data?.status !== 'capturing' && status.data?.status !== 'sealed')) return;
+    if (
+      !captureEnabled ||
+      !prior ||
+      !receipt ||
+      receipt.phase === 'accepted' ||
+      (status.data?.status !== 'capturing' && status.data?.status !== 'sealed')
+    )
+      return;
     void reconcileSetupCapture(ownerId, receipt, false, sessionAbortSignal, storage).then(
       () => setReceipt({ ...receipt, phase: 'accepted' }),
       () => undefined,
     );
-  }, [prior, receipt, status.data?.status, ownerId, sessionAbortSignal, storage]);
+  }, [captureEnabled, prior, receipt, status.data?.status, ownerId, sessionAbortSignal, storage]);
   useEffect(() => {
     if (
+      !captureEnabled ||
       !prior ||
       !receipt ||
       receipt.phase !== 'pending' ||
@@ -75,24 +114,39 @@ function SetupCaptureNoticeSession({ ownerId, operator }: { ownerId: number; ope
     } catch {
       // Keep the unconfirmed receipt if browser storage is unavailable.
     }
-  }, [prior, receipt, status.error, ownerId, storage]);
+  }, [captureEnabled, prior, receipt, status.error, ownerId, storage]);
   const terminal = status.data?.status === 'failed' || status.data?.status === 'interrupted';
   useEffect(() => {
-    if (!terminal || !receipt || receipt.phase === 'failed') return;
+    if (!captureEnabled || !terminal || !receipt || receipt.phase === 'failed') return;
     try {
       setReceipt(acknowledgeSetupCapture(ownerId, receipt, 'failed', storage));
     } catch {
       /* Keep the server point and existing receipt. */
     }
-  }, [receipt, terminal, ownerId, storage]);
+  }, [captureEnabled, receipt, terminal, ownerId, storage]);
   const retry = async () => {
-    if (!receipt || retrying) return;
+    if (!captureEnabled || !receipt || retrying) return;
     setRetrying(true);
     try {
-      const point = await reconcileSetupCapture(ownerId, receipt, true, AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(30_000)]), storage);
-      queryClient.setQueryData(key, point);
-      queryClient.setQueryData(['setup-capture-notice', ownerId], { message: '' });
-      setReceipt({ ...receipt, phase: 'accepted' });
+      await retrySetupCaptureIfEnabled(
+        async () => {
+          const fresh = await readManualProtection(sessionAbortSignal);
+          queryClient.setQueryData(timeMachinePreferencesQueryKey(ownerId), fresh);
+          return fresh.enabled;
+        },
+        async () => {
+          const point = await reconcileSetupCapture(
+            ownerId,
+            receipt,
+            true,
+            AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(30_000)]),
+            storage,
+          );
+          queryClient.setQueryData(key, point);
+          queryClient.setQueryData(['setup-capture-notice', ownerId], { message: '' });
+          setReceipt({ ...receipt, phase: 'accepted' });
+        },
+      );
     } catch (reason) {
       queryClient.setQueryData(['setup-capture-notice', ownerId], {
         message: reason instanceof TimeMachineApiError ? reason.message : 'The setup capture is not confirmed. Retry checks this same attempt.',
@@ -102,6 +156,7 @@ function SetupCaptureNoticeSession({ ownerId, operator }: { ownerId: number; ope
       setRetrying(false);
     }
   };
+  if (!captureEnabled) return null;
   if (status.data?.status === 'capturing' || status.data?.status === 'sealed') return null;
   if (!terminal && !status.isError && !notice.data?.message && !receiptError) return null;
   const notCreated = status.error instanceof TimeMachineApiError && status.error.code === 'point-not-found' && receipt?.phase === 'pending';

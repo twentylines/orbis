@@ -8,6 +8,7 @@ import { isLoggingOff } from '@/desktop/session-motion';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
 import { createPortal } from 'react-dom';
 import { DepthTravel } from '@/components/recovery-progress/depth-travel';
+import { RecoveryProgressBar } from '@/components/recovery-progress/recovery-progress';
 import './startup-space.css';
 
 const viewportGutterProperty = '--orbis-startup-viewport-gutter';
@@ -101,43 +102,52 @@ export function StartupSurface({
         <span />
       </div>
       <div className="orbis-startup-content">
-        <div className="orbis-startup-brand">
-          <div className="orbis-startup-emblem">
-            <div className="orbis-startup-orbits" aria-hidden="true">
-              <svg className="orbis-startup-trails" viewBox="0 0 240 200" fill="none" aria-hidden="true" focusable="false">
-                <ellipse cx="120" cy="100" rx="110" ry="36" transform="rotate(-32 120 100)" />
-                <ellipse cx="120" cy="100" rx="90" ry="32" transform="rotate(36 120 100)" />
-              </svg>
-              <span />
-              <span />
-              <span />
-            </div>
-            <span className="orbis-startup-logo">
-              <OrbisLogo size={88} />
-            </span>
-          </div>
-          <span className="orbis-startup-name">Orbis</span>
-        </div>
-        <output>
-          <span className="orbis-startup-message-loading">{label ?? status?.title ?? (signingIn ? 'Signing in…' : 'Loading workspace…')}</span>
-          <span className="orbis-startup-message-logout">Logging off…</span>
-        </output>
-        <div
-          className="orbis-startup-progress"
-          role="progressbar"
-          aria-label={label ?? status?.title ?? (loggingOff || resumingLogout ? 'Logging off' : signingIn ? 'Signing in' : 'Loading Orbis')}
-          aria-valuetext={status?.message}
-          aria-valuenow={completing ? 100 : undefined}
-        >
-          <span />
-        </div>
-        {status ? (
-          <div className="orbis-startup-status">
-            <p className="orbis-startup-detail">{status.message}</p>
-            <div className="orbis-startup-actions">{children}</div>
+        {setupSpace ? (
+          <div className="orbis-startup-space-content">
+            <output>{label ?? 'Preparing Orbis'}</output>
+            <RecoveryProgressBar label={label ?? 'Preparing Orbis'} />
           </div>
         ) : (
-          children
+          <>
+            <div className="orbis-startup-brand">
+              <div className="orbis-startup-emblem">
+                <div className="orbis-startup-orbits" aria-hidden="true">
+                  <svg className="orbis-startup-trails" viewBox="0 0 240 200" fill="none" aria-hidden="true" focusable="false">
+                    <ellipse cx="120" cy="100" rx="110" ry="36" transform="rotate(-32 120 100)" />
+                    <ellipse cx="120" cy="100" rx="90" ry="32" transform="rotate(36 120 100)" />
+                  </svg>
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <span className="orbis-startup-logo">
+                  <OrbisLogo size={88} />
+                </span>
+              </div>
+              <span className="orbis-startup-name">Orbis</span>
+            </div>
+            <output>
+              <span className="orbis-startup-message-loading">{label ?? status?.title ?? (signingIn ? 'Signing in…' : 'Loading workspace…')}</span>
+              <span className="orbis-startup-message-logout">Logging off…</span>
+            </output>
+            <div
+              className="orbis-startup-progress"
+              role="progressbar"
+              aria-label={label ?? status?.title ?? (loggingOff || resumingLogout ? 'Logging off' : signingIn ? 'Signing in' : 'Loading Orbis')}
+              aria-valuetext={status?.message}
+              aria-valuenow={completing ? 100 : undefined}
+            >
+              <span />
+            </div>
+            {status ? (
+              <div className="orbis-startup-status">
+                <p className="orbis-startup-detail">{status.message}</p>
+                <div className="orbis-startup-actions">{children}</div>
+              </div>
+            ) : (
+              children
+            )}
+          </>
         )}
       </div>
     </div>

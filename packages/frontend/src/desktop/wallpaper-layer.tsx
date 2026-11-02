@@ -1,10 +1,14 @@
 import { prefersReducedMotion } from './motion-setting';
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import type { DesktopAppearance } from '@runtipi/common/schemas/desktop-appearance';
 import { resolveWallpaperKey, wallpaperSources, type WallpaperChoice } from './wallpaper-presets';
 import { readWallpaperImage, rememberBrowserWallpaper, wallpaperCacheEvent } from './wallpaper-cache';
 import { publicThemePackWallpaper, subscribeThemePackAppearance, themePackAppearanceSnapshot } from '@/modules/theme-packs/theme-pack-cache';
 import './wallpaper.css';
+import { setWallpaperTextSample } from './wallpaper-text';
+import type { WallpaperPixels } from './wallpaper-contrast';
+
+const contrastPixels = new WeakMap<HTMLImageElement, WallpaperPixels>();
 
 const subscribeMotion = (changed: () => void) => {
   try {
@@ -22,11 +26,13 @@ function WallpaperImages({
   imageStyle,
   reduced,
   onError,
+  onReady,
 }: {
   source: string;
   imageStyle: CSSProperties;
   reduced: boolean;
   onError?: () => void;
+  onReady: (image: HTMLImageElement) => void;
 }) {
   const [frames, setFrames] = useState([{ source, ready: false }]);
   useEffect(() => {
@@ -44,6 +50,7 @@ function WallpaperImages({
       decoding="async"
       style={{ ...imageStyle, opacity: frame.ready ? 1 : 0, transitionDuration: reduced ? '0s' : undefined }}
       onLoad={(event) => {
+        if (frame.source === source) onReady(event.currentTarget);
         // Cached images need an initial computed opacity before the fade starts.
         if (!reduced) getComputedStyle(event.currentTarget).opacity;
         setFrames((previous) => {
@@ -142,6 +149,44 @@ export function WallpaperLayer({
       ? themePack && publicThemePackWallpaper(themePack)
       : null;
   const source = hash ? custom.source : packSource || wallpaperSources[resolveWallpaperKey(choice)];
+  const publishContrast = useCallback(
+    (image: HTMLImageElement) => {
+      if (!layer.current?.parentElement?.classList.contains('desktop') || !image.naturalWidth || image.getAttribute('src') !== source) return;
+      try {
+        let pixels = contrastPixels.get(image);
+        if (!pixels) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 96;
+          canvas.height = 96;
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          if (!context) return;
+          context.drawImage(image, 0, 0, 96, 96);
+          pixels = {
+            width: 96,
+            height: 96,
+            sourceWidth: image.naturalWidth,
+            sourceHeight: image.naturalHeight,
+            data: context.getImageData(0, 0, 96, 96).data,
+          };
+          contrastPixels.set(image, pixels);
+        }
+        setWallpaperTextSample({ pixels, fit: value.wallpaperFit, x: value.wallpaperX, y: value.wallpaperY, dim: value.wallpaperDim / 100 });
+      } catch {
+        // Cross-origin pack artwork can disallow sampling; retain the theme's readable fallback.
+        setWallpaperTextSample(null);
+      }
+    },
+    [source, value.wallpaperFit, value.wallpaperX, value.wallpaperY, value.wallpaperDim],
+  );
+  useEffect(() => {
+    for (const image of layer.current?.querySelectorAll('img') ?? []) if (image.complete) publishContrast(image);
+  }, [publishContrast]);
+  useEffect(() => {
+    const desktop = layer.current?.parentElement?.classList.contains('desktop');
+    return () => {
+      if (desktop) setWallpaperTextSample(null);
+    };
+  }, []);
   useLayoutEffect(() => {
     const surface = layer.current?.parentElement;
     if (!surface) return;
@@ -182,6 +227,7 @@ export function WallpaperLayer({
             transform: value.wallpaperBlur && !value.lowEffects ? 'scale(1.08)' : undefined,
           }}
           onError={hash ? custom.unavailable : undefined}
+          onReady={publishContrast}
         />
       ) : null}
       <div className="desktop-wallpaper-shade" />

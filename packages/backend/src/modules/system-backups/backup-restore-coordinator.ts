@@ -3,6 +3,7 @@ import { BackupRequirementError } from './backup-files';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { withRestoreLease } from './backup-restore-lease';
 import path from 'node:path';
+import type { RestoreTransactionCheck } from './backup-restore-diagnostics';
 
 // Runtime operations must be idempotent and verify their recorded Docker/database ownership.
 export type RestoreRuntime = {
@@ -14,12 +15,16 @@ export type RestoreRuntime = {
   resumeOriginal: () => Promise<void>;
 };
 const active = new Set<string>();
-const recoveryError = () => new BackupRequirementError('Restore recovery is incomplete. Apps remain stopped to protect their data.');
+const recoveryError = () =>
+  Object.assign(new BackupRequirementError('Restore recovery is incomplete. Apps remain stopped to protect their data.'), {
+    runtimeCheck: 'rollback-recovery',
+  });
 
 export class RestoreRolledBackError extends BackupRequirementError {
   constructor(
     readonly cancelled: boolean,
     cause: unknown,
+    readonly runtimeCheck?: RestoreTransactionCheck,
   ) {
     super('The restore did not complete. Your original server has been recovered.', { cause });
   }
@@ -63,18 +68,24 @@ export async function runRestoreTransaction(journal: BackupRestoreJournal, runti
         await recover();
         return 'rolled-back' as const;
       }
+      let check: RestoreTransactionCheck = 'transaction-start';
       try {
         signal.throwIfAborted();
         await journal.advance('quiescing');
+        check = 'stop-writers';
         await runtime.stopWriters(signal);
         signal.throwIfAborted();
         await journal.advance('promoting');
+        check = 'promote-roots';
         for (const root of roots) await root.promote(signal);
+        check = 'database-pointer';
         await runtime.installDatabasePointer(signal);
         await journal.advance('verifying');
+        check = 'verify-candidate';
         await runtime.verify(signal);
         signal.throwIfAborted();
         // This durable global decision precedes every irreversible per-root commit.
+        check = 'commit-decision';
         await journal.advance('committing');
       } catch (error) {
         // A rename can succeed before the directory fsync fails. Read the durable decision
@@ -86,7 +97,7 @@ export async function runRestoreTransaction(journal: BackupRestoreJournal, runti
         } catch {
           throw recoveryError();
         }
-        throw new RestoreRolledBackError(signal.aborted, error);
+        throw new RestoreRolledBackError(signal.aborted, error, check);
       }
       await finish();
       return 'completed' as const;

@@ -46,6 +46,7 @@ export async function restoreAfterReview(
 ) {
   const reviewed = await reviewForRestore(id, passphrase, signal, request);
   if (!reviewed.review || !canRestore(reviewed, Date.now())) throw new Error('Verify this backup again before restoring.');
+  signal.throwIfAborted();
   onSubmit?.();
   return request(
     '/restores',

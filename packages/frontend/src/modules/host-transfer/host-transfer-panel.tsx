@@ -390,7 +390,17 @@ export function HostTransferWizard({
               Back to transfers
             </Button>
           </div>
-          <SystemBackupsSettings restoreOnly embedded initialImportId={view.importId} onActivityChange={reportRestoreActivity} />
+          <SystemBackupsSettings
+            restoreOnly
+            embedded
+            initialImportId={view.importId}
+            onActivityChange={reportRestoreActivity}
+            onDismiss={() => {
+              reportRestoreActivity(false);
+              if (onDismiss) onDismiss();
+              else go({ kind: 'overview' });
+            }}
+          />
         </div>
       </div>
     );

@@ -134,10 +134,29 @@ test('embedded restore uses a file button, neutral backup key and one restore ac
   expect(markup).toContain('accept=".orbis,application/octet-stream"');
   expect(markup).toContain('name="passphrase"');
   expect(markup).toContain('>Restore</button>');
-  expect(markup).toContain('Restore this backup');
+  expect(markup).not.toContain('name="confirmation"');
+  expect(markup).not.toContain('Restore this backup');
   expect(markup).not.toContain('>Back</button>');
   expect(markup).not.toContain('>Cancel</button>');
   expect(markup).not.toContain('>Upload encrypted backup</button>');
+});
+test('an empty abandoned upload keeps onboarding file selection and its restore action available', () => {
+  const empty: ImportJob = { ...unrelatedImport, status: 'awaiting-upload', stage: 'upload', uploadedBytes: 0, completedBytes: 0 };
+  const markup = render(null, true, undefined, [empty]);
+  expect(markup).toContain('>Choose file</button>');
+  expect(markup).toContain('name="passphrase"');
+  expect(markup).toContain('>Restore</button>');
+  expect(markup).not.toContain('Verify the backup before confirming replacement');
+});
+test('mounted preparation cancels once and terminal rollback unlocks only after idle', async () => {
+  const child = Bun.spawn([process.execPath, new URL('./restore-interaction.fixture.tsx', import.meta.url).pathname], {
+    env: { ...process.env },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+  expect(JSON.parse(stdout)).toMatchObject({ mountedReact: true, duplicateCancel: false, explicitRestoreRequests: 1, rollbackIdleUnlocked: true });
 });
 test('restore remains in the embedded card with real preparation progress and recovery controls', () => {
   const markup = render({
@@ -353,11 +372,11 @@ test('actual submit preparation rejects missing fresh auth before clearing any d
     expect(fixture.selectedFile).toEqual({ name: 'encrypted.orbis', size: 100 });
   }
 });
-test('local key mismatch, missing file and restore confirmation leave all secrets intact', () => {
+test('local key mismatch, missing file and unverified restore leave all secrets intact', () => {
   for (const [change, values, field] of [
     [{}, encryptionValues('local password', 'separate backup key', 'different backup key'), 'repeatPassphrase'],
     [{}, encryptionValues('local password', 'short'), 'passphrase'],
-    [{ kind: 'upload', fileValid: false }, encryptionValues('local password'), 'confirmation'],
+    [{ kind: 'upload', fileValid: false }, encryptionValues('local password', 'separate backup key'), 'file'],
     [{ kind: 'restore', restoreValid: false }, encryptionValues('local password'), 'confirmation'],
   ] as const) {
     const fixture = submitFixture(values);
@@ -401,9 +420,7 @@ test('restore uses only backup password by default and honors optional fresh pro
   expect(prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'upload', totpEnabled: true }).credentials.password).toBe('');
   expect(prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'review', totpEnabled: true }).passphrase).toBe('12345678');
   values.delete('confirmation');
-  expect(() => prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'restore' })).toThrow(
-    'Confirm that you want to restore this backup',
-  );
+  expect(prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'restore' }).credentials.password).toBe('');
   values.set('confirmation', 'replace-server');
   expect(() =>
     prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'restore', restoreValid: false, restoreProofRequired: true }),

@@ -52,6 +52,7 @@ const appPath = (urn: string, catalogue = false) => {
   const [appId = '', storeId = ''] = urn.split(':');
   return `/${catalogue ? 'app-store' : 'apps'}/${encodeURIComponent(storeId)}/${encodeURIComponent(appId)}`;
 };
+const searchEasing = 'cubic-bezier(0.32, 0, 0.18, 1)';
 const reducedMotion = () => prefersReducedMotion();
 
 export function CommandSearch() {
@@ -63,6 +64,7 @@ export function CommandSearch() {
   };
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [glassBlurEnabled, setGlassBlurEnabled] = useState(false);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [scope, setScope] = useState<SearchScope>('all');
@@ -113,6 +115,12 @@ export function CommandSearch() {
   }, []);
   const openSearch = useCallback(() => {
     if (!closingRef.current && !panel.current) returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const glassFilter = getComputedStyle(document.documentElement).getPropertyValue('--desktop-glass-filter').trim();
+    setGlassBlurEnabled(
+      glassFilter !== '' &&
+        glassFilter !== 'none' &&
+        (CSS.supports('backdrop-filter', glassFilter) || CSS.supports('-webkit-backdrop-filter', glassFilter)),
+    );
     const next = readBar();
     if (next) setBar(next);
     setOpen(true);
@@ -146,6 +154,7 @@ export function CommandSearch() {
       }
       const current = getComputedStyle(element);
       const pose = {
+        opacity: current.opacity,
         left: current.left,
         top: current.top,
         width: current.width,
@@ -161,11 +170,12 @@ export function CommandSearch() {
       const resultFrom = resultPose ? { opacity: resultPose.opacity, transform: resultPose.transform } : null;
       const backdropFrom = backdrop.current ? getComputedStyle(backdrop.current).opacity : '1';
       cancelMotions();
-      const options = { duration: 360, easing: 'cubic-bezier(.32, 0, .18, 1)', fill: 'forwards' as const };
+      const options = { duration: 460, easing: searchEasing, fill: 'forwards' as const };
       const exit = element.animate(
         [
           pose,
           {
+            opacity: 0,
             left: `${origin.left - bounds.left}px`,
             top: `${origin.top - bounds.top}px`,
             width: `${origin.width}px`,
@@ -182,9 +192,16 @@ export function CommandSearch() {
       exit.id = 'orbis-search-bar-close';
       motions.current = [exit];
       if (dropdown.current && resultFrom) {
-        motions.current.push(dropdown.current.animate([resultFrom, { opacity: 0, transform: 'translateY(-8px)' }], { ...options, duration: 180 }));
+        motions.current.push(
+          dropdown.current.animate([resultFrom, { opacity: 0, transform: 'translateY(-8px)' }], {
+            ...options,
+            duration: 340,
+            delay: 100,
+          }),
+        );
       }
-      if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: backdropFrom }, { opacity: 0 }], options));
+      if (backdrop.current)
+        motions.current.push(backdrop.current.animate([{ opacity: backdropFrom }, { opacity: 0 }], { ...options, duration: 260 }));
       const started = document.timeline.currentTime;
       if (started !== null) for (const motion of motions.current) motion.startTime = started;
       void exit.finished.then(finishClose, () => undefined);
@@ -208,6 +225,7 @@ export function CommandSearch() {
       const enter = element.animate(
         [
           {
+            opacity: 0,
             left: `${origin.left - bounds.left}px`,
             top: `${origin.top - bounds.top}px`,
             width: `${origin.width}px`,
@@ -219,6 +237,7 @@ export function CommandSearch() {
             columnGap: originStyle.columnGap,
           },
           {
+            opacity: 1,
             left: '0px',
             top: '0px',
             width: `${bounds.width}px`,
@@ -230,7 +249,7 @@ export function CommandSearch() {
             columnGap: targetGap,
           },
         ],
-        { duration: 460, easing: 'cubic-bezier(.32, 0, .18, 1)' },
+        { duration: 460, easing: searchEasing },
       );
       enter.id = 'orbis-search-bar-open';
       motions.current = [enter];
@@ -243,14 +262,14 @@ export function CommandSearch() {
           {
             duration: 340,
             delay: 100,
-            easing: 'cubic-bezier(.32, 0, .18, 1)',
+            easing: searchEasing,
             fill: 'backwards',
           },
         );
         results.id = 'orbis-search-results-open';
         motions.current.push(results);
       }
-      if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260 }));
+      if (backdrop.current) motions.current.push(backdrop.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: searchEasing }));
       const started = document.timeline.currentTime;
       if (started !== null) for (const motion of motions.current) motion.startTime = started;
     }
@@ -379,7 +398,14 @@ export function CommandSearch() {
       }}
     >
       <Dialog.Trigger asChild>
-        <button ref={trigger} type="button" className="desktop-search-trigger" aria-label="Search Orbis" data-search-open={open}>
+        <button
+          ref={trigger}
+          type="button"
+          className="desktop-search-trigger"
+          aria-label="Search Orbis"
+          data-search-open={open}
+          data-search-closing={closing}
+        >
           <IconSearch size={20} aria-hidden="true" />
           <span>Search</span>
           <kbd>⌘/Ctrl K</kbd>
@@ -401,6 +427,7 @@ export function CommandSearch() {
               } as CSSProperties
             }
             data-closing={closing}
+            data-glass-blur={glassBlurEnabled}
             onOpenAutoFocus={(event) => {
               event.preventDefault();
               input.current?.focus({ preventScroll: true });

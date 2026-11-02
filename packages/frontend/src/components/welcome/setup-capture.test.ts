@@ -7,6 +7,9 @@ import {
   setupCaptureStorage,
   priorUnconfirmedSetupCapture,
   reconcileSetupCapture,
+  retrySetupCaptureIfEnabled,
+  setupCaptureRequested,
+  setupCaptureCanContinue,
   reserveSetupCapture,
   SetupCaptureNotStartedError,
   SetupCaptureTerminalError,
@@ -214,4 +217,36 @@ test('blocked browser storage is handled without losing the previous-capture saf
     if (original) Object.defineProperty(globalThis, 'localStorage', original);
     else Reflect.deleteProperty(globalThis, 'localStorage');
   }
+});
+
+test('only confirmed terminal failure or not-started capture permits continuing', () => {
+  expect(setupCaptureCanContinue(new SetupCaptureTerminalError('failed'))).toBe(true);
+  expect(setupCaptureCanContinue(new SetupCaptureNotStartedError('not started'))).toBe(true);
+  expect(setupCaptureCanContinue(new Error('unknown outcome'))).toBe(false);
+  expect(setupCaptureCanContinue(new DOMException('timed out', 'TimeoutError'))).toBe(false);
+});
+
+test('retry rechecks the current preference and never starts a disabled or unknown capture', async () => {
+  let attempts = 0;
+  const retry = async () => {
+    attempts++;
+  };
+  expect(await retrySetupCaptureIfEnabled(async () => false, retry)).toBe(false);
+  await expect(
+    retrySetupCaptureIfEnabled(async () => {
+      throw new Error('unavailable');
+    }, retry),
+  ).rejects.toThrow('unavailable');
+  expect(attempts).toBe(0);
+  expect(await retrySetupCaptureIfEnabled(async () => true, retry)).toBe(true);
+  expect(attempts).toBe(1);
+});
+
+test('a stale receipt cannot override disabled or unconfirmed Time Machine preferences', () => {
+  expect(setupCaptureRequested(true, false, true)).toBe(false);
+  expect(setupCaptureRequested(true, null, false)).toBe(false);
+  expect(setupCaptureRequested(true, null, undefined)).toBe(false);
+  expect(setupCaptureRequested(true, true, false)).toBe(true);
+  expect(setupCaptureRequested(true, null, true)).toBe(true);
+  expect(setupCaptureRequested(false, true, true)).toBe(false);
 });

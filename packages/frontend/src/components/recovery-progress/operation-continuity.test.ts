@@ -7,6 +7,7 @@ import {
   claimOperationBoot,
   claimOperationReload,
   clearOperationContinuity,
+  clearMatchingRestoreContinuity,
   decodeOperationContinuity,
   readOperationContinuity,
   operationContinuityStorageName,
@@ -48,8 +49,8 @@ test('preview, ready, historical terminal, reconnect and recovery never manufact
   expect(advanceOperationContinuity(running, job('succeeded'), true, now)).toBe(running);
   expect(advanceOperationContinuity(running, { ...job('succeeded'), needsRecovery: true }, false, now)).toBe(running);
   expect(advanceOperationContinuity(running, { ...job('succeeded'), id: other }, false, now)).toBe(running);
-  for (const status of ['succeeded', 'rolled-back'] as const)
-    expect(advanceOperationContinuity(running, job(status), false, now)?.phase).toBe('departing');
+  expect(advanceOperationContinuity(running, job('succeeded'), false, now)?.phase).toBe('departing');
+  expect(advanceOperationContinuity(running, job('rolled-back'), false, now)).toBe(running);
 });
 test('accepted start or observed running can cross one confirmed terminal and one boot claim only', () => {
   const storage = memory();
@@ -128,4 +129,19 @@ test('updates and downgrades share one marker but cannot complete each other or 
     expect(advanceOperationContinuity(started, { ...terminal, operation: 'restore' }, false, now)).toBe(started);
     expect(advanceOperationContinuity(started, { ...terminal, needsRecovery: true }, false, now)).toBe(started);
   }
+});
+
+test('rollback acknowledgement removes only its own restore marker', () => {
+  const storage = memory();
+  expect(armStartedOperation(id, 'restore', storage)).toBe(true);
+  expect(clearMatchingRestoreContinuity('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', storage)).toBe(false);
+  expect(readOperationContinuity(storage)?.jobId).toBe(id);
+  expect(clearMatchingRestoreContinuity(id, storage)).toBe(true);
+  expect(readOperationContinuity(storage)).toBeNull();
+  expect(armStartedOperation(id, 'update', storage)).toBe(true);
+  expect(clearMatchingRestoreContinuity(id, storage)).toBe(false);
+  expect(readOperationContinuity(storage)?.operation).toBe('update');
+  storage.setItem(operationContinuityStorageName, '{invalid');
+  expect(clearMatchingRestoreContinuity(id, storage)).toBe(false);
+  expect(storage.getItem(operationContinuityStorageName)).toBe('{invalid');
 });

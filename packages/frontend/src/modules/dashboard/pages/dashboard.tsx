@@ -7,6 +7,7 @@ import { useAppLauncher } from '@/desktop/app-launcher';
 import { appDestinations } from '@/desktop/app-destinations';
 import { appOpeningMode, primaryAppAddress } from '@/desktop/app-opening';
 import { useBlockedAppEmbeds } from '@/desktop/app-embedding';
+import { useWallpaperText } from '@/desktop/wallpaper-text';
 import { AppTabIndicator } from '@/desktop/app-tab-indicator';
 import { useAppContext } from '@/context/app-context';
 import { Switch } from '@/components/ui/Switch';
@@ -101,6 +102,8 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
     }
   });
   const heading = useRef<HTMLHeadingElement>(null);
+  const headingText = useWallpaperText<HTMLDivElement>();
+  const appsHeadingText = useWallpaperText<HTMLDivElement>();
   useEffect(() => {
     if (focusOnMount) heading.current?.focus({ preventScroll: true });
   }, [focusOnMount]);
@@ -297,7 +300,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   const widgets: Record<WidgetId, ReactNode> = {
     applications: (
       <section className="workspace-apps" aria-labelledby="workspace-apps-title">
-        <div className="workspace-section-heading">
+        <div className="workspace-section-heading" ref={appsHeadingText}>
           <div>
             <h2 id="workspace-apps-title">Applications</h2>
           </div>
@@ -499,7 +502,7 @@ function LocalDashboard({ focusOnMount = false }: { focusOnMount?: boolean }) {
   return (
     <div className="workspace">
       <div className="workspace-heading">
-        <div>
+        <div ref={headingText}>
           <h1
             ref={heading}
             tabIndex={focusOnMount ? -1 : undefined}

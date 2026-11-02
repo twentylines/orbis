@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 import { expect, test } from 'bun:test';
-import { finishSetup, saveSetupSteps, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices } from './setup-save';
+import { finishSetup, prepareSetupHome, saveSetupSteps, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices } from './setup-save';
 import type { AppUpdateRule } from '@/desktop/automatic-updates-api';
 
 test('an installed app can stay manual while a custom schedule survives other onboarding choices', async () => {
@@ -228,4 +228,40 @@ test('a lost save response still permits restoring the prior app policy', async 
   loseResponse = false;
   await saveSetupSteps(setupAppUpdateSteps([], touched, api), receipts, () => {});
   expect(rule).toEqual({ mode: 'disabled' });
+});
+
+test('Home preparation waits for the real dashboard, app data, fonts and minimum hold', async () => {
+  let releaseApps!: () => void;
+  const apps = new Promise<void>((resolve) => {
+    releaseApps = resolve;
+  });
+  const events: string[] = [];
+  const preparation = prepareSetupHome(
+    async () => {
+      events.push('dashboard');
+    },
+    async () => {
+      events.push('apps');
+      await apps;
+    },
+    Promise.resolve(),
+    Promise.resolve(),
+  ).then(() => {
+    events.push('ready');
+  });
+  await Promise.resolve();
+  expect(events).toEqual(['dashboard', 'apps']);
+  releaseApps();
+  await preparation;
+  expect(events).toEqual(['dashboard', 'apps', 'ready']);
+  await expect(
+    prepareSetupHome(
+      async () => {},
+      async () => {
+        throw Error('apps unavailable');
+      },
+      Promise.resolve(),
+      Promise.resolve(),
+    ),
+  ).rejects.toThrow('apps unavailable');
 });

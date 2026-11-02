@@ -78,13 +78,23 @@ export function clearOperationContinuity(storage: Pick<Storage, 'removeItem'>) {
     /* Browser storage is optional; the marker never authorizes an operation. */
   }
 }
+export function clearMatchingRestoreContinuity(jobId: string, storage: ContinuityStorage) {
+  try {
+    const marker = decodeOperationContinuity(storage.getItem(operationContinuityStorageName));
+    if (!marker || marker.operation !== 'restore' || marker.jobId !== jobId) return false;
+    storage.removeItem(operationContinuityStorageName);
+    return storage.getItem(operationContinuityStorageName) === null;
+  } catch {
+    return false;
+  }
+}
 export function advanceOperationContinuity(
   previous: OperationContinuity | null,
   job: OperationJob,
   reconnecting: boolean,
   now: number,
 ): OperationContinuity | null {
-  if (reconnecting) return previous;
+  if (reconnecting || (job.operation === 'restore' && job.status === 'rolled-back')) return previous;
   if (job.status === 'running' && !job.needsRecovery && (!previous || previous.phase === 'running'))
     return previous?.jobId === job.id && previous.operation === job.operation && previous.phase === 'running'
       ? previous

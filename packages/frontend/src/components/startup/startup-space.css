@@ -9,3 +9,26 @@
   z-index: -1;
   pointer-events: none;
 }
+
+.orbis-startup-setup-space .orbis-startup-space-content {
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+  width: min(100%, 360px);
+  color: #edf0f3;
+}
+.orbis-startup-setup-space .orbis-startup-space-content output,
+html:not([data-desktop-mode="dark"]) .orbis-startup.orbis-startup-setup-space:not([data-desktop-mode="dark"]) .orbis-startup-space-content output {
+  color: var(--orbis-setup-space-ink, #edf0f3);
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  line-height: 1.3;
+}
+.orbis-startup-setup-space .recovery-progress-bar {
+  --desktop-ink: #edf0f3;
+  --desktop-accent: #b7c2cf;
+}
+@media (forced-colors: active) {
+  .orbis-startup-setup-space {
+    --orbis-setup-space-ink: CanvasText;
+  }
+}

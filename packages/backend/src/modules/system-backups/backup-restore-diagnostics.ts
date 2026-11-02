@@ -71,7 +71,19 @@ export function reportVerifierStartupFailure(error: VerifierStartupFailure, writ
   }
 }
 export const verifierDiagnosticCheck = ({ stage, failure }: VerifierDiagnostic) => `verifier-${stage}-${failure}`;
+export const restoreTransactionChecks = [
+  'transaction-start',
+  'stop-writers',
+  'promote-roots',
+  'database-pointer',
+  'verify-candidate',
+  'commit-decision',
+  'rollback-recovery',
+] as const;
+export type RestoreTransactionCheck = (typeof restoreTransactionChecks)[number];
+const transactionChecks = new Set<string>(restoreTransactionChecks);
 const runtimeChecks = new Set([
+  ...restoreTransactionChecks,
   'runtime',
   'verifier-mounts',
   'preparation-phase',
@@ -99,12 +111,16 @@ const runtimeChecks = new Set([
 ]);
 export function restoreFailureProgress(error: unknown, stage: string) {
   let current = error;
+  let fallback: string | undefined;
   for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth++) {
     const check = Object.getOwnPropertyDescriptor(current, 'runtimeCheck')?.value;
-    if (typeof check === 'string' && runtimeChecks.has(check)) return { stage, check };
+    if (typeof check === 'string' && runtimeChecks.has(check)) {
+      if (transactionChecks.has(check)) fallback ??= check;
+      else return { stage, check };
+    }
     current = Object.getOwnPropertyDescriptor(current, 'cause')?.value;
   }
-  return { stage, check: undefined };
+  return { stage, check: fallback };
 }
 
 export class VerifierDiagnosticParser {

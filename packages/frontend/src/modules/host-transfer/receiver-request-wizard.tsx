@@ -210,7 +210,14 @@ export function ReceiverRequestWizard({ onActivityChange, onDismiss, recoverySce
   if (!requests) return <InlineFeedback>Restore requests are unavailable. Reopen this window from an operator session.</InlineFeedback>;
   if (stage === 'review' && job?.status === 'complete')
     return (
-      <SystemBackupsSettings restoreOnly embedded recoveryScene={recoveryScene} initialImportId={job.importId} onActivityChange={onActivityChange} />
+      <SystemBackupsSettings
+        restoreOnly
+        embedded
+        recoveryScene={recoveryScene}
+        initialImportId={job.importId}
+        onActivityChange={onActivityChange}
+        onDismiss={onDismiss}
+      />
     );
   if (!requests.available)
     return (

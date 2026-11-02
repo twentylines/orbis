@@ -11,12 +11,13 @@
   gap: var(--orbis-compact-section-gap, 26px);
   margin: 0 0 var(--orbis-compact-section-gap, 30px);
   color: var(--workspace-heading-ink);
-  text-shadow: 0 1px 18px var(--workspace-heading-shadow);
   animation: orbis-heading-enter 0.58s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .workspace-heading > div {
   min-width: 0;
   max-width: 100%;
+  color: var(--workspace-heading-ink);
+  transition: color 180ms ease;
 }
 .workspace-eyebrow {
   margin: 0 0 11px;
@@ -1224,7 +1225,7 @@
 .workspace-apps .workspace-panel-kicker,
 .workspace-apps .workspace-section-heading {
   color: var(--workspace-heading-ink);
-  text-shadow: 0 1px 15px var(--workspace-heading-shadow);
+  transition: color 180ms ease;
 }
 .workspace-apps .workspace-section-heading p {
   color: var(--workspace-heading-ink);

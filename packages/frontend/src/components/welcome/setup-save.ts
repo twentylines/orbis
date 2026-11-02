@@ -60,3 +60,12 @@ export async function finishSetup(
   onProgress('Preparing Orbis');
   await navigate('/dashboard', { replace: true });
 }
+
+export async function prepareSetupHome(
+  loadDashboard: () => Promise<unknown>,
+  loadApps: () => Promise<unknown>,
+  fonts: Promise<unknown>,
+  hold: Promise<unknown>,
+) {
+  await Promise.all([loadDashboard(), loadApps(), fonts, hold]);
+}

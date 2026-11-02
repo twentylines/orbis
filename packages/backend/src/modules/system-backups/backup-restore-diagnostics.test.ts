@@ -8,6 +8,7 @@ import {
   attachVerifierDiagnostics,
   reportVerifierStartupFailure,
   restoreFailureProgress,
+  restoreTransactionChecks,
   VerifierDiagnosticParser,
   VerifierStartupDiagnostics,
   VerifierStartupFailure,
@@ -152,6 +153,15 @@ it('preserves only allowlisted failure checks across rollback causes and never s
   const cyclic: { cause?: unknown } = {};
   cyclic.cause = cyclic;
   expect(restoreFailureProgress(cyclic, 'restoring').check).toBeUndefined();
+});
+it('retains a bounded transaction stage when a generic failure would otherwise lose its reason', () => {
+  for (const check of restoreTransactionChecks) {
+    const error = new RestoreRolledBackError(false, new Error('private connection and file details'), check);
+    expect(restoreFailureProgress(error, 'restoring')).toEqual({ stage: 'restoring', check });
+    expect(JSON.stringify(restoreFailureProgress(error, 'restoring'))).not.toContain('private');
+  }
+  const specific = Object.assign(new Error('private details'), { runtimeCheck: 'verifier-env-readonly' });
+  expect(restoreFailureProgress(new RestoreRolledBackError(false, specific, 'verify-candidate'), 'restoring').check).toBe('verifier-env-readonly');
 });
 it('attaches stderr before startup, finishes without waiting indefinitely and closes on cancellation', async () => {
   const stream = new PassThrough();

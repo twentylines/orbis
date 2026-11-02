@@ -71,6 +71,15 @@ let pending: Promise<OperationSnapshot> | null = null;
 let latest: OperationSnapshot | null = null;
 let checkedAt = 0;
 let observedLock = false;
+export function rollbackCanContinue(
+  job: { id: string; status: string; needsRecovery: boolean } | null,
+  startedId: string | null,
+  authority: OperationSnapshot,
+) {
+  return Boolean(
+    job && startedId && job.id === startedId && job.status === 'rolled-back' && !job.needsRecovery && operationAllowsDeparture(authority),
+  );
+}
 export function operationAllowsDeparture(snapshot: OperationSnapshot) {
   return snapshot.state === 'idle' && snapshot.supported && !snapshot.unavailable;
 }

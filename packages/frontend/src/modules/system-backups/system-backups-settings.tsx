@@ -1,5 +1,6 @@
 import { useRestoreDeparture } from '@/components/recovery-progress/use-restore-departure';
-import { armAcceptedRestore } from '@/components/recovery-progress/operation-continuity';
+import { armAcceptedRestore, clearMatchingRestoreContinuity, operationContinuityStorage } from '@/components/recovery-progress/operation-continuity';
+import { readOperationStatus } from '@/components/recovery-progress/operation-status';
 import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
 import { measuredPercent, restorePresentation } from '@/components/recovery-progress/restore-presentation';
 import { Link } from 'react-router';
@@ -42,8 +43,9 @@ import {
 } from './contracts';
 import { isAcceptedRestoreReconnect, shouldStopBackupStatusPolling } from './backup-reconnection';
 import { restoreAfterReview } from './review-for-restore';
-import { acceptRestoreAttempt, beginRestoreAttempt, restoreForAttempt, type RestoreAttempt } from './restore-attempt';
+import { acceptRestoreAttempt, beginRestoreAttempt, restoreCanResume, restoreForAttempt, type RestoreAttempt } from './restore-attempt';
 import { accountSecurityKey, readAccountSecurity } from '@/desktop/account-security-api';
+import { cancelImportBeforeRestore } from './cancel-backup-preparation';
 import { BackupRemoveTrigger, BackupRemovalConfirmation, type BackupRemovalTarget } from './backup-removal-confirmation';
 import type { BackupRemovalRect } from './backup-removal-position';
 import './system-backups-settings.css';
@@ -159,8 +161,6 @@ export function prepareBackupSubmission(
   const code = values.get('totpCode');
   const needsCredentials =
     !['upload', 'review', 'restore'].includes(options.kind) || options.restoreProofRequired === true || options.uploadFromServer === true;
-  if (['upload', 'review', 'restore'].includes(options.kind) && values.get('confirmation') !== 'replace-server')
-    throw new BackupFormError('confirmation', 'Confirm that you want to restore this backup.');
   if (needsCredentials && (typeof password !== 'string' || !password.length || password.length > 1024))
     throw new BackupFormError('password', 'Enter this server’s current account password.');
   if (needsCredentials && (options.totpEnabled || (code !== null && code !== '')) && (typeof code !== 'string' || !/^\d{6}$/.test(code)))
@@ -361,6 +361,7 @@ type BackupSettingsProps = {
   embedded?: boolean;
   initialImportId?: string;
   onActivityChange?: (active: boolean) => void;
+  onDismiss?: () => void;
   recoveryActions?: ReactNode;
 };
 
@@ -370,6 +371,7 @@ export function SystemBackupsSettings({
   embedded = false,
   initialImportId,
   onActivityChange,
+  onDismiss,
   recoveryActions,
 }: BackupSettingsProps = {}) {
   const id = useId();
@@ -405,6 +407,9 @@ export function SystemBackupsSettings({
   const [wizardJob, setWizardJob] = useState<{ kind: 'export' | 'import'; id: string } | null>(null);
   const [wizardPurpose, setWizardPurpose] = useState<Action['kind'] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stoppingPreparation, setStoppingPreparation] = useState(false);
+  const [dismissedRestoreId, setDismissedRestoreId] = useState<string | null>(null);
+  const [guidedImportCleared, setGuidedImportCleared] = useState(false);
   const [removal, setRemoval] = useState<BackupRemovalTarget | null>(null);
   const [removalError, setRemovalError] = useState<string | null>(null);
   const [removalAnchorRect, setRemovalAnchorRect] = useState<BackupRemovalRect | null>(null);
@@ -424,6 +429,8 @@ export function SystemBackupsSettings({
   const mounted = useRef(true);
   const running = useRef(false);
   const awaitingRestore = useRef(false);
+  const cancelPreparationRequested = useRef(false);
+  const preparationWork = useRef<Promise<void> | null>(null);
   const seededImport = useRef<string | null>(null);
   const actionOpener = useRef<HTMLElement | null>(null);
   const actionKeyboard = useRef(false);
@@ -467,41 +474,73 @@ export function SystemBackupsSettings({
   const savedBackups = (data?.exports.jobs ?? []).filter((job) => savedBackupEligible(job)).sort((a, b) => b.createdAt - a.createdAt);
   const selectedSavedBackup = savedBackups.find((job) => job.id === savedBackupId);
   useEffect(() => {
-    if (!initialImportId || seededImport.current === initialImportId || action || busy) return;
+    if (!initialImportId || guidedImportCleared || seededImport.current === initialImportId || action || busy) return;
     const job = data?.imports.jobs.find((entry) => entry.id === initialImportId);
-    if (!job || job.uploadedBytes <= 0 || ['uploading', 'reviewing', 'preparing'].includes(job.status)) return;
+    if (!job || ['uploading', 'reviewing', 'preparing'].includes(job.status)) return;
+    if (job.uploadedBytes <= 0) {
+      setGuidedImportCleared(true);
+      setAction({ kind: 'upload' });
+      setWizardPurpose('upload');
+      return;
+    }
     seededImport.current = initialImportId;
     setArchiveKeyMode(null);
-    setAction({ kind: 'review', job });
+    setAction({ kind: canRestore(job, Date.now()) ? 'restore' : 'review', job });
     setWizardJob({ kind: 'import', id: job.id });
     setWizardPurpose('review');
     if (!embedded) setWizardOpen(true);
-  }, [initialImportId, data, action, busy, embedded]);
+  }, [initialImportId, guidedImportCleared, data, action, busy, embedded]);
   const restore = restoreForAttempt(restoreAttempt, data?.restore.job);
-  const guidedImportId = restoreOnly && embedded ? initialImportId : undefined;
+  const terminalRestore = Boolean(restore && ['succeeded', 'rolled-back'].includes(restore.status));
+  const terminalAuthority = useQuery({
+    queryKey: ['orbis-restore-terminal-authority', user.id, terminalRestore ? restore?.id : null],
+    queryFn: ({ signal }) => readOperationStatus(signal),
+    enabled: visible && terminalRestore,
+    retry: false,
+    refetchInterval: (query) => (restoreCanResume(restore, query.state.data) ? false : 2000),
+    refetchIntervalInBackground: false,
+  });
+  const restoreSettled = !status.isError && !terminalAuthority.isError && restoreCanResume(restore, terminalAuthority.data);
+  const awaitingAcceptedRestore = awaitingRestore.current && !restoreSettled;
+  const terminalChecking = terminalRestore && !restoreSettled;
+  const guidedImportId = restoreOnly && embedded && !guidedImportCleared ? initialImportId : undefined;
   const visibleImports = guidedImportId ? data?.imports.jobs.filter((job) => job.id === guidedImportId) : data?.imports.jobs;
   const selectedImport = visibleImports?.find((job) => job.id === guidedImportId);
+  const activeImport = wizardJob?.kind === 'import' ? data?.imports.jobs.find((job) => job.id === wizardJob.id) : selectedImport;
+  const importRunning = activeImport && ['uploading', 'reviewing', 'preparing'].includes(activeImport.status) ? activeImport : undefined;
   const showImportSummary = !guidedImportId || !action || ['uploading', 'reviewing', 'preparing'].includes(selectedImport?.status ?? '');
-  const restoreActive = Boolean(restore && !['succeeded', 'rolled-back'].includes(restore.status));
-  const continuity = useRestoreDeparture(restore, status.isError);
+  const restoreActive = Boolean(restore && (!terminalRestore || restore.needsRecovery));
+  const continuity = useRestoreDeparture(restore?.status === 'rolled-back' ? null : restore, status.isError);
   useEffect(() => {
     if (restore && ['ready', 'running', 'recovery-required'].includes(restore.status)) awaitingRestore.current = true;
-    if (restore && ['succeeded', 'rolled-back'].includes(restore.status) && awaitingRestore.current && !continuity.departing) {
+    if (restoreSettled && awaitingRestore.current) {
       awaitingRestore.current = false;
       setRestoreSettled((value) => value + 1);
     }
-  }, [restore, continuity.departing]);
+  }, [restore, restoreSettled]);
   useEffect(() => {
-    onActivityChange?.(busy || restoreActive || awaitingRestore.current);
-  }, [busy, restoreActive, onActivityChange]);
+    onActivityChange?.(busy || stoppingPreparation || Boolean(importRunning) || restoreActive || terminalChecking || awaitingAcceptedRestore);
+  }, [busy, stoppingPreparation, importRunning, restoreActive, terminalChecking, awaitingAcceptedRestore, onActivityChange]);
+  useEffect(() => {
+    if (!error || busy || awaitingAcceptedRestore || !activeImport || !canRestore(activeImport, Date.now())) return;
+    if (action?.kind === 'upload' || action?.kind === 'review') {
+      setAction({ kind: 'restore', job: activeImport });
+      setWizardPurpose('restore');
+    }
+  }, [error, busy, awaitingAcceptedRestore, activeImport, action?.kind]);
   useEffect(() => () => onActivityChange?.(false), [onActivityChange]);
   const working =
     busy ||
+    stoppingPreparation ||
     restoreActive ||
-    awaitingRestore.current ||
+    terminalChecking ||
+    awaitingAcceptedRestore ||
     Boolean(data?.exports.jobs.some((job) => job.status === 'running' || job.needsRecovery || job.restartRequired)) ||
     Boolean(data?.imports.jobs.some((job) => ['uploading', 'reviewing', 'preparing'].includes(job.status)));
-  const refresh = () => void status.refetch();
+  const refresh = () => {
+    void status.refetch();
+    if (terminalRestore) void terminalAuthority.refetch();
+  };
   const run = async (work: (signal: AbortSignal) => Promise<void>, options?: { onError?: (message: string) => void; refresh?: boolean }) => {
     if (running.current) return;
     running.current = true;
@@ -513,7 +552,7 @@ export function SystemBackupsSettings({
     try {
       await work(controller.signal);
     } catch (failure) {
-      if (mounted.current)
+      if (mounted.current && !(cancelPreparationRequested.current && controller.signal.aborted))
         (options?.onError ?? setError)(failure instanceof Error ? failure.message : 'The backup action failed. Refresh status before retrying.');
     } finally {
       if (mounted.current) {
@@ -565,7 +604,7 @@ export function SystemBackupsSettings({
     if (!action || running.current) return;
     const form = event.currentTarget;
     const values = new FormData(form);
-    const confirmation = String(values.get('confirmation') ?? '');
+    const confirmation = 'replace-server';
     let submission: ReturnType<typeof prepareBackupSubmission>;
     try {
       if (action.kind === 'upload' && restoreSource === 'server' && !selectedSavedBackup)
@@ -578,8 +617,7 @@ export function SystemBackupsSettings({
         fileValid: restoreSource === 'server' ? Boolean(selectedSavedBackup) : Boolean(file && file.size >= 52),
         uploadFromServer: action.kind === 'upload' && restoreSource === 'server',
         restoreProofRequired: accountSecurity.data?.requireRestoreAuthentication === true,
-        restoreValid:
-          action.kind !== 'restore' || (confirmation === 'replace-server' && canRestore(action.job, Date.now()) && Boolean(action.job.review)),
+        restoreValid: action.kind !== 'restore' || (canRestore(action.job, Date.now()) && Boolean(action.job.review)),
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Check the backup password or passphrase.');
@@ -596,7 +634,7 @@ export function SystemBackupsSettings({
     const selected = action;
     const newAttempt = ['upload', 'review', 'restore'].includes(selected.kind) ? beginRestoreAttempt(data?.restore.job) : null;
     if (newAttempt) setRestoreAttempt(newAttempt);
-    void run(
+    const work = run(
       async (signal) => {
         const verifyAndRestore = async (job: ImportJob) => {
           let accepted: unknown;
@@ -655,19 +693,25 @@ export function SystemBackupsSettings({
           });
           setNotice('Download requested. Your browser shows its progress and confirms when the file has been saved.');
         } else if (selected.kind === 'restore') {
-          if (confirmation !== 'replace-server') throw new Error('Confirm that you want to restore this backup.');
           if (!canRestore(selected.job, Date.now()) || !selected.job.review) throw new Error('Verify this backup again before restoring.');
-          const accepted = await backupRequest(
-            '/restores',
-            'POST',
-            {
-              ...(credentials.password ? credentials : {}),
-              importId: selected.job.id,
-              manifestSha256: selected.job.review.manifestSha256,
-              confirmation,
-            },
-            signal,
-          );
+          awaitingRestore.current = true;
+          let accepted: unknown;
+          try {
+            accepted = await backupRequest(
+              '/restores',
+              'POST',
+              {
+                ...(credentials.password ? credentials : {}),
+                importId: selected.job.id,
+                manifestSha256: selected.job.review.manifestSha256,
+                confirmation,
+              },
+              signal,
+            );
+          } catch (failure) {
+            if (failure instanceof BackupApiError && failure.status >= 400 && failure.status < 500) awaitingRestore.current = false;
+            throw failure;
+          }
           const acceptedJob = restoreJobSchema.allows(accepted) ? accepted : restoreStatusSchema.allows(accepted) ? accepted.job : null;
           if (!acceptedJob) {
             awaitingRestore.current = true;
@@ -699,6 +743,84 @@ export function SystemBackupsSettings({
         },
       },
     );
+    if (newAttempt) preparationWork.current = work;
+    void work.finally(() => {
+      if (preparationWork.current === work) preparationWork.current = null;
+    });
+  };
+  const dismissForm = () => {
+    if (running.current || stoppingPreparation || restoreActive || awaitingAcceptedRestore || terminalChecking) return;
+    credentialsForm.current?.reset();
+    setUpload(null);
+    setError(null);
+    setNotice(null);
+    setRestoreAttempt(null);
+    if (embedded && onDismiss) {
+      onActivityChange?.(false);
+      onDismiss();
+    } else if (embedded) {
+      const retained = action && 'job' in action && ['review', 'restore'].includes(action.kind) ? (action.job as ImportJob) : null;
+      setAction(retained ? { kind: canRestore(retained, Date.now()) ? 'restore' : 'review', job: retained } : { kind: 'upload' });
+      setWizardJob(retained ? { kind: 'import', id: retained.id } : null);
+      setWizardPurpose(retained ? 'review' : 'upload');
+    } else {
+      setAction(null);
+      setFile(null);
+      setWizardOpen(false);
+    }
+  };
+  const cancelPreparation = async () => {
+    if (cancelPreparationRequested.current || restoreActive || awaitingRestore.current) return;
+    cancelPreparationRequested.current = true;
+    setStoppingPreparation(true);
+    setError(null);
+    const importId = wizardJob?.kind === 'import' ? wizardJob.id : action && 'job' in action && action.kind === 'review' ? action.job.id : null;
+    abort.current?.abort();
+    try {
+      await preparationWork.current;
+      if (awaitingRestore.current) throw new Error('The restore may have started. Check its status before leaving.');
+      const retained = await cancelImportBeforeRestore(importId);
+      await status.refetch();
+      if (!mounted.current) return;
+      setRestoreAttempt(null);
+      setUpload(null);
+      setNotice(null);
+      setError(null);
+      credentialsForm.current?.reset();
+      if (embedded && onDismiss) {
+        onActivityChange?.(false);
+        onDismiss();
+      } else {
+        setAction(
+          embedded && retained && retained.uploadedBytes > 0
+            ? { kind: canRestore(retained, Date.now()) ? 'restore' : 'review', job: retained }
+            : { kind: 'upload' },
+        );
+        setWizardJob(embedded && retained && retained.uploadedBytes > 0 ? { kind: 'import', id: retained.id } : null);
+        setWizardPurpose(embedded && retained && retained.uploadedBytes > 0 ? 'review' : 'upload');
+      }
+    } catch (failure) {
+      if (mounted.current) setError(failure instanceof Error ? failure.message : 'Backup cancellation could not be confirmed. Check status.');
+    } finally {
+      cancelPreparationRequested.current = false;
+      if (mounted.current) setStoppingPreparation(false);
+    }
+  };
+  const continueAfterRestore = () => {
+    if (!restore || !restoreSettled || busy || stoppingPreparation) return;
+    const storage = operationContinuityStorage();
+    if (storage) clearMatchingRestoreContinuity(restore.id, storage);
+    awaitingRestore.current = false;
+    setDismissedRestoreId(restore.id);
+    setRestoreAttempt(null);
+    setAction(null);
+    setWizardOpen(false);
+    setError(null);
+    if (embedded) {
+      onActivityChange?.(false);
+      if (onDismiss) onDismiss();
+      else setAction({ kind: 'upload' });
+    }
   };
   const simpleAction = (path: string, method = 'POST') =>
     void run(async (signal) => {
@@ -778,7 +900,11 @@ export function SystemBackupsSettings({
       {job.reviewExpiresAt ? <p>Review expires {new Date(job.reviewExpiresAt).toLocaleTimeString()}. Verify again if it expires.</p> : null}
       <div className="system-backups-actions">
         {job.uploadedBytes > 0 && !['uploading', 'reviewing', 'preparing'].includes(job.status) ? (
-          <Button intent="danger" disabled={working || status.isError} onClick={() => chooseAction({ kind: 'review', job })}>
+          <Button
+            intent="danger"
+            disabled={working || status.isError}
+            onClick={() => chooseAction({ kind: canRestore(job, Date.now()) ? 'restore' : 'review', job })}
+          >
             Restore
           </Button>
         ) : null}
@@ -796,43 +922,44 @@ export function SystemBackupsSettings({
       </div>
     </article>
   );
-  const restorePanel = restore ? (
-    <article className="system-backups-job" aria-labelledby={`${id}-restore`}>
-      <h3 id={`${id}-restore`}>Server restore</h3>
-      <output>{restore.message}</output>
-      {restore.preparation ? (
-        <RecoveryProgress
-          label={`Preparation · ${stageLabels[restore.preparation.stage] ?? 'Checking progress'}`}
-          completed={restore.preparation.stage === 'database' ? restore.preparation.records : restore.preparation.completedBytes}
-          total={restore.preparation.stage === 'database' ? restore.preparation.totalRecords : restore.preparation.totalBytes}
-          unit={restore.preparation.stage === 'database' ? 'records' : 'bytes'}
-        />
-      ) : null}
-      {!restore.preparation && ['ready', 'running'].includes(restore.status) ? <RecoveryProgress label="Restoring this server" /> : null}
-      {restore.status === 'succeeded' ? <RecoveryProgress label="Restore complete" completed={0} total={null} settled /> : null}
-      {restore.progressUnavailable ? <p>Detailed progress is unavailable. Recovery controls use the server’s verified restore state.</p> : null}
-      {restore.status === 'running' || restore.status === 'ready' ? (
-        <p>Orbis may disconnect while replacing its configuration and app data. Status is checked automatically when the connection returns.</p>
-      ) : null}
-      <div className="system-backups-actions">
-        {restore.canCancel ? (
-          <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'cancel-restore', job: restore })}>
-            Cancel
-          </Button>
+  const restorePanel =
+    restore && dismissedRestoreId !== restore.id ? (
+      <article className="system-backups-job" aria-labelledby={`${id}-restore`}>
+        <h3 id={`${id}-restore`}>Server restore</h3>
+        <output>{restore.message}</output>
+        {restore.preparation ? (
+          <RecoveryProgress
+            label={`Preparation · ${stageLabels[restore.preparation.stage] ?? 'Checking progress'}`}
+            completed={restore.preparation.stage === 'database' ? restore.preparation.records : restore.preparation.completedBytes}
+            total={restore.preparation.stage === 'database' ? restore.preparation.totalRecords : restore.preparation.totalBytes}
+            unit={restore.preparation.stage === 'database' ? 'records' : 'bytes'}
+          />
         ) : null}
-        {restore.canRecover ? (
-          <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'recover-restore', job: restore })}>
-            Recover
-          </Button>
+        {!restore.preparation && ['ready', 'running'].includes(restore.status) ? <RecoveryProgress label="Restoring this server" /> : null}
+        {restore.status === 'succeeded' ? <RecoveryProgress label="Restore complete" completed={0} total={null} settled /> : null}
+        {restore.progressUnavailable ? <p>Detailed progress is unavailable. Recovery controls use the server’s verified restore state.</p> : null}
+        {restore.status === 'running' || restore.status === 'ready' ? (
+          <p>Orbis may disconnect while replacing its configuration and app data. Status is checked automatically when the connection returns.</p>
         ) : null}
-        {['succeeded', 'rolled-back'].includes(restore.status) ? (
-          <Button variant="outline" onClick={() => window.location.reload()}>
-            Reload
-          </Button>
-        ) : null}
-      </div>
-    </article>
-  ) : null;
+        <div className="system-backups-actions">
+          {restore.canCancel ? (
+            <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'cancel-restore', job: restore })}>
+              Cancel
+            </Button>
+          ) : null}
+          {restore.canRecover ? (
+            <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'recover-restore', job: restore })}>
+              Recover
+            </Button>
+          ) : null}
+          {terminalRestore ? (
+            <Button variant="outline" onClick={restoreSettled ? continueAfterRestore : refresh} disabled={busy || terminalAuthority.isFetching}>
+              {restoreSettled ? 'Continue' : 'Check status'}
+            </Button>
+          ) : null}
+        </div>
+      </article>
+    ) : null;
   const credentialPanel = (
     <>
       {action && (recoveryScene || !(action.kind === 'upload' && ((busy && upload) || restoreActive || awaitingRestore.current))) ? (
@@ -924,10 +1051,6 @@ export function SystemBackupsSettings({
                 This replaces the server’s configuration, accounts and managed app data. Apps will stop and Orbis will restart. Keep a current backup
                 before continuing.
               </p>
-              <label className="system-backups-confirm">
-                <input type="checkbox" name="confirmation" value="replace-server" required disabled={busy} />
-                <span>Restore this backup</span>
-              </label>
             </>
           ) : null}
           {needsCredentials ? (
@@ -990,17 +1113,18 @@ export function SystemBackupsSettings({
             />
           ) : null}
           <div className="system-backups-actions">
-            {embedded && action.kind === 'upload' ? null : (
+            {embedded && action.kind === 'upload' && !onDismiss ? null : (
               <Button
                 type="button"
                 variant="outline"
-                disabled={busy}
+                disabled={busy || stoppingPreparation}
                 onClick={() => {
-                  credentialsForm.current?.reset();
-                  if (!embedded && !restoreActive && !awaitingRestore.current) setWizardOpen(false);
-                  setAction(null);
-                  setFile(null);
-                  setError(null);
+                  if (
+                    wizardJob?.kind === 'import' &&
+                    data?.imports.jobs.some((job) => job.id === wizardJob.id && ['uploading', 'reviewing'].includes(job.status))
+                  )
+                    void cancelPreparation();
+                  else dismissForm();
                 }}
               >
                 {action.kind === 'cancel-restore' ? 'Back' : 'Cancel'}
@@ -1031,9 +1155,9 @@ export function SystemBackupsSettings({
             total={upload.total}
             settled={upload.confirmed}
           />
-          {busy && !upload.confirmed ? (
+          {busy && !upload.confirmed && !recoveryScene ? (
             <div className="system-backups-actions">
-              <Button type="button" variant="outline" onClick={() => abort.current?.abort()}>
+              <Button type="button" variant="outline" onClick={() => void cancelPreparation()} disabled={stoppingPreparation}>
                 Cancel
               </Button>
             </div>
@@ -1044,29 +1168,31 @@ export function SystemBackupsSettings({
       {notice ? <output aria-live="polite">{notice}</output> : null}
     </>
   );
-  const activeImport = wizardJob?.kind === 'import' ? data?.imports.jobs.find((job) => job.id === wizardJob.id) : selectedImport;
-  const importRunning = activeImport && ['uploading', 'reviewing', 'preparing'].includes(activeImport.status) ? activeImport : undefined;
   const sceneRestore = restore ? restorePresentation(restore, status.isError) : undefined;
-  const showRestoreScene = Boolean(restoreActive || awaitingRestore.current || continuity.departing || (busy && action?.kind === 'restore'));
+  const showRestoreScene = Boolean(restoreActive || awaitingAcceptedRestore || continuity.departing || (busy && action?.kind === 'restore'));
   const showImportScene =
-    recoveryScene && !showRestoreScene && !error && Boolean((busy && action && ['upload', 'review'].includes(action.kind)) || importRunning);
+    recoveryScene &&
+    !showRestoreScene &&
+    (stoppingPreparation || (!error && Boolean((busy && action && ['upload', 'review'].includes(action.kind)) || importRunning)));
   const sceneStatus = showRestoreScene
     ? status.error instanceof BackupApiError && status.error.status === 401
       ? 'Sign in to check restore status'
       : (sceneRestore?.status ?? 'Starting restore')
-    : upload && busy
-      ? 'Uploading encrypted backup'
-      : importRunning
-        ? (stageLabels[importRunning.stage] ?? 'Checking backup')
-        : 'Checking backup';
-  const sceneCompleted = upload && busy ? upload.completed : importRunning?.completedBytes;
-  const sceneTotal = upload && busy ? upload.total : importRunning?.totalBytes;
+    : stoppingPreparation
+      ? 'Stopping backup preparation'
+      : upload && busy && !upload.confirmed
+        ? 'Uploading encrypted backup'
+        : importRunning
+          ? (stageLabels[importRunning.stage] ?? 'Checking backup')
+          : 'Checking backup';
+  const sceneCompleted = upload && busy && !upload.confirmed ? upload.completed : importRunning?.completedBytes;
+  const sceneTotal = upload && busy && !upload.confirmed ? upload.total : importRunning?.totalBytes;
   const sceneDetail = showRestoreScene
     ? sceneRestore?.detail
     : sceneCompleted !== undefined && sceneTotal != null
       ? `${formatBackupBytes(sceneCompleted)} of ${formatBackupBytes(sceneTotal)}`
       : undefined;
-  const wizardLocked = busy || restoreActive || awaitingRestore.current;
+  const wizardLocked = busy || stoppingPreparation || restoreActive || awaitingAcceptedRestore || terminalChecking;
   const wizardExport = wizardJob?.kind === 'export' ? data?.exports.jobs.find((job) => job.id === wizardJob.id) : undefined;
   const wizardImport = wizardJob?.kind === 'import' ? data?.imports.jobs.find((job) => job.id === wizardJob.id) : undefined;
   const restoringInWizard =
@@ -1128,10 +1254,9 @@ export function SystemBackupsSettings({
                 Recover
               </Button>
             ) : null}
-            {showImportScene && upload && busy && !upload.confirmed ? <Button onClick={() => abort.current?.abort()}>Cancel</Button> : null}
-            {showImportScene && importRunning && ['uploading', 'reviewing'].includes(importRunning.status) ? (
-              <Button disabled={busy || status.isError} onClick={() => simpleAction(`/imports/${importRunning.id}/cancel`)}>
-                Cancel
+            {showImportScene && !awaitingRestore.current ? (
+              <Button disabled={stoppingPreparation || status.isError} onClick={() => void cancelPreparation()}>
+                {stoppingPreparation ? 'Stopping…' : 'Cancel'}
               </Button>
             ) : null}
           </>
@@ -1219,6 +1344,25 @@ export function SystemBackupsSettings({
         <InlineFeedback>Finish the existing full backup or its app recovery in Settings before starting a restore.</InlineFeedback>
       ) : null}
       {embedded ? credentialPanel : null}
+      {guidedImportId && data && !selectedImport && !busy && !restoreActive && !awaitingAcceptedRestore ? (
+        <InlineFeedback>
+          This received backup is no longer available. Choose another backup to continue.
+          <Button
+            type="button"
+            variant="outline"
+            disabled={terminalChecking}
+            onClick={() => {
+              setGuidedImportCleared(true);
+              setAction({ kind: 'upload' });
+              setWizardJob(null);
+              setWizardPurpose('upload');
+              setError(null);
+            }}
+          >
+            Choose another backup
+          </Button>
+        </InlineFeedback>
+      ) : null}
       {!restoreOnly && data?.exports.jobs.length ? (
         <div className="system-backups-jobs">
           <h3>Server backups</h3>

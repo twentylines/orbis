@@ -29,19 +29,31 @@ import { useReducedMotion, useReducedTransparency } from '@/desktop/motion-prefe
 import { themePresets, presetLabels } from '@/desktop/wallpaper-presets';
 import { IconArrowLeft, IconArrowRight, IconCheck, IconDeviceDesktop, IconHistory, IconLeaf, IconSparkles } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
 import { useNavigate } from 'react-router';
-import { finishSetup, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices, type SetupSaveStep } from './setup-save';
+import { finishSetup, prepareSetupHome, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices, type SetupSaveStep } from './setup-save';
 import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
 import { readManualProtection, saveManualProtection } from '@/modules/time-machine-capsules/protection-choice';
+import { timeMachinePreferencesQueryKey } from '@/modules/time-machine/time-machine-preferences-query';
 import { nextSetupStep, previousSetupStep, setupCanFinish, setupPosition, setupStepCopy, type SetupEntry, type SetupStep } from './setup-navigation';
-import { readSetupCapture, reconcileSetupCapture, reserveSetupCapture, setupCaptureStorage, priorUnconfirmedSetupCapture } from './setup-capture';
+import {
+  acknowledgeSetupCapture,
+  readSetupCapture,
+  reconcileSetupCapture,
+  reserveSetupCapture,
+  setupCaptureStorage,
+  priorUnconfirmedSetupCapture,
+  setupCaptureCanContinue,
+  setupCaptureRequested,
+  SetupCaptureTerminalError,
+} from './setup-capture';
 import './welcome.css';
 
 const defaultAutomatic: AutomaticUpdateSettings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
 const setupEase = [0.22, 1, 0.36, 1] as const;
+const SetupSpace = memo(DepthTravel);
 
 export function SetupCustomisation({ draft, onChange }: { draft: DesktopPreferences; onChange: (next: DesktopPreferences) => void }) {
   return (
@@ -197,7 +209,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       return { receipt: null, error: reason instanceof Error ? reason.message : 'The setup capture receipt needs recovery.' };
     }
   });
-  const resumingCapture = ['pending', 'submitted'].includes(captureState.receipt?.phase ?? '') || Boolean(captureState.error);
+  const resumingCapture = ['pending', 'submitted', 'accepted'].includes(captureState.receipt?.phase ?? '') || Boolean(captureState.error);
   const [draft, setDraft] = useState(preferences);
   const resolvedSetupMode = useResolvedColourMode(draft.mode);
   const [name, setName] = useState(preferences.serverName);
@@ -244,7 +256,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     retry: false,
     refetchOnWindowFocus: false,
   });
-  const captureRequested = canManageUpdates && (protectionDraft ?? protection.data?.enabled ?? resumingCapture);
+  const captureRequested = setupCaptureRequested(canManageUpdates, protectionDraft, protection.data?.enabled);
   const updateSettings = useQuery({ ...automaticUpdateSettingsOptions(), enabled: canManageUpdates && (step === 'updates' || step === 'ready') });
   const installed = useQuery({
     ...getInstalledAppsOptions(),
@@ -305,7 +317,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     };
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(element);
     observer.observe(stepElement);
     return () => {
       observer.disconnect();
@@ -315,8 +326,8 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const position = setupPosition(step, entry);
   const headingId = `setup-heading-${step}`;
   const recoveryStep = step === 'restore' || step === 'transfer';
-  const go = (next: SetupStep | null) => {
-    if (saving || restoreBusy || transitionLock.current || next === null || next === step) return;
+  const go = (next: SetupStep | null, dismissedRecovery = false) => {
+    if (saving || (restoreBusy && !dismissedRecovery) || transitionLock.current || next === null || next === step) return;
     transitionLock.current = true;
     setTransitioning(true);
     setDirection(setupPosition(next, entry).current > position.current ? 1 : -1);
@@ -331,7 +342,8 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       savingLock.current ||
       !nameValid ||
       !scheduleValid ||
-      syncState === 'loading'
+      syncState === 'loading' ||
+      (canManageUpdates && (protection.isPending || protection.isError))
     )
       return;
     savingLock.current = true;
@@ -355,7 +367,8 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
         value: protectionDraft,
         save: async () => {
           try {
-            await saveManualProtection(protectionDraft, AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(20_000)]));
+            const saved = await saveManualProtection(protectionDraft, AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(20_000)]));
+            queryClient.setQueryData(timeMachinePreferencesQueryKey(user.id), saved);
           } catch {
             sessionAbortSignal.throwIfAborted();
             queryClient.setQueryData(['setup-capture-notice', user.id], {
@@ -381,40 +394,38 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       id: 'Saving workspace preferences',
       value: { preferences: completedDraft, capture: captureRequested },
       save: async () => {
-        await completeOnboarding(
-          name,
-          completedDraft,
-          captureRequested
-            ? async () => {
-                setSavingStep('Capturing Time Machine state');
-                try {
-                  if (priorUnconfirmedSetupCapture(user.id, onboardingGeneration))
-                    throw new Error('A previous setup capture needs review in Time Machine before starting another.');
-                  const receipt = captureState.receipt ?? reserveSetupCapture(user.id, setupCaptureStorage(onboardingGeneration));
-                  setCaptureState({ receipt, error: '' });
-                  await reconcileSetupCapture(
-                    user.id,
-                    receipt,
-                    true,
-                    AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(30_000)]),
-                    setupCaptureStorage(onboardingGeneration),
-                  );
-                  setCaptureState({ receipt: { ...receipt, phase: 'accepted' }, error: '' });
-                  return true;
-                } catch (reason) {
-                  // Capture is optional; its durable receipt remains available on Home.
-                  sessionAbortSignal.throwIfAborted();
-                  queryClient.setQueryData(['setup-capture-notice', user.id], {
-                    message:
-                      reason instanceof Error ? reason.message : 'The initial capture could not be confirmed. Check its status in Time Machine.',
-                  });
-                  return false;
-                } finally {
-                  setSavingStep('Preparing Orbis');
-                }
-              }
-            : undefined,
-        );
+        await completeOnboarding(name, completedDraft, async () => {
+          let captured = false;
+          if (captureRequested) {
+            setSavingStep('Starting Time Machine capture');
+            let receipt = captureState.receipt;
+            const storage = setupCaptureStorage(onboardingGeneration);
+            try {
+              if (priorUnconfirmedSetupCapture(user.id, onboardingGeneration))
+                throw new Error('A previous setup capture needs review in Time Machine before starting another.');
+              receipt ??= reserveSetupCapture(user.id, storage);
+              setCaptureState({ receipt, error: '' });
+              const signal = AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(30_000)]);
+              await reconcileSetupCapture(user.id, receipt, true, signal, storage);
+              setCaptureState({ receipt: { ...receipt, phase: 'accepted' }, error: '' });
+              captured = true;
+            } catch (reason) {
+              sessionAbortSignal.throwIfAborted();
+              if (!setupCaptureCanContinue(reason)) throw reason;
+              if (reason instanceof SetupCaptureTerminalError && receipt) acknowledgeSetupCapture(user.id, receipt, 'failed', storage);
+              queryClient.setQueryData(['setup-capture-notice', user.id], { message: reason.message });
+            }
+          }
+          setSavingStep('Preparing Orbis');
+          startupSession.begin('preparing-orbis', true);
+          await prepareSetupHome(
+            () => import('@/modules/dashboard/pages/dashboard'),
+            () => queryClient.fetchQuery({ ...getInstalledAppsOptions(), staleTime: 10_000, retry: false }),
+            document.fonts.ready,
+            new Promise<void>((resolve) => window.setTimeout(resolve, 300)),
+          );
+          return captured;
+        });
       },
     });
     try {
@@ -423,12 +434,12 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
         receipts.current,
         (stage) => setSavingStep(stage === 'Preparing Orbis' ? stage : 'Saving preferences'),
         async (destination, options) => {
-          startupSession.begin('preparing-orbis');
           await navigate(destination, options);
           await startupSession.finish();
         },
       );
     } catch (reason) {
+      void startupSession.finish();
       setError(
         `Setup is not complete. ${reason instanceof Error ? reason.message : 'Check the connection and try again.'} Saved choices are kept; retry continues with the remaining steps.`,
       );
@@ -438,7 +449,14 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     }
   };
   useEffect(() => {
-    if (resumedCapture.current || !resumingCapture || captureState.error || syncState === 'loading') return;
+    if (
+      resumedCapture.current ||
+      !resumingCapture ||
+      captureState.error ||
+      syncState === 'loading' ||
+      (canManageUpdates && (protection.isPending || protection.isError))
+    )
+      return;
     resumedCapture.current = true;
     void save();
   });
@@ -453,7 +471,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
         busy={saving}
         setup
         scene={
-          <DepthTravel
+          <SetupSpace
             mode={saving ? 'travel' : 'ambient'}
             variant="onboarding"
             distance={position.current + (saving ? 1 : 0)}
@@ -507,8 +525,12 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                   </h2>
                   {setupStepCopy[step].description ? <p>{setupStepCopy[step].description}</p> : null}
                 </div>
-                {step === 'restore' ? <SystemBackupsSettings restoreOnly embedded recoveryScene onActivityChange={setRestoreBusy} /> : null}
-                {step === 'transfer' ? <HostTransferPanel mode="receive" embedded recoveryScene onActivityChange={setRestoreBusy} /> : null}
+                {step === 'restore' ? (
+                  <SystemBackupsSettings restoreOnly embedded recoveryScene onActivityChange={setRestoreBusy} onDismiss={() => go('choose', true)} />
+                ) : null}
+                {step === 'transfer' ? (
+                  <HostTransferPanel mode="receive" embedded recoveryScene onActivityChange={setRestoreBusy} onDismiss={() => go('choose', true)} />
+                ) : null}
                 {recoveryStep ? null : (
                   <form
                     id="setup-form"

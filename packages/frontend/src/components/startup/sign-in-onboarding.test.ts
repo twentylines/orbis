@@ -23,10 +23,10 @@ test('classifies only an authenticated, valid onboarding response', async () => 
 test('uses setup space until workspace preparation while preserving other transitions', () => {
   expect(showSetupSpace(true, 'signing-in', null, false)).toBe(true);
   expect(showSetupSpace(true, null, null, false)).toBe(true);
-  expect(showSetupSpace(true, 'preparing-orbis', null, false)).toBe(false);
+  expect(showSetupSpace(true, 'preparing-orbis', null, false)).toBe(true);
   expect(showSetupSpace(false, 'signing-in', null, false)).toBe(false);
   expect(showSetupSpace(true, 'logging-out', null, false)).toBe(false);
-  expect(showSetupSpace(true, null, 'restore', false)).toBe(false);
+  expect(showSetupSpace(true, null, 'restore', false)).toBe(true);
   expect(showSetupSpace(true, null, 'update', false)).toBe(false);
   expect(showSetupSpace(true, null, null, true)).toBe(false);
 });
