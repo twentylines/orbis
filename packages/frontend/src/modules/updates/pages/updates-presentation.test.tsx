@@ -50,13 +50,14 @@ function renderDowngrade({ enabled = true, failed = false, active = true } = {})
   return { markup, requests };
 }
 
-test('downgrade is a permanent labelled section with the existing explicit plan action', () => {
+test('downgrade is a permanent labelled section with the primary Downgrade action', () => {
   const { markup, requests } = renderDowngrade();
   expect(markup).toContain('<section class="desktop-downgrade" aria-label="Downgrade">');
   expect(markup).toContain('<h3>Downgrade</h3>');
   expect(markup).not.toContain('<details');
   expect(markup).not.toContain('<summary');
   expect(markup).toContain('>Downgrade</button>');
+  expect(markup).not.toContain('Open last downgrade plan');
   expect(markup).toContain('A downgrade removes newer features and security fixes.');
   expect(markup).not.toContain('Force downgrade');
   expect(requests).toBe(0);

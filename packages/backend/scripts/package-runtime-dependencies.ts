@@ -41,6 +41,9 @@ const isPrivateConfiguration = (file: string) => {
   );
 };
 
+const runtimeHiddenDirectories = new Set(['.bin', '.well-known']);
+const developmentFiles = new Set(['.editorconfig', '.gitignore', '.gitattributes', '.eslintignore', '.prettierignore']);
+
 const runtimeFile = (name: string, file: string) =>
   name !== 'ssh2' ||
   (!['test', 'examples', '.github'].includes(file.split(sep)[0] ?? '') &&
@@ -118,8 +121,11 @@ export function packageRuntimeDependencies(workspace: string, output: string, lo
         if (!inside(root, resolved)) throw new Error('Runtime package contains an escaping symlink');
         if (isPrivateConfiguration(file) || isPrivateConfiguration(resolved))
           throw new Error('Runtime package contains a prohibited configuration file');
-        if (lstatSync(resolved).isFile() && hasPrivateBuildPath(readFileSync(resolved)))
-          throw new Error('Runtime package contains a private build path');
+        const name = basename(file);
+        const info = lstatSync(resolved);
+        if (info.isDirectory() && name.startsWith('.') && !runtimeHiddenDirectories.has(name)) return false;
+        if (info.isFile() && developmentFiles.has(name.toLowerCase())) return false;
+        if (info.isFile() && hasPrivateBuildPath(readFileSync(resolved))) throw new Error('Runtime package contains a private build path');
         return true;
       },
     });

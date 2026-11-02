@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useReducedMotion } from '@/desktop/motion-preferences';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { compare, valid } from 'semver';
 import { Button } from '@/components/ui/Button';
 import {
   Dialog,
@@ -34,11 +35,16 @@ import './release-channel-settings.css';
 type DialogMode = 'nightly' | 'stable' | null;
 
 function isStablePlan(value: StableChannelPlan): boolean {
+  const currentVersion = typeof value.currentTag === 'string' ? valid(value.currentTag) : null;
+  const targetVersion = typeof value.targetTag === 'string' ? valid(value.targetTag) : null;
   return (
     typeof value.planId === 'string' &&
     value.planId.length > 0 &&
     typeof value.currentTag === 'string' &&
     typeof value.targetTag === 'string' &&
+    currentVersion !== null &&
+    targetVersion !== null &&
+    compare(targetVersion, currentVersion) < 0 === (value.operation === 'downgrade') &&
     typeof value.targetDigest === 'string' &&
     value.targetDigest.length > 0 &&
     Number.isSafeInteger(value.snapshotBytes) &&
@@ -60,7 +66,7 @@ function errorText(error: unknown, fallback: string): string {
 }
 
 const safeLocalErrors = new Set([
-  'The stable installation plan could not be verified. Refresh release channels and try again.',
+  'Stable compatibility details could not be verified. Refresh release channels and try again.',
   'The stable installation was not accepted by the host.',
 ]);
 
@@ -107,7 +113,7 @@ export function ReleaseChannelSettings() {
     try {
       const result = await planStableChannelInstall(force);
       if (!isStablePlan(result) || result.forced !== force || result.expiresAt <= Date.now()) {
-        throw new Error('The stable installation plan could not be verified. Refresh release channels and try again.');
+        throw new Error('Stable compatibility details could not be verified. Refresh release channels and try again.');
       }
       if (!mounted.current) return;
       setPlan(result);
@@ -179,7 +185,7 @@ export function ReleaseChannelSettings() {
     if (plan.expiresAt <= Date.now()) {
       setPlan(null);
       setAccepted(false);
-      setPlanError('This review expired. Check compatibility again before continuing.');
+      setPlanError('These compatibility details expired. Check again before continuing.');
       return;
     }
     setBusy(true);
@@ -203,7 +209,7 @@ export function ReleaseChannelSettings() {
       setAccepted(false);
       await refreshReleaseChannelRelatedQueries(queryClient);
     } catch (cause) {
-      if (mounted.current) setError(errorText(cause, 'The reviewed stable installation could not be started.'));
+      if (mounted.current) setError(errorText(cause, 'The Stable installation could not be started.'));
     } finally {
       if (mounted.current) setBusy(false);
     }
@@ -301,14 +307,14 @@ export function ReleaseChannelSettings() {
       <Dialog open={dialog === 'stable'} onOpenChange={closeDialog}>
         <DialogContent size="md" className="release-channel-dialog" aria-describedby={`${id}-stable-description`}>
           <DialogHeader>
-            <DialogTitle>Stable installation plan</DialogTitle>
+            <DialogTitle>Switch to Stable</DialogTitle>
           </DialogHeader>
           <DialogDescription id={`${id}-stable-description`}>
-            Stable requires installing a reviewed release. Check the plan and confirm before Orbis starts the installation.
+            Switching to Stable installs the latest Stable version. Confirm the compatibility details before installation.
           </DialogDescription>
           {busy && !plan ? (
             <DialogSection>
-              <p>Checking the stable installation plan…</p>
+              <p>Checking Stable compatibility…</p>
             </DialogSection>
           ) : null}
           {plan ? (
@@ -330,7 +336,7 @@ export function ReleaseChannelSettings() {
                 </div>
                 <div>
                   <dt>Action</dt>
-                  <dd>{plan.operation === 'downgrade' ? 'Install an earlier release' : 'Install a release'}</dd>
+                  <dd>{plan.operation === 'downgrade' ? 'Downgrade' : compare(plan.targetTag, plan.currentTag) > 0 ? 'Upgrade' : 'Continue'}</dd>
                 </div>
                 <div>
                   <dt>Compatibility</dt>
@@ -357,7 +363,7 @@ export function ReleaseChannelSettings() {
               ) : null}
               <label className="release-channel-acknowledge">
                 <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-                <span>I have reviewed this installation plan.</span>
+                <span>I understand these compatibility details.</span>
               </label>
             </DialogSection>
           ) : null}
@@ -366,8 +372,8 @@ export function ReleaseChannelSettings() {
               <p>{planError}</p>
               {canForce ? (
                 <p>
-                  Force can continue without the normal compatibility approval and may leave this server unusable. Only continue if you have reviewed
-                  and accepted that risk.
+                  Force can continue without the normal compatibility approval and may leave this server unusable. Only continue if you understand and
+                  accepted that risk.
                 </p>
               ) : null}
             </DialogFeedback>
@@ -379,12 +385,20 @@ export function ReleaseChannelSettings() {
             </Button>
             {canForce && !plan ? (
               <Button intent="danger" onClick={() => void beginStableReview(true)} loading={busy}>
-                {busy ? 'Initialising…' : 'Force install'}
+                {busy ? 'Checking…' : 'Force install'}
               </Button>
             ) : null}
             {plan ? (
               <Button intent={plan.forced ? 'danger' : 'primary'} onClick={() => void applyStable()} disabled={!accepted || busy} loading={busy}>
-                {busy ? 'Initialising…' : plan.operation === 'downgrade' ? (plan.forced ? 'Force downgrade' : 'Downgrade') : 'Install'}
+                {busy
+                  ? 'Installing…'
+                  : plan.forced
+                    ? 'Force install'
+                    : plan.operation === 'downgrade'
+                      ? 'Downgrade'
+                      : compare(plan.targetTag, plan.currentTag) > 0
+                        ? 'Upgrade'
+                        : 'Continue'}
               </Button>
             ) : null}
           </DialogFooter>

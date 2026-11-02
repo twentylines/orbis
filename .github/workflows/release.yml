@@ -1,6 +1,12 @@
 name: Orbis release
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'New Nightly tag, for example v0.6.0-beta.1'
+        required: true
+        type: string
   push:
     tags:
       - 'v*'
@@ -21,61 +27,87 @@ jobs:
     permissions:
       contents: write
       packages: write
+    concurrency:
+      group: orbis-release-${{ inputs.tag || github.ref_name }}
+      cancel-in-progress: false
+    env:
+      RELEASE_DIR: ${{ github.workspace }}/.orbis-release-artifacts
+      TMPDIR: ${{ github.workspace }}/.orbis-release-artifacts/tmp
+      DOCKER_CONFIG: ${{ github.workspace }}/.orbis-release-auth/docker
+      DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      DOCKER_BUILD_SUMMARY: 'false'
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
+      - name: Prepare private local release files
+        run: |
+          umask 077
+          mkdir -p "$RELEASE_DIR" "$TMPDIR" "$DOCKER_CONFIG"
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y skopeo
+
       - name: Validate release identity and metadata
         id: metadata
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: python3 scripts/orbis-release-metadata.py --tag "$RELEASE_TAG" --notes "releases/${RELEASE_TAG}.md" --github-output "$GITHUB_OUTPUT"
+
+      - name: Prepare an unpushed local candidate ref for source-bound metadata
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          IS_PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$IS_PRERELEASE" = true
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$GITHUB_SHA"
+          else
+            git tag "$RELEASE_TAG" "$GITHUB_SHA"
+          fi
 
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Carry the source-bound critical fix marker
         id: watermark
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_CHANNEL: ${{ steps.metadata.outputs.channel }}
           RELEASE_PRIORITY: ${{ steps.metadata.outputs.priority }}
           RELEASE_SHA: ${{ github.sha }}
         run: python3 scripts/orbis-release-watermark.py --tag "$RELEASE_TAG" --channel "$RELEASE_CHANNEL" --priority "$RELEASE_PRIORITY" --commit "$RELEASE_SHA" --notes "releases/${RELEASE_TAG}.md" --notes-output release-notes.md --github-output "$GITHUB_OUTPUT"
 
-      - name: Build and publish Orbis image
+      - name: Build both platforms into a local OCI archive
         id: image
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          push: false
+          outputs: type=oci,dest=${{ env.RELEASE_DIR }}/image.oci.tar,compression=gzip
+          tags: ghcr.io/${{ github.repository }}:${{ env.RELEASE_TAG }}
           build-args: |
             TIPI_VERSION=4.10.1
             LOCAL=true
-            ORBIS_VERSION=${{ github.ref_name }}
+            ORBIS_VERSION=${{ env.RELEASE_TAG }}
             ORBIS_COMMIT=${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ env.RELEASE_TAG }}
+
+      - name: Read the local multi-platform image identity
+        id: identity
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 scripts/release-artifact-privacy.py identity --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --github-output "$GITHUB_OUTPUT"
 
       - name: Record immutable image and release notes
         env:
           IMAGE: ghcr.io/${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_SHA: ${{ github.sha }}
-          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE_DIGEST: ${{ steps.identity.outputs.digest }}
           UPDATE_PRIORITY: ${{ steps.metadata.outputs.priority }}
           CRITICAL_THROUGH: ${{ steps.watermark.outputs.criticalThrough }}
           CRITICAL_FIXES: ${{ steps.watermark.outputs.criticalFixes }}
@@ -97,13 +129,37 @@ jobs:
       - name: Package the source-bound installer
         run: python3 scripts/orbis-installer-bundle.py release-manifest.json installer-assets
 
+      - name: Inspect every image layer and the exact installer assets before upload
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 scripts/release-artifact-privacy.py scan --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifest release-manifest.json --installer installer-assets --notes release-notes.md --report "$RELEASE_DIR/privacy-receipt.json"
+
+      - name: Log in to GitHub Container Registry after inspection
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the same scanned OCI archive without rebuilding
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          flags=()
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            flags+=(--create-tag)
+          fi
+          python3 scripts/release-artifact-privacy.py publish --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifest release-manifest.json --installer installer-assets --notes release-notes.md --report "$RELEASE_DIR/privacy-receipt.json" --registry-auth "$DOCKER_CONFIG/config.json" "${flags[@]}"
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
           DISPLAY_VERSION: ${{ steps.metadata.outputs.displayVersion }}
           IS_PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
+          python3 scripts/release-artifact-privacy.py verify --oci "$RELEASE_DIR/image.oci.tar" --tag "$RELEASE_TAG" --commit "$RELEASE_SHA" --manifest release-manifest.json --installer installer-assets --notes release-notes.md --report "$RELEASE_DIR/privacy-receipt.json"
           flags=(--verify-tag --title "Orbis $DISPLAY_VERSION" --notes-file release-notes.md)
           if [[ "$IS_PRERELEASE" == true ]]; then
             flags+=(--prerelease --latest=false)

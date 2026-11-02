@@ -57,7 +57,7 @@ test('the existing canForce signal remains available with allowlisted error pars
     const error = await captureError(() => enrollOrbisReleaseChannel('stable', 'revision-4'));
     expect(error).toBeInstanceOf(ReleaseChannelRequestError);
     expect(error).toMatchObject({ canForce: true });
-    expect((error as Error).message).toBe('The release channel request was rejected. Refresh the status and review the request before trying again.');
+    expect((error as Error).message).toBe('The release channel change could not be completed. Refresh the status and try again.');
     expect((error as Error).message).not.toContain('internal compatibility detail');
   });
 });
@@ -81,7 +81,7 @@ test('a channel storage error code gives a safe repair action on status reads', 
       expect(error).toBeInstanceOf(ReleaseChannelsStatusError);
       expect(error).toMatchObject({
         status: 503,
-        message: 'The private release channel settings need repair. Review the host service with the current installer before retrying.',
+        message: 'The private release channel settings need repair. Update the host service using the current installer, then retry.',
       });
       expect((error as Error).message).not.toContain('private file path');
     },

@@ -74,6 +74,32 @@ describe('frozen runtime dependency packaging', () => {
     expect(JSON.parse(readFileSync(join(output, '.orbis-runtime-dependencies.json'), 'utf8'))).toEqual(result);
   });
 
+  it('excludes hidden development directories while preserving runtime assets and allowed hidden directories', () => {
+    const { root, workspace, output, lockfile } = fixture();
+    const alpha = join(root, 'node_modules', 'alpha');
+    module(alpha, { name: 'alpha', version: '1.0.0' }, "module.exports = require('./lib/runtime.js');");
+    for (const [file, content] of [
+      ['.github/workflows/build.yml', 'excluded'],
+      ['lib/.vscode/settings.json', 'excluded'],
+      ['.custom-dev/config', 'excluded'],
+      ['.well-known/data.json', 'runtime'],
+      ['.bin/helper', 'runtime'],
+      ['lib/runtime.js', "module.exports = require('fs').readFileSync(require('path').join(__dirname, '../prebuilds/binding.node'), 'utf8');"],
+      ['prebuilds/binding.node', 'native runtime fixture'],
+      ['.editorconfig', 'excluded'],
+      ['LICENSE', 'retained license'],
+    ]) {
+      mkdirSync(resolve(alpha, file, '..'), { recursive: true });
+      writeFileSync(join(alpha, file), content);
+    }
+    packageRuntimeDependencies(workspace, output, lockfile, ['alpha']);
+    const packaged = join(output, 'alpha');
+    for (const file of ['.github', 'lib/.vscode', '.custom-dev', '.editorconfig']) expect(existsSync(join(packaged, file))).toBe(false);
+    for (const file of ['.well-known/data.json', '.bin/helper', 'prebuilds/binding.node', 'LICENSE'])
+      expect(existsSync(join(packaged, file))).toBe(true);
+    expect(createRequire(join(root, 'runtime', 'probe.cjs'))('alpha')).toBe('native runtime fixture');
+  });
+
   it('links dependency cycles only within the packaged tree', () => {
     const { root, workspace, output, lockfile } = fixture();
     module(join(root, 'node_modules', 'alpha'), { name: 'alpha', version: '1.0.0', dependencies: { beta: '*' } });
@@ -205,6 +231,14 @@ describe('frozen runtime dependency packaging', () => {
     const { root, output } = fixture();
     const workspace = resolve(import.meta.dirname, '..');
     const result = packageRuntimeDependencies(workspace, output, resolve(workspace, '../../bun.lock'));
+    const directories = [output];
+    for (const directory of directories) {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith('.')) expect(['.bin', '.well-known']).toContain(entry.name);
+        directories.push(join(directory, entry.name));
+      }
+    }
     const require = createRequire(join(root, 'runtime', 'probe.cjs'));
     const installed = createRequire(join(workspace, 'package.json'));
     for (const name of runtimeDependencies) {

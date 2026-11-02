@@ -104,7 +104,7 @@ export function OrbisDowngrade({
         !Array.isArray(result.warnings) ||
         !result.warnings.every((warning) => typeof warning === 'string')
       )
-        throw new Error('The downgrade review could not be verified. Check compatibility again.');
+        throw new Error('Compatibility details could not be verified. Check again.');
       return result;
     },
     onSuccess: (value, _variables, context) => {
@@ -184,32 +184,33 @@ export function OrbisDowngrade({
               disabled={!selected || planning || apply.isPending}
               onClick={() => {
                 apply.reset();
-                plan.mutate({ tag: selected });
+                const cached = lastPlan?.data;
+                if (
+                  lastPlan?.status === 'success' &&
+                  lastPlan.tag === selected &&
+                  !lastPlan.forced &&
+                  cached?.targetTag === selected &&
+                  cached.currentTag === installed &&
+                  cached.expiresAt > Date.now() &&
+                  !lastReviewExpired
+                ) {
+                  setConfirmation('');
+                  setReview(cached);
+                } else {
+                  plan.mutate({ tag: selected });
+                }
               }}
             >
-              {planning ? 'Initialising…' : 'Downgrade'}
+              {planning ? 'Checking…' : 'Downgrade'}
             </button>
           </div>
         ) : null}
         {releases.data && !releases.data.complete ? <p>Only the available release history is shown.</p> : null}
-        {planError ? <p role="alert">{planError.message}</p> : null}
-        {!review && lastPlan?.status === 'success' && lastPlan.tag === selected && lastPlan.data ? (
-          <button
-            type="button"
-            className="desktop-update-action secondary"
-            disabled={!enabled || planning || apply.isPending || lastReviewExpired}
-            onClick={() => {
-              setConfirmation('');
-              setReview(lastPlan.data ?? null);
-            }}
-          >
-            Open last downgrade plan
-          </button>
-        ) : null}
+        {planError ? <p role="alert">Compatibility check failed. Try again.</p> : null}
         {canForce ? (
           <div className="desktop-update-risk">
             <strong>Compatibility check failed</strong>
-            <p>You can review a forced downgrade. It can make data unreadable, prevent sign-in, or reset saved settings.</p>
+            <p>A forced downgrade can make data unreadable, prevent sign-in, or reset saved settings.</p>
             <button
               type="button"
               className="desktop-update-action is-danger"
@@ -223,7 +224,7 @@ export function OrbisDowngrade({
             </button>
           </div>
         ) : null}
-        {apply.isError && !review ? <p role="alert">{apply.error.message}</p> : null}
+        {apply.isError && !review ? <p role="alert">Downgrade could not be started. Check the server status before trying again.</p> : null}
         <Dialog
           open={review !== null}
           onOpenChange={(value) => {
@@ -242,7 +243,7 @@ export function OrbisDowngrade({
             }}
           >
             <DialogHeader>
-              <DialogTitle>{review?.forced ? 'Force downgrade Orbis?' : 'Downgrade Orbis?'}</DialogTitle>
+              <DialogTitle>{review?.forced ? 'Force downgrade?' : 'Downgrade?'}</DialogTitle>
               <DialogDescription>
                 {review?.currentTag} → {review?.targetTag}
               </DialogDescription>
@@ -305,11 +306,11 @@ export function OrbisDowngrade({
               ) : null}
               {apply.isError ? (
                 <p ref={errorMessage} role="alert">
-                  {apply.error.message}
+                  Downgrade could not be started. Check the server status before trying again.
                 </p>
               ) : null}
-              {plan.isError ? <p role="alert">{plan.error.message}</p> : null}
-              {reviewExpired && !apply.isPending ? <output>This review expired. Check compatibility again before downgrading.</output> : null}
+              {plan.isError ? <p role="alert">Compatibility could not be checked. Try again.</p> : null}
+              {reviewExpired && !apply.isPending ? <output>Compatibility details expired. Check again before continuing.</output> : null}
             </div>
             <DialogFooter className="desktop-update-plan-actions">
               <button type="button" className="desktop-update-action secondary" disabled={apply.isPending} onClick={closeReview}>
@@ -336,12 +337,12 @@ export function OrbisDowngrade({
                 {apply.isPending
                   ? 'Starting downgrade…'
                   : planning
-                    ? 'Initialising…'
+                    ? 'Checking…'
                     : needsReview
-                      ? 'Check again'
+                      ? 'Continue'
                       : review?.forced
                         ? 'Force downgrade'
-                        : 'Downgrade Orbis'}
+                        : 'Downgrade'}
               </button>
             </DialogFooter>
           </DialogContent>

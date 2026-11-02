@@ -903,7 +903,7 @@ function LocalUpdates() {
                     reviewRestart.mutate();
                   }}
                 >
-                  {reviewRestart.isPending ? 'Initialising…' : 'Restart'}
+                  {reviewRestart.isPending ? 'Checking…' : 'Restart'}
                 </button>
               </div>
             ) : null}
@@ -930,7 +930,9 @@ function LocalUpdates() {
           ) : null}
           {restartError ? <p role="alert">Restart status could not be checked. Reconnecting to the server.</p> : null}
           {restart?.job?.state === 'failed' ? <p role="alert">{restart.job.message}</p> : null}
-          {reviewRestart.isError || applyRestart.isError ? <p role="alert">{reviewRestart.error?.message || applyRestart.error?.message}</p> : null}
+          {reviewRestart.isError || applyRestart.isError ? (
+            <p role="alert">Restart could not be started. Check the server status before trying again.</p>
+          ) : null}
           <Dialog
             open={Boolean(restartPlan)}
             onOpenChange={(open) => {
@@ -946,9 +948,9 @@ function LocalUpdates() {
               </DialogHeader>
               {restartReviewExpired || reviewRestart.isError || applyRestart.isError ? (
                 <div className="modal-body">
-                  {restartReviewExpired ? <output>This check expired. Check the restart again before continuing.</output> : null}
+                  {restartReviewExpired ? <output>Restart details expired. Check again before continuing.</output> : null}
                   {reviewRestart.isError || applyRestart.isError ? (
-                    <p role="alert">{reviewRestart.error?.message || applyRestart.error?.message}</p>
+                    <p role="alert">Restart could not be started. Check the server status before trying again.</p>
                   ) : null}
                 </div>
               ) : null}
@@ -967,13 +969,7 @@ function LocalUpdates() {
                     } else applyRestart.mutate(restartPlan.planId);
                   }}
                 >
-                  {applyRestart.isPending
-                    ? 'Restarting…'
-                    : reviewRestart.isPending
-                      ? 'Initialising…'
-                      : restartReviewExpired || reviewRestart.isError || applyRestart.isError
-                        ? 'Check again'
-                        : 'Restart server'}
+                  {applyRestart.isPending ? 'Restarting…' : reviewRestart.isPending ? 'Checking…' : 'Restart'}
                 </button>
               </DialogFooter>
             </DialogContent>

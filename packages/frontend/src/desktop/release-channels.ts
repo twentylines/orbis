@@ -44,7 +44,7 @@ function releaseChannelRequestMessage(status: number, code?: string): string {
   }
   if (status === 401 || status === 403) return 'Your session cannot change the release channel. Sign in with an operator account and try again.';
   if (status === 409) return 'Release channel status changed before this request completed. Refresh the status and try again.';
-  if (status === 400) return 'The release channel request was rejected. Refresh the status and review the request before trying again.';
+  if (status === 400) return 'The release channel change could not be completed. Refresh the status and try again.';
   if (status === 429) return 'Too many release channel requests were sent. Wait a moment and try again.';
   if (status >= 500) return `The host could not complete the release channel request (HTTP ${status}). Try again.`;
   return `The release channel request could not be completed (HTTP ${status}). Refresh the status and try again.`;
@@ -52,7 +52,7 @@ function releaseChannelRequestMessage(status: number, code?: string): string {
 
 export function releaseChannelsStatusMessage(status: number, code?: string): string {
   if (code === 'channel-storage-invalid') {
-    return 'The private release channel settings need repair. Review the host service with the current installer before retrying.';
+    return 'The private release channel settings need repair. Update the host service using the current installer, then retry.';
   }
   if (status === 401 || status === 403) return 'Your session cannot read release channel status. Sign in again and retry.';
   if (status >= 500) return `The host could not read release channel status (HTTP ${status}). Try again.`;
