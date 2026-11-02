@@ -7,6 +7,7 @@ import { useAppContext } from '@/context/app-context';
 import { installedOrbisBuildOptions } from '@/desktop/orbis-release';
 import { loadTelemetry, telemetryQueryKey } from '@/desktop/telemetry';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { SystemResetPanel } from '@/modules/system-reset/system-reset';
 import './about.css';
 
 const entryOptions = { staleTime: 5 * 60_000, refetchOnWindowFocus: false, retry: false } as const;
@@ -23,7 +24,7 @@ function capacity(bytes: number | null | undefined) {
 
 export function About() {
   const visible = useWindowVisible();
-  const { version } = useAppContext();
+  const { version, user } = useAppContext();
   const build = useQuery({ ...installedOrbisBuildOptions(), ...entryOptions, enabled: visible });
   const telemetry = useQuery({
     queryKey: [...telemetryQueryKey, '/api/system/telemetry'],
@@ -108,6 +109,7 @@ export function About() {
           <span>Runtipi repository</span>
         </a>
       </footer>
+      {user?.operator === true ? <SystemResetPanel /> : null}
     </div>
   );
 }

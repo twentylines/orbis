@@ -38,7 +38,7 @@ export const settingsCatalogue: readonly SettingEntry[] = [
   {
     id: 'system-reset',
     label: 'Reset Orbis',
-    section: 'general',
+    section: 'about',
     anchor: 'setting-system-reset',
     aliases: 'reset erase preferences onboarding setup accounts',
     operator: true,

@@ -95,6 +95,12 @@
   height: 22px;
   object-fit: contain;
 }
+.settings-about .system-reset-panel {
+  margin-block-start: 24px;
+}
+.settings-about .system-reset-panel h3 {
+  margin-bottom: 8px;
+}
 @container (max-width: 46rem) {
   .settings-about-sections {
     grid-template-columns: minmax(0, 1fr);

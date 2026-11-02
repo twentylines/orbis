@@ -10,7 +10,6 @@ import { AutomaticUpdatesSettings } from './automatic-updates-settings';
 import { ReleaseChannelSettings } from './release-channel-settings';
 import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
-import { SystemResetPanel } from '@/modules/system-reset/system-reset';
 
 type Props = {
   initialValues?: SettingsFormValues;
@@ -62,7 +61,6 @@ export const UserSettingsContainer = ({ initialValues, section = 'general' }: Pr
   return (
     <div className="settings-general-form">
       <UserSettingsForm initialValues={initialValues} onSubmit={onSubmit} loading={updateSettings.isPending} />
-      <SystemResetPanel />
     </div>
   );
 };

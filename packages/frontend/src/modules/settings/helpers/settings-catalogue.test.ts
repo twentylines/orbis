@@ -53,6 +53,7 @@ test('catalogue entries have unique identities and precise stable destinations i
   const backups = settingsCatalogue.find((entry) => entry.id === 'server-backups');
   if (!backups) throw new Error('Missing backup setting.');
   expect(settingAvailable(backups, { operator: false })).toBe(false);
+  expect(searchSettings('reset orbis', operator)[0]).toMatchObject({ section: 'about', anchor: 'setting-system-reset' });
 });
 test('legacy settings links resolve without losing the new category', () => {
   expect(resolveSettingsSection('appearance')).toBe('customise');

@@ -304,7 +304,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
 export function SystemResetPanel() {
   const [open, setOpen] = useState(false);
   return (
-    <section id="setting-system-reset" className="system-reset-panel">
+    <section id="setting-system-reset" className="system-reset-panel settings-group">
       <div>
         <h3>Reset Orbis</h3>
         <p>Return to setup while keeping installed applications and their data.</p>
