@@ -32,6 +32,7 @@ import { acquireRestoreLease } from './backup-restore-lease';
 import { BackupSourcePinnedError, createBackupSourceSeal, pinBackupSource, type BackupSourceSeal } from './backup-restore-source';
 import type { TimeMachineRestoreBinding } from '@runtipi/common/schemas/time-machine-restore';
 import { consumeRetainedRestorePermit, requireRetainedRestoreReceipt, type RetainedRestorePermit } from './time-machine-restore-admission';
+import { reuseRestoreArchive } from './backup-restore-reuse';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const retention = 24 * 60 * 60_000;
@@ -51,6 +52,7 @@ const stored = type({
   message: 'string',
   'origin?': "'time-machine'",
   'retainedPointId?': 'string',
+  'expectedManifestSha256?': type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value)),
 }).narrow((job) =>
   job.origin === 'time-machine' ? typeof job.retainedPointId === 'string' && uuid.test(job.retainedPointId) : job.retainedPointId === undefined,
 );
@@ -334,7 +336,21 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
       source.destroy();
     }
   }
-  private async receiveFile(job: ImportJob, source: Readable, expected: number | null, signal: AbortSignal) {
+  async reuseRestore(journal: BackupRestoreJournal, ownerId: number, manifestSha256: string, signal: AbortSignal) {
+    await this.initialize();
+    if (!/^[a-f0-9]{64}$/.test(manifestSha256)) throw new ConflictException('Review this backup again before preparing its restore.');
+    return reuseRestoreArchive(journal, ownerId, signal, async (source, bytes, verify) => {
+      const created = await this.createOwnedJob(ownerId);
+      const job = this.owned(created.id, ownerId);
+      job.expectedManifestSha256 = manifestSha256;
+      const active = this.begin(job, 'upload', (abort) => this.receiveFile(job, source, bytes, AbortSignal.any([signal, abort]), verify));
+      await active.done;
+      if (job.status !== 'uploaded')
+        throw new ConflictException('The saved restore archive could not be verified. Its recovery files have been preserved.');
+      return this.publicJob(job);
+    });
+  }
+  private async receiveFile(job: ImportJob, source: Readable, expected: number | null, signal: AbortSignal, verify?: () => Promise<void>) {
     const temporary = path.join(this.directory(job.id), 'upload.partial');
     let output: Awaited<ReturnType<typeof fs.open>> | undefined;
     try {
@@ -377,6 +393,7 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
       await output.sync();
       await output.close();
       output = undefined;
+      await verify?.();
       await fs.link(temporary, path.join(this.directory(job.id), 'backup.orbis'));
       job.uploadedBytes = job.completedBytes;
       job.totalBytes = job.uploadedBytes;
@@ -558,6 +575,8 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
           job.completedBytes = bytes;
         },
       });
+      if (job.expectedManifestSha256 && result.integrity.manifest.sha256 !== job.expectedManifestSha256)
+        throw new BackupRequirementError('The saved restore archive does not match its reviewed source.');
       await fs.rm(archive);
       job.stage = 'database';
       job.message = 'Reviewing database records in an isolated workspace.';

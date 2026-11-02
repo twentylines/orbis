@@ -21,6 +21,7 @@ function fixture() {
     prepareForSession: vi.fn().mockResolvedValue(result),
     cancel: vi.fn().mockResolvedValue(result),
     recover: vi.fn().mockResolvedValue(result),
+    reuse: vi.fn().mockResolvedValue({ id: randomUUID(), status: 'uploaded' }),
     launch: vi.fn().mockResolvedValue(undefined),
   };
   return { result, service, controller: new BackupRestoresController(service as unknown as BackupRestoresService) };
@@ -33,6 +34,7 @@ it.each([
   const { controller, service } = fixture();
   const res = response() as unknown as Response;
   expect(() => controller.status(request as Request, res)).toThrow('operator session');
+  expect(() => controller.reuse(request as Request, randomUUID(), {})).toThrow('operator session');
   await expect(controller.prepare(request as Request, input(), res)).rejects.toThrow('operator session');
   for (const action of ['cancel', 'recover'] as const)
     await expect(controller[action](request as Request, randomUUID(), { password: 'fixture' }, res)).rejects.toThrow('operator session');
@@ -125,4 +127,13 @@ it('does not launch after rejected preparation and prevents cached progress', as
   expect(service.launch).not.toHaveBeenCalled();
   await controller.status(operator, res as unknown as Response);
   expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
+});
+
+it('reuses an exact journal only for its session owner and rejects path or credential overrides', async () => {
+  const { controller, service } = fixture();
+  const id = randomUUID();
+  await controller.reuse(operator, id, {});
+  expect(service.reuse).toHaveBeenCalledExactlyOnceWith(id, 7, operator);
+  for (const body of [{ path: 'foreign' }, { password: 'unneeded' }, { ownerId: 8 }, []])
+    expect(() => controller.reuse(operator, id, body)).toThrow('without extra');
 });

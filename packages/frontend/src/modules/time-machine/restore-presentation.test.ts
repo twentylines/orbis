@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { RestoreJob } from '@/modules/system-backups/contracts';
-import { measuredPercent, restorePresentation } from '@/components/recovery-progress/restore-presentation';
+import { measuredPercent, restorePresentation, restoreFailureReason } from '@/components/recovery-progress/restore-presentation';
 
 const preparation = { stage: 'files' as const, completedBytes: 100, totalBytes: 100, records: 0, totalRecords: null };
 const base: RestoreJob = {
@@ -38,4 +38,12 @@ test('measured progress never completes from transferred bytes or accepts incons
   expect(measuredPercent(100, 100)).toBe(99);
   expect(measuredPercent(101, 100)).toBeUndefined();
   expect(measuredPercent(1, null)).toBeUndefined();
+});
+
+test('terminal failure copy uses fixed recognized checks and never displays an arbitrary diagnostic', () => {
+  const job = { ...base, status: 'rolled-back' as const, check: 'promote-roots' };
+  expect(restoreFailureReason(job)).toBe('The backup files could not be applied.');
+  expect(restorePresentation(job, false).detail).toBe('The backup files could not be applied.');
+  expect(restoreFailureReason({ ...job, check: 'private arbitrary exception' })).toBeUndefined();
+  expect(restoreFailureReason({ ...job, status: 'succeeded' })).toBeUndefined();
 });

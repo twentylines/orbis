@@ -25,6 +25,7 @@ const restoreConflictMessages = new Set([
   'Review this backup again before preparing its restore.',
   'Wait for the current backup upload or review to finish.',
   'Finish the current backup or recover its apps before starting another.',
+  'The saved restore archive could not be verified. Its recovery files have been preserved.',
 ]);
 const conflictBodyLimit = 16 * 1024;
 const safeBadRequestMessages = new Map([

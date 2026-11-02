@@ -969,3 +969,101 @@ it('discards an authorized staged restore when protected review fails before BEG
   expect(boundary.discard).toHaveBeenCalledOnce();
   expect(backupMaintenanceActive()).toBe(false);
 });
+
+async function reusableJournal(phase: 'rolled-back' | 'completed' = 'rolled-back') {
+  const value = await journal();
+  await fs.writeFile(
+    path.join(value.directory, 'restore.json'),
+    JSON.stringify({ ...value.state, phase, decision: phase === 'completed' ? 'commit' : 'rollback' }),
+    { mode: 0o600 },
+  );
+  Reflect.set(service, 'startup', Promise.resolve());
+  boundary.bootstrap.mockResolvedValue({ ownerId: 7, source: { manifest: { sha256: 'a'.repeat(64) } } });
+  vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('idle');
+  vi.spyOn(operationStatus, 'readRootCoreState').mockResolvedValue('idle');
+  vi.spyOn(service, 'status').mockResolvedValue({
+    job: {
+      id: value.state.id,
+      status: phase === 'completed' ? 'succeeded' : 'rolled-back',
+      stage: 'complete',
+      phase,
+      message: 'Settled',
+      needsRecovery: false,
+      progressUnavailable: false,
+      canCancel: false,
+      canRecover: false,
+    },
+  });
+  const reuse = vi.fn().mockImplementation(async () => ({ id: randomUUID(), status: 'uploaded' }));
+  Reflect.set(imports, 'reuseRestore', reuse);
+  return { value, reuse };
+}
+it.each(['rolled-back', 'completed'] as const)('reuses only the matching owner archive after a genuinely idle %s outcome', async (phase) => {
+  const { value, reuse } = await reusableJournal(phase);
+  const result = await service.reuse(value.state.id, 7, {} as Request);
+  expect(result.status).toBe('uploaded');
+  expect(reuse).toHaveBeenCalledWith(expect.objectContaining({ directory: value.directory }), 7, 'a'.repeat(64), expect.any(AbortSignal));
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  expect(await fs.readFile(path.join(value.directory, 'restore.json'), 'utf8')).toContain(phase);
+});
+it.each([
+  'owner',
+  'session-changed',
+  'identity',
+  'active-journal',
+  'recovery',
+  'progress-unavailable',
+  'root-checking',
+  'core-updating',
+  'task',
+  'host',
+  'wrong-id',
+  'retained',
+] as const)('rejects saved archive reuse for %s', async (failure) => {
+  const { value, reuse } = await reusableJournal();
+  if (failure === 'owner') boundary.bootstrap.mockResolvedValue({ ownerId: 8 });
+  if (failure === 'session-changed')
+    auth.operatorActionContext.mockResolvedValueOnce({ userId: 7, sessionBinding: 'first', securityBinding: 'security' });
+  if (failure === 'identity') controller.Id = '9'.repeat(64);
+  if (failure === 'active-journal')
+    await fs.writeFile(path.join(value.directory, 'restore.json'), JSON.stringify({ ...value.state, phase: 'staging', decision: null }));
+  if (failure === 'recovery' || failure === 'progress-unavailable')
+    vi.mocked(service.status).mockResolvedValue({
+      job: {
+        id: value.state.id,
+        status: 'rolled-back',
+        stage: 'complete',
+        phase: 'rolled-back',
+        message: 'Settled',
+        needsRecovery: failure === 'recovery',
+        progressUnavailable: failure === 'progress-unavailable',
+        canCancel: false,
+        canRecover: false,
+      },
+    });
+  if (failure === 'root-checking') vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('checking');
+  if (failure === 'core-updating') vi.mocked(operationStatus.readRootCoreState).mockResolvedValue('updating');
+  if (failure === 'task') tasks.read.mockResolvedValue({ tasks: [{ status: 'running' }] });
+  if (failure === 'host') host.status.mockResolvedValue({ enrolled: true, available: false, job: null });
+  if (failure === 'retained') await fs.writeFile(path.join(value.directory, 'retained-root-request.json'), '{}');
+  await expect(service.reuse(failure === 'wrong-id' ? randomUUID() : value.state.id, 7, {} as Request)).rejects.toThrow();
+  expect(reuse).not.toHaveBeenCalled();
+});
+
+it('serializes overlapping archive reuse and releases the guard after the first copy', async () => {
+  const { value, reuse } = await reusableJournal();
+  let complete: (value: unknown) => void = () => undefined;
+  reuse.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  );
+  const first = service.reuse(value.state.id, 7, {} as Request);
+  await vi.waitFor(() => expect(reuse).toHaveBeenCalledOnce());
+  await expect(service.reuse(value.state.id, 7, {} as Request)).rejects.toThrow();
+  complete({ id: randomUUID(), status: 'uploaded' });
+  await expect(first).resolves.toHaveProperty('status', 'uploaded');
+  await expect(service.reuse(value.state.id, 7, {} as Request)).resolves.toHaveProperty('status', 'uploaded');
+  expect(reuse).toHaveBeenCalledTimes(2);
+});

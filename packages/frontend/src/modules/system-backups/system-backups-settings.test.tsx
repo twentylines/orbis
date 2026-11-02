@@ -156,7 +156,13 @@ test('mounted preparation cancels once and terminal rollback unlocks only after 
   });
   const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
   expect(code, stderr).toBe(0);
-  expect(JSON.parse(stdout)).toMatchObject({ mountedReact: true, duplicateCancel: false, explicitRestoreRequests: 1, rollbackIdleUnlocked: true });
+  expect(JSON.parse(stdout)).toMatchObject({
+    mountedReact: true,
+    duplicateCancel: false,
+    explicitRestoreRequests: 2,
+    retainedArchiveRetry: true,
+    rollbackIdleUnlocked: true,
+  });
 });
 test('restore remains in the embedded card with real preparation progress and recovery controls', () => {
   const markup = render({

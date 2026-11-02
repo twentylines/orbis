@@ -60,6 +60,15 @@ export class BackupRestoresController {
     if (result.job) this.afterResponse(response, result.job.id);
     return result;
   }
+  @Post(':id/reuse')
+  @HttpCode(201)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  reuse(@Req() request: Request, @Param('id') id: string, @Body() body?: unknown) {
+    const owner = backupOperator(request);
+    if (body !== undefined && (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length))
+      throw new BadRequestException('Reuse the saved archive without extra settings.');
+    return this.restores.reuse(id, owner, request);
+  }
   @Post(':id/recover')
   @HttpCode(202)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })

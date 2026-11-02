@@ -2,7 +2,7 @@ import { useRestoreDeparture } from '@/components/recovery-progress/use-restore-
 import { armAcceptedRestore, clearMatchingRestoreContinuity, operationContinuityStorage } from '@/components/recovery-progress/operation-continuity';
 import { readOperationStatus } from '@/components/recovery-progress/operation-status';
 import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
-import { measuredPercent, restorePresentation } from '@/components/recovery-progress/restore-presentation';
+import { measuredPercent, restorePresentation, restoreFailureReason } from '@/components/recovery-progress/restore-presentation';
 import { Link } from 'react-router';
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -36,6 +36,7 @@ import {
   formatBackupBytes,
   restoreJobSchema,
   restoreStatusSchema,
+  importJobSchema,
   type BackupReview,
   type ExportJob,
   type ImportJob,
@@ -56,7 +57,7 @@ type Action =
   | { kind: 'review'; job: ImportJob }
   | { kind: 'restore'; job: ImportJob }
   | { kind: 'download' | 'recover-export'; job: ExportJob }
-  | { kind: 'cancel-restore' | 'recover-restore'; job: RestoreJob };
+  | { kind: 'cancel-restore' | 'recover-restore' | 'reuse'; job: RestoreJob };
 const stageLabels: Record<string, string> = {
   preparing: 'Preparing',
   inventory: 'Checking files',
@@ -79,6 +80,7 @@ const actionLabels = {
   export: 'Create encrypted backup',
   upload: 'Upload encrypted backup',
   review: 'Verify backup',
+  reuse: 'Restore saved backup',
   restore: 'Restore backup',
   download: 'Download encrypted backup',
   'recover-export': 'Recover apps',
@@ -90,6 +92,7 @@ const submitLabels: Record<Action['kind'], string> = {
   export: 'Continue',
   upload: 'Restore',
   review: 'Restore',
+  reuse: 'Restore',
   restore: 'Restore',
   download: 'Download',
   'recover-export': 'Recover',
@@ -160,15 +163,15 @@ export function prepareBackupSubmission(
   const password = values.get('password');
   const code = values.get('totpCode');
   const needsCredentials =
-    !['upload', 'review', 'restore'].includes(options.kind) || options.restoreProofRequired === true || options.uploadFromServer === true;
+    !['upload', 'review', 'restore', 'reuse'].includes(options.kind) || options.restoreProofRequired === true || options.uploadFromServer === true;
   if (needsCredentials && (typeof password !== 'string' || !password.length || password.length > 1024))
     throw new BackupFormError('password', 'Enter this server’s current account password.');
   if (needsCredentials && (options.totpEnabled || (code !== null && code !== '')) && (typeof code !== 'string' || !/^\d{6}$/.test(code)))
     throw new BackupFormError('totpCode', 'Enter the six-digit authentication code for this account.');
   let passphrase = '';
-  if (options.kind === 'export' || options.kind === 'review' || options.kind === 'upload') {
+  if (options.kind === 'export' || options.kind === 'review' || options.kind === 'upload' || options.kind === 'reuse') {
     const keyField = options.kind === 'export' && options.useAccountPassword ? 'password' : 'passphrase';
-    if ((options.kind === 'upload' || options.kind === 'review') && needsCredentials) {
+    if ((options.kind === 'upload' || options.kind === 'review' || options.kind === 'reuse') && needsCredentials) {
       const supplied = values.get('passphrase');
       if (!supplied && typeof password === 'string') values.set('passphrase', password);
     }
@@ -431,10 +434,12 @@ export function SystemBackupsSettings({
   const awaitingRestore = useRef(false);
   const cancelPreparationRequested = useRef(false);
   const preparationWork = useRef<Promise<void> | null>(null);
+  const retryArchiveKey = useRef<{ restoreId: string; passphrase: string } | null>(null);
   const seededImport = useRef<string | null>(null);
   const actionOpener = useRef<HTMLElement | null>(null);
   const actionKeyboard = useRef(false);
   const chooseAction = (next: Action) => {
+    if (next.kind !== 'reuse') retryArchiveKey.current = null;
     actionOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     actionKeyboard.current = actionOpener.current?.matches(':focus-visible') ?? false;
     credentialsForm.current?.reset();
@@ -459,6 +464,7 @@ export function SystemBackupsSettings({
     return () => {
       mounted.current = false;
       abort.current?.abort();
+      retryArchiveKey.current = null;
       downloadCleanup.current?.();
     };
   }, []);
@@ -599,11 +605,9 @@ export function SystemBackupsSettings({
       { onError: setRemovalError, refresh: false },
     );
   };
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!action || running.current) return;
-    const form = event.currentTarget;
-    const values = new FormData(form);
+  const submitAction = (action: Action, form: Pick<HTMLFormElement, 'querySelector' | 'querySelectorAll'>, values: FormData) => {
+    if (running.current) return;
+    if (action.kind === 'reuse' && retryArchiveKey.current?.restoreId === action.job.id) values.set('passphrase', retryArchiveKey.current.passphrase);
     const confirmation = 'replace-server';
     let submission: ReturnType<typeof prepareBackupSubmission>;
     try {
@@ -632,7 +636,7 @@ export function SystemBackupsSettings({
     }
     const { credentials, passphrase } = submission;
     const selected = action;
-    const newAttempt = ['upload', 'review', 'restore'].includes(selected.kind) ? beginRestoreAttempt(data?.restore.job) : null;
+    const newAttempt = ['upload', 'review', 'restore', 'reuse'].includes(selected.kind) ? beginRestoreAttempt(data?.restore.job) : null;
     if (newAttempt) setRestoreAttempt(newAttempt);
     const work = run(
       async (signal) => {
@@ -652,6 +656,7 @@ export function SystemBackupsSettings({
             throw new Error('Restore status could not be confirmed. Refresh status before trying again.');
           }
           if (newAttempt) setRestoreAttempt(acceptRestoreAttempt(newAttempt, acceptedJob));
+          retryArchiveKey.current = passphrase ? { restoreId: acceptedJob.id, passphrase } : null;
           if (acceptedJob) {
             try {
               armAcceptedRestore(acceptedJob.id, sessionStorage);
@@ -684,6 +689,12 @@ export function SystemBackupsSettings({
             if (mounted.current) setUpload({ completed: file.size, total: file.size, confirmed: true });
           }
           await verifyAndRestore(uploadedJob);
+        } else if (selected.kind === 'reuse') {
+          const reused = await backupRequest(`/restores/${selected.job.id}/reuse`, 'POST', {}, signal);
+          if (!importJobSchema.allows(reused) || reused.status !== 'uploaded')
+            throw new Error('The saved restore archive is unavailable. Your recovery files have been preserved.');
+          setWizardJob({ kind: 'import', id: reused.id });
+          await verifyAndRestore(reused);
         } else if (selected.kind === 'review') {
           await verifyAndRestore(selected.job);
         } else if (selected.kind === 'download') {
@@ -718,6 +729,7 @@ export function SystemBackupsSettings({
             throw new Error('Restore status could not be confirmed. Refresh status before trying again.');
           }
           if (newAttempt) setRestoreAttempt(acceptRestoreAttempt(newAttempt, acceptedJob));
+          retryArchiveKey.current = passphrase ? { restoreId: acceptedJob.id, passphrase } : null;
           if (acceptedJob) {
             try {
               armAcceptedRestore(acceptedJob.id, sessionStorage);
@@ -748,8 +760,27 @@ export function SystemBackupsSettings({
       if (preparationWork.current === work) preparationWork.current = null;
     });
   };
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (action) submitAction(action, event.currentTarget, new FormData(event.currentTarget));
+  };
+  const retrySavedRestore = () => {
+    if (!restore || !restoreSettled || working || accountSecurity.isPending || accountSecurity.isError) return;
+    const next: Action = { kind: 'reuse', job: restore };
+    if (retryArchiveKey.current?.restoreId !== restore.id || accountSecurity.data?.requireRestoreAuthentication) {
+      chooseAction(next);
+      return;
+    }
+    const values = new FormData();
+    values.set('passphrase', retryArchiveKey.current.passphrase);
+    setAction(next);
+    setWizardPurpose('reuse');
+    if (!embedded) setWizardOpen(true);
+    submitAction(next, { querySelectorAll: () => [] as unknown as NodeListOf<HTMLInputElement>, querySelector: () => null }, values);
+  };
   const dismissForm = () => {
     if (running.current || stoppingPreparation || restoreActive || awaitingAcceptedRestore || terminalChecking) return;
+    retryArchiveKey.current = null;
     credentialsForm.current?.reset();
     setUpload(null);
     setError(null);
@@ -784,6 +815,7 @@ export function SystemBackupsSettings({
       if (!mounted.current) return;
       setRestoreAttempt(null);
       setUpload(null);
+      retryArchiveKey.current = null;
       setNotice(null);
       setError(null);
       credentialsForm.current?.reset();
@@ -808,6 +840,7 @@ export function SystemBackupsSettings({
   };
   const continueAfterRestore = () => {
     if (!restore || !restoreSettled || busy || stoppingPreparation) return;
+    retryArchiveKey.current = null;
     const storage = operationContinuityStorage();
     if (storage) clearMatchingRestoreContinuity(restore.id, storage);
     awaitingRestore.current = false;
@@ -829,10 +862,11 @@ export function SystemBackupsSettings({
   const missing = status.error instanceof BackupApiError && status.error.status === 404;
   const reconnectingAcceptedRestore = status.isError && isAcceptedRestoreReconnect(status.error, restore?.status, awaitingRestore.current);
   const unavailable = !data || !data.exports.available || !data.imports.available || status.isError;
-  const phraseNeeded = action?.kind === 'review' || action?.kind === 'upload';
+  const phraseNeeded =
+    action?.kind === 'review' || action?.kind === 'upload' || (action?.kind === 'reuse' && retryArchiveKey.current?.restoreId !== action.job.id);
   const needsCredentials = Boolean(
     action &&
-      (!['upload', 'review', 'restore'].includes(action.kind) ||
+      (!['upload', 'review', 'restore', 'reuse'].includes(action.kind) ||
         accountSecurity.data?.requireRestoreAuthentication ||
         (action.kind === 'upload' && restoreSource === 'server')),
   );
@@ -927,6 +961,7 @@ export function SystemBackupsSettings({
       <article className="system-backups-job" aria-labelledby={`${id}-restore`}>
         <h3 id={`${id}-restore`}>Server restore</h3>
         <output>{restore.message}</output>
+        {restoreFailureReason(restore) ? <p>{restoreFailureReason(restore)}</p> : null}
         {restore.preparation ? (
           <RecoveryProgress
             label={`Preparation · ${stageLabels[restore.preparation.stage] ?? 'Checking progress'}`}
@@ -950,6 +985,15 @@ export function SystemBackupsSettings({
           {restore.canRecover ? (
             <Button variant="outline" disabled={busy || status.isError} onClick={() => chooseAction({ kind: 'recover-restore', job: restore })}>
               Recover
+            </Button>
+          ) : null}
+          {terminalRestore && restoreSettled ? (
+            <Button
+              intent="danger"
+              disabled={working || unavailable || accountSecurity.isPending || accountSecurity.isError}
+              onClick={retrySavedRestore}
+            >
+              Restore saved backup
             </Button>
           ) : null}
           {terminalRestore ? (
@@ -1044,7 +1088,7 @@ export function SystemBackupsSettings({
               )}
             </>
           ) : null}
-          {destructive || action.kind === 'upload' || action.kind === 'review' ? (
+          {destructive || action.kind === 'upload' || action.kind === 'review' || action.kind === 'reuse' ? (
             <>
               {destructive && action.job.review ? <Review review={action.job.review} /> : null}
               <p className="system-backups-warning">
@@ -1093,7 +1137,7 @@ export function SystemBackupsSettings({
               disabled={busy}
             />
           ) : null}
-          {['upload', 'review', 'restore'].includes(action.kind) && accountSecurity.isError ? (
+          {['upload', 'review', 'restore', 'reuse'].includes(action.kind) && accountSecurity.isError ? (
             <InlineFeedback>
               Account security could not be checked.{' '}
               <Button type="button" variant="outline" onClick={() => void accountSecurity.refetch()}>
@@ -1136,8 +1180,8 @@ export function SystemBackupsSettings({
               disabled={
                 busy ||
                 unavailable ||
-                (['upload', 'review', 'restore'].includes(action.kind) && (accountSecurity.isPending || accountSecurity.isError)) ||
-                (['export', 'upload', 'review', 'restore'].includes(action.kind) && working) ||
+                (['upload', 'review', 'restore', 'reuse'].includes(action.kind) && (accountSecurity.isPending || accountSecurity.isError)) ||
+                (['export', 'upload', 'review', 'restore', 'reuse'].includes(action.kind) && working) ||
                 (action.kind === 'upload' && restoreSource === 'upload' && !file) ||
                 (destructive && !canRestore(action.job, Date.now()))
               }
@@ -1173,7 +1217,7 @@ export function SystemBackupsSettings({
   const showImportScene =
     recoveryScene &&
     !showRestoreScene &&
-    (stoppingPreparation || (!error && Boolean((busy && action && ['upload', 'review'].includes(action.kind)) || importRunning)));
+    (stoppingPreparation || (!error && Boolean((busy && action && ['upload', 'review', 'reuse'].includes(action.kind)) || importRunning)));
   const sceneStatus = showRestoreScene
     ? status.error instanceof BackupApiError && status.error.status === 401
       ? 'Sign in to check restore status'

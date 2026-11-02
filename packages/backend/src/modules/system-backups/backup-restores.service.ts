@@ -1,12 +1,12 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { ConflictException, Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy } from '@nestjs/common';
+import { ConflictException, HttpException, Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy } from '@nestjs/common';
 import type Dockerode from 'dockerode';
 import type { Request } from 'express';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
-import { acquireBackupMaintenance, backupMaintenanceActive, setRestoreRecoveryRequired } from '@/common/backup-maintenance';
+import { acquireBackupMaintenance, backupMaintenanceActive, enterBackupMutation, setRestoreRecoveryRequired } from '@/common/backup-maintenance';
 import { installationMode } from '@/common/installation-mode';
 import { AuthService } from '../auth/auth.service';
 import { AccountSecurityService } from '../auth/account-security.service';
@@ -37,6 +37,9 @@ import { retainedPlatformSchema } from './time-machine-retained-phase-client';
 import { canonicalRuntimeJson } from './time-machine-runtime-payload';
 import { type } from 'arktype';
 import { readRootRestorationState } from '@/common/restoration-root-status';
+import { readOperationStatus, readRestorationStatus } from '@/common/restoration-status';
+import { ResetState } from '../system-reset/reset-state';
+import { acquireRestoreLease } from './backup-restore-lease';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const settled = (phase: string) => ['completed', 'rolled-back', 'discarded'].includes(phase);
@@ -785,6 +788,81 @@ export class BackupRestoresService implements OnModuleDestroy {
     await readRestoreBootstrap(journal);
     await requestRestoreCancellation(journal);
     return this.status();
+  }
+  async reuse(id: string, ownerId: number, request: Request) {
+    const actor = await this.auth.operatorActionContext(request);
+    if (actor.userId !== ownerId) throw failed();
+    await this.prepareStartup();
+    if (this.preparing || this.pending || this.startupHeld || this.recoveryHold || backupMaintenanceActive() || installationMode().phase !== 'normal')
+      throw failed();
+    this.preparing = true;
+    const signal = AbortSignal.timeout(15 * 60_000);
+    const mutation = enterBackupMutation();
+    let release: (() => void) | undefined;
+    try {
+      if (!mutation) throw failed();
+      release = await acquireRestoreLease(this.store());
+      const journal = await BackupRestoreJournal.latest(this.store());
+      if (
+        !uuid.test(id) ||
+        !journal ||
+        journal.state.id !== id ||
+        !settled(journal.state.phase) ||
+        journal.state.decision !== (journal.state.phase === 'completed' ? 'commit' : 'rollback') ||
+        (await this.isRetainedJournal(journal))
+      )
+        throw failed();
+      const bootstrap = await readRestoreBootstrap(journal);
+      if (bootstrap.ownerId !== ownerId) throw failed();
+      await this.ownController(journal);
+      const status = await this.status();
+      if (
+        status.job?.id !== id ||
+        status.job.status !== (journal.state.phase === 'completed' ? 'succeeded' : 'rolled-back') ||
+        status.job.needsRecovery ||
+        status.job.progressUnavailable
+      )
+        throw failed();
+      const operation = await readOperationStatus(
+        () => readRestorationStatus(this.store()),
+        undefined,
+        () => new ResetState(this.directories().data).active(),
+      );
+      if (operation.state !== 'idle' || (await this.tasks.read()).tasks.some((task) => ['queued', 'running', 'unconfirmed'].includes(task.status)))
+        throw failed();
+      const host = await this.host.status();
+      if ((host.enrolled && !host.available) || (host.job && ['queued', 'running', 'recovering', 'interrupted'].includes(host.job.state)))
+        throw failed();
+      const current = await this.auth.operatorActionContext(request);
+      if (current.userId !== actor.userId || current.sessionBinding !== actor.sessionBinding || current.securityBinding !== actor.securityBinding)
+        throw failed();
+      const copied = await this.imports.reuseRestore(journal, ownerId, bootstrap.source.manifest.sha256, signal);
+      const finalActor = await this.auth.operatorActionContext(request);
+      if (
+        finalActor.userId !== actor.userId ||
+        finalActor.sessionBinding !== actor.sessionBinding ||
+        finalActor.securityBinding !== actor.securityBinding
+      )
+        throw failed();
+      if (
+        (
+          await readOperationStatus(
+            () => readRestorationStatus(this.store()),
+            undefined,
+            () => new ResetState(this.directories().data).active(),
+          )
+        ).state !== 'idle'
+      )
+        throw failed();
+      return copied;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new ConflictException('The saved restore archive could not be verified. Its recovery files have been preserved.');
+    } finally {
+      release?.();
+      mutation?.();
+      this.preparing = false;
+    }
   }
   async recover(id: string, ownerId: number, credentials: Credentials, request?: Request) {
     const actor = request ? await this.auth.operatorActionContext(request) : undefined;

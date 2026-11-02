@@ -668,3 +668,24 @@ it('saved server archives enter the ordinary encrypted import and still require 
   expect((await finish(uploaded.id))?.status).toBe('reviewed');
   expect(await fs.readFile(path.join(root, 'live', 'preserve'), 'utf8')).toBe('live server fixture');
 });
+
+it('reuses a pinned archive through fresh decryption and rejects a different reviewed manifest', async () => {
+  const source = await reviewedSource();
+  const pinned = await service.claimReviewedSource(source.id, 1, credentials, source);
+  const file = path.join(pinned.directory, 'backup.orbis');
+  const before = createHash('sha256')
+    .update(await fs.readFile(file))
+    .digest('hex');
+  const copied = await service.reuseRestore(source.journal, 1, source.manifestSha256, new AbortController().signal);
+  await service.reviewUpload(copied.id, 1, fixturePassphrase);
+  expect((await finish(copied.id))?.status).toBe('reviewed');
+  expect((await service.list(1)).jobs.find((job) => job.id === copied.id)?.review?.manifestSha256).toBe(source.manifestSha256);
+  const different = await service.reuseRestore(source.journal, 1, '0'.repeat(64), new AbortController().signal);
+  await service.reviewUpload(different.id, 1, fixturePassphrase);
+  expect((await finish(different.id))?.status).toBe('failed');
+  expect(
+    createHash('sha256')
+      .update(await fs.readFile(file))
+      .digest('hex'),
+  ).toBe(before);
+});

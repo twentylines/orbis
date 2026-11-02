@@ -116,6 +116,7 @@ const accepted: RestoreJob = {
 };
 const request = async (path: string, _method = 'GET', body?: unknown) => {
   requests.push({ path, body });
+  if (path.endsWith('/reuse')) imported = { ...imported, id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', status: 'uploaded', uploadedBytes: 100 };
   if (path.endsWith('/cancel')) imported = { ...imported, status: 'cancelled' };
   if (path.endsWith('/review'))
     imported = {
@@ -138,9 +139,14 @@ const request = async (path: string, _method = 'GET', body?: unknown) => {
       },
     };
   if (path === '/restores') {
-    snapshot.restore = { job: accepted };
+    snapshot.restore = {
+      job: {
+        ...accepted,
+        id: requests.filter((item) => item.path === '/restores').length > 1 ? 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' : accepted.id,
+      },
+    };
     update();
-    return accepted;
+    return snapshot.restore.job;
   }
   snapshot.imports = { ...snapshot.imports, jobs: [imported] };
   update();
@@ -300,21 +306,35 @@ try {
   expect(restore?.props.disabled).toBe(false);
   const terminalScene = flatten(tree).find((element) => element.type === RecoveryScene);
   expect(terminalScene?.props.open).toBe(false);
+  const retry = flatten(tree).find((element) => element.props.children === 'Restore saved backup');
+  expect(retry?.props.disabled).toBe(false);
+  expect(secret.value).toBe('');
+  await flush(() => handler(retry, 'onClick')());
+  expect(requests.filter((item) => item.path.endsWith('/reuse'))).toHaveLength(1);
+  const repeated = requests.filter((item) => item.path === '/restores');
+  expect(repeated).toHaveLength(2);
+  expect(repeated[1]?.body).toEqual({
+    importId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    manifestSha256: 'a'.repeat(64),
+    confirmation: 'replace-server',
+  });
+  expect(snapshot.restore.job?.id).toBe('dddddddd-dddd-4ddd-8ddd-dddddddddddd');
   initialImportId = id;
   generation++;
-  imported = { ...imported, status: 'awaiting-upload', stage: 'upload', uploadedBytes: 0, review: undefined, reviewExpiresAt: undefined };
+  imported = { ...imported, id, status: 'awaiting-upload', stage: 'upload', uploadedBytes: 0, review: undefined, reviewExpiresAt: undefined };
   snapshot.imports = { ...snapshot.imports, jobs: [imported] };
   snapshot.restore = { job: null };
   update();
   await flush(render);
   expect(flatten(tree).some((element) => element.type === 'input' && element.props.type === 'file')).toBe(true);
   expect(flatten(tree).some((element) => element.props.children === 'Restore')).toBe(true);
-  expect(requests.filter((item) => item.path === '/restores')).toHaveLength(1);
+  expect(requests.filter((item) => item.path === '/restores')).toHaveLength(2);
   process.stdout.write(
     JSON.stringify({
       mountedReact: true,
       duplicateCancel: false,
-      explicitRestoreRequests: 1,
+      explicitRestoreRequests: 2,
+      retainedArchiveRetry: true,
       rollbackIdleUnlocked: true,
       emptyGuidedUploadRetry: true,
       layout: false,
