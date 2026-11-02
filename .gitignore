@@ -117,3 +117,4 @@ VISUAL-QA.md
 /screenshots/**/*.txt
 /screenshots/**/README.md
 /screenshots/
+/.orbis-tests.*/

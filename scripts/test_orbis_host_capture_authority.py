@@ -9,6 +9,7 @@ import struct
 import tarfile
 import time
 import socket
+import stat
 import threading
 import unittest
 from pathlib import Path
@@ -21,6 +22,12 @@ from test_orbis_host_app_runtime import fixture as app_fixture
 S = CONFIG.SERVICE
 A = S.CAPTURE_AUTHORITY
 P = S.CONTROLLER_IDENTITY
+
+
+def track_fixture(path):
+    # Establish macOS document tracking before taking immutable fixture metadata.
+    if hasattr(os, 'chflags') and hasattr(stat, 'UF_TRACKED') and stat.S_ISREG(path.lstat().st_mode):
+        os.chflags(path, path.stat().st_flags | stat.UF_TRACKED, follow_symlinks=False)
 
 
 def tar_bytes(entries):
@@ -58,6 +65,8 @@ class CaptureAuthorityTests(unittest.TestCase):
                           Config=json.loads(self.blobs['config_bytes'])['config'])
         self.fixture.docker.side_effect = lambda context, args, root: mock.Mock(returncode=0, stdout=json.dumps(self.local if args[0] == 'image' else self.fixture.identity))
         self.worker = self.enterContext(mock.patch.object(P, 'produce_bounded_publication', return_value=self.proof))
+        for file in self.fixture.root.iterdir():
+            track_fixture(file)
         before = self.fixture.capture()
         self.request = dict(pointId=self.fixture.point, controllerId=self.fixture.controller, imageId=self.fixture.image,
                             configurationSetSha256=before['configurationSetSha256'])
@@ -74,6 +83,7 @@ class CaptureAuthorityTests(unittest.TestCase):
                 if source.is_file() and capabilities.NAMES.fullmatch(source.name):
                     target = self.native_scripts / source.name
                     target.write_bytes(source.read_bytes()); target.chmod(0o600)
+                    track_fixture(target)
             reader = capabilities.source_digest
             self.enterContext(mock.patch.object(capabilities, 'source_digest', side_effect=lambda authority, **_: reader(authority, directory=self.native_scripts)))
             fence_request['captureContractSha256'] = self.service.time_machine_capability('capture')['contractSha256']

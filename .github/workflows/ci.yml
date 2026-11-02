@@ -45,7 +45,7 @@ jobs:
 
       - name: Check migration and release planning
         run: |
-          TMPDIR="$(mktemp -d "$HOME/.orbis-python-ci.XXXXXX")"
+          TMPDIR="$(mktemp -d "${GITHUB_WORKSPACE:?}/.orbis-tests.XXXXXX")"
           export TMPDIR
           trap 'rm -rf -- "$TMPDIR"' EXIT
           python3 -m unittest discover -s scripts -p 'test_*.py' -v
