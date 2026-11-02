@@ -82,10 +82,15 @@ test('reset is a server lock and accepts only its generic stage', () => {
   expect(() => parseOperationStatus({ state: 'resetting', accounts: 'remove', users: [7] })).toThrow();
 });
 
-test('ordinary startup and unknown waits use wallpaper; accepted or active operations use space', () => {
+test('ordinary startup uses wallpaper while confirmed waits and maintenance use space', () => {
   expect(operationUsesSpace(null, false)).toBe(false);
-  expect(operationUsesSpace({ state: 'checking', supported: true, unavailable: true }, false)).toBe(false);
+  expect(operationUsesSpace({ state: 'idle', supported: true }, false)).toBe(false);
+  expect(operationUsesSpace({ state: 'idle', supported: false }, false)).toBe(false);
+  expect(operationUsesSpace({ state: 'checking', supported: true }, false)).toBe(true);
+  expect(operationUsesSpace({ state: 'checking', supported: true, unavailable: true }, false)).toBe(true);
+  expect(operationUsesSpace({ state: 'idle', supported: true, unavailable: true }, false)).toBe(true);
   expect(operationUsesSpace({ state: 'checking', supported: true, unavailable: true }, true)).toBe(true);
+  expect(operationUsesSpace(null, true)).toBe(true);
   for (const state of ['restoring', 'updating', 'downgrading', 'resetting', 'recovery'] as const)
     expect(operationUsesSpace({ state, supported: true }, false)).toBe(true);
 });

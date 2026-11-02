@@ -241,10 +241,6 @@
 .settings-category-panel .appearance {
   padding-top: 0;
 }
-.settings-category-panel .appearance-section:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
 .settings-category-panel .appearance-section {
   grid-template-columns: minmax(9rem, 15rem) minmax(0, 1fr);
   gap: 24px;
@@ -386,8 +382,6 @@
 .settings-category-panel > section:first-child,
 .settings-category-panel > :first-child > section:first-child {
   margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
 }
 
 .settings-heading-container {

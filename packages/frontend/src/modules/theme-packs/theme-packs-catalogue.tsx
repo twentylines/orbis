@@ -93,7 +93,7 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
       <>
         {application.confirmation}
         <section
-          className="appearance-section"
+          className="appearance-section theme-selection-section"
           aria-labelledby={`${id}-heading`}
           onPointerDownCapture={() => {
             keyboardAction.current = false;
@@ -133,9 +133,9 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
                 ))}
               </SelectContent>
             </Select>
-            <Link className="theme-settings-store-link" to="/app-store?view=themes">
-              Browse themes
-            </Link>
+            <Button asChild className="theme-settings-store-link">
+              <Link to="/app-store?view=themes">Browse themes</Link>
+            </Button>
             {error ? (
               <div className="theme-packs-feedback" role="alert">
                 <p>{error}</p>

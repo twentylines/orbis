@@ -47,8 +47,11 @@ test('indeterminate orb is one clipped, fading sweep with a static inner glint',
   expect(styles).toMatch(/\.recovery-progress-bar\s*\{[^}]*clip-path:\s*inset\(-4px 0 round 8px\)/s);
   expect(styles).toMatch(/\.recovery-progress-bar > span\s*\{[^}]*animation:\s*recovery-orb-sweep 1800ms linear infinite/s);
   expect(styles).toMatch(
-    /@keyframes recovery-orb-sweep\s*\{[\s\S]*?from\s*\{[^}]*opacity:\s*0;[\s\S]*?to\s*\{[^}]*opacity:\s*0;[^}]*translate3d\(455%, -50%, 0\)/,
+    /@keyframes recovery-orb-sweep\s*\{[\s\S]*?from\s*\{[^}]*opacity:\s*0;[\s\S]*?to\s*\{[^}]*opacity:\s*0;[^}]*translate3d\(450%, -50%, 0\)/,
   );
+  const lightWidth = Number(styles.match(/\.recovery-progress-bar > span\s*\{[^}]*width:\s*([\d.]+)%;/s)?.[1]);
+  const endOffset = Number(styles.match(/@keyframes recovery-orb-sweep[\s\S]*?to\s*\{[^}]*translate3d\(([\d.]+)%/s)?.[1]);
+  expect((lightWidth / 100) * (endOffset / 100 + 0.5)).toBeCloseTo(1, 6);
   const innerGlint = styles.match(/\.recovery-progress-bar > span::after\s*\{([^}]*)\}/s)?.[1] ?? '';
   expect(innerGlint).not.toMatch(/\banimation\s*:/);
   expect(styles).not.toContain('@keyframes recovery-orb-glint');

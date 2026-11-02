@@ -13,7 +13,6 @@ import { useDesktopPreferences } from '@/desktop/preferences';
 import { SetupCaptureNotice } from '@/components/welcome/setup-capture-notice';
 import { DesktopWallpaper } from '@/desktop/wallpaper';
 import { DesktopTaskLink } from '@/desktop/desktop-task-link';
-import { SystemBarStatusContext } from '@/desktop/system-bar-status';
 import { CommandSearch } from '@/desktop/command-search';
 import { desktopNavigation as navigation } from '@/desktop/navigation';
 import { useSectionMotion } from '@/desktop/section-motion';
@@ -76,7 +75,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     }
   }, [pendingDestination, routeNavigation.state, routeNavigation.formMethod, location.pathname, location.search, location.hash]);
   const [loggingOff, setLoggingOff] = useState(false);
-  const [systemStatus, setSystemStatus] = useState<HTMLDivElement | null>(null);
   const leaving = useRef(false);
   const desktop = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
@@ -181,115 +179,112 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const sectionLabel = current?.label ?? 'Application';
   const routeContent = <DesktopRouteContent label={sectionLabel}>{children}</DesktopRouteContent>;
   return (
-    <SystemBarStatusContext.Provider value={systemStatus}>
-      <HostUpdateProvider suspended={loggingOff}>
-        <ClusterProvider>
-          <AppLauncherProvider>
-            <div
-              ref={desktop}
-              className="desktop orbis-theme"
-              data-session-state={loggingOff ? 'logging-out' : undefined}
-              data-desktop-preset={preferences.preset}
-              data-desktop-mode={resolvedMode}
-              data-desktop-density={preferences.density}
-              data-desktop-wallpaper={preferences.wallpaper}
-            >
-              <DesktopWallpaper />
-              <header className="desktop-system-bar">
-                <Link to="/dashboard" className="desktop-brand" aria-label="Orbis workspace">
-                  <OrbisLogo size={28} />
-                  <span className="desktop-product">Orbis</span>
-                  <span className="desktop-server-name">
-                    <ClusterServerLabel />
-                  </span>
-                </Link>
-                <span className="desktop-current" aria-current="page">
-                  <span className="desktop-current-label">{sectionLabel}</span>
+    <HostUpdateProvider suspended={loggingOff}>
+      <ClusterProvider>
+        <AppLauncherProvider>
+          <div
+            ref={desktop}
+            className="desktop orbis-theme"
+            data-session-state={loggingOff ? 'logging-out' : undefined}
+            data-desktop-preset={preferences.preset}
+            data-desktop-mode={resolvedMode}
+            data-desktop-density={preferences.density}
+            data-desktop-wallpaper={preferences.wallpaper}
+          >
+            <DesktopWallpaper />
+            <header className="desktop-system-bar">
+              <Link to="/dashboard" className="desktop-brand" aria-label="Orbis workspace">
+                <OrbisLogo size={28} />
+                <span className="desktop-product">Orbis</span>
+                <span className="desktop-server-name">
+                  <ClusterServerLabel />
                 </span>
-                <div className="desktop-system-actions">
-                  <OrbisUpdateNotice />
-                  <div className="desktop-system-status-slot" ref={setSystemStatus} />
-                  <DesktopTaskLink />
-                  <button
-                    type="button"
-                    className="desktop-mode-toggle"
-                    aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
-                    aria-pressed={resolvedMode === 'dark'}
-                    title={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
-                    onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
-                  >
-                    {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
-                  </button>
-                  <CommandSearch />
-                  <ClusterConnection />
-                  <ClusterSwitcher />
-                  <DesktopLogoutButton disabled={!isLoggedIn || loggingOff} onClick={() => void handleLogout()} />
-                </div>
-              </header>
+              </Link>
+              <span className="desktop-current" aria-current="page">
+                <span className="desktop-current-label">{sectionLabel}</span>
+              </span>
+              <div className="desktop-system-actions">
+                <OrbisUpdateNotice />
+                <DesktopTaskLink />
+                <button
+                  type="button"
+                  className="desktop-mode-toggle"
+                  aria-label={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+                  aria-pressed={resolvedMode === 'dark'}
+                  title={`Switch to ${resolvedMode === 'dark' ? 'light' : 'dark'} mode`}
+                  onClick={() => update({ mode: resolvedMode === 'dark' ? 'light' : 'dark' })}
+                >
+                  {resolvedMode === 'dark' ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
+                </button>
+                <CommandSearch />
+                <ClusterConnection />
+                <ClusterSwitcher />
+                <DesktopLogoutButton disabled={!isLoggedIn || loggingOff} onClick={() => void handleLogout()} />
+              </div>
+            </header>
 
-              <main
-                className="desktop-main"
-                id="desktop-content"
-                aria-busy={routeNavigation.state !== 'idle'}
-                onFocusCapture={(event) => {
-                  if (event.target.matches(':focus-visible')) revealPageFocus(event.target);
-                }}
-              >
-                {isTool ? (
-                  <RouteSurface section={location.pathname} label={current.label} icon={<current.Icon size={19} stroke={1.8} />}>
-                    {!pendingSection && !hasPageHeading && location.pathname.split('/').filter(Boolean).length > 1 ? (
-                      <div className="desktop-route-title">
-                        <PageTitle apps={apps} />
-                      </div>
-                    ) : null}
-                    {routeContent}
-                  </RouteSurface>
-                ) : (
-                  <div className="desktop-view desktop-view-home">{routeContent}</div>
-                )}
-              </main>
+            <main
+              className="desktop-main"
+              id="desktop-content"
+              aria-busy={routeNavigation.state !== 'idle'}
+              onFocusCapture={(event) => {
+                if (event.target.matches(':focus-visible')) revealPageFocus(event.target);
+              }}
+            >
+              {isTool ? (
+                <RouteSurface section={location.pathname} label={current.label} icon={<current.Icon size={19} stroke={1.8} />}>
+                  {!pendingSection && !hasPageHeading && location.pathname.split('/').filter(Boolean).length > 1 ? (
+                    <div className="desktop-route-title">
+                      <PageTitle apps={apps} />
+                    </div>
+                  ) : null}
+                  {routeContent}
+                </RouteSurface>
+              ) : (
+                <div className="desktop-view desktop-view-home">{routeContent}</div>
+              )}
+            </main>
 
-              <nav ref={dock} className="desktop-dock" aria-label="Main navigation">
-                <DockGlass />
-                <DockActivity />
-                <div className="desktop-dock-main">
-                  <DockSelection path={dockSection?.path} reduced={Boolean(reduceMotion)} />
-                  {navigation
-                    .filter((item) => item.path !== '/tasks')
-                    .map(({ path, label, Icon, ...item }) => (
-                      <Link
-                        key={path}
-                        to={path}
-                        prefetch="intent"
-                        onPointerEnter={() => warmNavigation(path)}
-                        onTouchStart={() => warmNavigation(path)}
-                        onFocus={(event) => {
-                          warmNavigation(path);
-                          event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
-                        }}
-                        className={`desktop-dock-item ${dockSection?.path === path ? 'is-active' : ''}`}
-                        aria-label={label}
-                        aria-current={current?.path === path ? 'page' : undefined}
-                        aria-busy={pendingSection?.path === path || undefined}
-                        title={label}
-                      >
-                        <span className="desktop-dock-content">
-                          <span className="desktop-dock-icon">
-                            {path === '/updates' ? <OrbisUpdateIcon /> : <Icon size={22} stroke={1.7} aria-hidden="true" />}
-                          </span>
-                          <span className="desktop-dock-label">{'dockLabel' in item ? item.dockLabel : label}</span>
+            <nav ref={dock} className="desktop-dock" aria-label="Main navigation">
+              <DockGlass />
+              <DockActivity />
+              <div className="desktop-dock-main">
+                <DockSelection path={dockSection?.path} reduced={Boolean(reduceMotion)} />
+                {navigation
+                  .filter((item) => item.path !== '/tasks')
+                  .map(({ path, label, Icon, ...item }) => (
+                    <Link
+                      key={path}
+                      to={path}
+                      prefetch="intent"
+                      onPointerEnter={() => warmNavigation(path)}
+                      onTouchStart={() => warmNavigation(path)}
+                      onFocus={(event) => {
+                        warmNavigation(path);
+                        event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+                      }}
+                      className={`desktop-dock-item ${dockSection?.path === path ? 'is-active' : ''}`}
+                      aria-label={label}
+                      aria-current={current?.path === path ? 'page' : undefined}
+                      aria-busy={pendingSection?.path === path || undefined}
+                      title={label}
+                    >
+                      <span className="desktop-dock-content">
+                        <span className="desktop-dock-icon">
+                          {path === '/updates' ? <OrbisUpdateIcon /> : <Icon size={22} stroke={1.7} aria-hidden="true" />}
                         </span>
-                      </Link>
-                    ))}
-                </div>
-                <MinimizedApps />
-              </nav>
-              {loggingOff ? null : <RestartUpdateCover />}
-            </div>
-          </AppLauncherProvider>
-        </ClusterProvider>
-      </HostUpdateProvider>
-    </SystemBarStatusContext.Provider>
+                        <span className="desktop-dock-label">{'dockLabel' in item ? item.dockLabel : label}</span>
+                      </span>
+                    </Link>
+                  ))}
+              </div>
+              <MinimizedApps />
+            </nav>
+            {loggingOff ? null : <RestartUpdateCover />}
+          </div>
+        </AppLauncherProvider>
+      </ClusterProvider>
+    </HostUpdateProvider>
   );
 };
 

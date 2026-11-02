@@ -38,8 +38,24 @@
   padding: 24px var(--desktop-window-gutter);
   border-bottom: 1px solid var(--desktop-line);
 }
-.desktop .desktop-route-page .desktop-page-heading h1 {
+.desktop-page-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   flex: 1 1 min-content;
+  gap: 8px 14px;
+  min-width: 0;
+  max-width: 100%;
+}
+.desktop-page-status {
+  min-width: 0;
+  max-width: 100%;
+}
+.desktop-page-status:empty {
+  display: none;
+}
+.desktop .desktop-route-page .desktop-page-heading h1 {
+  flex: 0 0 auto;
   min-width: min-content;
   max-width: 100%;
   margin: 0;

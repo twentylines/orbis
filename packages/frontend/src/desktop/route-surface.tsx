@@ -5,12 +5,14 @@ import { sectionMotionEasing, sectionMotionTiming, visibleSectionBounds } from '
 import { useDesktopPreferences } from './preferences';
 import './route-surface.css';
 import { RouteHeaderToolbarContext } from './route-header-toolbar';
+import { RouteHeaderStatusContext } from './route-header-status';
 
 const sizes = new Map<string, number>();
 
 export function RouteSurface({ label, icon, section, children }: PropsWithChildren<{ label: string; icon: ReactNode; section: string }>) {
   const surface = useRef<HTMLElement>(null);
   const [toolbar, setToolbar] = useState<HTMLDivElement | null>(null);
+  const [status, setStatus] = useState<HTMLDivElement | null>(null);
   const focusFrame = useRef<number | null>(null);
   const deferred = useRef(false);
   const measured = useRef<{ key: string; height: number } | null>(null);
@@ -117,38 +119,43 @@ export function RouteSurface({ label, icon, section, children }: PropsWithChildr
   );
 
   return (
-    <RouteHeaderToolbarContext.Provider value={toolbar}>
-      <section
-        ref={surface}
-        className="desktop-view desktop-view-app desktop-route-window desktop-route-page"
-        data-window-navigation="page"
-        data-route-section={section.split('/')[1]}
-        style={{ '--orbis-route-reserve': `${reserve}px` } as CSSProperties}
-        aria-label={label}
-      >
-        <div className="desktop-route-surface" aria-hidden="true" />
-        <header className="desktop-page-heading">
-          <span className="desktop-window-icon" aria-hidden="true">
-            {icon}
-          </span>
-          <h1>{label}</h1>
-          <div className="desktop-page-toolbar" ref={setToolbar} />
-        </header>
-        <div
-          className="desktop-window-content"
-          onFocusCapture={(event) => {
-            const target = event.target;
-            if (!target.matches(':focus-visible')) return;
-            if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
-            focusFrame.current = requestAnimationFrame(() => {
-              focusFrame.current = null;
-              if (target.isConnected && document.activeElement === target) revealPageFocus(target);
-            });
-          }}
+    <RouteHeaderStatusContext.Provider value={status}>
+      <RouteHeaderToolbarContext.Provider value={toolbar}>
+        <section
+          ref={surface}
+          className="desktop-view desktop-view-app desktop-route-window desktop-route-page"
+          data-window-navigation="page"
+          data-route-section={section.split('/')[1]}
+          style={{ '--orbis-route-reserve': `${reserve}px` } as CSSProperties}
+          aria-label={label}
         >
-          {children}
-        </div>
-      </section>
-    </RouteHeaderToolbarContext.Provider>
+          <div className="desktop-route-surface" aria-hidden="true" />
+          <header className="desktop-page-heading">
+            <span className="desktop-window-icon" aria-hidden="true">
+              {icon}
+            </span>
+            <div className="desktop-page-label">
+              <h1>{label}</h1>
+              <div className="desktop-page-status" ref={setStatus} />
+            </div>
+            <div className="desktop-page-toolbar" ref={setToolbar} />
+          </header>
+          <div
+            className="desktop-window-content"
+            onFocusCapture={(event) => {
+              const target = event.target;
+              if (!target.matches(':focus-visible')) return;
+              if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+              focusFrame.current = requestAnimationFrame(() => {
+                focusFrame.current = null;
+                if (target.isConnected && document.activeElement === target) revealPageFocus(target);
+              });
+            }}
+          >
+            {children}
+          </div>
+        </section>
+      </RouteHeaderToolbarContext.Provider>
+    </RouteHeaderStatusContext.Provider>
   );
 }

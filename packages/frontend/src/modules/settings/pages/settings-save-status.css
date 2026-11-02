@@ -1,33 +1,32 @@
-.desktop-system-status-slot {
-  position: relative;
-  flex: 0 0 0;
-  width: 0;
-  height: 44px;
-}
 .settings-system-status {
-  position: absolute;
-  inset-block-start: calc(100% + 16px);
-  inset-inline-end: 0;
-  width: max-content;
-  max-width: min(20rem, calc(100vw - 40px));
+  display: grid;
+  align-items: center;
+  max-width: 100%;
   margin: 0;
   pointer-events: none;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.settings-status-reserve,
+.settings-system-status-bubble {
+  grid-area: 1 / 1;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+}
+.settings-status-reserve {
+  visibility: hidden;
 }
 .settings-system-status-bubble {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 10px 14px;
-  border: 1px solid var(--desktop-edge);
+  justify-content: center;
+  gap: 8px;
+  border-color: var(--desktop-line);
   border-radius: var(--orbis-control-radius, 12px);
-  color: var(--desktop-chrome-ink);
-  background: var(--desktop-chrome);
-  backdrop-filter: var(--desktop-chrome-filter);
-  -webkit-backdrop-filter: var(--desktop-chrome-filter);
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  transform-origin: top right;
+  color: var(--desktop-ink);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 9%, var(--desktop-surface));
+  transform-origin: left center;
 }
 .settings-system-status-bubble > svg {
   flex: none;

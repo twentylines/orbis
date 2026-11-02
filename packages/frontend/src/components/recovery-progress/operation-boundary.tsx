@@ -280,18 +280,8 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       ) : snapshot ? null : (
         <StartupSurface initial setupSpace={useSpace} />
       )}
-      {!showChildren && snapshot !== null && waiting && !useSpace ? (
-        <StartupSurface
-          initial
-          status={{ title: 'Checking server', message: 'Waiting for the server to respond. Checking will continue automatically.' }}
-        >
-          <Button className="operation-wait-retry" onClick={() => window.location.reload()}>
-            Retry
-          </Button>
-        </StartupSurface>
-      ) : null}
       <RecoveryScene
-        open={!showChildren && snapshot !== null && (!waiting || useSpace)}
+        open={!showChildren && snapshot !== null}
         title={waiting ? 'Checking server' : title}
         status={waiting ? undefined : status}
         variant={kind}

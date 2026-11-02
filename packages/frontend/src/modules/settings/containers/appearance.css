@@ -11,7 +11,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  align-self: stretch;
+  align-self: center;
   min-width: 44px;
   min-height: 44px;
 }
@@ -52,6 +52,12 @@
 .appearance-section h2 {
   font-size: var(--orbis-compact-section, 1.125rem);
   margin: 0 0 6px;
+}
+.theme-selection-section {
+  align-items: center;
+}
+.theme-selection-section h2 {
+  margin-bottom: 0;
 }
 .appearance-section p {
   color: var(--desktop-muted);

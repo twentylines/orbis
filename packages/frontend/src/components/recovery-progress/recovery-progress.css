@@ -107,7 +107,7 @@
   top: 50%;
   left: 0;
   box-sizing: border-box;
-  width: 18%;
+  width: 20%;
   min-width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -156,23 +156,23 @@
 @keyframes recovery-orb-sweep {
   from {
     opacity: 0;
-    transform: translate3d(0, -50%, 0) scaleX(0.82);
+    transform: translate3d(-50%, -50%, 0) scaleX(0.82);
   }
   10% {
     opacity: 0.88;
-    transform: translate3d(45%, -50%, 0) scaleX(0.86);
+    transform: translate3d(0, -50%, 0) scaleX(0.86);
   }
   90% {
-    opacity: 0.72;
-    transform: translate3d(410%, -50%, 0) scaleX(0.9) scaleY(0.58);
+    opacity: 0.88;
+    transform: translate3d(400%, -50%, 0) scaleX(0.9);
   }
   96% {
-    opacity: 0.3;
-    transform: translate3d(437%, -50%, 0) scaleX(0.9) scaleY(0.34);
+    opacity: 0.58;
+    transform: translate3d(430%, -50%, 0) scaleX(0.9) scaleY(0.65);
   }
   to {
     opacity: 0;
-    transform: translate3d(455%, -50%, 0) scaleX(0.9) scaleY(0.2);
+    transform: translate3d(450%, -50%, 0) scaleX(0.9) scaleY(0.2);
   }
 }
 .recovery-progress-bar[data-motion="false"] > span,

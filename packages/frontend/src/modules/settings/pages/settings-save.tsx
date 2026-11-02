@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useId, useRef, useSt
 import { Button } from '@/components/ui/Button';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { AnimatePresence, motion } from 'framer-motion';
-import { IconCircle, IconLoader2 } from '@tabler/icons-react';
-import { SystemBarStatus } from '@/desktop/system-bar-status';
+import { IconLoader2 } from '@tabler/icons-react';
+import { RouteHeaderStatus } from '@/desktop/route-header-status';
 import { WindowVisibilityContext } from '@/desktop/window-visibility';
 import { useReducedMotion } from '@/desktop/motion-preferences';
 import './settings-save-status.css';
@@ -148,10 +148,13 @@ export function SettingsSaveFeedback() {
 
 export function SettingsDirtyIndicator({ dirty, pending = false }: { dirty: boolean; pending?: boolean }) {
   const reduced = useReducedMotion();
-  const message = pending ? 'Saving preferences…' : dirty ? 'Unsaved changes' : '';
+  const message = pending ? 'Saving…' : dirty ? 'Unsaved changes' : '';
   return (
     <output className="settings-system-status" aria-live="polite" aria-atomic="true">
       <span className="visually-hidden">{message}</span>
+      <span className="settings-status-reserve" aria-hidden="true">
+        Unsaved changes
+      </span>
       <AnimatePresence initial={false}>
         {message ? (
           <motion.span
@@ -163,7 +166,7 @@ export function SettingsDirtyIndicator({ dirty, pending = false }: { dirty: bool
             exit={{ opacity: 0, scale: reduced ? 1 : 0.86, y: reduced ? 0 : -3 }}
             transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 31, mass: 0.7 }}
           >
-            {pending ? <IconLoader2 className="settings-status-spinner" size={18} /> : <IconCircle size={14} />}
+            {pending ? <IconLoader2 className="settings-status-spinner" size={16} /> : null}
             <span>{message}</span>
           </motion.span>
         ) : null}
@@ -176,8 +179,8 @@ export function SettingsSaveStatus() {
   const context = useContext(SettingsSaveContext);
   const visible = useContext(WindowVisibilityContext);
   return context ? (
-    <SystemBarStatus>
+    <RouteHeaderStatus>
       <SettingsDirtyIndicator dirty={visible && context.dirty} pending={visible && context.activity} />
-    </SystemBarStatus>
+    </RouteHeaderStatus>
   ) : null;
 }
