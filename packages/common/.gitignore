@@ -1,1 +1,2 @@
-json-schemas/
+json-schemas/*
+!json-schemas/theme-framework-v1.json
