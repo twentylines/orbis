@@ -28,7 +28,7 @@ afterEach(async () => {
   await fs.rm(temporary, { recursive: true, force: true });
 });
 
-async function fixture() {
+async function fixture(preserveLiveProxy = false) {
   const store = path.join(temporary, 'backups', 'restores');
   const journal = await BackupRestoreJournal.create(store, {
     id: randomUUID(),
@@ -37,7 +37,7 @@ async function fixture() {
     candidateController: '1'.repeat(64),
     verifierController: '3'.repeat(64),
     worker: '4'.repeat(64),
-    roots: [...restoreTreeNames],
+    roots: restoreTreeNames.filter((name) => !preserveLiveProxy || name !== 'traefik'),
   });
   const source = await makeReviewedBackupFixture(temporary, { dbStatus: 'running' });
   for (const name of ['app-data', 'data/repos', 'data/media', 'data/user-config', 'data/traefik']) {
@@ -104,6 +104,7 @@ async function fixture() {
   });
   const options = {
     journal,
+    preserveLiveProxy,
     source: { ...pinned, seal: source.seal },
     roots,
     environment,
@@ -139,6 +140,15 @@ const discard = (test: Awaited<ReturnType<typeof fixture>>) =>
     discardRestorePayload({ journal: test.options.journal, connection: test.options.runtime.connection, signal: signal() }),
   );
 
+it('prepares only six authenticated roots and leaves the live proxy tree untouched', async () => {
+  const test = await fixture(true);
+  const before = await fs.readFile(path.join(test.options.roots.traefik, 'original.txt'));
+  await prepare(test);
+  expect((await test.options.journal.refresh()).roots).not.toContain('traefik');
+  expect(await fs.readdir(test.options.roots.traefik)).toEqual(['original.txt']);
+  expect(await fs.readFile(path.join(test.options.roots.traefik, 'original.txt'))).toEqual(before);
+  expect(await fs.readdir(path.join(test.options.journal.directory, 'roots'))).not.toContain('traefik');
+});
 it('prepares seven real file trees, rebased settings and a durable worker operation without replacing live data', async () => {
   const test = await fixture();
   const { options, owner } = test;

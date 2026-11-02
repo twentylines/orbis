@@ -75,10 +75,16 @@ def main() -> int:
     try:
         root = args.root.expanduser().resolve(strict=True)
         manifest = PLAN.validate_manifest(json.loads(args.manifest.read_text(encoding="utf-8")))
-        result = PLAN.plan(root, manifest)
         if args.write:
-            result.update(stage(root, manifest))
+            spec = importlib.util.spec_from_file_location("orbis_host_for_stage_cli", Path(__file__).with_name("orbis-host.py"))
+            assert spec and spec.loader
+            host = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(host)
+            with host.host_lock(root):
+                result = PLAN.plan(root, manifest)
+                result.update(stage(root, manifest))
         else:
+            result = PLAN.plan(root, manifest)
             result["result"] = "ready-to-stage"
             result["writeRequired"] = True
         print(json.dumps(result, indent=2))

@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -90,11 +91,67 @@ def write_journal(snapshot: Path, record: dict[str, object]) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def retained_source(root, context, record, current=None, target=None):
+    source = record.get("retainedSource")
+    if source is None:
+        return None
+    P = HOST.IDENTITY.PUBLICATION
+    if (not P.exact(source, {"schema", "descriptor", "descriptorDigest", "publication", "target"})
+            or source["schema"] != "orbis.update-retained-source.v1"
+            or source["descriptorDigest"] != P.digest(P.canonical(source["descriptor"]))
+            or (current is not None and source["publication"] != P.release_identity(current))
+            or (target is not None and source["target"] != P.release_identity(target))):
+        raise ValueError("update retained source binding changed")
+    with HOST.AUTHORITY.current(root, context, P.canonical(source["descriptor"])) as (descriptor, authority, proof):
+        if source["publication"] != descriptor["publication"]:
+            raise ValueError("update retained publication changed")
+    return descriptor
+
+
+def previous_reference(root, current, context, record):
+    descriptor = retained_source(root, context, record, current)
+    return descriptor["creationReference"] if descriptor else f"{current['image']}@{current['digest']}"
+
+
+def restore_retained_enrollment(root, current, context, record):
+    descriptor = retained_source(root, context, record, current)
+    if descriptor is None:
+        return
+    # A release update changes only the generated override and enrollment. All
+    # other files must still match the independently reviewed source generation.
+    with HOST.AUTHORITY.installation_files(root, descriptor["files"]) as hashes:
+        if any(hashes[name] != digest for name, digest in descriptor["files"].items() if name != "orbis-compose.yml"):
+            raise ValueError("rollback configuration differs from the authorized retained source")
+    content = HOST.AUTHORITY.override_content(current, descriptor["creationReference"]).encode()
+    if HOST.IDENTITY.PUBLICATION.digest(content)[7:] != descriptor["files"]["orbis-compose.yml"]:
+        raise ValueError("rollback retained override binding changed")
+    HOST.AUTHORITY.atomic(root / "orbis-compose.yml", content)
+    HOST.AUTHORITY.atomic(root / HOST.STATE_NAME, HOST.IDENTITY.PUBLICATION.canonical(descriptor))
+
+
 def read_journal(snapshot: Path, root: Path, context: str, current: dict[str, str], target: dict[str, str]) -> dict[str, object]:
     file = journal_path(snapshot)
-    if file.is_symlink() or not file.is_file():
-        raise ValueError("update journal is missing or is not a regular file")
-    record = json.loads(file.read_text(encoding="utf-8"))
+    try:
+        descriptor = os.open(file, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as error:
+        raise ValueError("update journal is missing or is not a protected regular file") from error
+    try:
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != os.geteuid()
+                or stat.S_IMODE(before.st_mode) & 0o077 or not 1 <= before.st_size <= 1024 * 1024):
+            raise ValueError("update journal is not protected")
+        body = bytearray()
+        while len(body) <= 1024 * 1024:
+            block = os.read(descriptor, min(65536, 1024 * 1024 + 1 - len(body)))
+            if not block:
+                break
+            body.extend(block)
+        if (len(body) != before.st_size or HOST.AUTHORITY.seal(before) != HOST.AUTHORITY.seal(os.fstat(descriptor))
+                or HOST.AUTHORITY.seal(before) != HOST.AUTHORITY.seal(file.lstat())):
+            raise ValueError("update journal changed during recovery")
+        record = json.loads(body, object_pairs_hook=HOST.IDENTITY.PUBLICATION.pairs)
+    finally:
+        os.close(descriptor)
     if not isinstance(record, dict) or record.get("schema") != JOURNAL_SCHEMA:
         raise ValueError("update journal has an unsupported schema")
     if (
@@ -105,6 +162,9 @@ def read_journal(snapshot: Path, root: Path, context: str, current: dict[str, st
         or record.get("targetDigest") != target["digest"]
     ):
         raise ValueError("update journal does not match this installation and release pair")
+    retained_source(root, context, record, current, target)
+    if HOST.retained_state(root) and record.get("retainedSource") is None:
+        raise ValueError("retained recovery requires its full protected source identity")
     return record
 
 
@@ -220,7 +280,9 @@ def update_plan(root: Path, current: dict[str, str], target: dict[str, str], con
     expected = HOST.installation_fingerprint(root, current, context)
     HOST.require_current_state(root, expected)
     candidate = HOST.PLAN.plan(root, target)
-    current_image = f"{current['image']}@{current['digest']}"
+    current_image = HOST.controller_reference(root, current, context)
+    if HOST.retained_state(root):
+        HOST.resolve_current_identity(root, context, current)
     if candidate.get("configuredImage") != current_image:
         raise ValueError("the configured core image differs from the enrolled release")
     docker_checked(context, ["info", "--format", "{{.ID}}"], root, "the selected Docker context is unavailable")
@@ -278,6 +340,7 @@ def start_core(root: Path, context: str, force_recreate: bool = False) -> None:
 
 
 def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, record: dict[str, object]) -> None:
+    retained_source(root, context, record, current)
     origin = record.setdefault("rollbackStartedFrom", record["stage"])
     record["stage"] = "rolling-back"
     write_journal(snapshot, record)
@@ -293,7 +356,7 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
                 HOST.require_current_state(root, expected)
                 core_ownership(root, context)
                 core = HOST.current_core(root, context)
-                if core.get("image") != f"{current['image']}@{current['digest']}" or core.get("state") != "running" or core.get("health") != "healthy":
+                if core.get("image") != previous_reference(root, current, context, record) or core.get("state") != "running" or core.get("health") != "healthy":
                     raise RuntimeError("previous Orbis release is not healthy before service downtime")
                 record["stage"] = "aborted"
                 write_journal(snapshot, record)
@@ -315,12 +378,16 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
             if restore_journal.exists() and tools.RESTORE.private_json(restore_journal).get("stage") == "complete":
                 restore_journal = snapshot.with_name(snapshot.name + f".restore-{uuid.uuid4()}.json")
             tools.RESTORE.restore(root, reader, reviewed, restore_journal, host_writers_stopped=True, recover=restore_journal.exists())
+            restore_retained_enrollment(root, current, context, record)
             start_core(root, context, force_recreate=True)
             restore_core_policies(root, context, checkpoint)
+        restore_retained_enrollment(root, current, context, record)
         expected = HOST.installation_fingerprint(root, current, context)
         HOST.require_current_state(root, expected)
+        if record.get("retainedSource"):
+            HOST.resolve_current_identity(root, context, current)
         core = HOST.current_core(root, context)
-        if core.get("image") != f"{current['image']}@{current['digest']}" or core.get("health") != "healthy":
+        if core.get("image") != previous_reference(root, current, context, record) or core.get("health") != "healthy":
             raise RuntimeError("previous Orbis release did not recover to a healthy state")
         record["stage"] = "rolled-back"
         write_journal(snapshot, record)
@@ -345,19 +412,24 @@ def rollback(root: Path, current: dict[str, str], context: str, snapshot: Path, 
         actual = SNAPSHOT.fingerprint(root)
         if any(actual[key] != saved.get(key) for key in actual):
             raise RuntimeError("restored installation does not match the verified snapshot")
+    restore_retained_enrollment(root, current, context, record)
     expected = HOST.installation_fingerprint(root, current, context)
     HOST.require_current_state(root, expected)
     start_core(root, context, force_recreate=True)
+    if record.get("retainedSource"):
+        HOST.resolve_current_identity(root, context, current)
     core = HOST.current_core(root, context)
-    if core.get("image") != f"{current['image']}@{current['digest']}" or core.get("health") != "healthy":
+    if core.get("image") != previous_reference(root, current, context, record) or core.get("health") != "healthy":
         raise RuntimeError("previous Orbis release did not recover to a healthy state")
     record["stage"] = "rolled-back"
     write_journal(snapshot, record)
 
 
-def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path) -> dict[str, object]:
+def apply_update(root: Path, current: dict[str, str], target: dict[str, str], context: str, snapshot: Path, *, expected_source=None) -> dict[str, object]:
     with HOST.host_lock(root) as lock_fd:
         planned = update_plan(root, current, target, context, snapshot)
+        if expected_source is not None and HOST.retained_descriptor(root, context, current) != expected_source:
+            raise ValueError("retained source changed after update approval")
         record = {
             "schema": JOURNAL_SCHEMA,
             "root": str(root),
@@ -367,6 +439,12 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             "targetDigest": target["digest"],
             "stage": "preparing",
         }
+        if HOST.retained_state(root):
+            descriptor = HOST.retained_descriptor(root, context, current)
+            record["retainedSource"] = {"schema": "orbis.update-retained-source.v1", "descriptor": descriptor,
+                "descriptorDigest": HOST.IDENTITY.PUBLICATION.digest(HOST.IDENTITY.PUBLICATION.canonical(descriptor)),
+                "publication": HOST.IDENTITY.PUBLICATION.release_identity(current), "target": HOST.IDENTITY.PUBLICATION.release_identity(target)}
+            retained_source(root, context, record, current, target)
         if "checkpoint" in planned:
             record.update(backupScope="controller", checkpoint=planned["checkpoint"])
         write_journal(snapshot, record)
@@ -391,14 +469,20 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
                 SNAPSHOT.capture(root, snapshot, current["tag"], context)
             record["stage"] = "snapshot-ready"
             write_journal(snapshot, record)
-            HOST.STAGE.stage(root, target)
+            source = retained_source(root, context, record, current, target)
+            if source:
+                if (root / "orbis-compose.yml").read_text() != HOST.AUTHORITY.override_content(current, source["creationReference"]):
+                    raise ValueError("retained source override changed before update staging")
+                HOST.AUTHORITY.atomic(root / "orbis-compose.yml", HOST.STAGE.staged_content(target).encode())
+            else:
+                HOST.STAGE.stage(root, target)
             record["stage"] = "staged"
             write_journal(snapshot, record)
             start_core(root, context)
             core = HOST.current_core(root, context)
             if core.get("image") != f"{target['image']}@{target['digest']}" or core.get("state") != "running" or core.get("health") != "healthy":
                 raise RuntimeError("new Orbis core did not reach the verified image and healthy state")
-            HOST.write_state(root, HOST.installation_fingerprint(root, target, context))
+            HOST.write_state(root, HOST.published_installation_fingerprint(root, target, context))
             if record.get("backupScope") == "controller":
                 restore_core_policies(root, context, planned["checkpoint"])
             record["stage"] = "complete"
@@ -432,7 +516,7 @@ def recover(root: Path, current: dict[str, str], target: dict[str, str], context
             core_ownership(root, context)
             core = HOST.current_core(root, context)
             if (
-                core.get("image") != f"{current['image']}@{current['digest']}"
+                core.get("image") != previous_reference(root, current, context, record)
                 or core.get("state") != "running"
                 or core.get("health") != "healthy"
             ):

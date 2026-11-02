@@ -66,7 +66,8 @@ class InstallerPresentationTests(unittest.TestCase):
                 elif width < 64:
                     self.assertTrue(output.getvalue().startswith("Orbis  "))
                 else:
-                    self.assertIn("(____( () )____)", output.getvalue())
+                    self.assertNotIn("Server installation", output.getvalue())
+                    self.assertNotIn("____", output.getvalue())
                 self.assertTrue(all(len(line) <= width for line in output.getvalue().splitlines()))
 
     def test_active_completed_and_failed_frames_fit_very_narrow_and_resized_terminals(self):
@@ -110,19 +111,19 @@ class InstallerPresentationTests(unittest.TestCase):
             self.assertEqual(progress(), "layers 1/2")
             self.assertEqual(progress.fraction, 0.5)
 
-    def test_operation_bar_uses_layer_completion_and_unknown_work_animates_across_its_track(self):
+    def test_only_measured_work_fills_a_bar_and_unknown_work_has_a_stationary_pulse(self):
         ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
-        ui.set_remaining_steps(12)
         with mock.patch.object(ui, "width", return_value=120):
-            frames = [ui.frame("Downloading", tick).split("]")[0][1:] for tick in range(54)]
-            self.assertEqual({frame.index("#") for frame in frames}, set(range(54)))
-            for fraction, cells in ((0, 0), (0.5, 27), (1, 54)):
+            for tick in range(24):
+                frame = ui.frame("Downloading", tick)
+                self.assertIn("Working", frame)
+                self.assertNotIn("[", frame)
+                self.assertNotIn("%", frame)
+            for fraction, cells in ((0, 0), (0.5, 12), (1, 24)):
                 bar = ui.frame("Downloading", 5, detail="layers 1/2", fraction=fraction).split("]")[0][1:]
-                self.assertEqual(len(bar) - len(bar.lstrip("=")), cells)
-            self.assertEqual(ui.frame("Done", 0, status="[ok]").count("="), 54)
-            stopped = ui.frame("Failed", 0, status="[stopped]")
-            self.assertNotIn("#", stopped)
-            self.assertNotIn("=", stopped)
+                self.assertEqual(bar.count("="), cells)
+            self.assertEqual(ui.frame("Done", 0, status="[ok]"), "[ok]  0.0s")
+            self.assertEqual(ui.frame("Failed", 0, status="[stopped]"), "[stopped]  0.0s")
 
     def test_noisy_or_unrecognized_pull_output_is_bounded_and_does_not_claim_download_progress(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -162,7 +163,7 @@ class InstallerPresentationTests(unittest.TestCase):
         self.assertIn("[stopped]", output.getvalue())
         self.assertNotIn("[ok]", output.getvalue())
 
-    def test_real_pty_shows_one_animated_bar_and_restores_cursor_before_prompt(self):
+    def test_real_pty_shows_activity_and_restores_cursor_before_prompt(self):
         import fcntl
         import termios
         master, slave = pty.openpty()
@@ -211,7 +212,7 @@ class InstallerPresentationTests(unittest.TestCase):
         ui = UI.Presentation(stream=output, environ={"TERM": "xterm"}, color=False)
         with ui.step("Detecting installations"):
             pass
-        self.assertIn("=" * 54, ui.frame("Detected", 0, status="[ok]"))
+        self.assertIn("[ok]", ui.frame("Detected", 0, status="[ok]"))
         ui.set_remaining_steps(3)
         self.assertNotIn("stages", ui.frame("Downloading image", 2))
         self.assertNotIn("%", ui.frame("Downloading image", 20))
@@ -226,7 +227,7 @@ class InstallerPresentationTests(unittest.TestCase):
         self.assertEqual(output.getvalue().count("[2/4] Downloading image"), 2)
         self.assertIn("[4/4] Enabling system administration", output.getvalue())
         self.assertNotIn("Step ", output.getvalue())
-        self.assertEqual(ui.frame("Done", 0, status="[ok]").count("="), 54)
+        self.assertIn("[ok]", ui.frame("Done", 0, status="[ok]"))
 
     def test_plain_output_uses_the_same_bracketed_stage_label(self):
         output = io.StringIO()
@@ -245,13 +246,64 @@ class SpaceflightTests(unittest.TestCase):
         for width in (1, 20, 71, 80, 100, 400):
             for tick in (0, 1, 50, 10**6):
                 rows = UI.spaceflight(width, tick)
-                self.assertEqual(len(rows), 6)
+                self.assertEqual(len(rows), 12)
                 self.assertTrue(all(len(row) <= min(width, 96) for row in rows))
                 self.assertEqual(rows, UI.spaceflight(width, tick))
                 self.assertNotIn("%", "".join(rows))
         self.assertNotEqual(UI.spaceflight(80, 1), UI.spaceflight(80, 12))
 
-    def test_large_terminal_scene_stays_seven_live_rows_and_compacts_on_resize(self):
+    def test_field_height_is_adaptive_but_memory_and_rows_are_bounded(self):
+        for height in (1, 6, 10, 12, 13, 1000):
+            rows = UI.spaceflight(1000, 80, height, unicode=True)
+            self.assertEqual(len(rows), max(6, min(13, height)))
+            self.assertLessEqual(sum(len(row) for row in rows), 96 * 13)
+        ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
+        for width, height, expected in ((80, 24, 12), (100, 30, 13), (80, 18, 6), (30, 24, 0)):
+            with mock.patch.object(ui, "width", return_value=width), mock.patch.object(ui, "height", return_value=height):
+                self.assertEqual(len(ui.scene(0)), expected)
+
+    def test_stars_move_radially_outward_without_a_ship_or_sideways_drift(self):
+        center_x, center_y = 39, 5.5
+        for index in range(72):
+            for tick in range(1, 90):
+                before = UI.star_position(index, tick - 1, 79)
+                after = UI.star_position(index, tick, 79)
+                if after[2] > before[2]:
+                    continue  # A star re-enters at the far end of its fixed ray.
+                self.assertGreaterEqual(abs(after[0] - center_x), abs(before[0] - center_x))
+                self.assertGreaterEqual(abs(after[1] - center_y), abs(before[1] - center_y))
+                self.assertAlmostEqual((before[0] - center_x) * (after[1] - center_y),
+                                       (after[0] - center_x) * (before[1] - center_y))
+        frames = "\n".join("\n".join(UI.spaceflight(79, tick)) for tick in range(96))
+        self.assertTrue(set(frames) <= set(" .*\n"))
+        self.assertIn("*", frames)
+        self.assertIn(".", frames)
+        self.assertNotIn("-", frames)
+        unicode_frames = "\n".join(UI.spaceflight(79, 50, unicode=True))
+        self.assertTrue(set(unicode_frames) <= set(" .·•\n"))
+        self.assertIn("•", unicode_frames)
+
+    def test_colored_scene_has_bounded_visible_columns_and_only_restrained_sgr(self):
+        ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"})
+        ui.unicode = True
+        for width in (72, 80, 100):
+            with mock.patch.object(ui, "width", return_value=width), mock.patch.object(ui, "height", return_value=24):
+                for tick in (0, 20, 95):
+                    for line in ui.scene(tick):
+                        self.assertLessEqual(len(re.sub(r"\x1b\[\d+(?:;\d+)*m", "", line)), width - 1)
+                        self.assertLessEqual(set(re.findall(r"\x1b\[([0-9;]+)m", line)), {"0", "90", "36", "37"})
+
+    def test_reduced_effects_and_short_terminals_never_draw_the_scene(self):
+        for env in ({"TERM": "xterm", "ORBIS_NO_ANIMATION": "1"}, {"TERM": "xterm", "NO_COLOR": ""}):
+            output = TerminalStream(); ui = UI.Presentation(stream=output, environ=env)
+            with ui.step("Verifying release"):
+                pass
+            self.assertEqual(output.getvalue(), "Verifying release...\n")
+        ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"})
+        with mock.patch.object(ui, "width", return_value=100), mock.patch.object(ui, "height", return_value=12):
+            self.assertEqual(ui.scene(1), [])
+
+    def test_large_terminal_scene_stays_bounded_and_compacts_on_resize(self):
         output = TerminalStream(); ui = UI.Presentation(stream=output, environ={"TERM": "xterm"}, color=False)
         width = [80]
         original = ui.redraw; counts = []
@@ -260,8 +312,8 @@ class SpaceflightTests(unittest.TestCase):
         with mock.patch.object(ui, "width", side_effect=lambda: width[0]), mock.patch.object(ui, "height", return_value=24), mock.patch.object(ui, "redraw", side_effect=draw):
             with ui.step("Checking the real operation"):
                 time.sleep(0.13); width[0] = 30; time.sleep(0.13)
-        self.assertIn(7, counts); self.assertEqual(counts[-1], 1)
-        self.assertLessEqual(max(counts), 7)
+        self.assertIn(13, counts); self.assertEqual(counts[-1], 1)
+        self.assertLessEqual(max(counts), 13)
         self.assertIn("[ok]", output.getvalue())
         self.assertTrue(output.getvalue().endswith("\033[?25h\n"))
 

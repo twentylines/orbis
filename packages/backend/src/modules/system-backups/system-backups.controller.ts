@@ -1,18 +1,41 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { SystemBackupsService } from './system-backups.service';
+import { BackupImportsService } from './backup-imports.service';
 import { backupCredentials as credentials, backupOperator } from './backup-access';
 
 @Controller('system-backups')
 @UseGuards(AuthGuard)
 export class SystemBackupsController {
-  constructor(private readonly backups: SystemBackupsService) {}
+  constructor(
+    private readonly backups: SystemBackupsService,
+    private readonly imports: BackupImportsService,
+  ) {}
   @Get()
   list(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     response.setHeader('Cache-Control', 'no-store');
     return this.backups.list(backupOperator(request));
+  }
+  @Get('settings')
+  settings(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    backupOperator(request);
+    response.setHeader('Cache-Control', 'no-store');
+    return this.backups.settings();
+  }
+  @Put('settings')
+  updateSettings(@Req() request: Request, @Body() body: unknown) {
+    backupOperator(request);
+    return this.backups.updateSettings(body);
+  }
+  @Post(':id/import')
+  @HttpCode(202)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async importSaved(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
+    const owner = backupOperator(request);
+    const archive = await this.backups.download(id, owner, credentials(body));
+    return this.imports.receiveServerExport(owner, archive.stream, archive.bytes);
   }
   @Post('export')
   @HttpCode(202)

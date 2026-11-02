@@ -14,8 +14,12 @@ import { appearanceBootstrap } from './desktop/appearance-cache';
 import { sessionExitBootstrap } from './desktop/session-motion';
 import { coreUpdateIsPending } from './desktop/host-update-watch';
 import { claimPreloadRetry } from './components/startup/preload-retry';
+import { reloadDestination } from './components/startup/reload-destination';
 import { recoverNavigation } from './components/startup/navigation-recovery';
 import { startupViewportBootstrap } from './components/startup/startup-surface';
+import { OperationBoundary } from './components/recovery-progress/operation-boundary';
+import { loadOperationStatus } from './components/recovery-progress/operation-status';
+import { operationPrepaintBootstrap } from './components/recovery-progress/operation-continuity';
 import { themeApplyHandoffBootstrap, themeApplyPrepaintCss } from './modules/theme-packs/theme-apply-handoff';
 
 export const links: Route.LinksFunction = () => [
@@ -26,19 +30,38 @@ export const links: Route.LinksFunction = () => [
 ];
 
 let navigationRecoveryChecked = false;
+let reloadDestinationChecked = false;
+let recoveredModuleNavigation = false;
 export async function clientLoader({ request }: Route.ActionArgs) {
   const url = new URL(request.url);
+  const restoration = await loadOperationStatus();
+  if (restoration.state !== 'idle' && !['/login', '/reset-password'].includes(url.pathname)) return { restoration };
   if (!navigationRecoveryChecked) {
     navigationRecoveryChecked = true;
     try {
       const entry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
       const destination = recoverNavigation(window.sessionStorage, url.pathname + url.search + url.hash, Date.now(), entry?.type === 'reload');
-      if (destination) return redirect(destination);
+      if (destination) {
+        recoveredModuleNavigation = true;
+        return redirect(destination);
+      }
     } catch {
       // Browser storage is optional; authentication still runs normally.
     }
   }
   const user = await userContext();
+  if (restoration.state === 'idle' && !reloadDestinationChecked) {
+    reloadDestinationChecked = true;
+    const entry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const destination = reloadDestination({
+      navigationType: entry?.type,
+      pathname: url.pathname,
+      authenticated: user.data?.isLoggedIn === true,
+      restorationIdle: true,
+      authHandoff: recoveredModuleNavigation || url.searchParams.has('redirect_url') || url.searchParams.has('return_to'),
+    });
+    if (destination) return redirect(destination);
+  }
   if (url.pathname !== '/') {
     return user;
   }
@@ -84,8 +107,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <title>Orbis</title>
         <meta charSet="UTF-8" />
+        <title>Orbis</title>
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code validates and consumes only a bounded same-tab operation marker. */}
+        <script data-orbis-operation-boot dangerouslySetInnerHTML={{ __html: operationPrepaintBootstrap }} />
         <style data-orbis-theme-reload>{themeApplyPrepaintCss}</style>
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code validates only a bounded public theme identity and timestamp. */}
         <script data-orbis-theme-reload dangerouslySetInnerHTML={{ __html: themeApplyHandoffBootstrap }} />
@@ -113,7 +138,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Static code measures the viewport gutter before the loading scene is painted. */}
         <script data-orbis-startup-viewport dangerouslySetInnerHTML={{ __html: startupViewportBootstrap }} />
         <main id="root" tabIndex={-1}>
-          <StartupBoundary>{children}</StartupBoundary>
+          <OperationBoundary>
+            <StartupBoundary>{children}</StartupBoundary>
+          </OperationBoundary>
           <ScrollRestoration />
           <Scripts />
         </main>

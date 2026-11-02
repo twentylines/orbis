@@ -7,6 +7,7 @@ import { PassThrough } from 'node:stream';
 import {
   BackupRestoreDockerRuntime,
   snapshotRestoreContainer,
+  snapshotRetainedRole,
   verifyRestoreVerifierMounts,
   restoreRootPlanMatchesPolicy,
   type RestoreOperation,
@@ -288,6 +289,48 @@ it('normalizes mount ordering, running state, and OOM flag nullability without c
   expect(snapshot(original).running).toBe(true);
 });
 
+it('accepts only root-confirmed post-commit controller renames while preserving fingerprint checks', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const originalBefore = fixture({ Name: '/runtipi' });
+  const originalAfter = fixture({ Name: `/orbis-retained-${id}-previous`, State: { Running: false } });
+  const candidateBefore = fixture({ Name: `/orbis-retained-${id}-candidate` });
+  const candidateAfter = fixture({ Name: '/runtipi' });
+  const snap = (value: InspectFixture, role: 'original' | 'candidate', committed: boolean) =>
+    snapshotRetainedRole(value as unknown as Dockerode.ContainerInspectInfo, id, role, committed);
+  expect(snap(originalAfter, 'original', true).fingerprint).toBe(snapshot(originalBefore).fingerprint);
+  expect(snap(candidateAfter, 'candidate', true).fingerprint).toBe(snapshot(candidateBefore).fingerprint);
+  expect(snap(originalAfter, 'original', false).fingerprint).not.toBe(snapshot(originalBefore).fingerprint);
+  expect(() => snap(fixture({ Name: '/unexpected' }), 'original', true)).toThrow();
+  expect(() => snap(fixture({ Name: '/unexpected' }), 'candidate', true)).toThrow();
+  const changed = fixture({ ...originalAfter, Config: { ...originalAfter.Config, Env: ['changed'] } });
+  expect(snap(changed, 'original', true).fingerprint).not.toBe(snapshot(originalBefore).fingerprint);
+});
+
+it('rechecks renamed root-owned roles through the actual committed runtime boundary', async () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const original = fixture({ Id: '1'.repeat(64), Name: '/runtipi' });
+  const candidate = fixture({ Id: '2'.repeat(64), Name: `/orbis-retained-${id}-candidate` });
+  const renamedOriginal = fixture({ ...original, Name: `/orbis-retained-${id}-previous`, State: { Running: false } });
+  const renamedCandidate = fixture({ ...candidate, Name: '/runtipi' });
+  const containers = new Map([
+    [original.Id, renamedOriginal],
+    [candidate.Id, renamedCandidate],
+  ]);
+  const docker = { getContainer: (key: string) => ({ inspect: async () => containers.get(key) }) };
+  const journal = { state: { phase: 'committing', decision: 'commit', worker: '3'.repeat(64) } };
+  const operation = { id, original: snapshot(original), candidate: snapshot(candidate) };
+  const runtime = new BackupRestoreDockerRuntime(docker as never, journal as never, operation as never, undefined, {
+    targetImage: `sha256:${'b'.repeat(64)}`,
+    committed: true,
+    verifyWorker: async () => undefined,
+  });
+  const owned = runtime as unknown as { owned: (value: ReturnType<typeof snapshot>) => Promise<unknown> };
+  await expect(owned.owned(operation.original)).resolves.toMatchObject({ Name: `/orbis-retained-${id}-previous` });
+  await expect(owned.owned(operation.candidate)).resolves.toMatchObject({ Name: '/runtipi' });
+  containers.set(candidate.Id, fixture({ ...renamedCandidate, Name: '/wrong' }));
+  await expect(owned.owned(operation.candidate)).rejects.toThrow();
+});
+
 it('fingerprints explicit OOM kill disable and reports restart policy separately', () => {
   const original = fixture();
   const oomDisabled = fixture({ HostConfig: { ...original.HostConfig, OomKillDisable: true } });
@@ -468,3 +511,33 @@ it.each([
     }
   },
 );
+
+it('accepts a separately root-bound historical verifier image only for an explicit retained runtime', async () => {
+  const restoreId = '11111111-1111-4111-8111-111111111111';
+  const nonce = '22222222-2222-4222-8222-222222222222';
+  const currentImage = `sha256:${'a'.repeat(64)}`;
+  const historicalImage = `sha256:${'b'.repeat(64)}`;
+  const operation = { id: restoreId, nonce, image: currentImage, original: { id: '1'.repeat(64) } } as unknown as RestoreOperation;
+  const journal = {} as BackupRestoreJournal;
+  const record = { id: '2'.repeat(64) };
+  const container = {
+    Image: historicalImage,
+    Config: {
+      Labels: { 'io.orbis.restore': restoreId, 'io.orbis.restore.nonce': nonce, 'io.orbis.restore.role': 'verifier' },
+      Env: [`ORBIS_INSTALLER_TRANSACTION=${restoreId}`, 'ORBIS_INSTALLER_PHASE=hold'],
+    },
+  };
+  const legacy = new BackupRestoreDockerRuntime({} as Dockerode, journal, operation);
+  const retained = new BackupRestoreDockerRuntime({} as Dockerode, journal, operation, undefined, {
+    targetImage: historicalImage,
+    verifyWorker: async () => undefined,
+  });
+  const legacyHooks = legacy as unknown as { owned: () => Promise<unknown>; role: (record: unknown, role: string) => Promise<unknown> };
+  const retainedHooks = retained as unknown as typeof legacyHooks;
+  vi.spyOn(legacyHooks, 'owned').mockResolvedValue(container);
+  vi.spyOn(retainedHooks, 'owned').mockResolvedValue(container);
+  await expect(legacyHooks.role(record, 'verifier')).rejects.toThrow();
+  await expect(retainedHooks.role(record, 'verifier')).resolves.toEqual(container);
+  container.Image = `sha256:${'c'.repeat(64)}`;
+  await expect(retainedHooks.role(record, 'verifier')).rejects.toThrow();
+});

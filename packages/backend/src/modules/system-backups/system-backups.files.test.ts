@@ -22,13 +22,20 @@ const auth = { verifySensitiveAction: vi.fn().mockResolvedValue({ id: 1 }) };
 const apps = { getApps: vi.fn().mockResolvedValue([{ appName: 'fixture', appStoreSlug: 'store', status: 'running' }]) };
 const tasks = { read: vi.fn().mockResolvedValue({ tasks: [] }) };
 const host = { status: vi.fn().mockResolvedValue({ available: false }) };
-const runtime = { plan: vi.fn(), stop: vi.fn(), resume: vi.fn(), dumpDatabase: vi.fn() };
+const runtime = { plan: vi.fn(), stop: vi.fn(), resume: vi.fn(), dumpDatabase: vi.fn(), verifyStopped: vi.fn() };
+const queueBase = {
+  pauseId: randomUUID(),
+  generation: 1,
+  queues: ['app-events-queue', 'repo-queue', 'system-events-queue'].map((name) => ({ name, messages: 0, consumers: 0 })),
+};
+const queueCapture = { verify: vi.fn(async () => ({ ...queueBase, checkedAt: Date.now() })), release: vi.fn() };
+const queues = { pauseForBackup: vi.fn(async () => ({ ...queueCapture, initial: { ...queueBase, checkedAt: Date.now() } })) };
 const logger = { warn: vi.fn() };
 const database = { execute: vi.fn().mockResolvedValue({ rows: [{ bytes: '1024' }] }) };
 let config: { get: (key: string) => unknown };
 const createService = () =>
   new SystemBackupsService(
-    ...([config, auth, apps, tasks, host, runtime, logger, database] as unknown as ConstructorParameters<typeof SystemBackupsService>),
+    ...([config, auth, apps, tasks, host, runtime, logger, database, queues] as unknown as ConstructorParameters<typeof SystemBackupsService>),
   );
 
 async function terminal(id: string) {
@@ -44,6 +51,9 @@ async function terminal(id: string) {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  runtime.verifyStopped.mockImplementation(async (plan) =>
+    plan.containers.map((item: { id: string; project: string }) => ({ ...item, running: false })),
+  );
   setBackupRecoveryRequired(false);
   directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-export-service-')));
   await fs.mkdir(path.join(directory, 'data', 'state'), { recursive: true });
@@ -355,4 +365,106 @@ it('a failed export cannot produce a grant stream and preserves normal app recov
   await expect(grant.open()).rejects.toThrow();
   expect(runtime.resume).toHaveBeenCalledWith([container]);
   expect((await terminal(grant.backupId))?.status).toBe('failed');
+});
+
+it('holds queue pause and the mutation barrier through the database snapshot, then resumes both', async () => {
+  runtime.dumpDatabase.mockImplementationOnce(async (_id, file) => {
+    expect(queues.pauseForBackup).toHaveBeenCalledTimes(1);
+    expect(queueCapture.release).not.toHaveBeenCalled();
+    expect(backupMaintenanceActive()).toBe(true);
+    await fs.writeFile(file, 'PGDMPcoherent fixture', { mode: 0o600 });
+  });
+  const job = await terminal((await service.start(1, credentials, passphrase)).id);
+  expect(job?.status).toBe('succeeded');
+  expect(queueCapture.verify).toHaveBeenCalledTimes(1);
+  expect(queueCapture.release).toHaveBeenCalledTimes(1);
+  expect(backupMaintenanceActive()).toBe(false);
+});
+it('releases the paused queue on database failure after recovering stopped apps', async () => {
+  runtime.dumpDatabase.mockRejectedValueOnce(new Error('fixture dump failure'));
+  const job = await terminal((await service.start(1, credentials, passphrase)).id);
+  expect(job?.status).toBe('failed');
+  expect(runtime.resume).toHaveBeenCalled();
+  expect(queueCapture.release).toHaveBeenCalledTimes(1);
+  expect(backupMaintenanceActive()).toBe(false);
+});
+it('rejects queue work arriving during capture and resumes without exposing a partial archive', async () => {
+  queueCapture.verify.mockRejectedValueOnce(new Error('fixture late queued command'));
+  const job = await terminal((await service.start(1, credentials, passphrase)).id);
+  expect(job?.status).toBe('failed');
+  expect(runtime.resume).toHaveBeenCalled();
+  expect(queueCapture.release).toHaveBeenCalledTimes(1);
+  expect(backupMaintenanceActive()).toBe(false);
+  if (!job) throw new Error('Backup fixture job missing');
+  await expect(fs.stat(path.join(directory, 'data', 'backups', 'full', job.id, 'backup.orbis'))).rejects.toThrow();
+});
+
+it('retention saves extend existing deadlines, never shorten or delete backups, and survive restart', async () => {
+  const id = randomUUID();
+  const createdAt = Date.now() - 60_000;
+  const storage = path.join(directory, 'data', 'backups', 'full', id);
+  await fs.mkdir(storage, { recursive: true, mode: 0o700 });
+  await fs.writeFile(
+    path.join(storage, 'job.json'),
+    JSON.stringify({
+      version: 1,
+      id,
+      ownerId: 1,
+      createdAt,
+      updatedAt: createdAt,
+      status: 'succeeded',
+      stage: 'complete',
+      completedBytes: 52,
+      totalBytes: 52,
+      message: 'Encrypted backup ready.',
+      resumePending: [],
+      restartRequired: false,
+    }),
+    { mode: 0o600 },
+  );
+  await fs.writeFile(path.join(storage, 'backup.orbis'), 'preserved encrypted fixture', { mode: 0o600 });
+  expect((await service.list(1)).jobs[0]?.expiresAt).toBe(createdAt + 24 * 60 * 60_000);
+  await service.updateSettings({ revision: 0, retentionHours: 168 });
+  const deadline = createdAt + 168 * 60 * 60_000;
+  expect((await service.list(1)).jobs[0]?.expiresAt).toBe(deadline);
+  await service.updateSettings({ revision: 1, retentionHours: 24 });
+  expect((await service.list(1)).jobs[0]?.expiresAt).toBe(deadline);
+  expect(await fs.readFile(path.join(storage, 'backup.orbis'), 'utf8')).toBe('preserved encrypted fixture');
+  await service.onModuleDestroy();
+  service = createService();
+  expect((await service.list(1)).jobs[0]?.expiresAt).toBe(deadline);
+  expect(await service.settings()).toMatchObject({ revision: 2, retentionHours: 24 });
+  expect((await service.list(2)).jobs).toEqual([]);
+});
+
+it('reconciles a durable longer policy before startup expiry when a settings save was interrupted', async () => {
+  const id = randomUUID();
+  const createdAt = Date.now() - 48 * 60 * 60_000;
+  const storage = path.join(directory, 'data', 'backups', 'full', id);
+  const settings = path.join(directory, 'data', 'backups', 'settings');
+  await fs.mkdir(storage, { recursive: true, mode: 0o700 });
+  await fs.mkdir(settings, { mode: 0o700 });
+  await fs.writeFile(path.join(settings, 'retention.json'), JSON.stringify({ version: 1, revision: 1, retentionHours: 168 }), { mode: 0o600 });
+  await fs.writeFile(
+    path.join(storage, 'job.json'),
+    JSON.stringify({
+      version: 1,
+      id,
+      ownerId: 1,
+      createdAt,
+      updatedAt: createdAt,
+      expiresAt: createdAt + 24 * 60 * 60_000,
+      status: 'succeeded',
+      stage: 'complete',
+      completedBytes: 52,
+      totalBytes: 52,
+      message: 'Encrypted backup ready.',
+      resumePending: [],
+      restartRequired: false,
+    }),
+    { mode: 0o600 },
+  );
+  await fs.writeFile(path.join(storage, 'backup.orbis'), 'preserved encrypted fixture', { mode: 0o600 });
+  expect((await service.list(1)).jobs[0]?.expiresAt).toBe(createdAt + 168 * 60 * 60_000);
+  expect(await fs.readFile(path.join(storage, 'backup.orbis'), 'utf8')).toBe('preserved encrypted fixture');
 });

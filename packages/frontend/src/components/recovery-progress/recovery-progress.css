@@ -1,4 +1,6 @@
 .recovery-progress {
+  position: relative;
+  isolation: isolate;
   display: grid;
   min-width: 0;
   gap: 10px;
@@ -38,10 +40,21 @@
   border-radius: 8px;
   background: var(--desktop-accent);
 }
-.recovery-flight {
-  height: 144px;
-  margin-block: 2px 8px;
-  border-radius: 12px;
+.recovery-progress .recovery-flight {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  min-height: 0;
+  opacity: 0.18;
+  background: transparent;
+  pointer-events: none;
+  mask-image: linear-gradient(to right, transparent 30%, #000);
+}
+.recovery-progress .recovery-flight .depth-travel-horizon {
+  background: radial-gradient(ellipse at 75% 50%, color-mix(in srgb, var(--desktop-accent) 16%, transparent), transparent 70%);
+}
+.recovery-progress .recovery-flight .depth-travel-plane i {
+  background: var(--desktop-ink);
 }
 @media (prefers-reduced-motion: reduce) {
   .recovery-progress progress,
@@ -54,4 +67,69 @@
 :root[data-orbis-effects="low"] .recovery-progress progress,
 :root[data-orbis-effects="low"] .recovery-progress progress::-webkit-progress-value {
   transition: none;
+}
+
+.recovery-progress-bar {
+  position: relative;
+  width: 100%;
+  height: 7px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--desktop-ink) 10%, transparent);
+}
+.recovery-progress-bar progress {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+.recovery-progress-bar progress::-webkit-progress-bar {
+  background: transparent;
+}
+.recovery-progress-bar progress::-webkit-progress-value {
+  background: var(--desktop-accent);
+  border-radius: 8px;
+  transition: width 400ms ease;
+}
+.recovery-progress-bar progress::-moz-progress-bar {
+  background: var(--desktop-accent);
+  border-radius: 8px;
+}
+.recovery-progress-bar[data-known="false"] progress {
+  opacity: 0;
+}
+.recovery-progress-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 34%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--desktop-accent), transparent);
+  animation: recovery-bar-sweep 1800ms ease-in-out infinite;
+}
+@keyframes recovery-bar-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+.recovery-progress-bar[data-motion="false"] > span,
+:root[data-orbis-effects="low"] .recovery-progress-bar > span {
+  animation: none;
+  left: 33%;
+  opacity: 0.65;
+}
+.recovery-progress-bar[data-motion="false"] progress::-webkit-progress-value {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .recovery-progress-bar > span {
+    animation: none;
+    left: 33%;
+    opacity: 0.65;
+  }
 }

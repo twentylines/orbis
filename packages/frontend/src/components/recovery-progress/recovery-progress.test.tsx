@@ -32,3 +32,17 @@ test('record preparation and reduced-motion preference retain honest accessible 
   expect(markup).toContain('value="25"');
   expect(markup).toContain('data-reduced="true"');
 });
+
+test('compact progress can omit decorative depth without losing measured or unknown status', () => {
+  const measured = renderToStaticMarkup(<RecoveryProgress label="Creating backup" completed={25} total={100} journey={false} />);
+  expect(measured).toContain('value="25"');
+  expect(measured).toContain('25 B of 100 B');
+  expect(measured).not.toContain('depth-travel');
+  const unknown = renderToStaticMarkup(<RecoveryProgress label="Checking backup" journey={false} />);
+  expect(unknown).toContain('Working…');
+  expect(unknown).not.toContain('value=');
+  const decorated = renderToStaticMarkup(<RecoveryProgress label="Creating backup" completed={25} total={100} />);
+  expect(decorated).toContain('data-journey="true"');
+  expect(decorated).toContain('class="depth-travel recovery-flight" aria-hidden="true"');
+  expect(decorated).not.toContain('<video');
+});

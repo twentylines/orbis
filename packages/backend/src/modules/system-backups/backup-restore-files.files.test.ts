@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { verifyRestoreFiles, type RestoreFileReview } from './backup-restore-files';
+import { verifyRestoreFiles, verifySelectedRestoreFiles, type RestoreFileReview } from './backup-restore-files';
 
 type LedgerEntry = {
   root: string;
@@ -141,6 +141,35 @@ it('verifies a real multi-root ledger, nested reserved-looking filenames, and ig
     ctimeMs: before.ctimeMs,
     ino: before.ino,
   });
+});
+
+it('verifies selected final files against the full root-pinned ledger without freezing unrelated app data', async () => {
+  const fixture = await makeFixture();
+  const options = { ledger: fixture.ledger, expected: fixture.expected, roots: fixture.roots, signal: signal(), selected: ['app-data/settings.yml'] };
+  await fs.writeFile(path.join(fixture.roots.state, 'sub', 'config.txt'), 'ordinary later change');
+  await expect(verifySelectedRestoreFiles(options)).resolves.toBeUndefined();
+  await fs.writeFile(path.join(fixture.roots['app-data'], 'settings.yml'), 'tampered');
+  await expect(verifySelectedRestoreFiles(options)).rejects.toThrow();
+});
+it('rejects missing selections, duplicate selections and changed ledger authority', async () => {
+  const fixture = await makeFixture();
+  const options = { ledger: fixture.ledger, expected: fixture.expected, roots: fixture.roots, signal: signal(), selected: ['app-data/settings.yml'] };
+  await expect(verifySelectedRestoreFiles({ ...options, selected: ['app-data/missing.yml'] })).rejects.toThrow();
+  await expect(verifySelectedRestoreFiles({ ...options, selected: ['app-data/settings.yml', 'app-data/settings.yml'] })).rejects.toThrow();
+  await expect(verifySelectedRestoreFiles({ ...options, expected: { ...fixture.expected, sha256: '0'.repeat(64) } })).rejects.toThrow();
+});
+
+it('rejects selected directory entries, symlink targets, and cancelled verification', async () => {
+  const fixture = await makeFixture();
+  const options = { ledger: fixture.ledger, expected: fixture.expected, roots: fixture.roots, signal: signal(), selected: ['state/sub'] };
+  await expect(verifySelectedRestoreFiles(options)).rejects.toThrow();
+  const file = path.join(fixture.roots['app-data'], 'settings.yml');
+  await fs.unlink(file);
+  await fs.symlink(path.join(fixture.roots.state, 'sub', 'config.txt'), file);
+  await expect(verifySelectedRestoreFiles({ ...options, selected: ['app-data/settings.yml'] })).rejects.toThrow();
+  const abort = new AbortController();
+  abort.abort();
+  await expect(verifySelectedRestoreFiles({ ...options, signal: abort.signal })).rejects.toThrow();
 });
 
 it('accepts an empty ledger and empty canonical root', async () => {

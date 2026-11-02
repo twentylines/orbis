@@ -13,15 +13,6 @@ import time
 import textwrap
 
 
-WORDMARK = (
-    r"  ___  ____  ____  ___ ____  ",
-    r" / _ \|  _ \| __ )|_ _/ ___| ",
-    r"| | | | |_) |  _ \ | |\___ \ ",
-    r"| |_| |  _ <| |_) || | ___) |",
-    r" \___/|_| \_\____/|___|____/ ",
-)
-
-
 def display_release(tag):
     match = re.fullmatch(r"v?(\d+\.\d+\.\d+)(?:-(beta|rc)\.(\d+))?", tag) if isinstance(tag, str) else None
     if match is None:
@@ -32,29 +23,34 @@ def display_release(tag):
     return base if match[2] is None else f"{base} {match[2]} {match[3]}"
 
 
-def spaceflight(width, tick):
-    """Decorative perspective only; operation progress is displayed separately."""
+def star_position(index, tick, width, height=12):
+    # A terminal cell is roughly twice as tall as it is wide.
+    angle = index * math.pi * (3 - math.sqrt(5))
+    phase = (tick + index * 29) % 96
+    depth = 1 - phase / 104
+    radius = 0.14 + (index % 7) * 0.023
+    scale = height * 1.4
+    return ((width - 1) / 2 + math.cos(angle) * radius / depth * scale,
+            (height - 1) / 2 + math.sin(angle) * radius / depth * scale / 2,
+            depth)
+
+
+def spaceflight(width, tick, height=12, unicode=False):
+    """A bounded forward starfield, unrelated to operation completion."""
     width = max(1, min(96, width))
-    height, center = 6, width // 2
+    height = max(6, min(13, height))
     cells = [[" " for _ in range(width)] for _ in range(height)]
-    for index in range(36):
-        depth = ((index * 37 - tick * 2) % 97 + 3) / 100
-        x = center + round((((index * 53) % 101) - 50) / depth)
-        y = 2 + round((((index * 17) % 23) - 11) / (6 * depth))
-        if 0 <= x < width and 0 <= y < height:
-            cells[y][x] = "." if depth > 0.65 else "+" if depth > 0.3 else "*"
-    for row in (4, 5):
-        distance = (row - 2) * max(3, width // 8)
-        for x, value in ((center - distance, "/"), (center + distance, "\\")):
-            if 0 <= x < width:
-                cells[row][x] = value
-    ship = ("   /\\   ", "  /__\\  ", " /|__|\\ ", "<_|__|_>")
-    drift = round(math.sin(tick / 12))
-    for row, line in enumerate(ship, 1):
-        for column, value in enumerate(line):
-            x = center - len(line) // 2 + column + drift
-            if value != " " and 0 <= x < width:
-                cells[row][x] = value
+    for index in range(72):
+        x, y, depth = star_position(index, tick, width, height)
+        if depth < 0.4:
+            for age in (3, 6, 9):
+                old_x, old_y, old_depth = star_position(index, tick - age, width, height)
+                column, row = round(old_x), round(old_y)
+                if old_depth >= depth and 0 <= column < width and 0 <= row < height and cells[row][column] == " ":
+                    cells[row][column] = "·" if unicode else "."
+        column, row = round(x), round(y)
+        if 0 <= column < width and 0 <= row < height:
+            cells[row][column] = ("." if depth > 0.65 else "·" if depth > 0.3 else "•") if unicode else ("." if depth > 0.3 else "*")
     return ["".join(row).rstrip() for row in cells]
 
 
@@ -136,14 +132,16 @@ class Presentation:
         if self.tty and self.width() < 32:
             self.write(self.paint("Orbis", "1;36") + f"\n{release}\n")
             return
-        if not self.tty or self.width() < 64:
-            self.write(self.paint("Orbis", "1;36") + f"  {release}\n")
-            return
-        planet = ("     .----.    ", " .--' .--. '--.", "(____( () )____)", " '--. '--' .--'", "     '----'    ")
-        self.write("\n")
-        for orbit, letters in zip(planet, WORDMARK):
-            self.write(self.paint(orbit, "36") + "  " + self.paint(letters, "1;33") + "\n")
-        self.write(f"  {release}  /  Server installation\n\n")
+        self.write(self.paint("Orbis", "1;36") + f"  {release}\n")
+        if self.tty and self.width() >= 64:
+            self.write("\n")
+
+    def scene(self, tick):
+        if self.width() < 72 or self.height() < 18:
+            return []
+        return ["".join(self.paint(char, "37" if char in {"*", "•"} else "36" if char == "·" else "90")
+                        if char != " " else char for char in line)
+                for line in spaceflight(self.width() - 1, tick, min(13, self.height() - 12), self.unicode)]
 
     def set_remaining_steps(self, count):
         if type(count) is not int or not 1 <= count <= 128:
@@ -152,32 +150,19 @@ class Presentation:
 
     def frame(self, label, tick, elapsed=0, status=None, detail=None, fraction=None):
         width = max(1, self.width() - 1)
-        caption = f"{status}  {elapsed:.1f}s" if status else f"{elapsed:.1f}s"
-        if detail and not status and width >= 64:
-            caption = f"{detail}  /  {elapsed:.1f}s"
-        if width < 36:
-            caption = status or f"{elapsed:.0f}s"
-        if width < len(caption) + 8:
-            return caption[:width]
-        cells = max(4, min(54, width - len(caption) - 4))
-        # The bar belongs to the current operation; the heading identifies its stage.
-        # Layer counts are not byte percentages, and unknown work stays animated.
-        done = cells if status == "[ok]" else min(cells, int(cells * fraction)) if fraction is not None else 0
-        end = cells
-        span = max(1, end - done)
-        period = max(1, 2 * (span - 1))
-        position = tick % period
-        head = done + min(position, period - position)
-        track = []
-        for index in range(cells):
-            if index < done:
-                track.append(self.paint("█" if self.unicode else "=", "36"))
-            elif status is None and done <= index < end and abs(index - head) < 3:
-                distance = abs(index - head)
-                track.append(self.paint(("█", "▓", "░")[distance] if self.unicode else ("#", "=", ".")[distance], "1;33" if distance == 0 else "33"))
-            else:
-                track.append(self.paint("─" if self.unicode else "-", "90"))
-        return self.paint("[", "90") + "".join(track) + self.paint("]", "90") + "  " + caption
+        if status:
+            return (self.paint(status, "36" if status == "[ok]" else "33") + f"  {elapsed:.1f}s") if width >= len(status) + len(f"  {elapsed:.1f}s") else status[:width]
+        caption = f"{elapsed:.1f}s"
+        if detail and width >= 36:
+            caption = f"{detail}  /  {caption}"
+        if fraction is not None and width >= len(caption) + 12:
+            cells = min(24, width - len(caption) - 4)
+            done = max(0, min(cells, int(cells * fraction)))
+            fill, empty = ("━", "─") if self.unicode else ("=", "-")
+            return "[" + self.paint(fill * done, "36") + self.paint(empty * (cells - done), "90") + "]  " + caption
+        pulse = ("·", "o", "O", "o") if self.unicode else (".", "o", "O", "o")
+        value = f"{pulse[(tick // 3) % len(pulse)]}  Working  /  {caption}"
+        return self.paint(value, "90") if len(value) <= width else caption[:width]
 
     @contextlib.contextmanager
     def step(self, label, *, completed=None, detail=None):
@@ -201,7 +186,7 @@ class Presentation:
             tick = 1
             while not stopped.wait(0.1):
                 summary = detail() if detail else None
-                scene = [self.paint(line, "36") for line in spaceflight(self.width() - 1, tick)] if self.width() >= 72 and self.height() >= 18 else []
+                scene = self.scene(tick)
                 rows = self.redraw(rows, [*scene, self.frame(label, tick, time.monotonic() - started, detail=summary, fraction=getattr(detail, "fraction", None))])
                 tick += 1
 
@@ -213,7 +198,7 @@ class Presentation:
                     previous_handlers[signum] = signal.signal(signum, terminate)
             self.write(textwrap.fill(heading, width=max(16, self.width() - 1), subsequent_indent="  ", break_long_words=False, break_on_hyphens=False) + "\n")
             self.write("\033[?25l")
-            scene = [self.paint(line, "36") for line in spaceflight(self.width() - 1, 0)] if self.width() >= 72 and self.height() >= 18 else []
+            scene = self.scene(0)
             rows = self.redraw(0, [*scene, self.frame(label, 0)])
             worker.start()
             yield

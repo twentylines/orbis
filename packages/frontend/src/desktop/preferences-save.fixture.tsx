@@ -16,6 +16,9 @@ const doc = {
   activeElement: null,
   documentElement: {
     dataset: {},
+    removeAttribute() {
+      return undefined;
+    },
     style: {
       setProperty() {
         return undefined;

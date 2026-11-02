@@ -31,6 +31,18 @@ class BundleTests(unittest.TestCase):
         self.manifest = json.loads(self.assets[BUILD.MANIFEST])
         self.identity = {"tag": self.release["tag"], "commit": self.release["commit"], "manifestSha256": BUILD.sha(self.assets[BUILD.MANIFEST])}
 
+    def test_native_app_driver_dependencies_are_required_and_retained_in_bundle(self):
+        names = {'orbis-host-retained-app-driver.py', 'orbis-host-retained-app-effects.py', 'orbis-host-app-create-intent.py',
+                 'orbis-host-app-port-policy.py', 'orbis-host-app-port-observer.py', 'orbis-host-app-inet-diag.py',
+                         'orbis-host-time-machine-capabilities.py'}
+        expected = {'scripts/' + name for name in names}
+        self.assertTrue(expected <= BUILD.REQUIRED & BOOT.REQUIRED)
+        verified = BOOT.verify_manifest(self.assets[BUILD.MANIFEST], self.identity)
+        self.assertTrue(expected <= set(verified['files']))
+        for name in expected:
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                BUILD.build({key: data for key, data in self.files.items() if key != name}, self.release_bytes)
+
     def validate_manifest_value(self, value):
         data = json.dumps(value).encode()
         identity = {**self.identity, "manifestSha256": BUILD.sha(data)}
@@ -104,13 +116,15 @@ class BundleTests(unittest.TestCase):
 
     def test_verified_real_package_can_import_every_installer_entry_point(self):
         root = Path(__file__).resolve().parent.parent
-        files = {str(path.relative_to(root)): path.read_bytes() for path in (root / "scripts").glob("*.py") if BUILD.ALLOWED.fullmatch(str(path.relative_to(root)))}
+        files = {str(path.relative_to(root)): path.read_bytes() for path in (root / "scripts").iterdir() if BUILD.ALLOWED.fullmatch(str(path.relative_to(root)))}
         unit = "packaging/systemd/orbis-host.service"
         files[unit] = (root / unit).read_bytes()
         assets = BUILD.build(files, self.release_bytes)
         manifest = json.loads(assets[BUILD.MANIFEST])
         verified = BOOT.verify_files(assets[BUILD.ARCHIVE], manifest)
-        self.assertEqual(len(verified),38)
+        self.assertEqual(set(verified), set(files))
+        self.assertIn("scripts/orbis-proxy-identity.py", verified)
+        self.assertIn("scripts/orbis-host-maintenance-responder.mjs", verified)
         self.assertIn("scripts/orbis-install-prerequisites.py",BUILD.REQUIRED & BOOT.REQUIRED)
         self.assertEqual(verified["scripts/orbis-install-prerequisites.py"],files["scripts/orbis-install-prerequisites.py"])
         with tempfile.TemporaryDirectory() as folder:

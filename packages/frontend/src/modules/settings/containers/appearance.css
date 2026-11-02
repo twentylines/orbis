@@ -7,6 +7,14 @@
   flex-wrap: wrap;
   gap: 12px;
 }
+.appearance .theme-packs-settings > a.theme-settings-store-link[href] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-width: 44px;
+  min-height: 44px;
+}
 .theme-packs-settings > label {
   flex: 1 1 200px;
   max-width: 28rem;

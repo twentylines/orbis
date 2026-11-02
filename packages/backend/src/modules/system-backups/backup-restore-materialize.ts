@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { decodeAppImagePins } from '../docker/app-image-pins';
 import { constants } from 'node:fs';
 import fs, { type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
@@ -82,6 +83,7 @@ async function capacity(
   ledger: string,
   files: { name: string; bytes: number }[],
   directories: { name: string }[],
+  preserveLiveProxy = false,
 ) {
   const volumes = new Map<bigint, { directory: string; bytes: bigint; inodes: bigint; block: bigint }>();
   const volume = async (directory: string) => {
@@ -96,7 +98,7 @@ async function capacity(
     return item;
   };
   const byRoot = new Map<RestoreTreeName, Awaited<ReturnType<typeof volume>>>();
-  for (const name of restoreTreeNames) byRoot.set(name, await volume(roots[name]));
+  for (const name of restoreTreeNames) if (!preserveLiveProxy || name !== 'traefik') byRoot.set(name, await volume(roots[name]));
   for (const entry of files) {
     if (entry.name === 'data/.env') continue;
     const item = byRoot.get(locate(entry.name).root);
@@ -137,6 +139,8 @@ export async function materializeBackupSource(options: {
   progress: (value: RestoreMaterializeProgress) => void;
   settingsOverride?: RestoreSettingsOverride;
   hostIdentity?: { directory: string; id: string; seal: RestoreHostIdentitySeal };
+  retainedPins?: readonly { name: string; data: Uint8Array }[];
+  preserveLiveProxy?: boolean;
 }) {
   const { signal, roots } = options;
   try {
@@ -153,7 +157,7 @@ export async function materializeBackupSource(options: {
     if (!path.isAbsolute(options.ledger) || path.resolve(options.ledger) !== options.ledger || inside(source.directory, options.ledger))
       throw failed();
     await privateDirectory(path.dirname(options.ledger));
-    const targets = Object.values(roots);
+    const targets = restoreTreeNames.filter((name) => !options.preserveLiveProxy || name !== 'traefik').map((name) => roots[name]);
     for (const directory of targets) {
       await privateDirectory(directory);
       if (
@@ -165,24 +169,69 @@ export async function materializeBackupSource(options: {
       )
         throw failed();
     }
-    if (new Set(targets).size !== restoreTreeNames.length) throw failed();
+    if (new Set(targets).size !== restoreTreeNames.length - (options.preserveLiveProxy ? 1 : 0)) throw failed();
     const environment = source.manifest.files.find((entry) => entry.name === 'data/.env');
     if (!environment || !source.manifest.files.some((entry) => entry.name === 'data/state/seed')) throw failed();
+    const pinRoot = 'data/state/time-machine/image-pins';
+    const generatedPins =
+      options.retainedPins === undefined ? undefined : options.retainedPins.map((item) => ({ name: item.name, data: Buffer.from(item.data) }));
+    if (
+      generatedPins &&
+      (generatedPins.length > 512 ||
+        new Set(generatedPins.map((item) => item.name)).size !== generatedPins.length ||
+        generatedPins.some((item) => !/^[a-f0-9]{64}\.json$/.test(item.name) || !item.data.length || item.data.length > 128 * 1024))
+    )
+      throw failed();
+    for (const entry of generatedPins ?? []) {
+      const pins = decodeAppImagePins(entry.data);
+      if (`${createHash('sha256').update(pins.appUrn).digest('hex')}.json` !== entry.name) throw failed();
+    }
+    if (
+      generatedPins &&
+      (source.manifest.directories.some((entry) => entry.name.startsWith(`${pinRoot}/`)) ||
+        source.manifest.files.some(
+          (entry) => entry.name.startsWith(`${pinRoot}/`) && !new RegExp(`^${pinRoot}/[a-f0-9]{64}\\.json$`).test(entry.name),
+        ))
+    )
+      throw failed();
     const inputFiles = [
       ...source.manifest.files.map((entry) => ({
         ...entry,
         inputPath: path.join(source.directory, 'content', entry.name),
-        omitOutput: !!preserved && preservesRestoreHostPath(entry.name),
+        omitOutput:
+          (!!preserved && preservesRestoreHostPath(entry.name)) ||
+          (!!generatedPins && entry.name.startsWith(`${pinRoot}/`)) ||
+          (options.preserveLiveProxy && (entry.name === 'data/traefik' || entry.name.startsWith('data/traefik/'))),
       })),
-      ...(preserved?.files.map((entry) => ({ ...entry, omitOutput: false })) ?? []),
+      ...(preserved?.files
+        .filter((entry) => !options.preserveLiveProxy || entry.root !== 'traefik')
+        .map((entry) => ({ ...entry, omitOutput: false })) ?? []),
     ];
     const effectiveDirectories = [
-      ...source.manifest.directories.filter((entry) => !preserved || !preservesRestoreHostPath(entry.name)),
-      ...(preserved?.directories ?? []),
+      ...source.manifest.directories.filter(
+        (entry) =>
+          (!preserved || !preservesRestoreHostPath(entry.name)) &&
+          (!options.preserveLiveProxy || (entry.name !== 'data/traefik' && !entry.name.startsWith('data/traefik/'))),
+      ),
+      ...(preserved?.directories.filter((entry) => !options.preserveLiveProxy || entry.root !== 'traefik') ?? []),
     ];
+    if (generatedPins?.length) {
+      const uid = process.getuid?.() ?? 0;
+      const gid = process.getgid?.() ?? 0;
+      for (const name of ['data/state/time-machine', pinRoot]) {
+        if (inputFiles.some((entry) => entry.name === name)) throw failed();
+        const index = effectiveDirectories.findIndex((entry) => entry.name === name);
+        if (index < 0) effectiveDirectories.push({ name, uid, gid, mode: 0o700, mtime: 0 });
+        else if (name === pinRoot) {
+          const entry = effectiveDirectories[index];
+          if (!entry) throw failed();
+          effectiveDirectories[index] = { ...entry, uid, gid, mode: 0o700 };
+        }
+      }
+    }
     if (
       inputFiles.filter((entry) => !entry.omitOutput && entry.name !== 'data/.env').length +
-        effectiveDirectories.filter((entry) => locate(entry.name).relative).length >
+        (effectiveDirectories.filter((entry) => locate(entry.name).relative).length + (generatedPins?.length ?? 0)) >
       fullBackupLimits.entries
     )
       throw failed();
@@ -196,13 +245,16 @@ export async function materializeBackupSource(options: {
         .map((entry) => ({
           name: entry.name,
           bytes: override && entry.name === settingsName ? override.replacement.length : entry.bytes,
-        })),
-      effectiveDirectories,
+        }))
+        .concat((generatedPins ?? []).map((entry) => ({ name: `${pinRoot}/${entry.name}`, bytes: entry.data.length }))),
+      [...effectiveDirectories],
+      options.preserveLiveProxy,
     );
-    const budgets = Object.fromEntries(restoreTreeNames.map((name) => [name, new BackupExtractionBudget(roots[name])])) as Record<
-      RestoreTreeName,
-      BackupExtractionBudget
-    >;
+    const budgets = Object.fromEntries(
+      restoreTreeNames
+        .filter((name) => !options.preserveLiveProxy || name !== 'traefik')
+        .map((name) => [name, new BackupExtractionBudget(roots[name])]),
+    ) as Record<RestoreTreeName, BackupExtractionBudget>;
     const progress: RestoreMaterializeProgress = {
       stage: 'copying',
       completedBytes: 0,
@@ -316,6 +368,37 @@ export async function materializeBackupSource(options: {
             await input.close();
           }
         }
+      }
+      for (const entry of generatedPins ?? []) {
+        signal.throwIfAborted();
+        const relative = `time-machine/image-pins/${entry.name}`;
+        await budgets.state.reserve(relative, '-', entry.data.length);
+        const output = await fs.open(
+          path.join(roots.state, relative),
+          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+          0o600,
+        );
+        const uid = process.getuid?.() ?? 0;
+        const gid = process.getgid?.() ?? 0;
+        try {
+          await output.writeFile(entry.data);
+          await budgets.state.written(entry.data.length);
+          await attributes(output, { uid, gid, mode: 0o600, mtime: 0 });
+        } finally {
+          await output.close();
+        }
+        await writeEntry({
+          root: 'state',
+          name: relative,
+          kind: 'file',
+          uid,
+          gid,
+          mode: 0o600,
+          mtime: 0,
+          bytes: entry.data.length,
+          sha256: createHash('sha256').update(entry.data).digest('hex'),
+        });
+        review.files++;
       }
       progress.stage = 'metadata';
       options.progress({ ...progress });

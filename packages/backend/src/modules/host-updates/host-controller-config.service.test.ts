@@ -101,6 +101,11 @@ beforeAll(async () => {
       response.end(JSON.stringify({ available: true, capabilities: ['controller-config.v1'], enrolled: true }));
       return;
     }
+    if (request.url === '/v1/controller-config/capability') {
+      response.statusCode = status;
+      response.end(JSON.stringify(status === 200 ? { version: 1, capability: 'controller-config.v1' } : { error: 'Unsupported' }));
+      return;
+    }
     if (afterRead) await afterRead();
     response.statusCode = status;
     response.end(JSON.stringify(payload));
@@ -273,3 +278,28 @@ it('verifies the actual Python service response through the actual Unix client w
   }
   if (fixtureSocket) await expect(fs.stat(path.dirname(fixtureSocket))).rejects.toMatchObject({ code: 'ENOENT' });
 }, 15_000);
+
+it('checks capability without reading status or any captured bytes and fails on old helpers', async () => {
+  await service.requireControllerConfigurationSupport();
+  expect(requests).toEqual([{ path: '/v1/controller-config/capability', body: null }]);
+  status = 404;
+  await expect(service.requireControllerConfigurationSupport()).rejects.toThrow();
+  expect(requests.every((request) => request.path === '/v1/controller-config/capability')).toBe(true);
+});
+it('cancels an in-flight private capture without returning its payload', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  afterRead = () => gate;
+  const abort = new AbortController();
+  const pending = service.captureControllerConfiguration(identity, abort.signal);
+  void pending.catch(() => undefined);
+  while (!requests.length) await new Promise((resolve) => setTimeout(resolve, 5));
+  abort.abort();
+  try {
+    await expect(pending).rejects.toThrow();
+  } finally {
+    release();
+  }
+});

@@ -7,10 +7,13 @@ import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen'
 import { useQuery } from '@tanstack/react-query';
 import type { TaskRecord } from '@runtipi/common/schemas';
 import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
+import { useTimeMachineActivity } from '@/modules/time-machine/use-time-machine-activity';
+import { TimeMachineCaptureProgress } from '@/modules/time-machine/capture-progress';
 import './tasks.css';
 
 export default function Tasks() {
   const tasks = useTasks();
+  const captures = useTimeMachineActivity();
   const apps = useQuery(getInstalledAppsOptions());
   const [filter, setFilter] = useState('all');
   const [params, setParams] = useSearchParams();
@@ -19,6 +22,7 @@ export default function Tasks() {
   const records = (tasks.data?.tasks ?? []).filter((task) => !appScope || task.appUrn === appScope);
   const names = new Map(apps.data?.installed.map(({ info }) => [info.urn, info.name]));
   const active = records.filter(taskIsActive);
+  const activeCount = active.length + (!appScope && captures.activity ? 1 : 0);
   const review = records.filter((task) => ['failed', 'interrupted', 'unconfirmed'].includes(task.status));
   const visible = records.filter(
     (task) =>
@@ -60,18 +64,14 @@ export default function Tasks() {
         </div>
       ) : null}
       <div className="task-summary">
-        <span
-          className={`task-summary-orbit ${active.length ? 'is-busy' : ''}`}
-          data-attention={tasks.isError || review.length > 0}
-          aria-hidden="true"
-        >
+        <span className={`task-summary-orbit ${activeCount ? 'is-busy' : ''}`} data-attention={tasks.isError || review.length > 0} aria-hidden="true">
           {tasks.isError || review.length > 0 ? <IconAlertTriangle size={30} stroke={1.5} /> : <IconActivity size={30} stroke={1.3} />}
         </span>
         <div>
           <h2>
             {tasks.data
-              ? active.length
-                ? `${active.length} operation${active.length === 1 ? '' : 's'} in progress`
+              ? activeCount
+                ? `${activeCount} operation${activeCount === 1 ? '' : 's'} in progress`
                 : 'No operations in progress'
               : tasks.isError
                 ? 'Operation history unavailable'
@@ -117,7 +117,7 @@ export default function Tasks() {
         <span>{tasks.data ? `Checked ${new Date(tasks.data.sampledAt).toLocaleTimeString()}` : 'Loading history'}</span>
       </div>
       {tasks.isPending ? <p>Loading operations…</p> : null}
-      {!tasks.isPending && !visible.length ? (
+      {!tasks.isPending && !visible.length && (appScope || !captures.activity || !['all', 'active'].includes(filter)) ? (
         <div className="task-empty">
           <IconClock size={32} stroke={1.4} aria-hidden="true" />
           <h2>{filter === 'all' ? 'No recorded operations' : 'No matching operations'}</h2>
@@ -125,6 +125,18 @@ export default function Tasks() {
         </div>
       ) : null}
       <ol className="task-list">
+        {!appScope && ['all', 'active'].includes(filter) && captures.activity ? (
+          <li className="task-time-machine" data-status="running">
+            {captures.data?.point ? (
+              <div>
+                <TimeMachineCaptureProgress point={captures.data.point} unavailable={captures.isError} />
+                <Link className="btn btn-outline" to="/settings?tab=time-machine">
+                  Time Machine
+                </Link>
+              </div>
+            ) : null}
+          </li>
+        ) : null}
         {visible.map((task) => {
           const [appId, storeId] = task.appUrn.split(':');
           return (

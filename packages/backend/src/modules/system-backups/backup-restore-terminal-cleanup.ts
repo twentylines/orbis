@@ -1,13 +1,19 @@
 import path from 'node:path';
 import fs, { constants } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { type } from 'arktype';
+import dotenv from 'dotenv';
 import type Dockerode from 'dockerode';
+import { readRootRestorationState } from '@/common/restoration-root-status';
+import { canonicalPublicationJson } from '@/modules/host-updates/host-controller-publication';
 import { BackupRestoreJournal, restoreControllerRetired } from './backup-restore-journal';
 import { withRestoreLease } from './backup-restore-lease';
 import { readRestoreProgress } from './backup-restore-progress';
-import { snapshotRestoreContainer } from './backup-restore-runtime';
+import { readRestoreOperation, snapshotRestoreContainer } from './backup-restore-runtime';
 import { verifyRestoreStorageMounts } from './backup-restore-storage';
 import {
   readTerminalOwnership,
+  readTerminalJson,
   readLatestTerminalPointer,
   retireTerminalControllers,
   terminalFailure,
@@ -26,6 +32,10 @@ import {
   terminalIdentity,
   type TerminalRecordedIdentity,
 } from './backup-restore-terminal-ownership';
+import { RetainedRootTransaction } from './time-machine-retained-root-client';
+import { readRetainedBoundRecord } from './time-machine-retained-bootstrap';
+import { restoreBootstrapSchema } from './backup-restore-bootstrap';
+import { readRetainedRestoreReceipt } from './time-machine-restore-admission';
 
 type Context = {
   docker: Dockerode;
@@ -34,17 +44,227 @@ type Context = {
   recorded: TerminalRecordedIdentity;
   current: Dockerode.ContainerInspectInfo;
   signal: AbortSignal;
+  verifiedRetained: boolean;
+  revalidateRetained?: () => Promise<void>;
+  terminalReceipt?: {
+    version: 1;
+    transactionId: string;
+    pointId: string;
+    proofSha256: string;
+    nodeJournalSha256: string;
+    operationSha256: string | null;
+    decision: 'commit' | 'rollback';
+    survivorId: string;
+    databaseOid: number;
+  };
+  finalizeRetained?: () => Promise<void>;
 };
 const stopped = (value: Dockerode.ContainerInspectInfo) => !value.State.Running && !value.State.Restarting && !value.State.Paused;
+async function settleProtectedStaging(options: {
+  journal: BackupRestoreJournal;
+  docker: Dockerode;
+  controller: string;
+  data: string;
+  signal: AbortSignal;
+}) {
+  const { journal, docker, controller, data, signal } = options;
+  const transaction = await RetainedRootTransaction.read(journal.directory);
+  const proof = await transaction.terminalProof(signal);
+  if (proof.nodePhase !== 'staging') return false;
+  if (
+    proof.state !== 'rolled-back' ||
+    proof.decision !== 'rollback' ||
+    proof.operationSha256 !== null ||
+    !['idle', 'checking'].includes((await readRootRestorationState()) ?? '')
+  )
+    throw terminalFailure();
+  const store = path.dirname(journal.directory);
+  await withRestoreLease(store, async () => {
+    const active = await BackupRestoreJournal.active(store);
+    if (!active || active.state.id !== journal.state.id || !['staging', 'discarded'].includes(active.state.phase)) throw terminalFailure();
+    const state = active.state;
+    const staged = { ...state, phase: 'staging', decision: null };
+    const bindingRecord = await readTerminalJson(path.join(active.directory, 'retained-binding.json'), 512 * 1024);
+    let original = staged;
+    if (proof.binding) {
+      if (
+        proof.binding.restoreId !== state.id ||
+        proof.binding.nonce !== state.nonce ||
+        proof.binding.originalController !== state.originalController
+      )
+        throw terminalFailure();
+      if (bindingRecord === undefined) {
+        if (state.candidateController !== state.originalController) throw terminalFailure();
+      } else {
+        if (
+          !bindingRecord ||
+          typeof bindingRecord !== 'object' ||
+          Array.isArray(bindingRecord) ||
+          Object.keys(bindingRecord).sort().join(',') !== 'binding,oldState,version' ||
+          !('version' in bindingRecord) ||
+          bindingRecord.version !== 1 ||
+          !('oldState' in bindingRecord) ||
+          !('binding' in bindingRecord) ||
+          canonicalPublicationJson(bindingRecord.binding) !== canonicalPublicationJson(proof.binding)
+        )
+          throw terminalFailure();
+        original = bindingRecord.oldState as typeof staged;
+        if (
+          proof.binding.candidateController !== state.candidateController ||
+          proof.binding.workerId !== state.worker ||
+          proof.binding.verifierController !== state.verifierController ||
+          canonicalPublicationJson(original.roots) !== canonicalPublicationJson(state.roots)
+        )
+          throw terminalFailure();
+      }
+    } else if (bindingRecord !== undefined || state.candidateController !== state.originalController) throw terminalFailure();
+    if (
+      original.id !== state.id ||
+      original.nonce !== state.nonce ||
+      original.phase !== 'staging' ||
+      original.decision !== null ||
+      original.originalController !== state.originalController ||
+      original.candidateController !== original.originalController ||
+      createHash('sha256').update(canonicalPublicationJson(original)).digest('hex') !== proof.sourceBinding.originalJournalSha256
+    )
+      throw terminalFailure();
+    if (
+      !proof.retired.some((entry) => entry.role === 'provisional-worker' && entry.id === original.worker) ||
+      !proof.retired.some((entry) => entry.role === 'provisional-verifier' && entry.id === original.verifierController)
+    )
+      throw terminalFailure();
+    const journalRecord = await readRetainedBoundRecord(path.join(active.directory, 'restore.json'));
+    if (
+      createHash('sha256').update(JSON.stringify(staged)).digest('hex') !== proof.nodeJournalSha256 ||
+      (state.phase === 'staging' && journalRecord.sha256 !== proof.nodeJournalSha256)
+    )
+      throw terminalFailure();
+    const bootstrapRecord = await readRetainedBoundRecord(path.join(active.directory, 'bootstrap.json'));
+    const bootstrap = restoreBootstrapSchema(bootstrapRecord.value);
+    const admission = await readRetainedBoundRecord(path.join(active.directory, 'time-machine-admission.json'));
+    const receipt = await readRetainedRestoreReceipt(active);
+    if (
+      bootstrap instanceof type.errors ||
+      bootstrapRecord.sha256 !== proof.sourceBinding.bootstrapSha256 ||
+      admission.sha256 !== proof.admissionSha256 ||
+      !receipt ||
+      receipt.binding.pointId !== proof.pointId ||
+      bootstrap.identity.id !== state.id ||
+      bootstrap.identity.nonce !== state.nonce ||
+      bootstrap.identity.original.id !== original.originalController ||
+      bootstrap.identity.candidate.id !== original.candidateController ||
+      bootstrap.identity.worker?.id !== original.worker ||
+      bootstrap.identity.verifier.id !== original.verifierController
+    )
+      throw terminalFailure();
+    const current = await inspectTerminalContainer(docker, controller, signal);
+    const connection = bootstrap.connection;
+    const rootJson = canonicalPublicationJson(connection).replace(
+      /[\u007f-\uffff]/g,
+      (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
+    );
+    if (
+      !current ||
+      current.Id !== proof.survivor.id ||
+      current.Id !== state.originalController ||
+      current.Image !== proof.survivor.imageId ||
+      !current.Id.startsWith(controller) ||
+      current.Config.Hostname !== controller ||
+      !current.State.Running ||
+      current.State.Paused ||
+      current.State.Restarting ||
+      proof.database.name !== connection.database ||
+      proof.database.user !== connection.user ||
+      proof.database.connectionSha256 !== createHash('sha256').update(rootJson).digest('hex')
+    )
+      throw terminalFailure();
+    const env = await fs.open(path.join(data, '.env'), constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const before = await env.stat();
+      if (
+        !before.isFile() ||
+        before.nlink !== 1 ||
+        before.mode & 0o077 ||
+        before.size > 1024 * 1024 ||
+        (process.getuid && before.uid !== process.getuid())
+      )
+        throw terminalFailure();
+      const bytes = await env.readFile();
+      const after = await env.stat();
+      const now = await fs.lstat(path.join(data, '.env'));
+      const parsed = dotenv.parse(bytes);
+      if (
+        bytes.length !== before.size ||
+        [after, now].some((stat) =>
+          ['ino', 'dev', 'size', 'mode', 'uid', 'nlink', 'mtimeMs', 'ctimeMs'].some((key) => Reflect.get(stat, key) !== Reflect.get(before, key)),
+        ) ||
+        parsed.POSTGRES_HOST !== connection.host ||
+        parsed.POSTGRES_USERNAME !== connection.user ||
+        Number(parsed.POSTGRES_PORT ?? 5432) !== connection.port ||
+        parsed.POSTGRES_DBNAME !== connection.database
+      )
+        throw terminalFailure();
+    } finally {
+      await env.close();
+    }
+    if (state.phase === 'staging') await active.advance('discarded');
+    const result = {
+      version: 1,
+      transactionId: state.id,
+      pointId: proof.pointId,
+      proofSha256: proof.proofSha256,
+      nodeJournalSha256: proof.nodeJournalSha256,
+      operationSha256: null,
+      decision: 'rollback',
+      survivorId: proof.survivor.id,
+      databaseOid: proof.database.oid,
+    };
+    const receiptFile = path.join(active.directory, 'retained-terminal-reconciliation.json');
+    const prior = await readTerminalJson(receiptFile);
+    if (prior === undefined) await writeTerminalJson(receiptFile, result, true);
+    else if (canonicalPublicationJson(prior) !== canonicalPublicationJson(result)) throw terminalFailure();
+    await writeTerminalJson(path.join(store, 'latest-terminal.json'), { version: 1, id: state.id, nonce: state.nonce, phase: 'discarded' });
+    if (canonicalPublicationJson(await transaction.terminalProof(signal)) !== canonicalPublicationJson(proof)) throw terminalFailure();
+    const pointerFile = path.join(store, 'active.json');
+    const handle = await fs.open(pointerFile, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const before = await handle.stat();
+      if (!before.isFile() || before.nlink !== 1 || before.mode & 0o077 || before.size > 4096 || (process.getuid && before.uid !== process.getuid()))
+        throw terminalFailure();
+      const pointer = JSON.parse(await handle.readFile('utf8'));
+      const now = await fs.lstat(pointerFile);
+      if (
+        Object.keys(pointer).sort().join(',') !== 'id,nonce' ||
+        pointer.id !== state.id ||
+        pointer.nonce !== state.nonce ||
+        now.dev !== before.dev ||
+        now.ino !== before.ino
+      )
+        throw terminalFailure();
+      await fs.unlink(pointerFile);
+      const parent = await fs.open(store, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        await parent.sync();
+      } finally {
+        await parent.close();
+      }
+    } finally {
+      await handle.close();
+    }
+    await transaction.terminalFinalize(proof.proofSha256, signal);
+  });
+  return true;
+}
 async function context(docker: Dockerode, journal: BackupRestoreJournal, controller: string, data: string, signal: AbortSignal): Promise<Context> {
   const state = await journal.refresh();
   if (!terminalPhase(state) || !state.verifierController) throw terminalFailure();
   if (await restoreControllerRetired(path.dirname(journal.directory), controller)) throw terminalFailure();
-  let recorded = await terminalIdentity(journal);
+  let recorded: TerminalRecordedIdentity | undefined;
+  const retained = await readTerminalJson(path.join(journal.directory, 'retained-binding.json'), 512 * 1024);
   const progress = await readRestoreProgress(journal);
   if (
-    (state.phase === 'completed' && progress?.status !== 'succeeded') ||
-    (state.phase === 'rolled-back' && progress?.status !== 'rolled-back') ||
+    (retained === undefined && state.phase === 'completed' && progress?.status !== 'succeeded') ||
+    (retained === undefined && state.phase === 'rolled-back' && progress?.status !== 'rolled-back') ||
     (state.phase === 'discarded' && progress && progress.status !== 'rolled-back')
   )
     throw terminalFailure();
@@ -64,7 +284,169 @@ async function context(docker: Dockerode, journal: BackupRestoreJournal, control
   }
   const current = await inspectTerminalContainer(docker, controller, signal);
   if (!current) throw terminalFailure();
-  let ownership = await readTerminalOwnership(journal.directory, state);
+  let ownership: TerminalOwnership | undefined;
+  let protectedTerminal = false;
+  let revalidateRetained: (() => Promise<void>) | undefined;
+  let terminalReceipt: Context['terminalReceipt'];
+  let finalizeRetained: Context['finalizeRetained'];
+  if (retained !== undefined) {
+    if (
+      !retained ||
+      typeof retained !== 'object' ||
+      Array.isArray(retained) ||
+      Object.keys(retained).sort().join(',') !== 'binding,oldState,version' ||
+      !('version' in retained) ||
+      retained.version !== 1 ||
+      !('oldState' in retained) ||
+      !('binding' in retained)
+    )
+      throw terminalFailure();
+    const old = retained.oldState as typeof state;
+    const transaction = await RetainedRootTransaction.read(journal.directory);
+    const proof = await transaction.terminalProof(signal);
+    const status = proof;
+    if (
+      !['discarded', 'rolled-back', 'completed'].includes(state.phase) ||
+      status.state !== (state.phase === 'completed' ? 'complete' : 'rolled-back') ||
+      status.decision !== state.decision ||
+      !status.binding ||
+      !['idle', 'checking'].includes((await readRootRestorationState()) ?? '') ||
+      canonicalPublicationJson(status.binding) !== canonicalPublicationJson(retained.binding) ||
+      createHash('sha256').update(canonicalPublicationJson(old)).digest('hex') !== status.binding.sourceBinding.originalJournalSha256 ||
+      old.id !== state.id ||
+      old.nonce !== state.nonce ||
+      old.phase !== 'staging' ||
+      old.decision !== null ||
+      old.originalController !== state.originalController ||
+      old.candidateController !== old.originalController ||
+      status.binding.restoreId !== state.id ||
+      status.binding.nonce !== state.nonce ||
+      status.binding.originalController !== state.originalController ||
+      status.binding.candidateController !== state.candidateController ||
+      status.binding.workerId !== state.worker ||
+      status.binding.verifierController !== state.verifierController ||
+      canonicalPublicationJson(old.roots) !== canonicalPublicationJson(state.roots)
+    )
+      throw terminalFailure();
+    revalidateRetained = async () => {
+      const fresh = await transaction.terminalProof(signal);
+      const root = await readRootRestorationState();
+      if (!(root === 'idle' || root === 'checking') || canonicalPublicationJson(fresh) !== canonicalPublicationJson(status)) throw terminalFailure();
+    };
+    const bootstrapRecord = await readRetainedBoundRecord(path.join(journal.directory, 'bootstrap.json'));
+    const bootstrap = restoreBootstrapSchema(bootstrapRecord.value);
+    if (
+      bootstrap instanceof type.errors ||
+      bootstrapRecord.sha256 !== status.binding.sourceBinding.bootstrapSha256 ||
+      bootstrap.identity.id !== old.id ||
+      bootstrap.identity.nonce !== old.nonce ||
+      bootstrap.identity.original.id !== old.originalController ||
+      bootstrap.identity.candidate.id !== old.candidateController ||
+      bootstrap.identity.worker?.id !== old.worker ||
+      bootstrap.identity.verifier.id !== old.verifierController
+    )
+      throw terminalFailure();
+    {
+      const journalRecord = await readRetainedBoundRecord(path.join(journal.directory, 'restore.json'));
+      if (proof.nodePhase !== state.phase || proof.nodeJournalSha256 !== journalRecord.sha256) throw terminalFailure();
+      const operation = proof.operationSha256 === null ? undefined : await readRestoreOperation(journal);
+      if (operation) {
+        const operationRecord = await readRetainedBoundRecord(path.join(journal.directory, 'runtime.json'));
+        if (proof.operationSha256 !== operationRecord.sha256) throw terminalFailure();
+      } else {
+        if (state.phase !== 'discarded') throw terminalFailure();
+        try {
+          await fs.lstat(path.join(journal.directory, 'runtime.json'));
+          throw terminalFailure();
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+      }
+      const originalConnection = operation?.database.connection ?? bootstrap.connection;
+      const expectedName = state.phase === 'completed' ? operation?.database.owner.name : originalConnection.database;
+      if (!expectedName || (state.phase === 'completed' && !operation)) throw terminalFailure();
+      recorded = { identity: operation ?? bootstrap.identity, connection: originalConnection, database: expectedName };
+      const connection = { ...originalConnection, database: expectedName };
+      const rootJson = canonicalPublicationJson(connection).replace(
+        /[\u007f-\uffff]/g,
+        (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
+      );
+      const requiredRetired = new Map([
+        [state.phase === 'completed' ? 'previous' : 'candidate', state.phase === 'completed' ? state.originalController : state.candidateController],
+        ['verifier', state.verifierController],
+        ['coordinator', state.worker],
+        ['provisional-worker', old.worker],
+        ['provisional-verifier', old.verifierController],
+      ]);
+      if (
+        proof.retired.length !== requiredRetired.size ||
+        proof.retired.some((item) => requiredRetired.get(item.role) !== item.id) ||
+        proof.survivor.id !== (state.phase === 'completed' ? state.candidateController : state.originalController) ||
+        proof.survivor.id !== current.Id ||
+        proof.survivor.imageId !== current.Image ||
+        !current.Id.startsWith(controller) ||
+        current.Config.Hostname !== controller ||
+        !current.State.Running ||
+        current.State.Paused ||
+        current.State.Restarting ||
+        proof.database.name !== expectedName ||
+        proof.database.user !== connection.user ||
+        proof.database.connectionSha256 !== createHash('sha256').update(rootJson).digest('hex') ||
+        (state.phase === 'completed' &&
+          (!operation || proof.database.oid !== operation.database.owner.oid || proof.database.marker !== operation.database.owner.marker))
+      )
+        throw terminalFailure();
+      const env = await fs.open(path.join(data, '.env'), constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const before = await env.stat();
+        if (
+          !before.isFile() ||
+          before.nlink !== 1 ||
+          before.mode & 0o077 ||
+          before.size > 1024 * 1024 ||
+          (process.getuid && before.uid !== process.getuid())
+        )
+          throw terminalFailure();
+        const bytes = await env.readFile();
+        const after = await env.stat();
+        const currentEnv = await fs.lstat(path.join(data, '.env'));
+        const parsed = dotenv.parse(bytes);
+        if (
+          bytes.length !== before.size ||
+          [after, currentEnv].some((stat) =>
+            ['ino', 'dev', 'size', 'mode', 'uid', 'nlink', 'mtimeMs', 'ctimeMs'].some((key) => Reflect.get(stat, key) !== Reflect.get(before, key)),
+          ) ||
+          parsed.POSTGRES_HOST !== connection.host ||
+          parsed.POSTGRES_USERNAME !== connection.user ||
+          Number(parsed.POSTGRES_PORT ?? 5432) !== connection.port ||
+          parsed.POSTGRES_DBNAME !== expectedName
+        )
+          throw terminalFailure();
+      } finally {
+        await env.close();
+      }
+      protectedTerminal = true;
+      terminalReceipt = {
+        version: 1,
+        transactionId: state.id,
+        pointId: proof.pointId,
+        proofSha256: proof.proofSha256,
+        nodeJournalSha256: proof.nodeJournalSha256,
+        operationSha256: proof.operationSha256,
+        decision: proof.decision,
+        survivorId: proof.survivor.id,
+        databaseOid: proof.database.oid,
+      };
+      finalizeRetained = async () => {
+        await transaction.terminalFinalize(proof.proofSha256, signal);
+      };
+    }
+    ownership = await readTerminalOwnership(journal.directory, old);
+    if (!ownership) throw terminalFailure();
+  } else {
+    recorded = await terminalIdentity(journal);
+    ownership = await readTerminalOwnership(journal.directory, state);
+  }
   if (!ownership) {
     const original = await inspectTerminalContainer(docker, state.originalController, signal);
     if (!original) throw terminalFailure();
@@ -88,9 +470,20 @@ async function context(docker: Dockerode, journal: BackupRestoreJournal, control
     };
   if (!recorded) throw terminalFailure();
   if (ownership.fingerprint !== recorded.identity.original.fingerprint || ownership.image !== recorded.identity.image) throw terminalFailure();
-  await proveTerminalRoots(journal, ownership);
-  await proveManagedController(docker, current, ownership, controller, data, recorded.connection, recorded.database, signal);
-  return { docker, journal, ownership, recorded, current, signal };
+  await proveTerminalRoots(journal, ownership, retained === undefined ? undefined : recorded);
+  if (!protectedTerminal) await proveManagedController(docker, current, ownership, controller, data, recorded.connection, recorded.database, signal);
+  return {
+    docker,
+    journal,
+    ownership,
+    recorded,
+    current,
+    signal,
+    verifiedRetained: retained !== undefined,
+    revalidateRetained,
+    terminalReceipt,
+    finalizeRetained,
+  };
 }
 async function auxiliary(c: Context, role: 'worker' | 'verifier') {
   const { state } = c.journal;
@@ -198,7 +591,7 @@ async function removeAuxiliaries(c: Context, previous: string) {
   for (const role of ['verifier', 'worker'] as const) {
     c.signal.throwIfAborted();
     await c.journal.refresh();
-    await proveTerminalRoots(c.journal, c.ownership);
+    await proveTerminalRoots(c.journal, c.ownership, c.verifiedRetained ? c.recorded : undefined);
     const worker = await auxiliary(c, 'worker');
     const verifier = await auxiliary(c, 'verifier');
     await exclusiveControllers(c, previous);
@@ -215,9 +608,10 @@ async function removeAuxiliaries(c: Context, previous: string) {
   }
 }
 async function releaseTerminalBarrier(c: Context, store: string, previous: string) {
+  await c.revalidateRetained?.();
   await readLatestTerminalPointer(store);
   await removeAuxiliaries(c, previous);
-  await cleanupTerminalWorkingTrees(c.journal, c.ownership);
+  await cleanupTerminalWorkingTrees(c.journal, c.ownership, c.verifiedRetained ? c.recorded : undefined);
   await exclusiveControllers(c, previous);
   await c.journal.refresh();
   const state = c.journal.state;
@@ -234,6 +628,13 @@ async function releaseTerminalBarrier(c: Context, store: string, previous: strin
       throw terminalFailure();
     const pointer = JSON.parse(await handle.readFile('utf8'));
     if (Object.keys(pointer).sort().join(',') !== 'id,nonce' || pointer.id !== state.id || pointer.nonce !== state.nonce) throw terminalFailure();
+    await c.revalidateRetained?.();
+    if (c.terminalReceipt) {
+      const receiptFile = path.join(c.journal.directory, 'retained-terminal-reconciliation.json');
+      const prior = await readTerminalJson(receiptFile);
+      if (prior === undefined) await writeTerminalJson(receiptFile, c.terminalReceipt, true);
+      else if (canonicalPublicationJson(prior) !== canonicalPublicationJson(c.terminalReceipt)) throw terminalFailure();
+    }
     await c.journal.refresh();
     const current = await fs.lstat(file);
     if (current.dev !== stat.dev || current.ino !== stat.ino) throw terminalFailure();
@@ -244,6 +645,7 @@ async function releaseTerminalBarrier(c: Context, store: string, previous: strin
     } finally {
       await parent.close();
     }
+    await c.finalizeRetained?.();
   } finally {
     await handle.close();
   }
@@ -256,8 +658,41 @@ export async function cleanupSettledRestoreAuxiliaries(options: {
   signal: AbortSignal;
 }) {
   const active = await BackupRestoreJournal.active(options.store);
-  if (!active) return;
-  const signal = AbortSignal.any([options.signal, AbortSignal.timeout(10000)]);
+  const signal = AbortSignal.any([options.signal, AbortSignal.timeout(30000)]);
+  if (!active) {
+    if ((await readRootRestorationState()) !== 'checking') return;
+    await withRestoreLease(options.store, async () => {
+      if (await BackupRestoreJournal.active(options.store)) throw terminalFailure();
+      const latest = await BackupRestoreJournal.latest(options.store);
+      if (!latest) throw terminalFailure();
+      const receipt = await readTerminalJson(path.join(latest.directory, 'retained-terminal-reconciliation.json'));
+      const transaction = await RetainedRootTransaction.read(latest.directory);
+      const proof = await transaction.terminalProof(signal);
+      const expected = {
+        version: 1,
+        transactionId: latest.state.id,
+        pointId: proof.pointId,
+        proofSha256: proof.proofSha256,
+        nodeJournalSha256: proof.nodeJournalSha256,
+        operationSha256: proof.operationSha256,
+        decision: proof.decision,
+        survivorId: proof.survivor.id,
+        databaseOid: proof.database.oid,
+      };
+      if (canonicalPublicationJson(receipt) !== canonicalPublicationJson(expected)) throw terminalFailure();
+      await transaction.terminalFinalize(proof.proofSha256, signal);
+    });
+    return;
+  }
+  if (['staging', 'discarded'].includes(active.state.phase) && (await readRootRestorationState()) === 'checking') {
+    try {
+      await fs.lstat(path.join(active.directory, 'retained-root-request.json'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      throw terminalFailure();
+    }
+    if (await settleProtectedStaging({ journal: active, docker: options.docker, controller: options.controller, data: options.data, signal })) return;
+  }
   if (
     active.state.phase === 'discarded' &&
     active.state.originalController === active.state.candidateController &&

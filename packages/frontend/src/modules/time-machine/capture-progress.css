@@ -1,0 +1,9 @@
+.tm-capture-progress {
+  display: grid;
+  gap: 10px;
+  margin-block: 20px;
+}
+.tm-capture-progress progress {
+  width: 100%;
+  accent-color: var(--desktop-accent);
+}

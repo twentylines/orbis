@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
+import { useOperationStartup } from './operation-startup';
 import { StartupSurface } from './startup-surface';
 import { startupCycleRemaining } from './startup-timing';
 import { useThemeApplyStartup } from '@/modules/theme-packs/use-theme-apply-startup';
 import { ThemeApplyCover } from '@/modules/theme-packs/theme-apply-cover';
 
 const ReadyContext = createContext<(ready: boolean) => void>(() => undefined);
-type SessionTransition = 'signing-in' | 'logging-out';
+type SessionTransition = 'signing-in' | 'logging-out' | 'preparing-orbis';
 const SessionContext = createContext<{ begin: (transition?: SessionTransition) => void; finish: () => Promise<void> }>({
   begin: () => undefined,
   finish: async () => undefined,
@@ -21,6 +22,7 @@ export function useStartupReady(ready: boolean) {
 export function StartupBoundary({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
   const themeHandoff = useThemeApplyStartup();
+  const operationBoot = useOperationStartup();
   const [phase, setPhase] = useState<'loading' | 'finishing' | 'revealing' | 'complete'>('loading');
   const surface = useRef<HTMLDivElement>(null);
   const [sessionTransition, setSessionTransition] = useState<SessionTransition | null>(null);
@@ -70,9 +72,10 @@ export function StartupBoundary({ children }: PropsWithChildren) {
     if (phase === 'complete') {
       setSessionTransition(null);
       themeHandoff.complete();
+      operationBoot.complete();
       for (const resolve of finished.current.splice(0)) resolve();
     }
-  }, [phase, themeHandoff.complete]);
+  }, [phase, themeHandoff.complete, operationBoot.complete]);
 
   return (
     <SessionContext.Provider value={session}>
@@ -91,8 +94,10 @@ export function StartupBoundary({ children }: PropsWithChildren) {
             ref={surface}
             overlay
             initial
+            freshAppearance={operationBoot.operation === 'restore'}
             signingIn={sessionTransition === 'signing-in'}
             loggingOff={sessionTransition === 'logging-out'}
+            label={sessionTransition === 'preparing-orbis' ? 'Preparing Orbis' : undefined}
             status={themeHandoff.active && !themeHandoff.pending ? { title: 'Loading theme…', message: 'Preparing your workspace.' } : undefined}
             completing={phase !== 'loading'}
             revealing={phase === 'revealing'}

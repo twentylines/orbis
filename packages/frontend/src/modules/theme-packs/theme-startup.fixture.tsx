@@ -18,6 +18,7 @@ const doc = {
     setAttribute: (key: string, value: string) => {
       attrs.set(key, value);
     },
+    hasAttribute: (key: string) => attrs.has(key),
     removeAttribute: (key: string) => {
       attrs.delete(key);
     },

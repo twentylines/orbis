@@ -40,12 +40,15 @@ import { CustomAppsModule } from './modules/custom-apps/custom-apps.module';
 import { DesktopPreferencesModule } from './modules/desktop-preferences/desktop-preferences.module';
 import { HostUpdatesModule } from './modules/host-updates/host-updates.module';
 import { installationMiddleware } from './common/installation.middleware';
+import { restorationMiddleware } from './common/restoration-status';
 import { DockerAppsModule } from './modules/docker-apps/docker-apps.module';
 import { ClusterModule } from './modules/cluster/cluster.module';
 import { SystemBackupsModule } from './modules/system-backups/system-backups.module';
 import { ThemePacksModule } from './modules/theme-packs/theme-packs.module';
 import { HostTransferModule } from './modules/host-transfer/host-transfer.module';
 import { BackupMaintenanceInterceptor, backupMaintenanceMiddleware } from './common/backup-maintenance';
+import { ResetModule } from './modules/system-reset/reset.module';
+import { CapsulesModule } from './modules/time-machine-capsules/capsules.module';
 
 const DEFAULT_THROTTLE_TTL = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 300;
@@ -86,6 +89,8 @@ const imports: NonNullable<ModuleMetadata['imports']> = [
   HostTransferModule,
   ThemePacksModule,
   NearbyDiscoveryModule,
+  ResetModule,
+  CapsulesModule,
 ];
 
 if (process.env.NODE_ENV === 'production') {
@@ -122,6 +127,6 @@ if (process.env.NODE_ENV === 'production') {
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(installationMiddleware, backupMaintenanceMiddleware, AuthMiddleware).forRoutes('*all');
+    consumer.apply(restorationMiddleware, installationMiddleware, backupMaintenanceMiddleware, AuthMiddleware).forRoutes('*all');
   }
 }

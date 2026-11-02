@@ -92,7 +92,9 @@ function apply(
         callback();
         return 1;
       },
-      localStorage: { getItem: (key: string) => (key === preferenceStorageKey ? JSON.stringify({ appearance: options }) : null) },
+      localStorage: {
+        getItem: (key: string) => (key === preferenceStorageKey ? JSON.stringify({ appearance: options, mode: dark ? 'dark' : 'light' }) : null),
+      },
     });
   else runInNewContext(`(${applyAppearanceRuntime.toString()})(options,mode)`, { ...environment, options, mode: dark ? 'dark' : 'light' });
   return { properties, dataset: root.dataset };
@@ -126,7 +128,13 @@ describe('saved appearance applied before hydration and to live materials', () =
   test('keeps the theme defaults exact and removes stale overrides on reset', () => {
     const result = apply({});
     expect([...result.properties.keys()].sort()).toEqual(['--orbis-chrome-focus', '--orbis-chrome-muted', '--orbis-control-transition-duration']);
-    expect(result.dataset).toEqual({ orbisMotion: 'full', orbisTransparency: 'glass', orbisEffects: 'full', orbisColourCustom: 'false' });
+    expect(result.dataset).toEqual({
+      orbisMotion: 'full',
+      orbisTransparency: 'glass',
+      orbisEffects: 'full',
+      orbisColourCustom: 'false',
+      orbisOled: 'false',
+    });
   });
   test('ignores invalid or CSS-shaped values instead of writing them into styles', () => {
     const result = apply({
@@ -219,6 +227,31 @@ describe('saved appearance applied before hydration and to live materials', () =
       if (dark) expect(Math.max(...surface)).toBeLessThanOrEqual(30);
       else expect(Math.min(...surface)).toBeGreaterThanOrEqual(250);
     }
+  });
+  test.each([
+    ['#fdf7faf7', [253, 247, 250]],
+    ['#FDF7FAF7', [253, 247, 250]],
+    ['#abc8', [170, 187, 204]],
+    ['#abc', [170, 187, 204]],
+  ] as const)('compiled palette %s preserves its colour in solid mode and startup', (surface, expected) => {
+    for (const firstPaint of [false, true]) {
+      const result = apply({ lowEffects: true }, { tokens: { '--desktop-base-surface': surface }, firstPaint });
+      const actual = rgb(result.properties.get('--orbis-surface') ?? '');
+      expect(actual).toEqual([...expected, 1]);
+      expect(contrast(actual, [0, 0, 0])).toBeGreaterThan(4.5);
+    }
+  });
+  test('OLED uses black panels in dark mode without altering the light palette or disabling motion', () => {
+    const oled = apply({ oledDark: true, glassTint: 30, surfaceOpacity: 90 }, { dark: true });
+    for (const name of ['surface', 'chrome', 'panel-dark']) expect(rgb(oled.properties.get(`--orbis-${name}`) ?? '')).toEqual([0, 0, 0, 1]);
+    expect(oled.dataset.orbisEffects).toBe('full');
+    expect(oled.dataset.orbisMotion).toBe('full');
+    expect(oled.dataset.orbisOled).toBe('true');
+    const light = apply({ oledDark: true });
+    expect(light.properties.has('--orbis-surface')).toBe(false);
+    expect(light.dataset.orbisOled).toBe('false');
+    const cached = apply({ oledDark: true }, { dark: true, firstPaint: true });
+    expect(rgb(cached.properties.get('--orbis-surface') ?? '')).toEqual([0, 0, 0, 1]);
   });
   test('low effects forces opaque materials and disables the blur filter', () => {
     const result = apply({ lowEffects: true, glassBlur: 40, surfaceOpacity: 90, chromeOpacity: 80 });

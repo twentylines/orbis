@@ -44,7 +44,8 @@ export function MaterialSettings() {
       setMessage('');
     }
   };
-  const opaque = value.lowEffects || value.transparency === 'solid' || (value.transparency === 'system' && systemSolid);
+  const oled = resolvedMode === 'dark' && value.oledDark;
+  const opaque = oled || value.lowEffects || value.transparency === 'solid' || (value.transparency === 'system' && systemSolid);
   return (
     <>
       <section ref={section} className="appearance-section" aria-labelledby="appearance-accent">
@@ -164,7 +165,9 @@ export function MaterialSettings() {
                 onChange={(glassTint) => updateAppearance({ glassTint })}
               />
             </div>
-            {opaque ? <p>Solid surfaces are enabled. Opacity and blur will apply when transparency is enabled.</p> : null}
+            {opaque ? (
+              <p>{oled ? 'OLED uses black panels.' : 'Solid surfaces are enabled. Opacity and blur will apply when transparency is enabled.'}</p>
+            ) : null}
             <div className="appearance-actions">
               <button
                 type="button"

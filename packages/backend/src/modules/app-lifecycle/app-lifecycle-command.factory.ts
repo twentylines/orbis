@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type Dockerode from 'dockerode';
+import { DockerService } from '../docker/docker.service';
 import { DOCKERODE } from '../docker/docker.module';
 import type { appEventSchema } from '../queue/entities/app-events';
 import { BackupAppCommand } from './commands/backup-app-command';
@@ -22,6 +23,16 @@ export class AppLifecycleCommandFactory {
   ) {}
 
   createCommand(eventData: typeof appEventSchema.infer) {
+    const command = this.createUncheckedCommand(eventData);
+    return {
+      execute: async (appUrn: typeof eventData.appUrn, form: typeof eventData.form) => {
+        await this.moduleRef.get(DockerService, { strict: false }).requireAppImagePinUpdate(appUrn);
+        return command.execute(appUrn, form);
+      },
+    };
+  }
+
+  private createUncheckedCommand(eventData: typeof appEventSchema.infer) {
     const command = eventData.command;
 
     switch (command) {

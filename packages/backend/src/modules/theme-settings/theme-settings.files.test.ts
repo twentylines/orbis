@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,8 @@ import type { ConfigurationService } from '@/core/config/configuration.service';
 import type { LoggerService } from '@/core/logger/logger.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
-import { ThemePacksService } from '../theme-packs/theme-packs.service';
+import { ThemePacksService, validateThemeAsset } from '../theme-packs/theme-packs.service';
+import { legacyThemePacks } from '../theme-packs/theme-pack-catalogue';
 import { ThemeSettingsController } from './theme-settings.controller';
 import { ThemeSettingsService } from './theme-settings.service';
 
@@ -27,6 +29,31 @@ const update = (expectedRevision: number, key = 'accent', value: unknown = '#123
   values: [{ key, value }],
 });
 const read = () => fs.readFile(file(), 'utf8');
+
+async function seedLegacyInstallation(identity = alpine) {
+  const manifest = legacyThemePacks.find((item) => item.id === identity.id && item.version === identity.version);
+  if (!manifest?.assets[0]) throw new Error('Missing historical installed theme fixture');
+  const folder = path.join(root, 'state', 'theme-packs', '7');
+  const assetFolder = path.join(folder, manifest.id, manifest.version);
+  await fs.mkdir(assetFolder, { recursive: true, mode: 0o700 });
+  const bytes = await fs.readFile(path.resolve(import.meta.dirname, '../../../../frontend/public/wallpapers', manifest.assets[0].path));
+  validateThemeAsset(manifest, bytes);
+  await fs.writeFile(path.join(assetFolder, manifest.wallpaper), bytes, { mode: 0o600, flag: 'wx' });
+  const state = {
+    formatVersion: 1,
+    selected: null,
+    installed: [
+      {
+        manifest,
+        digest: createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
+        installedAt: '2026-10-01T00:00:00.000Z',
+        updatedAt: '2026-10-01T00:00:00.000Z',
+        previous: null,
+      },
+    ],
+  };
+  await fs.writeFile(path.join(folder, 'registry.json'), JSON.stringify(state), { mode: 0o600, flag: 'wx' });
+}
 
 beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-theme-settings-')));
@@ -75,7 +102,7 @@ describe('separate private per-user theme state', () => {
     ])
       await expect(service.update(7, invalid)).rejects.toThrow();
     await expect(service.update(7, update(0, 'accent', '#123456', alpine))).rejects.toThrow('Install');
-    await packs.install(7, 'alpine', '1.0.0');
+    await seedLegacyInstallation({ id: 'alpine', version: '1.0.0' });
     await expect(service.update(7, update(0, 'accent', '#123456', alpine))).rejects.toThrow('Install');
     expect((await service.snapshot(7)).revision).toBe(0);
     await expect(fs.stat(file())).rejects.toMatchObject({ code: 'ENOENT' });
@@ -94,7 +121,7 @@ describe('separate private per-user theme state', () => {
   });
 
   it('derives active selection from the installed-pack service and retains inactive namespaces after removal', async () => {
-    await packs.install(7, alpine.id, alpine.version);
+    await seedLegacyInstallation();
     await packs.select(7, alpine);
     const saved = await service.update(7, update(0, 'accent', '#654321', alpine));
     expect(saved.selected).toEqual(alpine);
@@ -106,6 +133,9 @@ describe('separate private per-user theme state', () => {
     expect(removed.current.identity).toEqual(builtin);
     expect(removed.settings.entries.some((entry) => entry.id === alpine.id)).toBe(true);
     await expect(service.update(7, update(1, 'accent', '#111111', alpine))).rejects.toThrow('Install');
+    const namespace = await read();
+    await expect(packs.install(7, alpine.id, alpine.version)).rejects.toThrow('not available for installation');
+    expect(await read()).toBe(namespace);
   });
 
   it('retains bounded unsupported namespaces inactive while rejecting invalid known values', async () => {
@@ -123,7 +153,7 @@ describe('separate private per-user theme state', () => {
   });
 
   it('refreshes the authoritative selection after a settings commit when another tab changes themes', async () => {
-    await packs.install(7, alpine.id, alpine.version);
+    await seedLegacyInstallation();
     await packs.select(7, alpine);
     const selected = await packs.snapshot(7);
     vi.spyOn(packs, 'snapshot')
@@ -196,7 +226,7 @@ describe('explicit idempotent legacy migration', () => {
       density: 'comfortable',
       appearance: { accent: '#334455', glassBlur: 18, textScale: 150, dockPins: ['local:app'] },
     });
-    await packs.install(7, alpine.id, alpine.version);
+    await seedLegacyInstallation();
     await packs.select(7, alpine);
     const legacyFile = path.join(root, 'state', 'desktop', '7.json');
     const packFile = path.join(root, 'state', 'theme-packs', '7', 'registry.json');

@@ -17,6 +17,9 @@ import { executeRestoreWorker } from './backup-restore-worker';
 import { BackupDirectorySwap } from './backup-directory-swap';
 import { writeTerminalJson } from './backup-restore-terminal-record';
 import { captureRestoreStartupRole, waitForRestoreStartup } from './backup-restore-startup';
+import * as operationStatus from '@/common/restoration-root-status';
+import { TimeMachineStore } from './time-machine-store';
+import type { Request } from 'express';
 
 // This service suite uses real journals and maintenance locks; Docker, authentication and reviewed-source handoff are declared boundaries.
 const boundary = vi.hoisted(() => ({
@@ -27,7 +30,30 @@ const boundary = vi.hoisted(() => ({
   cleanup: vi.fn(),
   operation: vi.fn(),
   resume: vi.fn(),
+  stageRetained: vi.fn(),
+  rootReview: vi.fn(),
+  rootCreate: vi.fn(),
+  rootBegin: vi.fn(),
+  rootStatus: vi.fn(),
+  rootLaunch: vi.fn(),
+  rootBind: vi.fn(),
+  rootWorker: vi.fn(),
+  rootRead: vi.fn(),
+  rootRevoke: vi.fn(),
+  admissionRead: vi.fn(),
+  receiptRead: vi.fn(),
 }));
+vi.mock('./time-machine-retained-root-client', () => ({
+  reviewRetainedRoot: boundary.rootReview,
+  RetainedRootTransaction: { create: boundary.rootCreate, read: boundary.rootRead },
+}));
+vi.mock('./time-machine-retained-bootstrap', () => ({ bindRetainedJournal: boundary.rootBind, readRetainedBoundRecord: boundary.admissionRead }));
+vi.mock('./time-machine-restore-admission', async (original) => ({
+  ...(await original<typeof import('./time-machine-restore-admission')>()),
+  readRetainedRestoreReceipt: boundary.receiptRead,
+}));
+vi.mock('./time-machine-retained-context', () => ({ verifyRetainedRootWorker: boundary.rootWorker }));
+vi.mock('./time-machine-retained-stage', () => ({ stageRetainedRuntime: boundary.stageRetained }));
 vi.mock('./backup-restore-terminal-cleanup', () => ({ cleanupSettledRestoreAuxiliaries: boundary.cleanup }));
 vi.mock('./backup-restore-handoff', () => ({ prepareRestoreHandoff: boundary.handoff, discardUnstartedRestoreHandoff: boundary.discard }));
 vi.mock('./backup-restore-bootstrap', async (original) => ({
@@ -44,12 +70,12 @@ vi.mock('./backup-restore-runtime', async (original) => ({
 }));
 let root: string;
 let service: BackupRestoresService;
-let auth: { verifySensitiveAction: ReturnType<typeof vi.fn> };
+let auth: { verifySensitiveAction: ReturnType<typeof vi.fn>; operatorActionContext: ReturnType<typeof vi.fn> };
 let apps: { getApps: ReturnType<typeof vi.fn> };
 let tasks: { read: ReturnType<typeof vi.fn> };
 let host: { status: ReturnType<typeof vi.fn> };
 let runtime: { plan: ReturnType<typeof vi.fn> };
-let imports: { claimReviewedSource: ReturnType<typeof vi.fn> };
+let imports: { claimReviewedSource: ReturnType<typeof vi.fn>; claimRetainedSource: ReturnType<typeof vi.fn> };
 let logger: { warn: ReturnType<typeof vi.fn> };
 let docker: { getContainer: ReturnType<typeof vi.fn> };
 let controller: Dockerode.ContainerInspectInfo;
@@ -74,16 +100,32 @@ async function journal() {
 }
 beforeEach(async () => {
   vi.resetAllMocks();
+  vi.spyOn(operationStatus, 'readRootRestorationState').mockResolvedValue('checking');
   setBackupRecoveryRequired(false);
   setRestoreRecoveryRequired(false);
   captureRestoreStartupRole('ordinary');
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-restores-service-')));
-  auth = { verifySensitiveAction: vi.fn().mockResolvedValue(undefined) };
+  auth = {
+    verifySensitiveAction: vi.fn().mockResolvedValue(undefined),
+    operatorActionContext: vi.fn().mockResolvedValue({ userId: 7, sessionBinding: 'session', securityBinding: 'security' }),
+  };
   apps = { getApps: vi.fn().mockResolvedValue([{ appName: 'fixture', appStoreSlug: 'catalogue', status: 'running' }]) };
   tasks = { read: vi.fn().mockResolvedValue({ tasks: [] }) };
   host = { status: vi.fn().mockResolvedValue({ enrolled: false, available: false, job: null }) };
   runtime = { plan: vi.fn().mockResolvedValue({ containers: [{ id: '4'.repeat(64), project: 'fixture_catalogue' }] }) };
-  imports = { claimReviewedSource: vi.fn().mockResolvedValue(undefined) };
+  imports = { claimReviewedSource: vi.fn().mockResolvedValue(undefined), claimRetainedSource: vi.fn() };
+  boundary.stageRetained.mockResolvedValue(undefined);
+  boundary.rootCreate.mockResolvedValue({ begin: boundary.rootBegin, status: boundary.rootStatus, launch: boundary.rootLaunch });
+  boundary.rootRead.mockResolvedValue({ status: boundary.rootStatus, launch: boundary.rootLaunch, revokeAbsent: boundary.rootRevoke });
+  boundary.rootRevoke.mockRejectedValue(new Error('needs review'));
+  boundary.rootBegin.mockResolvedValue({ state: 'allocated', binding: {} });
+  boundary.rootStatus.mockResolvedValue({ state: 'allocated', binding: {} });
+  boundary.rootLaunch.mockResolvedValue({ state: 'allocated' });
+  boundary.rootBind.mockImplementation(async (options) => {
+    await options.rootStatus();
+    await options.verifyRootWorker({});
+  });
+  boundary.rootWorker.mockResolvedValue(undefined);
   logger = { warn: vi.fn() };
   start = vi.fn().mockResolvedValue(undefined);
   restart = vi.fn().mockResolvedValue(undefined);
@@ -185,6 +227,357 @@ it('pins the exact reviewed source under maintenance but leaves the worker inert
   expect(start).toHaveBeenCalledTimes(1);
   expect(backupMaintenanceActive()).toBe(true);
 });
+it('rejects a retained manifest paired with the wrong protected authority version', async () => {
+  const pointId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  for (const [schema, version] of [
+    ['orbis.time-machine-runtime.v4', 1],
+    ['orbis.time-machine-runtime.v3', 2],
+    ['orbis.time-machine-runtime.v6', 2],
+    ['orbis.time-machine-runtime.v4', 4],
+  ] as const) {
+    await expect(
+      service.prepareRetained({
+        importId: randomUUID(),
+        ownerId: 7,
+        binding,
+        admitted: {
+          manifest: { schema, pointId, legacy: { manifestSha256: binding.manifestSha256, cipherSha256: binding.archiveSha256 } },
+          controllerAuthority: { metadata: { version } },
+        } as never,
+        expectedRuntimeManifestSha256: 'd'.repeat(64),
+        admit: vi.fn() as never,
+      }),
+    ).rejects.toThrow();
+  }
+  expect(boundary.handoff).not.toHaveBeenCalled();
+});
+
+it.each([
+  [3, 1, false],
+  [4, 2, true],
+  [6, 4, true],
+] as const)('claims v%i runtime with the matching protected authority and proxy policy', async (format, version, preserveLiveProxy) => {
+  const pointId = randomUUID();
+  const importId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  const admitted = {
+    manifest: {
+      schema: `orbis.time-machine-runtime.v${format}`,
+      pointId,
+      legacy: { manifestSha256: binding.manifestSha256, cipherSha256: binding.archiveSha256 },
+    },
+    controllerAuthority: { metadata: { version } },
+  };
+  const permit = {};
+  const admit = vi.fn().mockResolvedValue(permit);
+  imports.claimRetainedSource.mockImplementation(async (_id, _owner, _binding, _permit, options) =>
+    options.prepare({ directory: root }, new AbortController().signal),
+  );
+  const journal = await service.prepareRetained({
+    importId,
+    ownerId: 7,
+    binding,
+    admitted: admitted as never,
+    expectedRuntimeManifestSha256: 'd'.repeat(64),
+    admit: admit as never,
+  });
+  expect(boundary.handoff).toHaveBeenCalledWith(expect.objectContaining({ preserveLiveProxy }));
+  expect(admit).toHaveBeenCalledExactlyOnceWith(journal);
+  expect(imports.claimRetainedSource).toHaveBeenCalledWith(importId, 7, binding, permit, expect.objectContaining({ journal }));
+  expect(boundary.stageRetained).toHaveBeenCalledOnce();
+  expect(start).not.toHaveBeenCalled();
+  expect(backupMaintenanceActive()).toBe(true);
+  const pending = Reflect.get(service, 'pending') as { release: () => void };
+  pending.release();
+  Reflect.set(service, 'pending', undefined);
+});
+
+it('reviews, binds and starts only the protected retained transaction after account rechecks', async () => {
+  const pointId = randomUUID();
+  const importId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  const publication = { schema: 'fixture-publication' };
+  const admitted = {
+    manifest: {
+      schema: 'orbis.time-machine-runtime.v3',
+      pointId,
+      legacy: { manifestSha256: binding.manifestSha256, cipherSha256: binding.archiveSha256 },
+    },
+    controllerAuthority: {
+      metadata: {
+        version: 1,
+        publication,
+        platform: { os: 'linux', architecture: 'arm64' },
+        archive: {
+          creationReference: `sha256:${'1'.repeat(64)}`,
+          platformManifestDigest: `sha256:${'2'.repeat(64)}`,
+          configDigest: `sha256:${'3'.repeat(64)}`,
+        },
+      },
+    },
+  };
+  const admit = vi.fn().mockResolvedValue({});
+  imports.claimRetainedSource.mockImplementation(async (_id, _owner, _binding, _permit, options) =>
+    options.prepare({ directory: root }, new AbortController().signal),
+  );
+  const journal = await service.prepareRetained({
+    importId,
+    ownerId: 7,
+    binding,
+    admitted: admitted as never,
+    expectedRuntimeManifestSha256: 'd'.repeat(64),
+    admit: admit as never,
+  });
+  boundary.rootReview.mockResolvedValue({ publication });
+  const verifyAccount = vi.fn().mockResolvedValue(undefined);
+  vi.spyOn(service, 'retainedStatus').mockResolvedValue({
+    job: {
+      id: journal.state.id,
+      status: 'running',
+      phase: 'allocated',
+      stage: 'preparing',
+      message: 'Preparing',
+      needsRecovery: false,
+      progressUnavailable: false,
+      canCancel: false,
+      canRecover: false,
+    },
+  });
+  await expect(
+    service.beginRetainedRoot({
+      journal,
+      importId,
+      ownerId: 7,
+      binding,
+      admitted: admitted as never,
+      expectedRuntimeManifestSha256: 'd'.repeat(64),
+      verifyAccount,
+      signal: new AbortController().signal,
+    }),
+  ).resolves.toMatchObject({ job: { id: journal.state.id, status: 'running' } });
+  expect(verifyAccount).toHaveBeenCalledTimes(3);
+  expect(boundary.rootBind).toHaveBeenCalledOnce();
+  expect(boundary.rootWorker).toHaveBeenCalledOnce();
+  expect(boundary.rootLaunch).toHaveBeenCalledWith('activate', expect.any(AbortSignal));
+  expect(start).not.toHaveBeenCalled();
+});
+
+it('preserves the journal and maintenance hold if root begin loses its reply', async () => {
+  const pointId = randomUUID();
+  const importId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  const publication = { schema: 'fixture-publication' };
+  const admitted = {
+    manifest: {
+      schema: 'orbis.time-machine-runtime.v3',
+      pointId,
+      legacy: { manifestSha256: binding.manifestSha256, cipherSha256: binding.archiveSha256 },
+    },
+    controllerAuthority: {
+      metadata: {
+        version: 1,
+        publication,
+        platform: { os: 'linux', architecture: 'arm64' },
+        archive: {
+          creationReference: `sha256:${'1'.repeat(64)}`,
+          platformManifestDigest: `sha256:${'2'.repeat(64)}`,
+          configDigest: `sha256:${'3'.repeat(64)}`,
+        },
+      },
+    },
+  };
+  imports.claimRetainedSource.mockImplementation(async (_id, _owner, _binding, _permit, options) =>
+    options.prepare({ directory: root }, new AbortController().signal),
+  );
+  const journal = await service.prepareRetained({
+    importId,
+    ownerId: 7,
+    binding,
+    admitted: admitted as never,
+    expectedRuntimeManifestSha256: 'd'.repeat(64),
+    admit: vi.fn().mockResolvedValue({}) as never,
+  });
+  boundary.rootReview.mockResolvedValue({ publication });
+  boundary.rootBegin.mockRejectedValue(new Error('lost reply'));
+  await expect(
+    service.beginRetainedRoot({
+      journal,
+      importId,
+      ownerId: 7,
+      binding,
+      admitted: admitted as never,
+      expectedRuntimeManifestSha256: 'd'.repeat(64),
+      verifyAccount: vi.fn().mockResolvedValue(undefined),
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow('needs review');
+  expect(boundary.discard).not.toHaveBeenCalled();
+  expect(boundary.rootLaunch).not.toHaveBeenCalled();
+  expect(backupMaintenanceActive()).toBe(true);
+  const pending = Reflect.get(service, 'pending') as { release: () => void };
+  pending.release();
+  Reflect.set(service, 'pending', undefined);
+});
+
+it('reconciles a lost begin reply only after protected rollback and idle, releasing the held lease', async () => {
+  const active = await journal();
+  const pointId = randomUUID();
+  const release = vi.fn();
+  Reflect.set(service, 'pending', { id: active.state.id, release });
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding: { pointId } });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  boundary.rootStatus.mockResolvedValue({
+    pointId,
+    state: 'rolled-back',
+    decision: 'rollback',
+    binding: null,
+    recoverable: false,
+    admissionSha256: 'd'.repeat(64),
+  });
+  vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('checking');
+  expect((await service.retainedStatus(active, 7)).job.status).toBe('recovery-required');
+  expect((await active.refresh()).phase).toBe('staging');
+  expect(release).not.toHaveBeenCalled();
+  vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('idle');
+  expect((await service.retainedStatus(active, 7)).job.status).toBe('rolled-back');
+  expect((await active.refresh()).phase).toBe('discarded');
+  expect(release).toHaveBeenCalledOnce();
+  expect(Reflect.get(service, 'pending')).toBeUndefined();
+});
+it('continues checking a lost begin without requiring a process restart', async () => {
+  const active = await journal();
+  const status = vi.spyOn(service, 'retainedStatus').mockResolvedValue({
+    job: {
+      id: active.state.id,
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      stage: 'complete',
+      message: 'Recovered',
+      needsRecovery: false,
+      progressUnavailable: false,
+      canCancel: false,
+      canRecover: false,
+    },
+  });
+  vi.useFakeTimers();
+  try {
+    Reflect.get(service, 'watchRetainedTerminal').call(service, active, 7);
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(status).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('starts protected settlement for an already terminal retained journal', async () => {
+  const active = await journal();
+  await active.discardStaging();
+  await fs.writeFile(path.join(active.directory, 'retained-root-request.json'), '{}', { mode: 0o600 });
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7 });
+  vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('checking');
+  const status = vi.spyOn(service, 'retainedStatus').mockResolvedValue({ job: { id: active.state.id, status: 'recovery-required' } } as never);
+  vi.useFakeTimers();
+  try {
+    await service.startRetainedSettlement();
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.waitFor(() => expect(boundary.cleanup).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it('reports success only after protected root completion and a cleared maintenance marker', async () => {
+  const active = await journal();
+  const pointId = randomUUID();
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding: { pointId } });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  boundary.rootStatus.mockResolvedValue({
+    pointId,
+    state: 'complete',
+    binding: null,
+    decision: 'commit',
+    recoverable: false,
+    admissionSha256: 'd'.repeat(64),
+  });
+  await fs.writeFile(path.join(active.directory, 'retained-root-request.json'), '{}', { mode: 0o600 });
+  expect((await service.status()).job).toMatchObject({ status: 'recovery-required', progressUnavailable: true, canRecover: true });
+  expect(backupMaintenanceActive()).toBe(true);
+  vi.mocked(operationStatus.readRootRestorationState).mockResolvedValue('idle');
+  expect((await service.status()).job).toMatchObject({ status: 'succeeded', stage: 'complete' });
+  expect(backupMaintenanceActive()).toBe(false);
+  boundary.admissionRead.mockResolvedValue({ sha256: 'e'.repeat(64) });
+  await expect(service.retainedStatus(active, 7)).rejects.toThrow('needs review');
+});
+
+it('routes a retained job through protected recovery rather than the legacy worker', async () => {
+  const active = await journal();
+  await fs.writeFile(path.join(active.directory, 'retained-root-request.json'), '{}', { mode: 0o600 });
+  const pointId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding });
+  boundary.rootStatus.mockResolvedValue({ pointId, state: 'allocating', binding: null, admissionSha256: 'd'.repeat(64), recoverable: true });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  vi.spyOn(TimeMachineStore.prototype, 'load').mockResolvedValue({ ownerId: 7 } as never);
+  vi.spyOn(TimeMachineStore.prototype, 'metadata').mockResolvedValue({
+    archiveSha256: binding.archiveSha256,
+    manifestSha256: binding.manifestSha256,
+  } as never);
+  vi.spyOn(TimeMachineStore.prototype, 'machineIdentity').mockResolvedValue(binding.machineId);
+  const request = { authMethod: 'session', user: { id: 7, operator: true } } as Request;
+  const result = await service.recover(active.state.id, 7, credentials, request);
+  expect(result).toMatchObject({ rootManaged: true, job: { id: active.state.id } });
+  expect(boundary.rootLaunch).toHaveBeenCalledExactlyOnceWith('recover', expect.any(AbortSignal));
+  expect(start).not.toHaveBeenCalled();
+});
+
+it('recovers incomplete root allocation only after the protected admission hash proves the owner receipt', async () => {
+  const active = await journal();
+  const pointId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding });
+  boundary.rootStatus.mockResolvedValue({ pointId, state: 'allocating', binding: null, admissionSha256: 'd'.repeat(64) });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'e'.repeat(64) });
+  const verifyAccount = vi.fn().mockResolvedValue(undefined);
+  const options = { restoreId: active.state.id, pointId, ownerId: 7, binding, verifyAccount, signal: new AbortController().signal };
+  await expect(service.recoverRetainedRoot(options)).rejects.toThrow('needs review');
+  expect(boundary.rootLaunch).not.toHaveBeenCalled();
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  await expect(service.recoverRetainedRoot(options)).resolves.toEqual({ restoreId: active.state.id });
+  expect(boundary.rootLaunch).toHaveBeenCalledExactlyOnceWith('recover', expect.any(AbortSignal));
+  expect(verifyAccount).toHaveBeenCalledTimes(3);
+});
+
+it('cleans an unbegun handoff only after root revokes its exact request and authenticates the admission', async () => {
+  const active = await journal();
+  const pointId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  boundary.receiptRead.mockResolvedValue({ ownerId: 7, binding });
+  boundary.admissionRead.mockResolvedValue({ sha256: 'd'.repeat(64) });
+  boundary.rootStatus.mockRejectedValue(new Error('no accepted transaction'));
+  boundary.rootRevoke.mockResolvedValueOnce({ admissionSha256: 'e'.repeat(64) }).mockResolvedValueOnce({ admissionSha256: 'd'.repeat(64) });
+  await fs.writeFile(path.join(active.directory, 'retained-root-request.json'), '{}', { mode: 0o600 });
+  await fs.mkdir(path.join(active.directory, 'retained'), { mode: 0o700 });
+  const options = {
+    restoreId: active.state.id,
+    pointId,
+    ownerId: 7,
+    binding,
+    verifyAccount: vi.fn().mockResolvedValue(undefined),
+    signal: new AbortController().signal,
+  };
+  await expect(service.recoverRetainedRoot(options)).rejects.toThrow('needs review');
+  expect(boundary.discard).not.toHaveBeenCalled();
+  await expect(service.recoverRetainedRoot(options)).resolves.toEqual({ restoreId: active.state.id });
+  expect(boundary.discard).toHaveBeenCalledOnce();
+  expect(boundary.rootLaunch).not.toHaveBeenCalled();
+  expect((await active.refresh()).phase).toBe('discarded');
+  await expect(fs.lstat(path.join(active.directory, 'retained'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(fs.lstat(path.join(active.directory, 'retained-root-request.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
 it('releases a failed prepare response while preserving a durable recovery hold', async () => {
   vi.spyOn(service, 'status').mockRejectedValueOnce(new Error('status read failed'));
   await expect(service.prepare(randomUUID(), 7, credentials, 'a'.repeat(64))).rejects.toThrow('needs review');
@@ -514,4 +907,58 @@ it('does not release its recovery hold from another transaction generation’s m
   expect((await service.status()).job?.id).toBe(next.state.id);
   expect(backupMaintenanceActive()).toBe(true);
   expect(enterBackupMutation()).toBeNull();
+});
+
+it('discards an authorized staged restore when protected review fails before BEGIN', async () => {
+  const pointId = randomUUID();
+  const importId = randomUUID();
+  const binding = { pointId, reviewId: randomUUID(), archiveSha256: 'a'.repeat(64), manifestSha256: 'b'.repeat(64), machineId: 'c'.repeat(64) };
+  const admitted = {
+    manifest: {
+      schema: 'orbis.time-machine-runtime.v6',
+      pointId,
+      legacy: { manifestSha256: binding.manifestSha256, cipherSha256: binding.archiveSha256 },
+    },
+    controllerAuthority: {
+      metadata: {
+        version: 4,
+        publication: {},
+        platform: { os: 'linux', architecture: 'arm64' },
+        archive: {
+          creationReference: `sha256:${'1'.repeat(64)}`,
+          platformManifestDigest: `sha256:${'2'.repeat(64)}`,
+          configDigest: `sha256:${'3'.repeat(64)}`,
+        },
+      },
+    },
+  };
+  imports.claimRetainedSource.mockImplementation(async (_id, _owner, _binding, _permit, options) =>
+    options.prepare({ directory: root }, new AbortController().signal),
+  );
+  const journal = await service.prepareRetained({
+    importId,
+    ownerId: 7,
+    binding,
+    admitted: admitted as never,
+    expectedRuntimeManifestSha256: 'd'.repeat(64),
+    admit: vi.fn().mockResolvedValue({}) as never,
+  });
+  boundary.rootReview.mockRejectedValue(new Error('Protected review failed'));
+  await expect(
+    service.beginRetainedRoot({
+      journal,
+      importId,
+      ownerId: 7,
+      binding,
+      admitted: admitted as never,
+      expectedRuntimeManifestSha256: 'd'.repeat(64),
+      verifyAccount: vi.fn().mockResolvedValue(undefined),
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow();
+  expect(boundary.rootCreate).not.toHaveBeenCalled();
+  expect(boundary.rootBegin).not.toHaveBeenCalled();
+  expect(boundary.rootLaunch).not.toHaveBeenCalled();
+  expect(boundary.discard).toHaveBeenCalledOnce();
+  expect(backupMaintenanceActive()).toBe(false);
 });

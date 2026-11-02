@@ -7,7 +7,9 @@ import { EncryptionService } from '@/core/encryption/encryption.service';
 import { FilesystemService } from '@/core/filesystem/filesystem.service';
 import { PasswordService } from '@/core/password/password.service';
 import { UserRepository } from '@/modules/user/user.repository';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import type { Request } from 'express';
+import { SESSION_COOKIE_NAME } from '@/common/constants';
 import psl from 'psl';
 import validator from 'validator';
 import type { LoginBody, RegisterBody } from './dto/auth.dto';
@@ -15,6 +17,7 @@ import { SessionManager } from './session.manager';
 import { TotpAuthenticator } from './utils/totp-authenticator';
 import { normalizeNewUsername } from './username';
 import { PasskeyStore } from './passkey.store';
+import { sensitiveAccountBinding } from './sensitive-action-context';
 
 const TOTP_SESSION_EXPIRATION = 60 * 5;
 const MAX_TOTP_ATTEMPTS = 5;
@@ -419,6 +422,42 @@ export class AuthService {
     }
     return user;
   };
+
+  public async operatorActionContext(request: Request) {
+    this.assertSecurityChangeAllowed();
+    const session = request.cookies?.[SESSION_COOKIE_NAME];
+    if (request.authMethod !== 'session' || request.user?.operator !== true || typeof session !== 'string' || session.length > 256)
+      throw new UnauthorizedException('Sign in again before confirming this action.');
+    const user = await this.userRepository.getUserById(request.user.id);
+    if (!user?.operator || !this.sessionManager.isSessionForUser(session, user.id))
+      throw new UnauthorizedException('Sign in again before confirming this action.');
+    const state = await this.passkeys.snapshot();
+    const current = await this.userRepository.getUserById(user.id);
+    this.assertSecurityChangeAllowed();
+    if (!current?.operator || !this.sessionManager.isSessionForUser(session, current.id))
+      throw new UnauthorizedException('Sign in again before confirming this action.');
+    return {
+      userId: current.id,
+      sessionBinding: crypto.createHash('sha256').update(session).digest('hex'),
+      securityBinding: sensitiveAccountBinding(current, state),
+    };
+  }
+
+  // Called only after an account-bound passkey assertion when that account requires an extra code.
+  public async verifyPasskeyActionCode(userId: number, totpCode?: string) {
+    this.assertSecurityChangeAllowed();
+    const user = await this.userRepository.getUserById(userId);
+    if (
+      !user?.operator ||
+      !user.totpEnabled ||
+      !totpCode ||
+      !user.totpSecret ||
+      !user.salt ||
+      !TotpAuthenticator.check(totpCode, this.encryption.decrypt(user.totpSecret, user.salt))
+    )
+      throw new TranslatableError('AUTH_ERROR_TOTP_INVALID_CODE', {}, HttpStatus.BAD_REQUEST);
+    return user;
+  }
 
   public assertSecurityChangeAllowed() {
     if (this.config.get('demoMode')) throw new TranslatableError('SERVER_ERROR_NOT_ALLOWED_IN_DEMO');

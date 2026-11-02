@@ -24,6 +24,9 @@ import {
 } from '../helpers/settings-catalogue';
 import { revealSetting } from '../helpers/reveal-setting';
 
+const TimeMachineSettings = lazy(() =>
+  import('@/modules/time-machine/time-machine-settings').then((module) => ({ default: module.TimeMachineSettings })),
+);
 const UserSettingsContainer = lazy(() => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer })));
 const SecurityContainer = lazy(() => import('../containers/security').then((module) => ({ default: module.SecurityContainer })));
 const LogsContainer = lazy(() => import('../containers/logs').then((module) => ({ default: module.LogsContainer })));
@@ -114,6 +117,11 @@ export default function SettingsPage() {
               ),
               updates: serverPanel('updates'),
               backups: serverPanel('backups'),
+              'time-machine': protect(
+                <Suspense fallback={loading}>
+                  <TimeMachineSettings />
+                </Suspense>,
+              ),
               https: <HttpsSettings />,
               security: (
                 <Suspense fallback={loading}>

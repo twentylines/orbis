@@ -69,7 +69,9 @@ export function SettingsWorkspace({
     setQuery('');
     onSetting(entry);
   };
-  const sections = settingsSections.filter((entry) => entry.id !== 'https' || access.http === true);
+  const sections = settingsSections.filter(
+    (entry) => (entry.id !== 'https' || access.http === true) && (entry.id !== 'time-machine' || access.operator),
+  );
   const section = settingsSections.find((entry) => entry.id === current) ?? settingsSections[0];
   return (
     <div className="settings-workspace">

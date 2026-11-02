@@ -8,6 +8,7 @@ import { useWindowVisible } from '@/desktop/window-visibility';
 import { useHostReadings } from './host-devices';
 import { SystemGauges } from './system-gauges';
 import { statusBytes, statusNetwork } from './system-readings';
+import { useNetworkWarmup } from './network-rate-warmup';
 import { sensorOptions, useObserveSystemHealth } from './use-system-health';
 
 const rate = (value: number | null) => {
@@ -22,6 +23,35 @@ const rate = (value: number | null) => {
   } while (amount >= 1024 && index < units.length - 1);
   return `${amount.toFixed(amount < 10 ? 1 : 0)} ${units[index]}`;
 };
+
+export function NetworkSummary({ network, visible }: { network: ReturnType<typeof statusNetwork>; visible: boolean }) {
+  const measuring = useNetworkWarmup(network, visible);
+  return (
+    <section className="workspace-network" aria-label={network?.label ?? 'Network'}>
+      <span className="workspace-network-heading">
+        <IconArrowsDownUp size={17} aria-hidden="true" /> {network?.label ?? 'Network'}
+      </span>
+      {network ? (
+        <strong className="workspace-network-interface" title={network.interface}>
+          {network.interface}
+          {network.speedMbps !== null ? (
+            <small>{network.speedMbps >= 1000 ? `${(network.speedMbps / 1000).toFixed(1)} Gbps` : `${network.speedMbps} Mbps`} link</small>
+          ) : null}
+        </strong>
+      ) : null}
+      <div className="workspace-network-direction">
+        <small>Download</small>
+        <strong className="workspace-network-rate">{measuring ? 'Measuring…' : rate(network?.rxBytesPerSecond ?? null)}</strong>
+        {network ? <small>{statusBytes(network.receivedBytes)} received</small> : null}
+      </div>
+      <div className="workspace-network-direction">
+        <small>Upload</small>
+        <strong className="workspace-network-rate">{measuring ? 'Measuring…' : rate(network?.txBytesPerSecond ?? null)}</strong>
+        {network ? <small>{statusBytes(network.transmittedBytes)} sent</small> : null}
+      </div>
+    </section>
+  );
+}
 
 export function HomeSystemStatus() {
   const visible = useWindowVisible();
@@ -80,29 +110,7 @@ export function HomeSystemStatus() {
             </span>
             <strong>{system.data ? formatUptime(system.data.cpu.uptimeSeconds) : '—'}</strong>
           </div>
-          <section className="workspace-network" aria-label={network?.label ?? 'Network'}>
-            <span className="workspace-network-heading">
-              <IconArrowsDownUp size={17} aria-hidden="true" /> {network?.label ?? 'Network'}
-            </span>
-            {network ? (
-              <strong className="workspace-network-interface" title={network.interface}>
-                {network.interface}
-                {network.speedMbps !== null ? (
-                  <small>{network.speedMbps >= 1000 ? `${(network.speedMbps / 1000).toFixed(1)} Gbps` : `${network.speedMbps} Mbps`} link</small>
-                ) : null}
-              </strong>
-            ) : null}
-            <div className="workspace-network-direction">
-              <small>Download</small>
-              <strong className="workspace-network-rate">{rate(network?.rxBytesPerSecond ?? null)}</strong>
-              {network ? <small>{statusBytes(network.receivedBytes)} received</small> : null}
-            </div>
-            <div className="workspace-network-direction">
-              <small>Upload</small>
-              <strong className="workspace-network-rate">{rate(network?.txBytesPerSecond ?? null)}</strong>
-              {network ? <small>{statusBytes(network.transmittedBytes)} sent</small> : null}
-            </div>
-          </section>
+          <NetworkSummary network={network} visible={visible} />
         </div>
       )}
       <ContainerResources compact />

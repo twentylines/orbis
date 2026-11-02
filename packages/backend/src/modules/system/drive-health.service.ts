@@ -47,7 +47,11 @@ const point = (row: Record<string, unknown>): DriveHealthPoint => ({
 });
 export function parseDriveHealth(value: unknown): DriveHealthSample {
   const data = record(value);
-  if (data.available === false) return unavailable(text(data.reason, 256));
+  if (data.available === false) {
+    const reason = text(data.reason, 256);
+    if (data.toolsMissing !== undefined && typeof data.toolsMissing !== 'boolean') throw new Error('Invalid SMART tools status');
+    return { available: false, reason, ...(data.toolsMissing === true ? { toolsMissing: true } : {}) };
+  }
   if (data.available !== true) throw new Error('Invalid drive sample');
   const sampledAt = timestamp(data.sampledAt);
   const seen = new Set<string>();

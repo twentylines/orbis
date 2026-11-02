@@ -1,0 +1,8 @@
+{
+  "schema": "orbis.retained-app-engine.v1",
+  "version": 1,
+  "authority": "root-candidate-app-result.v1",
+  "execution": "verify-only-root-engine.v1",
+  "ordinaryMutationsHeld": true,
+  "normalBootstrap": "idempotent-after-root-settlement.v1"
+}

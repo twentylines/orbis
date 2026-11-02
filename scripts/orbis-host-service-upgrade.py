@@ -143,6 +143,10 @@ def preflight(root: Path, context: str, source: Path) -> dict[str, str]:
         raise ValueError("a helper upgrade needs recovery before another upgrade")
     ready = SETUP.preflight(root, context, source, allow_existing=True)
     require_installed(root, context)
+    if HOST.retained_state(root):
+        HOST.resolve_current_identity(root, context)
+        for name in ("orbis-host-identity.py", "orbis-host-retained-authority.py"):
+            require_root_owned(SETUP.INSTALL_DIR / name, directory=False, private=True)
     job_identity()
     source_files, source_unit = SETUP.source_files(source)
     for file in source_files:
@@ -224,7 +228,18 @@ def workspace_from_record(record: dict, root: Path, context: str) -> Path:
     return workspace
 
 
+def require_maintenance_identity(root, context):
+    record = SERVICE.read_private(MAINTENANCE)
+    if record and record.get("retainedSource") is not None:
+        if HOST.retained_descriptor(root, context) != record["retainedSource"]:
+            raise ValueError("retained source changed during helper maintenance")
+        HOST.resolve_current_identity(root, context)
+    elif HOST.retained_state(root):
+        raise ValueError("retained helper recovery requires its protected source descriptor")
+
+
 def restore_previous(workspace: Path, digest: str, root: Path, context: str) -> None:
+    require_maintenance_identity(root, context)
     SETUP.run_systemctl("stop", "orbis-host.service")
     previous = workspace / "previous"
     if previous.exists():
@@ -291,7 +306,10 @@ def upgrade(root: Path, context: str, source: Path, confirmation: str | None) ->
                 "previousDigest": ready["digest"],
                 "stage": "prepared",
             }
+            if HOST.retained_state(root):
+                record["retainedSource"] = HOST.retained_descriptor(root, context)
             SERVICE.write_private(MAINTENANCE, record)
+            require_maintenance_identity(root, context)
             SETUP.run_systemctl("stop", "orbis-host.service")
             if job_identity() != previous_job:
                 raise ValueError("a core update was accepted while stopping the old helper; retry after resolving it")
@@ -338,6 +356,7 @@ def recover(root: Path, context: str, confirmation: str | None) -> dict[str, str
         if not isinstance(digest, str) or not SETUP.PLAN.DIGEST.fullmatch(digest):
             raise ValueError("helper maintenance record has an invalid release digest")
         job_identity()
+        require_maintenance_identity(root, context)
         if record.get("stage") == "verified":
             try:
                 verify_service(digest, root, context)

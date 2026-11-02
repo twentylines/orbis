@@ -6,6 +6,7 @@
 }
 .modal-content.orbis-dialog-content {
   --orbis-dialog-gutter: 24px;
+  --orbis-control-height: 44px;
   position: fixed;
   top: 50%;
   left: 50%;
@@ -87,8 +88,8 @@ body:has(.orbis-theme) .orbis-dialog-content .orbis-dialog-header {
 }
 .orbis-dialog-content > .modal-body,
 .orbis-dialog-content > .orbis-dialog-section {
-  min-height: 0;
-  overflow-y: auto;
+  flex: none;
+  overflow: visible;
 }
 .orbis-dialog-content > :is(.modal-header, .modal-footer, .orbis-dialog-feedback) {
   flex: none;
@@ -156,22 +157,78 @@ body:has(.orbis-theme) .orbis-dialog-content .orbis-dialog-header {
 body:has(.orbis-theme) .orbis-dialog-content .btn:focus-visible {
   outline: none;
   box-shadow: none;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-  text-decoration-thickness: 2px;
+  text-decoration: none;
+  background: var(--tblr-btn-hover-bg, color-mix(in srgb, var(--desktop-accent) 24%, var(--desktop-surface)));
+  color: var(--tblr-btn-hover-color, var(--desktop-ink));
+  border-color: var(--desktop-accent);
 }
 body:has(.orbis-theme) .orbis-dialog-content .btn:not(.btn-primary, .btn-danger):is(:hover, :focus-visible) {
   background: color-mix(in srgb, var(--desktop-preset-tint) 18%, var(--desktop-surface));
 }
-.orbis-dialog-close:focus-visible::after {
-  position: absolute;
-  right: 14px;
-  bottom: 5px;
-  left: 14px;
-  height: 2px;
-  border-radius: 1px;
-  background: currentColor;
-  content: "";
+.orbis-dialog-content .orbis-dialog-close:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--desktop-accent) 24%, var(--desktop-surface));
+  border-color: var(--desktop-accent);
+  color: var(--desktop-ink);
+  box-shadow: none;
+}
+.modal-content.orbis-dialog-content[data-presentation="scene"] {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  transform: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  isolation: isolate;
+}
+.orbis-dialog-content[data-presentation="scene"][data-state="open"] {
+  animation-name: orbis-scene-enter;
+}
+.orbis-dialog-content[data-presentation="scene"][data-state="closed"] {
+  animation-name: orbis-scene-exit;
+}
+@keyframes orbis-scene-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes orbis-scene-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.orbis-dialog-overlay[data-reduced="true"],
+.orbis-dialog-content[data-reduced="true"],
+:root[data-orbis-motion="reduced"] :is(.orbis-dialog-content, .orbis-dialog-overlay),
+:root[data-orbis-effects="low"] :is(.orbis-dialog-content, .orbis-dialog-overlay) {
+  animation-duration: 0.01ms;
+}
+@media (forced-colors: active) {
+  body:has(.orbis-theme) .orbis-dialog-content .btn:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+    forced-color-adjust: auto;
+  }
 }
 @keyframes orbis-dialog-fade-in {
   from {

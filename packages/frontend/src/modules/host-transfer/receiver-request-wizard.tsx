@@ -1,3 +1,6 @@
+import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
+import { measuredPercent } from '@/components/recovery-progress/restore-presentation';
+import { formatBackupBytes } from '@/modules/system-backups/contracts';
 import { useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
@@ -40,7 +43,7 @@ export function dismissUnavailableRequest(
   dismiss?.();
   return true;
 }
-type Props = { embedded?: boolean; onActivityChange?: (active: boolean) => void; onDismiss?: () => void };
+type Props = { embedded?: boolean; recoveryScene?: boolean; onActivityChange?: (active: boolean) => void; onDismiss?: () => void };
 function resumableRequestStatus(status: OutgoingRestoreRequest['status']) {
   switch (status) {
     case 'awaiting-source-approval':
@@ -57,7 +60,7 @@ function resumableRequestStatus(status: OutgoingRestoreRequest['status']) {
       return status;
   }
 }
-export function ReceiverRequestWizard({ onActivityChange, onDismiss }: Props) {
+export function ReceiverRequestWizard({ onActivityChange, onDismiss, recoveryScene = false }: Props) {
   const { user } = useAppContext();
   const requests = useRestoreRequests();
   const id = useId();
@@ -206,7 +209,9 @@ export function ReceiverRequestWizard({ onActivityChange, onDismiss }: Props) {
   if (user?.operator !== true) return null;
   if (!requests) return <InlineFeedback>Restore requests are unavailable. Reopen this window from an operator session.</InlineFeedback>;
   if (stage === 'review' && job?.status === 'complete')
-    return <SystemBackupsSettings restoreOnly embedded initialImportId={job.importId} onActivityChange={onActivityChange} />;
+    return (
+      <SystemBackupsSettings restoreOnly embedded recoveryScene={recoveryScene} initialImportId={job.importId} onActivityChange={onActivityChange} />
+    );
   if (!requests.available)
     return (
       <div className="receiver-request-card">
@@ -221,8 +226,35 @@ export function ReceiverRequestWizard({ onActivityChange, onDismiss }: Props) {
         </div>
       </div>
     );
+  const showScene = recoveryScene && !error && (busy || Boolean(job && pending && !job.canStart));
+  const transferStatus = busy
+    ? 'Connecting to source'
+    : job?.status === 'source-exporting'
+      ? restoreExportStage(job.exportProgress?.stage)
+      : job?.status === 'receiving'
+        ? 'Receiving encrypted backup'
+        : 'Waiting for source approval';
+  const transferProgress = job?.status === 'source-exporting' ? job.exportProgress : job?.status === 'receiving' ? job : undefined;
+  const completed = transferProgress?.completedBytes;
+  const total = transferProgress?.totalBytes;
   return (
     <div className="receiver-request-card">
+      <RecoveryScene
+        open={showScene}
+        title="Transferring"
+        status={transferStatus}
+        detail={completed !== undefined && total != null ? `${formatBackupBytes(completed)} of ${formatBackupBytes(total)}` : undefined}
+        progress={completed !== undefined ? measuredPercent(completed, total ?? null) : undefined}
+        active={showScene}
+        actions={
+          !busy && job && pending ? (
+            <>
+              <Button onClick={cancel}>Cancel</Button>
+              <Button onClick={requests.refresh}>Refresh</Button>
+            </>
+          ) : undefined
+        }
+      />
       <AnimatePresence initial={false} mode="wait">
         <motion.form
           key={stage}

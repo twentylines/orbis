@@ -102,6 +102,31 @@ it('retains the recovery and health routes while returning a retryable response 
     release();
   }
 });
+it('admits only fresh sign-in and recovery while a restore holds the mutation lease', async () => {
+  const release = await acquireBackupMaintenance(new AbortController().signal);
+  setRestoreRecoveryRequired(true);
+  try {
+    const response = Object.assign(new EventEmitter(), { setHeader: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() });
+    const next = vi.fn();
+    for (const originalUrl of [
+      '/api/auth/login',
+      '/api/auth/verify-totp',
+      '/api/auth/passkeys/login/options',
+      '/api/auth/passkeys/login/verify',
+      '/api/system-backups/restores/abc/recover',
+    ])
+      backupMaintenanceMiddleware({ method: 'POST', originalUrl } as Request, response as unknown as Response, next);
+    expect(next).toHaveBeenCalledTimes(5);
+    for (const originalUrl of ['/api/auth/register', '/api/auth/change-password', '/api/settings', '/api/apps'])
+      backupMaintenanceMiddleware({ method: 'POST', originalUrl } as Request, response as unknown as Response, next);
+    expect(next).toHaveBeenCalledTimes(5);
+    expect(response.status).toHaveBeenCalledTimes(4);
+    expect(backupMaintenanceActive()).toBe(true);
+  } finally {
+    setRestoreRecoveryRequired(false);
+    release();
+  }
+});
 it('waits for a disconnected handler to finish before taking a snapshot', async () => {
   const request = { originalUrl: '/api/apps', method: 'POST' } as Request;
   const response = Object.assign(new EventEmitter(), { setHeader: vi.fn() });

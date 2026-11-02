@@ -1,4 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import {
+  createCaptureCoherenceReceipt,
+  hashCaptureSnapshotFile,
+  type CaptureCoherenceReceipt,
+  type CaptureCoherenceRuntimeBinding,
+} from './time-machine-capture-coherence';
+import { QueueFactory } from '../queue/queue.factory';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
@@ -23,13 +30,14 @@ import { AppsRepository } from '../apps/apps.repository';
 import { AuthService } from '../auth/auth.service';
 import { TasksService } from '../tasks/tasks.service';
 import { HostUpdatesService } from '../host-updates/host-updates.service';
-import { BackupRuntimeService } from './backup-runtime.service';
+import { BackupRuntimeService, type BackupRuntimePlan } from './backup-runtime.service';
 import { BackupRequirementError, copyBackupFiles, inventoryBackup, packageBackup, privateBackupDirectory } from './backup-files';
 import { BackupArchiveError } from './backup-crypto';
 import { fullBackupLimits } from './backup-limits';
 import { restoreStartupRole } from './backup-restore-startup';
 import { acquireRestoreLease } from './backup-restore-lease';
 import { BackupRestoreJournal } from './backup-restore-journal';
+import { BackupRetentionPolicy, backupExpiresAt } from './backup-retention-policy';
 
 export type TransferArchiveGrant = Readonly<{
   requestId: string;
@@ -40,6 +48,23 @@ export type TransferArchiveGrant = Readonly<{
   cancel: () => Promise<void>;
 }>;
 
+export type LocalBackupSnapshot = Readonly<{
+  content: string;
+  createdAt: number;
+  manifestSha256: string;
+  software: { orbis: string; runtipi: string; architecture: string };
+  files: readonly { name: string; bytes: number }[];
+  databaseBytes: number;
+  apps: readonly { urn: string; name: string; running: boolean }[];
+  sealCoherence?: (binding: CaptureCoherenceRuntimeBinding, signal: AbortSignal) => Promise<CaptureCoherenceReceipt>;
+}>;
+export type LocalCapturePlan = { runtime: BackupRuntimePlan; apps: { urn: string; userConfigEnabled: boolean }[] };
+export type LocalCaptureHooks = {
+  maximumPlaintextBytes: number;
+  hostPreflight: (signal: AbortSignal) => Promise<void>;
+  beforeQuiesce: (plan: LocalCapturePlan, signal: AbortSignal) => Promise<void>;
+};
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const savedJob = type({
   version: '1',
@@ -47,6 +72,7 @@ const savedJob = type({
   ownerId: 'number.integer > 0',
   createdAt: 'number.integer > 0',
   updatedAt: 'number.integer > 0',
+  'expiresAt?': 'number.integer > 0',
   status: "'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted'",
   stage: "'preparing' | 'inventory' | 'quiescing' | 'database' | 'copying' | 'archiving' | 'encrypting' | 'resuming' | 'complete'",
   completedBytes: 'number >= 0',
@@ -62,6 +88,7 @@ const safeJob = (job: Job) => ({
   stage: job.stage,
   createdAt: job.createdAt,
   updatedAt: job.updatedAt,
+  expiresAt: job.expiresAt,
   completedBytes: job.completedBytes,
   totalBytes: job.totalBytes,
   message: job.message,
@@ -69,11 +96,17 @@ const safeJob = (job: Job) => ({
   restartRequired: job.restartRequired,
 });
 const dataRoots = ['state', 'apps', 'repos', 'media', 'user-config', 'traefik'];
-const expiry = 24 * 60 * 60_000;
 
 @Injectable()
 export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   private jobs = new Map<string, Job>();
+  private readonly retention: BackupRetentionPolicy;
+  private retentionWork: Promise<unknown> = Promise.resolve();
+  private withRetention<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.retentionWork.then(work);
+    this.retentionWork = result.catch(() => undefined);
+    return result;
+  }
   private active?: { id: string; abort: AbortController; done: Promise<void> };
   private ready?: Promise<void>;
   private unavailable = false;
@@ -90,7 +123,10 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     private readonly runtime: BackupRuntimeService,
     private readonly logger: LoggerService,
     @Inject(DATABASE) private readonly database: Database,
-  ) {}
+    private readonly queues: QueueFactory,
+  ) {
+    this.retention = new BackupRetentionPolicy(path.join(config.get('directories').dataDir, 'backups', 'settings'));
+  }
 
   private root() {
     return path.join(this.config.get('directories').dataDir, 'backups', 'full');
@@ -100,6 +136,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     return path.join(this.root(), id);
   }
   private async save(job: Job) {
+    job.expiresAt = backupExpiresAt(job.createdAt, (await this.retention.read()).retentionHours, job.expiresAt);
     job.updatedAt = Date.now();
     const directory = this.directory(job.id);
     const temporary = path.join(directory, `.${randomUUID()}.tmp`);
@@ -141,6 +178,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   }
   private async load() {
     try {
+      const policy = await this.retention.read();
       await privateBackupDirectory(this.root());
       for (const id of await fs.readdir(this.root())) {
         if (!uuid.test(id)) throw new BackupRequirementError('Unexpected full backup storage entry.');
@@ -164,6 +202,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
         )
           throw new BackupRequirementError('Invalid backup journal.');
         this.jobs.set(id, job);
+        if (job.expiresAt !== backupExpiresAt(job.createdAt, policy.retentionHours, job.expiresAt)) await this.save(job);
         if (job.restartRequired && !job.resumePending.length) {
           job.restartRequired = false;
           job.message = 'App recovery completed after restarting Orbis.';
@@ -187,12 +226,17 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn('Full backup storage needs review. New exports are disabled; existing files have been preserved.');
     }
   }
-  private async expire() {
-    for (const [id, job] of this.jobs)
-      if (job.status !== 'running' && !job.resumePending.length && Date.now() - job.createdAt > expiry) {
-        await fs.rm(this.directory(id), { recursive: true });
-        this.jobs.delete(id);
+  private expire() {
+    return this.withRetention(async () => {
+      const policy = await this.retention.read();
+      for (const [id, job] of this.jobs) {
+        if (job.expiresAt !== backupExpiresAt(job.createdAt, policy.retentionHours, job.expiresAt)) await this.save(job);
+        if (job.status !== 'running' && !job.resumePending.length && Date.now() > (job.expiresAt ?? backupExpiresAt(job.createdAt, 24))) {
+          await fs.rm(this.directory(id), { recursive: true });
+          this.jobs.delete(id);
+        }
       }
+    });
   }
   private async cleanPlaintext(job: Job) {
     for (const name of await fs.readdir(this.directory(job.id)))
@@ -216,15 +260,55 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     await this.initialize();
     return {
       available: !this.unavailable,
-      retentionHours: 24,
+      retentionHours: this.unavailable ? 24 : (await this.retention.read()).retentionHours,
       jobs: [...this.jobs.values()]
         .filter((job) => job.ownerId === ownerId)
         .map((job) => safeJob(this.active?.id === job.id ? { ...job, status: 'running' } : job)),
     };
   }
+  async settings() {
+    await this.initialize();
+    if (this.unavailable) throw new ConflictException('Backup storage needs review. Existing files have been preserved.');
+    return this.retention.read();
+  }
+  async updateSettings(input: unknown) {
+    await this.initialize();
+    if (this.unavailable) throw new ConflictException('Backup storage needs review. Existing files have been preserved.');
+    if (this.active) throw new ConflictException('Wait for the active backup to finish before changing retention.');
+    return this.withRetention(async () => {
+      const next = await this.retention.update(input);
+      for (const job of this.jobs.values()) {
+        const deadline = backupExpiresAt(job.createdAt, next.retentionHours, job.expiresAt);
+        if (deadline !== job.expiresAt) {
+          job.expiresAt = deadline;
+          await this.save(job);
+        }
+      }
+      return next;
+    });
+  }
   async start(ownerId: number, credentials: { password: string; totpCode?: string }, passphrase: string) {
     await this.initialize();
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    return this.begin(ownerId, passphrase);
+  }
+
+  // Server-only capture seam; its controller performs operator/session authorization.
+  async startLocalCapture(ownerId: number, passphrase: string, snapshot: (value: LocalBackupSnapshot) => Promise<void>, hooks?: LocalCaptureHooks) {
+    await this.initialize();
+    if (this.closing) throw new ConflictException('Wait for Orbis to finish restarting before capturing.');
+    const job = await this.begin(ownerId, passphrase, snapshot, hooks);
+    const operation = this.active?.id === job.id ? this.active.done : Promise.resolve();
+    return {
+      id: job.id,
+      ready: operation.then(async () => {
+        const opened = await this.openArchive(job.id, ownerId);
+        return { stream: opened.file.createReadStream(), bytes: opened.stat.size };
+      }),
+    };
+  }
+
+  private async begin(ownerId: number, passphrase: string, snapshot?: (value: LocalBackupSnapshot) => Promise<void>, hooks?: LocalCaptureHooks) {
     this.assertAvailable();
     if (typeof passphrase !== 'string' || passphrase.trim().length < 12 || passphrase.length > 1024)
       throw new BadRequestException(new BackupArchiveError('passphrase').message);
@@ -260,7 +344,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       } finally {
         await parent.close();
       }
-      this.active.done = this.export(job, passphrase, abort.signal).finally(() => {
+      this.active.done = this.export(job, passphrase, abort.signal, snapshot, hooks).finally(() => {
         this.active = undefined;
       });
       return safeJob(job);
@@ -269,10 +353,17 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       throw error;
     }
   }
-  private async export(job: Job, passphrase: string, signal: AbortSignal) {
+  private async export(
+    job: Job,
+    passphrase: string,
+    signal: AbortSignal,
+    snapshot?: (value: LocalBackupSnapshot) => Promise<void>,
+    hooks?: LocalCaptureHooks,
+  ) {
     let release: (() => void) | undefined;
     let releaseDisk: (() => void) | undefined;
     let releaseRestore: (() => void) | undefined;
+    let queuePause: Awaited<ReturnType<QueueFactory['pauseForBackup']>> | undefined;
     const directory = this.directory(job.id);
     const content = path.join(directory, 'content');
     const stage = (name: Job['stage'], message: string) => {
@@ -282,7 +373,9 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       job.totalBytes = null;
     };
     try {
+      queuePause = await this.queues.pauseForBackup(signal);
       release = await acquireBackupMaintenance(signal);
+      const managedWritesHeldAt = Date.now();
       releaseDisk = acquireBackupDisk();
       const restoreStore = path.join(this.config.get('directories').dataDir, 'backups', 'restores');
       releaseRestore = await acquireRestoreLease(restoreStore);
@@ -292,10 +385,13 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       const excludedDirectories = restore ? await restore.backupExclusions(expectedRoots) : [];
       if ((await this.tasks.read()).tasks.some((task) => ['queued', 'running', 'unconfirmed'].includes(task.status)))
         throw new BackupRequirementError('Wait for app tasks to finish before creating a full backup.');
-      const host = await this.host.status();
-      if (host.enrolled && !host.available) throw new BackupRequirementError('Reconnect the host service before creating a full backup.');
-      if (host.job && ['queued', 'running', 'recovering', 'interrupted'].includes(host.job.state))
-        throw new BackupRequirementError('Wait for the server update or recovery to finish before creating a full backup.');
+      if (hooks) await hooks.hostPreflight(signal);
+      else {
+        const host = await this.host.status();
+        if (host.enrolled && !host.available) throw new BackupRequirementError('Reconnect the host service before creating a full backup.');
+        if (host.job && ['queued', 'running', 'recovering', 'interrupted'].includes(host.job.state))
+          throw new BackupRequirementError('Wait for the server update or recovery to finish before creating a full backup.');
+      }
       const apps = await this.apps.getApps();
       if (apps.some((app) => !['running', 'stopped', 'missing'].includes(app.status)))
         throw new BackupRequirementError('Wait for apps to reach a stable state before creating a full backup.');
@@ -320,6 +416,14 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       const size = await this.database.execute(sql`select pg_database_size(current_database())::text as bytes`);
       const databaseBytes = Number(size.rows[0]?.bytes);
       if (!Number.isSafeInteger(databaseBytes) || databaseBytes < 0) throw new BackupRequirementError('Database backup size could not be checked.');
+      if (hooks)
+        await hooks.beforeQuiesce(
+          {
+            runtime: plan,
+            apps: apps.map((app) => ({ urn: `${app.appName}:${app.appStoreSlug}`, userConfigEnabled: app.userConfigEnabled ?? true })),
+          },
+          signal,
+        );
       const storage = await fs.statfs(directory);
       if (storage.bavail * storage.bsize < 3 * (estimate.totalBytes + databaseBytes) + 256 * 1024 * 1024)
         throw new BackupRequirementError('There is not enough free storage for the full backup and its encrypted output.');
@@ -330,11 +434,13 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
         signal.throwIfAborted();
         await this.runtime.stop(container);
       }
+      await this.runtime.verifyStopped(plan, signal);
       await fs.mkdir(content, { mode: 0o700 });
       stage('database', 'Saving the Orbis database.');
       await this.runtime.dumpDatabase(plan.databaseId, path.join(content, 'database.dump'), signal, (bytes) => {
         job.completedBytes = bytes;
       });
+      const databaseSeal = hooks ? await hashCaptureSnapshotFile(path.join(content, 'database.dump'), signal) : undefined;
       stage('inventory', 'Checking the stopped apps’ data.');
       const inventory = await inventoryBackup(roots, signal, excludedDirectories);
       const files = await copyBackupFiles(inventory, content, signal, (value) => Object.assign(job, value));
@@ -359,6 +465,70 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       if (Buffer.byteLength(manifest) > fullBackupLimits.manifestBytes)
         throw new BackupRequirementError('The backup inventory exceeds the supported manifest size. No partial export is available.');
       await fs.writeFile(path.join(content, 'manifest.json'), manifest, { mode: 0o600, flag: 'wx' });
+      let coherenceSealed = false;
+      if (snapshot)
+        await snapshot({
+          content,
+          createdAt: job.createdAt,
+          manifestSha256: createHash('sha256').update(manifest).digest('hex'),
+          software: {
+            orbis: process.env.ORBIS_VERSION ?? 'development',
+            runtipi: this.config.get('version'),
+            architecture: this.config.get('architecture'),
+          },
+          files,
+          databaseBytes: (await fs.stat(path.join(content, 'database.dump'))).size,
+          apps: apps.map((app) => ({
+            urn: `${app.appName}:${app.appStoreSlug}`,
+            name: app.appName,
+            running: app.status === 'running',
+          })),
+          sealCoherence: async (binding, ownSignal) => {
+            const check = AbortSignal.any([signal, ownSignal]);
+            check.throwIfAborted();
+            if (coherenceSealed || !hooks || !release || !releaseRestore || !queuePause || !databaseSeal || !backupMaintenanceActive())
+              throw new BackupRequirementError('Capture write barriers are no longer held.');
+            const stopped = await this.runtime.verifyStopped(plan, check);
+            if ((await this.tasks.read()).tasks.some((task) => ['queued', 'running', 'unconfirmed'].includes(task.status)))
+              throw new BackupRequirementError('App tasks changed during the snapshot.');
+            const databaseNow = await hashCaptureSnapshotFile(path.join(content, 'database.dump'), check);
+            const manifestNow = await hashCaptureSnapshotFile(path.join(content, 'manifest.json'), check);
+            if (
+              databaseNow.bytes !== databaseSeal.bytes ||
+              databaseNow.sha256 !== databaseSeal.sha256 ||
+              manifestNow.sha256 !== createHash('sha256').update(manifest).digest('hex')
+            )
+              throw new BackupRequirementError('Snapshot data changed before coherence sealing.');
+            const queueEnd = await queuePause.verify();
+            const receipt = createCaptureCoherenceReceipt({
+              schema: 'orbis.capture-coherence.v1',
+              scope: 'orbis-managed-writers.v1',
+              ...binding,
+              transactionId: job.id,
+              createdAt: job.createdAt,
+              sealedAt: Date.now(),
+              managedWritesHeldAt,
+              database: { containerId: plan.databaseId, ...databaseSeal },
+              manifestSha256: manifestNow.sha256,
+              apps: stopped
+                .map((item) => ({
+                  id: item.id,
+                  project: item.project,
+                  wasRunning: plan.containers.find((original) => original.id === item.id)?.running ?? false,
+                  state: 'stopped' as const,
+                }))
+                .sort((a, b) => a.id.localeCompare(b.id)),
+              queueStart: queuePause.initial,
+              queueEnd,
+            });
+            check.throwIfAborted();
+            coherenceSealed = true;
+            return receipt;
+          },
+        });
+      if (hooks && !coherenceSealed) throw new BackupRequirementError('The capture coherence checks did not complete.');
+      await this.runtime.verifyStopped(plan, signal);
+      await queuePause.verify();
       // Release the app outage before compressing/encrypting the immutable snapshot.
       stage('resuming', 'Restarting apps that were running before the backup.');
       await this.runtime.resume(job.resumePending);
@@ -366,7 +536,16 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       await this.save(job);
       release();
       release = undefined;
-      await packageBackup({ directory, content, passphrase, signal, progress: (value) => Object.assign(job, value) });
+      queuePause.release();
+      queuePause = undefined;
+      await packageBackup({
+        directory,
+        content,
+        passphrase,
+        signal,
+        maximumPlaintextBytes: hooks?.maximumPlaintextBytes,
+        progress: (value) => Object.assign(job, value),
+      });
       job.status = 'succeeded';
       stage('complete', 'Full backup is ready to download. It is kept for 24 hours.');
     } catch (error) {
@@ -389,6 +568,13 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
         }
       }
       release?.();
+      try {
+        queuePause?.release();
+      } catch {
+        this.unavailable = true;
+        setBackupRecoveryRequired(true);
+        this.logger.warn('Backup queue resumption needs review. Further exports are disabled.');
+      }
       try {
         await this.cleanPlaintext(job);
         await this.save(job);
@@ -435,7 +621,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   }
   private async openArchive(id: string, ownerId: number) {
     const job = this.owned(id, ownerId);
-    if (this.active?.id === id || job.status !== 'succeeded' || Date.now() - job.createdAt > expiry)
+    if (this.active?.id === id || job.status !== 'succeeded' || Date.now() > (job.expiresAt ?? backupExpiresAt(job.createdAt, 24)))
       throw new NotFoundException('This backup is not available. Create a new full backup.');
     const file = await fs.open(path.join(this.directory(id), 'backup.orbis'), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     try {

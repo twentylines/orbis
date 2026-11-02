@@ -1,7 +1,7 @@
 import { UserContextProvider } from '@/context/user-context';
 import { QueryClientProvider, QueryErrorResetBoundary } from '@tanstack/react-query';
 import { createAppQueryClient } from '@/lib/query-client';
-import { type PropsWithChildren, Suspense } from 'react';
+import { type PropsWithChildren, Suspense, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ErrorPage } from '../error/error-page';
 import { I18nProvider } from './i18n/i18n-provider';
@@ -10,8 +10,6 @@ import { AutoThemeProvider } from './theme/auto-theme-provider';
 import { ThemeProvider } from './theme/theme-provider';
 import { DebugPanel } from '../debug-panel/debug-panel';
 import { DesktopPreferencesProvider, useDesktopPreferences } from '@/desktop/preferences';
-
-const queryClient = createAppQueryClient();
 
 const ThemedProviders = ({ children }: PropsWithChildren) => {
   const { resolvedMode } = useDesktopPreferences();
@@ -25,6 +23,7 @@ const ThemedProviders = ({ children }: PropsWithChildren) => {
 };
 
 export const Providers = ({ children }: PropsWithChildren) => {
+  const [queryClient] = useState(createAppQueryClient);
   return (
     <QueryClientProvider client={queryClient}>
       <QueryErrorResetBoundary>

@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router';
 import { appContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
 import { AppContextProvider } from '@/context/app-context';
 import { startExport } from './backup-api';
 import { Dialog, retainDialogChildren } from '@/components/ui/Dialog/Dialog';
+import { BackupRetentionSettings } from './backup-retention-settings';
+import { SettingsSaveProvider } from '@/modules/settings/pages/settings-save';
 import { backupRemovalContents, BackupRemoveTrigger } from './backup-removal-confirmation';
 import { placeBackupRemoval, restoreBackupRemovalFocus } from './backup-removal-position';
 import type { BackupSnapshot, ExportJob, ImportJob, RestoreJob } from './contracts';
@@ -42,11 +45,13 @@ function render(
       .find({ queryKey })
       ?.setState({ error: new Error('Status unavailable.'), status: 'error', fetchStatus: 'idle' });
   const markup = renderToStaticMarkup(
-    <QueryClientProvider client={client}>
-      <AppContextProvider>
-        <SystemBackupsSettings restoreOnly={embedded} embedded={embedded} recoveryActions={recoveryActions} initialImportId={initialImportId} />
-      </AppContextProvider>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <AppContextProvider>
+          <SystemBackupsSettings restoreOnly={embedded} embedded={embedded} recoveryActions={recoveryActions} initialImportId={initialImportId} />
+        </AppContextProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
   client.clear();
   return markup;
@@ -499,4 +504,52 @@ test('backup dismissal preserves scroll and skips a removed or disabled opener',
   expect(restoreBackupRemovalFocus([element(false), element(true, true), element(true)])).toBe(true);
   expect(calls).toEqual([{ preventScroll: true }]);
   expect(restoreBackupRemovalFocus([null, element(false)])).toBe(false);
+});
+
+test('Time Machine has a compact full-recovery entry and stays outside guided restore', () => {
+  expect(render(null, false)).toContain('href="/time-machine"');
+  expect(render(null, true)).not.toContain('href="/time-machine"');
+});
+
+test('restore offers the server source only for eligible saved encrypted backups while keeping upload and fresh auth', () => {
+  const active = { ...completedExport, createdAt: Date.now(), expiresAt: Date.now() + 60_000 };
+  const available = render(null, true, undefined, [], undefined, false, [active]);
+  expect(available).toContain('Upload a file');
+  expect(available).toMatch(/aria-pressed="false"[^>]*>Saved on server/);
+  expect(available).not.toMatch(/disabled=""[^>]*>Saved on server/);
+  expect(available).toContain('Current account password');
+  expect(available).toContain('Authentication code');
+  for (const changed of [
+    { ...active, needsRecovery: true },
+    { ...active, status: 'running' as const },
+    { ...active, expiresAt: 1 },
+  ]) {
+    expect(render(null, true, undefined, [], undefined, false, [changed])).toMatch(/disabled=""[^>]*>Saved on server/);
+  }
+});
+test('completed exports keep a compact Download row without an active progress scene', () => {
+  const markup = render(null, false, undefined, [], undefined, false, [completedExport]);
+  expect(markup).toContain('data-ready="true"');
+  expect(markup).not.toContain('<progress');
+  expect(markup).not.toContain('recovery-scene');
+});
+
+test('retention uses the shared select and global Save without a duplicate local action', () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
+  client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true } });
+  client.setQueryData(['orbis-backup-retention', 7], { version: 1, revision: 3, retentionHours: 168 });
+  const markup = renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <AppContextProvider>
+        <SettingsSaveProvider onSection={() => undefined}>
+          <BackupRetentionSettings />
+        </SettingsSaveProvider>
+      </AppContextProvider>
+    </QueryClientProvider>,
+  );
+  expect(markup).toContain('Keep server backups for');
+  expect(markup).toContain('7 days');
+  expect(markup).toContain('Existing backups keep at least their current expiry date');
+  expect(markup).not.toMatch(/>Save<\/button>/);
+  client.clear();
 });

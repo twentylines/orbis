@@ -80,6 +80,26 @@
 .task-list li {
   border-bottom: 1px solid var(--desktop-line);
 }
+.task-time-machine > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 22px 8px;
+}
+.task-time-machine .tm-capture-progress {
+  min-width: 0;
+  margin: 0;
+}
+@media (max-width: 650px) {
+  .task-time-machine > div {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 0;
+  }
+  .task-time-machine .btn {
+    justify-self: start;
+  }
+}
 .task-list summary {
   display: flex;
   align-items: center;

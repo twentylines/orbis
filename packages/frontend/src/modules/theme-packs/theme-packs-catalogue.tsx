@@ -3,12 +3,18 @@ import type { ThemePackSnapshot } from '@runtipi/common/schemas/theme-pack';
 import { IconChevronDown, IconTrash } from '@tabler/icons-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { themePacksChanged, themePacksRequest } from './theme-packs-api';
-import { themeCatalogue, themeVersions } from './theme-catalogue';
+import { themeStoreCatalogue, themeStoreEmptyMessage } from './theme-catalogue';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import './theme-packs-catalogue.css';
 import './theme-packs-store.css';
 import { Link } from 'react-router';
+import { Button } from '@/components/ui/Button';
 import { useThemeApply } from './use-theme-apply';
+
+export function ThemePacksEmpty({ snapshot, search = '' }: { snapshot: ThemePackSnapshot | null; search?: string }) {
+  const message = themeStoreEmptyMessage(snapshot, search);
+  return message ? <p className="theme-packs-empty">{message}</p> : null;
+}
 
 export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { surface?: 'appearance' | 'store'; search?: string }) {
   const visible = useWindowVisible();
@@ -20,7 +26,6 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [review, setReview] = useState<string | null>(null);
-  const [versions, setVersions] = useState<Record<string, string>>({});
   const [removing, setRemoving] = useState<string | null>(null);
   const revision = useRef(0);
   const focusAfterChange = useRef<string | null>(null);
@@ -80,7 +85,7 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
       setBusy(false);
     }
   };
-  const packs = themeCatalogue(snapshot?.catalogue ?? [], search);
+  const packs = themeStoreCatalogue(snapshot, search);
   const selected = snapshot?.state.selected;
   if (surface === 'appearance') {
     const installed = snapshot?.state.installed ?? [];
@@ -164,18 +169,13 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
         ) : (
           <div>
             <h2 id={`${id}-heading`}>Theme packs</h2>
-            <p>
-              Install a photographed desktop with coordinated materials, typography and controls. Your personal appearance settings stay in place.
-            </p>
-            <p>These bundled packs use local images. Theme imports and remote catalogues are not supported.</p>
+            <p>Manage your installed themes. Your personal appearance settings stay in place.</p>
           </div>
         )}
         <div className="theme-packs-content" aria-busy={busy}>
           <div className="theme-packs-toolbar">
-            <span>
-              {snapshot ? (selected ? 'A theme pack is applied to your account.' : 'Using your colour preset.') : 'Loading theme catalogue…'}
-            </span>
-            <button
+            <span>{snapshot ? (selected ? 'A theme is applied.' : 'Using Default.') : 'Loading theme catalogue…'}</span>
+            <Button
               id={`${id}-refresh`}
               type="button"
               disabled={busy}
@@ -184,15 +184,15 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
               }}
             >
               Refresh
-            </button>
+            </Button>
             {selected ? (
-              <button
+              <Button
                 type="button"
                 disabled={busy}
                 onClick={() => application.stage({ kind: 'select', source: selected ?? null, target: null, name: 'Default' })}
               >
                 Use Default
-              </button>
+              </Button>
             ) : null}
           </div>
           {error ? (
@@ -214,10 +214,8 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
           </output>
           <div className="theme-packs-grid">
             {packs.map((latest) => {
-              const available = themeVersions(snapshot?.catalogue ?? [], latest.id);
               const installed = snapshot?.state.installed.find((item) => item.manifest.id === latest.id);
-              const version = installed?.manifest.version ?? versions[latest.id] ?? latest.version;
-              const pack = available.find((item) => item.version === version) ?? latest;
+              const pack = installed?.manifest ?? latest;
               const active = selected?.id === pack.id;
               const asset = pack.assets[0];
               const showingReview = review === pack.id;
@@ -347,43 +345,6 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
                             </dd>
                           </div>
                         </dl>
-                        {installed ? null : (
-                          <>
-                            <Select
-                              value={version}
-                              disabled={busy}
-                              onValueChange={(value) => setVersions((previous) => ({ ...previous, [pack.id]: value }))}
-                            >
-                              <SelectTrigger id={`${id}-${pack.id}-version`} label="Version" className="theme-pack-version-select">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {[...available].reverse().map((item) => (
-                                  <SelectItem key={item.version} value={item.version}>
-                                    {item.version}
-                                    {item.version === latest.version ? ' (latest)' : ''}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <p>
-                              Install adds this version to your account. Apply it when you are ready; custom wallpaper, colour and material choices
-                              remain yours.
-                            </p>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() =>
-                                void perform(
-                                  () => themePacksRequest('/install', 'POST', { id: pack.id, version: pack.version }),
-                                  `${pack.name} installed. Choose Apply to use it.`,
-                                )
-                              }
-                            >
-                              Install {pack.name} {pack.version}
-                            </button>
-                          </>
-                        )}
                       </div>
                     ) : null}
                     {removing === pack.id ? (
@@ -417,12 +378,7 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
               );
             })}
           </div>
-          {snapshot && !packs.length ? (
-            <p className="theme-packs-empty">{search.trim() ? 'No theme packs match your search.' : 'No bundled theme packs are available.'}</p>
-          ) : null}
-          {surface === 'store' ? (
-            <p className="theme-packs-scope">Bundled catalogue. Theme imports and remote catalogues are not supported.</p>
-          ) : null}
+          <ThemePacksEmpty snapshot={snapshot} search={search} />
         </div>
       </section>
     </>

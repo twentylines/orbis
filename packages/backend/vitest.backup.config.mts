@@ -6,7 +6,12 @@ export default defineConfig({
   plugins: [swc.vite(), viteTsconfigPaths() as unknown] as Plugin[],
   test: {
     maxWorkers: 1,
-    include: ['src/modules/backups/__tests__/*.files.test.ts', 'src/modules/system-backups/*.files.test.ts'],
+    include: [
+      'src/modules/backups/__tests__/*.files.test.ts',
+      'src/modules/system-backups/*.files.test.ts',
+      'src/modules/system-reset/*.files.test.ts',
+      'src/modules/time-machine-capsules/*.files.test.ts',
+    ],
     reporters: ['default'],
   },
 });

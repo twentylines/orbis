@@ -65,8 +65,8 @@ export class BackupRestoresController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async recover(@Req() request: Request, @Param('id') id: string, @Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const owner = backupOperator(request);
-    const result = await this.restores.recover(id, owner, backupCredentials(body));
-    if (result.job) this.afterResponse(response, result.job.id);
-    return result;
+    const result = await this.restores.recover(id, owner, backupCredentials(body), request);
+    if (result.job && !('rootManaged' in result)) this.afterResponse(response, result.job.id);
+    return { job: result.job };
   }
 }

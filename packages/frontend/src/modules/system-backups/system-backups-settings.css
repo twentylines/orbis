@@ -207,6 +207,7 @@
   line-height: 1.55;
 }
 .system-backups-window-body {
+  container-type: inline-size;
   display: grid;
   gap: 20px;
   min-width: 0;
@@ -402,4 +403,32 @@ body[data-motion="reduced"] .system-backups-settings .alert-danger,
 .system-backups-remove-icon {
   color: var(--desktop-negative);
   flex: none;
+}
+
+.system-backups-retention {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  max-width: 36rem;
+}
+.system-backups-retention > .btn {
+  justify-self: start;
+}
+.system-backups-retention .form-label {
+  margin-bottom: 8px;
+}
+.system-backups-job[data-ready="true"] > .system-backups-actions:empty {
+  display: none;
+}
+.system-backups-job[data-ready="true"]:has(> .system-backups-actions:empty) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+@container (max-width: 600px) {
+  .system-backups-job[data-ready="true"]:has(> .system-backups-actions:empty) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .system-backups-job[data-ready="true"]:has(> .system-backups-actions:empty) > .system-backups-download-ready {
+    grid-column: 1;
+    grid-row: 3;
+  }
 }

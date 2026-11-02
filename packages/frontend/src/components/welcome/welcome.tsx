@@ -1,7 +1,11 @@
+import { DepthTravel } from '@/components/recovery-progress/depth-travel';
+import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
+import { useStartupSession } from '@/components/startup/startup-boundary';
 import { acknowledgeWelcome } from '@/api-client';
 import { getInstalledAppsOptions } from '@/api-client/@tanstack/react-query.gen';
 import { AuthLayout } from '@/components/layouts/auth/layout';
 import { Button } from '@/components/ui/Button';
+import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
@@ -17,20 +21,12 @@ import {
   type AutomaticUpdateSettings,
 } from '@/desktop/automatic-updates-api';
 import { DesktopPreferencesPreview, useDesktopPreferences, type DesktopPreferences } from '@/desktop/preferences';
+import { ColourModeChoice } from '@/desktop/colour-mode-choice';
+import { useResolvedColourMode } from '@/desktop/colour-mode';
 import { AppLaunchModeChoice } from '@/desktop/app-launch-mode-choice';
 import { useReducedMotion, useReducedTransparency } from '@/desktop/motion-preferences';
-import { themePresets, presetLabels, presetWallpaperPreviews } from '@/desktop/wallpaper-presets';
-import {
-  IconArrowLeft,
-  IconArrowRight,
-  IconCheck,
-  IconChevronDown,
-  IconDeviceDesktop,
-  IconLeaf,
-  IconMoon,
-  IconSparkles,
-  IconSun,
-} from '@tabler/icons-react';
+import { themePresets, presetLabels } from '@/desktop/wallpaper-presets';
+import { IconArrowLeft, IconArrowRight, IconCheck, IconDeviceDesktop, IconLeaf, IconSparkles } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
@@ -38,6 +34,7 @@ import { useNavigate } from 'react-router';
 import { finishSetup, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices, type SetupSaveStep } from './setup-save';
 import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
+import { ProtectionChoice, readManualProtection, saveManualProtection } from '@/modules/time-machine-capsules/protection-choice';
 import { nextSetupStep, previousSetupStep, setupCanFinish, setupPosition, setupStepCopy, type SetupEntry, type SetupStep } from './setup-navigation';
 import './welcome.css';
 
@@ -72,68 +69,17 @@ export function SetupCustomisation({ draft, onChange }: { draft: DesktopPreferen
       </fieldset>
       <fieldset className="orbis-setup-choice-group">
         <legend>Display mode</legend>
-        <div className="orbis-setup-mode">
-          {(
-            [
-              ['light', 'Light', IconSun],
-              ['dark', 'Dark', IconMoon],
-              ['system', 'System', IconDeviceDesktop],
-            ] as const
-          ).map(([mode, label, Icon]) => (
-            <button key={mode} type="button" aria-pressed={draft.mode === mode} onClick={() => onChange({ ...draft, mode })}>
-              <Icon size={19} aria-hidden="true" />
-              {label}
-            </button>
-          ))}
-        </div>
-        <p className="orbis-setup-help">System follows this browser’s light or dark preference.</p>
-      </fieldset>
-      <fieldset className="orbis-setup-choice-group">
-        <legend>Wallpaper</legend>
-        <Switch
-          label="Match wallpaper to colour preset"
-          checked={draft.wallpaperMode === 'theme'}
-          onCheckedChange={(checked) =>
-            onChange({
-              ...draft,
-              wallpaperMode: checked ? 'theme' : 'custom',
-              wallpaperPreset: checked ? draft.wallpaperPreset : draft.preset,
-              appearance: { ...draft.appearance, wallpaperImage: null },
-            })
-          }
+        <ColourModeChoice
+          compact
+          mode={draft.mode}
+          oledDark={draft.appearance.oledDark}
+          onChange={({ mode, oledDark }) => onChange({ ...draft, mode, appearance: { ...draft.appearance, oledDark } })}
         />
-        {draft.wallpaperMode !== 'theme' ? (
-          <div className="orbis-setup-wallpapers">
-            {themePresets.map((preset) => {
-              const selected =
-                draft.wallpaperMode === 'theme' ? draft.preset === preset : draft.wallpaperPreset === preset && !draft.appearance.wallpaperImage;
-              return (
-                <button
-                  key={preset}
-                  type="button"
-                  data-wallpaper={preset}
-                  aria-pressed={selected}
-                  onClick={() =>
-                    onChange({
-                      ...draft,
-                      wallpaperMode: 'custom',
-                      wallpaperPreset: preset,
-                      appearance: { ...draft.appearance, wallpaperImage: null },
-                    })
-                  }
-                >
-                  <img src={presetWallpaperPreviews[preset]} alt="" loading="lazy" decoding="async" />
-                  <span>
-                    {presetLabels[preset]}
-                    {selected ? <IconCheck size={18} aria-hidden="true" /> : null}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-        <p className="orbis-setup-help">You can add custom images later in Settings.</p>
+        <p className="orbis-setup-help">
+          {draft.appearance.oledDark ? 'System uses OLED in dark mode.' : 'System follows this browser’s light or dark preference.'}
+        </p>
       </fieldset>
+      <p className="orbis-setup-help">You can add custom wallpapers later in Settings.</p>
     </>
   );
 }
@@ -143,34 +89,47 @@ function SetupStepPanel({
   direction,
   reduced,
   onReady,
+  onSettled,
+  headingId,
 }: {
   children: ReactNode;
   direction: number;
   reduced: boolean;
   onReady: (element: HTMLElement) => void;
+  onSettled: () => void;
+  headingId: string;
 }) {
   const element = useRef<HTMLElement>(null);
   const present = useIsPresent();
+  const reported = useRef(false);
   useLayoutEffect(() => {
-    if (element.current) onReady(element.current);
-  }, [onReady]);
+    if (!reported.current && element.current) {
+      reported.current = true;
+      onReady(element.current);
+    }
+    if (reduced && present) onSettled();
+  }, [onReady, onSettled, reduced, present]);
   return (
     <motion.section
       ref={element}
       className="orbis-setup-step"
-      aria-labelledby="setup-heading"
+      aria-labelledby={headingId}
+      onAnimationComplete={() => {
+        if (present) onSettled();
+      }}
       aria-hidden={!present || undefined}
+      data-present={present}
       inert={!present}
       custom={direction}
       variants={{
-        enter: (next: number) => ({ opacity: 0, x: next * 10 }),
-        active: { opacity: 1, x: 0 },
-        exit: (next: number) => ({ opacity: 0, x: -next * 10, transition: { duration: 0.12, ease: setupEase } }),
+        enter: (next: number) => ({ opacity: 0, z: next * 80 }),
+        active: { opacity: 1, z: 0 },
+        exit: (next: number) => ({ opacity: 0, z: -next * 80, transition: { duration: 0.3, ease: setupEase } }),
       }}
       initial={reduced ? false : 'enter'}
       animate="active"
-      exit={reduced ? { opacity: 0, x: 0, transition: { duration: 0 } } : 'exit'}
-      transition={{ duration: reduced ? 0 : 0.24, ease: setupEase }}
+      exit={reduced ? { opacity: 0, z: 0, transition: { duration: 0 } } : 'exit'}
+      transition={{ duration: reduced ? 0 : 0.38, ease: setupEase }}
     >
       {children}
     </motion.section>
@@ -181,6 +140,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const { preferences, completeOnboarding, syncState, onboardingOrigin } = useDesktopPreferences();
   const { user } = useAppContext();
   const [draft, setDraft] = useState(preferences);
+  const resolvedSetupMode = useResolvedColourMode(draft.mode);
   const [name, setName] = useState(preferences.serverName);
   const [step, setStep] = useState<SetupStep>(onboardingOrigin === 'runtipi' ? 'customisation' : 'choose');
   const [entry, setEntry] = useState<SetupEntry>(onboardingOrigin === 'runtipi' ? 'migration' : null);
@@ -189,6 +149,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const [errorMonitoring, setErrorMonitoring] = useState(allowErrorMonitoring);
   const [automatic, setAutomatic] = useState(defaultAutomatic);
   const [automaticEdited, setAutomaticEdited] = useState(false);
+  const [protectionDraft, setProtectionDraft] = useState<boolean | null>(null);
   const [appChoicesDraft, setAppChoices] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingStep, setSavingStep] = useState('');
@@ -198,7 +159,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const touchedApps = useRef<SetupAppChoices>(new Map());
   const heading = useRef<HTMLHeadingElement>(null);
   const stage = useRef<HTMLDivElement>(null);
-  const [stageScroll, setStageScroll] = useState({ overflow: false, below: false });
   const [stepElement, setStepElement] = useState<HTMLElement | null>(null);
   const [stageSize, setStageSize] = useState<{ height: number; animate: boolean } | null>(null);
   const stageMeasured = useRef(false);
@@ -206,14 +166,24 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const [transitioning, setTransitioning] = useState(false);
   const firstStep = useRef(true);
   const navigate = useNavigate();
+  const startupSession = useStartupSession();
   const reduceMotion = useReducedMotion();
   const reduceTransparency = useReducedTransparency();
   const reduceSetupMotion = reduceMotion || draft.appearance.motion === 'reduced' || draft.appearance.lowEffects;
   const glassEnabled =
     !draft.appearance.lowEffects &&
+    !(resolvedSetupMode === 'dark' && draft.appearance.oledDark) &&
     draft.appearance.glassBlur !== 0 &&
     (draft.appearance.transparency === 'glass' || (draft.appearance.transparency === 'system' && !reduceTransparency));
   const canManageUpdates = user.operator;
+  const protection = useQuery({
+    queryKey: ['setup-time-machine-preferences', user.id],
+    queryFn: ({ signal }) => readManualProtection(signal),
+    enabled: canManageUpdates && step === 'ready',
+    staleTime: 30_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
   const updateSettings = useQuery({ ...automaticUpdateSettingsOptions(), enabled: canManageUpdates && (step === 'updates' || step === 'ready') });
   const installed = useQuery({
     ...getInstalledAppsOptions(),
@@ -248,10 +218,12 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       setAutomatic(updateSettings.data.settings);
     }
   }, [updateSettings.data, automaticEdited]);
-  const onStepReady = useCallback((element: HTMLElement) => {
-    setStepElement(element);
+  const onStepSettled = useCallback(() => {
     transitionLock.current = false;
     setTransitioning(false);
+  }, []);
+  const onStepReady = useCallback((element: HTMLElement) => {
+    setStepElement(element);
     if (firstStep.current) {
       firstStep.current = false;
       return;
@@ -265,26 +237,22 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     if (!element || !stepElement) return;
     const measure = () => {
       const style = getComputedStyle(element);
-      const height = stepElement.getBoundingClientRect().height + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+      const height = stepElement.offsetHeight + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
       const animate = stageMeasured.current;
       stageMeasured.current = true;
       setStageSize((current) => (current?.height === height ? current : { height, animate }));
-      const overflow = element.scrollHeight > element.clientHeight + 2;
-      const below = overflow && element.scrollTop + element.clientHeight < element.scrollHeight - 2;
-      setStageScroll((current) => (current.overflow === overflow && current.below === below ? current : { overflow, below }));
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     observer.observe(stepElement);
-    element.addEventListener('scroll', measure, { passive: true });
     return () => {
       observer.disconnect();
-      element.removeEventListener('scroll', measure);
     };
   }, [stepElement]);
 
   const position = setupPosition(step, entry);
+  const headingId = `setup-heading-${step}`;
   const recoveryStep = step === 'restore' || step === 'transfer';
   const go = (next: SetupStep | null) => {
     if (saving || restoreBusy || transitionLock.current || next === null || next === step) return;
@@ -312,13 +280,19 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     const automaticToSave = automaticUpdateSettingsForSave(automatic);
     const tasks: SetupSaveStep[] = [
       {
-        id: 'Saving reporting preference',
+        id: 'Saving preferences',
         value: errorMonitoring,
         save: () => acknowledgeWelcome({ body: { allowErrorMonitoring: errorMonitoring }, signal: AbortSignal.timeout(20_000), throwOnError: true }),
       },
     ];
     if (canManageUpdates && automaticEdited && automaticToSave)
       tasks.push({ id: 'Saving Orbis update schedule', value: automaticToSave, save: () => saveAutomaticUpdateSettings(automaticToSave) });
+    if (canManageUpdates && protectionDraft !== null)
+      tasks.push({
+        id: 'Saving Time Machine preferences',
+        value: protectionDraft,
+        save: () => saveManualProtection(protectionDraft, AbortSignal.timeout(20_000)),
+      });
     tasks.push(
       ...setupAppUpdateSteps(
         appChoicesDraft === null ? [] : selectedApps.map(({ info }) => ({ urn: info.urn, name: info.name })),
@@ -332,9 +306,18 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
             },
       ),
     );
-    tasks.push({ id: 'Opening your workspace', value: completedDraft, save: () => completeOnboarding(name, completedDraft) });
+    tasks.push({ id: 'Saving workspace preferences', value: completedDraft, save: () => completeOnboarding(name, completedDraft) });
     try {
-      await finishSetup(tasks, receipts.current, setSavingStep, navigate);
+      await finishSetup(
+        tasks,
+        receipts.current,
+        (stage) => setSavingStep(stage === 'Preparing Orbis' ? stage : 'Saving preferences'),
+        async (destination, options) => {
+          startupSession.begin('preparing-orbis');
+          await navigate(destination, options);
+          await startupSession.finish();
+        },
+      );
     } catch (reason) {
       setError(
         `Setup is not complete. ${reason instanceof Error ? reason.message : 'Check the connection and try again.'} Saved choices are kept; retry continues with the remaining steps.`,
@@ -351,8 +334,18 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
 
   return (
     <DesktopPreferencesPreview value={draft} onChange={setDraft}>
-      <AuthLayout busy={saving} setup>
-        <section className="orbis-setup" aria-labelledby="setup-heading" aria-busy={saving || transitioning} data-reduced={reduceSetupMotion}>
+      <AuthLayout
+        busy={saving}
+        setup
+        scene={
+          <DepthTravel
+            mode={saving ? 'travel' : 'ambient'}
+            variant="onboarding"
+            distance={position.current + (saving ? 1 : 0)}
+            className="orbis-setup-space"
+          />
+        }
+        progress={
           <header className="orbis-setup-header">
             <div className="orbis-setup-progress-label">
               <span>{recoveryStep ? (step === 'transfer' ? 'Server transfer' : 'Backup recovery') : 'Setup'}</span>
@@ -372,25 +365,34 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
               </div>
             )}
           </header>
+        }
+      >
+        <section className="orbis-setup" aria-labelledby={headingId} aria-busy={saving || transitioning} data-reduced={reduceSetupMotion}>
           <motion.div
             ref={stage}
             id="setup-choices"
             className="orbis-setup-stage"
-            data-more-below={stageScroll.below}
             initial={false}
             animate={stageSize ? { height: stageSize.height } : {}}
             transition={{ duration: reduceSetupMotion || !stageSize?.animate ? 0 : 0.24, ease: setupEase }}
           >
-            <AnimatePresence initial={false} mode="wait" custom={direction}>
-              <SetupStepPanel key={step} direction={direction} reduced={reduceSetupMotion} onReady={onStepReady}>
+            <AnimatePresence initial={false} mode="sync" custom={direction}>
+              <SetupStepPanel
+                key={step}
+                direction={direction}
+                reduced={reduceSetupMotion}
+                onReady={onStepReady}
+                onSettled={onStepSettled}
+                headingId={headingId}
+              >
                 <div className="orbis-setup-intro">
-                  <h2 ref={heading} id="setup-heading" tabIndex={-1}>
+                  <h2 ref={heading} id={headingId} tabIndex={-1}>
                     {setupStepCopy[step].title}
                   </h2>
                   {setupStepCopy[step].description ? <p>{setupStepCopy[step].description}</p> : null}
                 </div>
-                {step === 'restore' ? <SystemBackupsSettings restoreOnly embedded onActivityChange={setRestoreBusy} /> : null}
-                {step === 'transfer' ? <HostTransferPanel mode="receive" embedded onActivityChange={setRestoreBusy} /> : null}
+                {step === 'restore' ? <SystemBackupsSettings restoreOnly embedded recoveryScene onActivityChange={setRestoreBusy} /> : null}
+                {step === 'transfer' ? <HostTransferPanel mode="receive" embedded recoveryScene onActivityChange={setRestoreBusy} /> : null}
                 {recoveryStep ? null : (
                   <form
                     id="setup-form"
@@ -475,7 +477,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                             <Switch
                               label="Background blur"
                               checked={glassEnabled}
-                              disabled={draft.appearance.lowEffects}
+                              disabled={draft.appearance.lowEffects || (resolvedSetupMode === 'dark' && draft.appearance.oledDark)}
                               aria-describedby="setup-glass-help"
                               onCheckedChange={(enabled) =>
                                 setDraft({
@@ -490,9 +492,11 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                               }
                             />
                             <p id="setup-glass-help" className="orbis-setup-help">
-                              {draft.appearance.lowEffects
-                                ? 'Save resources uses solid panels with no blur.'
-                                : 'Softens the wallpaper behind panels during setup, sign-in and in your workspace. Turn off for solid panels.'}
+                              {resolvedSetupMode === 'dark' && draft.appearance.oledDark
+                                ? 'OLED uses black panels.'
+                                : draft.appearance.lowEffects
+                                  ? 'Save resources uses solid panels with no blur.'
+                                  : 'Softens the wallpaper behind panels during setup, sign-in and in your workspace. Turn off for solid panels.'}
                             </p>
                           </div>
                           <Switch
@@ -515,9 +519,9 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                             {updateSettings.isError ? (
                               <div className="orbis-setup-notice">
                                 <p>Update preferences could not be read. They will stay as they are.</p>
-                                <button type="button" onClick={() => void updateSettings.refetch()}>
+                                <Button type="button" variant="outline" onClick={() => void updateSettings.refetch()}>
                                   Try again
-                                </button>
+                                </Button>
                               </div>
                             ) : null}
                             {updateSettings.data ? (
@@ -640,7 +644,8 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                             <div>
                               <dt>Appearance</dt>
                               <dd>
-                                {presetLabels[draft.preset]} · {draft.mode === 'system' ? 'System' : draft.mode === 'dark' ? 'Dark' : 'Light'}
+                                {presetLabels[draft.preset]} ·{' '}
+                                {draft.mode === 'system' ? 'System' : draft.mode === 'dark' ? (draft.appearance.oledDark ? 'OLED' : 'Dark') : 'Light'}
                               </dd>
                             </div>
                             <div>
@@ -687,6 +692,19 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                               </div>
                             ) : null}
                           </dl>
+                          {canManageUpdates && protection.data ? (
+                            <fieldset className="orbis-setup-choice-group">
+                              <legend>Time Machine</legend>
+                              <p className="orbis-setup-help">
+                                Experimental. Save restore points manually in Settings. No capture starts during setup.
+                              </p>
+                              <ProtectionChoice
+                                enabled={protectionDraft ?? protection.data.enabled}
+                                onChange={setProtectionDraft}
+                                disabled={saving}
+                              />
+                            </fieldset>
+                          ) : null}
                           <div className="orbis-setup-reporting">
                             <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Send error reports" />
                             <p className="orbis-setup-help">Optional. Reports are sent to the upstream Sentry service.</p>
@@ -699,11 +717,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
               </SetupStepPanel>
             </AnimatePresence>
           </motion.div>
-          {error ? (
-            <p className="orbis-setup-error" role="alert">
-              {error}
-            </p>
-          ) : null}
+          {error ? <InlineFeedback className="orbis-setup-error">{error}</InlineFeedback> : null}
           <footer className="orbis-setup-footer">
             <Button
               type="button"
@@ -714,26 +728,9 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
               <IconArrowLeft size={18} aria-hidden="true" />
               Back
             </Button>
-            {saving || recoveryStep || stageScroll.overflow ? (
+            {saving || recoveryStep ? (
               <div className="orbis-setup-footer-status">
-                {!saving && stageScroll.overflow ? (
-                  <button
-                    type="button"
-                    className="orbis-setup-scroll-hint"
-                    aria-controls="setup-choices"
-                    data-below={stageScroll.below}
-                    onClick={() => {
-                      const element = stage.current;
-                      if (!element) return;
-                      const behavior = reduceSetupMotion ? 'instant' : 'smooth';
-                      if (stageScroll.below) element.scrollBy({ top: Math.max(120, element.clientHeight * 0.75), behavior });
-                      else element.scrollTo({ top: 0, behavior });
-                    }}
-                  >
-                    {stageScroll.below ? 'More below' : 'Back to top'}
-                    <IconChevronDown size={18} aria-hidden="true" />
-                  </button>
-                ) : saving || recoveryStep ? (
+                {saving || recoveryStep ? (
                   <output aria-live="polite">
                     {saving
                       ? savingStep
@@ -770,6 +767,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
             )}
           </footer>
         </section>
+        <RecoveryScene open={saving} variant="onboarding" title={savingStep || 'Saving preferences'} active={saving} sharedBackdrop />
       </AuthLayout>
     </DesktopPreferencesPreview>
   );

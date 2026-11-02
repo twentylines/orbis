@@ -71,9 +71,17 @@ beforeEach(async () => {
     { mode: 0o600 },
   );
   backups = new SystemBackupsService(
-    ...([configuration(path.join(root, 'source-server')), auth, {}, {}, {}, {}, logger, {}] as unknown as ConstructorParameters<
-      typeof SystemBackupsService
-    >),
+    ...([
+      configuration(path.join(root, 'source-server')),
+      auth,
+      {},
+      {},
+      {},
+      {},
+      logger,
+      {},
+      { pauseForBackup: vi.fn() },
+    ] as unknown as ConstructorParameters<typeof SystemBackupsService>),
   );
   imports = new BackupImportsService(
     ...([configuration(path.join(root, 'destination-server')), auth, logger, database] as unknown as ConstructorParameters<

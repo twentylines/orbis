@@ -298,12 +298,6 @@ class GuidedTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Multiple controllers"):
             GUIDE.select_installation(report, Path("/opt/a"))
 
-    def test_interactive_installation_selection_reprompts_after_invalid_choice(self):
-        report = {"installations": [{"installRoot": "/opt/a", "product": "runtipi"}, {"installRoot": "/opt/b", "product": "runtipi"}]}
-        ask = mock.Mock(side_effect=["0", "9" * 5000, "bad", "2"])
-        self.assertIs(GUIDE.select_installation(report, ask=ask), report["installations"][1])
-        self.assertEqual(ask.call_count, 4)
-
     def test_review_refresh_ignores_only_derived_size_and_hash_fields(self):
         value = {"reviewId": "old", "mode": "keep", "checkpoint": {"reviewId": "old", "roles": {"core": "controller"}, "storage": {"reviewId": "old", "estimatedBytes": 50, "resources": [{"source": "/opt/data", "inode": 1}]}}}
         original = copy.deepcopy(value)
@@ -353,6 +347,14 @@ class GuidedTests(unittest.TestCase):
             with mock.patch.object(GUIDE, "command") as execute, self.assertRaisesRegex(ValueError, "missing or changed"):
                 GUIDE.recover_pending(root, SimpleNamespace(context="test"), root / "state", None)
             execute.assert_not_called()
+
+    def test_interactive_installation_selection_reprompts_after_invalid_choice(self):
+        report = {"installations": [{"installRoot": "/opt/a", "product": "runtipi"}, {"installRoot": "/opt/b", "product": "runtipi"}]}
+        ask = mock.Mock(side_effect=["0", "9" * 5000, "bad", "2"])
+        self.assertIs(GUIDE.select_installation(report, ask=ask), report["installations"][1])
+        self.assertEqual(ask.call_count, 4)
+
+
 
 
 class NewInstallationTests(unittest.TestCase):
@@ -499,8 +501,12 @@ class NewInstallationTests(unittest.TestCase):
             app = root / "accepted-app-write"; app.write_bytes(b"new application data")
             NEW.APPS.write_journal(root / ".orbis-installation.json", {"root": str(root), "dockerContext": "test", "journal": str(journal)})
             record = {"schema": NEW.SCHEMA, "root": str(root), "dockerContext": "test", "daemon": "selected", "manifest": MANIFEST, "stage": "starting", "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
-            with mock.patch.object(NEW.APPS, "digest_daemon", return_value="selected"), mock.patch.object(NEW.HOST.PLAN, "plan", return_value={}), mock.patch.object(NEW.HOST, "current_core", return_value=HEALTHY), mock.patch.object(NEW.HOST, "docker", return_value=subprocess.CompletedProcess([], 0)):
+            ownership = {"fixture": "root-protected-proxy-ownership"}
+            record["proxyHostIdentitySha256"] = hashlib.sha256(NEW.PROXY.P.canonical(ownership)).hexdigest()
+            observed = {"mutableIdentity": {"ownershipSha256": record["proxyHostIdentitySha256"]}}
+            with mock.patch.object(NEW.APPS, "digest_daemon", return_value="selected"), mock.patch.object(NEW.HOST.PLAN, "plan", return_value={}), mock.patch.object(NEW.HOST, "current_core", return_value=HEALTHY), mock.patch.object(NEW.HOST, "docker", return_value=subprocess.CompletedProcess([], 0)), mock.patch.object(NEW.PROXY, "owned", return_value=ownership), mock.patch.object(NEW.PROXY, "observe_current", return_value=observed) as observe:
                 self.assertEqual(NEW.finish(record, SimpleNamespace(context="test"), journal)["result"], "orbis-installed")
+                observe.assert_called_once_with(root, "test")
             self.assertEqual((root / ".env").read_bytes(), b"server-generated environment retained")
             self.assertEqual(app.read_bytes(), b"new application data")
             self.assertEqual(json.loads(journal.read_text())["stage"], "complete")
@@ -627,56 +633,6 @@ class CompletionAddressTests(unittest.TestCase):
 
 
 class ExplicitChannelTests(unittest.TestCase):
-    def test_launcher_channel_selection_reprompts_after_invalid_choice(self):
-        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": {"tag": "v1.2.3", "commit": "a" * 40, "launcherSha256": "b" * 64}, "nightly": {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "launcherSha256": "d" * 64}}}
-        ask = mock.Mock(side_effect=["0", "stable"])
-        self.assertEqual(GUIDE.BOOT.select_channel(catalog, ask=ask), ("stable", catalog["channels"]["stable"], True))
-        self.assertEqual(ask.call_count, 2)
-
-    def test_interactive_unavailable_channel_reprompts_but_explicit_channel_fails(self):
-        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "launcherSha256": "d" * 64}}}
-        ask = mock.Mock(side_effect=["1", "2"])
-        self.assertEqual(GUIDE.BOOT.select_channel(catalog, ask=ask), ("nightly", catalog["channels"]["nightly"], True))
-        self.assertEqual(ask.call_count, 2)
-        with self.assertRaisesRegex(ValueError, "Stable is not available yet"):
-            GUIDE.BOOT.select_channel(catalog, requested="stable")
-
-    def test_interactive_launcher_download_error_returns_to_channel_choice(self):
-        identity = {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "manifestSha256": "e" * 64}
-        data = ("EXPECTED_RELEASE = " + repr(identity) + "\n").encode()
-        nightly = {"tag": identity["tag"], "commit": identity["commit"], "launcherSha256": hashlib.sha256(data).hexdigest()}
-        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": nightly}}
-        ask = mock.Mock(side_effect=["2", "2"])
-        fetcher = mock.Mock(side_effect=[OSError("temporary download failure"), data])
-        with contextlib.redirect_stderr(io.StringIO()):
-            result = GUIDE.BOOT.select_verified_channel_launcher(catalog, ask=ask, fetch_launcher=fetcher)
-        self.assertEqual(result, ("nightly", nightly, True, data, identity))
-        self.assertEqual(ask.call_count, 2)
-        self.assertEqual(fetcher.call_count, 2)
-
-    def test_interactive_launcher_error_can_be_cancelled_cleanly(self):
-        identity = {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "manifestSha256": "e" * 64}
-        data = ("EXPECTED_RELEASE = " + repr(identity) + "\n").encode()
-        nightly = {"tag": identity["tag"], "commit": identity["commit"], "launcherSha256": hashlib.sha256(data).hexdigest()}
-        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": nightly}}
-        ask = mock.Mock(side_effect=["2", ValueError("Installation cancelled")])
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaisesRegex(ValueError, "Installation cancelled"):
-                GUIDE.BOOT.select_verified_channel_launcher(catalog, ask=ask, fetch_launcher=mock.Mock(side_effect=OSError("offline")))
-        self.assertEqual(ask.call_count, 2)
-
-    def test_interactive_launcher_integrity_error_returns_to_choice_without_accepting_bad_data(self):
-        identity = {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "manifestSha256": "e" * 64}
-        good_data = ("EXPECTED_RELEASE = " + repr(identity) + "\n").encode()
-        nightly = {"tag": identity["tag"], "commit": identity["commit"], "launcherSha256": hashlib.sha256(good_data).hexdigest()}
-        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": nightly}}
-        ask = mock.Mock(side_effect=["2", "2"])
-        fetcher = mock.Mock(side_effect=[b"not the published launcher", good_data])
-        with contextlib.redirect_stderr(io.StringIO()):
-            result = GUIDE.BOOT.select_verified_channel_launcher(catalog, ask=ask, fetch_launcher=fetcher)
-        self.assertEqual(result[3:], (good_data, identity))
-        self.assertEqual(fetcher.call_count, 2)
-
     def test_32_bit_guided_entry_stops_before_manifest_or_docker_inspection(self):
         argv = ["installer", "--manifest", "/nonexistent/manifest.json", "--state-dir", "/nonexistent/state"]
         with mock.patch.object(sys, "argv", argv), mock.patch.object(GUIDE.sys, "platform", "linux"), mock.patch.object(GUIDE.os, "geteuid", return_value=0), mock.patch.object(GUIDE.BOOT.platform, "machine", return_value="aarch64"), mock.patch.object(GUIDE.sys, "maxsize", 2**31 - 1), mock.patch.object(GUIDE, "require_docker_prerequisites"), mock.patch.object(GUIDE.APPS, "Docker") as docker, mock.patch.object(GUIDE, "prepare_backup_tools") as packages:
@@ -747,6 +703,62 @@ class ExplicitChannelTests(unittest.TestCase):
         self.assertEqual(calls[0], ("/v1/status", None))
         self.assertEqual(calls[1], ("/v1/plan", {"tag": MANIFEST["tag"]}))
         self.assertEqual(channel["channel"], "nightly")
+
+    def test_launcher_channel_selection_reprompts_after_invalid_choice(self):
+        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": {"tag": "v1.2.3", "commit": "a" * 40, "launcherSha256": "b" * 64}, "nightly": {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "launcherSha256": "d" * 64}}}
+        ask = mock.Mock(side_effect=["0", "stable"])
+        self.assertEqual(GUIDE.BOOT.select_channel(catalog, ask=ask), ("stable", catalog["channels"]["stable"], True))
+        self.assertEqual(ask.call_count, 2)
+
+
+    def test_interactive_unavailable_channel_reprompts_but_explicit_channel_fails(self):
+        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "launcherSha256": "d" * 64}}}
+        ask = mock.Mock(side_effect=["1", "2"])
+        self.assertEqual(GUIDE.BOOT.select_channel(catalog, ask=ask), ("nightly", catalog["channels"]["nightly"], True))
+        self.assertEqual(ask.call_count, 2)
+        with self.assertRaisesRegex(ValueError, "Stable is not available yet"):
+            GUIDE.BOOT.select_channel(catalog, requested="stable")
+
+
+    def test_interactive_launcher_download_error_returns_to_channel_choice(self):
+        identity = {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "manifestSha256": "e" * 64}
+        data = ("EXPECTED_RELEASE = " + repr(identity) + "\n").encode()
+        nightly = {"tag": identity["tag"], "commit": identity["commit"], "launcherSha256": hashlib.sha256(data).hexdigest()}
+        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": nightly}}
+        ask = mock.Mock(side_effect=["2", "2"])
+        fetcher = mock.Mock(side_effect=[OSError("temporary download failure"), data])
+        with contextlib.redirect_stderr(io.StringIO()):
+            result = GUIDE.BOOT.select_verified_channel_launcher(catalog, ask=ask, fetch_launcher=fetcher)
+        self.assertEqual(result, ("nightly", nightly, True, data, identity))
+        self.assertEqual(ask.call_count, 2)
+        self.assertEqual(fetcher.call_count, 2)
+
+
+    def test_interactive_launcher_error_can_be_cancelled_cleanly(self):
+        identity = {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "manifestSha256": "e" * 64}
+        data = ("EXPECTED_RELEASE = " + repr(identity) + "\n").encode()
+        nightly = {"tag": identity["tag"], "commit": identity["commit"], "launcherSha256": hashlib.sha256(data).hexdigest()}
+        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": nightly}}
+        ask = mock.Mock(side_effect=["2", ValueError("Installation cancelled")])
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, "Installation cancelled"):
+                GUIDE.BOOT.select_verified_channel_launcher(catalog, ask=ask, fetch_launcher=mock.Mock(side_effect=OSError("offline")))
+        self.assertEqual(ask.call_count, 2)
+
+
+    def test_interactive_launcher_integrity_error_returns_to_choice_without_accepting_bad_data(self):
+        identity = {"tag": "v1.2.4-beta.1", "commit": "c" * 40, "manifestSha256": "e" * 64}
+        good_data = ("EXPECTED_RELEASE = " + repr(identity) + "\n").encode()
+        nightly = {"tag": identity["tag"], "commit": identity["commit"], "launcherSha256": hashlib.sha256(good_data).hexdigest()}
+        catalog = {"schema": "orbis.installer-channels.v1", "channels": {"stable": None, "nightly": nightly}}
+        ask = mock.Mock(side_effect=["2", "2"])
+        fetcher = mock.Mock(side_effect=[b"not the published launcher", good_data])
+        with contextlib.redirect_stderr(io.StringIO()):
+            result = GUIDE.BOOT.select_verified_channel_launcher(catalog, ask=ask, fetch_launcher=fetcher)
+        self.assertEqual(result[3:], (good_data, identity))
+        self.assertEqual(fetcher.call_count, 2)
+
+
 
 
 if __name__ == "__main__":

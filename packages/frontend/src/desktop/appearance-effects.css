@@ -36,3 +36,9 @@
 :root[data-orbis-effects="low"] :is(.cluster-rack-shadow, .workspace-app .app-logo, .workspace-drive-stack) {
   filter: none;
 }
+
+:root[data-orbis-palette-motion]::view-transition-old(*),
+:root[data-orbis-palette-motion]::view-transition-new(*) {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
+}

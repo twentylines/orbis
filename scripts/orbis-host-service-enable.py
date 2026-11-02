@@ -104,6 +104,8 @@ def enable(root, context, source):
                 record["stage"] = "complete"
                 APPS.write_journal(path, record)
             return {"result": "host-service-active", "socket": str(SETUP.SOCKET_FILE)}
+        if HOST.retained_state(root):
+            raise ValueError("retained host socket configuration changes require a new independent root review; existing healthy sockets can be reused")
         if path.exists():
             record = read_record(path)
             if record.get("schema") != SCHEMA or record.get("root") != str(root) or record.get("dockerContext") != context or record.get("sources") != source_hashes(source):

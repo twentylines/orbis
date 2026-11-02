@@ -10,6 +10,11 @@ import { fullBackupFixture, fixturePassphrase } from './backup-import.fixture';
 import { acquireBackupDisk } from '@/common/backup-disk';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { acquireRestoreLease } from './backup-restore-lease';
+import { TimeMachineRestoreAuthorization } from './time-machine-restore-authorization';
+import { readRetainedRestoreReceipt, type RetainedRestorePermit } from './time-machine-restore-admission';
+import type { AuthService } from '../auth/auth.service';
+import type { PasskeyService } from '../auth/passkey.service';
+import type { Request } from 'express';
 
 let root: string;
 let service: BackupImportsService;
@@ -63,6 +68,192 @@ afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 const directory = (id: string) => path.join(root, 'live', 'backups', 'imports', id);
+async function retainedFixture() {
+  const fixture = await fullBackupFixture(root);
+  const expected = {
+    pointId: randomUUID(),
+    bytes: (await fs.stat(fixture.encrypted)).size,
+    archiveSha256: createHash('sha256')
+      .update(await fs.readFile(fixture.encrypted))
+      .digest('hex'),
+    manifestSha256: createHash('sha256')
+      .update(await fs.readFile(path.join(fixture.content, 'manifest.json')))
+      .digest('hex'),
+  };
+  const open = async (_signal: AbortSignal, consume: (source: Readable, passphrase: string) => Promise<void>) => {
+    const source = createReadStream(fixture.encrypted);
+    try {
+      await consume(source, fixturePassphrase);
+    } finally {
+      source.destroy();
+    }
+  };
+  return { expected, open };
+}
+async function retainedSource() {
+  vi.stubEnv('ORBIS_VERSION', 'v1.0.0');
+  const fixture = await retainedFixture();
+  const reviewed = await service.reviewRetained(1, fixture.expected, fixture.open, new AbortController().signal, () => undefined);
+  const journal = await BackupRestoreJournal.create(path.join(root, 'live', 'backups', 'restores'), {
+    id: randomUUID(),
+    nonce: randomUUID(),
+    originalController: '1'.repeat(64),
+    candidateController: '1'.repeat(64),
+    worker: '3'.repeat(64),
+    roots: ['state'],
+  });
+  const binding = {
+    pointId: fixture.expected.pointId,
+    reviewId: randomUUID(),
+    archiveSha256: fixture.expected.archiveSha256,
+    manifestSha256: fixture.expected.manifestSha256,
+    machineId: 'a'.repeat(64),
+  };
+  const actor = { userId: 1, sessionBinding: 'b'.repeat(64), securityBinding: 'c'.repeat(64) };
+  const context = vi.fn().mockResolvedValue(actor);
+  const authorization = new TimeMachineRestoreAuthorization(
+    { ...auth, operatorActionContext: context } as unknown as AuthService,
+    {} as PasskeyService,
+  );
+  const request = {} as Request;
+  const authorize = async () => {
+    const grant = await authorization.password(request, binding, credentials);
+    return authorization.admit(request, binding, grant.grantId, reviewed.id, journal);
+  };
+  const permit = await authorize();
+  return { fixture, journal, binding, id: reviewed.id, permit, context, actor, authorize, signal: new AbortController().signal };
+}
+
+it('moves only a freshly authorized retained source into the existing journal without touching live data', async () => {
+  const source = await retainedSource();
+  const result = await service.claimRetainedSource(source.id, 1, source.binding, source.permit, source);
+  expect(result.seal.manifest.sha256).toBe(source.binding.manifestSha256);
+  expect(result.directory).toBe(path.join(source.journal.directory, 'source', 'payload'));
+  const receipt = await readRetainedRestoreReceipt(source.journal);
+  expect(receipt?.binding).toEqual(source.binding);
+  expect(receipt?.authorizationSha256).toBe(
+    createHash('sha256')
+      .update(`orbis-time-machine-admission-actor-v1\n${source.actor.userId}\n${source.actor.sessionBinding}\n${source.actor.securityBinding}`)
+      .digest('hex'),
+  );
+  expect(JSON.stringify(receipt)).not.toContain(credentials.password);
+  expect(JSON.stringify(receipt)).not.toContain(source.actor.sessionBinding);
+  await expect(service.claimRetainedSource(source.id, 1, source.binding, source.permit, source)).rejects.toThrow();
+  expect(await fs.readFile(path.join(root, 'live', 'preserve'), 'utf8')).toBe('live server fixture');
+});
+
+it('cannot claim retained data using a receipt or reconstructed permit alone', async () => {
+  const source = await retainedSource();
+  const receipt = await readRetainedRestoreReceipt(source.journal);
+  for (const forged of [receipt, JSON.parse(JSON.stringify(source.permit))])
+    await expect(service.claimRetainedSource(source.id, 1, source.binding, forged as RetainedRestorePermit, source)).rejects.toThrow();
+  expect((await service.retainedStatus(source.id, 1)).status).toBe('reviewed');
+  await expect(fs.stat(path.join(source.journal.directory, 'source'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('rejects changed ciphertext before transfer and requires a new fresh authorization for a safe retry', async () => {
+  const source = await retainedSource();
+  const file = path.join(directory(source.id), 'backup.orbis');
+  const original = await fs.readFile(file);
+  await fs.appendFile(file, 'changed');
+  await expect(service.claimRetainedSource(source.id, 1, source.binding, source.permit, source)).rejects.toThrow('ciphertext changed');
+  await fs.writeFile(file, original);
+  await expect(service.claimRetainedSource(source.id, 1, source.binding, source.permit, source)).rejects.toThrow();
+  const fresh = await source.authorize();
+  await expect(service.claimRetainedSource(source.id, 1, source.binding, fresh, source)).resolves.toMatchObject({
+    seal: { manifest: { sha256: source.binding.manifestSha256 } },
+  });
+});
+
+it('rechecks session authority after ciphertext verification under the existing restore lease', async () => {
+  const source = await retainedSource();
+  const file = path.join(directory(source.id), 'backup.orbis');
+  const open = fs.open;
+  vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+    const handle = await open(...args);
+    if (String(args[0]) === file) source.context.mockResolvedValue({ ...source.actor, sessionBinding: 'd'.repeat(64) });
+    return handle;
+  });
+  await expect(service.claimRetainedSource(source.id, 1, source.binding, source.permit, source)).rejects.toThrow('Verify this exact restore');
+  await expect(fs.stat(path.join(source.journal.directory, 'source'))).rejects.toMatchObject({ code: 'ENOENT' });
+  expect((await service.retainedStatus(source.id, 1)).status).toBe('reviewed');
+});
+
+it('preserves journal-owned source and receipt on admission callback failure, with explicit reload recovery', async () => {
+  const source = await retainedSource();
+  await expect(
+    service.claimRetainedSource(source.id, 1, source.binding, source.permit, {
+      ...source,
+      prepare: async () => {
+        throw new Error('Declared preparation boundary failure');
+      },
+    }),
+  ).rejects.toThrow('preserved in its restore journal');
+  const payload = path.join(source.journal.directory, 'source', 'payload');
+  expect(await fs.readFile(path.join(payload, 'content', 'app-data', 'document'), 'utf8')).toBe('fixture app content');
+  await service.onModuleDestroy();
+  service = construct();
+  expect((await service.list(1)).available).toBe(true);
+  expect((await readRetainedRestoreReceipt(source.journal))?.restoreId).toBe(source.journal.state.id);
+  await source.journal.discardStaging();
+  expect(source.journal.state.phase).toBe('discarded');
+  expect(await fs.readFile(path.join(payload, 'content', 'app-data', 'document'), 'utf8')).toBe('fixture app content');
+  expect(await fs.readFile(path.join(root, 'live', 'preserve'), 'utf8')).toBe('live server fixture');
+});
+
+it('uses the existing file, database and source-seal review for a server-owned retained point without a second password', async () => {
+  const fixture = await retainedFixture();
+  let id = '';
+  const result = await service.reviewRetained(1, fixture.expected, fixture.open, new AbortController().signal, (value) => {
+    id = value;
+  });
+  expect(result.id).toBe(id);
+  expect(result.review.manifestSha256).toBe(fixture.expected.manifestSha256);
+  expect(result.review.databaseValidation).toBe('validated');
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  expect((await service.list(1)).jobs).toEqual([]);
+  await expect(service.retainedStatus(id, 2)).rejects.toThrow('not found');
+  expect((await fs.readdir(directory(id))).sort()).toEqual(['backup.orbis', 'content', 'database', 'job.json', 'review-seal.json']);
+});
+
+it('rejects a mismatched retained ciphertext hash before opening plaintext or reviewing the database', async () => {
+  const fixture = await retainedFixture();
+  let id = '';
+  await expect(
+    service.reviewRetained(1, { ...fixture.expected, archiveSha256: '0'.repeat(64) }, fixture.open, new AbortController().signal, (value) => {
+      id = value;
+    }),
+  ).rejects.toThrow('checksum');
+  expect(database.review).not.toHaveBeenCalled();
+  expect((await fs.readdir(directory(id))).sort()).toEqual(['backup.orbis', 'job.json']);
+  expect((await service.retainedStatus(id, 1)).status).toBe('failed');
+});
+
+it('rejects a mismatched retained manifest after review and removes every plaintext result', async () => {
+  const fixture = await retainedFixture();
+  let id = '';
+  await expect(
+    service.reviewRetained(1, { ...fixture.expected, manifestSha256: '0'.repeat(64) }, fixture.open, new AbortController().signal, (value) => {
+      id = value;
+    }),
+  ).rejects.toThrow('manifest identity');
+  expect(database.review).toHaveBeenCalledTimes(1);
+  expect((await fs.readdir(directory(id))).sort()).toEqual(['backup.orbis', 'job.json']);
+  expect((await service.retainedStatus(id, 1)).status).toBe('failed');
+});
+
+it('rejects an already-aborted retained review before allocating an import or touching its reader', async () => {
+  const fixture = await retainedFixture();
+  const abort = new AbortController();
+  abort.abort();
+  const open = vi.fn(fixture.open);
+  const registered = vi.fn();
+  await expect(service.reviewRetained(1, fixture.expected, open, abort.signal, registered)).rejects.toThrow();
+  expect(open).not.toHaveBeenCalled();
+  expect(registered).not.toHaveBeenCalled();
+  expect(await fs.readdir(path.join(root, 'live', 'backups', 'imports'))).toEqual([]);
+});
+
 async function finish(id: string) {
   await vi.waitFor(async () => expect(['uploading', 'reviewing']).not.toContain((await service.list(1)).jobs.find((job) => job.id === id)?.status), {
     timeout: 10_000,
@@ -435,4 +626,19 @@ it('preserves claimed files and releases both leases when later preparation fail
   disk();
   const lease = await acquireRestoreLease(source.store);
   lease();
+});
+
+it('saved server archives enter the ordinary encrypted import and still require archive-key verification', async () => {
+  const fixture = await fullBackupFixture(root);
+  const bytes = await fs.readFile(fixture.encrypted);
+  const source = Readable.from(bytes);
+  const uploaded = await service.receiveServerExport(1, source, bytes.length);
+  expect(uploaded.status).toBe('uploaded');
+  expect(uploaded.review).toBeUndefined();
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  await service.review(uploaded.id, 1, credentials, 'incorrect archive key');
+  expect((await finish(uploaded.id))?.status).toBe('failed');
+  await service.review(uploaded.id, 1, credentials, fixturePassphrase);
+  expect((await finish(uploaded.id))?.status).toBe('reviewed');
+  expect(await fs.readFile(path.join(root, 'live', 'preserve'), 'utf8')).toBe('live server fixture');
 });

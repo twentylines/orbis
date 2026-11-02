@@ -1,7 +1,7 @@
 import type { UserContextDto } from '@/api-client';
 import { userContextOptions, userContextQueryKey } from '@/api-client/@tanstack/react-query.gen';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { createContext, useContext, useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { createContext, useContext, useLayoutEffect, useEffect, useRef, useState, useCallback } from 'react';
 import { PreferenceSession } from '@/desktop/preference-save-queue';
 import { clearAccountQueries } from '@/lib/query-client';
 
@@ -30,6 +30,11 @@ export const UserContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
     currentSession.current = { authenticated, session: next };
     setSession(next);
   }, []);
+
+  useEffect(() => {
+    if (currentSession.current.authenticated && currentSession.current.session.signal.aborted) changeSession(true);
+    return () => currentSession.current.session.invalidate();
+  }, [changeSession]);
 
   useLayoutEffect(() => {
     if (currentSession.current.authenticated !== userContext.isLoggedIn) changeSession(userContext.isLoggedIn);

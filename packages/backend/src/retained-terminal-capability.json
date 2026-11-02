@@ -1,0 +1,6 @@
+{
+  "schema": "orbis.retained-terminal-settlement.v1",
+  "version": 1,
+  "states": ["staging", "discarded", "rolled-back", "completed"],
+  "beforeUnlock": true
+}

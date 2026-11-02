@@ -44,6 +44,18 @@ const sample = () => ({
 });
 
 describe('physical drive health boundary', () => {
+  it('exposes an explicit missing-tools flag without inferring permission from error text', () => {
+    expect(parseDriveHealth({ available: false, reason: 'SMART tools are missing.', toolsMissing: true })).toEqual({
+      available: false,
+      reason: 'SMART tools are missing.',
+      toolsMissing: true,
+    });
+    expect(parseDriveHealth({ available: false, reason: 'Install smartmontools on the host to read drive health.' })).not.toHaveProperty(
+      'toolsMissing',
+    );
+    expect(() => parseDriveHealth({ available: false, reason: 'Missing.', toolsMissing: 'true' })).toThrow('Invalid SMART tools status');
+  });
+
   it('shares active reads and refreshes immediately after invalidation', async () => {
     const first = parseDriveHealth(sample());
     const current = parseDriveHealth({ ...sample(), drives: [{ ...drive(), selfTest: { ...drive().selfTest, running: true } }] });

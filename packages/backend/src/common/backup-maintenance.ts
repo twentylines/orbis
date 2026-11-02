@@ -7,12 +7,18 @@ let acquiring = false;
 // Production queue consumers must remain closed until backup journals have been checked.
 let recoveryRequired = process.env.NODE_ENV === 'production';
 let restoreRecoveryRequired = false;
+let resetRecoveryRequired = process.env.NODE_ENV === 'production';
 let active = 0;
 const drained = new Set<() => void>();
 const available = new Set<() => void>();
 const requests = new WeakMap<Request, { release: () => void; entered: boolean; disconnected: boolean }>();
 
-export const backupMaintenanceActive = () => held || recoveryRequired || restoreRecoveryRequired;
+export const backupMaintenanceActive = () => held || recoveryRequired || restoreRecoveryRequired || resetRecoveryRequired;
+export const backupMaintenanceOutsideResetActive = () => held || acquiring || recoveryRequired || restoreRecoveryRequired;
+export const setResetRecoveryRequired = (required: boolean) => {
+  resetRecoveryRequired = required;
+  if (!backupMaintenanceActive()) for (const notify of available) notify();
+};
 export const setBackupRecoveryRequired = (required: boolean) => {
   recoveryRequired = required;
   if (!backupMaintenanceActive()) for (const notify of available) notify();
@@ -101,10 +107,19 @@ export function backupMaintenanceMiddleware(request: Request, response: Response
   const pathname = request.originalUrl.split('?')[0] ?? '';
   if (pathname.startsWith('/api/system-backups')) response.setHeader('Cache-Control', 'no-store');
   if (!pathname.startsWith('/api/') || /^\/api\/(?:health\/?$|system-backups(?:\/|$))/.test(pathname)) return next();
+  // Reset acquires and retains the same drain itself; counting its admission request would deadlock it.
+  if (request.method === 'POST' && /^\/api\/system-reset(?:\/(?:recover|passkey-options))?\/?$/.test(pathname)) return next();
+  // A held restore must still admit fresh operator authentication for protected recovery.
+  if (
+    restoreRecoveryRequired &&
+    request.method === 'POST' &&
+    /^\/api\/auth\/(?:login|verify-totp|passkeys\/login\/(?:options|verify))\/?$/.test(pathname)
+  )
+    return next();
   // Event streams stay open for the browser session and do not mutate snapshot data.
   if (request.method === 'GET' && /^\/api\/sse\/(?:app|app-logs|runtipi-logs)\/?$/.test(pathname)) return next();
   if (
-    (recoveryRequired || restoreRecoveryRequired) &&
+    (recoveryRequired || restoreRecoveryRequired || resetRecoveryRequired) &&
     !held &&
     (['GET', 'HEAD'].includes(request.method) || /^\/api\/auth\/(?:login|logout|verify-totp|passkeys\/login\/(?:options|verify))\/?$/.test(pathname))
   )

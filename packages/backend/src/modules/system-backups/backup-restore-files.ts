@@ -21,13 +21,17 @@ const metadata = type({
 }).onUndeclaredKey('reject');
 export type RestoreFileReview = { bytes: number; sha256: string; files: number; directories: number };
 
-export async function verifyRestoreFiles(options: {
+async function verifyRestoreFilesInner(options: {
   ledger: string;
   expected: RestoreFileReview;
   roots: Record<string, string>;
   signal: AbortSignal;
+  selected?: readonly string[];
 }) {
   const { expected, signal } = options;
+  const selected = options.selected === undefined ? undefined : new Set(options.selected);
+  if (selected && (!selected.size || selected.size !== options.selected?.length || selected.size > 1024)) throw failed();
+  const matched = new Set<string>();
   if (
     !Number.isSafeInteger(expected.bytes) ||
     expected.bytes < 0 ||
@@ -80,6 +84,15 @@ export async function verifyRestoreFiles(options: {
       pathBytes += Buffer.byteLength(key);
       if (names.has(key) || pathBytes > 32 * 1024 * 1024) throw failed();
       names.add(key);
+      if (selected && !selected.has(key)) {
+        if (entry.kind === 'file') files++;
+        else directories++;
+        return;
+      }
+      if (selected) {
+        if (entry.kind !== 'file') throw failed();
+        matched.add(key);
+      }
       const target = path.join(options.roots[entry.root] as string, entry.name);
       if ((await fs.realpath(target)) !== target) throw failed();
       const stat = await fs.lstat(target);
@@ -121,7 +134,20 @@ export async function verifyRestoreFiles(options: {
     }
     lines.finish();
     const after = await source.stat();
+    const current = await fs.lstat(options.ledger);
     if (
+      current.isSymbolicLink() ||
+      [after, current].some(
+        (stat) =>
+          stat.dev !== before.dev ||
+          stat.ino !== before.ino ||
+          stat.mode !== before.mode ||
+          stat.uid !== before.uid ||
+          stat.nlink !== before.nlink ||
+          stat.size !== before.size ||
+          stat.mtimeMs !== before.mtimeMs ||
+          stat.ctimeMs !== before.ctimeMs,
+      ) ||
       after.size !== before.size ||
       after.mtimeMs !== before.mtimeMs ||
       after.ctimeMs !== before.ctimeMs ||
@@ -130,6 +156,10 @@ export async function verifyRestoreFiles(options: {
       directories !== expected.directories
     )
       throw failed();
+    if (selected) {
+      if (matched.size !== selected.size) throw failed();
+      return;
+    }
     const visit = async (root: string, directory: string, name: string) => {
       for (const child of await fs.readdir(directory)) {
         signal.throwIfAborted();
@@ -146,4 +176,23 @@ export async function verifyRestoreFiles(options: {
   } finally {
     await source.close();
   }
+}
+
+export async function verifyRestoreFiles(options: {
+  ledger: string;
+  expected: RestoreFileReview;
+  roots: Record<string, string>;
+  signal: AbortSignal;
+}) {
+  return verifyRestoreFilesInner(options);
+}
+
+export async function verifySelectedRestoreFiles(options: {
+  ledger: string;
+  expected: RestoreFileReview;
+  roots: Record<string, string>;
+  signal: AbortSignal;
+  selected: readonly string[];
+}) {
+  return verifyRestoreFilesInner(options);
 }

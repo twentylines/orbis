@@ -40,7 +40,8 @@ export class AppLifecycleCommand {
     return result;
   }
 
-  protected async ensureAppDir(appUrn: AppUrn, form: AppEventFormInput): Promise<void> {
+  protected async ensureAppDir(appUrn: AppUrn, form: AppEventFormInput, imagePinUpdate?: string): Promise<void> {
+    await this.moduleRef.get(DockerService, { strict: false }).requireAppImagePinUpdate(appUrn, imagePinUpdate);
     const appFilesManager = this.moduleRef.get(AppFilesManager, { strict: false });
     const marketplaceService = this.moduleRef.get(MarketplaceService, { strict: false });
     const logger = this.moduleRef.get(LoggerService, { strict: false });

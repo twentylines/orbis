@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import type { decodeAppRuntimeCapture } from './time-machine-app-runtime-capture';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
@@ -18,6 +19,8 @@ import { restoreStartupRole } from './backup-restore-startup';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { acquireRestoreLease } from './backup-restore-lease';
 import { BackupSourcePinnedError, createBackupSourceSeal, pinBackupSource, type BackupSourceSeal } from './backup-restore-source';
+import type { TimeMachineRestoreBinding } from '@runtipi/common/schemas/time-machine-restore';
+import { consumeRetainedRestorePermit, requireRetainedRestoreReceipt, type RetainedRestorePermit } from './time-machine-restore-admission';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const retention = 24 * 60 * 60_000;
@@ -35,10 +38,18 @@ const stored = type({
   totalBytes: 'number >= 0 | null',
   uploadedBytes: 'number >= 0',
   message: 'string',
-});
+  'origin?': "'time-machine'",
+  'retainedPointId?': 'string',
+}).narrow((job) =>
+  job.origin === 'time-machine' ? typeof job.retainedPointId === 'string' && uuid.test(job.retainedPointId) : job.retainedPointId === undefined,
+);
 type ImportJob = typeof stored.infer & { review?: FullBackupReview; seal?: BackupSourceSeal };
 type Credentials = { password: string; totpCode?: string };
 export type ClaimedBackupSource = Awaited<ReturnType<typeof pinBackupSource>> & { seal: BackupSourceSeal };
+
+const trustedBackupImports = new WeakSet<object>();
+export const isBackupImportsServiceInstance = (value: unknown): value is BackupImportsService =>
+  typeof value === 'object' && value !== null && trustedBackupImports.has(value);
 
 @Injectable()
 export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
@@ -55,7 +66,9 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
     private readonly auth: AuthService,
     private readonly logger: LoggerService,
     private readonly database: BackupDatabaseService,
-  ) {}
+  ) {
+    trustedBackupImports.add(this);
+  }
   private root() {
     return path.join(this.config.get('directories').dataDir, 'backups', 'imports');
   }
@@ -245,12 +258,15 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
     return {
       available: !this.unavailable,
       retentionHours: 24,
-      jobs: [...this.jobs.values()].filter((job) => job.ownerId === ownerId).map((job) => this.publicJob(job)),
+      jobs: [...this.jobs.values()].filter((job) => job.ownerId === ownerId && job.origin !== 'time-machine').map((job) => this.publicJob(job)),
     };
   }
   async create(ownerId: number, credentials: Credentials) {
     await this.initialize();
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    return this.createOwnedJob(ownerId);
+  }
+  private async createOwnedJob(ownerId: number, retainedPointId?: string) {
     this.available();
     await this.expire();
     if (this.jobs.size >= 32) throw new ConflictException('Remove an older import before uploading another backup.');
@@ -267,6 +283,7 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
       totalBytes: null,
       uploadedBytes: 0,
       message: 'Choose an encrypted Orbis backup to upload.',
+      ...(retainedPointId ? { origin: 'time-machine' as const, retainedPointId } : {}),
     };
     this.jobs.set(id, job);
     try {
@@ -281,6 +298,7 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
   async receive(id: string, ownerId: number, source: Readable, length?: string) {
     await this.initialize();
     const job = this.owned(id, ownerId);
+    if (job.origin) throw new ConflictException('Review retained points through Time Machine.');
     if (job.status !== 'awaiting-upload' && job.status !== 'cancelled' && job.status !== 'failed')
       throw new ConflictException('This import already has an uploaded file. Create a new import to choose another.');
     const expected = length === undefined ? null : /^\d+$/.test(length) ? Number(length) : Number.NaN;
@@ -290,6 +308,15 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
     const active = this.begin(job, 'upload', (signal) => this.receiveFile(job, source, expected, signal));
     await active.done;
     return this.publicJob(job);
+  }
+  async receiveServerExport(ownerId: number, source: Readable, bytes: number) {
+    try {
+      await this.initialize();
+      const job = await this.createOwnedJob(ownerId);
+      return await this.receive(job.id, ownerId, source, String(bytes));
+    } finally {
+      source.destroy();
+    }
   }
   private async receiveFile(job: ImportJob, source: Readable, expected: number | null, signal: AbortSignal) {
     const temporary = path.join(this.directory(job.id), 'upload.partial');
@@ -357,13 +384,116 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
     await this.initialize();
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
     const job = this.owned(id, ownerId);
+    if (job.origin) throw new ConflictException('Review retained points through Time Machine.');
     if (typeof passphrase !== 'string' || passphrase.trim().length < 12 || passphrase.length > 1024)
       throw new BadRequestException(new BackupArchiveError('passphrase').message);
     if (!(await this.uploaded(job))) throw new ConflictException('Upload the encrypted backup before reviewing it.');
     this.begin(job, 'review', (signal) => this.inspect(job, passphrase, signal));
     return this.publicJob(job);
   }
-  private async inspect(job: ImportJob, passphrase: string, signal: AbortSignal) {
+  // Only a server-owned retained-point reader may supply this callback; public imports retain their separate password checks.
+  async reviewRetained(
+    ownerId: number,
+    expected: { pointId: string; bytes: number; archiveSha256: string; manifestSha256: string },
+    open: (signal: AbortSignal, consume: (source: Readable, passphrase: string) => Promise<void>) => Promise<void>,
+    signal: AbortSignal,
+    registered: (id: string) => void,
+    verifyContent?: (content: string, signal: AbortSignal) => Promise<void>,
+    appRuntime?: ReturnType<typeof decodeAppRuntimeCapture>,
+  ) {
+    await this.initialize();
+    signal.throwIfAborted();
+    if (
+      !Number.isSafeInteger(ownerId) ||
+      !uuid.test(expected.pointId) ||
+      ownerId < 1 ||
+      !Number.isSafeInteger(expected.bytes) ||
+      expected.bytes < 52 ||
+      !/^[a-f0-9]{64}$/.test(expected.archiveSha256) ||
+      !/^[a-f0-9]{64}$/.test(expected.manifestSha256)
+    )
+      throw new ConflictException('The retained backup identity is invalid.');
+    for (const previous of [...this.jobs.values()])
+      if (previous.origin === 'time-machine' && previous.retainedPointId === expected.pointId && previous.ownerId === ownerId)
+        await this.remove(previous.id, ownerId);
+    const created = await this.createOwnedJob(ownerId, expected.pointId);
+    const job = this.owned(created.id, ownerId);
+    const abort = () => this.abort(job.id, ownerId);
+    signal.addEventListener('abort', abort, { once: true });
+    try {
+      registered(job.id);
+      let failure: unknown;
+      const operation = this.begin(job, 'review', async (ownSignal) => {
+        const combined = AbortSignal.any([signal, ownSignal]);
+        try {
+          combined.throwIfAborted();
+          await open(combined, async (source, passphrase) => {
+            if (typeof passphrase !== 'string' || passphrase.length < 12 || passphrase.length > 1024)
+              throw new BackupRequirementError('The retained backup key is invalid.');
+            await this.receiveFile(job, source, expected.bytes, combined);
+            if (job.status !== 'uploaded') throw new BackupRequirementError('The retained backup could not be copied safely.');
+            const handle = await fs.open(path.join(this.directory(job.id), 'backup.orbis'), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+            try {
+              const stat = await handle.stat();
+              if (
+                !stat.isFile() ||
+                stat.nlink !== 1 ||
+                stat.mode & 0o077 ||
+                stat.size !== expected.bytes ||
+                (process.getuid && stat.uid !== process.getuid())
+              )
+                throw new BackupRequirementError('The retained backup file is unsafe.');
+              const hash = createHash('sha256');
+              for await (const chunk of handle.createReadStream({ autoClose: false })) {
+                combined.throwIfAborted();
+                hash.update(chunk);
+              }
+              const after = await handle.stat();
+              if (
+                hash.digest('hex') !== expected.archiveSha256 ||
+                ['ino', 'dev', 'size', 'mode', 'nlink', 'uid', 'mtimeMs', 'ctimeMs'].some((key) => Reflect.get(stat, key) !== Reflect.get(after, key))
+              )
+                throw new BackupRequirementError('The retained backup checksum changed.');
+            } finally {
+              await handle.close();
+            }
+            await this.inspect(job, passphrase, combined, appRuntime);
+            const reviewed = this.owned(job.id, ownerId);
+            if (reviewed.status !== 'reviewed' || reviewed.review?.manifestSha256 !== expected.manifestSha256 || !reviewed.seal)
+              throw new BackupRequirementError(reviewed.status === 'reviewed' ? 'The retained backup manifest identity changed.' : reviewed.message);
+            await verifyContent?.(path.join(this.directory(job.id), 'content'), combined);
+          });
+          combined.throwIfAborted();
+        } catch (error) {
+          failure = error;
+          await this.cleanPlaintext(job).catch(() => {
+            this.unavailable = true;
+            this.logger.warn('Retained backup review cleanup needs review. Further imports are disabled.');
+          });
+          job.status = combined.aborted ? 'cancelled' : 'failed';
+          job.stage = 'complete';
+          job.message = 'The retained backup review did not finish. No server data has been changed.';
+          await this.save(job).catch(() => {
+            this.unavailable = true;
+          });
+        }
+      });
+      await operation.done;
+      if (failure) throw failure;
+      if (!job.review || job.status !== 'reviewed') throw new ConflictException('Review this retained backup again.');
+      return { id: job.id, review: job.review, expiresAt: job.updatedAt + reviewRetention };
+    } finally {
+      signal.removeEventListener('abort', abort);
+    }
+  }
+  async retainedStatus(id: string, ownerId: number) {
+    await this.initialize();
+    if (!this.unavailable) await this.expire();
+    const job = this.owned(id, ownerId);
+    if (job.origin !== 'time-machine') throw new NotFoundException('Retained backup review not found.');
+    return this.publicJob(job);
+  }
+  private async inspect(job: ImportJob, passphrase: string, signal: AbortSignal, appRuntime?: ReturnType<typeof decodeAppRuntimeCapture>) {
     const directory = this.directory(job.id);
     const archive = path.join(directory, 'opened.tar.gz');
     try {
@@ -414,9 +544,15 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
       job.completedBytes = 0;
       job.totalBytes = null;
       await this.save(job);
-      const database = await this.database.review(path.join(directory, 'content'), path.join(directory, 'database'), signal, (bytes) => {
-        job.completedBytes = bytes;
-      });
+      const database = await this.database.review(
+        path.join(directory, 'content'),
+        path.join(directory, 'database'),
+        signal,
+        (bytes) => {
+          job.completedBytes = bytes;
+        },
+        appRuntime,
+      );
       job.seal = createBackupSourceSeal(result.integrity, database);
       const seal = await fs.open(path.join(directory, 'review-seal.json'), 'wx', 0o600);
       try {
@@ -477,6 +613,63 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
     this.available();
     const job = this.owned(id, ownerId);
+    if (job.origin) throw new ConflictException('Time Machine requires its point-bound authorization and restore preparation.');
+    return this.claimSource(job, options);
+  }
+  async claimRetainedSource<T = undefined>(
+    id: string,
+    ownerId: number,
+    binding: TimeMachineRestoreBinding,
+    permit: RetainedRestorePermit,
+    options: {
+      journal: BackupRestoreJournal;
+      signal: AbortSignal;
+      prepare?: (source: ClaimedBackupSource, signal: AbortSignal) => Promise<T>;
+    },
+  ) {
+    const admission = await consumeRetainedRestorePermit(permit, options.journal, ownerId, id, binding);
+    await this.initialize();
+    this.available();
+    const job = this.owned(id, ownerId);
+    if (job.origin !== 'time-machine' || job.retainedPointId !== binding.pointId) throw new ConflictException('Review this exact point again.');
+    return this.claimSource(job, {
+      ...options,
+      manifestSha256: binding.manifestSha256,
+      beforePin: async (signal) => {
+        await requireRetainedRestoreReceipt(options.journal, admission.receipt);
+        await admission.verify();
+        const file = path.join(this.directory(id), 'backup.orbis');
+        const handle = await fs.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+        try {
+          const stat = await handle.stat();
+          if (!stat.isFile() || stat.nlink !== 1 || stat.mode & 0o077 || (process.getuid && stat.uid !== process.getuid()))
+            throw new BackupRequirementError('The retained ciphertext is unsafe.');
+          const hash = createHash('sha256');
+          for await (const chunk of handle.createReadStream({ autoClose: false, signal })) hash.update(chunk);
+          const after = await handle.stat();
+          if (
+            hash.digest('hex') !== binding.archiveSha256 ||
+            ['ino', 'dev', 'size', 'mode', 'nlink', 'uid', 'mtimeMs', 'ctimeMs'].some((key) => Reflect.get(stat, key) !== Reflect.get(after, key))
+          )
+            throw new BackupRequirementError('The retained ciphertext changed. Review this point again.');
+        } finally {
+          await handle.close();
+        }
+        await admission.verify();
+      },
+    });
+  }
+  private async claimSource<T>(
+    job: ImportJob,
+    options: {
+      journal: BackupRestoreJournal;
+      manifestSha256: string;
+      signal: AbortSignal;
+      prepare?: (source: ClaimedBackupSource, signal: AbortSignal) => Promise<T>;
+      beforePin?: (signal: AbortSignal) => Promise<void>;
+    },
+  ) {
+    const id = job.id;
     const store = path.join(this.config.get('directories').dataDir, 'backups', 'restores');
     if (
       job.status !== 'reviewed' ||
@@ -503,6 +696,7 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
         release = await acquireRestoreLease(store);
         const state = await options.journal.refresh();
         if (state.phase !== 'staging' || state.decision !== null) throw new ConflictException('This restore is no longer preparing its files.');
+        await options.beforePin?.(signal);
         result = await pinBackupSource({
           directory: this.directory(id),
           destination: path.join(options.journal.directory, 'source'),

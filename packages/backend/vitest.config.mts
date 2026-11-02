@@ -9,7 +9,14 @@ export default defineConfig({
     maxWorkers: 2,
     setupFiles: ['./src/tests/vite.setup.ts'],
     include: ['src/**/*.test.ts'],
-    exclude: ['**/integration/**', '**/.internal/**', '**/backups/__tests__/*.files.test.ts', '**/system-backups/*.files.test.ts'],
+    exclude: [
+      '**/integration/**',
+      '**/.internal/**',
+      '**/backups/__tests__/*.files.test.ts',
+      '**/system-backups/*.files.test.ts',
+      '**/system-reset/*.files.test.ts',
+      '**/time-machine-capsules/*.files.test.ts',
+    ],
     coverage: { reporter: ['lcov', 'text-summary'] },
     reporters: ['default'],
     env: {

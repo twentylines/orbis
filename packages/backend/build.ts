@@ -44,3 +44,15 @@ for (const sourceMap of sourceMaps) {
   if (sources.some((source: string) => /(?:^|\/)@faker-js\/|(?:^|\/)src\/(?:tests|modules\/debug)(?:\/|$)/.test(source)))
     throw new Error('Production server includes development-only modules');
 }
+
+// This probe is intentionally built separately without the application banner or imports.
+const retainedCapability = await Bun.build({
+  entrypoints: ['./src/retained-worker-capability.ts'],
+  outdir: './dist',
+  format: 'esm',
+  target: 'node',
+  env: 'disable',
+  sourcemap: false,
+});
+if (!retainedCapability.success) throw new AggregateError(retainedCapability.logs, 'Retained worker capability build failed');
+await assertNoPrivateBuildPaths(retainedCapability.outputs);

@@ -5,6 +5,7 @@ export const settingsSections = [
   { id: 'store', label: 'Store', detail: 'Sources and suggestions' },
   { id: 'updates', label: 'Updates', detail: 'Releases and schedules' },
   { id: 'backups', label: 'Backup & recovery', detail: 'Archives and transfers' },
+  { id: 'time-machine', label: 'Time Machine', detail: 'Saved restore points' },
   { id: 'security', label: 'Security', detail: 'Account and sign-in' },
   { id: 'https', label: 'HTTPS', detail: 'Private secure access' },
   { id: 'cluster', label: 'Cluster', detail: 'Paired servers and sync' },
@@ -35,6 +36,22 @@ export function resolveSettingsSection(value: string | null): SettingsSection {
 
 export const settingsCatalogue: readonly SettingEntry[] = [
   {
+    id: 'system-reset',
+    label: 'Reset Orbis',
+    section: 'general',
+    anchor: 'setting-system-reset',
+    aliases: 'reset erase preferences onboarding setup accounts',
+    operator: true,
+  },
+  {
+    id: 'time-machine',
+    label: 'Time Machine',
+    section: 'time-machine',
+    anchor: 'setting-time-machine',
+    aliases: 'snapshot timeline history restore point capture',
+    operator: true,
+  },
+  {
     id: 'server-name',
     label: 'Server name',
     section: 'customise',
@@ -49,6 +66,14 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     anchor: 'appearance-mode',
     aliases: 'dark night black theme',
     focus: '[data-setting-value="dark"]',
+  },
+  {
+    id: 'oled-dark-mode',
+    label: 'OLED',
+    section: 'customise',
+    anchor: 'appearance-mode',
+    aliases: 'oled amoled black display pure dark',
+    focus: '[data-setting-value="oled"]',
   },
   {
     id: 'light-mode',

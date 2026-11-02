@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test';
-import { BackupApiError, backupRequest, downloadBackup, uploadBackup } from './backup-api';
+import {
+  BackupApiError,
+  backupRequest,
+  downloadBackup,
+  uploadBackup,
+  importSavedBackup,
+  readBackupRetention,
+  saveBackupRetention,
+} from './backup-api';
 
 const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 async function withFetch(response: Response, run: (calls: { url: unknown; init?: RequestInit }[]) => Promise<void>) {
@@ -380,4 +388,39 @@ test('upload error classification uses the same bounded allowlist without echoin
       UploadRequest.current.onload?.();
       await expect(promise).rejects.toThrow(expected);
     });
+});
+
+test('saved import uses fixed same-origin authenticated POST and never accepts a client file path', async () => {
+  const job = {
+    id,
+    createdAt: 1,
+    updatedAt: 1,
+    message: 'Selected encrypted archive',
+    status: 'uploaded',
+    stage: 'complete',
+    completedBytes: 52,
+    totalBytes: 52,
+    uploadedBytes: 52,
+  };
+  await withFetch(Response.json(job), async (calls) => {
+    expect((await importSavedBackup(id, { password: 'fresh-fixture', totpCode: '123456' })).status).toBe('uploaded');
+    expect(calls[0]?.url).toBe(`/api/system-backups/${id}/import`);
+    expect(calls[0]?.init).toMatchObject({ method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ password: 'fresh-fixture', totpCode: '123456' });
+  });
+  await withFetch(Response.json({}), async (calls) => {
+    await expect(importSavedBackup('../outside', { password: 'fixture' })).rejects.toThrow('Invalid backup action');
+    expect(calls).toHaveLength(0);
+  });
+});
+test('retention reads and writes validated revision-bound settings', async () => {
+  await withFetch(Response.json({ version: 1, revision: 1, retentionHours: 168 }), async (calls) => {
+    expect((await readBackupRetention()).retentionHours).toBe(168);
+    expect(calls[0]?.url).toBe('/api/system-backups/settings');
+  });
+  await withFetch(Response.json({ version: 1, revision: 2, retentionHours: 720 }), async (calls) => {
+    await saveBackupRetention(720, 1);
+    expect(calls[0]?.init?.method).toBe('PUT');
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ retentionHours: 720, revision: 1 });
+  });
 });

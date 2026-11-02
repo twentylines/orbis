@@ -17,6 +17,7 @@ import { BackupDirectorySwap } from './backup-directory-swap';
 import { fullBackupLimits } from './backup-limits';
 import { rebaseBackupConfiguration } from './backup-restore-configuration';
 import { captureRestoreHostIdentity } from './backup-restore-host-identity';
+import { encodeAppImagePins } from '../docker/app-image-pins';
 
 let temporary: string;
 const signal = () => new AbortController().signal;
@@ -84,6 +85,107 @@ async function run(
     settingsOverride,
   });
 }
+
+it('verifies captured proxy bytes without writing into the live proxy tree when preservation is authorized', async () => {
+  const test = await fixture();
+  await fs.mkdir(path.join(test.source.content, 'data/traefik'), { recursive: true, mode: 0o700 });
+  await fs.writeFile(path.join(test.source.content, 'data/traefik/captured.yml'), 'historical', { mode: 0o600 });
+  test.source.manifest.files.push(await fileMetadata(test.source.content, 'data/traefik/captured.yml'));
+  await reseal(test.source);
+  await fs.writeFile(path.join(test.roots.traefik, 'live.yml'), 'live', { mode: 0o600 });
+  await materializeBackupSource({
+    directory: test.source.directory,
+    expected: test.source.seal,
+    roots: test.roots,
+    ledger: test.ledger,
+    signal: signal(),
+    progress: () => undefined,
+    preserveLiveProxy: true,
+  });
+  expect(await fs.readdir(test.roots.traefik)).toEqual(['live.yml']);
+  expect(await fs.readFile(path.join(test.roots.traefik, 'live.yml'), 'utf8')).toBe('live');
+  expect(await fs.readFile(path.join(test.roots.state, 'seed'), 'utf8')).toBeTruthy();
+});
+it('rejects tampered captured proxy bytes while leaving the live proxy tree untouched', async () => {
+  const test = await fixture();
+  await fs.mkdir(path.join(test.source.content, 'data/traefik'), { recursive: true, mode: 0o700 });
+  const captured = path.join(test.source.content, 'data/traefik/captured.yml');
+  await fs.writeFile(captured, 'historical', { mode: 0o600 });
+  test.source.manifest.files.push(await fileMetadata(test.source.content, 'data/traefik/captured.yml'));
+  await reseal(test.source);
+  await fs.writeFile(captured, 'tampered');
+  await fs.writeFile(path.join(test.roots.traefik, 'live.yml'), 'live', { mode: 0o600 });
+  await expect(
+    materializeBackupSource({
+      directory: test.source.directory,
+      expected: test.source.seal,
+      roots: test.roots,
+      ledger: test.ledger,
+      signal: signal(),
+      progress: () => undefined,
+      preserveLiveProxy: true,
+    }),
+  ).rejects.toThrow();
+  expect(await fs.readdir(test.roots.traefik)).toEqual(['live.yml']);
+  expect(await fs.readFile(path.join(test.roots.traefik, 'live.yml'), 'utf8')).toBe('live');
+});
+it('records generated retained image pins in the verified file ledger', async () => {
+  const test = await fixture();
+  const source = { appUrn: 'demo:store', project: 'demo_store', sourceSha256: 'a'.repeat(64) };
+  const { data } = encodeAppImagePins(source, {
+    version: 1,
+    pointId: randomUUID(),
+    sourceSha256: source.sourceSha256,
+    services: { web: `sha256:${'b'.repeat(64)}` },
+  });
+  const name = `${createHash('sha256').update(source.appUrn).digest('hex')}.json`;
+  const result = await materializeBackupSource({
+    directory: test.source.directory,
+    expected: test.source.seal,
+    roots: test.roots,
+    ledger: test.ledger,
+    signal: signal(),
+    progress: () => undefined,
+    retainedPins: [{ name, data }],
+  });
+  const pin = path.join(test.roots.state, 'time-machine', 'image-pins', name);
+  expect(await fs.readFile(pin)).toEqual(data);
+  await verifyRestoreFiles({ ledger: test.ledger, expected: result.files, roots: test.roots, signal: signal() });
+  await fs.appendFile(pin, ' ');
+  await expect(verifyRestoreFiles({ ledger: test.ledger, expected: result.files, roots: test.roots, signal: signal() })).rejects.toThrow();
+});
+
+it('replaces captured pin files without leaving stale entries in the restored ledger', async () => {
+  const test = await fixture();
+  const parent = 'data/state/time-machine';
+  const directory = `${parent}/image-pins`;
+  await fs.mkdir(path.join(test.source.content, directory), { recursive: true, mode: 0o700 });
+  for (const name of [parent, directory]) test.source.manifest.directories.push(await directoryMetadata(test.source.content, name));
+  const old = `${directory}/${'c'.repeat(64)}.json`;
+  await fs.writeFile(path.join(test.source.content, old), 'previous-pin', { mode: 0o600 });
+  test.source.manifest.files.push(await fileMetadata(test.source.content, old));
+  await reseal(test.source);
+  const source = { appUrn: 'demo:store', project: 'demo_store', sourceSha256: 'a'.repeat(64) };
+  const { data } = encodeAppImagePins(source, {
+    version: 1,
+    pointId: randomUUID(),
+    sourceSha256: source.sourceSha256,
+    services: { web: `sha256:${'b'.repeat(64)}` },
+  });
+  const name = `${createHash('sha256').update(source.appUrn).digest('hex')}.json`;
+  const result = await materializeBackupSource({
+    directory: test.source.directory,
+    expected: test.source.seal,
+    roots: test.roots,
+    ledger: test.ledger,
+    signal: signal(),
+    progress: () => undefined,
+    retainedPins: [{ name, data }],
+  });
+  const pins = path.join(test.roots.state, 'time-machine', 'image-pins');
+  expect(await fs.readdir(pins)).toEqual([name]);
+  await verifyRestoreFiles({ ledger: test.ledger, expected: result.files, roots: test.roots, signal: signal() });
+});
 
 function rebasedSettings() {
   const target = {

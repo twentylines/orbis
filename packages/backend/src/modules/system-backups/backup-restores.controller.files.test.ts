@@ -88,10 +88,21 @@ it.each(['cancel', 'recover'] as const)('keeps %s gated on fresh credentials and
   const res = response();
   const id = randomUUID();
   await controller[action](operator, id, { password: 'fixture', totpCode: '123456' }, res as unknown as Response);
-  expect(service[action]).toHaveBeenCalledWith(id, 7, { password: 'fixture', totpCode: '123456', passphrase: undefined });
+  const credentials = { password: 'fixture', totpCode: '123456', passphrase: undefined };
+  if (action === 'recover') expect(service.recover).toHaveBeenCalledWith(id, 7, credentials, operator);
+  else expect(service.cancel).toHaveBeenCalledWith(id, 7, credentials);
   expect(service.launch).not.toHaveBeenCalled();
   res.emit('finish');
   expect(service.launch).toHaveBeenCalledExactlyOnceWith(result.job.id);
+});
+it('never launches the legacy worker after a root-managed recovery response', async () => {
+  const { controller, service, result } = fixture();
+  const res = response();
+  service.recover.mockResolvedValue({ ...result, rootManaged: true } as typeof result);
+  await controller.recover(operator, randomUUID(), { password: 'fixture' }, res as unknown as Response);
+  res.emit('finish');
+  res.emit('close');
+  expect(service.launch).not.toHaveBeenCalled();
 });
 it('does not launch after rejected preparation and prevents cached progress', async () => {
   const { controller, service } = fixture();

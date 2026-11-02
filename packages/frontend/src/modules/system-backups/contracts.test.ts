@@ -3,6 +3,8 @@ import {
   backupPollingInterval,
   canRestore,
   exportListSchema,
+  savedBackupEligible,
+  backupRetentionSchema,
   importJobSchema,
   parseBackupResponse,
   progressPercent,
@@ -116,4 +118,30 @@ test('idle status polls slowly, active recovery polls promptly and hidden window
   expect(backupPollingInterval(undefined, true)).toBe(30_000);
   expect(backupPollingInterval(idle, false)).toBe(false);
   expect(backupPollingInterval({ ...idle, imports: { ...idle.imports, jobs: [{ ...reviewed, status: 'reviewing' }] } }, true)).toBe(2500);
+});
+
+test('saved backup selection excludes incomplete, expired and recovery-blocked archives', () => {
+  const job = {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    createdAt: 1000,
+    updatedAt: 1000,
+    status: 'succeeded',
+    stage: 'complete',
+    completedBytes: 52,
+    totalBytes: 52,
+    message: 'Ready',
+    needsRecovery: false,
+    restartRequired: false,
+    expiresAt: 5000,
+  } as const;
+  expect(savedBackupEligible(job, 4999)).toBe(true);
+  for (const entry of [
+    { ...job, status: 'running' as const },
+    { ...job, needsRecovery: true },
+    { ...job, restartRequired: true },
+  ])
+    expect(savedBackupEligible(entry, 2000)).toBe(false);
+  expect(savedBackupEligible(job, 5000)).toBe(false);
+  expect(backupRetentionSchema.allows({ version: 1, revision: 0, retentionHours: 24 })).toBe(true);
+  expect(backupRetentionSchema.allows({ version: 1, revision: 0, retentionHours: 23 })).toBe(false);
 });

@@ -22,6 +22,13 @@ class OrbisHostServiceSetupTests(unittest.TestCase):
         self.assertIn("orbis-host-discovery.py", [item.name for item in files])
         self.assertEqual(unit.name, "orbis-host.service")
 
+    def test_native_app_driver_and_diagnostic_closure_are_installed(self):
+        files, _ = SETUP.source_files(Path(__file__).parent)
+        names = {item.name for item in files}
+        self.assertTrue({'orbis-host-retained-app-driver.py', 'orbis-host-retained-app-effects.py', 'orbis-host-app-create-intent.py',
+                         'orbis-host-app-port-policy.py', 'orbis-host-app-port-observer.py', 'orbis-host-app-inet-diag.py',
+                         'orbis-host-time-machine-capabilities.py'} <= names)
+
     def setUp(self):
         self.config = {
             "services": {

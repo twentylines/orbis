@@ -158,11 +158,18 @@ class UpdateServiceTests(unittest.TestCase):
             with mock.patch.object(service, 'current_manifest', return_value=CURRENT), mock.patch.object(SERVICE, 'manifest_for_tag', return_value=TARGET), mock.patch.object(SERVICE.UPDATE, 'update_plan', return_value={'snapshotBytes': 1, 'runningAppsMustBeStopped': False}) as validate:
                 plan = service.plan(TARGET['tag']); validate.reset_mock()
                 self.assertFalse(plan['appsMustBeStopped'])
-                accepted, _ = service.apply(plan['planId'])
+                overlays = mock.Mock()
+                overlays.begin.return_value = 'fixture-overlay'
+                with mock.patch.object(service, 'core_overlays', return_value=overlays), mock.patch.object(
+                    SERVICE.subprocess, 'run', side_effect=AssertionError('unexpected subprocess in isolated test')
+                ) as run_process:
+                    accepted, _ = service.apply(plan['planId'])
+                    run_process.assert_not_called()
+                    overlays.begin.assert_called_once()
                 validate.assert_not_called()
                 self.assertEqual(accepted['state'], 'running')
                 self.assertEqual(SERVICE.read_private(service.job_file)['id'], plan['planId'])
-                with self.assertRaisesRegex(ValueError, 'in progress'):
+                with self.assertRaisesRegex(ValueError, 'resolve the active Orbis operation'):
                     service.apply(plan['planId'])
 
 

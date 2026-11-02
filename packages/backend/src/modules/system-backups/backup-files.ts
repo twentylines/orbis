@@ -239,12 +239,15 @@ export async function packageBackup(options: {
   passphrase: string;
   signal: AbortSignal;
   progress: (value: BackupProgress) => void;
+  maximumPlaintextBytes?: number;
 }) {
   const archive = path.join(options.directory, `${randomUUID()}.tar.gz`);
   const encrypted = path.join(options.directory, 'backup.orbis');
   try {
     options.progress({ stage: 'archiving', completedBytes: 0, totalBytes: null });
     await archiveBackup(options.content, archive, options.signal);
+    if (options.maximumPlaintextBytes !== undefined && (await fs.stat(archive)).size > options.maximumPlaintextBytes)
+      throw new BackupRequirementError('This capture exceeds the supported encrypted file size.');
     options.progress({ stage: 'encrypting', completedBytes: 0, totalBytes: (await fs.stat(archive)).size });
     await encryptBackup({
       source: archive,

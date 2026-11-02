@@ -7,7 +7,7 @@ import {
   type DesktopPreferences,
 } from '@/desktop/preferences';
 import { useRef, useState } from 'react';
-import { IconDeviceDesktop, IconMoonStars, IconSunHigh } from '@tabler/icons-react';
+import { ColourModeChoice } from '@/desktop/colour-mode-choice';
 import { WallpaperSettings } from './wallpaper-settings';
 import { MaterialSettings } from './material-settings';
 import { preferenceCacheLimit } from '@/desktop/appearance-cache';
@@ -241,45 +241,17 @@ export const Appearance = () => {
       <section className="appearance-section" aria-labelledby="appearance-mode">
         <div>
           <h2 id="appearance-mode">Colour mode</h2>
-          <p>Follow this device's setting, or choose a mode.</p>
+          <p>
+            {preferences.mode === 'system' && preferences.appearance.oledDark
+              ? 'System uses OLED in dark mode.'
+              : 'Follow this device’s setting, or choose a mode.'}
+          </p>
         </div>
-        <div className="appearance-modes">
-          <button
-            type="button"
-            className="appearance-mode appearance-mode-light"
-            data-setting-value="light"
-            aria-pressed={preferences.mode === 'light'}
-            onClick={() => update({ mode: 'light' })}
-          >
-            <IconSunHigh size={24} stroke={1.5} aria-hidden="true" />
-            <span>
-              <strong>Light</strong>
-            </span>
-          </button>
-          <button
-            type="button"
-            className="appearance-mode appearance-mode-dark"
-            data-setting-value="dark"
-            aria-pressed={preferences.mode === 'dark'}
-            onClick={() => update({ mode: 'dark' })}
-          >
-            <IconMoonStars size={24} stroke={1.5} aria-hidden="true" />
-            <span>
-              <strong>Dark</strong>
-            </span>
-          </button>
-          <button
-            type="button"
-            className="appearance-mode appearance-mode-system"
-            aria-pressed={preferences.mode === 'system'}
-            onClick={() => update({ mode: 'system' })}
-          >
-            <IconDeviceDesktop size={24} stroke={1.5} aria-hidden="true" />
-            <span>
-              <strong>Follow system</strong>
-            </span>
-          </button>
-        </div>
+        <ColourModeChoice
+          mode={preferences.mode}
+          oledDark={preferences.appearance.oledDark}
+          onChange={({ mode, oledDark }) => update({ ...preferences, mode, appearance: { ...preferences.appearance, oledDark } })}
+        />
       </section>
       <section className="appearance-section" aria-labelledby="appearance-text">
         <div>

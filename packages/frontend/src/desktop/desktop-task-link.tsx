@@ -21,6 +21,7 @@ import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
 import toast from 'react-hot-toast';
 import { orbisReleaseChannelsOptions } from './release-channels';
+import { useTimeMachineActivity } from '@/modules/time-machine/use-time-machine-activity';
 
 function TaskBadge({ alert, reducedMotion, children }: { alert: boolean; reducedMotion: boolean; children: ReactNode }) {
   return (
@@ -40,6 +41,7 @@ function TaskBadge({ alert, reducedMotion, children }: { alert: boolean; reduced
 
 export function DesktopTaskLink() {
   const tasks = useTasks();
+  const capture = useTimeMachineActivity();
   const { user } = useAppContext();
   const { sessionEpoch, sessionAbortSignal } = useUserContext();
   const queryClient = useQueryClient();
@@ -147,7 +149,7 @@ export function DesktopTaskLink() {
     location.pathname === '/tasks'
       ? 0
       : keys.filter((key) => !seen.has(key) && (attentionKnown || key.startsWith('critical:') || key === 'history-unavailable')).length;
-  const activeTasks = tasks.data?.tasks.filter(taskIsActive).length ?? 0;
+  const activeTasks = (tasks.data?.tasks.filter(taskIsActive).length ?? 0) + (capture.activity ? 1 : 0);
   const count = activeTasks + pendingRequests || alerts;
   return (
     <Link

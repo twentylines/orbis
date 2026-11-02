@@ -16,8 +16,18 @@ SCHEMA = "orbis.installer-bundle.v1"
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
 LAUNCHER = "install-orbis.py"
-ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|packaging/systemd/orbis-host\.service")
-REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-prerequisites.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "scripts/orbis-release-policy.py", "packaging/systemd/orbis-host.service"}
+ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|scripts/orbis-host-maintenance-responder\.mjs|packaging/systemd/orbis-host\.service")
+REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-prerequisites.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "scripts/orbis-release-policy.py", "packaging/systemd/orbis-host.service", "scripts/orbis-proxy-identity.py", "scripts/orbis-host-maintenance-responder.mjs"}
+
+REQUIRED |= {
+    "scripts/orbis-host-app-create-intent.py",
+    "scripts/orbis-host-app-inet-diag.py",
+    "scripts/orbis-host-app-port-observer.py",
+    "scripts/orbis-host-app-port-policy.py",
+    "scripts/orbis-host-retained-app-driver.py",
+    "scripts/orbis-host-retained-app-effects.py",
+    "scripts/orbis-host-time-machine-capabilities.py",
+}
 
 
 def sha(data):

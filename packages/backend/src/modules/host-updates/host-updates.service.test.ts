@@ -7,8 +7,50 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import type { DriveHealthService } from '../system/drive-health.service';
 import { HostUpdatesService } from './host-updates.service';
+import * as rootStatus from '@/common/restoration-root-status';
 
 describe('host update Unix socket transport', () => {
+  it('rejects SMART installation on old helpers before dispatching an install or review', async () => {
+    const candidate = new HostUpdatesService({} as never, mock<DriveHealthService>());
+    const status = vi.spyOn(candidate, 'status').mockResolvedValue({ available: true, capabilities: [] });
+    const call = vi.spyOn(candidate as unknown as { call: (endpoint: string, body?: object) => Promise<unknown> }, 'call');
+    await expect(candidate.smartToolsPlan()).rejects.toThrow('Update the Orbis host service');
+    await expect(candidate.smartToolsApply('00000000-0000-4000-8000-000000000000')).rejects.toThrow('Update the Orbis host service');
+    expect(call).not.toHaveBeenCalled();
+    status.mockRestore();
+    call.mockRestore();
+  });
+
+  it('allows only complete fixed-package SMART reviews and exact plan applies', async () => {
+    const candidate = new HostUpdatesService({} as never, mock<DriveHealthService>());
+    vi.spyOn(candidate, 'status').mockResolvedValue({ available: true, capabilities: ['drives.tools-install.v1'] });
+    const plan = {
+      planId: '00000000-0000-4000-8000-000000000000',
+      createdAt: 1000,
+      expiresAt: 1900,
+      selected: [{ name: 'smartmontools', installedVersion: null, candidateVersion: '7.4-2build1' }],
+      operations: [{ name: 'smartmontools', installedVersion: null, candidateVersion: '7.4-2build1', action: 'install' }],
+    };
+    const call = vi.spyOn(candidate as unknown as { call: (endpoint: string, body?: object) => Promise<unknown> }, 'call').mockResolvedValue(plan);
+    expect(await candidate.smartToolsPlan()).toEqual(plan);
+    expect(call).toHaveBeenLastCalledWith('/v1/drives/tools/plan', {});
+    for (const changed of [
+      { selected: [{ ...plan.selected[0], name: 'curl' }] },
+      { selected: [{ ...plan.selected[0], candidateVersion: '7.4; reboot' }] },
+      { operations: [{ ...plan.operations[0], action: 'upgrade' }] },
+      { operations: [] },
+      { selected: [null] },
+      { expiresAt: 1901 },
+    ]) {
+      call.mockResolvedValueOnce({ ...plan, ...changed });
+      await expect(candidate.smartToolsPlan()).rejects.toThrow('invalid SMART tools review');
+    }
+    call.mockResolvedValueOnce({ jobId: plan.planId, state: 'queued' });
+    await candidate.smartToolsApply(plan.planId);
+    expect(call).toHaveBeenLastCalledWith('/v1/drives/tools/apply', { planId: plan.planId });
+    for (const id of ['../invalid', 'id; reboot', 5]) await expect(candidate.smartToolsApply(id)).rejects.toThrow('Review the SMART tools');
+  });
+
   let directory: string;
   let server: http.Server;
   let service: HostUpdatesService;
@@ -31,6 +73,7 @@ describe('host update Unix socket transport', () => {
   const drives = mock<DriveHealthService>();
 
   beforeAll(async () => {
+    vi.spyOn(rootStatus, 'readRootCoreState').mockResolvedValue('idle');
     directory = await mkdtemp(path.join(os.tmpdir(), 'orbis-host-transport-'));
     const socketPath = path.join(directory, 'host.sock');
     server = http.createServer((request, response) => {
@@ -112,6 +155,9 @@ describe('host update Unix socket transport', () => {
     const count = requests.length;
     await expect(service.apply(id)).rejects.toThrow('new update or downgrade review');
     await expect(new HostUpdatesService(channels as never, drives).apply(id)).rejects.toThrow('new update or downgrade review');
+    expect(requests).toHaveLength(count);
+    vi.mocked(rootStatus.readRootCoreState).mockResolvedValueOnce(null);
+    await expect(service.apply(id, true)).rejects.toThrow('verified operation status');
     expect(requests).toHaveLength(count);
     await service.apply(id, true);
     expect(requests.at(-1)).toEqual({ method: 'POST', path: '/v1/apply', body: { planId: id } });

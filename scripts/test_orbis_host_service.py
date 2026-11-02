@@ -38,6 +38,7 @@ class DiscoveryRoutesTests(unittest.TestCase):
         handler = object.__new__(SERVICE.Handler)
         handler.path = path
         handler.server = mock.Mock()
+        handler.server.service.run_capture_mutation.side_effect = lambda work: work()
         handler.send_json = mock.Mock()
         handler.body = mock.Mock(return_value=body)
         return handler
@@ -216,6 +217,8 @@ class HostServiceTests(unittest.TestCase):
             (self.root / name).write_text("fixture\n")
         SERVICE.save_channel(self.root, "nightly", str(uuid.uuid4()))
         self.service = SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
+        self.service.core_overlay_manager = mock.Mock()
+        self.service.core_overlay_manager.begin.side_effect = lambda identifier, *_: identifier
         self.current = mock.patch.object(self.service, "current_manifest", return_value=CURRENT)
         self.current.start()
         self.addCleanup(self.current.stop)

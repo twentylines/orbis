@@ -34,6 +34,9 @@ class ControllerConfigTests(unittest.TestCase):
             (self.root / name).write_bytes(data)
             (self.root / name).chmod(0o600)
         self.enroll()
+        owner_patch = mock.patch.object(SERVICE.HOST.AUTHORITY, "OWNER", os.geteuid())
+        owner_patch.start()
+        self.addCleanup(owner_patch.stop)
         self.service = SERVICE.HostService(self.root, "fixture", self.snapshots, self.state)
         self.point = str(uuid.uuid4())
         self.controller = "a" * 64
@@ -192,6 +195,15 @@ class ControllerConfigTests(unittest.TestCase):
         with mock.patch.object(SERVICE.HOST.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
             SERVICE.HOST.run(["fixed-read-fixture"], self.root)
             self.assertNotIn("timeout", run.call_args.kwargs)
+
+    def test_capability_route_does_not_read_or_reconcile_host_state(self):
+        handler = object.__new__(SERVICE.Handler)
+        handler.path = "/v1/controller-config/capability"
+        handler.server = mock.Mock(service=self.service)
+        handler.send_json = mock.Mock()
+        with mock.patch.object(self.service, "status", side_effect=AssertionError("No status")), mock.patch.object(self.service, "capture_controller_config", side_effect=AssertionError("No bytes")):
+            handler.do_GET()
+        self.assertEqual(handler.send_json.call_args.args, (200, {"version": 1, "capability": "controller-config.v1"}))
 
     def test_http_route_only_accepts_bound_identity_and_never_returns_payload_in_errors(self):
         handler = object.__new__(SERVICE.Handler)

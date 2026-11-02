@@ -57,5 +57,6 @@ export async function finishSetup(
   navigate: (destination: string, options: { replace: true }) => unknown,
 ) {
   await saveSetupSteps(steps, receipts, onProgress);
+  onProgress('Preparing Orbis');
   await navigate('/dashboard', { replace: true });
 }

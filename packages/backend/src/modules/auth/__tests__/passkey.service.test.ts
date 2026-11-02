@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { Request } from 'express';
+import { timeMachineRestorePasskeyOptionsSchema } from '@runtipi/common/schemas/time-machine-restore';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 import { ConfigurationService } from '@/core/config/configuration.service';
@@ -412,5 +413,144 @@ describe('audited WebAuthn passkey ceremonies', () => {
         (key === 'demoMode' ? true : key === 'userSettings' ? { domain: 'orbis.example.test', sslPort: 443 } : { dataDir: directory }) as never,
     );
     await expect(service.loginOptions(request(), {})).rejects.toThrow();
+  });
+  describe('account-bound sensitive action assertions', () => {
+    const binding = 'a'.repeat(64);
+    const operatorRequest = (session = 'browser-session') => {
+      const req = request(undefined, session);
+      if (!req.user) throw new Error('The authenticated fixture user is missing.');
+      req.user.operator = true;
+      return req;
+    };
+    it('uses a standalone UV assertion without creating a new login session and consumes it once', async () => {
+      const { authenticator, handle } = await enroll();
+      const req = operatorRequest();
+      const begin = await service.sensitiveOptions(req, binding);
+      expect(
+        timeMachineRestorePasskeyOptionsSchema.allows({ version: 1, method: 'passkey', reviewId: '22222222-2222-4222-8222-222222222222', ...begin }),
+      ).toBe(true);
+      const create = vi.spyOn(sessions, 'createSession');
+      const response = authenticator.authenticate(begin.options.challenge, handle);
+      const proof = await service.verifySensitive(req, binding, { challengeId: begin.challengeId, response });
+      expect(proof).toEqual(await auth.operatorActionContext(req));
+      expect(begin.requiresTotp).toBe(false);
+      expect(create).not.toHaveBeenCalled();
+      await expect(service.verifySensitive(req, binding, { challengeId: begin.challengeId, response })).rejects.toThrow();
+    });
+    it.each(['point', 'session', 'revoked-session', 'password', 'operator', 'removed-key'])(
+      'rejects a changed %s after issuance',
+      async (changed) => {
+        const { authenticator, handle } = await enroll();
+        const req = operatorRequest();
+        const begin = await service.sensitiveOptions(req, binding);
+        if (changed === 'session') values.set('session:other-session', '41');
+        if (changed === 'revoked-session') values.delete('session:browser-session');
+        if (changed === 'password') user.password = 'replaced-password-hash';
+        if (changed === 'operator') user.operator = false;
+        if (changed === 'removed-key') await service.remove(req, { id: authenticator.id, password: 'fixture-password' });
+        const body = { challengeId: begin.challengeId, response: authenticator.authenticate(begin.options.challenge, handle) };
+        await expect(
+          service.verifySensitive(
+            changed === 'session' ? operatorRequest('other-session') : req,
+            changed === 'point' ? 'b'.repeat(64) : binding,
+            body,
+          ),
+        ).rejects.toThrow();
+        await expect(service.verifySensitive(req, binding, body)).rejects.toThrow();
+      },
+    );
+    it('refuses revocation after real signature verification without advancing its counter', async () => {
+      const { authenticator, handle } = await enroll();
+      const req = operatorRequest();
+      const begin = await service.sensitiveOptions(req, binding);
+      const original = auth.assertSecurityChangeAllowed.bind(auth);
+      let checks = 0;
+      vi.spyOn(auth, 'assertSecurityChangeAllowed').mockImplementation(() => {
+        original();
+        if (++checks === 3) values.delete('session:browser-session');
+      });
+      await expect(
+        service.verifySensitive(req, binding, {
+          challengeId: begin.challengeId,
+          response: authenticator.authenticate(begin.options.challenge, handle),
+        }),
+      ).rejects.toThrow();
+      expect(checks).toBe(3);
+      expect((await store.snapshot()).users[41]?.credentials[0]?.counter).toBe(0);
+    });
+    it('retains standalone passkey behavior when TOTP is enabled without the extra-code opt-in', async () => {
+      user.totpEnabled = true;
+      user.totpSecret = 'encrypted';
+      user.salt = 'salt';
+      const { authenticator, handle } = await enroll();
+      const req = operatorRequest();
+      const begin = await service.sensitiveOptions(req, binding);
+      const code = vi.spyOn(auth, 'verifyPasskeyActionCode');
+      await expect(
+        service.verifySensitive(req, binding, {
+          challengeId: begin.challengeId,
+          response: authenticator.authenticate(begin.options.challenge, handle),
+        }),
+      ).resolves.toMatchObject({ userId: 41 });
+      expect(begin.requiresTotp).toBe(false);
+      expect(code).not.toHaveBeenCalled();
+    });
+    it('enforces the opted-in extra authenticator code after the real assertion', async () => {
+      user.totpEnabled = true;
+      user.totpSecret = 'encrypted';
+      user.salt = 'salt';
+      const { authenticator, handle } = await enroll();
+      const req = operatorRequest();
+      const code = TotpAuthenticator.generate('JBSWY3DPEHPK3PXP');
+      await service.updatePolicy(req, { requireTotpAfterPasskey: true, password: 'fixture-password', totpCode: code });
+      const begin = await service.sensitiveOptions(req, binding);
+      expect(begin.requiresTotp).toBe(true);
+      await expect(
+        service.verifySensitive(req, binding, {
+          challengeId: begin.challengeId,
+          response: authenticator.authenticate(begin.options.challenge, handle),
+        }),
+      ).rejects.toThrow();
+      const fresh = await service.sensitiveOptions(req, binding);
+      await expect(
+        service.verifySensitive(req, binding, {
+          challengeId: fresh.challengeId,
+          response: authenticator.authenticate(fresh.options.challenge, handle, 2),
+          totpCode: code,
+        }),
+      ).resolves.toMatchObject({ userId: 41 });
+    });
+    it('rejects missing UV, expiry and login-ceremony substitution', async () => {
+      const { authenticator, handle } = await enroll();
+      const req = operatorRequest();
+      const begin = await service.sensitiveOptions(req, binding);
+      await expect(
+        service.verifySensitive(req, binding, {
+          challengeId: begin.challengeId,
+          response: authenticator.authenticate(begin.options.challenge, handle, 1, undefined, undefined, false),
+        }),
+      ).rejects.toThrow();
+      const fresh = await service.sensitiveOptions(req, binding);
+      vi.spyOn(Date, 'now').mockReturnValue(fresh.expiresAt + 1);
+      await expect(
+        service.verifySensitive(req, binding, {
+          challengeId: fresh.challengeId,
+          response: authenticator.authenticate(fresh.options.challenge, handle),
+        }),
+      ).rejects.toThrow();
+      vi.restoreAllMocks();
+      const login = await service.loginOptions(req, {});
+      await expect(
+        service.verifySensitive(req, binding, { challengeId: login.id, response: authenticator.authenticate(login.options.challenge, handle) }),
+      ).rejects.toThrow();
+    });
+    it('accepts a bound non-discoverable credential without an optional user handle', async () => {
+      const { authenticator, handle } = await enroll();
+      const req = operatorRequest();
+      const begin = await service.sensitiveOptions(req, binding);
+      const response = authenticator.authenticate(begin.options.challenge, handle);
+      delete response.response.userHandle;
+      await expect(service.verifySensitive(req, binding, { challengeId: begin.challengeId, response })).resolves.toMatchObject({ userId: 41 });
+    });
   });
 });

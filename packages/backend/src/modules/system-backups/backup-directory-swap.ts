@@ -490,6 +490,21 @@ export class BackupDirectorySwap {
     if (current.length !== promoted.size || current.some((name) => !promoted.has(name))) throw failed();
     await this.save('committed');
   }
+  // Root has already committed and released the historical controller. Live entries may have changed.
+  async commitAfterActivation() {
+    await this.refresh();
+    if (this.plan.phase === 'committed') return;
+    if (this.plan.phase !== 'promoting') throw failed();
+    await this.checkRoot();
+    if (this.plan.version === 2) {
+      await this.save('committed');
+      return;
+    }
+    const intents = await this.readIntents();
+    if (intents.length !== this.plan.previous.length + this.plan.incoming.length || (await directoryNames(this.incomingDirectory)).length)
+      throw failed();
+    await this.save('committed');
+  }
   async cleanup() {
     await this.refresh();
     if (!['committed', 'rolled-back'].includes(this.plan.phase)) throw failed();

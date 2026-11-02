@@ -554,6 +554,27 @@ export class AutomaticUpdatesService implements OnModuleInit, OnModuleDestroy {
     );
     return this.read();
   }
+  async resetOrbisPreferences() {
+    await this.change(
+      (next) => {
+        next.settings.orbis = { enabled: false, mode: 'idle' };
+        next.orbis = null;
+        next.pauseReason = null;
+        next.revision++;
+      },
+      true,
+      '03:00',
+    );
+    await this.changeSystem((next) => {
+      next.enabled = false;
+      next.attempt = null;
+      next.phase = null;
+      next.settingsRevision = null;
+      next.policyRevision = null;
+      next.pauseReason = null;
+      next.revision++;
+    });
+  }
   async pauseForDowngrade() {
     await this.change((next) => {
       next.settings.orbis.enabled = false;

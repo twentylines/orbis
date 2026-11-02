@@ -6,6 +6,7 @@ import type { HostTelemetry } from '@runtipi/common/schemas';
 import { Link, useSearchParams } from 'react-router';
 import { useWindowVisible } from '@/desktop/window-visibility';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import { useNetworkWarmup } from './network-rate-warmup';
 import './host-devices.css';
 
 function bytes(value: number | null) {
@@ -50,6 +51,20 @@ function Facts({ values }: { values: [string, string][] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+export function NetworkFacts({ item, visible }: { item: Extract<HostTelemetry, { available: true }>['network'][number]; visible: boolean }) {
+  const measuring = useNetworkWarmup(item, visible);
+  return (
+    <Facts
+      values={[
+        ['Download', measuring ? 'Measuring…' : rate(item.rxBytesPerSecond)],
+        ['Upload', measuring ? 'Measuring…' : rate(item.txBytesPerSecond)],
+        ['Received', bytes(item.receivedBytes)],
+        ['Sent', bytes(item.transmittedBytes)],
+      ]}
+    />
   );
 }
 
@@ -98,6 +113,7 @@ export function useHostReadings() {
 
 export const HostDevices = memo(function HostDevices() {
   const query = useHostReadings();
+  const visible = useWindowVisible();
   const data = query.data;
   const ready = data?.available ? data : null;
   const stale = query.isError || ready?.stale;
@@ -235,7 +251,7 @@ export const HostDevices = memo(function HostDevices() {
                 </h3>
                 <div className="host-device-list">
                   {network.map((item) => (
-                    <article className="host-device" data-kind="network" key={item.interface}>
+                    <article className="host-device" data-kind="network" key={`${item.interface}:${item.historyId ?? ''}`}>
                       <div className="host-device-identity">
                         <div className="host-device-heading">
                           <h4 className="host-device-identifier" title={item.interface}>
@@ -247,14 +263,7 @@ export const HostDevices = memo(function HostDevices() {
                         </div>
                         {item.speedMbps !== null ? <p className="host-device-kind">Link speed {item.speedMbps.toLocaleString()} Mb/s</p> : null}
                       </div>
-                      <Facts
-                        values={[
-                          ['Download', rate(item.rxBytesPerSecond)],
-                          ['Upload', rate(item.txBytesPerSecond)],
-                          ['Received', bytes(item.receivedBytes)],
-                          ['Sent', bytes(item.transmittedBytes)],
-                        ]}
-                      />
+                      <NetworkFacts item={item} visible={visible} />
                       <HistoryLink kind="network" name={item.interface} />
                     </article>
                   ))}

@@ -24,7 +24,8 @@ REPLACE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REPLACE)
 HOST, APPS = REPLACE.HOST, REPLACE.APPS
 UI = REPLACE.load("orbis-install-ui.py", "orbis_new_ui")
-SCHEMA = "orbis.new-installation.v1"
+PROXY = REPLACE.load("orbis-proxy-identity.py", "orbis_new_proxy_identity")
+SCHEMA = "orbis.new-installation.v2"
 IMAGES = {
     "postgres": "postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
     "rabbitmq": "rabbitmq@sha256:8668a6ed4a878a6619213d9d5721dd4983ecb662312fe233816e1d1ff8a96753",
@@ -64,11 +65,11 @@ def compose(root, image, endpoint, http, https):
         if Path(source).is_file():
             core["volumes"].append(bind(source, target, True))
     core["labels"] = {"runtipi.managed": "true", "traefik.enable": "true", "traefik.http.services.dashboard.loadbalancer.server.port": "3000", "traefik.http.routers.dashboard.rule": "PathPrefix(`/`)", "traefik.http.routers.dashboard.entrypoints": "web", "traefik.http.routers.dashboard.service": "dashboard", "traefik.http.routers.dashboard-secure.rule": "PathPrefix(`/`)", "traefik.http.routers.dashboard-secure.entrypoints": "websecure", "traefik.http.routers.dashboard-secure.service": "dashboard", "traefik.http.routers.dashboard-secure.tls": "true", "traefik.http.middlewares.runtipi.forwardauth.address": "http://runtipi:3000/api/auth/traefik", "traefik.http.middlewares.runtipi.forwardauth.authRequestHeaders": "Cookie", "traefik.http.middlewares.runtipi.forwardauth.maxResponseBodySize": "8192"}
-    return {"services": {
+    return {"x-orbis-proxy-host-identity": PROXY.declaration(root), "services": {
         "runtipi": core,
         "runtipi-db": {**common, "container_name": "runtipi-db", "image": IMAGES["postgres"], "stop_grace_period": "1m", "environment": {"POSTGRES_USER": "tipi", "POSTGRES_DB": "tipi", "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?}"}, "volumes": [bind(root / "data/postgres", "/var/lib/postgresql/data")], "healthcheck": {"test": ["CMD-SHELL", "pg_isready -U tipi -d tipi"], "interval": "3s", "timeout": "3s", "retries": 60}},
         "runtipi-queue": {**common, "container_name": "runtipi-queue", "image": IMAGES["rabbitmq"], "environment": {"RABBITMQ_DEFAULT_USER": "tipi", "RABBITMQ_DEFAULT_PASS": "${RABBITMQ_PASSWORD:?}"}, "volumes": [bind(root / "data/rabbitmq", "/var/lib/rabbitmq")]},
-        "runtipi-reverse-proxy": {**common, "container_name": "runtipi-reverse-proxy", "image": IMAGES["traefik"], "depends_on": {"runtipi": {"condition": "service_healthy"}}, "ports": [f"{http}:80", f"{https}:443"], "volumes": [bind(root / "traefik", "/etc/traefik"), bind(root / "traefik/shared", "/shared"), bind(endpoint, "/var/run/docker.sock", True)]},
+        "runtipi-reverse-proxy": {**common, "container_name": "runtipi-reverse-proxy", "image": IMAGES["traefik"], "depends_on": {"runtipi": {"condition": "service_healthy"}}, "ports": [f"{http}:80", f"{https}:443"], "volumes": [bind(root / "traefik", "/etc/traefik", True), bind(PROXY.shared_path(root), "/shared"), bind(endpoint, "/var/run/docker.sock", True)]},
     }, "networks": {"tipi_main_network": {"name": NETWORK, "driver": "bridge", "labels": {"orbis.managed": "true"}}}}
 
 
@@ -143,7 +144,14 @@ def finish(record, reader, journal):
     if marker.get("journal") != str(journal) or marker.get("dockerContext") != reader.context or marker.get("root") != str(root):
         raise ValueError("The installation marker belongs to another transaction")
     if record["stage"] == "prepared":
-        for name in ["media", "state", "repos", "apps", "logs", "traefik/dynamic", "traefik/shared", "traefik/tls", "user-config", "backups", "app-data", "cache", "data/postgres", "data/rabbitmq"]:
+        planned = journal.parent / "files" / "docker-compose.yml"
+        if (hashlib.sha256(planned.read_bytes()).hexdigest() != record["files"]["docker-compose.yml"]
+                or json.loads(planned.read_bytes()).get("x-orbis-proxy-host-identity") != PROXY.declaration(root)):
+            raise ValueError("This installation transaction requires explicit proxy layout review; existing data was preserved")
+        ownership = PROXY.initialize(root)
+        record["proxyHostIdentitySha256"] = hashlib.sha256(PROXY.P.canonical(ownership)).hexdigest()
+        APPS.write_journal(journal, record)
+        for name in ["media", "state", "repos", "apps", "logs", "traefik/dynamic", "traefik/tls", "user-config", "backups", "app-data", "cache", "data/postgres", "data/rabbitmq"]:
             target = root / name
             target.mkdir(mode=0o700, parents=True, exist_ok=True)
             if target.is_symlink() or not target.is_dir():
@@ -173,6 +181,9 @@ def finish(record, reader, journal):
         APPS.write_journal(journal, record)
     if record["stage"] not in {"starting", "enrolled"}:
         raise ValueError("This installation transaction cannot be replayed")
+    ownership = PROXY.owned(root)
+    if hashlib.sha256(PROXY.P.canonical(ownership)).hexdigest() != record.get("proxyHostIdentitySha256"):
+        raise ValueError("The protected proxy host identity ownership changed; preserve this installation transaction")
     environment = (root / ".env").lstat()
     if not stat.S_ISREG(environment.st_mode) or environment.st_nlink != 1 or environment.st_uid != os.geteuid() or stat.S_IMODE(environment.st_mode) & 0o077:
         raise ValueError("The server environment must remain a private regular file")
@@ -186,6 +197,9 @@ def finish(record, reader, journal):
     core = HOST.current_core(root, reader.context)
     if core.get("state") != "running" or core.get("health") != "healthy" or core.get("image") != REPLACE.target_image(manifest):
         raise RuntimeError("The new controller did not reach its pinned healthy image")
+    observed = PROXY.observe_current(root, reader.context)
+    if observed["mutableIdentity"]["ownershipSha256"] != record["proxyHostIdentitySha256"]:
+        raise ValueError("The running proxy does not match the protected installation layout; existing identity was preserved")
     HOST.write_state(root, HOST.installation_fingerprint(root, manifest, reader.context))
     record["stage"] = "complete"
     APPS.write_journal(journal, record)

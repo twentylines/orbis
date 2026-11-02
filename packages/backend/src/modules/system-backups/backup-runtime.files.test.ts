@@ -71,7 +71,7 @@ it.each(['stderr', 'exit', 'truncated', 'wrong-format'] as const)('refuses an in
   }
 });
 
-function planFixture(extraMount?: { Type: string; Source: string; Destination: string; RW: boolean }, dbNetwork = 'private') {
+function planFixture(extraMount?: { Type: string; Source: string; Destination: string; RW: boolean }, dbNetwork = 'private', running = true) {
   const self = {
     Id: 'controller',
     Mounts: [
@@ -84,7 +84,7 @@ function planFixture(extraMount?: { Type: string; Source: string; Destination: s
     Id: 'app',
     Name: '/app',
     Config: { Labels: { 'com.docker.compose.project': 'fixture_store' }, Image: 'fixture:1' },
-    State: { Running: true },
+    State: { Running: running },
     NetworkSettings: { Networks: { private: {} } },
     Mounts: [extraMount ?? { Type: 'bind', Source: '/host/runtime/app-data/store/fixture', Destination: '/data', RW: true }],
   };
@@ -116,4 +116,19 @@ it('refuses Docker volumes and a database from a different network', async () =>
     'Docker volume',
   );
   await expect(planFixture(undefined, 'unrelated').plan(['fixture_store'])).rejects.toThrow('identified safely');
+});
+
+it('re-inspects actual Docker inventory and refuses a still-running app before certifying quiescence', async () => {
+  const runtime = planFixture();
+  const plan = await runtime.plan(['fixture_store']);
+  await expect(runtime.verifyStopped(plan, new AbortController().signal)).rejects.toThrow('writer state changed');
+  await expect(runtime.verifyStopped({ ...plan, databaseId: 'different database' }, new AbortController().signal)).rejects.toThrow(
+    'writer state changed',
+  );
+});
+
+it('certifies the re-inspected stopped container inventory when database and image identities remain unchanged', async () => {
+  const runtime = planFixture(undefined, 'private', false);
+  const plan = await runtime.plan(['fixture_store']);
+  expect(await runtime.verifyStopped(plan, new AbortController().signal)).toEqual([{ id: 'app', project: 'fixture_store', running: false }]);
 });

@@ -2,10 +2,10 @@ import type { TaskRecord } from '@runtipi/common/schemas';
 import { coreUpdateTitle, coreWatchIsActive, type CoreUpdateWatch } from './core-update-state';
 import { formatOrbisVersion } from './orbis-version';
 
-export type PackageActivityJob = { id: string; kind?: 'refresh'; state: string; operationCount?: number; message?: string };
+export type PackageActivityJob = { id: string; kind?: 'refresh' | 'smart-tools'; state: string; operationCount?: number; message?: string };
 export type DesktopActivityItem = {
   id: string;
-  kind: 'app' | 'core' | 'packages';
+  kind: 'app' | 'core' | 'packages' | 'time-machine';
   title: string;
   detail: string;
   state: string;
@@ -18,6 +18,7 @@ export type DesktopActivity = {
   kind: DesktopActivityItem['kind'];
   count: number;
   items: DesktopActivityItem[];
+  percentage?: number;
 };
 const verbs: Record<TaskRecord['action'], string> = {
   start: 'Starting',
@@ -66,18 +67,21 @@ export function desktopActivity(
   }
   for (const check of checks.filter((check) => check.operation === 'downgrade')) {
     const title = 'Checking';
-    const detail = formatOrbisVersion(check.target).replace(/^0\.1 beta /, 'Beta ');
+    const detail = check.target.replace(/^v?0\.1\.0-beta\./, 'Beta ');
     items.unshift({ id: check.id, kind: 'core', title, detail, state: 'checking' });
     summary = { title, detail, kind: 'core', count: items.length };
   }
   if (packageJob && ['queued', 'running'].includes(packageJob.state)) {
     const count = packageJob.operationCount;
     const refresh = packageJob.kind === 'refresh';
-    const title = refresh
-      ? 'Refreshing package lists'
-      : count
-        ? `Updating ${count} system package${count === 1 ? '' : 's'}`
-        : 'Updating system packages';
+    const tools = packageJob.kind === 'smart-tools';
+    const title = tools
+      ? 'Installing drive health tools'
+      : refresh
+        ? 'Refreshing package lists'
+        : count
+          ? `Updating ${count} system package${count === 1 ? '' : 's'}`
+          : 'Updating system packages';
     items.unshift({
       id: packageJob.id,
       kind: 'packages',
@@ -86,8 +90,14 @@ export function desktopActivity(
       state: packageJob.state,
     });
     summary = {
-      title: refresh ? 'Refreshing' : 'Updating',
-      detail: refresh ? 'System package lists' : count ? `${count} system package${count === 1 ? '' : 's'}` : 'System packages',
+      title: tools ? 'Installing' : refresh ? 'Refreshing' : 'Updating',
+      detail: tools
+        ? 'Drive health tools'
+        : refresh
+          ? 'System package lists'
+          : count
+            ? `${count} system package${count === 1 ? '' : 's'}`
+            : 'System packages',
       kind: 'packages',
       count: items.length,
     };
@@ -97,7 +107,7 @@ export function desktopActivity(
     items.unshift({ id: watch.id, kind: 'core', title, detail: `${formatOrbisVersion(watch.targetTag)} · ${watch.message}`, state: watch.phase });
     summary = {
       title: title.replace(/ Orbis$/, ''),
-      detail: `Orbis ${formatOrbisVersion(watch.targetTag).replace(/^0\.1 beta /, 'beta ')}`,
+      detail: `Orbis ${formatOrbisVersion(watch.targetTag).replace(/^0\.1\.0 beta /, 'beta ')}`,
       kind: 'core',
       count: items.length,
     };
@@ -105,7 +115,14 @@ export function desktopActivity(
   return summary ? { ...summary, count: items.length, items } : null;
 }
 
-export function desktopActivityGroups(...[tasks, names, watch, packages, checks = []]: Parameters<typeof desktopActivity>) {
+export function desktopActivityGroups(
+  tasks: readonly TaskRecord[],
+  names: ReadonlyMap<string, string>,
+  watch: CoreUpdateWatch | null,
+  packages: PackageActivityJob | null,
+  checks: Parameters<typeof desktopActivity>[4] = [],
+  capture?: { id: string; title: string; detail: string; stage: string; percentage?: number } | null,
+) {
   const groups: (DesktopActivity & { category: string })[] = [];
   const add = (category: string, activity: DesktopActivity | null) => {
     if (activity) groups.push({ ...activity, category });
@@ -113,6 +130,13 @@ export function desktopActivityGroups(...[tasks, names, watch, packages, checks 
   add('orbis', desktopActivity([], names, watch, null));
   add('system', desktopActivity([], names, null, packages));
   add('compatibility', desktopActivity([], names, null, null, checks));
+  if (capture)
+    add('time-machine', {
+      ...capture,
+      kind: 'time-machine',
+      count: 1,
+      items: [{ id: capture.id, kind: 'time-machine', title: 'Time Machine capture', detail: capture.stage, state: 'running' }],
+    });
   const actions = new Set(tasks.filter((task) => ['queued', 'running'].includes(task.status)).map((task) => task.action));
   for (const action of actions)
     add(

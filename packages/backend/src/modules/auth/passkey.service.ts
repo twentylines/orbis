@@ -16,6 +16,7 @@ import { UserRepository } from '../user/user.repository';
 import { SessionManager } from './session.manager';
 import { AuthService } from './auth.service';
 import { PasskeyStore, type StoredPasskey, type PasskeyState } from './passkey.store';
+import { sensitiveAccountBinding } from './sensitive-action-context';
 
 export const PASSKEY_COOKIE = 'orbis-passkey-ceremony';
 export const PASSKEY_TTL = 5 * 60_000;
@@ -23,11 +24,13 @@ type Context = { origin: string; rpID: string };
 type Ceremony = Context & {
   challenge: string;
   expires: number;
-  kind: 'register' | 'login';
+  kind: 'register' | 'login' | 'sensitive';
   userId?: number;
   sessionId?: string;
   accountHash?: string;
   name?: string;
+  actionBinding?: string;
+  securityBinding?: string;
 };
 type PasskeyUser = NonNullable<Awaited<ReturnType<UserRepository['getUserById']>>>;
 const proofHash = (user: PasskeyUser) =>
@@ -276,6 +279,107 @@ export class PasskeyService {
     const id = randomUUID();
     this.challenges.set(id, { ...context, kind: 'login', challenge: options.challenge, expires: Date.now() + PASSKEY_TTL });
     return { id, options };
+  }
+  async sensitiveOptions(req: Request, actionBinding: string) {
+    const context = this.context(req);
+    const actor = await this.auth.operatorActionContext(req);
+    if (!/^[a-f0-9]{64}$/.test(actionBinding)) throw fail();
+    const state = await this.store.snapshot();
+    const user = await this.users.getUserById(actor.userId);
+    const account = state.users[actor.userId];
+    const credentials = account?.credentials.filter((credential) => credential.rpID === context.rpID) ?? [];
+    if (!user?.operator || !credentials.length || sensitiveAccountBinding(user, state) !== actor.securityBinding) throw fail();
+    const options = await generateAuthenticationOptions({
+      rpID: context.rpID,
+      timeout: 2 * 60_000,
+      userVerification: 'required',
+      allowCredentials: credentials.map(({ id, transports }) => ({ id, transports })),
+    });
+    this.prune();
+    const id = randomUUID();
+    const expires = Date.now() + 2 * 60_000;
+    this.challenges.set(id, {
+      ...context,
+      kind: 'sensitive',
+      challenge: options.challenge,
+      expires,
+      userId: actor.userId,
+      sessionId: actor.sessionBinding,
+      securityBinding: actor.securityBinding,
+      actionBinding,
+    });
+    const { extensions: _extensions, ...publicOptions } = options;
+    return { challengeId: id, options: publicOptions, expiresAt: expires, requiresTotp: accountPolicy(account, user).requireTotpAfterPasskey };
+  }
+  async verifySensitive(req: Request, actionBinding: string, raw: unknown) {
+    const context = this.context(req);
+    const body = this.object(raw, ['challengeId', 'response', 'totpCode']);
+    const ceremony = this.take(body.challengeId, 'sensitive', context);
+    const actor = await this.auth.operatorActionContext(req);
+    if (
+      ceremony.userId !== actor.userId ||
+      ceremony.sessionId !== actor.sessionBinding ||
+      ceremony.securityBinding !== actor.securityBinding ||
+      ceremony.actionBinding !== actionBinding
+    )
+      throw fail();
+    const response = body.response as AuthenticationResponseJSON | undefined;
+    if (
+      !response ||
+      typeof response.id !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,2048}$/.test(response.id) ||
+      !response.response ||
+      typeof response.response !== 'object' ||
+      (body.totpCode !== undefined && (typeof body.totpCode !== 'string' || !/^\d{6}$/.test(body.totpCode)))
+    )
+      throw fail();
+    return this.store.change(async (state) => {
+      const account = state.users[actor.userId];
+      const user = await this.users.getUserById(actor.userId);
+      const credential = account?.credentials.find((value) => value.id === response.id && value.rpID === context.rpID);
+      if (
+        !user?.operator ||
+        !account ||
+        !credential ||
+        sensitiveAccountBinding(user, state) !== actor.securityBinding ||
+        (response.response.userHandle != null && response.response.userHandle !== account.handle)
+      )
+        throw fail();
+      let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
+      try {
+        verification = await verifyAuthenticationResponse({
+          response,
+          expectedChallenge: ceremony.challenge,
+          expectedOrigin: context.origin,
+          expectedRPID: context.rpID,
+          requireUserVerification: true,
+          credential: {
+            id: credential.id,
+            publicKey: new Uint8Array(Buffer.from(credential.publicKey, 'base64url')),
+            counter: credential.counter,
+            transports: credential.transports,
+          },
+        });
+      } catch {
+        throw fail();
+      }
+      if (!verification.verified) throw fail();
+      if (accountPolicy(account, user).requireTotpAfterPasskey) await this.auth.verifyPasskeyActionCode(user.id, body.totpCode as string | undefined);
+      this.auth.assertSecurityChangeAllowed();
+      const current = await this.users.getUserById(user.id);
+      const browser = this.browser(req);
+      if (
+        ceremony.expires <= Date.now() ||
+        !current?.operator ||
+        sensitiveAccountBinding(current, state) !== actor.securityBinding ||
+        browser.userId !== actor.userId ||
+        createHash('sha256').update(browser.sessionId).digest('hex') !== actor.sessionBinding
+      )
+        throw fail();
+      credential.counter = verification.authenticationInfo.newCounter;
+      credential.lastUsedAt = Date.now();
+      return actor;
+    });
   }
   async verifyLogin(req: Request, raw: unknown) {
     const context = this.context(req);

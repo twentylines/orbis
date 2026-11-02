@@ -1,3 +1,4 @@
+import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
 import { StartupSurface } from '@/components/startup/startup-surface';
 import { useStartupSession } from '@/components/startup/startup-boundary';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
@@ -19,7 +20,7 @@ import { DelayedRouteLoading } from '@/desktop/route-loading';
 import { clearNavigation, rememberNavigation } from '@/components/startup/navigation-recovery';
 import { AppLauncherProvider, MinimizedApps } from '@/desktop/app-launcher';
 import { HostUpdateProvider, useHostUpdateWatch } from '@/desktop/host-update-watch';
-import { coreWatchIsActive, coreUpdateTitle } from '@/desktop/core-update-state';
+import { coreWatchIsActive } from '@/desktop/core-update-state';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Button } from '@/components/ui/Button';
@@ -295,9 +296,8 @@ function DesktopLogoutButton({ disabled, onClick }: { disabled: boolean; onClick
 }
 
 function RestartUpdateCover() {
-  const { watch, packageJob, unavailable, restart } = useHostUpdateWatch();
+  const { watch, departing, packageJob, unavailable, restart } = useHostUpdateWatch();
   const { preferences } = useDesktopPreferences();
-  const [dismissed, setDismissed] = useState<string | null>(null);
   const [restartId, setRestartId] = useState<string | null>(null);
   const restartActive = restart?.job?.state === 'restarting';
   const pendingRestartId = restartActive ? restart?.job?.id : null;
@@ -327,16 +327,26 @@ function RestartUpdateCover() {
     );
   }
   if (coreWatchIsActive(watch) && watch) {
-    const restarting = watch.phase === 'offline' || watch.phase === 'checking' || watch.phase === 'ready';
-    if (!restarting && dismissed === watch.id) return null;
+    const stage =
+      watch.phase === 'downloading'
+        ? 'Downloading files'
+        : watch.phase === 'offline'
+          ? 'Restarting'
+          : watch.phase === 'checking'
+            ? 'Verifying release'
+            : watch.phase === 'ready'
+              ? 'Opening your server'
+              : 'Installing release';
     return (
-      <StartupSurface appearance={preferences} status={{ title: coreUpdateTitle(watch.phase, watch.operation), message: watch.message }} overlay>
-        {restarting ? null : (
-          <button type="button" className="orbis-startup-return" onClick={() => setDismissed(watch.id)}>
-            Keep using Orbis
-          </button>
-        )}
-      </StartupSurface>
+      <RecoveryScene
+        title={`Orbis ${watch.targetTag}`}
+        status={stage}
+        active={watch.phase !== 'ready'}
+        departing={departing}
+        variant={watch.operation ?? 'update'}
+        indicator={watch.phase === 'offline' || watch.phase === 'checking' ? 'restart' : 'progress'}
+        footer="Applications keep running during this Orbis operation."
+      />
     );
   }
   if (unavailable && packageJob && ['queued', 'running'].includes(packageJob.state)) {

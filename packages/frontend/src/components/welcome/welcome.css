@@ -52,13 +52,10 @@
 }
 .orbis-setup-stage {
   position: relative;
-  min-height: 430px;
+  min-height: 0;
   min-width: 0;
   padding: 8px 12px;
   margin-inline: -12px;
-}
-.orbis-setup-stage[data-more-below="true"] {
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
 }
 .orbis-setup-step {
   display: grid;
@@ -135,9 +132,7 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary, h2):focus-visible {
 }
 body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   background-color: color-mix(in srgb, var(--desktop-ink) 12%, var(--desktop-surface));
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+  border-color: var(--desktop-accent);
 }
 .orbis-setup :is(.orbis-setup-palette, .orbis-setup-mode > button, .orbis-setup-wallpapers > button, .orbis-setup-performance > button) {
   border: 1px solid var(--desktop-line);
@@ -401,7 +396,8 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   justify-content: space-between;
   gap: 18px;
 }
-.orbis-setup-footer > .btn {
+.desktop-auth.desktop-auth-setup .orbis-setup-footer > .btn {
+  min-width: 8.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -409,7 +405,7 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   min-height: 48px;
   white-space: normal;
 }
-.orbis-setup-footer > .btn svg {
+.desktop-auth.desktop-auth-setup .orbis-setup-footer > .btn svg {
   flex: none;
 }
 .orbis-setup-footer-status {
@@ -423,106 +419,12 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   line-height: 1.5;
   text-align: center;
 }
-.orbis-setup-scroll-hint {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--desktop-muted);
-  font: inherit;
-  cursor: pointer;
-  transition: background-color 160ms ease;
-}
-.orbis-setup-scroll-hint:hover {
-  color: var(--desktop-ink);
-  background: color-mix(in srgb, var(--desktop-ink) 7%, transparent);
-}
-.orbis-setup-scroll-hint svg {
-  flex: none;
-  transition: transform 180ms ease;
-}
-.orbis-setup-scroll-hint[data-below="false"] svg {
-  transform: rotate(180deg);
-}
-.orbis-setup-error {
-  color: var(--desktop-negative);
-  border-inline-start: 3px solid var(--desktop-negative);
-  padding: 12px 16px;
-  background: color-mix(in srgb, var(--desktop-negative) 7%, var(--desktop-surface));
-  line-height: 1.6;
+.orbis-setup-error.alert {
+  margin: 0;
+  flex-shrink: 0;
 }
 .orbis-setup[data-reduced="true"] .orbis-setup-progress > span {
   transition: none;
-}
-.orbis-setup[data-reduced="true"] .orbis-setup-scroll-hint svg {
-  transition: none;
-}
-@media (min-height: 640px) {
-  .desktop-auth.desktop-auth-setup {
-    height: 100dvh;
-    min-height: 0;
-    grid-template-rows: minmax(0, 1fr);
-    padding-block: 16px;
-  }
-  .desktop-auth-setup .desktop-auth-toolbar {
-    margin-bottom: 16px;
-  }
-  .desktop-auth.desktop-auth-setup .desktop-auth-container {
-    align-self: stretch;
-    min-height: 0;
-    padding-block: 0;
-  }
-  .desktop-auth-setup .card {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-  }
-  .desktop-auth-setup .desktop-auth-identity {
-    padding-top: 24px;
-  }
-  .desktop-auth-setup .card-body {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    padding-top: 20px;
-    padding-bottom: 24px;
-  }
-  .orbis-setup {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    gap: 20px;
-  }
-  .orbis-setup-stage {
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
-    overflow-x: hidden;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    padding-block: 8px;
-    scroll-padding-block: 8px;
-  }
-  .orbis-setup-header,
-  .orbis-setup-error,
-  .orbis-setup-footer {
-    flex-shrink: 0;
-  }
-  .orbis-setup-name-mark {
-    min-height: 96px;
-    padding-block: 20px;
-  }
-}
-@media (max-width: 640px) and (min-height: 640px) {
-  .desktop-auth.desktop-auth-setup {
-    grid-template-rows: auto minmax(0, 1fr);
-  }
 }
 @media (max-width: 600px) {
   .desktop-auth-setup {
@@ -530,9 +432,6 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   }
   .orbis-setup {
     gap: 25px;
-  }
-  .orbis-setup-stage {
-    min-height: 380px;
   }
   .orbis-setup-palettes {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
@@ -565,28 +464,21 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   }
   .orbis-setup-footer {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
   }
   .orbis-setup-footer-status {
     grid-column: 1 / -1;
     order: 3;
   }
-  .orbis-setup-footer > .btn {
+  .desktop-auth.desktop-auth-setup .orbis-setup-footer > .btn {
+    width: 100%;
     min-width: 0;
     padding-inline: 12px;
   }
 }
-@media (max-width: 600px) and (min-height: 640px) {
-  .orbis-setup-stage {
-    min-height: 0;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .orbis-setup-progress > span {
-    transition: none;
-  }
-  .orbis-setup-scroll-hint svg {
     transition: none;
   }
 }
@@ -637,5 +529,170 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .orbis-setup-entry-choices > button {
     transition: none;
+  }
+}
+
+.desktop-auth.desktop-auth-setup {
+  --auth-gutter: clamp(20px, 3vw, 36px);
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 20px;
+  background: #030508;
+}
+.orbis-setup-space {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.desktop-auth.desktop-auth-setup .desktop-auth-container {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 24px;
+  width: min(100%, 920px);
+  max-width: 920px;
+  height: auto;
+  max-height: calc(100dvh - 40px);
+  min-height: 0;
+  padding: 0;
+}
+.desktop-auth-setup .desktop-auth-identity {
+  padding: 0;
+  border: 0;
+  color: #edf0f3;
+}
+.desktop-auth-setup .desktop-auth-product {
+  color: inherit;
+  font-size: 1.4rem;
+}
+.desktop-auth-setup .desktop-auth-brand {
+  --desktop-ink: #edf0f3;
+  --desktop-accent: color-mix(in srgb, var(--desktop-base-accent) 40%, #e0e7eb);
+  gap: 14px;
+}
+.desktop-auth-setup .orbis-setup-header {
+  margin-inline: 1px;
+  color: #edf0f3;
+  gap: 12px;
+}
+.desktop-auth-setup .orbis-setup-progress-label > :last-child {
+  color: #c3cbd4;
+}
+.desktop-auth-setup .orbis-setup-progress {
+  background: rgb(237 240 243 / 20%);
+}
+.desktop-auth-setup .orbis-setup-progress > span {
+  background: color-mix(in srgb, var(--desktop-accent) 40%, #e0e7eb);
+}
+.desktop-auth-setup .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--desktop-line);
+  border-radius: 24px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 18%);
+}
+.desktop-auth.desktop-auth-setup .desktop-auth-container {
+  transition:
+    opacity 300ms ease,
+    transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: 50% 45%;
+}
+.desktop-auth.desktop-auth-setup:where([data-setup-saving="true"]) .desktop-auth-container {
+  opacity: 0;
+  transform: scale(0.96) translateY(-12px);
+  pointer-events: none;
+}
+:where(:root:is([data-orbis-motion="reduced"], [data-orbis-effects="low"])) .desktop-auth.desktop-auth-setup .desktop-auth-container {
+  transition-duration: 0.01ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-auth.desktop-auth-setup .desktop-auth-container {
+    transition-duration: 0.01ms;
+  }
+}
+.desktop-auth-setup .card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--auth-gutter);
+}
+.desktop-auth-setup .orbis-setup {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 24px;
+}
+.desktop-auth-setup .orbis-setup-stage {
+  flex: 0 1 auto;
+  max-height: calc(100dvh - 280px);
+  min-height: 0;
+  overflow: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-block: 8px;
+  scroll-padding-block: 12px;
+  perspective: 1000px;
+  perspective-origin: 50% 40%;
+}
+.orbis-setup-step[data-present="false"] {
+  position: absolute;
+  inset: 8px 12px auto;
+  pointer-events: none;
+}
+.desktop-auth-setup .orbis-setup-footer,
+.desktop-auth-setup .orbis-setup-error {
+  flex-shrink: 0;
+}
+.desktop-auth.desktop-auth-setup .desktop-auth-toolbar .btn {
+  color: #edf0f3;
+  background: rgb(237 240 243 / 7%);
+  border-color: rgb(237 240 243 / 30%);
+}
+.desktop-auth.desktop-auth-setup .desktop-auth-toolbar .btn:hover:not(:disabled) {
+  background: rgb(237 240 243 / 14%);
+}
+.desktop-auth-setup .desktop-auth-toolbar {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .desktop-auth.desktop-auth-setup {
+    padding: 20px 12px;
+  }
+  .desktop-auth.desktop-auth-setup .desktop-auth-container {
+    height: auto;
+    max-height: calc(100dvh - 40px);
+    gap: 20px;
+  }
+  .desktop-auth-setup .desktop-auth-identity {
+    margin-inline: 8px;
+  }
+  .desktop-auth-setup .desktop-auth-toolbar {
+    top: 16px;
+    right: 20px;
+  }
+  .desktop-auth-setup .card {
+    border-radius: 20px;
+  }
+}
+@media (max-height: 580px) {
+  .desktop-auth.desktop-auth-setup .desktop-auth-container {
+    height: auto;
+    min-height: 0;
+  }
+  .desktop-auth-setup .orbis-setup-stage {
+    max-height: none;
+    overflow: visible;
   }
 }

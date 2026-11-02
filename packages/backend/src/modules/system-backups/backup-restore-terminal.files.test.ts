@@ -2,7 +2,10 @@ import fs from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import * as rootState from '@/common/restoration-root-status';
+import { canonicalPublicationJson } from '@/modules/host-updates/host-controller-publication';
+import { RetainedRootTransaction } from './time-machine-retained-root-client';
 import type Dockerode from 'dockerode';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupRestoreJournal, restoreControllerRetired } from './backup-restore-journal';
@@ -901,3 +904,289 @@ it.each(['host-source-alias', 'unbound-plan', 'swapped-plan', 'swapped-mount', '
     expect(removals).toEqual([]);
   },
 );
+
+it('reconciles a root-authorized discarded rebind only after protected rollback and idle', async () => {
+  await fs.rm(root, { recursive: true, force: true });
+  await setup('discarded', true, true);
+  const currentState = journal.state;
+  const oldState = { ...currentState, phase: 'staging', decision: null };
+  const rebound = { ...currentState, candidateController: 'b'.repeat(64), worker: 'f'.repeat(64), verifierController: '9'.repeat(64) };
+  const binding = {
+    restoreId: currentState.id,
+    nonce: currentState.nonce,
+    originalController: coreId,
+    candidateController: rebound.candidateController,
+    workerId: rebound.worker,
+    verifierController: rebound.verifierController,
+    sourceBinding: {
+      originalJournalSha256: createHash('sha256').update(canonicalPublicationJson(oldState)).digest('hex'),
+      bootstrapSha256: createHash('sha256')
+        .update(await fs.readFile(path.join(journal.directory, 'bootstrap.json')))
+        .digest('hex'),
+    },
+  };
+  await writeTerminalJson(path.join(journal.directory, 'retained-binding.json'), { version: 1, oldState, binding });
+  await writeTerminalJson(path.join(journal.directory, 'restore.json'), rebound);
+  values.delete(workerId);
+  values.delete(verifierId);
+  const sha = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
+  const proof = {
+    state: 'rolled-back',
+    decision: 'rollback',
+    binding,
+    pointId: randomUUID(),
+    proofSha256: '4'.repeat(64),
+    nodePhase: 'discarded',
+    nodeJournalSha256: sha(await fs.readFile(path.join(journal.directory, 'restore.json'))),
+    operationSha256: null,
+    survivor: { id: coreId, imageId: image },
+    database: {
+      name: operation.database.connection.database,
+      user: operation.database.connection.user,
+      connectionSha256: sha(canonicalPublicationJson(operation.database.connection)),
+      oid: 1,
+    },
+    retired: [
+      { role: 'candidate', id: rebound.candidateController },
+      { role: 'verifier', id: rebound.verifierController },
+      { role: 'coordinator', id: rebound.worker },
+      { role: 'provisional-worker', id: oldState.worker },
+      { role: 'provisional-verifier', id: oldState.verifierController },
+    ],
+  };
+  const terminalProof = vi.fn().mockResolvedValue(proof);
+  const terminalFinalize = vi.fn().mockResolvedValue({});
+  vi.spyOn(RetainedRootTransaction, 'read').mockResolvedValue({ terminalProof, terminalFinalize } as never);
+  vi.spyOn(rootState, 'readRootRestorationState').mockResolvedValue('recovery');
+  await expect(cleanupSettledRestoreAuxiliaries(args())).rejects.toThrow('ownership review');
+  expect(await BackupRestoreJournal.active(store)).toBeDefined();
+  vi.mocked(rootState.readRootRestorationState).mockResolvedValue('idle');
+  terminalProof.mockResolvedValueOnce({ ...proof, binding: { ...binding, workerId: '0'.repeat(64) } });
+  await expect(cleanupSettledRestoreAuxiliaries(args())).rejects.toThrow('ownership review');
+  expect(await BackupRestoreJournal.active(store)).toBeDefined();
+  const bootstrapFile = path.join(journal.directory, 'bootstrap.json');
+  const bootstrap = await fs.readFile(bootstrapFile);
+  await fs.writeFile(bootstrapFile, Buffer.concat([bootstrap, Buffer.from(' ')]));
+  await expect(cleanupSettledRestoreAuxiliaries(args())).rejects.toThrow('ownership review');
+  expect(await BackupRestoreJournal.active(store)).toBeDefined();
+  await fs.writeFile(bootstrapFile, bootstrap);
+  await cleanupSettledRestoreAuxiliaries(args());
+  expect(await BackupRestoreJournal.active(store)).toBeUndefined();
+});
+
+it.each(['rolled-back', 'completed'] as const)('clears a retained %s journal only with a root-bound runtime and survivor proof', async (phase) => {
+  await fs.rm(root, { recursive: true, force: true });
+  await setup(phase);
+  const prior = { ...journal.state, phase: 'staging', decision: null };
+  const rebound = { ...journal.state, candidateController: 'b'.repeat(64), worker: 'f'.repeat(64), verifierController: '9'.repeat(64) };
+  const bootstrap = {
+    version: 1,
+    ownerId: 1,
+    identity: {
+      version: operation.version,
+      id: operation.id,
+      nonce: operation.nonce,
+      image: operation.image,
+      original: operation.original,
+      candidate: operation.candidate,
+      worker: operation.worker,
+      verifier: operation.verifier,
+      apps: operation.apps,
+      queue: operation.queue,
+    },
+    connection: operation.database.connection,
+    source: {
+      version: 1,
+      manifest: { bytes: 1, sha256: '8'.repeat(64) },
+      recovery: { bytes: 1, sha256: '8'.repeat(64) },
+      database: { bytes: 1, sha256: '8'.repeat(64) },
+      normalized: { bytes: 1, sha256: '8'.repeat(64), counts: operation.database.counts },
+    },
+    environmentSha256: operation.originalEnvSha256,
+  };
+  await writeTerminalJson(path.join(journal.directory, 'bootstrap.json'), bootstrap);
+  const sha = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
+  const binding = {
+    restoreId: rebound.id,
+    nonce: rebound.nonce,
+    originalController: coreId,
+    candidateController: rebound.candidateController,
+    workerId: rebound.worker,
+    verifierController: rebound.verifierController,
+    sourceBinding: {
+      originalJournalSha256: sha(canonicalPublicationJson(prior)),
+      bootstrapSha256: sha(await fs.readFile(path.join(journal.directory, 'bootstrap.json'))),
+    },
+  };
+  await writeTerminalJson(path.join(journal.directory, 'retained-binding.json'), { version: 1, oldState: prior, binding });
+  if (!operation.worker) throw Error('Missing worker fixture');
+  operation = {
+    ...operation,
+    candidate: { ...operation.candidate, id: rebound.candidateController },
+    worker: { ...operation.worker, id: rebound.worker },
+    verifier: { ...operation.verifier, id: rebound.verifierController },
+  };
+  await writeTerminalJson(path.join(journal.directory, 'runtime.json'), operation);
+  await writeTerminalJson(path.join(journal.directory, 'restore.json'), rebound);
+  values.delete(workerId);
+  values.delete(verifierId);
+  if (phase === 'completed') {
+    const candidate = structuredClone(original);
+    candidate.Id = rebound.candidateController;
+    candidate.Config.Hostname = token(rebound.candidateController);
+    values.delete(coreId);
+    values.set(rebound.candidateController, candidate);
+    await env(operation.database.owner.name);
+  }
+  const selectedDatabase = phase === 'completed' ? operation.database.owner.name : operation.database.connection.database;
+  const proof = {
+    pointId: randomUUID(),
+    proofSha256: '4'.repeat(64),
+    state: phase === 'completed' ? 'complete' : 'rolled-back',
+    decision: phase === 'completed' ? 'commit' : 'rollback',
+    binding,
+    nodePhase: phase,
+    nodeJournalSha256: sha(await fs.readFile(path.join(journal.directory, 'restore.json'))),
+    operationSha256: sha(await fs.readFile(path.join(journal.directory, 'runtime.json'))),
+    survivor: { id: phase === 'completed' ? rebound.candidateController : coreId, imageId: image },
+    database: {
+      oid: operation.database.owner.oid,
+      name: selectedDatabase,
+      marker: operation.database.owner.marker,
+      user: operation.database.connection.user,
+      connectionSha256: sha(canonicalPublicationJson({ ...operation.database.connection, database: selectedDatabase })),
+      environmentSha256: sha(await fs.readFile(path.join(data, '.env'))),
+    },
+    retired: [
+      { role: phase === 'completed' ? 'previous' : 'candidate', id: phase === 'completed' ? coreId : rebound.candidateController },
+      { role: 'verifier', id: rebound.verifierController },
+      { role: 'coordinator', id: rebound.worker },
+      { role: 'provisional-worker', id: prior.worker },
+      { role: 'provisional-verifier', id: prior.verifierController },
+    ],
+  };
+  const terminalProof = vi.fn().mockResolvedValue(proof);
+  const terminalFinalize = vi.fn().mockResolvedValue({});
+  vi.spyOn(RetainedRootTransaction, 'read').mockResolvedValue({ terminalProof, terminalFinalize } as never);
+  vi.spyOn(rootState, 'readRootRestorationState').mockResolvedValue('checking');
+  terminalProof.mockResolvedValueOnce({ ...proof, operationSha256: '0'.repeat(64) });
+  await expect(cleanupSettledRestoreAuxiliaries(args(phase === 'completed' ? rebound.candidateController : coreId))).rejects.toThrow(
+    'ownership review',
+  );
+  expect(await BackupRestoreJournal.active(store)).toBeDefined();
+  terminalProof.mockResolvedValueOnce({ ...proof, retired: [] });
+  await expect(cleanupSettledRestoreAuxiliaries(args(phase === 'completed' ? rebound.candidateController : coreId))).rejects.toThrow(
+    'ownership review',
+  );
+  const environment = await fs.readFile(path.join(data, '.env'));
+  await fs.writeFile(path.join(data, '.env'), environment.toString().replace('POSTGRES_HOST=fixture-db', 'POSTGRES_HOST=changed'));
+  await expect(cleanupSettledRestoreAuxiliaries(args(phase === 'completed' ? rebound.candidateController : coreId))).rejects.toThrow(
+    'ownership review',
+  );
+  await fs.writeFile(path.join(data, '.env'), environment);
+  terminalProof.mockResolvedValueOnce(proof).mockResolvedValueOnce({ ...proof, nodeJournalSha256: '0'.repeat(64) });
+  await expect(cleanupSettledRestoreAuxiliaries(args(phase === 'completed' ? rebound.candidateController : coreId))).rejects.toThrow(
+    'ownership review',
+  );
+  expect(await BackupRestoreJournal.active(store)).toBeDefined();
+  await fs.appendFile(path.join(data, '.env'), '\nUNRELATED_NEW_SETTING=preserved\n');
+  if (phase === 'rolled-back') terminalFinalize.mockRejectedValueOnce(Error('lost reply'));
+  if (phase === 'rolled-back') {
+    await expect(cleanupSettledRestoreAuxiliaries(args(coreId))).rejects.toThrow('ownership review');
+    expect(await BackupRestoreJournal.active(store)).toBeUndefined();
+  }
+  await cleanupSettledRestoreAuxiliaries(args(phase === 'completed' ? rebound.candidateController : coreId));
+  expect(await BackupRestoreJournal.active(store)).toBeUndefined();
+  expect(terminalFinalize).toHaveBeenCalledTimes(phase === 'rolled-back' ? 2 : 1);
+  expect(await fs.readFile(path.join(data, '.env'), 'utf8')).toContain('UNRELATED_NEW_SETTING=preserved');
+});
+
+it.each([
+  ['staging', 'none'],
+  ['discarded', 'none'],
+  ['staging', 'allocated'],
+  ['discarded', 'allocated'],
+  ['staging', 'bound'],
+  ['discarded', 'bound'],
+] as const)('settles protected no-worker rollback after a crash in %s (binding=%s)', async (resumePhase, bindingMode) => {
+  await fs.rm(root, { recursive: true, force: true });
+  await setup('discarded', true, true);
+  const original = { ...journal.state, phase: 'staging', decision: null };
+  const allocated = { ...original, candidateController: 'b'.repeat(64), worker: 'f'.repeat(64), verifierController: '9'.repeat(64) };
+  const staging = bindingMode === 'bound' ? allocated : original;
+  const binding =
+    bindingMode !== 'none'
+      ? {
+          restoreId: staging.id,
+          nonce: staging.nonce,
+          originalController: coreId,
+          candidateController: allocated.candidateController,
+          workerId: allocated.worker,
+          verifierController: allocated.verifierController,
+        }
+      : null;
+  if (bindingMode === 'bound')
+    await writeTerminalJson(path.join(journal.directory, 'retained-binding.json'), { version: 1, oldState: original, binding });
+  await writeTerminalJson(path.join(journal.directory, 'restore.json'), staging);
+  const sha = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
+  const journalSha = sha(await fs.readFile(path.join(journal.directory, 'restore.json')));
+  if (resumePhase === 'discarded')
+    await writeTerminalJson(path.join(journal.directory, 'restore.json'), { ...staging, phase: 'discarded', decision: 'rollback' });
+  const pointId = randomUUID();
+  const admission = {
+    version: 1,
+    restoreId: staging.id,
+    nonce: staging.nonce,
+    ownerId: 7,
+    importId: randomUUID(),
+    binding: {
+      pointId,
+      reviewId: randomUUID(),
+      archiveSha256: 'a'.repeat(64),
+      manifestSha256: 'b'.repeat(64),
+      machineId: 'c'.repeat(64),
+    },
+    authorizationSha256: 'd'.repeat(64),
+    authorizedAt: 1,
+  };
+  await writeTerminalJson(path.join(journal.directory, 'time-machine-admission.json'), admission);
+  await writeTerminalJson(path.join(journal.directory, 'retained-root-request.json'), { fixture: true });
+  const proof = {
+    state: 'rolled-back',
+    decision: 'rollback',
+    nodePhase: 'staging',
+    operationSha256: null,
+    binding,
+    pointId,
+    proofSha256: 'e'.repeat(64),
+    nodeJournalSha256: journalSha,
+    admissionSha256: sha(await fs.readFile(path.join(journal.directory, 'time-machine-admission.json'))),
+    sourceBinding: {
+      originalJournalSha256: sha(canonicalPublicationJson(original)),
+      bootstrapSha256: sha(await fs.readFile(path.join(journal.directory, 'bootstrap.json'))),
+    },
+    survivor: { id: coreId, imageId: image },
+    database: {
+      name: operation.database.connection.database,
+      user: operation.database.connection.user,
+      connectionSha256: sha(canonicalPublicationJson(operation.database.connection)),
+      oid: 1,
+    },
+    retired: [
+      { role: 'provisional-worker', id: workerId },
+      { role: 'provisional-verifier', id: verifierId },
+    ],
+  };
+  const terminalProof = vi.fn().mockResolvedValue(proof);
+  const terminalFinalize = vi.fn().mockRejectedValueOnce(Error('lost reply')).mockResolvedValue({});
+  vi.spyOn(RetainedRootTransaction, 'read').mockResolvedValue({ terminalProof, terminalFinalize } as never);
+  vi.spyOn(rootState, 'readRootRestorationState').mockResolvedValue('checking');
+  terminalProof.mockResolvedValueOnce({ ...proof, sourceBinding: { ...proof.sourceBinding, originalJournalSha256: '0'.repeat(64) } });
+  await expect(cleanupSettledRestoreAuxiliaries(args())).rejects.toThrow();
+  expect(await BackupRestoreJournal.active(store)).toBeDefined();
+  await expect(cleanupSettledRestoreAuxiliaries(args())).rejects.toThrow();
+  expect(await BackupRestoreJournal.active(store)).toBeUndefined();
+  await cleanupSettledRestoreAuxiliaries(args());
+  expect(terminalFinalize).toHaveBeenCalledTimes(2);
+  expect((await BackupRestoreJournal.latest(store))?.state.phase).toBe('discarded');
+});

@@ -1,5 +1,9 @@
 import importlib.util
 import tempfile
+import json
+import io
+import sys
+from unittest import mock
 import unittest
 from pathlib import Path
 
@@ -20,6 +24,21 @@ MANIFEST = {
 
 
 class OrbisStageReleaseTests(unittest.TestCase):
+    def test_cli_write_refuses_a_persistent_capture_fence_before_planning_or_staging(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder).resolve()
+            root = base / "installation"
+            root.mkdir()
+            manifest = base / "release.json"
+            manifest.write_text(json.dumps(MANIFEST))
+            (base / ".installation.orbis-capture-fence.json").write_text("{}")
+            with mock.patch.object(sys, "argv", ["orbis-stage-release.py", str(root), str(manifest), "--write"]), \
+                 mock.patch.object(STAGE.PLAN, "plan", return_value={}) as plan, \
+                 mock.patch.object(sys, "stderr", io.StringIO()):
+                self.assertEqual(STAGE.main(), 2)
+            plan.assert_not_called()
+            self.assertFalse((root / "orbis-compose.yml").exists())
+
     def test_stages_only_core_image_and_build_identity(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

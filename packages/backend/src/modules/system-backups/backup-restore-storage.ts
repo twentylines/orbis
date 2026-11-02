@@ -150,3 +150,55 @@ export function verifyRestoreStorageMounts(
     if (!selected || mount.Source !== selected.Source || mount.RW !== !selected.ReadOnly) throw failed();
   }
 }
+
+// The migration source must come from the independently authenticated root binding, never a client path.
+export function verifyRetainedRestoreWorkerMounts(
+  original: readonly RestoreStorageMount[],
+  actual: readonly RestoreStorageMount[],
+  restoreId: string,
+  rootRetainedSource: string,
+  rootPayloadSource: string,
+) {
+  if (
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(restoreId) ||
+    !canonical(rootRetainedSource) ||
+    !canonical(rootPayloadSource)
+  )
+    throw failed();
+  const base = deriveRestoreStorageLayout(original).workerMounts;
+  const socket = original.find((mount) => mount.Destination === '/run/orbis');
+  if (!socket) throw failed();
+  bind(socket);
+  const socketMount = specification(socket, true);
+  const migrations: RestoreStorageBind = {
+    Type: 'bind',
+    Source: rootRetainedSource,
+    Target: `/data/backups/restores/${restoreId}/retained`,
+    ReadOnly: true,
+    BindOptions: { Propagation: 'rprivate' },
+  };
+  const payload: RestoreStorageBind = {
+    Type: 'bind',
+    Source: rootPayloadSource,
+    Target: `/data/backups/restores/${restoreId}/source/payload`,
+    ReadOnly: true,
+    BindOptions: { Propagation: 'rprivate' },
+  };
+  const all = [...base, socketMount, migrations, payload];
+  if (
+    base.some(
+      (mount) => overlap(mount.Source, rootRetainedSource) || overlap(mount.Source, rootPayloadSource) || overlap(mount.Source, socket.Source),
+    ) ||
+    overlap(rootRetainedSource, socket.Source) ||
+    overlap(rootPayloadSource, socket.Source) ||
+    overlap(rootRetainedSource, rootPayloadSource) ||
+    actual.length !== all.length ||
+    new Set(actual.map((mount) => mount.Destination)).size !== actual.length
+  )
+    throw failed();
+  for (const mount of actual) {
+    bind(mount);
+    const match = all.find((item) => item.Target === mount.Destination);
+    if (!match || mount.Source !== match.Source || mount.RW !== !match.ReadOnly) throw failed();
+  }
+}

@@ -107,17 +107,21 @@ export async function prepareRestorePayload(options: {
   runtime: RestorePreparationRuntime;
   signal: AbortSignal;
   progress: (value: RestorePreparationProgress) => void;
+  retainedPins?: readonly { name: string; data: Uint8Array }[];
+  preserveLiveProxy?: boolean;
+  beforePrepared?: (signal: AbortSignal) => Promise<void>;
 }) {
   const { journal, signal, runtime } = options;
   let check = 'preconditions';
   try {
     signal.throwIfAborted();
     const state = await journal.refresh();
+    const activeRoots = restoreTreeNames.filter((name) => !options.preserveLiveProxy || name !== 'traefik');
     if (
       !['staging', 'preparing'].includes(state.phase) ||
       state.decision !== null ||
-      state.roots.length !== restoreTreeNames.length ||
-      state.roots.some((name) => !restoreTreeNames.includes(name as RestoreTreeName)) ||
+      state.roots.length !== activeRoots.length ||
+      state.roots.some((name) => !activeRoots.includes(name as RestoreTreeName)) ||
       options.source.directory !== path.join(journal.directory, 'source', 'payload') ||
       Object.keys(options.roots).length !== restoreTreeNames.length ||
       restoreTreeNames.some((name) => !options.roots[name])
@@ -169,7 +173,7 @@ export async function prepareRestorePayload(options: {
     });
     const swaps = new Map<RestoreTreeName, BackupDirectorySwap>();
     check = 'directories';
-    for (const name of restoreTreeNames) {
+    for (const name of activeRoots) {
       signal.throwIfAborted();
       swaps.set(
         name,
@@ -186,8 +190,10 @@ export async function prepareRestorePayload(options: {
     const materialized = await materializeBackupSource({
       directory: source.directory,
       expected: options.source.seal,
-      roots: Object.fromEntries([...swaps].map(([name, swap]) => [name, swap.incomingDirectory])) as Record<RestoreTreeName, string>,
+      roots: { ...options.roots, ...Object.fromEntries([...swaps].map(([name, swap]) => [name, swap.incomingDirectory])) },
+      preserveLiveProxy: options.preserveLiveProxy,
       ledger: path.join(journal.directory, 'applied-files.ndjson'),
+      retainedPins: options.retainedPins,
       settingsOverride: { original: { bytes: settings.bytes, sha256: settings.sha256 }, replacement: Buffer.from(configuration.settings) },
       hostIdentity: { directory: path.join(journal.directory, 'host-identity'), id: state.id, seal: hostIdentity },
       signal,
@@ -255,6 +261,8 @@ export async function prepareRestorePayload(options: {
       seal: hostIdentity,
       signal,
     });
+    signal.throwIfAborted();
+    if (options.beforePrepared) await options.beforePrepared(signal);
     signal.throwIfAborted();
     await journal.advance('prepared');
     progress.stage = 'prepared';

@@ -1,6 +1,7 @@
 import {
   exportJobSchema,
   exportListSchema,
+  backupRetentionSchema,
   importJobSchema,
   importListSchema,
   parseBackupResponse,
@@ -128,7 +129,10 @@ async function recognizedErrorMessage(response: Response): Promise<string | unde
 
 const root = '/api/system-backups';
 function endpoint(path: string) {
-  if (!/^\/(?:imports|restores|export|[a-f0-9-]{36})(?:\/[a-f0-9-]{36})?(?:\/(?:file|review|cancel|recover|download))?$/.test(path) && path !== '')
+  if (
+    !/^\/(?:imports|restores|export|settings|[a-f0-9-]{36})(?:\/[a-f0-9-]{36})?(?:\/(?:file|review|cancel|recover|download|import))?$/.test(path) &&
+    path !== ''
+  )
     throw new Error('Invalid backup action.');
   return `${root}${path}`;
 }
@@ -218,14 +222,21 @@ export function uploadBackup(
 
 // Let the browser stream the attachment to disk instead of building an unbounded Blob in memory.
 let downloadSequence = 0;
-export function downloadBackup(id: string, credentials: BackupCredentials, onError: (message: string) => void): () => void {
+export function downloadBackup(
+  id: string,
+  credentials: BackupCredentials,
+  onError: (message: string) => void,
+  kind: 'backup' | 'capture' = 'backup',
+): () => void {
   const frame = document.createElement('iframe');
   frame.hidden = true;
   frame.title = 'Encrypted backup download';
   frame.name = `orbis-backup-download-${Date.now()}-${++downloadSequence}`;
   const form = document.createElement('form');
   form.method = 'POST';
-  form.action = endpoint(`/${id}/download`);
+  if (kind === 'capture' && !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id))
+    throw new Error('Choose a valid capture archive.');
+  form.action = kind === 'capture' ? `/api/system-backups/capsules/${id}/download` : endpoint(`/${id}/download`);
   form.target = frame.name;
   for (const [name, value] of Object.entries(credentials)) {
     if (!value) continue;
@@ -251,4 +262,14 @@ export function downloadBackup(id: string, credentials: BackupCredentials, onErr
   for (const field of Array.from(form.elements)) if (field instanceof HTMLInputElement) field.value = '';
   form.remove();
   return () => frame.remove();
+}
+
+export async function importSavedBackup(id: string, credentials: BackupCredentials, signal?: AbortSignal) {
+  return parseBackupResponse(importJobSchema, await backupRequest(`/${id}/import`, 'POST', credentials, signal));
+}
+export async function readBackupRetention(signal?: AbortSignal) {
+  return parseBackupResponse(backupRetentionSchema, await backupRequest('/settings', 'GET', undefined, signal));
+}
+export async function saveBackupRetention(retentionHours: number, revision: number, signal?: AbortSignal) {
+  return parseBackupResponse(backupRetentionSchema, await backupRequest('/settings', 'PUT', { retentionHours, revision }, signal));
 }

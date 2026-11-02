@@ -14,6 +14,7 @@ export default [
     route('monitor', './modules/dashboard/pages/monitor.tsx', { id: 'monitor' }),
     route('updates', './modules/updates/pages/updates.tsx', { id: 'updates' }),
     route('tasks', './modules/tasks/pages/tasks.tsx', { id: 'tasks' }),
+    route('time-machine', './modules/time-machine/time-machine-page.tsx', { id: 'time-machine' }),
 
     // App store routes
     ...prefix('app-store', [

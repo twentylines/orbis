@@ -88,6 +88,11 @@ export const user = pgTable('user', {
   hasSeenWelcome: boolean('has_seen_welcome').default(false).notNull(),
 });
 
+export const orbisResetReceipt = pgTable('orbis_reset_receipt', {
+  id: varchar().primaryKey().notNull(),
+  completedAt: integer('completed_at').notNull(),
+});
+
 export const appStore = pgTable('app_store', {
   slug: varchar().notNull().primaryKey(),
   hash: varchar().notNull().unique(),

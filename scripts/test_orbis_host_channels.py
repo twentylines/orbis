@@ -124,6 +124,8 @@ class HostReleaseChannelTests(unittest.TestCase):
             file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             file.write_text("fixture\n")
         self.service = SERVICE.HostService(self.root, "test-daemon", self.snapshots, self.state)
+        self.service.core_overlay_manager = mock.Mock()
+        self.service.core_overlay_manager.begin.side_effect = lambda identifier, *_: identifier
         self.current = manifest("v1.0.1-beta.10", "a")
         self.beta9 = manifest("v1.0.1-beta.9", "b")
         self.older_beta = manifest("v1.0.0-beta.12", "c")

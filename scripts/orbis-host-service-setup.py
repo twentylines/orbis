@@ -37,6 +37,27 @@ SCRIPTS = (
     "orbis-release-policy.py",
     "orbis-stage-release.py",
     "orbis-host.py",
+    "orbis-host-identity.py",
+    "orbis-host-retained-authority.py",
+    "orbis-host-capture-authority.py",
+    "orbis-host-app-runtime.py",
+    "orbis-host-normal-bootstrap.py",
+    "orbis-host-app-create-intent.py",
+    "orbis-host-retained-app-effects.py",
+    "orbis-host-app-port-policy.py",
+    "orbis-host-app-port-observer.py",
+    "orbis-host-app-inet-diag.py",
+    "orbis-host-time-machine-capabilities.py",
+    "orbis-host-retained-app-driver.py",
+    "orbis-host-retained-restore.py",
+    "orbis-host-retained-restore-runtime.py",
+    "orbis-host-maintenance-responder.mjs",
+    "orbis-host-maintenance-overlay.py",
+    "orbis-proxy-identity.py",
+    "orbis-host-portable-policy.py",
+    "orbis-host-portable-enrollment.py",
+    "orbis-install-compat.py",
+    "orbis-controller-identity.py",
     "orbis-release-check.py",
     "orbis-snapshot.py",
     "orbis-host-update.py",
@@ -116,11 +137,11 @@ def preflight(root: Path, context: str, source: Path, *, allow_existing: bool = 
         if not Path(executable).is_file():
             raise ValueError(f"required host command is unavailable: {executable}")
     saved = HOST.saved_state(root)
-    if not saved or saved.get("root") != str(root) or saved.get("dockerContext") != context or not isinstance(saved.get("tag"), str):
+    if not saved or saved.get("root") != str(root) or saved.get("dockerContext") != context or (saved.get("schema") != HOST.IDENTITY.RETAINED_SCHEMA and not isinstance(saved.get("tag"), str)):
         raise ValueError("this installation is not enrolled on the selected Docker context")
     manifest = SERVICE.installed_manifest(root, context)
     core = HOST.current_core(root, context)
-    if core.get("state") != "running" or core.get("health") != "healthy" or core.get("image") != f"{PLAN.IMAGE}@{manifest['digest']}":
+    if core.get("state") != "running" or core.get("health") != "healthy" or core.get("image") != HOST.controller_reference(root, manifest, context):
         raise ValueError("the enrolled Orbis core must be healthy at its published image")
     merged = HOST.docker(context, HOST.compose_args(root) + ["config", "--format", "json"], root)
     if merged.returncode:

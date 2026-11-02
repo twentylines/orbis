@@ -18,12 +18,16 @@ import Dockerode from 'dockerode';
 import { GithubService } from './utils/github/github.service';
 import YAML from 'yaml';
 import { installationMode } from './common/installation-mode';
+import { retainedBootstrapStartup, retainedSettledStartup } from './modules/system-backups/backup-restore-startup';
 import { QueueFactory } from './modules/queue/queue.factory';
 import { backupMaintenanceActive } from './common/backup-maintenance';
 import { restoreStartupRole } from './modules/system-backups/backup-restore-startup';
+import { ResetService } from './modules/system-reset/reset.service';
 
 @Injectable()
 export class AppService {
+  private retainedPreparation?: Promise<void>;
+  private retainedTimersInstalled = false;
   constructor(
     private readonly cache: CacheService,
     private readonly configuration: ConfigurationService,
@@ -38,19 +42,26 @@ export class AppService {
     private readonly appStatusSyncService: AppStatusSyncService,
     private readonly githubService: GithubService,
     private readonly queueFactory: QueueFactory,
+    private readonly reset: ResetService,
     @Inject(DOCKERODE) private docker: Dockerode,
   ) {}
 
   public async bootstrap(prepareRecovery: () => Promise<void> = async () => undefined) {
     const installation = installationMode();
-    await this.databaseService.migrate();
+    if (!retainedBootstrapStartup() && !retainedSettledStartup()) await this.databaseService.migrate();
     await prepareRecovery();
+    if (installation.phase === 'normal' && restoreStartupRole() === 'ordinary') await this.reset.resumePending();
     if (installation.phase === 'hold') {
       this.logger.info('Installation mode: database prepared; app services remain held.');
       return;
     }
     if (backupMaintenanceActive()) {
       this.logger.warn('Full backup recovery needs review. App startup changes remain held.');
+      return;
+    }
+    if (retainedSettledStartup()) {
+      await this.prepareRetainedNormalContinuation();
+      this.activateRetainedNormalContinuation();
       return;
     }
     if (installation.phase === 'resume') {
@@ -109,6 +120,25 @@ export class AppService {
       Sentry.captureException(e, { tags: { source: 'bootstrap' } });
       if (installation.phase === 'resume') throw e;
     }
+  }
+
+  public async prepareRetainedNormalContinuation() {
+    if (!retainedBootstrapStartup() && !retainedSettledStartup()) throw new Error('Retained continuation is unavailable.');
+    if (retainedBootstrapStartup() && !backupMaintenanceActive()) throw new Error('Retained continuation is not held.');
+    this.retainedPreparation ??= this.marketplaceService.initialize({ refreshRepositories: false }).catch((error: unknown) => {
+      this.retainedPreparation = undefined;
+      throw error;
+    });
+    await this.retainedPreparation;
+  }
+
+  public activateRetainedNormalContinuation() {
+    if (!this.retainedPreparation || (!retainedBootstrapStartup() && !retainedSettledStartup()))
+      throw new Error('Retained continuation is not prepared.');
+    if (this.retainedTimersInstalled) return;
+    if (this.configuration.getConfig().__prod__) this.repoQueue.publishRepeatable({ command: 'update_all' }, '*/15 * * * *');
+    this.systemEventsQueue.publishRepeatable({ command: 'sync_app_statuses' }, '*/5 * * * *');
+    this.retainedTimersInstalled = true;
   }
 
   public async getVersion() {

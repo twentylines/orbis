@@ -8,7 +8,7 @@ import { BackupRestoreJournal } from './backup-restore-journal';
 import { restoreDatabaseConnectionSchema, restoreRuntimeIdentitySchema, validateRestoreIdentity } from './backup-restore-runtime';
 import { backupSourceSealSchema } from './backup-restore-source';
 
-const schema = type({
+export const restoreBootstrapSchema = type({
   '+': 'reject',
   version: '1',
   ownerId: 'number.integer > 0',
@@ -17,7 +17,7 @@ const schema = type({
   source: backupSourceSealSchema,
   environmentSha256: type('string').narrow((value) => /^[a-f0-9]{64}$/.test(value)),
 });
-export type RestoreBootstrap = typeof schema.infer;
+export type RestoreBootstrap = typeof restoreBootstrapSchema.infer;
 const failed = () => new BackupRequirementError('The restore handoff could not be verified. Your server data has been preserved.');
 async function syncDirectory(journal: BackupRestoreJournal) {
   const directory = await fs.open(journal.directory, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -29,7 +29,7 @@ async function syncDirectory(journal: BackupRestoreJournal) {
 }
 
 async function validate(journal: BackupRestoreJournal, input: unknown) {
-  const value = schema(input);
+  const value = restoreBootstrapSchema(input);
   if (value instanceof type.errors || !value.identity.worker || value.identity.original.id !== value.identity.candidate.id) throw failed();
   await validateRestoreIdentity(journal, value.identity);
   return value;

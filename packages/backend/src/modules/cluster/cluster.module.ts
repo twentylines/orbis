@@ -38,6 +38,7 @@ import { AuthModule } from '../auth/auth.module';
     UserModule,
   ],
   controllers: [ClusterController, ClusterPairingController, ClusterSyncController],
+  exports: [ClusterStateService, ClusterSyncStore],
   providers: [
     ClusterPairingService,
     ClusterService,

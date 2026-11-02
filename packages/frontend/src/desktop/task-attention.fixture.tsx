@@ -46,6 +46,7 @@ mock.module('react-router', () => ({
   },
 }));
 mock.module('framer-motion', () => ({
+  animate: () => ({ stop: () => undefined }),
   AnimatePresence: ({ children }: { children: ReactNode }) => children,
   motion: {
     span: (props: { children: number; 'data-alert'?: boolean }) => {
@@ -59,7 +60,7 @@ mock.module('framer-motion', () => ({
     },
   },
 }));
-mock.module('@/desktop/motion-preferences', () => ({ useReducedMotion: () => true }));
+mock.module('@/desktop/motion-preferences', () => ({ useReducedMotion: () => true, useReducedTransparency: () => false }));
 const icons = await import('@tabler/icons-react');
 mock.module('@tabler/icons-react', () => ({ ...icons, IconActivity: () => null, IconAlertTriangle: () => null }));
 let saveErrors = 0;

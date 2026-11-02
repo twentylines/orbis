@@ -1,7 +1,17 @@
 import { expect, test } from 'bun:test';
-import { freshSetupSteps, nextSetupStep, previousSetupStep, setupCanFinish, setupPosition, setupStepCopy, type SetupStep } from './setup-navigation';
+import {
+  freshSetupSteps,
+  migrationSetupSteps,
+  nextSetupStep,
+  previousSetupStep,
+  setupCanFinish,
+  setupPosition,
+  setupStepCopy,
+  type SetupStep,
+} from './setup-navigation';
 import { Children, createElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { ColourModeChoice } from '@/desktop/colour-mode-choice';
 import { SetupCustomisation } from './welcome';
 import { defaultDesktopPreferences, type DesktopPreferences } from '@/desktop/preferences';
 
@@ -24,19 +34,15 @@ test('fresh setup combines colour and wallpaper in one customisation step and re
   expect(visited.slice(1).map((step) => previousSetupStep(step))).toEqual(visited.slice(0, -1));
 });
 
-test('installer-marked Runtipi migrations start with preferences and never revisit fresh setup', () => {
-  const visited: SetupStep[] = ['customisation'];
-  let next = nextSetupStep('customisation', 'migration');
-  while (next) {
-    visited.push(next);
-    next = nextSetupStep(next, 'migration');
-  }
-  expect(visited).toEqual(['customisation', 'performance', 'updates', 'ready']);
+test('installer-detected Runtipi migration starts at customisation and never returns to fresh setup choices', () => {
+  expect(migrationSetupSteps).toEqual(['customisation', 'performance', 'updates', 'ready']);
   expect(previousSetupStep('customisation', 'migration')).toBeNull();
-  expect(previousSetupStep('performance', 'migration')).toBe('customisation');
-  expect(setupCanFinish('ready', 'migration')).toBe(true);
-  expect(setupPosition('customisation', 'migration')).toEqual({ current: 1, total: 4 });
-  expect(setupPosition('ready', 'migration')).toEqual({ current: 4, total: 4 });
+  for (const [index, step] of migrationSetupSteps.entries()) {
+    expect(setupPosition(step, 'migration')).toEqual({ current: index + 1, total: 4 });
+    expect(nextSetupStep(step, 'migration')).toBe(migrationSetupSteps[index + 1] ?? null);
+    expect(setupCanFinish(step, 'migration')).toBe(step === 'ready');
+  }
+  expect(setupCanFinish('ready', null)).toBe(false);
 });
 
 test('back from restore returns to the choice and never skips into the fresh completion step', () => {
@@ -69,13 +75,15 @@ test('every fresh step has copy and a stable bounded position for directional tr
   expect(setupStepCopy.restore.title).not.toContain('Ready');
   expect(setupStepCopy.transfer.title).toBe('Transfer a server');
   expect(setupStepCopy.transfer.description).toContain('Orbis to Orbis');
+  expect(setupStepCopy.ready).toEqual({ title: 'Ready', description: '' });
 });
 
-test('the customisation panel presents colour, display mode and wallpaper together with the Settings note', () => {
+test('customisation offers colour and display controls while custom wallpaper stays in Settings', () => {
   const html = renderToStaticMarkup(createElement(SetupCustomisation, { draft: defaultDesktopPreferences, onChange: () => undefined }));
-  for (const label of ['Colour', 'Display mode', 'Wallpaper']) expect(html).toContain(`<legend>${label}</legend>`);
-  expect(html).toContain('You can add custom images later in Settings.');
-  expect(html).toContain('Match wallpaper to colour preset');
+  for (const label of ['Colour', 'Display mode']) expect(html).toContain(`<legend>${label}</legend>`);
+  expect(html).toContain('You can add custom wallpapers later in Settings.');
+  expect(html).not.toContain('Match wallpaper to colour preset');
+  expect(defaultDesktopPreferences.wallpaperMode).toBe('theme');
   expect(html).not.toContain('type="file"');
 });
 
@@ -85,7 +93,7 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   );
 }
 
-test('actual customisation handlers preserve the same draft across palette, mode and explicit wallpaper choices', () => {
+test('actual customisation handlers preserve the saved draft and leave custom wallpaper controls in Settings', () => {
   const draft: DesktopPreferences = {
     ...defaultDesktopPreferences,
     mode: 'dark',
@@ -112,12 +120,41 @@ test('actual customisation handlers preserve the same draft across palette, mode
   palette.props.onClick();
   expect(changed).toEqual({ ...draft, preset: 'forest', appearance: { ...draft.appearance, accent: null } });
   expect(draft.appearance.wallpaperImage).toBe('/api/desktop-preferences/wallpaper');
-  const light = controls.find((control) => control.type === 'button' && Children.toArray(control.props.children as ReactNode).includes('Light'));
+  const modeControls = elements(
+    ColourModeChoice({
+      mode: draft.mode,
+      oledDark: draft.appearance.oledDark,
+      onChange: ({ mode, oledDark }) => {
+        changed = { ...draft, mode, appearance: { ...draft.appearance, oledDark } };
+      },
+    }),
+  );
+  const light = modeControls.find((control) => control.props['data-setting-value'] === 'light');
   if (typeof light?.props.onClick !== 'function') throw new Error('Display mode control missing');
   light.props.onClick();
-  expect(changed).toEqual({ ...draft, mode: 'light' });
-  const wallpaper = controls.find((control) => control.props['data-wallpaper'] === 'frost');
-  if (typeof wallpaper?.props.onClick !== 'function') throw new Error('Wallpaper control missing');
-  wallpaper.props.onClick();
-  expect(changed).toEqual({ ...draft, wallpaperMode: 'custom', wallpaperPreset: 'frost', appearance: { ...draft.appearance, wallpaperImage: null } });
+  expect(changed).toEqual({ ...draft, mode: 'light', appearance: { ...draft.appearance, oledDark: false } });
+  const oled = modeControls.find((control) => control.props['data-setting-value'] === 'oled');
+  if (typeof oled?.props.onClick !== 'function') throw new Error('OLED control missing');
+  oled.props.onClick();
+  expect(changed).toEqual({ ...draft, mode: 'dark', appearance: { ...draft.appearance, oledDark: true } });
+  expect(controls.some((control) => control.props['data-wallpaper'] !== undefined)).toBe(false);
+});
+
+test('System and Light retain the OLED preference while Dark explicitly disables it', () => {
+  for (const mode of ['system', 'light', 'dark', 'oled'] as const) {
+    let changed: { mode: string; oledDark: boolean } | undefined;
+    const controls = elements(
+      ColourModeChoice({
+        mode: 'dark',
+        oledDark: true,
+        onChange: (next) => {
+          changed = next;
+        },
+      }),
+    );
+    const control = controls.find((item) => item.props['data-setting-value'] === mode);
+    if (typeof control?.props.onClick !== 'function') throw new Error('Display mode missing');
+    control.props.onClick();
+    expect(changed).toEqual({ mode: mode === 'oled' ? 'dark' : mode, oledDark: mode !== 'dark' });
+  }
 });

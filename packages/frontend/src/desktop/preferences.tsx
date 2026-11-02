@@ -7,6 +7,9 @@ import { MotionPreferences } from './motion-preferences';
 import { useLayoutEffect, createContext, useContext, useEffect, useRef, useState, type PropsWithChildren, useMemo, useCallback } from 'react';
 import { useUserContext } from '@/context/user-context';
 import { PreferenceSaveQueue } from './preference-save-queue';
+import { OperationStartupContext } from '@/components/startup/operation-startup';
+import { publishServerAppearance, restoredPreferencesState } from './restore-readiness';
+import { Button } from '@/components/ui/Button';
 import { useStartupReady } from '@/components/startup/startup-boundary';
 import { useLocation } from 'react-router';
 import toast from 'react-hot-toast';
@@ -198,6 +201,10 @@ const LOAD_NOTICE = 'desktop-preferences-load';
 export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const { isLoggedIn, sessionEpoch, sessionAbortSignal } = useUserContext();
   const { pathname } = useLocation();
+  const startupOperation = useContext(OperationStartupContext);
+  const [requiresFreshRestore] = useState(
+    () => startupOperation === 'restore' || (typeof document !== 'undefined' && document.documentElement.dataset.orbisOperationBoot === 'restore'),
+  );
   const themePack = useThemePack(isLoggedIn);
   const [cache] = useState(readPreferenceCache);
   const [preferences, setPreferences] = useState(cache.preferences);
@@ -217,10 +224,21 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   const [loadStateSession, setLoadStateSession] = useState<object | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const booting = isLoggedIn && (!initialLoadComplete || loadStateSession !== sessionEpoch || workspaceLoading);
-  useStartupReady(!booting && !(isLoggedIn && ['/login', '/register', '/reset-password'].includes(pathname)));
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [serverReady, setServerReady] = useState(false);
+  const restoreReadiness = restoredPreferencesState(requiresFreshRestore, isLoggedIn, serverReady, loadError);
+  useStartupReady(!booting && restoreReadiness !== 'waiting' && !(isLoggedIn && ['/login', '/register', '/reset-password'].includes(pathname)));
+  useLayoutEffect(() => {
+    if (serverReady && isLoggedIn) publishServerAppearance(appearanceFromStored(preferences));
+    else publishServerAppearance(null);
+    if (requiresFreshRestore && isLoggedIn && !serverReady) document.documentElement.dataset.orbisFreshAppearance = 'restore';
+    else document.documentElement.removeAttribute('data-orbis-fresh-appearance');
+    return () => {
+      publishServerAppearance(null);
+      document.documentElement.removeAttribute('data-orbis-fresh-appearance');
+    };
+  }, [serverReady, isLoggedIn, requiresFreshRestore, preferences]);
   const [requiresOnboarding, setRequiresOnboarding] = useState(true);
   const [onboardingOrigin, setOnboardingOrigin] = useState<'fresh' | 'runtipi'>('fresh');
   const completingSetup = useRef(false);
@@ -277,7 +295,11 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       applyThemePackRuntime(themePack, effectiveMode, displayed.wallpaperMode === 'theme');
       applyAppearanceRuntime(themePackAppearance(themePack, displayed.appearance), effectiveMode);
     };
-    transitionAppearance(apply, appearancePainted.current);
+    transitionAppearance(
+      apply,
+      appearancePainted.current,
+      JSON.stringify([effectiveMode, displayed.preset, displayed.appearance, displayedWallpaper, displayed.wallpaperMode, themePack]),
+    );
     appearancePainted.current = true;
     const queries = ['(prefers-reduced-motion: reduce)', '(prefers-reduced-transparency: reduce)'].flatMap((query) => {
       try {
@@ -434,7 +456,11 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     if (loadError) {
       toast.error(
         <>
-          <p>Appearance could not be loaded. Using this browser’s settings.</p>
+          <p>
+            {requiresFreshRestore
+              ? 'Restored appearance could not be loaded. Retry before opening Home.'
+              : 'Appearance could not be loaded. Using this browser’s settings.'}
+          </p>
           <button
             type="button"
             className="btn btn-outline-primary"
@@ -455,7 +481,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       );
     }
     return () => toast.dismiss(LOAD_NOTICE);
-  }, [loadError]);
+  }, [loadError, requiresFreshRestore]);
 
   useEffect(() => {
     if (preferences !== currentPreferences.current || !canSave() || !serverReady || acknowledgedRevision.current === revision.current) return;
@@ -636,7 +662,27 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       }}
     >
       <MotionPreferences reduced={displayed.appearance.motion === 'reduced' || displayed.appearance.lowEffects}>
-        {isLoggedIn && (!initialLoadComplete || loadStateSession !== sessionEpoch) ? null : children}
+        {(isLoggedIn && (!initialLoadComplete || loadStateSession !== sessionEpoch)) || restoreReadiness === 'waiting' ? null : restoreReadiness ===
+          'error' ? (
+          <section
+            role="alert"
+            style={{
+              minHeight: '100svh',
+              display: 'grid',
+              placeContent: 'center',
+              gap: 16,
+              padding: 24,
+              background: 'var(--desktop-surface)',
+              color: 'var(--desktop-ink)',
+            }}
+          >
+            <h1>Restored appearance is unavailable</h1>
+            <p>Home will open after this server’s settings can be verified.</p>
+            <Button onClick={() => setLoadAttempt((value) => value + 1)}>Retry</Button>
+          </section>
+        ) : (
+          children
+        )}
       </MotionPreferences>
     </Context.Provider>
   );

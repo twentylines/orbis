@@ -8,8 +8,9 @@ import { useTranslation } from 'react-i18next';
 import { type SettingsFormValues, UserSettingsForm } from '../components/user-settings-form/user-settings-form';
 import { AutomaticUpdatesSettings } from './automatic-updates-settings';
 import { ReleaseChannelSettings } from './release-channel-settings';
-import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
+import { BackupRecoveryContents } from '@/modules/time-machine-capsules/capsules-panel';
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
+import { SystemResetPanel } from '@/modules/system-reset/system-reset';
 
 type Props = {
   initialValues?: SettingsFormValues;
@@ -49,7 +50,7 @@ export const UserSettingsContainer = ({ initialValues, section = 'general' }: Pr
   if (section === 'backups')
     return (
       <div id="setting-server-backups">
-        <SystemBackupsSettings
+        <BackupRecoveryContents
           recoveryActions={
             <div id="setting-server-transfer">
               <HostTransferPanel contained />
@@ -61,6 +62,7 @@ export const UserSettingsContainer = ({ initialValues, section = 'general' }: Pr
   return (
     <div className="settings-general-form">
       <UserSettingsForm initialValues={initialValues} onSubmit={onSubmit} loading={updateSettings.isPending} />
+      <SystemResetPanel />
     </div>
   );
 };

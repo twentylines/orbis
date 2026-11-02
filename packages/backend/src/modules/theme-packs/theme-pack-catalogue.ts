@@ -399,4 +399,8 @@ const bundled: unknown[] = [
   },
 ];
 
-export const bundledThemePacks: ThemePackManifest[] = bundled.map((pack) => themePackManifestSchema.assert(pack));
+// Compatibility records are retained for accounts that already installed these versions.
+export const legacyThemePacks: ThemePackManifest[] = bundled.map((pack) => themePackManifestSchema.assert(pack));
+export const discoverableThemePacks: readonly ThemePackManifest[] = Object.freeze([]);
+// Existing runtime/restore consumers use this registry, never the discovery policy.
+export const bundledThemePacks = legacyThemePacks;

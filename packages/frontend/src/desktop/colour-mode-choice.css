@@ -1,0 +1,45 @@
+.orbis-colour-mode-choice {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.orbis-colour-mode-choice > .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 96px;
+  padding: 16px 12px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.4;
+  background: var(--desktop-code-background);
+  color: var(--desktop-ink);
+  border: 1px solid var(--desktop-line);
+  border-radius: 13px;
+}
+.orbis-colour-mode-choice > .btn svg {
+  flex: none;
+}
+.orbis-colour-mode-choice > .btn[aria-pressed="true"] {
+  border-color: var(--desktop-accent);
+  background: color-mix(in srgb, var(--desktop-accent) 10%, var(--desktop-surface));
+}
+.orbis-colour-mode-choice[data-compact="true"] > .btn {
+  flex-direction: row;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px;
+}
+@media (max-width: 700px) {
+  .orbis-colour-mode-choice {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

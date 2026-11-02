@@ -23,8 +23,18 @@ CHANNEL_CATALOG = None
 CHANNEL_METADATA_URL = "https://twentylines.github.io/orbis/channels.json"
 ARCHIVE = "orbis-installer.tar.gz"
 MANIFEST = "orbis-installer-manifest.json"
-ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|packaging/systemd/orbis-host\.service")
-REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-prerequisites.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "packaging/systemd/orbis-host.service"}
+ALLOWED = re.compile(r"scripts/(?:orbis-[a-z-]+|install-orbis|migration-preflight)\.py|scripts/orbis-host-maintenance-responder\.mjs|packaging/systemd/orbis-host\.service")
+REQUIRED = {"scripts/install-orbis.py", "scripts/orbis-install.py", "scripts/orbis-install-prerequisites.py", "scripts/orbis-install-ui.py", "scripts/orbis-install-new.py", "scripts/orbis-install-replace.py", "scripts/orbis-install-fresh.py", "scripts/orbis-host-service-enable.py", "scripts/orbis-host-discovery.py", "scripts/orbis-release-check.py", "packaging/systemd/orbis-host.service", "scripts/orbis-proxy-identity.py", "scripts/orbis-host-maintenance-responder.mjs"}
+
+REQUIRED |= {
+    "scripts/orbis-host-app-create-intent.py",
+    "scripts/orbis-host-app-inet-diag.py",
+    "scripts/orbis-host-app-port-observer.py",
+    "scripts/orbis-host-app-port-policy.py",
+    "scripts/orbis-host-retained-app-driver.py",
+    "scripts/orbis-host-retained-app-effects.py",
+    "scripts/orbis-host-time-machine-capabilities.py",
+}
 
 
 def require_supported_host():
@@ -101,6 +111,7 @@ def select_verified_channel_launcher(catalog, requested=None, ask=None, fetch_la
                 raise
             print(f"Could not load the {channel.title()} installer: {error}. Choose a channel to retry.", file=sys.stderr)
             requested = None
+
 
 
 def verify_selected_launcher(data, record):

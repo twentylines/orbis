@@ -161,9 +161,9 @@ const containerRoots = {
   traefik: '/data/traefik',
   'app-data': '/app-data',
 } as const;
-export async function proveTerminalRoots(journal: BackupRestoreJournal, ownership: TerminalOwnership) {
+export async function proveTerminalRoots(journal: BackupRestoreJournal, ownership: TerminalOwnership, verified?: TerminalRecordedIdentity) {
   const expected = journal.state.phase === 'completed' ? 'committed' : 'rolled-back';
-  const record = await terminalIdentity(journal);
+  const record = verified ?? (await terminalIdentity(journal));
   const preservedTraefik = !!record && 'preservedTraefik' in record.identity && record.identity.preservedTraefik === 1;
   const bootstrapDiscard = journal.state.phase === 'discarded' && !!record && !Object.hasOwn(record.identity, 'database');
   for (const name of journal.state.roots) {
@@ -339,8 +339,8 @@ export async function inspectTerminalImage(docker: Dockerode, id: string, signal
   );
 }
 
-export async function cleanupTerminalWorkingTrees(journal: BackupRestoreJournal, ownership: TerminalOwnership) {
-  await proveTerminalRoots(journal, ownership);
+export async function cleanupTerminalWorkingTrees(journal: BackupRestoreJournal, ownership: TerminalOwnership, verified?: TerminalRecordedIdentity) {
+  await proveTerminalRoots(journal, ownership, verified);
   for (const name of journal.state.roots) {
     const raw = await readTerminalJson(path.join(journal.rootJournal(name), 'swap.json'), 64 * 1024 * 1024);
     if (raw === undefined && journal.state.phase === 'discarded') continue;

@@ -12,7 +12,7 @@ import {
   type ThemePackManifest,
   type ThemePackState,
 } from '@runtipi/common/schemas/theme-pack';
-import { bundledThemePacks } from './theme-pack-catalogue';
+import { discoverableThemePacks, legacyThemePacks } from './theme-pack-catalogue';
 
 const hash = (data: Buffer | string) => createHash('sha256').update(data).digest('hex');
 const digest = (manifest: ThemePackManifest) => hash(JSON.stringify(manifest));
@@ -101,7 +101,7 @@ export class ThemePacksService {
       for (const record of parsed.installed.flatMap((item) => [item, ...(item.previous ? [item.previous] : [])])) {
         if (
           record.digest !== digest(record.manifest) ||
-          !bundledThemePacks.some((pack) => sameVersion(pack, record.manifest) && digest(pack) === record.digest)
+          !legacyThemePacks.some((pack) => sameVersion(pack, record.manifest) && digest(pack) === record.digest)
         )
           throw new BadRequestException('Saved theme version did not pass integrity checks.');
       }
@@ -142,13 +142,15 @@ export class ThemePacksService {
   }
 
   async snapshot(userId: number) {
-    return { catalogue: bundledThemePacks, state: await this.read(userId) };
+    const state = await this.read(userId);
+    const installed = new Set(state.installed.map((record) => record.manifest.id));
+    return { catalogue: [...discoverableThemePacks, ...legacyThemePacks.filter((pack) => installed.has(pack.id))], state };
   }
 
   private manifest(id: string, version?: string) {
     if (!themePackIdSchema.allows(id) || (version !== undefined && !themePackVersionSchema.allows(version)))
       throw new BadRequestException('Invalid theme version.');
-    const pack = bundledThemePacks.filter((item) => item.id === id && (version === undefined || item.version === version)).at(-1);
+    const pack = legacyThemePacks.filter((item) => item.id === id && (version === undefined || item.version === version)).at(-1);
     if (!pack) throw new NotFoundException('This theme version is unavailable.');
     return pack;
   }
@@ -206,6 +208,8 @@ export class ThemePacksService {
       const state = await this.read(userId);
       const old = state.installed.find((item) => item.manifest.id === id);
       if (update && !old) throw new NotFoundException('Install this theme first.');
+      if (!old && !discoverableThemePacks.some((pack) => sameVersion(pack, manifest)))
+        throw new NotFoundException('This theme is not available for installation.');
       if (old && sameVersion(old.manifest, manifest)) return this.snapshot(userId);
       if (!old && state.installed.length >= 12) throw new BadRequestException('Remove a theme before installing another.');
       await this.stage(userId, manifest);

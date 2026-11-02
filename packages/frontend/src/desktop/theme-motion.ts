@@ -36,10 +36,50 @@ const colours = [
 ];
 const registered = new Set<string>();
 let motion: Animation | null = null;
+let paletteRevision = 0;
+let snapshotTransition: ViewTransition | null = null;
+let paletteIdentity: string | undefined;
 
-export function transitionAppearance(apply: () => void, animate: boolean) {
+export function transitionAppearance(apply: () => void, animate: boolean, identity?: string) {
+  if (identity !== undefined && identity === paletteIdentity) return;
+  paletteIdentity = identity;
   const root = document.documentElement;
-  if (!animate || typeof CSS.registerProperty !== 'function' || typeof root.animate !== 'function') {
+  const revision = ++paletteRevision;
+  snapshotTransition?.skipTransition();
+  snapshotTransition = null;
+  if (!animate || prefersReducedMotion()) {
+    motion?.cancel();
+    motion = null;
+    delete root.dataset.orbisPaletteMotion;
+    apply();
+    return;
+  }
+  // Crossfade two paints instead of recalculating every inherited palette colour each frame.
+  if (typeof document.startViewTransition === 'function') {
+    motion?.cancel();
+    motion = null;
+    root.dataset.orbisPaletteMotion = 'true';
+    let transition: ViewTransition;
+    try {
+      transition = document.startViewTransition(() => {
+        if (revision === paletteRevision) apply();
+      });
+    } catch {
+      delete root.dataset.orbisPaletteMotion;
+      apply();
+      return;
+    }
+    snapshotTransition = transition;
+    const settle = () => {
+      if (snapshotTransition !== transition) return;
+      snapshotTransition = null;
+      delete root.dataset.orbisPaletteMotion;
+    };
+    void transition.ready.catch(() => undefined);
+    void transition.finished.then(settle, settle);
+    return;
+  }
+  if (typeof CSS.registerProperty !== 'function' || typeof root.animate !== 'function') {
     apply();
     return;
   }
@@ -73,7 +113,9 @@ export function transitionAppearance(apply: () => void, animate: boolean) {
     return;
   }
   root.dataset.orbisPaletteMotion = 'true';
-  const animation = root.animate([before, after], { duration: 240, easing: 'cubic-bezier(.2, 0, .2, 1)' });
+  const changed = colours.filter((name) => before[name] !== after[name]);
+  const frame = (values: Record<string, string>) => Object.fromEntries(changed.map((name) => [name, values[name]]));
+  const animation = root.animate([frame(before), frame(after)], { duration: 180, easing: 'cubic-bezier(.2, 0, .2, 1)' });
   animation.id = 'orbis-palette';
   motion = animation;
   void animation.finished.then(

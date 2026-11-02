@@ -108,6 +108,8 @@ describe('reviewed Orbis downgrades', () => {
     host.status.mockReset();
     host.plan.mockReset();
     host.apply.mockReset();
+    host.requireOperationStatus.mockReset();
+    host.requireOperationStatus.mockResolvedValue(undefined);
     execute.mockReset();
     automaticUpdates.pauseForDowngrade.mockReset();
     automaticUpdates.pauseForDowngrade.mockResolvedValue(undefined);
@@ -234,6 +236,14 @@ describe('reviewed Orbis downgrades', () => {
     expect(automaticUpdates.pauseForDowngrade).toHaveBeenCalledTimes(1);
     expect(preferences.read).not.toHaveBeenCalled();
     await expect(service.apply(id)).rejects.toThrow('new downgrade review');
+  });
+  it('keeps the review and automatic updates unchanged when operation status is unavailable', async () => {
+    await service.plan(target);
+    host.requireOperationStatus.mockRejectedValueOnce(new Error('Host status unavailable'));
+    await expect(service.apply(id)).rejects.toThrow('Host status unavailable');
+    expect(automaticUpdates.pauseForDowngrade).not.toHaveBeenCalled();
+    expect(host.apply).not.toHaveBeenCalled();
+    expect(await service.apply(id)).toEqual({ jobId: id, state: 'running' });
   });
   it('rejects changed database state before contacting host apply', async () => {
     await service.plan(target);

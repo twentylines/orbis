@@ -1,0 +1,85 @@
+.capsules-panel,
+.capsules-list {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.capsules-panel {
+  margin-top: 24px;
+}
+.capsules-panel header,
+.capsules-list article {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.capsules-panel h2,
+.capsules-panel h3,
+.capsules-panel p {
+  margin: 0;
+  line-height: 1.5;
+}
+.capsules-panel h2 {
+  font-size: 1.2rem;
+}
+.capsules-panel h3 {
+  font-size: 1rem;
+}
+.capsules-list article {
+  border-top: 1px solid var(--tblr-border-color);
+  padding-top: 20px;
+}
+.capsules-list article > div:first-child {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+.capsules-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.capsules-actions > .btn {
+  flex: 1 1 7rem;
+  min-width: 0;
+  white-space: normal;
+}
+.capsules-panel > .capsules-actions > .btn {
+  flex: 0 1 auto;
+  min-width: 8rem;
+}
+.capsules-form {
+  padding: 24px;
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.capsules-form .modal-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+}
+.capsules-file {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.capsules-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .capsules-file {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .capsules-file > .btn {
+    justify-self: start;
+  }
+}

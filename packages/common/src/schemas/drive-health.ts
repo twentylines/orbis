@@ -37,5 +37,13 @@ export type DriveHealth = {
   history: DriveHealthPoint[];
 };
 export type DriveHealthSample =
-  | { available: false; reason: string }
+  | { available: false; reason: string; toolsMissing?: boolean }
   | { available: true; sampledAt: string; stale: boolean; limited: boolean; historyAvailable: boolean; drives: DriveHealth[] };
+
+export type SmartToolsPlan = {
+  planId: string;
+  createdAt: number;
+  expiresAt: number;
+  selected: { name: string; installedVersion: null; candidateVersion: string }[];
+  operations: { name: string; installedVersion: null; candidateVersion: string; action: 'install' }[];
+};

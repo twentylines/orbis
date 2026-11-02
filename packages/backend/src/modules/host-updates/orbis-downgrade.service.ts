@@ -259,6 +259,7 @@ export class OrbisDowngradeService {
     ) {
       throw new BadRequestException('The installation changed. Create a new downgrade review.');
     }
+    await this.host.requireOperationStatus();
     this.reviews.delete(review.planId);
     if (review.operation === 'downgrade') await this.automaticUpdates.pauseForDowngrade();
     return this.host.apply(review.planId, review.operation === 'downgrade', returnToStable);

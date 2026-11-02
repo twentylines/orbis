@@ -13,8 +13,16 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   else root.style.setProperty('--orbis-text-scale', String(textScale / 100));
   if (!source.getPropertyValue('--desktop-base-surface').trim()) return;
   const colour = (value: string): Rgba => {
-    if (/^#[a-f0-9]{6}$/i.test(value))
-      return [Number.parseInt(value.slice(1, 3), 16), Number.parseInt(value.slice(3, 5), 16), Number.parseInt(value.slice(5, 7), 16), 1];
+    const hex = value.match(/^#([a-f0-9]{3,4}|[a-f0-9]{6}|[a-f0-9]{8})$/i)?.[1];
+    if (hex) {
+      const expanded = hex.length < 5 ? [...hex].map((channel) => channel + channel).join('') : hex;
+      return [
+        Number.parseInt(expanded.slice(0, 2), 16),
+        Number.parseInt(expanded.slice(2, 4), 16),
+        Number.parseInt(expanded.slice(4, 6), 16),
+        expanded.length === 8 ? Number.parseInt(expanded.slice(6, 8), 16) / 255 : 1,
+      ];
+    }
     const match = value.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/);
     return match ? [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4] ?? 1)] : [0, 0, 0, 1];
   };
@@ -105,7 +113,9 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     }
   };
   const systemSolid = media('(prefers-reduced-transparency: reduce)');
-  const solid = low || options.transparency === 'solid' || (options.transparency !== 'glass' && systemSolid);
+  const oled = mode === 'dark' && options.oledDark === true;
+  root.dataset.orbisOled = String(oled);
+  const solid = low || oled || options.transparency === 'solid' || (options.transparency !== 'glass' && systemSolid);
   const systemReduced = media('(prefers-reduced-motion: reduce)');
   root.style.setProperty('--orbis-control-transition-duration', options.motion === 'reduced' || systemReduced ? '0.01ms' : '180ms');
   root.dataset.orbisMotion = low || options.motion === 'reduced' || systemReduced ? 'reduced' : 'full';
@@ -114,13 +124,19 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
 
   const opacity = numeric('surfaceOpacity', 90, 100);
   const chromeOpacity = numeric('chromeOpacity', 80, 100);
-  const tint = (numeric('glassTint', 0, 30) ?? 0) / 100;
+  const tint = oled ? 0 : (numeric('glassTint', 0, 30) ?? 0) / 100;
   const blur = numeric('glassBlur', 0, 40);
   const materialChanged = solid || opacity !== null || chromeOpacity !== null || tint > 0;
   const preset = colour(source.getPropertyValue('--desktop-preset-tint').trim());
   const surface = base('surface');
   const chrome = base('chrome');
   const panel = base('panel-dark');
+  if (oled) {
+    for (const value of [surface, chrome, panel]) {
+      value[0] = value[1] = value[2] = 0;
+      value[3] = 1;
+    }
+  }
   if (opacity !== null) surface[3] = opacity / 100;
   if (chromeOpacity !== null) chrome[3] = chromeOpacity / 100;
   if (solid) surface[3] = chrome[3] = panel[3] = 1;

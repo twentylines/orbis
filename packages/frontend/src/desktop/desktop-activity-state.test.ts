@@ -29,6 +29,19 @@ test('simultaneous categories retain independent summaries and exclude completed
   expect(groups.map((group) => group.count)).toEqual([1, 1, 1, 1]);
   expect(groups.find((group) => group.category === 'app:install')?.title).toBe('Installing');
 });
+
+test('a background Time Machine capture has a separate pill alongside app operations', () => {
+  const groups = desktopActivityGroups([task('app', 'photos:store')], names, null, null, [], {
+    id: 'capture',
+    title: 'Capturing',
+    detail: 'Time Machine',
+    stage: 'Saving Docker images',
+    percentage: 40,
+  });
+  expect(groups.map((group) => group.category)).toEqual(['time-machine', 'app:update']);
+  expect(groups[0]).toMatchObject({ kind: 'time-machine', percentage: 40, count: 1 });
+  expect(groups[0]?.items[0]?.detail).toBe('Saving Docker images');
+});
 describe('dock activity describes actual active work', () => {
   test('completed history does not create an ongoing task', () => {
     expect(desktopActivity([task('old', 'photos:store', 'update', 'succeeded')], names, null, null)).toBeNull();
@@ -76,11 +89,16 @@ describe('dock activity describes actual active work', () => {
     expect(value).toMatchObject({ title: 'Refreshing', detail: 'System package lists', kind: 'packages', count: 1 });
     expect(value?.items[0]?.title).toBe('Refreshing package lists');
   });
+  test('drive health tool installation is described separately from system package updates', () => {
+    const value = desktopActivity([], names, null, { id: 'smart', kind: 'smart-tools', state: 'running' });
+    expect(value).toMatchObject({ title: 'Installing', detail: 'Drive health tools', kind: 'packages', count: 1 });
+    expect(value?.items[0]?.title).toBe('Installing drive health tools');
+  });
   test('accepted Orbis restart remains visible when ordinary app task reads stop', () => {
     const id = 'd8b4a1ec-f912-4e14-8e20-58d2754a0130';
     const watch = advanceCoreUpdate(advanceCoreUpdate(null, { type: 'accepted', id, targetTag: 'v0.1.0-beta.79' }), { type: 'unavailable' });
     const activity = desktopActivity([], names, watch, null);
-    expect(activity).toMatchObject({ title: 'Restarting', detail: 'Orbis beta 79', kind: 'core', count: 1 });
+    expect(activity).toMatchObject({ title: 'Restarting', detail: 'Orbis 0.1 beta 79', kind: 'core', count: 1 });
     expect(activity?.items[0]).toMatchObject({ title: 'Restarting Orbis', detail: `0.1 beta 79 · ${watch?.message}` });
   });
 });

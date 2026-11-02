@@ -9,7 +9,7 @@ import { writeRestoreBootstrap, requestRestoreCancellation } from './backup-rest
 import { BackupDirectorySwap } from './backup-directory-swap';
 import { restoreTreeNames } from './backup-restore-materialize';
 import { prepareRestorePayload } from './backup-restore-preparation';
-import { writeRestoreOperation, type RestoreOperation } from './backup-restore-runtime';
+import { readRestoreOperation, writeRestoreOperation, type RestoreOperation } from './backup-restore-runtime';
 import { executeRestoreWorker } from './backup-restore-worker';
 import { RestoreRolledBackError } from './backup-restore-coordinator';
 
@@ -173,6 +173,15 @@ it('closes the startup gate, prepares once, then hands the durable operation to 
     expect(
       await fs.readFile(path.join(name === 'app-data' ? options.directories.appData : path.join(options.directories.data, name), 'value'), 'utf8'),
     ).toBe(`restored ${name}`);
+});
+
+it('accepts a root-pinned operation digest and rejects a different digest', async () => {
+  const options = await fixture();
+  await executeRestoreWorker(options);
+  const bytes = await fs.readFile(path.join(options.journal.directory, 'runtime.json'));
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  await expect(readRestoreOperation(options.journal, sha256)).resolves.toMatchObject({ id: options.journal.state.id });
+  await expect(readRestoreOperation(options.journal, '0'.repeat(64))).rejects.toThrow();
 });
 
 it('recovers an interrupted preparing phase without allocating files or another database again', async () => {

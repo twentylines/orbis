@@ -145,6 +145,21 @@ export function snapshotRestoreContainer(container: Dockerode.ContainerInspectIn
   };
 }
 
+// Only the root-confirmed commit-finish phase permits these exact rename transitions.
+export function snapshotRetainedRole(
+  container: Dockerode.ContainerInspectInfo,
+  restoreId: string,
+  role: 'original' | 'candidate',
+  committed: boolean,
+) {
+  if (!committed) return snapshotRestoreContainer(container);
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(restoreId)) throw failed('retained-rename');
+  const actual = role === 'original' ? `/orbis-retained-${restoreId}-previous` : '/runtipi';
+  const previous = role === 'original' ? '/runtipi' : `/orbis-retained-${restoreId}-candidate`;
+  if (container.Name !== actual) throw failed('retained-rename');
+  return snapshotRestoreContainer({ ...container, Name: previous });
+}
+
 export function verifyRestoreVerifierMounts(original: Dockerode.ContainerInspectInfo, verifier: Dockerode.ContainerInspectInfo) {
   try {
     verifyRestoreStorageMounts(original.Mounts, verifier.Mounts, 'verifier');
@@ -231,9 +246,12 @@ export function restoreRootPlanMatchesPolicy(name: string, input: unknown, prese
   );
 }
 
-export async function readRestoreOperation(journal: BackupRestoreJournal) {
+export async function readRestoreOperation(journal: BackupRestoreJournal, expectedSha256?: string) {
   await privateBackupDirectory(journal.directory);
-  return validateRestoreOperation(journal, JSON.parse((await readOwned(path.join(journal.directory, 'runtime.json'))).toString('utf8')));
+  const bytes = await readOwned(path.join(journal.directory, 'runtime.json'));
+  if (expectedSha256 !== undefined && (!/^[a-f0-9]{64}$/.test(expectedSha256) || createHash('sha256').update(bytes).digest('hex') !== expectedSha256))
+    throw failed('operation-integrity');
+  return validateRestoreOperation(journal, JSON.parse(bytes.toString('utf8')));
 }
 
 export async function writeRestoreOperation(journal: BackupRestoreJournal, operation: RestoreOperation) {
@@ -266,7 +284,14 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     private readonly journal: BackupRestoreJournal,
     private readonly operation: RestoreOperation | RestoreRuntimeIdentity,
     private readonly roots = { data: '/data', appData: '/app-data', cache: '/cache' },
+    private readonly retained?: {
+      targetImage: string;
+      committed?: boolean;
+      preserveLiveProxy?: boolean;
+      verifyWorker: (original: Dockerode.ContainerInspectInfo, worker: Dockerode.ContainerInspectInfo) => Promise<void>;
+    },
   ) {
+    if (retained && !/^sha256:[a-f0-9]{64}$/.test(retained.targetImage)) throw failed('retained-target');
     this.data = roots.data;
     this.cache = roots.cache;
   }
@@ -276,7 +301,15 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
   }
   private async owned(record: Snapshot) {
     const inspect = await this.docker.getContainer(record.id).inspect();
-    if (snapshotRestoreContainer(inspect).fingerprint !== record.fingerprint) throw failed('container-snapshot');
+    const role = this.retained?.committed
+      ? record.id === this.operation.original.id
+        ? 'original'
+        : record.id === this.operation.candidate.id
+          ? 'candidate'
+          : undefined
+      : undefined;
+    const snapshot = role ? snapshotRetainedRole(inspect, this.operation.id, role, true) : snapshotRestoreContainer(inspect);
+    if (snapshot.fingerprint !== record.fingerprint) throw failed('container-snapshot');
     const policy = inspect.HostConfig.RestartPolicy ?? { Name: 'no', MaximumRetryCount: 0 };
     if (
       (this.journal.state.phase === 'staging' ||
@@ -302,7 +335,7 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
     // Restarting the original container preserves Compose ownership, proxy labels and network aliases for later OTA updates.
     const restartingOriginal = role === 'candidate' && record.id === this.operation.original.id;
     if (
-      inspect.Image !== this.operation.image ||
+      inspect.Image !== (this.retained ? this.retained.targetImage : this.operation.image) ||
       (!restartingOriginal &&
         (labels?.['io.orbis.restore'] !== this.operation.id ||
           labels['io.orbis.restore.nonce'] !== this.operation.nonce ||
@@ -345,7 +378,8 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
         .sort((a, b) => (a.destination < b.destination ? -1 : a.destination > b.destination ? 1 : 0));
     if (JSON.stringify(mountIdentity(original.Mounts)) !== JSON.stringify(mountIdentity(candidate.Mounts))) throw failed('candidate-mounts');
     try {
-      verifyRestoreStorageMounts(original.Mounts, worker.Mounts, 'worker');
+      if (this.retained) await this.retained.verifyWorker(original, worker);
+      else verifyRestoreStorageMounts(original.Mounts, worker.Mounts, 'worker');
     } catch {
       throw failed('worker-mounts');
     }
@@ -387,6 +421,10 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
       )
         throw failed();
       roots[name] = target;
+    }
+    if (this.retained?.preserveLiveProxy) {
+      if (this.journal.state.roots.includes('traefik')) throw failed('host-identity-changed');
+      roots.traefik = path.join(this.data, 'traefik');
     }
     return roots;
   }
@@ -579,10 +617,12 @@ export class BackupRestoreDockerRuntime implements RestoreRuntime {
   }
   async verify(signal: AbortSignal) {
     const operation = this.preparedOperation();
+    const roots = await this.fileRoots();
+    if (this.retained?.preserveLiveProxy) delete roots.traefik;
     const files = {
       ledger: path.join(this.journal.directory, 'applied-files.ndjson'),
       expected: operation.files,
-      roots: await this.fileRoots(),
+      roots,
       signal,
     };
     await verifyRestoreFiles(files);

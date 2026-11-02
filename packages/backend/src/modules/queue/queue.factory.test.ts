@@ -1,3 +1,4 @@
+import { setRestoreRecoveryRequired } from '@/common/backup-maintenance';
 import { type } from 'arktype';
 import type { ConsumerHandler } from 'rabbitmq-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -5,6 +6,7 @@ import { mock } from 'vitest-mock-extended';
 import type { ConfigurationService } from '@/core/config/configuration.service';
 import type { LoggerService } from '@/core/logger/logger.service';
 import { QueueFactory } from './queue.factory';
+import * as restoreStartup from '../system-backups/backup-restore-startup';
 
 const rabbit = vi.hoisted(() => ({
   createConsumer: vi.fn((_options: unknown, _callback: ConsumerHandler) => undefined),
@@ -83,6 +85,27 @@ describe('QueueFactory', () => {
     expect(callback).toHaveBeenCalledExactlyOnceWith(body, reply, { redelivered });
   });
 
+  it('allows normal startup with queued work without a retained empty-queue preflight', async () => {
+    rabbit.queueDeclare.mockResolvedValue({ messageCount: 9, consumerCount: 0 });
+    const factory = new QueueFactory(loggerService, configurationService);
+    const queue = await factory.createQueue({ queueName: 'app-events-queue', eventSchema: type({ event: 'string' }) });
+    queue.onEvent(vi.fn());
+    expect(rabbit.createConsumer).toHaveBeenCalledOnce();
+    expect(rabbit.queueDeclare).not.toHaveBeenCalled();
+    factory.onModuleDestroy();
+  });
+
+  it('registers a repeatable event only once per queue and stops timers on shutdown', async () => {
+    vi.useFakeTimers();
+    const factory = new QueueFactory(loggerService, configurationService);
+    const queue = await factory.createQueue({ queueName: 'repeat-fixture', eventSchema: type({ event: 'string' }) });
+    queue.publishRepeatable({ event: 'refresh' }, '*/15 * * * *');
+    queue.publishRepeatable({ event: 'refresh' }, '*/15 * * * *');
+    expect(vi.getTimerCount()).toBe(1);
+    factory.onModuleDestroy();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('does not consume, enqueue, observe or schedule jobs during installer hold', async () => {
     vi.stubEnv('ORBIS_INSTALLER_TRANSACTION', 'f92e8862-38b5-4e81-bc84-f9131944872d');
     vi.stubEnv('ORBIS_INSTALLER_PHASE', 'hold');
@@ -118,6 +141,114 @@ describe('QueueFactory', () => {
     return { factory, app: queues[0] as (typeof queues)[number] };
   };
 
+  it('resumes deferred consumers after settlement without an empty-queue check', async () => {
+    const { factory, app } = await resumeQueues();
+    setRestoreRecoveryRequired(true);
+    try {
+      rabbit.queueDeclare.mockClear();
+      factory.resumeRetainedAfterSettlement();
+      factory.resumeRetainedAfterSettlement();
+      expect(rabbit.queueDeclare).not.toHaveBeenCalled();
+      expect(rabbit.createConsumer).toHaveBeenCalledTimes(3);
+      expect((await app.publish({ event: 'start' })).success).toBe(false);
+    } finally {
+      setRestoreRecoveryRequired(false);
+    }
+  });
+
+  it('prepares exactly three retained consumers under a mutation hold with a stable broker generation', async () => {
+    const { factory, app } = await resumeQueues();
+    setRestoreRecoveryRequired(true);
+    try {
+      rabbit.queueDeclare.mockImplementation(async ({ queue }: { queue: string }) => ({
+        messageCount: 0,
+        consumerCount: rabbit.createConsumer.mock.calls.filter(([options]) => (options as { queue: string }).queue === queue).length,
+      }));
+      const result = await factory.prepareRetainedConsumers(new AbortController().signal);
+      expect(result.queueGeneration).toBeGreaterThan(0);
+      expect(result.queues.map((item) => item.name)).toEqual(['app-events-queue', 'repo-queue', 'system-events-queue']);
+      expect(rabbit.createConsumer).toHaveBeenCalledTimes(3);
+      await result.recheck();
+      expect((await app.publish({ event: 'start' })).success).toBe(false);
+      const handler = rabbit.createConsumer.mock.calls[0]?.[1] as unknown as (
+        request: { body: { requestId: string } },
+        reply: () => Promise<void>,
+      ) => Promise<void>;
+      if (!handler) throw new Error('Missing retained consumer');
+      let finished = false;
+      const pending = handler({ body: { requestId: 'fixture' } }, async () => undefined).then(() => {
+        finished = true;
+      });
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      await expect(factory.prepareRetainedConsumers(new AbortController().signal)).rejects.toThrow();
+      setRestoreRecoveryRequired(false);
+      await pending;
+      expect(finished).toBe(true);
+    } finally {
+      setRestoreRecoveryRequired(false);
+    }
+  });
+  it('refuses retained consumers without the hold or with queued work', async () => {
+    const { factory } = await resumeQueues();
+    await expect(factory.prepareRetainedConsumers(new AbortController().signal)).rejects.toThrow();
+    setRestoreRecoveryRequired(true);
+    try {
+      rabbit.queueDeclare.mockResolvedValue({ messageCount: 1, consumerCount: 0 });
+      await expect(factory.prepareRetainedConsumers(new AbortController().signal)).rejects.toThrow();
+      expect(rabbit.createConsumer).not.toHaveBeenCalled();
+    } finally {
+      setRestoreRecoveryRequired(false);
+    }
+  });
+  it('fails closed if the broker reconnects during retained preparation', async () => {
+    const { factory } = await resumeQueues();
+    setRestoreRecoveryRequired(true);
+    try {
+      rabbit.queueDeclare.mockImplementationOnce(async () => {
+        const listener = rabbit.on.mock.calls.find(([event]) => event === 'connection')?.[1];
+        if (!listener) throw new Error('Missing connection listener');
+        listener();
+        return { messageCount: 0, consumerCount: 0 };
+      });
+      await expect(factory.prepareRetainedConsumers(new AbortController().signal)).rejects.toThrow();
+      expect(rabbit.createConsumer).not.toHaveBeenCalled();
+      await expect(factory.prepareRetainedConsumers(new AbortController().signal)).rejects.toThrow();
+    } finally {
+      setRestoreRecoveryRequired(false);
+    }
+  });
+  it('rejects a retained readiness recheck after a broker reconnect', async () => {
+    const { factory } = await resumeQueues();
+    setRestoreRecoveryRequired(true);
+    try {
+      rabbit.queueDeclare.mockImplementation(async ({ queue }: { queue: string }) => ({
+        messageCount: 0,
+        consumerCount: rabbit.createConsumer.mock.calls.filter(([options]) => (options as { queue: string }).queue === queue).length,
+      }));
+      const result = await factory.prepareRetainedConsumers(new AbortController().signal);
+      const listener = rabbit.on.mock.calls.find(([event]) => event === 'connection')?.[1];
+      if (!listener) throw new Error('Missing connection listener');
+      listener();
+      await expect(result.recheck()).rejects.toThrow();
+    } finally {
+      setRestoreRecoveryRequired(false);
+    }
+  });
+  it('cancels a stalled broker declaration without starting consumers', async () => {
+    const { factory } = await resumeQueues();
+    setRestoreRecoveryRequired(true);
+    try {
+      rabbit.queueDeclare.mockImplementationOnce(() => new Promise(() => undefined));
+      const abort = new AbortController();
+      const running = factory.prepareRetainedConsumers(abort.signal);
+      abort.abort();
+      await expect(running).rejects.toThrow();
+      expect(rabbit.createConsumer).not.toHaveBeenCalled();
+    } finally {
+      setRestoreRecoveryRequired(false);
+    }
+  });
   it('defers resume consumers until preflight and app consumers until bootstrap completes', async () => {
     const { factory, app } = await resumeQueues();
     expect(rabbit.createConsumer).not.toHaveBeenCalled();
@@ -144,6 +275,32 @@ describe('QueueFactory', () => {
     await expect(factory.prepareInstallationResume()).rejects.toThrow('app commands or another app consumer');
     expect(rabbit.createConsumer).not.toHaveBeenCalled();
     expect((await app.publish({ event: 'start' })).success).toBe(false);
+  });
+
+  it.each([
+    { pending: 'repo-queue', messageCount: 1, consumerCount: 0 },
+    { pending: 'repo-queue', messageCount: 0, consumerCount: 1 },
+    { pending: 'system-events-queue', messageCount: 1, consumerCount: 0 },
+    { pending: 'system-events-queue', messageCount: 0, consumerCount: 1 },
+  ])('refuses $pending work or another consumer before resume', async ({ pending, messageCount, consumerCount }) => {
+    const { factory, app } = await resumeQueues();
+    rabbit.queueDeclare.mockImplementation(async ({ queue }: { queue: string }) => ({
+      messageCount: queue === pending ? messageCount : 0,
+      consumerCount: queue === pending ? consumerCount : 0,
+    }));
+    await expect(factory.prepareInstallationResume()).rejects.toThrow('other queue work');
+    expect(rabbit.createConsumer).not.toHaveBeenCalled();
+    expect((await app.publish({ event: 'update' })).success).toBe(false);
+  });
+
+  it('does not consume historical app commands when resuming a restored candidate', async () => {
+    vi.spyOn(restoreStartup, 'restoreStartupRole').mockReturnValue('candidate');
+    const { factory, app } = await resumeQueues();
+    rabbit.queueDeclare.mockResolvedValue({ messageCount: 1, consumerCount: 0 });
+    await expect(factory.prepareInstallationResume()).rejects.toThrow('app commands or another app consumer');
+    expect(rabbit.createConsumer).not.toHaveBeenCalled();
+    expect((await app.publish({ event: 'update' })).success).toBe(false);
+    vi.restoreAllMocks();
   });
 
   it('rechecks pending work after bootstrap without consuming or discarding it', async () => {

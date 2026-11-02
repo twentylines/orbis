@@ -1,16 +1,143 @@
 .depth-travel {
+  --depth-duration: 4.8s;
+  --depth-origin-x: 50%;
+  --depth-origin-y: 48%;
+  --depth-accent: color-mix(in srgb, var(--orbis-accent, var(--desktop-base-accent, #aebcc4)) 58%, #b7c6d0);
+  --depth-light: color-mix(in srgb, var(--orbis-accent, var(--desktop-base-accent, #b7c6d0)) 20%, #d9e3e7);
   position: relative;
   overflow: hidden;
   isolation: isolate;
   min-height: 120px;
-  background: #030408;
+  background: #030508;
   perspective: 520px;
-  perspective-origin: 50% 50%;
+  perspective-origin: var(--depth-origin-x) var(--depth-origin-y);
+}
+.depth-travel[data-mode="ambient"] {
+  --depth-duration: 24s;
+}
+.depth-travel::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 48%, rgb(3 5 8 / 22%), transparent 60%),
+    radial-gradient(ellipse at 50% 48%, transparent 35%, rgb(2 3 6 / 65%) 100%);
+}
+.depth-travel-distant-stars {
+  position: absolute;
+  inset: 0;
+  opacity: 0.65;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22640%22%20height%3D%22640%22%20viewBox%3D%220%200%20640%20640%22%3E%3Ccircle%20cx%3D%2231%22%20cy%3D%2213%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22224%22%20cy%3D%22290%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22417%22%20cy%3D%22567%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22610%22%20cy%3D%22204%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22163%22%20cy%3D%22481%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22356%22%20cy%3D%22118%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%22549%22%20cy%3D%22395%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22102%22%20cy%3D%2232%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22295%22%20cy%3D%22309%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22488%22%20cy%3D%22586%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%2241%22%20cy%3D%22223%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22234%22%20cy%3D%22500%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%22427%22%20cy%3D%22137%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22620%22%20cy%3D%22414%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22173%22%20cy%3D%2251%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22366%22%20cy%3D%22328%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22559%22%20cy%3D%22605%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22112%22%20cy%3D%22242%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%22305%22%20cy%3D%22519%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22498%22%20cy%3D%22156%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%2251%22%20cy%3D%22433%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22244%22%20cy%3D%2270%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22437%22%20cy%3D%22347%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22630%22%20cy%3D%22624%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%22183%22%20cy%3D%22261%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22376%22%20cy%3D%22538%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22569%22%20cy%3D%22175%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22122%22%20cy%3D%22452%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22315%22%20cy%3D%2289%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22508%22%20cy%3D%22366%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%2261%22%20cy%3D%223%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22254%22%20cy%3D%22280%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22447%22%20cy%3D%22557%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%220%22%20cy%3D%22194%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22193%22%20cy%3D%22471%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22386%22%20cy%3D%22108%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%22579%22%20cy%3D%22385%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22132%22%20cy%3D%2222%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22325%22%20cy%3D%22299%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22518%22%20cy%3D%22576%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%2271%22%20cy%3D%22213%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22264%22%20cy%3D%22490%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%22457%22%20cy%3D%22127%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%2210%22%20cy%3D%22404%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22203%22%20cy%3D%2241%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22396%22%20cy%3D%22318%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22589%22%20cy%3D%22595%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22142%22%20cy%3D%22232%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%22335%22%20cy%3D%22509%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22528%22%20cy%3D%22146%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%2281%22%20cy%3D%22423%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22274%22%20cy%3D%2260%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22467%22%20cy%3D%22337%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%22614%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%22213%22%20cy%3D%22251%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22406%22%20cy%3D%22528%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22599%22%20cy%3D%22165%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22152%22%20cy%3D%22442%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22345%22%20cy%3D%2279%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22538%22%20cy%3D%22356%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%2291%22%20cy%3D%22633%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22284%22%20cy%3D%22270%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22477%22%20cy%3D%22547%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%22184%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22223%22%20cy%3D%22461%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22416%22%20cy%3D%2298%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.60%22%2F%3E%3Ccircle%20cx%3D%22609%22%20cy%3D%22375%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.20%22%2F%3E%3Ccircle%20cx%3D%22162%22%20cy%3D%2212%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%22355%22%20cy%3D%22289%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22548%22%20cy%3D%22566%22%20r%3D%220.4%22%20fill%3D%22white%22%20opacity%3D%220.44%22%2F%3E%3Ccircle%20cx%3D%22101%22%20cy%3D%22203%22%20r%3D%220.75%22%20fill%3D%22white%22%20opacity%3D%220.52%22%2F%3E%3C%2Fsvg%3E");
+  background-size: 640px 640px;
+}
+.depth-travel-camera {
+  position: absolute;
+  inset: 0;
+  transform: translateZ(var(--depth-camera-z, 0px));
+  transform-origin: var(--depth-origin-x) var(--depth-origin-y);
+  transform-style: preserve-3d;
 }
 .depth-travel-horizon {
   position: absolute;
+  inset: -16%;
+  transform: rotate(-12deg) scale(1.04);
+  background:
+    radial-gradient(ellipse at 58% 39%, color-mix(in srgb, var(--depth-light) 12%, transparent), transparent 26%),
+    radial-gradient(ellipse at 34% 52%, color-mix(in srgb, var(--depth-accent) 17%, transparent), transparent 44%);
+}
+.depth-travel-cloud {
+  position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, #45416538, #10122438 35%, transparent 68%);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22768%22%20height%3D%22768%22%20viewBox%3D%220%200%20768%20768%22%3E%3Cfilter%20id%3D%22n%22%20x%3D%220%22%20y%3D%220%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%22.009%20.014%22%20numOctaves%3D%224%22%20seed%3D%2219%22%20stitchTiles%3D%22stitch%22%2F%3E%3CfeColorMatrix%20type%3D%22matrix%22%20values%3D%220%200%200%200%201%200%200%200%200%201%200%200%200%200%201%202.5%200%200%200%20-.75%22%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%22768%22%20height%3D%22768%22%20filter%3D%22url%28%23n%29%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22768%22%20height%3D%22768%22%20viewBox%3D%220%200%20768%20768%22%3E%3Cfilter%20id%3D%22n%22%20x%3D%220%22%20y%3D%220%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%22.009%20.014%22%20numOctaves%3D%224%22%20seed%3D%2219%22%20stitchTiles%3D%22stitch%22%2F%3E%3CfeColorMatrix%20type%3D%22matrix%22%20values%3D%220%200%200%200%201%200%200%200%200%201%200%200%200%200%201%202.5%200%200%200%20-.75%22%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%22768%22%20height%3D%22768%22%20filter%3D%22url%28%23n%29%22%2F%3E%3C%2Fsvg%3E");
+  -webkit-mask-size: cover;
+  mask-size: cover;
+}
+.depth-travel-cloud-far {
+  background:
+    radial-gradient(ellipse at 32% 46%, color-mix(in srgb, var(--depth-light) 33%, transparent), transparent 38%),
+    radial-gradient(ellipse at 74% 53%, color-mix(in srgb, var(--depth-accent) 42%, transparent), transparent 46%);
+  transform: rotate(-23deg) scale(1.3, 0.62);
+}
+.depth-travel-cloud-near {
+  background:
+    radial-gradient(ellipse at 27% 44%, color-mix(in srgb, var(--depth-accent) 44%, transparent), transparent 37%),
+    radial-gradient(ellipse at 67% 51%, color-mix(in srgb, var(--depth-light) 34%, transparent), transparent 39%);
+  transform: rotate(19deg) scale(1.55, 0.48);
+}
+.depth-travel[data-variant="timeline"] {
+  --depth-origin-y: 43%;
+}
+.depth-travel[data-variant="timeline"] .depth-travel-horizon {
+  background:
+    radial-gradient(ellipse at 54% 32%, color-mix(in srgb, var(--depth-light) 14%, transparent), transparent 24%),
+    radial-gradient(ellipse at 24% 66%, color-mix(in srgb, var(--depth-accent) 15%, transparent), transparent 34%);
+}
+.depth-travel[data-variant="timeline"] .depth-travel-cloud-far {
+  transform: rotate(-31deg) scale(1.35, 0.82) translateY(-8%);
+}
+.depth-travel[data-variant="timeline"] .depth-travel-cloud-near {
+  transform: rotate(-36deg) scale(1.75, 0.38) translateY(25%);
+  opacity: 0.7;
+}
+.depth-travel[data-variant="restore"] .depth-travel-horizon {
+  background:
+    radial-gradient(ellipse at 56% 41%, rgb(3 5 8 / 85%) 9%, transparent 37%),
+    radial-gradient(ellipse at 56% 41%, color-mix(in srgb, var(--depth-accent) 23%, transparent), transparent 65%);
+}
+.depth-travel[data-variant="restore"] .depth-travel-cloud-far {
+  transform: rotate(24deg) scale(1.7, 0.8) translateY(-13%);
+}
+.depth-travel[data-variant="restore"] .depth-travel-cloud-near {
+  transform: rotate(-28deg) scale(1.7, 0.65) translateY(21%);
+}
+.depth-travel[data-variant="update"] {
+  --depth-origin-y: 60%;
+  --depth-duration: 6.4s;
+}
+.depth-travel[data-variant="update"] .depth-travel-horizon {
+  background:
+    radial-gradient(ellipse at 50% 66%, color-mix(in srgb, var(--depth-light) 18%, transparent), transparent 40%),
+    radial-gradient(ellipse at 70% 81%, color-mix(in srgb, var(--depth-accent) 19%, transparent), transparent 48%);
+}
+.depth-travel[data-variant="update"] .depth-travel-cloud-far {
+  transform: rotate(-5deg) scale(1.7, 0.32) translateY(56%);
+}
+.depth-travel[data-variant="update"] .depth-travel-cloud-near {
+  transform: rotate(7deg) scale(1.5, 0.23) translateY(110%);
+  opacity: 0.7;
+}
+.depth-travel[data-variant="downgrade"] {
+  --depth-origin-x: 43%;
+  --depth-duration: 7.2s;
+}
+.depth-travel[data-variant="downgrade"] .depth-travel-horizon {
+  background:
+    radial-gradient(ellipse at 32% 44%, color-mix(in srgb, var(--depth-light) 12%, transparent), transparent 29%),
+    radial-gradient(ellipse at 72% 31%, color-mix(in srgb, var(--depth-accent) 19%, transparent), transparent 48%);
+}
+.depth-travel[data-variant="downgrade"] .depth-travel-cloud-far {
+  transform: rotate(34deg) scale(1.65, 0.52) translateY(-14%);
+}
+.depth-travel[data-variant="downgrade"] .depth-travel-cloud-near {
+  transform: rotate(43deg) scale(1.3, 0.36) translateY(38%);
+  opacity: 0.62;
+}
+.depth-travel[data-variant="onboarding"] {
+  --depth-origin-y: 46%;
+}
+.depth-travel[data-variant="onboarding"] .depth-travel-horizon {
+  background:
+    radial-gradient(ellipse at 18% 31%, color-mix(in srgb, var(--depth-light) 18%, transparent), transparent 30%),
+    radial-gradient(ellipse at 80% 63%, color-mix(in srgb, var(--depth-accent) 19%, transparent), transparent 40%);
+}
+.depth-travel[data-variant="onboarding"] .depth-travel-cloud-far {
+  transform: rotate(51deg) scale(1.5, 0.55) translateY(-16%);
+}
+.depth-travel[data-variant="onboarding"] .depth-travel-cloud-near {
+  transform: rotate(-51deg) scale(1.4, 0.5) translateY(20%);
 }
 .depth-travel-plane {
   position: absolute;
@@ -23,11 +150,42 @@
   position: absolute;
   display: block;
   border-radius: 50%;
-  background: #e8e9f6;
+  background: #d9e3eb;
+}
+.depth-travel-plane i::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgb(217 227 235 / 50%));
+  transform-origin: right center;
+  transform: rotate(var(--star-angle)) scaleX(0);
+  opacity: 0;
+  transition:
+    transform 220ms ease,
+    opacity 220ms ease;
+}
+.depth-travel:is([data-travelling="true"], [data-departing="true"]) .depth-travel-plane i::after {
+  transform: rotate(var(--star-angle)) scaleX(1);
+  opacity: 0.6;
+}
+.depth-travel-plane i[data-bright="true"] {
+  background: #f2f0e7;
+  box-shadow: 0 0 5px rgb(201 219 246 / 35%);
 }
 .depth-travel[data-active="true"]:not([data-reduced="true"]) .depth-travel-plane {
-  animation: depth-travel-forward 4.8s linear infinite;
-  animation-delay: var(--depth-delay);
+  animation: depth-travel-forward var(--depth-duration) linear infinite;
+  animation-delay: calc(var(--depth-layer) * var(--depth-duration) / -3);
+}
+.depth-travel[data-active="true"]:not([data-reduced="true"]) .depth-travel-horizon {
+  animation: depth-travel-clouds 48s ease-in-out infinite alternate;
+}
+@keyframes depth-travel-clouds {
+  to {
+    transform: rotate(-7deg) scale(1.12) translate3d(1%, -1%, 0);
+  }
 }
 @keyframes depth-travel-forward {
   0% {
@@ -45,6 +203,11 @@
     opacity: 0;
   }
 }
+.depth-travel[data-reduced="true"] .depth-travel-camera,
+.depth-travel[data-active="false"] .depth-travel-camera,
+:root[data-orbis-effects="low"] .depth-travel-camera {
+  transform: none;
+}
 .depth-travel[data-reduced="true"] .depth-travel-plane,
 .depth-travel[data-active="false"] .depth-travel-plane,
 :root[data-orbis-effects="low"] .depth-travel .depth-travel-plane {
@@ -52,18 +215,37 @@
   transform: translateZ(0);
   opacity: 0.55;
 }
+.depth-travel[data-reduced="true"] .depth-travel-horizon,
+.depth-travel[data-active="false"] .depth-travel-horizon,
+:root[data-orbis-effects="low"] .depth-travel .depth-travel-horizon {
+  animation: none;
+}
 .depth-travel[data-reduced="true"] .depth-travel-plane ~ .depth-travel-plane,
 .depth-travel[data-active="false"] .depth-travel-plane ~ .depth-travel-plane,
 :root[data-orbis-effects="low"] .depth-travel .depth-travel-plane ~ .depth-travel-plane {
   display: none;
 }
+:root[data-orbis-effects="low"] .depth-travel-cloud {
+  display: none;
+}
 @media (prefers-reduced-motion: reduce) {
+  .depth-travel .depth-travel-camera {
+    transform: none;
+  }
+  .depth-travel .depth-travel-horizon {
+    animation: none;
+  }
   .depth-travel .depth-travel-plane {
     animation: none;
     transform: translateZ(0);
     opacity: 0.55;
   }
   .depth-travel .depth-travel-plane ~ .depth-travel-plane {
+    display: none;
+  }
+}
+@media (forced-colors: active) {
+  .depth-travel {
     display: none;
   }
 }

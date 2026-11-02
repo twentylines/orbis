@@ -4,7 +4,7 @@ import { resolveWallpaperKey } from '@/desktop/wallpaper-presets';
 import { DesktopWallpaper } from '@/desktop/wallpaper';
 import { IconMoon, IconSun } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
-import { useLayoutEffect, useRef, type PropsWithChildren } from 'react';
+import { useLayoutEffect, useRef, type PropsWithChildren, type ReactNode } from 'react';
 import { prefersReducedMotion } from '@/desktop/motion-setting';
 
 function revealAuthFocus(target: EventTarget) {
@@ -21,7 +21,18 @@ function revealAuthFocus(target: EventTarget) {
   });
 }
 
-export const AuthLayout = ({ children, busy = false, setup = false }: PropsWithChildren<{ busy?: boolean; setup?: boolean }>) => {
+export const AuthLayout = ({
+  children,
+  busy = false,
+  setup = false,
+  scene,
+  progress,
+}: PropsWithChildren<{
+  busy?: boolean;
+  setup?: boolean;
+  scene?: ReactNode;
+  progress?: ReactNode;
+}>) => {
   const container = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     let animation: Animation | undefined;
@@ -50,9 +61,10 @@ export const AuthLayout = ({ children, busy = false, setup = false }: PropsWithC
       data-desktop-preset={preferences.preset}
       data-desktop-mode={resolvedMode}
       data-desktop-wallpaper={resolveWallpaperKey(preferences)}
+      data-setup-saving={(setup && busy) || undefined}
       onFocusCapture={(event) => revealAuthFocus(event.target)}
     >
-      <DesktopWallpaper />
+      {scene ?? <DesktopWallpaper />}
       <div className="desktop-auth-toolbar">
         <Button
           size="icon"
@@ -65,14 +77,27 @@ export const AuthLayout = ({ children, busy = false, setup = false }: PropsWithC
         </Button>
       </div>
       <div ref={container} className="container container-tight desktop-auth-container">
+        {setup ? (
+          <>
+            <header className="desktop-auth-identity">
+              <div className="desktop-auth-brand">
+                <OrbisLogo size={36} plain />
+                <span className="desktop-auth-product">Orbis</span>
+              </div>
+            </header>
+            {progress}
+          </>
+        ) : null}
         <div className="card card-md">
-          <header className="desktop-auth-identity">
-            <div className="desktop-auth-brand">
-              <OrbisLogo size={42} plain />
-              <span className="desktop-auth-product">Orbis</span>
-            </div>
-            {!setup && <p className="desktop-auth-server">{preferences.serverName}</p>}
-          </header>
+          {setup ? null : (
+            <header className="desktop-auth-identity">
+              <div className="desktop-auth-brand">
+                <OrbisLogo size={42} plain />
+                <span className="desktop-auth-product">Orbis</span>
+              </div>
+              <p className="desktop-auth-server">{preferences.serverName}</p>
+            </header>
+          )}
           <div className="card-body">{children}</div>
         </div>
       </div>

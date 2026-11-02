@@ -20,6 +20,9 @@ import { DatabaseService } from '@/core/database/database.service';
 import { QueueFactory } from '@/modules/queue/queue.factory';
 import { LoggerService } from '@/core/logger/logger.service';
 import * as restoreStartup from '@/modules/system-backups/backup-restore-startup';
+import { MarketplaceService } from '@/modules/marketplace/marketplace.service';
+import { RepoEventsQueue } from '@/modules/queue/entities/repo-events';
+import { SystemEventsQueue } from '@/modules/queue/entities/system-events';
 
 const TRAEFIK_CONFIG = `api:
   dashboard: true
@@ -52,6 +55,9 @@ describe('AppService', () => {
   let queueFactory = mock<QueueFactory>();
   let pruneNetworks = vi.fn();
   let loggerService = mock<LoggerService>();
+  let marketplace = mock<MarketplaceService>();
+  let repoQueue = mock<RepoEventsQueue>();
+  let systemQueue = mock<SystemEventsQueue>();
 
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -86,6 +92,10 @@ describe('AppService', () => {
     databaseService = moduleRef.get(DatabaseService);
     queueFactory = moduleRef.get(QueueFactory);
     loggerService = moduleRef.get(LoggerService);
+    marketplace = moduleRef.get(MarketplaceService);
+    marketplace.initialize.mockResolvedValue(undefined);
+    repoQueue = moduleRef.get(RepoEventsQueue);
+    systemQueue = moduleRef.get(SystemEventsQueue);
   });
 
   it('keeps account secrets and private configuration out of startup diagnostics', async () => {
@@ -143,6 +153,77 @@ describe('AppService', () => {
     expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
     expect(copy).not.toHaveBeenCalled();
     expect(pruneNetworks).not.toHaveBeenCalled();
+  });
+
+  it('uses ordinary startup without requiring empty retained queues after settlement', async () => {
+    const retained = vi.spyOn(restoreStartup, 'retainedBootstrapStartup').mockReturnValue(false);
+    configurationService.getConfig.mockReturnValue(
+      fromPartial({ version: '5.0.0', userSettings: { logLevel: 'info', allowErrorMonitoring: false, localDomain: 'local.test' }, __prod__: false }),
+    );
+    vi.spyOn(appService, 'copyAssets').mockResolvedValue();
+    vi.spyOn(appService, 'generateTlsCertificates').mockResolvedValue();
+    try {
+      await appService.bootstrap();
+      expect(queueFactory.prepareRetainedConsumers).not.toHaveBeenCalled();
+      expect(databaseService.migrate).toHaveBeenCalledOnce();
+      expect(appStatusSyncService.syncAllAppStatuses).toHaveBeenCalledOnce();
+    } finally {
+      retained.mockRestore();
+    }
+  });
+
+  it('prepares retained continuation without refreshing repositories, then registers timers once while held', async () => {
+    const retained = vi.spyOn(restoreStartup, 'retainedBootstrapStartup').mockReturnValue(true);
+    const settled = vi.spyOn(restoreStartup, 'retainedSettledStartup').mockReturnValue(false);
+    setBackupRecoveryRequired(true);
+    configurationService.getConfig.mockReturnValue(fromPartial({ __prod__: true }));
+    try {
+      await appService.prepareRetainedNormalContinuation();
+      await appService.prepareRetainedNormalContinuation();
+      appService.activateRetainedNormalContinuation();
+      appService.activateRetainedNormalContinuation();
+      expect(marketplace.initialize).toHaveBeenCalledExactlyOnceWith({ refreshRepositories: false });
+      expect(repoQueue.publishRepeatable).toHaveBeenCalledExactlyOnceWith({ command: 'update_all' }, '*/15 * * * *');
+      expect(systemQueue.publishRepeatable).toHaveBeenCalledExactlyOnceWith({ command: 'sync_app_statuses' }, '*/5 * * * *');
+      expect(repoQueue.publish).not.toHaveBeenCalled();
+      expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+    } finally {
+      retained.mockRestore();
+      settled.mockRestore();
+    }
+  });
+
+  it('restarts a settled restored controller without reapplying saved app configuration', async () => {
+    const retained = vi.spyOn(restoreStartup, 'retainedBootstrapStartup').mockReturnValue(false);
+    const settled = vi.spyOn(restoreStartup, 'retainedSettledStartup').mockReturnValue(true);
+    configurationService.getConfig.mockReturnValue(fromPartial({ version: 'later-cache-miss', __prod__: true }));
+    try {
+      await appService.bootstrap();
+      expect(databaseService.migrate).not.toHaveBeenCalled();
+      expect(marketplace.initialize).toHaveBeenCalledExactlyOnceWith({ refreshRepositories: false });
+      expect(repoQueue.publish).not.toHaveBeenCalled();
+      expect(appLifecycleService.restartRunningApps).not.toHaveBeenCalled();
+      expect(pruneNetworks).not.toHaveBeenCalled();
+      expect(systemQueue.publishRepeatable).toHaveBeenCalledOnce();
+    } finally {
+      retained.mockRestore();
+      settled.mockRestore();
+    }
+  });
+
+  it('holds startup work and skips migration during protected retained bootstrap', async () => {
+    const retained = vi.spyOn(restoreStartup, 'retainedBootstrapStartup').mockReturnValue(true);
+    const prepareRecovery = vi.fn(async () => setBackupRecoveryRequired(true));
+    try {
+      await appService.bootstrap(prepareRecovery);
+      expect(prepareRecovery).toHaveBeenCalledOnce();
+      expect(databaseService.migrate).not.toHaveBeenCalled();
+      expect(appLifecycleService.recoverInterruptedRestores).not.toHaveBeenCalled();
+      expect(appStatusSyncService.syncAllAppStatuses).not.toHaveBeenCalled();
+      expect(pruneNetworks).not.toHaveBeenCalled();
+    } finally {
+      retained.mockRestore();
+    }
   });
 
   it('prepares the database while holding all app bootstrap work during installation', async () => {

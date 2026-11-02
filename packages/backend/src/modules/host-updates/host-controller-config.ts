@@ -52,9 +52,46 @@ const schema = type({
   rootIdentity: type({ device: decimal, inode: decimal, uid: owner, gid: owner, mode, pathSha256: hash }).onUndeclaredKey('reject'),
   files: present.or(absent).array().exactlyLength(5),
 }).onUndeclaredKey('reject');
-type Wire = typeof schema.infer;
+const retainedIdentity = type({
+  publishedReference: type('string').narrow((value) => /^ghcr\.io\/twentylines\/orbis@sha256:[a-f0-9]{64}$/.test(value)),
+  platform: type({
+    os: "'linux'",
+    architecture: "'amd64' | 'arm64'",
+    'variant?': type('string').narrow((v) => /^[a-z0-9][a-z0-9._-]{0,63}$/.test(v)),
+  }).onUndeclaredKey('reject'),
+  platformManifestDigest: image,
+  configDigest: image,
+  sourceImageId: image,
+  creationReference: image,
+  pointId: image,
+  configurationDigest: image,
+  archiveRootId: image,
+  descriptorDigest: image,
+  archiveKind: "'oci' | 'docker'",
+  proofDigest: image,
+}).onUndeclaredKey('reject');
+const schemaV2 = schema
+  .omit('version', 'controller')
+  .merge({
+    version: '2',
+    controller: schema.get('controller').omit('imageReference').merge({ imageReference: image }).onUndeclaredKey('reject'),
+    retainedIdentity,
+  })
+  .onUndeclaredKey('reject');
+type Wire = typeof schema.infer | typeof schemaV2.infer;
+export const controllerConfigurationMetadataV1Schema = schema
+  .omit('files')
+  .merge({
+    files: present.omit('data').or(absent).array().exactlyLength(5),
+  })
+  .onUndeclaredKey('reject');
+export const controllerConfigurationMetadataV2Schema = schemaV2
+  .omit('files')
+  .merge({ files: present.omit('data').or(absent).array().exactlyLength(5) })
+  .onUndeclaredKey('reject');
+export const controllerConfigurationMetadataSchema = controllerConfigurationMetadataV1Schema.or(controllerConfigurationMetadataV2Schema);
 type MetadataFile = Omit<typeof present.infer, 'data'> | typeof absent.infer;
-type CaptureMetadata = Omit<Wire, 'files'> & { files: MetadataFile[] };
+type CaptureMetadata = Wire extends infer T ? (T extends Wire ? Omit<T, 'files'> & { files: MetadataFile[] } : never) : never;
 const canonical = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object')
@@ -124,13 +161,17 @@ export function validateControllerCaptureIdentity(value: ControllerCaptureIdenti
 }
 export function decodeControllerConfigurationCapture(raw: unknown, expected: ControllerCaptureIdentity) {
   validateControllerCaptureIdentity(expected);
-  const value = schema(raw);
+  const value = schema.or(schemaV2)(raw);
   if (
     value instanceof type.errors ||
     value.pointId !== expected.pointId ||
     value.controller.id !== expected.controllerId ||
     value.controller.imageId !== expected.imageId ||
-    value.controller.imageReference !== `ghcr.io/twentylines/orbis@${value.controller.releaseDigest}` ||
+    (value.version === 1
+      ? value.controller.imageReference !== `ghcr.io/twentylines/orbis@${value.controller.releaseDigest}`
+      : value.controller.imageReference !== value.retainedIdentity.creationReference ||
+        value.controller.imageId !== value.retainedIdentity.creationReference ||
+        value.retainedIdentity.publishedReference !== `ghcr.io/twentylines/orbis@${value.controller.releaseDigest}`) ||
     value.rootIdentity.mode & 0o022
   )
     throw invalid();
@@ -159,7 +200,7 @@ export function decodeControllerConfigurationCapture(raw: unknown, expected: Con
   const { configurationSetSha256, ...descriptor } = { ...value, files };
   if (
     createHash('sha256')
-      .update(`orbis.controller-config.v1\n${canonical(descriptor)}`)
+      .update(`orbis.controller-config.v${value.version}\n${canonical(descriptor)}`)
       .digest('hex') !== configurationSetSha256
   )
     throw invalid();

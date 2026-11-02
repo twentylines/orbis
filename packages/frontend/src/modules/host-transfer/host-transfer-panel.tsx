@@ -39,6 +39,7 @@ import './host-transfer-panel.css';
 type Props = {
   mode?: 'receive' | 'both';
   embedded?: boolean;
+  recoveryScene?: boolean;
   contained?: boolean;
   onActivityChange?: (active: boolean) => void;
   onDismiss?: () => void;

@@ -12,6 +12,7 @@ import { BackupRequirementError, privateBackupDirectory } from './backup-files';
 import { backupDockerExec, BackupDatabaseLines } from './backup-docker-exec';
 import { backupDatabaseColumns, backupDatabaseLimits, BackupDatabaseRecords, backupDatabaseTables } from './backup-database-records';
 import { restoreStartupRole } from './backup-restore-startup';
+import type { decodeAppRuntimeCapture } from './time-machine-app-runtime-capture';
 
 const label = 'io.orbis.backup-database-review';
 const failure = () => new BackupRequirementError('The backup database could not be reviewed safely. No server data has been changed.');
@@ -196,12 +197,18 @@ export class BackupDatabaseService implements OnModuleInit, OnModuleDestroy {
     return { image: info.Id, volumes: Object.keys(info.Config.Volumes ?? {}) };
   }
 
-  async review(content: string, destination: string, signal: AbortSignal, progress: (bytes: number) => void): Promise<BackupDatabaseReview> {
+  async review(
+    content: string,
+    destination: string,
+    signal: AbortSignal,
+    progress: (bytes: number) => void,
+    appRuntime?: ReturnType<typeof decodeAppRuntimeCapture>,
+  ): Promise<BackupDatabaseReview> {
     await this.initialize();
     if (this.running) throw failure();
     this.cancellation = new AbortController();
     const combined = AbortSignal.any([signal, this.cancellation.signal, AbortSignal.timeout(5 * 60_000)]);
-    this.running = this.inspect(content, destination, combined, progress);
+    this.running = this.inspect(content, destination, combined, progress, appRuntime);
     try {
       return await this.running;
     } finally {
@@ -210,7 +217,13 @@ export class BackupDatabaseService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async inspect(content: string, destination: string, signal: AbortSignal, progress: (bytes: number) => void) {
+  private async inspect(
+    content: string,
+    destination: string,
+    signal: AbortSignal,
+    progress: (bytes: number) => void,
+    appRuntime?: ReturnType<typeof decodeAppRuntimeCapture>,
+  ) {
     const installed = await this.image(signal);
     const owner: Ownership = { version: 1, name: `orbis-database-review-${randomUUID()}`, nonce: randomUUID(), image: installed.image };
     await this.save(owner);
@@ -284,7 +297,7 @@ export class BackupDatabaseService implements OnModuleInit, OnModuleDestroy {
       );
       const recovery = (await this.readJson(path.join(content, 'recovery.json'), 1024 * 1024)) as { jwtSecret?: unknown };
       if (!recovery || typeof recovery.jwtSecret !== 'string') throw failure();
-      const validator = new BackupDatabaseRecords(recovery.jwtSecret);
+      const validator = new BackupDatabaseRecords(recovery.jwtSecret, appRuntime);
       let passkeys: unknown;
       try {
         passkeys = await this.readJson(path.join(content, 'data/state/auth/passkeys.json'), 512 * 1024);

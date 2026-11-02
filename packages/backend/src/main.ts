@@ -15,7 +15,12 @@ import { captureInstallationMode, installationMode } from './common/installation
 import { BackupRestoreJournal } from './modules/system-backups/backup-restore-journal';
 import { BackupRestoresService } from './modules/system-backups/backup-restores.service';
 import { SystemBackupsService } from './modules/system-backups/system-backups.service';
-import { captureRestoreStartupRole, waitForRestoreStartup } from './modules/system-backups/backup-restore-startup';
+import {
+  captureRestoreStartupRole,
+  retainedBootstrapStartup,
+  retainedSettledStartup,
+  waitForRestoreStartup,
+} from './modules/system-backups/backup-restore-startup';
 import { BackupRestoreActivationService } from './modules/system-backups/backup-restore-activation.service';
 import {
   VerifierStartupDiagnostics,
@@ -59,12 +64,16 @@ async function bootstrap() {
   captureRestoreStartupRole(restoreMode);
   if (restoreMode === 'verify' && installation.phase === 'hold') verifierDiagnostics.enable();
   if (restoreMode === 'candidate' && installation.phase === 'normal') {
-    const restore = await BackupRestoreJournal.active(path.join(DATA_DIR, 'backups', 'restores'));
+    const restore =
+      (await BackupRestoreJournal.active(path.join(DATA_DIR, 'backups', 'restores'))) ??
+      (await BackupRestoreJournal.latest(path.join(DATA_DIR, 'backups', 'restores')));
     if (!restore || restore.state.decision !== 'commit' || !restore.state.candidateController.startsWith(os.hostname()))
       throw new Error('Restore startup ownership changed.');
     captureInstallationMode({ ORBIS_INSTALLER_TRANSACTION: restore.state.id, ORBIS_INSTALLER_PHASE: 'resume' });
   } else captureInstallationMode();
-  await verifierDiagnostics.run('env', () => generateSystemEnvFile({ readOnly: restoreMode === 'verify' }));
+  await verifierDiagnostics.run('env', () =>
+    generateSystemEnvFile({ readOnly: restoreMode === 'verify' || retainedBootstrapStartup() || retainedSettledStartup() }),
+  );
 
   const app = await verifierDiagnostics.run('app', () =>
     NestFactory.create<NestExpressApplication>(AppModule, {
@@ -83,7 +92,12 @@ async function bootstrap() {
       }),
     ),
   );
-  await verifierDiagnostics.run('activation', () => app.get(BackupRestoreActivationService).resumeApps());
+  const activation = app.get(BackupRestoreActivationService);
+  activation.configureRetainedContinuation({
+    prepare: () => appService.prepareRetainedNormalContinuation(),
+    activate: () => appService.activateRetainedNormalContinuation(),
+  });
+  await verifierDiagnostics.run('activation', () => activation.resumeApps());
 
   app.set('trust proxy', true);
   app.setGlobalPrefix('/api');

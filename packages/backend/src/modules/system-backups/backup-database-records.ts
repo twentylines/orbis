@@ -5,6 +5,7 @@ import { type } from 'arktype';
 import { app, appStore, link, user } from '@/core/database/drizzle/schema';
 import { passkeyStateSchema } from '../auth/passkey.store';
 import { BackupRequirementError } from './backup-files';
+import { appRuntimeImageBindings, type decodeAppRuntimeCapture } from './time-machine-app-runtime-capture';
 
 const deriveKey = promisify(pbkdf2);
 const tables = { user, app_store: appStore, app, link } as const;
@@ -84,8 +85,18 @@ export class BackupDatabaseRecords {
   private subnets = new Set<string>();
   readonly counts = { user: 0, app_store: 0, app: 0, link: 0 };
 
-  constructor(private readonly jwtSecret: string) {
+  private readonly expectedApps: Map<number, ReturnType<typeof decodeAppRuntimeCapture>['metadata']['apps'][number]> | undefined;
+  private readonly seenApps = new Set<number>();
+
+  constructor(
+    private readonly jwtSecret: string,
+    appRuntime?: ReturnType<typeof decodeAppRuntimeCapture>,
+  ) {
     if (!jwtSecret || jwtSecret.length > 4096) invalid('account');
+    if (appRuntime) {
+      appRuntimeImageBindings(appRuntime);
+      this.expectedApps = new Map(appRuntime.metadata.apps.map((entry) => [entry.id, entry]));
+    }
   }
 
   accept(name: BackupDatabaseTable, value: unknown): RecordValue {
@@ -96,7 +107,7 @@ export class BackupDatabaseRecords {
     for (const column of columns) {
       const entry = value[column.name];
       if (entry === null) {
-        if (column.notNull) invalid('schema');
+        if (column.notNull && !(name === 'app' && column.name === 'user_config_enabled' && this.expectedApps)) invalid('schema');
       } else if (column.enumValues?.length) {
         if (typeof entry !== 'string' || !column.enumValues.includes(entry)) invalid('schema');
       } else if (column.dataType === 'number') {
@@ -111,7 +122,7 @@ export class BackupDatabaseRecords {
         if (!object(entry)) invalid('schema');
         validateJson(entry);
       } else invalid('schema');
-      row[column.name] = entry;
+      row[column.name] = name === 'app' && column.name === 'user_config_enabled' && entry === null && this.expectedApps ? true : entry;
     }
     const encoded = JSON.stringify(row);
     const size = Buffer.byteLength(encoded);
@@ -120,6 +131,18 @@ export class BackupDatabaseRecords {
     const id = name === 'app_store' ? row.slug : row.id;
     if (name === 'app_store' ? typeof id !== 'string' || !id : !integer(id) || id <= 0) invalid('identity');
     if (this.identities[name].has(id as number | string)) invalid('identity');
+    if (name === 'app' && this.expectedApps) {
+      const expected = this.expectedApps.get(row.id as number);
+      if (
+        !expected ||
+        expected.urn !== `${row.app_name}:${row.app_store_slug}` ||
+        expected.status !== row.status ||
+        expected.pendingRestart !== row.pending_restart ||
+        expected.userConfigEnabled !== (row.user_config_enabled ?? true)
+      )
+        invalid('identity');
+      this.seenApps.add(expected.id);
+    }
     if (name === 'user') {
       if (!boundedPasswordHash(row.password) || typeof row.username !== 'string' || !row.username) invalid('account');
     }
@@ -144,6 +167,7 @@ export class BackupDatabaseRecords {
 
   async finish(passkeys: unknown | undefined, signal: AbortSignal) {
     signal.throwIfAborted();
+    if (this.expectedApps && this.seenApps.size !== this.expectedApps.size) invalid('identity');
     if (![...this.accounts.values()].some((account) => account.operator)) invalid('account');
     if ([...this.linkUsers].some((id) => !this.accounts.has(id))) invalid('identity');
     for (const account of this.accounts.values()) {

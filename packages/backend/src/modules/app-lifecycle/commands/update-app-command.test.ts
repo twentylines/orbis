@@ -205,3 +205,65 @@ describe('UpdateAppCommand', () => {
     expect(fixture.appHelpers.generateEnvFile).not.toHaveBeenCalled();
   });
 });
+
+describe('explicit update of a retained app', () => {
+  const pinnedFixture = (running = true) => {
+    const fixture = createFixture(false);
+    fixture.dockerService.readAppImagePins.mockResolvedValue({ path: '/pins.json', pins: {} } as never);
+    const container = mock<Dockerode.Container>();
+    fixture.docker.listContainers.mockResolvedValue([{ Id: 'retained-container' }] as Dockerode.ContainerInfo[]);
+    fixture.docker.getContainer.mockReturnValue(container);
+    container.inspect.mockResolvedValue({ State: { Running: running } } as Dockerode.ContainerInspectInfo);
+    fixture.dockerService.beginRetainedAppImageUpdate.mockResolvedValue({
+      id: 'transaction-id',
+      prepare: vi.fn(),
+      activationAttempted: vi.fn(),
+      restoreMetadata: vi.fn(),
+      commit: async (retire) => {
+        await retire();
+      },
+    });
+    fixture.dockerService.retireAppImagePinsAfterUpdate.mockImplementation(async () => {
+      fixture.steps.push('retire-pin');
+    });
+    return fixture;
+  };
+  it('retires the pin only after the new running app passes bounded startup', async () => {
+    const fixture = pinnedFixture();
+    expect((await fixture.command.execute(appUrn, {})).success).toBe(true);
+    expect(fixture.steps.slice(-3)).toEqual(['compose:pull', 'compose:up --detach --wait --wait-timeout 120', 'retire-pin']);
+    expect(fixture.dockerService.composeApp).toHaveBeenCalledWith(appUrn, 'pull', { imagePins: 'explicit-update', imagePinUpdate: 'transaction-id' });
+    expect(fixture.dockerService.composeApp).toHaveBeenCalledWith(appUrn, 'down --remove-orphans');
+    expect(fixture.dockerService.composeApp).not.toHaveBeenCalledWith(appUrn, 'up --detach --force-recreate --remove-orphans');
+  });
+  it.each(['pull', 'up --detach --wait --wait-timeout 120'])('preserves the old pin on new %s failure', async (failed) => {
+    const fixture = pinnedFixture();
+    fixture.dockerService.composeApp.mockImplementation(async (_urn, command, options) => {
+      if (options?.imagePins === 'explicit-update' && command === failed) throw new Error('New image failed');
+      return { success: true, stdout: '', stderr: '' };
+    });
+    expect(await fixture.command.execute(appUrn, {})).toEqual({
+      success: false,
+      message:
+        failed === 'pull'
+          ? 'New image failed'
+          : 'Retained app update requires explicit recovery. Its metadata and any new app writes were preserved.',
+    });
+    expect(fixture.dockerService.retireAppImagePinsAfterUpdate).not.toHaveBeenCalled();
+  });
+  it('does not replace source or retire pins if the retained project cannot stop', async () => {
+    const fixture = pinnedFixture();
+    fixture.dockerService.composeApp.mockRejectedValue(new Error('Project could not stop'));
+    expect(await fixture.command.execute(appUrn, {})).toEqual({ success: false, message: 'Project could not stop' });
+    expect(fixture.appFilesManager.deleteAppFolder).not.toHaveBeenCalled();
+    expect(fixture.marketplaceService.copyAppFromRepoToInstalled).not.toHaveBeenCalled();
+    expect(fixture.dockerService.retireAppImagePinsAfterUpdate).not.toHaveBeenCalled();
+  });
+  it('does not start a previously stopped retained app during update', async () => {
+    const fixture = pinnedFixture(false);
+    expect((await fixture.command.execute(appUrn, {})).success).toBe(true);
+    expect(fixture.dockerService.composeApp.mock.calls.some(([, command]) => command.startsWith('up '))).toBe(false);
+    expect(fixture.dockerService.composeApp).not.toHaveBeenCalledWith(appUrn, 'up --detach --wait --wait-timeout 120', expect.anything());
+    expect(fixture.dockerService.retireAppImagePinsAfterUpdate).toHaveBeenCalledExactlyOnceWith(appUrn, 'transaction-id');
+  });
+});

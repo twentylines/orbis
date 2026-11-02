@@ -13,6 +13,8 @@ import {
   type BackupDatabaseTable,
 } from './backup-database-records';
 
+import { canonicalAppRuntimeJson, decodeAppRuntimeCapture } from './time-machine-app-runtime-capture';
+
 type Row = Record<string, unknown>;
 let directory: string;
 let fileNumber = 0;
@@ -472,4 +474,65 @@ it('honours cancellation before validation and during asynchronous account decry
   const finishing = during.finish(undefined, controller.signal);
   controller.abort();
   await expect(finishing).rejects.toThrow();
+});
+
+function protectedAppRows(userConfigEnabled = true) {
+  const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
+  const h = 'a'.repeat(64);
+  const pointId = 'a2e0a9a1-b78e-49a5-9342-560b420cfd76';
+  const savedFiles = [{ name: 'data/apps/_user/custom-app/config.json', bytes: 4, sha256: h }];
+  const raw = {
+    schema: 'orbis.app-runtime-capture.v1',
+    version: 1,
+    pointId,
+    rootSha256: h,
+    dockerContextSha256: h,
+    daemonSha256: h,
+    configurationSetSha256: h,
+    preparationSha256: h,
+    capturedAt: 42,
+    apps: [
+      {
+        id: 1,
+        urn: 'custom-app:_user',
+        project: 'custom-app__user',
+        status: 'stopped',
+        pendingRestart: true,
+        userConfigEnabled,
+        sourceSha256: sha(`orbis.app-runtime-saved-source.v1\n${canonicalAppRuntimeJson(savedFiles)}`),
+        configurationSha256: h,
+        savedFiles,
+        services: [],
+      },
+    ],
+    containers: [],
+    networkDefinitions: [],
+  };
+  const bytes = Buffer.from(canonicalAppRuntimeJson({ ...raw, sha256: sha(`${raw.schema}\n${canonicalAppRuntimeJson(raw)}`) }));
+  return decodeAppRuntimeCapture(bytes, {
+    pointId,
+    rootSha256: h,
+    dockerContextSha256: h,
+    daemonSha256: h,
+    configurationSetSha256: h,
+    preparationSha256: h,
+    entrySha256: sha(bytes),
+  });
+}
+
+it('compares isolated database app rows with the protected app snapshot', async () => {
+  const runtime = protectedAppRows();
+  const records = new BackupDatabaseRecords(sourceKey, runtime);
+  await accept(records, 'user', account());
+  expect((await accept(records, 'app', app({ user_config_enabled: null }))).user_config_enabled).toBe(true);
+  expect((await records.finish(undefined, signal())).app).toBe(1);
+  expect(() => new BackupDatabaseRecords(sourceKey).accept('app', app({ user_config_enabled: null }))).toThrow(BackupDatabaseRecordError);
+  for (const change of [{ id: 2 }, { app_name: 'other' }, { status: 'running' }, { pending_restart: false }, { user_config_enabled: false }]) {
+    const changed = new BackupDatabaseRecords(sourceKey, runtime);
+    expect(() => changed.accept('app', app(change))).toThrow(BackupDatabaseRecordError);
+  }
+  const missing = new BackupDatabaseRecords(sourceKey, runtime);
+  await accept(missing, 'user', account());
+  await expect(missing.finish(undefined, signal())).rejects.toThrow(BackupDatabaseRecordError);
+  expect(() => new BackupDatabaseRecords(sourceKey, { metadata: runtime.metadata } as never)).toThrow();
 });

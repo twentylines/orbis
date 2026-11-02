@@ -4,7 +4,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { BackupArchiveError, decryptBackup, encryptBackup } from './backup-crypto';
+import { Readable } from 'node:stream';
+import { backupGcmPlaintextLimit, encryptBackupStream, BackupArchiveError, decryptBackup, encryptBackup } from './backup-crypto';
 
 const passphrase = 'disposable-backup-passphrase';
 let directory: string;
@@ -12,7 +13,7 @@ let source: string;
 let archive: string;
 let restored: string;
 beforeEach(async () => {
-  directory = await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-full-backup-'));
+  directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-full-backup-')));
   source = path.join(directory, 'source.tar.gz');
   archive = path.join(directory, 'saved.orbis-backup');
   restored = path.join(directory, 'restored.tar.gz');
@@ -162,4 +163,72 @@ it('removes unverified plaintext when a restore is cancelled', async () => {
   ).rejects.toMatchObject({ code: 'cancelled' });
   await expect(fs.stat(restored)).rejects.toMatchObject({ code: 'ENOENT' });
   expect((await fs.readdir(directory)).filter((name) => name.endsWith('.partial'))).toEqual([]);
+});
+
+it('encrypts declared streams using the existing authenticated format and checks exact byte counts', async () => {
+  const bytes = Buffer.from('retained ordered runtime frames');
+  const result = await encryptBackupStream({
+    source: Readable.from([bytes.subarray(0, 5), bytes.subarray(5)]),
+    plaintextBytes: bytes.length,
+    destination: archive,
+    passphrase,
+    signal: new AbortController().signal,
+  });
+  expect(result.bytes).toBe(bytes.length + 52);
+  expect(result.sha256).toBe(
+    createHash('sha256')
+      .update(await fs.readFile(archive))
+      .digest('hex'),
+  );
+  await decryptBackup({ source: archive, destination: restored, passphrase });
+  expect(await fs.readFile(restored)).toEqual(bytes);
+});
+it.each([2, 4])('rejects a stream whose declared length %i differs from its actual bytes', async (plaintextBytes) => {
+  const stream = Readable.from([Buffer.from('abc')]);
+  await expect(
+    encryptBackupStream({ source: stream, plaintextBytes, destination: archive, passphrase, signal: new AbortController().signal }),
+  ).rejects.toMatchObject({ code: 'operation-failed' });
+  expect(stream.destroyed).toBe(true);
+  expect((await fs.readdir(directory)).filter((name) => name.endsWith('.partial'))).toEqual([]);
+  await expect(fs.stat(archive)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+it('rejects the GCM bound before reading or allocating the declared payload', async () => {
+  const stream = new Readable({
+    read() {
+      throw new Error('Must not read');
+    },
+  });
+  await expect(
+    encryptBackupStream({
+      source: stream,
+      plaintextBytes: backupGcmPlaintextLimit + 1,
+      destination: archive,
+      passphrase,
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toMatchObject({ code: 'operation-failed' });
+  expect(stream.destroyed).toBe(true);
+});
+it('cancels an idle runtime stream and closes its private incomplete output', async () => {
+  const stream = new Readable({ read() {} });
+  const abort = new AbortController();
+  const pending = encryptBackupStream({ source: stream, plaintextBytes: 1, destination: archive, passphrase, signal: abort.signal });
+  setTimeout(() => abort.abort(), 50);
+  await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+  expect(stream.destroyed).toBe(true);
+  await expect(fs.stat(archive)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('cancels before a stream consumer exists without emitting an unhandled source error', async () => {
+  const stream = new Readable({ read() {} });
+  const errors: unknown[] = [];
+  stream.on('error', (error) => errors.push(error));
+  const abort = new AbortController();
+  const pending = encryptBackupStream({ source: stream, plaintextBytes: 1, destination: archive, passphrase, signal: abort.signal });
+  abort.abort();
+  await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(errors).toEqual([]);
+  expect(stream.destroyed).toBe(true);
+  await expect(fs.stat(archive)).rejects.toMatchObject({ code: 'ENOENT' });
 });

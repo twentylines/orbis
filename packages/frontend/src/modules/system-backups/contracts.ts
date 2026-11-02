@@ -9,6 +9,7 @@ export const exportJobSchema = type({
   ...base,
   status: "'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted'",
   stage: "'preparing' | 'inventory' | 'quiescing' | 'database' | 'copying' | 'archiving' | 'encrypting' | 'resuming' | 'complete'",
+  'expiresAt?': 'number > 0',
   needsRecovery: 'boolean',
   restartRequired: 'boolean',
 });
@@ -107,4 +108,9 @@ export function backupPollingInterval(snapshot: BackupSnapshot | undefined, visi
     snapshot?.imports.jobs.some((job) => ['uploading', 'reviewing', 'preparing'].includes(job.status)) ||
     (snapshot?.restore.job && !['succeeded', 'rolled-back'].includes(snapshot.restore.job.status));
   return active ? 2500 : 30_000;
+}
+
+export const backupRetentionSchema = type({ version: '1', revision: count, retentionHours: 'number.integer >= 24 & number <= 8760' });
+export function savedBackupEligible(job: ExportJob, now = Date.now()) {
+  return job.status === 'succeeded' && !job.needsRecovery && !job.restartRequired && (job.expiresAt ?? job.createdAt + 24 * 60 * 60_000) > now;
 }

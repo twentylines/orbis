@@ -62,6 +62,7 @@ export type RestoreHandoffOptions = {
   apps: { id: string; project: string }[];
   directories: { data: string; appData: string; cache: string };
   signal: AbortSignal;
+  preserveLiveProxy?: boolean;
   claimReviewedSource: (
     journal: BackupRestoreJournal,
     accept: (source: { seal: BackupSourceSeal }, signal: AbortSignal) => Promise<void>,
@@ -124,7 +125,7 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
       candidateController: original.Id,
       verifierController: verifier.id,
       worker: worker.id,
-      roots: [...restoreTreeNames],
+      roots: restoreTreeNames.filter((name) => !options.preserveLiveProxy || name !== 'traefik'),
     });
     await withRestoreLease(path.dirname(journal.directory), () =>
       retainRestoreControllerOwnership(journal as BackupRestoreJournal, original, {

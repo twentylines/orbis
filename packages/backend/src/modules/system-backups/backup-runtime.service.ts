@@ -76,6 +76,23 @@ export class BackupRuntimeService {
     return { databaseId: databases[0] as string, containers, images };
   }
 
+  async verifyStopped(plan: BackupRuntimePlan, signal: AbortSignal) {
+    signal.throwIfAborted();
+    const current = await this.plan([...new Set(plan.containers.map((item) => item.project))]);
+    signal.throwIfAborted();
+    const identities = (value: BackupRuntimePlan) =>
+      JSON.stringify(value.containers.map(({ id, project }) => ({ id, project })).sort((a, b) => a.id.localeCompare(b.id)));
+    const images = (value: BackupRuntimePlan) => JSON.stringify([...value.images].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+    if (
+      current.databaseId !== plan.databaseId ||
+      identities(current) !== identities(plan) ||
+      images(current) !== images(plan) ||
+      current.containers.some((item) => item.running)
+    )
+      throw new BackupRequirementError('App, database or writer state changed during the snapshot.');
+    return current.containers;
+  }
+
   async stop(container: BackupContainer) {
     const handle = this.docker.getContainer(container.id);
     const current = await handle.inspect();

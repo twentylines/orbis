@@ -1,8 +1,8 @@
 import type { LoggerService } from '@/core/logger/logger.service';
 import * as Sentry from '@sentry/nestjs';
-import { AMQPConnectionError, AMQPError, type Connection, type RPCClient } from 'rabbitmq-client';
+import { AMQPConnectionError, AMQPError, type Connection, type RPCClient, type Consumer } from 'rabbitmq-client';
 import { type } from 'arktype';
-import { scheduleCron, validateCronPattern } from './cron-scheduler';
+import { scheduleCron, validateCronPattern, type ScheduledCronTask } from './cron-scheduler';
 import type { EventPublisher } from './event.publisher';
 import { INSTALLATION_MESSAGE, installationHeld, installationMode } from '@/common/installation-mode';
 import { backupMaintenanceActive, enterBackupMutation, waitForBackupMutation } from '@/common/backup-maintenance';
@@ -20,6 +20,49 @@ export type QueueObserver<T> = { queued: (event: T) => Promise<void>; unconfirme
 export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: boolean; message: string }>> {
   private enabled = installationMode().phase === 'normal';
   private deferredConsumer?: () => void;
+  private consumer?: Consumer;
+  private backupPaused = false;
+  private admittedPublications = 0;
+  private readonly publicationsDrained = new Set<() => void>();
+  private readonly repeatables = new Map<string, ScheduledCronTask>();
+
+  public pauseForBackup() {
+    if (this.backupPaused) throw new Error('Queue capture is already in progress.');
+    this.backupPaused = true;
+    let released = false;
+    return {
+      drain: async (signal: AbortSignal) => {
+        signal.throwIfAborted();
+        while (this.admittedPublications) {
+          await new Promise<void>((resolve, reject) => {
+            const cleanup = () => {
+              this.publicationsDrained.delete(finished);
+              signal.removeEventListener('abort', cancelled);
+            };
+            const finished = () => {
+              cleanup();
+              resolve();
+            };
+            const cancelled = () => {
+              cleanup();
+              reject(new Error('Queue capture cancelled.'));
+            };
+            this.publicationsDrained.add(finished);
+            signal.addEventListener('abort', cancelled, { once: true });
+          });
+        }
+        signal.throwIfAborted();
+        if (!this.consumer) throw new Error('Queue consumer is unavailable for capture.');
+        await this.consumer.close();
+      },
+      release: () => {
+        if (released) return;
+        released = true;
+        this.consumer?.start();
+        this.backupPaused = false;
+      },
+    };
+  }
 
   constructor(
     private rabbit: Connection,
@@ -55,6 +98,7 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
       delivery?: { redelivered: boolean },
     ) => Promise<void>,
   ) {
+    if (this.backupPaused) throw new Error('Queue consumers cannot be added during capture.');
     if (installationHeld()) return;
     if (!this.enabled) {
       this.deferredConsumer = () => this.createConsumer(callback);
@@ -65,7 +109,7 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
 
   private createConsumer(callback: Parameters<Queue<T, R>['onEvent']>[0]) {
     try {
-      this.rabbit.createConsumer(
+      this.consumer = this.rabbit.createConsumer(
         {
           queue: this.queueName,
           concurrency: this.workers,
@@ -113,11 +157,18 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
 
   async publish(event: unknown): Promise<{ success: boolean; message: string } | Infer<R>> {
     if (!this.enabled) return { success: false, message: INSTALLATION_MESSAGE };
+    if (this.backupPaused) return { success: false, message: 'A full backup is draining the queue. Retry when it finishes.' };
     const release = enterBackupMutation();
     if (!release) return { success: false, message: 'A full backup or app recovery is in progress. Retry when it finishes.' };
+    this.admittedPublications++;
     try {
       return await this.publishAdmitted(event);
     } finally {
+      this.admittedPublications--;
+      if (!this.admittedPublications) {
+        for (const notify of this.publicationsDrained) notify();
+        this.publicationsDrained.clear();
+      }
       release();
     }
   }
@@ -168,7 +219,9 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
       throw new Error(`Invalid event data: ${eventData.summary}`);
     }
 
-    scheduleCron(cronPattern, async () => {
+    const key = `${cronPattern}\0${JSON.stringify(eventData)}`;
+    if (this.repeatables.has(key)) return;
+    const scheduled = scheduleCron(cronPattern, async () => {
       if (backupMaintenanceActive()) return;
       try {
         await this.publish(eventData);
@@ -177,5 +230,11 @@ export class Queue<T extends ArkTypeSchema, R extends ArkTypeSchema<{ success: b
         this.logger.error('Error in cron job:', e);
       }
     });
+    this.repeatables.set(key, scheduled);
+  }
+
+  public stopRepeatables() {
+    for (const task of this.repeatables.values()) task.stop();
+    this.repeatables.clear();
   }
 }

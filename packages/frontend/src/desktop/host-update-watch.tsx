@@ -1,11 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type PropsWithChildren } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PropsWithChildren } from 'react';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from './window-visibility';
+import { armStartedOperation, operationContinuityStorage } from '@/components/recovery-progress/operation-continuity';
+import { useOperationDeparture } from '@/components/recovery-progress/use-operation-departure';
 import { installedOrbisBuildOptions } from './orbis-release';
 import {
   advanceCoreUpdate,
-  claimCoreRefresh,
   coreJobIsActive,
   coreWatchIsActive,
   validCoreUpdate,
@@ -64,6 +65,8 @@ const emptyAccepted = () => null;
 
 export function rememberAcceptedCoreUpdate(id: string, targetTag: string, operation: CoreUpdateOperation = 'update') {
   if (!validCoreUpdate(id, targetTag)) return;
+  const storage = operationContinuityStorage();
+  if (storage) armStartedOperation(id, operation, storage);
   acceptedUpdate = { id, targetTag, operation };
   updatePending = true;
   for (const listener of acceptedListeners) listener();
@@ -107,6 +110,7 @@ function recordRefresh(id: string) {
 
 type HostUpdateContextValue = {
   watch: CoreUpdateWatch | null;
+  departing: boolean;
   core: CoreUpdateStatus | undefined;
   packageJob: PackageUpdateJob | null;
   restart: ServerRestartStatus | undefined;
@@ -115,6 +119,7 @@ type HostUpdateContextValue = {
 };
 const HostUpdateContext = createContext<HostUpdateContextValue>({
   watch: null,
+  departing: false,
   core: undefined,
   packageJob: null,
   restart: undefined,
@@ -131,6 +136,22 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
   const [watch, setWatch] = useState<CoreUpdateWatch | null>(null);
   const enabled = !suspended && visible && user.operator === true;
   const active = coreWatchIsActive(watch);
+  const operationJob = useMemo(
+    () =>
+      watch && !watch.refreshIssued
+        ? {
+            id: watch.id,
+            operation: watch.operation ?? 'update',
+            status: watch.phase === 'ready' ? 'succeeded' : watch.phase === 'failed' ? 'recovery-required' : 'running',
+            needsRecovery: watch.phase === 'failed',
+          }
+        : null,
+    [watch],
+  );
+  const continuity = useOperationDeparture(operationJob, false, (id) => {
+    recordRefresh(id);
+    forgetAccepted(id);
+  });
   const core = useQuery({
     queryKey: ['orbis-host-update-status'],
     queryFn: ({ signal }) => readHost<CoreUpdateStatus>('status', signal),
@@ -176,21 +197,16 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
     if (accepted) next = advanceCoreUpdate(next, { type: 'accepted', ...accepted });
     if (core.isError) next = advanceCoreUpdate(next, { type: 'unavailable' });
     else if (core.data) next = advanceCoreUpdate(next, { type: 'status', status: core.data, buildTag: build.data?.version });
-    const claimed = claimCoreRefresh(next, readRefreshedJobs());
-    updatePending = coreWatchIsActive(claimed.watch);
-    watchRef.current = claimed.watch;
-    setWatch(claimed.watch);
-    if (claimed.watch && (claimed.watch.phase === 'failed' || claimed.watch.refreshIssued)) forgetAccepted(claimed.watch.id);
-    if (claimed.refresh && claimed.watch) {
-      recordRefresh(claimed.watch.id);
-      forgetAccepted(claimed.watch.id);
-      window.location.reload();
-    }
+    updatePending = coreWatchIsActive(next);
+    watchRef.current = next;
+    setWatch(next);
+    if (next?.phase === 'failed') forgetAccepted(next.id);
   }, [accepted, core.data, core.isError, build.data?.version, suspended, user.operator]);
   return (
     <HostUpdateContext.Provider
       value={{
         watch,
+        departing: continuity.departing,
         core: core.data,
         packageJob: packages.data?.job ?? null,
         restart: restart.data,

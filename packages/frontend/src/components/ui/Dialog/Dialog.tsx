@@ -8,6 +8,7 @@ import { IconX } from '@tabler/icons-react';
 import { Button } from '../Button';
 import { InlineFeedback, type AlertProps } from '../Alert/Alert';
 import { WrapWords } from '@/components/wrap-words/wrap-words';
+import { useReducedMotion } from '@/desktop/motion-preferences';
 import './Dialog.css';
 
 export type Sizes = 'sm' | 'md' | 'lg' | 'xl';
@@ -50,10 +51,11 @@ const DialogTrigger = DialogPrimitive.Trigger;
 
 const DialogPortal = DialogPrimitive.Portal;
 export const DialogVisibilityContext = createContext(true);
-const DialogCloseContext = createContext({ disabled: false, inHeader: false });
+const DialogCloseContext = createContext({ disabled: false, inHeader: false, hidden: false });
 
 const DialogCloseButton = () => {
-  const { disabled } = useContext(DialogCloseContext);
+  const { disabled, hidden } = useContext(DialogCloseContext);
+  if (hidden) return null;
   return (
     <DialogPrimitive.Close asChild>
       <Button disabled={disabled} className="orbis-dialog-close" size="icon" aria-label="Close dialog" data-testid="modal-close-button">
@@ -125,11 +127,21 @@ const DialogContent = ({
   onInteractOutside,
   restoreFocusTo,
   closeDisabled = false,
+  hideClose = false,
+  overlayClassName,
   size = 'lg',
+  presentation = 'dialog',
   type,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> &
-  ModalProps & { closeDisabled?: boolean; restoreFocusTo?: React.RefObject<HTMLElement | null> }) => {
+  ModalProps & {
+    presentation?: 'dialog' | 'scene';
+    closeDisabled?: boolean;
+    hideClose?: boolean;
+    overlayClassName?: string;
+    restoreFocusTo?: React.RefObject<HTMLElement | null>;
+  }) => {
+  const reduced = useReducedMotion();
   const visible = useContext(DialogVisibilityContext);
   const open = useContext(DialogOpenContext);
   const visibility = useRef(visible);
@@ -140,10 +152,12 @@ const DialogContent = ({
   if (!visible) return null;
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay data-reduced={Boolean(reduced)} className={overlayClassName} />
       <DialogPrimitive.Content
         className={clsx('modal-content', 'orbis-dialog-content', 'orbis-modal-frame', className)}
         data-size={size}
+        data-presentation={presentation}
+        data-reduced={Boolean(reduced)}
         {...props}
         inert={!open || props.inert}
         data-focus-surface="parent"
@@ -189,11 +203,11 @@ const DialogContent = ({
         }}
       >
         <RetainedDialogContents>
-          <DialogCloseContext.Provider value={{ disabled: closeDisabled, inHeader: hasHeader }}>
+          <DialogCloseContext.Provider value={{ disabled: closeDisabled, inHeader: hasHeader, hidden: hideClose }}>
             <div data-testid="modal-status" className={clsx('modal-status', type ? `bg-${type}` : 'd-none')} />
             {children}
             {hasHeader ? null : <DialogCloseButton />}
-            <span hidden aria-hidden="true" ref={observeDialogSize} />
+            <span hidden aria-hidden="true" ref={presentation === 'dialog' ? observeDialogSize : undefined} />
           </DialogCloseContext.Provider>
         </RetainedDialogContents>
       </DialogPrimitive.Content>

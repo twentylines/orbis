@@ -1,8 +1,9 @@
 import { WallpaperLayer } from '@/desktop/wallpaper-layer';
 import { resolveWallpaperKey } from '@/desktop/wallpaper-presets';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
-import { useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useImperativeHandle, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type Ref } from 'react';
 import { readCachedAppearance, appearanceCacheEvent, type CachedAppearance } from '@/desktop/appearance-cache';
+import { readServerAppearance, serverAppearanceSnapshot, subscribeServerAppearance } from '@/desktop/restore-readiness';
 import { isLoggingOff } from '@/desktop/session-motion';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
 import { createPortal } from 'react-dom';
@@ -16,22 +17,26 @@ export function StartupSurface({
   appearance,
   loggingOff = false,
   signingIn = false,
+  label,
   status,
   overlay = false,
   revealing = false,
   completing = false,
   initial = false,
+  freshAppearance = false,
   children,
 }: {
   ref?: Ref<HTMLDivElement>;
   appearance?: CachedAppearance;
   loggingOff?: boolean;
   signingIn?: boolean;
+  label?: string;
   status?: { title: string; message: string };
   overlay?: boolean;
   revealing?: boolean;
   completing?: boolean;
   initial?: boolean;
+  freshAppearance?: boolean;
   children?: ReactNode;
 }) {
   const surface = useRef<HTMLDivElement>(null);
@@ -63,7 +68,9 @@ export function StartupSurface({
     window.addEventListener(appearanceCacheEvent, changed);
     return () => window.removeEventListener(appearanceCacheEvent, changed);
   }, []);
-  const current = appearance ?? cached;
+  const serverAppearance = useSyncExternalStore(subscribeServerAppearance, readServerAppearance, serverAppearanceSnapshot);
+  const fresh = freshAppearance || (typeof document !== 'undefined' && document.documentElement.dataset.orbisFreshAppearance === 'restore');
+  const current = appearance ?? (fresh ? serverAppearance : cached);
   const mode = useResolvedColourMode(current?.mode ?? 'light');
   const content = (
     <div
@@ -73,6 +80,7 @@ export function StartupSurface({
       data-revealing={revealing || undefined}
       data-completing={completing || undefined}
       data-initial-startup={initial || undefined}
+      style={fresh && !serverAppearance ? { backgroundImage: 'none' } : undefined}
       aria-live="polite"
       aria-busy="true"
       data-desktop-mode={current ? mode : undefined}
@@ -103,13 +111,13 @@ export function StartupSurface({
           <span className="orbis-startup-name">Orbis</span>
         </div>
         <output>
-          <span className="orbis-startup-message-loading">{status?.title ?? (signingIn ? 'Signing in…' : 'Loading workspace…')}</span>
+          <span className="orbis-startup-message-loading">{label ?? status?.title ?? (signingIn ? 'Signing in…' : 'Loading workspace…')}</span>
           <span className="orbis-startup-message-logout">Logging off…</span>
         </output>
         <div
           className="orbis-startup-progress"
           role="progressbar"
-          aria-label={status?.title ?? (loggingOff || resumingLogout ? 'Logging off' : signingIn ? 'Signing in' : 'Loading Orbis')}
+          aria-label={label ?? status?.title ?? (loggingOff || resumingLogout ? 'Logging off' : signingIn ? 'Signing in' : 'Loading Orbis')}
           aria-valuetext={status?.message}
           aria-valuenow={completing ? 100 : undefined}
         >

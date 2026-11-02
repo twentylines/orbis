@@ -45,6 +45,47 @@ test('Finish replaces setup with Home only after every save succeeds', async () 
   expect(calls).toEqual(['saved', { destination: '/dashboard', options: { replace: true } }]);
 });
 
+test('Preparing Orbis starts only after every preference save has finished', async () => {
+  const events: string[] = [];
+  await finishSetup(
+    [
+      {
+        id: 'Saving preferences',
+        value: true,
+        save: async () => {
+          events.push('saved');
+        },
+      },
+    ],
+    new Map(),
+    (stage) => events.push(stage),
+    () => {
+      events.push('home');
+    },
+  );
+  expect(events).toEqual(['Saving preferences', 'saved', 'Preparing Orbis', 'home']);
+  events.length = 0;
+  await expect(
+    finishSetup(
+      [
+        {
+          id: 'Saving preferences',
+          value: true,
+          save: async () => {
+            throw new Error('Not saved');
+          },
+        },
+      ],
+      new Map(),
+      (stage) => events.push(stage),
+      () => {
+        events.push('home');
+      },
+    ),
+  ).rejects.toThrow('Not saved');
+  expect(events).toEqual(['Saving preferences']);
+});
+
 test('a failed Finish stays in setup and retry reaches Home without repeating acknowledged saves', async () => {
   const calls: string[] = [];
   const receipts = new Map<string, string>();

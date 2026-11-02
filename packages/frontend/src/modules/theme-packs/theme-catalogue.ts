@@ -1,5 +1,5 @@
 import { createSearchMatcher } from '@runtipi/common/search';
-import type { ThemePackManifest } from '@runtipi/common/schemas/theme-pack';
+import type { ThemePackManifest, ThemePackSnapshot } from '@runtipi/common/schemas/theme-pack';
 
 export function compareThemeVersions(left: string, right: string) {
   const a = left.split('.').map(Number);
@@ -29,4 +29,25 @@ export function themeCatalogue(catalogue: ThemePackManifest[], search = '') {
         match(right.name, `${right.description} ${right.author}`) - match(left.name, `${left.description} ${left.author}`) ||
         left.name.localeCompare(right.name),
     );
+}
+
+// Cosmetic legacy metadata never grants new-install eligibility.
+export function themeStoreVersions(snapshot: ThemePackSnapshot | null): ThemePackManifest[] {
+  if (!snapshot) return [];
+  const installed = new Set(snapshot.state.installed.map((record) => record.manifest.id));
+  const versions = new Map<string, ThemePackManifest>();
+  for (const pack of [
+    ...snapshot.catalogue.filter((pack) => installed.has(pack.id)),
+    ...snapshot.state.installed.flatMap((record) => [...(record.previous ? [record.previous.manifest] : []), record.manifest]),
+  ])
+    versions.set(`${pack.id}@${pack.version}`, pack);
+  return [...versions.values()];
+}
+export function themeStoreCatalogue(snapshot: ThemePackSnapshot | null, search = '') {
+  return themeCatalogue(themeStoreVersions(snapshot), search);
+}
+export function themeStoreEmptyMessage(snapshot: ThemePackSnapshot | null, search = ''): string | null {
+  if (!snapshot || themeStoreCatalogue(snapshot, search).length) return null;
+  if (search.trim()) return 'No themes match your search.';
+  return snapshot.state.selected ? 'No themes are available.' : 'No themes are available. Default is active.';
 }

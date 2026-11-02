@@ -3,13 +3,32 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { BackupRestoreActivationService } from './backup-restore-activation.service';
 import { readRestoreOperation } from './backup-restore-runtime';
-import { captureRestoreStartupRole, restoreStartupRole } from './backup-restore-startup';
+import { captureRestoreStartupRole, restoreStartupRole, retainedBootstrapStartup } from './backup-restore-startup';
 import { releaseRestoreInstallationMode } from '@/common/installation-mode';
+import { acquireBackupMaintenance } from '@/common/backup-maintenance';
+import { readRootRestorationState } from '@/common/restoration-root-status';
+import { RetainedRootTransaction } from './time-machine-retained-root-client';
+import { finishRetainedNormalBootstrap } from './backup-retained-normal-bootstrap';
+import { verifyRetainedCandidateApps } from './time-machine-retained-app-result';
 
-vi.mock('./backup-restore-journal', () => ({ BackupRestoreJournal: { active: vi.fn() } }));
+vi.mock('./backup-restores.service', () => ({ BackupRestoresService: class {} }));
+vi.mock('./backup-restore-journal', () => ({ BackupRestoreJournal: { active: vi.fn(), latest: vi.fn() } }));
 vi.mock('./backup-restore-runtime', () => ({ readRestoreOperation: vi.fn() }));
-vi.mock('./backup-restore-startup', () => ({ restoreStartupRole: vi.fn(), captureRestoreStartupRole: vi.fn() }));
-vi.mock('@/common/installation-mode', () => ({ releaseRestoreInstallationMode: vi.fn() }));
+vi.mock('./backup-restore-startup', () => ({
+  restoreStartupRole: vi.fn(),
+  captureRestoreStartupRole: vi.fn(),
+  retainedBootstrapStartup: vi.fn().mockReturnValue(false),
+  setRetainedBootstrapStartup: vi.fn(),
+}));
+vi.mock('@/common/installation-mode', () => ({
+  releaseRestoreInstallationMode: vi.fn(),
+  installationMode: vi.fn().mockReturnValue({ phase: 'normal', transactionId: null }),
+}));
+vi.mock('@/common/backup-maintenance', () => ({ acquireBackupMaintenance: vi.fn(), setRestoreRecoveryRequired: vi.fn() }));
+vi.mock('./time-machine-retained-root-client', () => ({ RetainedRootTransaction: { read: vi.fn() } }));
+vi.mock('./backup-retained-normal-bootstrap', () => ({ finishRetainedNormalBootstrap: vi.fn() }));
+vi.mock('./time-machine-retained-app-result', () => ({ verifyRetainedCandidateApps: vi.fn() }));
+vi.mock('@/common/restoration-root-status', () => ({ readRootRestorationState: vi.fn().mockResolvedValue('idle') }));
 
 const candidateId = 'a'.repeat(64);
 const transactionId = 'f92e8862-38b5-4e81-bc84-f9131944872d';
@@ -48,13 +67,22 @@ function createService(
   const listContainers = vi.fn().mockResolvedValue(containers);
   const inspect = options.inspect ?? (async () => ({ State: { Running: true, Health: { Status: 'healthy' } } }));
   const getContainer = vi.fn((id: string) => ({ inspect: () => inspect(id) }));
-  const service = new BackupRestoreActivationService({ getAppById } as never, { startApp } as never, { listContainers, getContainer } as never);
-  return { service, getAppById, startApp, listContainers, getContainer };
+  const startRetainedSettlement = vi.fn().mockResolvedValue(undefined);
+  const service = new BackupRestoreActivationService(
+    { getAppById } as never,
+    { startApp } as never,
+    { startRetainedSettlement } as never,
+    { listContainers, getContainer } as never,
+    { resumeRetainedAfterSettlement: vi.fn() } as never,
+  );
+  return { service, getAppById, startApp, listContainers, getContainer, startRetainedSettlement };
 }
 
 beforeEach(() => {
   vi.mocked(restoreStartupRole).mockReturnValue('candidate');
   vi.mocked(BackupRestoreJournal.active).mockResolvedValue(journal() as never);
+  vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(undefined);
+  vi.mocked(readRootRestorationState).mockResolvedValue('idle');
   vi.mocked(readRestoreOperation).mockResolvedValue({ resumeApps: [selected] } as never);
   vi.mocked(releaseRestoreInstallationMode).mockReturnValue(true);
   vi.spyOn(os, 'hostname').mockReturnValue(candidateId.slice(0, 12));
@@ -92,7 +120,7 @@ it('does not start user-stopped apps after a committed restore has already compl
 
 it('releases installer mode only after the matching candidate journal completes, then stops polling', async () => {
   vi.useFakeTimers();
-  const { service } = createService();
+  const { service, startRetainedSettlement } = createService();
   await service.resumeApps();
   expect(releaseRestoreInstallationMode).not.toHaveBeenCalled();
 
@@ -104,9 +132,120 @@ it('releases installer mode only after the matching candidate journal completes,
   await vi.advanceTimersByTimeAsync(1000);
   expect(releaseRestoreInstallationMode).toHaveBeenCalledExactlyOnceWith(transactionId);
   expect(captureRestoreStartupRole).toHaveBeenCalledExactlyOnceWith('ordinary');
+  expect(startRetainedSettlement).toHaveBeenCalledOnce();
 
   await vi.advanceTimersByTimeAsync(5000);
   expect(BackupRestoreJournal.active).toHaveBeenCalledTimes(3);
+});
+
+it('prepares while held and activates the scoped continuation only after acknowledgement', async () => {
+  vi.useFakeTimers();
+  const value = { ...journal('completed'), directory: '/private/transaction' };
+  const release = vi.fn();
+  vi.mocked(acquireBackupMaintenance).mockResolvedValue(release);
+  const { service, startRetainedSettlement } = createService();
+  const prepare = vi.fn().mockResolvedValue(undefined);
+  const activate = vi.fn();
+  service.configureRetainedContinuation({ prepare, activate });
+  await service.resumeApps();
+  service.onModuleInit();
+  vi.mocked(readRootRestorationState).mockResolvedValue('checking');
+  vi.mocked(RetainedRootTransaction.read).mockResolvedValue({
+    terminalProof: vi.fn().mockResolvedValue({ proofSha256: 'proof' }),
+    normalBootstrapStatus: vi.fn().mockResolvedValue({ required: true }),
+  } as never);
+  vi.mocked(finishRetainedNormalBootstrap).mockResolvedValue(undefined);
+  vi.mocked(BackupRestoreJournal.active).mockResolvedValue(value as never);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(startRetainedSettlement).toHaveBeenCalledOnce();
+  expect(finishRetainedNormalBootstrap).not.toHaveBeenCalled();
+  expect(releaseRestoreInstallationMode).not.toHaveBeenCalled();
+  vi.mocked(BackupRestoreJournal.active).mockResolvedValue(undefined);
+  vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(value as never);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(finishRetainedNormalBootstrap).toHaveBeenCalledOnce();
+  expect(prepare).toHaveBeenCalledBefore(vi.mocked(finishRetainedNormalBootstrap));
+  expect(finishRetainedNormalBootstrap).toHaveBeenCalledBefore(activate);
+  expect(activate).toHaveBeenCalledBefore(release);
+  expect(releaseRestoreInstallationMode).toHaveBeenCalledOnce();
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it('keeps its hold when scoped preparation fails before acknowledgement', async () => {
+  vi.useFakeTimers();
+  const value = { ...journal('completed'), directory: '/private/transaction' };
+  const release = vi.fn();
+  vi.mocked(acquireBackupMaintenance).mockResolvedValue(release);
+  const { service } = createService();
+  service.configureRetainedContinuation({ prepare: vi.fn().mockRejectedValue(new Error('unavailable')), activate: vi.fn() });
+  await service.resumeApps();
+  service.onModuleInit();
+  vi.mocked(BackupRestoreJournal.active).mockResolvedValue(undefined);
+  vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(value as never);
+  vi.mocked(readRootRestorationState).mockResolvedValue('checking');
+  vi.mocked(RetainedRootTransaction.read).mockResolvedValue({
+    terminalProof: vi.fn().mockResolvedValue({ proofSha256: 'proof' }),
+    normalBootstrapStatus: vi.fn().mockResolvedValue({ required: true }),
+  } as never);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(finishRetainedNormalBootstrap).not.toHaveBeenCalled();
+  expect(release).not.toHaveBeenCalled();
+  expect(releaseRestoreInstallationMode).not.toHaveBeenCalled();
+});
+
+it('retries scoped activation after acknowledgement without losing its hold', async () => {
+  vi.useFakeTimers();
+  const value = { ...journal('completed'), directory: '/private/transaction' };
+  const release = vi.fn();
+  const activate = vi.fn().mockImplementationOnce(() => {
+    throw new Error('interrupted');
+  });
+  vi.mocked(acquireBackupMaintenance).mockResolvedValue(release);
+  const { service } = createService();
+  service.configureRetainedContinuation({ prepare: vi.fn().mockResolvedValue(undefined), activate });
+  await service.resumeApps();
+  service.onModuleInit();
+  vi.mocked(BackupRestoreJournal.active).mockResolvedValue(undefined);
+  vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(value as never);
+  vi.mocked(readRootRestorationState).mockResolvedValue('checking');
+  vi.mocked(RetainedRootTransaction.read).mockResolvedValue({
+    terminalProof: vi.fn().mockResolvedValue({ proofSha256: 'proof' }),
+    normalBootstrapStatus: vi.fn().mockResolvedValue({ required: true }),
+  } as never);
+  vi.mocked(finishRetainedNormalBootstrap).mockResolvedValue(undefined);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(release).not.toHaveBeenCalled();
+  vi.mocked(readRootRestorationState).mockResolvedValue('idle');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(acquireBackupMaintenance).toHaveBeenCalledOnce();
+  expect(activate).toHaveBeenCalledTimes(2);
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it('retains the same hold across a lost acknowledgement and finishes after root becomes idle', async () => {
+  vi.useFakeTimers();
+  const value = { ...journal('completed'), directory: '/private/transaction' };
+  const release = vi.fn();
+  vi.mocked(acquireBackupMaintenance).mockResolvedValue(release);
+  const { service } = createService();
+  service.configureRetainedContinuation({ prepare: vi.fn().mockResolvedValue(undefined), activate: vi.fn() });
+  await service.resumeApps();
+  service.onModuleInit();
+  vi.mocked(BackupRestoreJournal.active).mockResolvedValue(undefined);
+  vi.mocked(BackupRestoreJournal.latest).mockResolvedValue(value as never);
+  vi.mocked(readRootRestorationState).mockResolvedValue('checking');
+  vi.mocked(RetainedRootTransaction.read).mockResolvedValue({
+    terminalProof: vi.fn().mockResolvedValue({ proofSha256: 'proof' }),
+    normalBootstrapStatus: vi.fn().mockResolvedValue({ required: true }),
+  } as never);
+  vi.mocked(finishRetainedNormalBootstrap).mockRejectedValueOnce(new Error('lost reply')).mockResolvedValueOnce(undefined);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(acquireBackupMaintenance).toHaveBeenCalledOnce();
+  expect(release).not.toHaveBeenCalled();
+  vi.mocked(readRootRestorationState).mockResolvedValue('idle');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(acquireBackupMaintenance).toHaveBeenCalledOnce();
+  expect(release).toHaveBeenCalledOnce();
 });
 
 it.each([
@@ -121,6 +260,19 @@ it.each([
 
   expect(getAppById).not.toHaveBeenCalled();
   expect(startApp).not.toHaveBeenCalled();
+});
+
+it('uses only protected Engine result verification for retained app activation', async () => {
+  vi.mocked(retainedBootstrapStartup).mockReturnValue(true);
+  const { service, startApp, listContainers } = createService();
+  try {
+    await expect(service.resumeApps()).resolves.toBeUndefined();
+    expect(verifyRetainedCandidateApps).toHaveBeenCalledOnce();
+    expect(startApp).not.toHaveBeenCalled();
+    expect(listContainers).not.toHaveBeenCalled();
+  } finally {
+    vi.mocked(retainedBootstrapStartup).mockReturnValue(false);
+  }
 });
 
 it('validates each selected database ID against its recorded app URN before starting it', async () => {
@@ -190,10 +342,12 @@ it('does not report success for an unhealthy container', async () => {
   const service = new BackupRestoreActivationService(
     { getAppById: current } as never,
     { startApp } as never,
+    { startRetainedSettlement: vi.fn() } as never,
     {
       listContainers: vi.fn().mockResolvedValue([{ Id: 'app-container' }]),
       getContainer: vi.fn(() => ({ inspect: async () => ({ State: { Running: true, Health: { Status: 'unhealthy' } } }) })),
     } as never,
+    { resumeRetainedAfterSettlement: vi.fn() } as never,
   );
 
   await expect(service.resumeApps()).rejects.toThrow();

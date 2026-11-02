@@ -79,6 +79,8 @@ RUN node ./verify-runtime-dependencies.cjs
 COPY --from=builder_base /deps/docker-binary /usr/local/bin/docker-compose
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/packages/backend/dist ./
+COPY --from=builder /app/packages/backend/src/retained-terminal-capability.json ./retained-terminal-capability.json
+COPY --from=builder /app/packages/backend/src/retained-app-engine-capability.json ./retained-app-engine-capability.json
 
 # Assets
 COPY --from=builder /app/packages/backend/assets ./assets
@@ -88,6 +90,6 @@ COPY --from=builder /app/packages/frontend/dist/client ./assets/frontend
 
 EXPOSE 3000
 
-RUN mv main.js main.mjs && mv restore-worker.js restore-worker.mjs
+RUN mv main.js main.mjs && mv restore-worker.js restore-worker.mjs && mv retained-worker-capability.js retained-worker-capability.mjs
 
 CMD ["node", "./main.mjs"]
