@@ -128,28 +128,36 @@ describe('autonomous private host device history service', () => {
     vi.useRealTimers();
   });
 
-  it('collects only with connected clients and stops cleanly after they leave', async () => {
+  it('collects continuously without clients and stops cleanly on shutdown', async () => {
     host.read.mockImplementation(async () => reading());
     await service.onModuleInit();
+    await service.onModuleInit();
     await vi.advanceTimersByTimeAsync(30000);
-    expect(host.read).not.toHaveBeenCalled();
+    expect(host.read).toHaveBeenCalledTimes(4);
     const disconnect = activity.connect();
-    await service.collect();
     await vi.advanceTimersByTimeAsync(30000);
-    expect(host.read).toHaveBeenCalledTimes(4);
-    const history = await service.read('5m', selected);
-    expect(history.points).toHaveLength(4);
-    expect(history.collectorAvailable).toBe(true);
-    expect(history.points.map((point) => point.at)).toEqual([32, 42, 52, 62].map((seconds) => new Date(origin + seconds * 1000).toISOString()));
-    await Promise.all(Array.from({ length: 20 }, () => service.read('1h', selected)));
-    expect(host.read).toHaveBeenCalledTimes(4);
+    expect(host.read).toHaveBeenCalledTimes(7);
     disconnect();
     await vi.advanceTimersByTimeAsync(20000);
-    expect(host.read).toHaveBeenCalledTimes(4);
+    expect(host.read).toHaveBeenCalledTimes(9);
+    const history = await service.read('5m', selected);
+    expect(history.points).toHaveLength(9);
+    expect(history.collectorAvailable).toBe(true);
+    await Promise.all(Array.from({ length: 20 }, () => service.read('1h', selected)));
+    expect(host.read).toHaveBeenCalledTimes(9);
     await close();
     await vi.advanceTimersByTimeAsync(20000);
     await service.collect();
-    expect(host.read).toHaveBeenCalledTimes(4);
+    expect(host.read).toHaveBeenCalledTimes(9);
+  });
+
+  it('persists unattended device samples and reloads them after shutdown', async () => {
+    host.read.mockImplementation(async () => reading());
+    await service.onModuleInit();
+    await vi.advanceTimersByTimeAsync(70000);
+    await close();
+    const points = (await create().read('1h', selected)).points;
+    expect(points.reduce((total, point) => total + point.samples, 0)).toBe(8);
   });
 
   it('coalesces concurrent collection and ignores repeated and backward cached samples', async () => {

@@ -45,18 +45,13 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     if (installationHeld()) return;
     await this.load();
+    if (this.closed || this.timer) return;
     this.unsubscribe = this.activity.subscribe((active) => {
-      clearInterval(this.timer);
-      this.timer = undefined;
-      if (!active || this.closed) {
-        this.collectorAvailable = false;
-        if (!this.closed) this.checkpoint();
-        return;
-      }
-      this.timer = setInterval(() => void this.collect(), 10000);
-      this.timer.unref();
-      void this.collect();
+      if (!active && !this.closed) this.checkpoint();
     });
+    this.timer = setInterval(() => void this.collect(), 10000);
+    this.timer.unref();
+    void this.collect();
   }
 
   async onModuleDestroy() {
@@ -155,7 +150,7 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
   }
 
   collect(): Promise<void> {
-    if (this.closed || (this.unsubscribe && !this.timer)) return Promise.resolve();
+    if (this.closed) return Promise.resolve();
     this.pending ??= this.sample().finally(() => {
       this.pending = undefined;
     });
@@ -164,10 +159,10 @@ export class MetricHistoryService implements OnModuleInit, OnModuleDestroy {
 
   private async sample() {
     await this.load();
-    if (this.closed || (this.unsubscribe && !this.timer)) return;
+    if (this.closed) return;
     try {
       const sample = metricSample(await this.system.getTelemetry());
-      if (this.closed || (this.unsubscribe && !this.timer)) return;
+      if (this.closed) return;
       if (!sample || sample.lastAt > Date.now() + 1000 || sample.lastAt < Date.now() - 60000) throw new Error('Telemetry sample is not current');
       this.collectorAvailable = true;
       if (this.lastSampleAt !== null && sample.lastAt <= this.lastSampleAt) return;

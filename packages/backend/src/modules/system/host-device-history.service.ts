@@ -67,19 +67,13 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     if (installationHeld()) return;
     await this.load();
+    if (this.closed || this.timer) return;
     this.unsubscribe = this.activity.subscribe((active) => {
-      clearInterval(this.timer);
-      this.timer = undefined;
-      if (!active || this.closed) {
-        this.collectorAvailable = false;
-        this.reason = 'Monitoring is paused while no client is connected.';
-        if (!this.closed) this.queueCurrent();
-        return;
-      }
-      this.timer = setInterval(() => void this.collect(), 10000);
-      this.timer.unref();
-      void this.collect();
+      if (!active && !this.closed) this.queueCurrent();
     });
+    this.timer = setInterval(() => void this.collect(), 10000);
+    this.timer.unref();
+    void this.collect();
   }
 
   async onModuleDestroy() {
@@ -268,7 +262,7 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
   }
 
   collect(): Promise<void> {
-    if (this.closed || (this.unsubscribe && !this.timer)) return Promise.resolve();
+    if (this.closed) return Promise.resolve();
     this.pending ??= this.sample().finally(() => {
       this.pending = undefined;
     });
@@ -277,10 +271,10 @@ export class HostDeviceHistoryService implements OnModuleInit, OnModuleDestroy {
 
   private async sample() {
     await this.load();
-    if (this.closed || (this.unsubscribe && !this.timer)) return;
+    if (this.closed) return;
     try {
       const data = await this.host.read();
-      if (this.closed || (this.unsubscribe && !this.timer)) return;
+      if (this.closed) return;
       const sample = hostHistorySample(data, Date.now());
       if (!sample) {
         this.collectorAvailable = false;

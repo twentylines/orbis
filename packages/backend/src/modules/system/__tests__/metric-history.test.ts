@@ -121,28 +121,36 @@ describe('bounded server metric history', () => {
     expect((await service.read('5m')).collectorAvailable).toBe(false);
   });
 
-  it('starts one timer while browsers are connected and stops after the last browser leaves', async () => {
+  it('continues one timer without viewers and through connection changes until shutdown', async () => {
     system.getTelemetry.mockImplementation(async () => sample());
     await service.onModuleInit();
-    await vi.advanceTimersByTimeAsync(20000);
-    expect(system.getTelemetry).not.toHaveBeenCalled();
-    const first = activity.connect();
-    const second = activity.connect();
-    await service.collect();
+    await service.onModuleInit();
     await vi.advanceTimersByTimeAsync(20000);
     expect(system.getTelemetry).toHaveBeenCalledTimes(3);
-    expect((await service.read('5m')).points).toHaveLength(3);
+    const first = activity.connect();
+    const second = activity.connect();
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(system.getTelemetry).toHaveBeenCalledTimes(5);
     first();
-    await vi.advanceTimersByTimeAsync(10000);
-    expect(system.getTelemetry).toHaveBeenCalledTimes(4);
     second();
     await vi.advanceTimersByTimeAsync(20000);
-    expect(system.getTelemetry).toHaveBeenCalledTimes(4);
-    const resume = activity.connect();
+    expect(system.getTelemetry).toHaveBeenCalledTimes(7);
+    expect((await service.read('5m')).points).toHaveLength(7);
+    await service.onModuleDestroy();
+    await vi.advanceTimersByTimeAsync(20000);
     await service.collect();
-    expect(system.getTelemetry).toHaveBeenCalledTimes(5);
-    expect((await service.read('5m')).points).toHaveLength(5);
-    resume();
+    expect(system.getTelemetry).toHaveBeenCalledTimes(7);
+  });
+
+  it('persists unattended samples and reloads them after shutdown', async () => {
+    system.getTelemetry.mockImplementation(async () => sample());
+    await service.onModuleInit();
+    await vi.advanceTimersByTimeAsync(70000);
+    await service.onModuleDestroy();
+    const restored = new MetricHistoryService(system, config, logger, activity);
+    const points = (await restored.read('1h')).points;
+    expect(points.reduce((total, point) => total + point.samples, 0)).toBe(8);
+    await restored.onModuleDestroy();
   });
 
   it('bounds retention, output and journal growth through compaction', async () => {
@@ -169,22 +177,13 @@ describe('bounded server metric history', () => {
     expect(decodeBucket(JSON.parse(retained[0] ?? ''), Date.now()).lastAt).toBeGreaterThanOrEqual(Date.now() - 7 * 86400000);
   });
 
-  it('expires peer demand without a history read renewing it and preserves the idle gap', async () => {
+  it('continues recording after peer demand expires', async () => {
     system.getTelemetry.mockImplementation(async () => sample());
     await service.onModuleInit();
     activity.touchPeer();
-    await service.collect();
-    await vi.advanceTimersByTimeAsync(45000);
-    expect(system.getTelemetry).toHaveBeenCalledTimes(5);
-    await service.collect();
-    await service.read('5m');
-    await vi.advanceTimersByTimeAsync(30000);
-    expect(system.getTelemetry).toHaveBeenCalledTimes(5);
-    activity.touchPeer();
-    await service.collect();
-    const points = (await service.read('5m')).points;
-    expect(points).toHaveLength(6);
-    expect(Date.parse(points[5]?.at ?? '') - Date.parse(points[4]?.until ?? '')).toBe(35000);
+    await vi.advanceTimersByTimeAsync(75000);
+    expect(system.getTelemetry).toHaveBeenCalledTimes(8);
+    expect((await service.read('5m')).points).toHaveLength(8);
   });
 
   it('checkpoints the partial minute when the final client disconnects', async () => {
