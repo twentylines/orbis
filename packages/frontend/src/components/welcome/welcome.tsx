@@ -51,6 +51,7 @@ import {
   SetupCaptureTerminalError,
 } from './setup-capture';
 import { recordSetupFailureTask } from './setup-capture-task';
+import { SetupStage } from './setup-stage';
 import './welcome.css';
 
 const defaultAutomatic: AutomaticUpdateSettings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
@@ -231,8 +232,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const heading = useRef<HTMLHeadingElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const [stepElement, setStepElement] = useState<HTMLElement | null>(null);
-  const [stageSize, setStageSize] = useState<{ height: number; animate: boolean } | null>(null);
-  const stageMeasured = useRef(false);
   const transitionLock = useRef(false);
   const [transitioning, setTransitioning] = useState(false);
   const firstStep = useRef(true);
@@ -304,23 +303,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
     heading.current?.focus({ preventScroll: true });
     heading.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
   }, []);
-  useLayoutEffect(() => {
-    const element = stage.current;
-    if (!element || !stepElement) return;
-    const measure = () => {
-      const style = getComputedStyle(element);
-      const height = stepElement.offsetHeight + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-      const animate = stageMeasured.current;
-      stageMeasured.current = true;
-      setStageSize((current) => (current?.height === height ? current : { height, animate }));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(stepElement);
-    return () => {
-      observer.disconnect();
-    };
-  }, [stepElement]);
 
   const position = setupPosition(step, entry);
   const headingId = `setup-heading-${step}`;
@@ -516,14 +498,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
         }
       >
         <section className="orbis-setup" aria-labelledby={headingId} aria-busy={saving || transitioning} data-reduced={reduceSetupMotion}>
-          <motion.div
-            ref={stage}
-            id="setup-choices"
-            className="orbis-setup-stage"
-            initial={false}
-            animate={stageSize ? { height: stageSize.height } : {}}
-            transition={{ duration: reduceSetupMotion || !stageSize?.animate ? 0 : 0.24, ease: setupEase }}
-          >
+          <SetupStage stageRef={stage} stepElement={stepElement} reduced={reduceSetupMotion}>
             <AnimatePresence initial={false} mode="sync" custom={direction}>
               <SetupStepPanel
                 key={step}
@@ -866,7 +841,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                 )}
               </SetupStepPanel>
             </AnimatePresence>
-          </motion.div>
+          </SetupStage>
           {error ? <InlineFeedback className="orbis-setup-error">{error}</InlineFeedback> : null}
           <footer className="orbis-setup-footer">
             <Button

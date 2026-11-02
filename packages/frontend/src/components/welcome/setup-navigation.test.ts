@@ -212,3 +212,20 @@ test('display modes preserve the OLED preference and the separate switch changes
   oled.props.onCheckedChange(true);
   expect(changed).toEqual({ mode: 'system', oledDark: true });
 });
+
+test('setup size changes coalesce without rerendering the current step and stop on unmount', async () => {
+  const child = Bun.spawn([process.execPath, new URL('./setup-stage.fixture.tsx', import.meta.url).pathname], {
+    env: { ...process.env },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+  expect(JSON.parse(stdout)).toEqual({
+    resizeCallbacks: 100,
+    batchedUpdates: 1,
+    contentRenders: 1,
+    noResizeLayoutReads: true,
+    unmountCancelsFrame: true,
+  });
+});

@@ -4,6 +4,7 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const { execFileSync } = require('node:child_process');
 const os = require('node:os');
+const { pipeline } = require('node:stream/promises');
 const { verifyNodeSecurity } = require('./verify-node-security.cjs');
 
 verifyNodeSecurity();
@@ -77,6 +78,22 @@ const verifyArchiveRuntime = () => {
   }
 };
 
+const verifyTarFsRuntime = async (tarFs) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'orbis-tar-runtime-'));
+  try {
+    const source = path.join(root, 'source');
+    const restored = path.join(root, 'restored');
+    fs.mkdirSync(source);
+    fs.mkdirSync(restored);
+    const bytes = Buffer.from([0, 255, 128, 10, 13, 0]);
+    fs.writeFileSync(path.join(source, 'payload.bin'), bytes);
+    await pipeline(tarFs.pack(source), tarFs.extract(restored));
+    assert.deepEqual(fs.readFileSync(path.join(restored, 'payload.bin')), bytes);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+};
+
 (async () => {
   if (process.argv[2] === '--archive-only') {
     process.stdout.write(
@@ -111,13 +128,15 @@ const verifyArchiveRuntime = () => {
   const docker = new Docker({ socketPath: '/var/run/docker.sock' });
   assert.equal(typeof docker.getContainer('runtime-probe').inspect, 'function');
   assert.equal(typeof runtime('dockerode/lib/session'), 'function');
+  const dockerRequire = createRequire(runtime.resolve('dockerode'));
+  await verifyTarFsRuntime(dockerRequire('tar-fs'));
   const modemRequire = createRequire(createRequire(runtime.resolve('dockerode')).resolve('docker-modem'));
   assert.equal(typeof modemRequire('ssh2').Client, 'function');
   const swagger = runtime('swagger-ui-dist').getAbsoluteFSPath();
   for (const asset of ['swagger-ui.css', 'swagger-ui-bundle.js']) assert.ok(fs.statSync(path.join(swagger, asset)).isFile());
   const archives = verifyArchiveRuntime();
   process.stdout.write(
-    `${JSON.stringify({ lockfileSha256: manifest.lockfileSha256, packages: manifest.packages.length, nativeHashVerified: true, transformerVerified: true, dockerClientVerified: true, documentationAssetsVerified: true, ...archives, node: process.version, architecture: process.arch })}\n`,
+    `${JSON.stringify({ lockfileSha256: manifest.lockfileSha256, packages: manifest.packages.length, nativeHashVerified: true, transformerVerified: true, dockerClientVerified: true, tarFsRoundTripVerified: true, documentationAssetsVerified: true, ...archives, node: process.version, architecture: process.arch })}\n`,
   );
 })().catch((error) => {
   process.stderr.write(`Runtime dependency verification failed: ${error.message}\n`);

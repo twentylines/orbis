@@ -63,11 +63,11 @@ class InstallerPresentationTests(unittest.TestCase):
                 self.assertIn("0.1 beta 68", output.getvalue())
                 if width < 32:
                     self.assertTrue(output.getvalue().startswith("Orbis\n"))
-                elif width < 64:
+                elif width < 40:
                     self.assertTrue(output.getvalue().startswith("Orbis  "))
                 else:
                     self.assertNotIn("Server installation", output.getvalue())
-                    self.assertNotIn("____", output.getvalue())
+                    self.assertIn(UI.ORBIS_MARK[0], output.getvalue())
                 self.assertTrue(all(len(line) <= width for line in output.getvalue().splitlines()))
 
     def test_active_completed_and_failed_frames_fit_very_narrow_and_resized_terminals(self):
@@ -140,6 +140,37 @@ class InstallerPresentationTests(unittest.TestCase):
                 progress()
             self.assertEqual(progress(), "layers 4096/4096")
 
+    def test_redraw_writes_changed_rows_once_and_returns_to_shrunken_last_row(self):
+        output = TerminalStream()
+        ui = UI.Presentation(stream=output, environ={"TERM": "xterm"}, color=False)
+        with mock.patch.object(ui, "width", return_value=80), mock.patch.object(ui, "write", wraps=ui.write) as write:
+            self.assertEqual(ui.redraw(0, ["same", "old", "last"]), 3)
+            write.reset_mock()
+            self.assertEqual(ui.redraw(3, ["same", "new", "last"]), 3)
+            write.assert_called_once()
+            update = write.call_args.args[0]
+            self.assertEqual(update.count("\033[2K"), 1)
+            self.assertNotIn("same", update)
+            self.assertNotIn("last", update)
+            self.assertIn("new", update)
+            write.reset_mock()
+            self.assertEqual(ui.redraw(3, ["done"]), 1)
+            write.assert_called_once()
+            self.assertEqual(write.call_args.args[0].count("\033[2K"), 3)
+            self.assertTrue(write.call_args.args[0].endswith("\033[2A\r"))
+
+    def test_redraw_repaints_on_width_change_and_extends_below_existing_frame(self):
+        ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
+        width = [80]
+        with mock.patch.object(ui, "width", side_effect=lambda: width[0]), mock.patch.object(ui, "write", wraps=ui.write) as write:
+            ui.redraw(0, ["same"])
+            width[0] = 40
+            write.reset_mock()
+            ui.redraw(1, ["same", "added"])
+            write.assert_called_once()
+            self.assertEqual(write.call_args.args[0].count("\033[2K"), 2)
+            self.assertIn("\n\033[2Kadded", write.call_args.args[0])
+
     def test_failure_and_interrupt_restore_cursor_and_never_report_success(self):
         for error in (ValueError("ownership needs review"), KeyboardInterrupt()):
             output = TerminalStream()
@@ -202,7 +233,7 @@ class InstallerPresentationTests(unittest.TestCase):
             os.close(master)
             if slave is not None:
                 os.close(slave)
-        self.assertGreaterEqual(len(re.findall(rb"\r\x1b\[2K", output)), 3, repr(output))
+        self.assertGreaterEqual(output.count(b"\x1b[2K"), 3, repr(output))
         self.assertIn(b"[ok]", output)
         self.assertNotIn(b".==>", output)
         self.assertLess(output.rfind(b"\x1b[?25h"), output.find(b"Ready for confirmation"))
@@ -258,7 +289,7 @@ class SpaceflightTests(unittest.TestCase):
             self.assertEqual(len(rows), max(6, min(13, height)))
             self.assertLessEqual(sum(len(row) for row in rows), 96 * 13)
         ui = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
-        for width, height, expected in ((80, 24, 12), (100, 30, 13), (80, 18, 6), (30, 24, 0)):
+        for width, height, expected in ((40, 24, 12), (80, 24, 12), (100, 30, 13), (80, 18, 6), (30, 24, 0)):
             with mock.patch.object(ui, "width", return_value=width), mock.patch.object(ui, "height", return_value=height):
                 self.assertEqual(len(ui.scene(0)), expected)
 
@@ -292,6 +323,18 @@ class SpaceflightTests(unittest.TestCase):
                     for line in ui.scene(tick):
                         self.assertLessEqual(len(re.sub(r"\x1b\[\d+(?:;\d+)*m", "", line)), width - 1)
                         self.assertLessEqual(set(re.findall(r"\x1b\[([0-9;]+)m", line)), {"0", "90", "36", "37"})
+
+    def test_large_field_is_centered_and_colored_output_preserves_cells(self):
+        plain = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"}, color=False)
+        colored = UI.Presentation(stream=TerminalStream(), environ={"TERM": "xterm"})
+        for width in (40, 80, 120, 160):
+            with mock.patch.object(plain, "width", return_value=width), mock.patch.object(colored, "width", return_value=width), mock.patch.object(plain, "height", return_value=24), mock.patch.object(colored, "height", return_value=24):
+                rows = plain.scene(20)
+                clean = [re.sub(r"\x1b\[[0-9;]+m", "", row) for row in colored.scene(20)]
+                self.assertEqual(rows, clean)
+                self.assertTrue(all(len(row) <= width - 1 for row in rows))
+                if width > 97:
+                    self.assertTrue(all(row.startswith(" " * ((width - 97) // 2)) for row in rows))
 
     def test_reduced_effects_and_short_terminals_never_draw_the_scene(self):
         for env in ({"TERM": "xterm", "ORBIS_NO_ANIMATION": "1"}, {"TERM": "xterm", "NO_COLOR": ""}):

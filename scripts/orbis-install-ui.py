@@ -103,6 +103,15 @@ class PullProgress:
         return f"layers {ready}/{len(self.layers)}"
 
 
+# The circle, tilted orbit and centre reflect the application mark using ASCII cells.
+ORBIS_MARK = (
+    r"   .---. /",
+    r"  /  .  X",
+    "  \\    /",
+    r"   '---'",
+)
+
+
 class Presentation:
     def __init__(self, *, stream=None, environ=None, interactive=True, color=True, animation=True):
         self.stream = stream if stream is not None else sys.stderr
@@ -113,6 +122,8 @@ class Presentation:
         self.tty = bool(tty)
         self.completed = 0
         self.total = None
+        self._frame_lines = []
+        self._frame_width = None
         self.unicode = "utf" in (getattr(self.stream, "encoding", None) or env.get("LC_ALL") or env.get("LANG", "")).lower()
 
     def paint(self, value, code):
@@ -138,11 +149,28 @@ class Presentation:
             return shutil.get_terminal_size((80, 24)).lines
 
     def redraw(self, previous, lines):
-        if previous:
-            self.write("\r" + (f"\033[{previous - 1}A" if previous > 1 else ""))
-            self.write("\n".join("\033[2K" for _ in range(previous)))
-            self.write((f"\033[{previous - 1}A" if previous > 1 else "") + "\r")
-        self.write("\n".join(lines))
+        width = self.width()
+        if not previous:
+            self._frame_lines = list(lines)
+            self._frame_width = width
+            self.write("\n".join(lines))
+            return len(lines)
+
+        old = self._frame_lines if len(self._frame_lines) == previous else []
+        repaint = self._frame_width != width
+        output = ["\r", f"\033[{previous - 1}A" if previous > 1 else ""]
+        count = max(previous, len(lines))
+        for index in range(count):
+            if index:
+                output.append("\n" if index >= previous else "\033[1B\r")
+            value = lines[index] if index < len(lines) else ""
+            if repaint or index >= len(old) or value != old[index] or index >= len(lines):
+                output.extend(("\033[2K", value))
+        if count > len(lines):
+            output.extend((f"\033[{count - len(lines)}A", "\r"))
+        self._frame_lines = list(lines)
+        self._frame_width = width
+        self.write("".join(output))
         return len(lines)
 
     def banner(self, release):
@@ -150,16 +178,29 @@ class Presentation:
         if self.tty and self.width() < 32:
             self.write(self.paint("Orbis", "1;36") + f"\n{release}\n")
             return
-        self.write(self.paint("Orbis", "1;36") + f"  {release}\n")
-        if self.tty and self.width() >= 64:
+        if self.tty and self.width() >= 40:
+            available = max(1, self.width() - 1 - len(ORBIS_MARK[1]) - len("  Orbis  "))
+            release_lines = textwrap.wrap(release, width=available, break_long_words=True, break_on_hyphens=False) or [""]
+            for index, line in enumerate(ORBIS_MARK):
+                suffix = f"  Orbis  {release_lines[0]}" if index == 1 else ""
+                self.write(self.paint(line, "36") + suffix + "\n")
+            for line in release_lines[1:]:
+                self.write(" " * (len(ORBIS_MARK[1]) + len("  Orbis  ")) + line + "\n")
             self.write("\n")
+            return
+        self.write(self.paint("Orbis", "1;36") + f"  {release}\n")
 
     def scene(self, tick):
-        if self.width() < 72 or self.height() < 18:
+        width, height = self.width(), self.height()
+        if width < 40 or height < 18:
             return []
-        return ["".join(self.paint(char, "37" if char in {"*", "•"} else "36" if char == "·" else "90")
-                        if char != " " else char for char in line)
-                for line in spaceflight(self.width() - 1, tick, min(13, self.height() - 12), self.unicode)]
+        field_width = min(96, width - 1)
+        inset = " " * ((width - 1 - field_width) // 2)
+        lines = spaceflight(field_width, tick, min(13, height - 12), self.unicode)
+        def color_run(match):
+            value = match.group(0)
+            return self.paint(value, "37" if value[0] in {"*", "•"} else "36" if value[0] == "·" else "90")
+        return [inset + re.sub(r"([.*·•])\1*", color_run, line) for line in lines]
 
     def set_remaining_steps(self, count):
         if type(count) is not int or not 1 <= count <= 128:

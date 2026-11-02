@@ -6,14 +6,30 @@ import './depth-travel.css';
 
 export type DepthTravelVariant = 'timeline' | 'restore' | 'update' | 'downgrade' | 'onboarding';
 
-const stars = Array.from({ length: 48 }, (_, index) => ({
-  x: 2 + ((index * 373 + 71) % 960) / 10,
-  y: 2 + ((index * 537 + 193) % 960) / 10,
-  size: index % 13 === 0 ? 2.5 : index % 5 === 0 ? 1.5 : 1,
-  bright: index % 13 === 0,
-  opacity: 0.35 + ((index * 17) % 55) / 100,
-  temperature: index % 23 === 11 ? 'warm' : index % 9 === 4 ? 'cool' : 'neutral',
-}));
+function starTexture(layer: number, trails: boolean) {
+  const marks = Array.from({ length: 80 }, (_, index) => {
+    const seed = index + layer * 89;
+    const x = 20 + ((seed * 373 + 71) % 960);
+    const y = 20 + ((seed * 537 + 193) % 960);
+    const size = index % 17 === 0 ? 1.4 : index % 5 === 0 ? 0.85 : 0.55;
+    const opacity = 0.32 + ((seed * 17) % 55) / 100;
+    const colour = index % 23 === 11 ? '#e3d3b5' : index % 9 === 4 ? '#c9d9e8' : '#d9e3eb';
+    if (!trails) return `<circle cx="${x}" cy="${y}" r="${size}" fill="${colour}" opacity="${opacity}"/>`;
+    const radius = Math.hypot(x - 500, y - 500) || 1;
+    const length = 3 + (radius / 700) * 8;
+    return `<path d="M${x},${y}l${(((500 - x) / radius) * length).toFixed(2)},${(((500 - y) / radius) * length).toFixed(2)}" stroke="${colour}" stroke-width="${size * 0.65}" opacity="${opacity * 0.5}"/>`;
+  }).join('');
+  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">${marks}</svg>`)}")`;
+}
+
+// Three cached textures move as layers; individual stars never need DOM updates.
+const starPlanes = [0, 1, 2].map((layer) => (
+  <div
+    key={layer}
+    className="depth-travel-plane"
+    style={{ '--depth-layer': layer, '--depth-stars': starTexture(layer, false), '--depth-trails': starTexture(layer, true) } as CSSProperties}
+  />
+));
 
 export function DepthTravel({
   active = true,
@@ -140,27 +156,7 @@ export function DepthTravel({
           <div className="depth-travel-cloud depth-travel-cloud-near" />
         </div>
       </div>
-      {[0, 1, 2].map((layer) => (
-        <div key={layer} className="depth-travel-plane" style={{ '--depth-layer': layer } as CSSProperties}>
-          {stars.map((star) => (
-            <i
-              key={`${star.x}-${star.y}`}
-              data-bright={star.bright || undefined}
-              data-temperature={star.temperature}
-              style={
-                {
-                  left: `${star.x}%`,
-                  top: `${star.y}%`,
-                  width: star.size,
-                  height: star.size,
-                  opacity: star.opacity,
-                  '--star-angle': `${(Math.atan2(star.y - 50, star.x - 50) * 180) / Math.PI}deg`,
-                } as CSSProperties
-              }
-            />
-          ))}
-        </div>
-      ))}
+      {starPlanes}
     </div>
   );
 }

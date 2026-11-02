@@ -44,11 +44,16 @@ const isPrivateConfiguration = (file: string) => {
 const runtimeHiddenDirectories = new Set(['.bin', '.well-known']);
 const developmentFiles = new Set(['.editorconfig', '.gitignore', '.gitattributes', '.eslintignore', '.prettierignore']);
 
-const runtimeFile = (name: string, file: string) =>
-  name !== 'ssh2' ||
-  (!['test', 'examples', '.github'].includes(file.split(sep)[0] ?? '') &&
-    file !== join('lib', 'protocol', 'crypto', 'build') &&
-    !file.startsWith(`${join('lib', 'protocol', 'crypto', 'build')}${sep}`));
+const runtimeFile = (name: string, file: string) => {
+  const top = file.split(sep)[0] ?? '';
+  if (name === 'tar-fs' && top === 'test') return false;
+  return (
+    name !== 'ssh2' ||
+    (!['test', 'examples', '.github'].includes(top) &&
+      file !== join('lib', 'protocol', 'crypto', 'build') &&
+      !file.startsWith(`${join('lib', 'protocol', 'crypto', 'build')}${sep}`))
+  );
+};
 
 type Package = {
   name: string;
@@ -115,7 +120,7 @@ export function packageRuntimeDependencies(workspace: string, output: string, lo
       dereference: true,
       filter: (file) => {
         if (relative(root, file).split(sep)[0] === 'node_modules') return false;
-        // ssh2 supports its portable JS implementation; local native build scratch and upstream test keys are not runtime assets.
+        // Upstream development fixtures and optional local build scratch are not runtime assets.
         if (!runtimeFile(metadata.name, relative(root, file))) return false;
         const resolved = lstatSync(file).isSymbolicLink() ? realpathSync(file) : file;
         if (!inside(root, resolved)) throw new Error('Runtime package contains an escaping symlink');

@@ -75,8 +75,8 @@ test('compact progress can omit decorative depth without losing measured or unkn
   expect(decorated).toContain('data-journey="true"');
   expect(decorated).toContain('class="depth-travel recovery-flight" aria-hidden="true"');
   expect(decorated.match(/class="depth-travel-plane"/g)).toHaveLength(3);
-  expect(decorated.match(/data-temperature="/g)).toHaveLength(144);
-  expect(decorated.match(/data-temperature="warm"/g)).toHaveLength(6);
-  expect(decorated.match(/data-temperature="cool"/g)).toHaveLength(15);
+  expect(decorated.match(/--depth-stars:/g)).toHaveLength(3);
+  expect(decorated).not.toContain('<i ');
+  expect(decorated).toContain('data:image/svg+xml');
   expect(decorated).not.toContain('<video');
 });

@@ -227,6 +227,22 @@ describe('frozen runtime dependency packaging', () => {
       expect(existsSync(join(output, 'ssh2', file))).toBe(false);
   });
 
+  it('omits tar-fs development archives while retaining its runtime entry and licence', () => {
+    const { root, workspace, output, lockfile } = fixture();
+    const tar = join(root, 'node_modules', 'tar-fs');
+    module(tar, { name: 'tar-fs', version: '2.1.4' }, 'module.exports = { pack() {}, extract() {} };');
+    mkdirSync(join(tar, 'test', 'fixtures'), { recursive: true });
+    writeFileSync(join(tar, 'test', 'fixtures', 'invalid.tar'), 'upstream development archive fixture');
+    writeFileSync(join(tar, 'LICENSE'), 'retained upstream licence');
+    packageRuntimeDependencies(workspace, output, lockfile, ['tar-fs']);
+    expect(existsSync(join(output, 'tar-fs', 'test'))).toBe(false);
+    expect(readFileSync(join(output, 'tar-fs', 'LICENSE'), 'utf8')).toBe('retained upstream licence');
+    const loaded = createRequire(join(root, 'runtime', 'probe.cjs'))('tar-fs');
+    expect(typeof loaded.pack).toBe('function');
+    expect(typeof loaded.extract).toBe('function');
+    expect(existsSync(join(tar, 'test', 'fixtures', 'invalid.tar'))).toBe(true);
+  });
+
   it('loads the installed locked modules and their runtime assets from the standalone output', async () => {
     const { root, output } = fixture();
     const workspace = resolve(import.meta.dirname, '..');
@@ -238,6 +254,13 @@ describe('frozen runtime dependency packaging', () => {
         if (entry.name.startsWith('.')) expect(['.bin', '.well-known']).toContain(entry.name);
         directories.push(join(directory, entry.name));
       }
+    }
+    const tarPackages = result.packages.filter((entry) => entry.name === 'tar-fs');
+    expect(tarPackages.length).toBeGreaterThan(0);
+    for (const entry of tarPackages) {
+      expect(existsSync(join(output, entry.path, 'test', 'fixtures', 'invalid.tar'))).toBe(false);
+      expect(existsSync(join(output, entry.path, 'test'))).toBe(false);
+      expect(existsSync(join(output, entry.path, 'index.js'))).toBe(true);
     }
     const require = createRequire(join(root, 'runtime', 'probe.cjs'));
     const installed = createRequire(join(workspace, 'package.json'));
@@ -264,6 +287,7 @@ describe('frozen runtime dependency packaging', () => {
       nativeHashVerified: true,
       transformerVerified: true,
       dockerClientVerified: true,
+      tarFsRoundTripVerified: true,
       documentationAssetsVerified: true,
       lockfileSha256: result.lockfileSha256,
     });
