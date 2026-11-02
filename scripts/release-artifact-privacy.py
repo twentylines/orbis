@@ -238,6 +238,16 @@ class Prefixed:
         return before + self.source.read(size - len(before))
 
 
+def tar_header(prefix):
+    if len(prefix) != tarfile.BLOCKSIZE:
+        return False
+    try:
+        tarfile.TarInfo.frombuf(prefix, 'utf-8', 'surrogateescape')
+    except tarfile.HeaderError:
+        return False
+    return True
+
+
 def scan_body(stream, location, budget, depth):
     if depth > 3:
         reject('nested-archive-limit', location)
@@ -272,7 +282,7 @@ def scan_body(stream, location, budget, depth):
                     if not member.is_dir():
                         with archive.open(member) as source:
                             scan_body(source, entry, budget, depth + 1)
-    elif prefix[257:262] == b'ustar':
+    elif tar_header(prefix):
         scan_tar(body, location + '.tar', budget, depth=depth + 1)
     else:
         scan_stream(body, location, budget)
@@ -612,11 +622,13 @@ def main(argv=None):
     parser.add_argument('--create-tag', action='store_true')
     args = parser.parse_args(argv)
     image = None
+    stage = 'image-read'
     try:
         if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-(?:beta|rc)\.\d+)?', args.tag) or not re.fullmatch(r'[a-f0-9]{40}', args.commit):
             reject('invalid-release-identity')
         archive_sha = file_hash(args.oci)
         image = Image(args.oci)
+        stage = 'image-identity'
         digest = image.identity(args.tag, args.commit)
         result = {'imageDigest': digest, 'archiveSha256': archive_sha, 'tag': args.tag, 'commit': args.commit,
                   'platforms': sorted(image.platforms)}
@@ -625,12 +637,16 @@ def main(argv=None):
                 reject('missing-scan-input')
             budget = Budget()
             if args.mode == 'scan':
+                stage = 'image-content'
                 image.scan(budget)
+            stage = 'installer-assets'
             artifacts = installer_files(args.manifest, args.installer, args.notes, digest, args.tag, args.commit, budget)
+            stage = 'artifact-identity'
             if file_hash(args.oci) != archive_sha:
                 reject('scanned-artifact-changed')
             result.update(artifacts=artifacts, passed=True)
             if args.mode in {'verify', 'publish'}:
+                stage = 'scan-receipt'
                 prior = json.loads(args.report.read_bytes())
                 if prior != result:
                     reject('scanned-artifact-changed')
@@ -638,6 +654,7 @@ def main(argv=None):
                 args.report.write_text(json.dumps(result, sort_keys=True, indent=2) + '\n')
                 args.report.chmod(0o600)
             if args.mode == 'publish':
+                stage = 'image-publication'
                 publish_image(args.oci, digest, args.tag, args.registry_auth, args.commit, args.create_tag)
         if args.github_output:
             with args.github_output.open('a') as output:
@@ -647,8 +664,8 @@ def main(argv=None):
     except Rejected as error:
         print(json.dumps({'passed': False, 'error': str(error)}))
         return 1
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, tarfile.TarError, zipfile.BadZipFile, EOFError):
-        print(json.dumps({'passed': False, 'error': 'invalid-or-unreadable-artifact'}))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, tarfile.TarError, zipfile.BadZipFile, EOFError) as error:
+        print(json.dumps({'passed': False, 'error': 'invalid-or-unreadable-artifact', 'stage': stage, 'exception': type(error).__name__}))
         return 1
     finally:
         if image:

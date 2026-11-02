@@ -222,6 +222,46 @@ class ArtifactTests(unittest.TestCase):
         with self.assertRaisesRegex(SCAN.Rejected, 'unsupported-nested-archive'):
             self.scan_image()
 
+    def test_tar_signature_inside_ordinary_source_requires_a_valid_header(self):
+        source = b'public JavaScript source'.ljust(257, b' ') + b'ustar' + b' ordinary source'.ljust(300, b' ')
+        self.assertFalse(SCAN.tar_header(source[:512]))
+        self.image([layer([('app/headers.js', source)])])
+        self.scan_image()
+        token = ('gh' + 'p_' + 'AbCd01234567' * 4).encode()
+        self.image([layer([('app/headers.js', source + token)])])
+        with self.assertRaisesRegex(SCAN.Rejected, 'github-token'):
+            self.scan_image()
+
+    def test_valid_old_tar_headers_and_truncated_archives_still_fail_closed(self):
+        output = io.BytesIO()
+        with tarfile.open(fileobj=output, mode='w', format=tarfile.USTAR_FORMAT) as archive:
+            entry = tarfile.TarInfo('nested/.env')
+            entry.size = 1
+            archive.addfile(entry, io.BytesIO(b'x'))
+        value = bytearray(output.getvalue())
+        value[257:265] = b'\x00' * 8
+        value[148:156] = b' ' * 8
+        value[148:156] = f'{sum(value[:512]):06o}\x00 '.encode()
+        self.assertTrue(SCAN.tar_header(bytes(value[:512])))
+        self.image([layer([('app/archive.bin', bytes(value))])])
+        with self.assertRaisesRegex(SCAN.Rejected, 'private-file'):
+            self.scan_image()
+        header = tarfile.TarInfo('public.txt')
+        header.size = 2048
+        self.image([layer([('app/archive.bin', header.tobuf() + b'short')])])
+        with self.assertRaises(tarfile.ReadError):
+            self.scan_image()
+
+    def test_unreadable_artifact_reports_only_fixed_stage_and_exception_type(self):
+        self.installer(self.image())
+        private = 'synthetic private diagnostic contents'
+        with mock.patch.object(SCAN.Image, 'scan', side_effect=OSError(private)):
+            result, message = self.cli('scan')
+        self.assertEqual(result, 1)
+        self.assertEqual(message, {'passed': False, 'error': 'invalid-or-unreadable-artifact', 'stage': 'image-content', 'exception': 'OSError'})
+        self.assertNotIn(private, json.dumps(message))
+        self.assertFalse(self.report.exists())
+
     def test_credentials_split_across_read_boundaries_and_trailing_tar_bytes_fail(self):
         token = ('gh' + 'p_' + 'ABCdef012345' * 4).encode()
         scanner = SCAN.Content('fixture')
