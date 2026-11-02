@@ -260,9 +260,11 @@ export async function prepareProtectedImageCaptureV2(options: ProtectedImageCapt
           : image.identity.kind !== 'docker' || image.identity.configId !== item.image.creationReference)
       )
         throw fail();
+      const source = await abortable(engine.inspectImage(item.image.sourceImageId, signal), signal);
+      if (source.Id !== item.image.sourceImageId) throw fail();
       const inspected = await abortable(engine.inspectImage(item.image.sourceImageId, signal, item.image.platform), signal);
       if (
-        inspected.Id !== item.image.sourceImageId ||
+        inspected.Id !== item.image.creationReference ||
         inspected.Os !== item.image.platform.os ||
         inspected.Architecture !== item.image.platform.architecture ||
         (inspected.Variant || undefined) !== item.image.platform.variant

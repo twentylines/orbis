@@ -17,7 +17,7 @@ import {
   type ImageCaptureOptions,
   type ImageCaptureContainer,
 } from './backup-image-capture';
-import { retainedImageLimits } from './backup-image-retention';
+import { retainedImageLimits, type RetainedImagePlatform } from './backup-image-retention';
 import { finalizeProtectedImageCaptureV2, prepareProtectedImageCaptureV2 } from './backup-image-capture-v2';
 import { canonicalAppRuntimeJson, decodeAppRuntimeCapture } from './time-machine-app-runtime-capture';
 function required<T>(value: T | undefined): T {
@@ -68,6 +68,52 @@ function imageFixture(suffix = '') {
       { name: configName, bytes: config },
       { name: layerName, bytes: layer },
       { name: 'manifest.json', bytes: Buffer.from(JSON.stringify([{ Config: configName, Layers: [layerName], RepoTags: null }])) },
+    ]),
+  };
+}
+function ociImageFixture(corrupt?: 'config' | 'layer' | 'diff') {
+  const layer = tar([{ name: 'app-data', bytes: Buffer.from('retained OCI layer') }]);
+  const layerId = `sha256:${sha(layer)}`;
+  const config = Buffer.from(
+    JSON.stringify({
+      architecture: 'arm64',
+      os: 'linux',
+      config: {},
+      rootfs: { type: 'layers', diff_ids: [corrupt === 'diff' ? `sha256:${'0'.repeat(64)}` : layerId] },
+    }),
+  );
+  const configId = `sha256:${sha(config)}`;
+  const manifest = Buffer.from(
+    JSON.stringify({
+      schemaVersion: 2,
+      mediaType: 'application/vnd.oci.image.manifest.v1+json',
+      config: { mediaType: 'application/vnd.oci.image.config.v1+json', digest: configId, size: config.length },
+      layers: [{ mediaType: 'application/vnd.oci.image.layer.v1.tar', digest: layerId, size: layer.length }],
+    }),
+  );
+  const manifestId = `sha256:${sha(manifest)}`;
+  const platform = { os: 'linux', architecture: 'arm64' };
+  const index = Buffer.from(
+    JSON.stringify({
+      schemaVersion: 2,
+      mediaType: 'application/vnd.oci.image.index.v1+json',
+      manifests: [{ mediaType: 'application/vnd.oci.image.manifest.v1+json', digest: manifestId, size: manifest.length, platform }],
+    }),
+  );
+  const sourceId = `sha256:${sha(Buffer.from(JSON.stringify({ ...JSON.parse(index.toString()), annotations: { source: 'fixture' } })))}`;
+  const blob = (id: string) => `blobs/sha256/${id.slice(7)}`;
+  return {
+    sourceId,
+    manifestId,
+    configId,
+    platform,
+    archive: tar([
+      { name: blob(layerId), bytes: corrupt === 'layer' ? Buffer.alloc(layer.length, 1) : layer },
+      { name: blob(configId), bytes: corrupt === 'config' ? Buffer.alloc(config.length, 1) : config },
+      { name: blob(manifestId), bytes: manifest },
+      { name: 'index.json', bytes: index },
+      { name: 'oci-layout', bytes: Buffer.from('{"imageLayoutVersion":"1.0.0"}') },
+      { name: 'manifest.json', bytes: Buffer.from(JSON.stringify([{ Config: blob(configId), Layers: [blob(layerId)], RepoTags: null }])) },
     ]),
   };
 }
@@ -156,7 +202,12 @@ async function fixture() {
       if (!found) throw new Error('Container missing');
       return structuredClone(found);
     }),
-    inspectImage: vi.fn(async (id: string) => ({ Id: id, Os: 'linux', Architecture: 'arm64', RepoDigests: [] })),
+    inspectImage: vi.fn(async (id: string, _signal?: AbortSignal, _platform?: RetainedImagePlatform) => ({
+      Id: id,
+      Os: 'linux',
+      Architecture: 'arm64',
+      RepoDigests: [],
+    })),
     saveImage: vi.fn(async (_id: string) =>
       Readable.from(Array.from({ length: Math.ceil(image.archive.length / 31) }, (_, index) => image.archive.subarray(index * 31, (index + 1) * 31))),
     ),
@@ -810,6 +861,7 @@ function protectedRuntimeForProducer(
   test: Awaited<ReturnType<typeof fixture>>,
   selection: 'docker-config.v1' | 'docker29-platform-manifest.v1' = 'docker-config.v1',
   secondImageId = test.image.id,
+  selectedManifest = `sha256:${'f'.repeat(64)}`,
 ) {
   const manifest = JSON.parse(test.manifest.toString()) as { files: { name: string; bytes: number; sha256: string }[] };
   const savedFiles = manifest.files.map(({ name, bytes, sha256 }) => ({ name, bytes, sha256 })).sort((a, b) => (a.name < b.name ? -1 : 1));
@@ -867,7 +919,7 @@ function protectedRuntimeForProducer(
       },
       image: {
         sourceImageId: index === 0 ? test.image.id : secondImageId,
-        creationReference: selection === 'docker-config.v1' ? (index === 0 ? test.image.id : secondImageId) : `sha256:${'f'.repeat(64)}`,
+        creationReference: selection === 'docker-config.v1' ? (index === 0 ? test.image.id : secondImageId) : selectedManifest,
         platform: { os: 'linux', architecture: 'arm64' },
         selection,
       },
@@ -902,6 +954,58 @@ it('exports replica-specific protected v2 bindings and verifies each archive on 
   await prepared.dispose();
   await clean(test);
 });
+it.each(['valid', 'wrong-selected', 'source-drift', 'wrong-platform', 'wrong-creation', 'config', 'layer', 'diff'] as const)(
+  'checks distinct Docker 29 source, selected manifest and config identities: %s',
+  async (scenario) => {
+    const test = await fixture();
+    const image = ociImageFixture(scenario === 'config' || scenario === 'layer' || scenario === 'diff' ? scenario : undefined);
+    expect(new Set([image.sourceId, image.manifestId, image.configId]).size).toBe(3);
+    test.image.id = image.sourceId;
+    for (const container of test.values.values()) container.imageId = image.sourceId;
+    const appRuntime = protectedRuntimeForProducer(
+      test,
+      'docker29-platform-manifest.v1',
+      image.sourceId,
+      scenario === 'wrong-creation' ? `sha256:${'f'.repeat(64)}` : image.manifestId,
+    );
+    let unfiltered = 0;
+    let filtered = 0;
+    test.engine.inspectImage.mockImplementation(async (id, _signal, platform) => {
+      if (!platform) {
+        unfiltered++;
+        return {
+          Id: scenario === 'source-drift' && unfiltered >= 3 ? `sha256:${'d'.repeat(64)}` : id,
+          Os: 'linux',
+          Architecture: 'arm64',
+          RepoDigests: [],
+          Manifests: [{ Kind: 'image', Available: true, Descriptor: { digest: image.manifestId, platform: image.platform } }],
+        };
+      }
+      filtered++;
+      return {
+        Id: scenario === 'wrong-selected' && filtered >= 4 ? `sha256:${'e'.repeat(64)}` : image.manifestId,
+        Os: 'linux',
+        Architecture: scenario === 'wrong-platform' && filtered >= 4 ? 'amd64' : 'arm64',
+        RepoDigests: [],
+      };
+    });
+    test.engine.saveImage.mockImplementation(async () => Readable.from([image.archive]));
+    const result = prepareProtectedImageCaptureV2({ ...test.options, appRuntime });
+    if (scenario === 'valid') {
+      const prepared = await result;
+      const retained = required(prepared.inventory.images[0]);
+      expect(retained.imageId).toBe(image.sourceId);
+      expect(retained.identity).toMatchObject({ kind: 'oci', manifestId: image.manifestId, configId: image.configId, platform: image.platform });
+      expect(unfiltered).toBeGreaterThanOrEqual(3);
+      expect(filtered).toBeGreaterThanOrEqual(4);
+      expect(sha(await collect(await required(prepared.files[0]).open(new AbortController().signal)))).toBe(required(prepared.files[0]).sha256);
+      await prepared.dispose();
+    } else {
+      await expect(result).rejects.toThrow();
+    }
+    await clean(test);
+  },
+);
 it.each(['unknown-container', 'image-graph-drift', 'cancel'] as const)('fails closed and cleans up a v2 preparation on %s', async (kind) => {
   const test = await fixture();
   const appRuntime = protectedRuntimeForProducer(test, kind === 'image-graph-drift' ? 'docker29-platform-manifest.v1' : 'docker-config.v1');

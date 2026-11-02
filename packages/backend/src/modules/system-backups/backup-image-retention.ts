@@ -715,6 +715,7 @@ async function validateDockerArchive(
         const layer = layers.get(entry.path);
         if (!layer) return;
         if (!layer.gzip) {
+          if (`sha256:${entries.get(entry.path)?.sha256}` !== layer.diffId) throw failure();
           expanded.set(entry.path, entry.size);
           return;
         }
