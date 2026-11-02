@@ -254,8 +254,8 @@ export class ReceiverRequestService implements OnModuleDestroy {
       throw new BadRequestException('Choose how to encrypt this new backup.');
     if (encryption === 'source-account-password' && passphrase !== undefined) throw new BadRequestException('Choose one backup encryption method.');
     const archiveKey = encryption === 'source-account-password' ? credentials.password : passphrase;
-    if (typeof archiveKey !== 'string' || archiveKey.trim().length < 12 || archiveKey.length > 1024)
-      throw new BadRequestException('The backup password must be between 12 and 1024 characters. Choose a separate backup passphrase if needed.');
+    if (typeof archiveKey !== 'string' || archiveKey.length < 8 || !archiveKey.trim() || archiveKey.length > 1024)
+      throw new BadRequestException('The backup password must be between 8 and 1024 characters. Choose a separate backup passphrase if needed.');
     value.status = 'approving';
     value.reservedBy = ownerId;
     try {

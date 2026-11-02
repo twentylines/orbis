@@ -7,11 +7,13 @@ import { AuthService } from './auth.service';
 import { SessionManager } from './session.manager';
 import { PasskeyStore } from './passkey.store';
 import { PasskeyService } from './passkey.service';
+import { AccountSecurityService } from './account-security.service';
+import { AccountSecurityController } from './account-security.controller';
 
 @Module({
   imports: [UserModule, EncryptionModule, PasswordModule],
-  controllers: [AuthController],
-  providers: [AuthService, SessionManager, PasskeyStore, PasskeyService],
-  exports: [AuthService, PasskeyService, PasskeyStore, SessionManager],
+  controllers: [AuthController, AccountSecurityController],
+  providers: [AuthService, SessionManager, PasskeyStore, PasskeyService, AccountSecurityService],
+  exports: [AuthService, PasskeyService, PasskeyStore, SessionManager, AccountSecurityService],
 })
 export class AuthModule {}

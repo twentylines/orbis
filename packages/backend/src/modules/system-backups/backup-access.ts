@@ -16,8 +16,9 @@ export function backupCredentials(body: unknown, passphrase = false) {
     !value.password ||
     value.password.length > 1024 ||
     (value.totpCode !== undefined && (typeof value.totpCode !== 'string' || !/^\d{6}$/.test(value.totpCode))) ||
-    (passphrase && (typeof value.passphrase !== 'string' || value.passphrase.trim().length < 12 || value.passphrase.length > 1024))
+    (passphrase &&
+      (typeof value.passphrase !== 'string' || value.passphrase.length < 8 || !value.passphrase.trim() || value.passphrase.length > 1024))
   )
-    throw new BadRequestException('Provide your password, authentication code if enabled, and a backup passphrase of at least 12 characters.');
+    throw new BadRequestException('Provide your password, authentication code if enabled, and a backup passphrase of at least 8 characters.');
   return { password: value.password, totpCode: value.totpCode as string | undefined, passphrase: value.passphrase as string };
 }

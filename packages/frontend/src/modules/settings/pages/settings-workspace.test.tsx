@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
-import { useContext } from 'react';
+import { Children, isValidElement, useContext, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { DialogContent, DialogVisibilityContext } from '@/components/ui/Dialog/Dialog';
 import { WindowVisibilityContext } from '@/desktop/window-visibility';
-import { SettingsPanel, SettingsWorkspace } from './settings-workspace';
+import { ColourModeChoice } from '@/desktop/colour-mode-choice';
+import { SettingsPanel, SettingsSearch, SettingsWorkspace } from './settings-workspace';
 import { SettingsSaveProvider, SettingsSavingIndicator } from './settings-save';
-import { settingsSections, type SettingsSection } from '../helpers/settings-catalogue';
+import { settingsCatalogue, settingsSections, type SettingsSection } from '../helpers/settings-catalogue';
 
 function VisibilityProbe() {
   const visible = useContext(WindowVisibilityContext);
@@ -56,6 +57,19 @@ test('categories expose a shared Orbis picker and only the visited category cont
   expect(markup).not.toContain('More');
 });
 
+test('Time Machine retains one category heading and its own settings panel', () => {
+  const panels = Object.fromEntries(settingsSections.map(({ id }) => [id, <div key={id}>{id} content</div>])) as Record<
+    SettingsSection,
+    React.ReactNode
+  >;
+  const markup = renderToStaticMarkup(
+    <SettingsWorkspace current="time-machine" access={{ operator: true }} onSection={() => {}} onSetting={() => {}} panels={panels} />,
+  );
+  expect(markup.match(/<h2>Time Machine<\/h2>/g)).toHaveLength(1);
+  expect(markup).toContain('time-machine content');
+  expect(markup).not.toContain('backups content');
+});
+
 function DialogVisibilityProbe() {
   return <output data-dialog-visible={useContext(DialogVisibilityContext)} />;
 }
@@ -96,26 +110,57 @@ test('a hidden parent settings window suppresses its active category dialog with
   expect(hidden).not.toContain('Inactive portal');
 });
 
-test('search and the single section Save keep their existing locations when the title status is added', () => {
+test('settings search renders as a header control while section Save stays in its content heading', () => {
   const panels = Object.fromEntries(settingsSections.map(({ id }) => [id, <input key={id} aria-label={`Draft ${id}`} />])) as Record<
     SettingsSection,
     React.ReactNode
   >;
+  const search = renderToStaticMarkup(<SettingsSearch access={{ operator: true }} onSetting={() => {}} />);
   const markup = renderToStaticMarkup(
     <SettingsSaveProvider onSection={() => {}}>
       <SettingsWorkspace current="general" access={{ operator: true }} onSection={() => {}} onSetting={() => {}} panels={panels} />
     </SettingsSaveProvider>,
   );
-  expect(markup.match(/type="search"/g)).toHaveLength(1);
+  expect(search.match(/type="search"/g)).toHaveLength(1);
+  expect(search).toContain('class="settings-search settings-header-search"');
+  expect(search).toContain('placeholder="Find a setting"');
+  expect(search).toContain('data-focus-surface="parent"');
+  expect(markup).not.toContain('class="settings-search settings-header-search"');
   expect(markup.match(/>Save<\/button>/g)).toHaveLength(1);
-  expect(markup.indexOf('<search')).toBeLessThan(markup.indexOf('class="settings-layout"'));
   const sectionHeader = markup.match(/<header class="settings-content-heading">[\s\S]*?<\/header>/)?.[0] ?? '';
   expect(sectionHeader).toContain('<h2>General</h2>');
   expect(sectionHeader).toContain('>Save</button>');
   expect(sectionHeader).toContain('settings-save-actions');
-  expect(sectionHeader).toContain('settings-save-activity');
   expect(markup).not.toContain('<h1');
   expect(markup).not.toContain('settings-header-status');
+});
+
+test('OLED search target resolves to the separate switch control', () => {
+  const entry = settingsCatalogue.find((item) => item.id === 'oled-dark-mode');
+  expect(entry?.focus).toBe('[data-setting-focus="oled"]');
+  const controls = (function flatten(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+    return Children.toArray(node).flatMap((child) =>
+      isValidElement<Record<string, unknown>>(child) ? [child, ...flatten(child.props.children as ReactNode)] : [],
+    );
+  })(
+    ColourModeChoice({
+      mode: 'system',
+      oledDark: false,
+      onChange: () => undefined,
+    }),
+  );
+  expect(controls.some((control) => control.props['data-setting-focus'] === 'oled')).toBe(true);
+});
+
+test('React-mounted handlers query through the portal target, clear and blur, and run the shared Save plan', async () => {
+  const child = Bun.spawn([process.execPath, new URL('./settings-workspace-interaction.fixture.tsx', import.meta.url).pathname], {
+    cwd: new URL('../../../../..', import.meta.url).pathname,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  expect({ code, stderr }).toEqual({ code: 0, stderr: '' });
+  expect(JSON.parse(stdout)).toEqual({ mountedReact: true, portalTarget: true, network: false, layout: false, eventsSeen: ['prepare', 'commit'] });
 });
 
 test('save activity retains its reserved content while the polite announcement follows actual pending state', () => {

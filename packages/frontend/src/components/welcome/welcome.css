@@ -214,6 +214,54 @@ body:has(.orbis-theme) .orbis-setup :is(button, summary):focus-visible {
   padding: 0;
   min-width: 0;
 }
+.orbis-setup-intro h2:has(svg) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.orbis-setup-time-machine-illustration {
+  position: relative;
+  width: min(100%, 280px);
+  height: 180px;
+  margin: 8px auto 16px;
+}
+.orbis-setup-time-machine-illustration > :is(span, div) {
+  position: absolute;
+  inset: 24px 12px 0;
+  border: 1px solid var(--desktop-line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--desktop-action) 8%, var(--desktop-surface));
+}
+.orbis-setup-time-machine-illustration > span:first-child {
+  transform: translateY(-22px) scale(0.88);
+  opacity: 0.4;
+}
+.orbis-setup-time-machine-illustration > span:nth-child(2) {
+  transform: translateY(-11px) scale(0.94);
+  opacity: 0.65;
+}
+.orbis-setup-time-machine-illustration > div {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  align-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--desktop-action);
+}
+.orbis-setup-time-machine-illustration svg {
+  grid-row: 1 / 4;
+}
+.orbis-setup-time-machine-illustration i {
+  height: 6px;
+  border-radius: 4px;
+  background: currentColor;
+  opacity: 0.4;
+}
+.orbis-setup-time-machine-illustration i:last-child {
+  width: 65%;
+}
 .orbis-setup-choice-group legend {
   float: none;
   font-size: 0.875rem;

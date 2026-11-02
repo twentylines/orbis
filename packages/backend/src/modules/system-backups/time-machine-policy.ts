@@ -39,7 +39,7 @@ export const timeMachineCapabilities = (): TimeMachineCapabilities => ({
   version: 1,
   experimental: true,
   manualCapture: true,
-  experimentalAcknowledgementRequired: true,
+  experimentalAcknowledgementRequired: false,
   automaticCapture: { scheduled: false, preUpdate: false, preRestart: false },
   osSnapshots: { supported: false, reason: timeMachineIssue('os-snapshots-unsupported') },
   dockerImages: { capture: true, restore: false },

@@ -83,6 +83,7 @@ mock.module('@/desktop/appearance-runtime', () => ({
 mock.module('@/desktop/theme-motion', () => ({ transitionAppearance: (fn: () => void) => fn() }));
 mock.module('@/desktop/motion-preferences', () => ({ MotionPreferences: ({ children }: { children: React.ReactNode }) => children }));
 mock.module('@/components/startup/startup-boundary', () => ({
+  useStartupSession: () => ({ setFirstSetup: () => undefined, begin: () => undefined, finish: async () => undefined }),
   useStartupReady() {
     return undefined;
   },
@@ -101,9 +102,21 @@ mock.module('react-router', () => ({ useLocation: () => ({ pathname: '/dashboard
 let session = new PreferenceSession(true);
 mock.module('@/context/user-context', () => ({
   useUserContext: () => ({ isLoggedIn: true, sessionEpoch: session.epoch, sessionAbortSignal: session.signal }),
+  UserContextProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
+for (const [path, name] of [
+  ['@/components/providers/i18n/i18n-provider', 'I18nProvider'],
+  ['@/components/providers/sentry/sentry-provider', 'SentryProvider'],
+  ['@/components/providers/theme/auto-theme-provider', 'AutoThemeProvider'],
+  ['@/components/providers/theme/theme-provider', 'ThemeProvider'],
+] as const)
+  mock.module(path, () => ({ [name]: ({ children }: { children: React.ReactNode }) => children }));
+mock.module('@/components/debug-panel/debug-panel', () => ({ DebugPanel: () => null }));
+mock.module('@/components/error/error-page', () => ({ ErrorPage: () => null }));
 const { createRoot } = await import('react-dom/client');
 const { DesktopPreferencesProvider, useDesktopPreferences, defaultDesktopPreferences } = await import('./preferences');
+const CompositionProvider =
+  process.argv[2] === 'provider-composition' ? (await import('@/components/providers/providers')).Providers : DesktopPreferencesProvider;
 let controls: ReturnType<typeof useDesktopPreferences>;
 let nameDraft: ReturnType<typeof usePreferenceNameDraft>;
 function Probe() {
@@ -114,6 +127,7 @@ function Probe() {
 type RequestRecord = { url: string; method: string; body: string; signal: AbortSignal | null | undefined };
 const requests: RequestRecord[] = [];
 let server = structuredClone(defaultDesktopPreferences);
+let onboardingComplete = !process.argv[2]?.startsWith('onboarding-capture-') && process.argv[2] !== 'provider-composition';
 let intercept: ((r: RequestRecord) => Promise<Response> | undefined) | undefined;
 Object.assign(globalThis, {
   fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -121,7 +135,10 @@ Object.assign(globalThis, {
     requests.push(r);
     const result = intercept?.(r);
     if (result) return result;
-    if (r.url.endsWith('/onboarding')) return Response.json({ complete: true });
+    if (r.url.endsWith('/onboarding')) {
+      if (r.method === 'POST') onboardingComplete = true;
+      return Response.json({ complete: onboardingComplete });
+    }
     if (r.method === 'PUT') server = JSON.parse(r.body);
     return Response.json(server);
   },
@@ -153,12 +170,12 @@ const container = {
     return undefined;
   },
 };
-const root = createRoot(container as unknown as HTMLElement);
+let root = createRoot(container as unknown as HTMLElement);
 const render = () =>
   root.render(
-    <DesktopPreferencesProvider>
+    <CompositionProvider>
       <Probe />
-    </DesktopPreferencesProvider>,
+    </CompositionProvider>,
   );
 const switchSession = async () => {
   session.invalidate();
@@ -169,6 +186,66 @@ const switchSession = async () => {
   });
 };
 const scenarios: Record<string, () => Promise<void>> = {
+  'provider-composition': async () => {
+    expect(controls.requiresOnboarding).toBe(true);
+    await act(async () => {
+      await controls.completeOnboarding('Composition server');
+    });
+    expect(controls.requiresOnboarding).toBe(false);
+    await act(async () => {
+      root.unmount();
+    });
+    root = createRoot(container as unknown as HTMLElement);
+    await act(async () => {
+      render();
+    });
+    expect(controls.requiresOnboarding).toBe(false);
+    expect(controls.preferences.serverName).toBe('Composition server');
+  },
+  'onboarding-capture-completion': async () => {
+    expect(controls.requiresOnboarding).toBe(true);
+    const events: string[] = [];
+    await act(async () => {
+      await controls.completeOnboarding('Captured server', undefined, async () => {
+        expect(puts().at(-1)?.body).toContain('Captured server');
+        expect(requests.filter((request) => request.url.endsWith('/onboarding') && request.method === 'POST')).toHaveLength(0);
+        events.push('capture accepted');
+        onboardingComplete = true;
+        return true;
+      });
+    });
+    expect(events).toEqual(['capture accepted']);
+    expect(requests.at(-1)).toMatchObject({ url: '/api/desktop-preferences/onboarding', method: 'GET' });
+    expect(controls.requiresOnboarding).toBe(false);
+    expect(controls.preferences.serverName).toBe('Captured server');
+  },
+  'onboarding-capture-failure': async () => {
+    await act(async () => {
+      await expect(
+        controls.completeOnboarding('Waiting server', undefined, async () => {
+          throw new Error('Capture did not start');
+        }),
+      ).rejects.toThrow('Capture did not start');
+    });
+    expect(controls.requiresOnboarding).toBe(true);
+    expect(requests.filter((request) => request.url.endsWith('/onboarding') && request.method === 'POST')).toHaveLength(0);
+  },
+  'onboarding-capture-unconfirmed': async () => {
+    await act(async () => {
+      await expect(controls.completeOnboarding('Waiting server', undefined, async () => true)).rejects.toThrow('could not be completed');
+    });
+    expect(controls.requiresOnboarding).toBe(true);
+    expect(requests.filter((request) => request.url.endsWith('/onboarding') && request.method === 'POST')).toHaveLength(0);
+  },
+  'onboarding-capture-optional-failure': async () => {
+    expect(controls.requiresOnboarding).toBe(true);
+    await act(async () => {
+      await controls.completeOnboarding('Ready without capture', undefined, async () => false);
+    });
+    expect(controls.requiresOnboarding).toBe(false);
+    expect(requests.at(-1)).toMatchObject({ url: '/api/desktop-preferences/onboarding', method: 'POST' });
+    expect(controls.preferences.serverName).toBe('Ready without capture');
+  },
   'batched-edit-commit': async () => {
     await act(async () => {
       controls.updateAppearance({ textScale: 125 });

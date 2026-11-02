@@ -1,6 +1,10 @@
 .orbis-selection-group {
   position: relative;
   isolation: isolate;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--orbis-control-gap, 12px);
 }
 .orbis-selection-layer {
   position: absolute;

@@ -191,7 +191,7 @@ type PreferenceContext = {
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
   requiresOnboarding: boolean;
   onboardingOrigin: 'fresh' | 'runtipi';
-  completeOnboarding: (serverName: string, draft?: DesktopPreferences) => Promise<void>;
+  completeOnboarding: (serverName: string, draft?: DesktopPreferences, capture?: () => Promise<boolean>) => Promise<void>;
   setPreview: (value: DesktopPreferences | null) => void;
   setWorkspaceLoading: (loading: boolean) => void;
 };
@@ -598,7 +598,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
     replacePreferences((previous) => ({ ...previous, windows: { ...previous.windows, [id]: value } }));
   };
 
-  const completeOnboarding = async (serverName: string, draft = currentPreferences.current) => {
+  const completeOnboarding = async (serverName: string, draft = currentPreferences.current, capture?: () => Promise<boolean>) => {
     const next = { ...draft, serverName: serverName.trim() };
     if (!canSave() || !serverReady || !isPreferences(next) || completingSetup.current) throw new Error('Setup cannot be saved yet. Try again.');
     completingSetup.current = true;
@@ -615,8 +615,10 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       });
       if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
       if (!saved.ok) throw new Error('Server settings could not be saved. Try again.');
+      const captureCompletedSetup = capture ? await capture() : false;
+      if (!isCurrentSession()) throw new Error('Your session changed. Reload your settings before saving.');
       const completed = await fetch('/api/desktop-preferences/onboarding', {
-        method: 'POST',
+        method: captureCompletedSetup ? 'GET' : 'POST',
         credentials: 'include',
         signal: requestSignal(),
       });

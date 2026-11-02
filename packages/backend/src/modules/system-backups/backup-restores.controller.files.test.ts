@@ -18,7 +18,7 @@ function fixture() {
   const result = { job: { id: randomUUID(), status: 'ready' } };
   const service = {
     status: vi.fn().mockResolvedValue(result),
-    prepare: vi.fn().mockResolvedValue(result),
+    prepareForSession: vi.fn().mockResolvedValue(result),
     cancel: vi.fn().mockResolvedValue(result),
     recover: vi.fn().mockResolvedValue(result),
     launch: vi.fn().mockResolvedValue(undefined),
@@ -56,9 +56,10 @@ it('uses the session owner and exact reviewed manifest, then starts only after t
   const body = input();
   const res = response();
   expect(await controller.prepare(operator, body, res as unknown as Response)).toEqual(result);
-  expect(service.prepare).toHaveBeenCalledWith(
+  expect(service.prepareForSession).toHaveBeenCalledWith(
     body.importId,
     7,
+    operator,
     { password: body.password, totpCode: body.totpCode, passphrase: undefined },
     body.manifestSha256,
   );
@@ -75,6 +76,16 @@ it('starts a fully confirmed handoff once even if the client disconnects before 
   res.emit('close');
   res.emit('finish');
   expect(service.launch).toHaveBeenCalledTimes(1);
+});
+it('passes session authorization without inventing a password', async () => {
+  const { controller, service } = fixture();
+  const body = input();
+  await controller.prepare(
+    operator,
+    { importId: body.importId, manifestSha256: body.manifestSha256, confirmation: body.confirmation },
+    response() as unknown as Response,
+  );
+  expect(service.prepareForSession).toHaveBeenCalledWith(body.importId, 7, operator, undefined, body.manifestSha256);
 });
 it('does not strand a handoff when disconnect happened during preparation', async () => {
   const { controller, service } = fixture();
@@ -107,7 +118,7 @@ it('never launches the legacy worker after a root-managed recovery response', as
 it('does not launch after rejected preparation and prevents cached progress', async () => {
   const { controller, service } = fixture();
   const res = response();
-  service.prepare.mockRejectedValue(new Error('review required'));
+  service.prepareForSession.mockRejectedValue(new Error('review required'));
   await expect(controller.prepare(operator, input(), res as unknown as Response)).rejects.toThrow('review required');
   res.emit('finish');
   res.emit('close');

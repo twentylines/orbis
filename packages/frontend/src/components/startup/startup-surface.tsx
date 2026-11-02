@@ -7,6 +7,8 @@ import { readServerAppearance, serverAppearanceSnapshot, subscribeServerAppearan
 import { isLoggingOff } from '@/desktop/session-motion';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
 import { createPortal } from 'react-dom';
+import { DepthTravel } from '@/components/recovery-progress/depth-travel';
+import './startup-space.css';
 
 const viewportGutterProperty = '--orbis-startup-viewport-gutter';
 export const startupViewportBootstrap = `requestAnimationFrame(()=>document.documentElement.style.setProperty('${viewportGutterProperty}',Math.max(0,window.innerWidth-document.documentElement.clientWidth)+'px'));
@@ -24,6 +26,7 @@ export function StartupSurface({
   completing = false,
   initial = false,
   freshAppearance = false,
+  setupSpace = false,
   children,
 }: {
   ref?: Ref<HTMLDivElement>;
@@ -37,6 +40,7 @@ export function StartupSurface({
   completing?: boolean;
   initial?: boolean;
   freshAppearance?: boolean;
+  setupSpace?: boolean;
   children?: ReactNode;
 }) {
   const surface = useRef<HTMLDivElement>(null);
@@ -75,7 +79,7 @@ export function StartupSurface({
   const content = (
     <div
       ref={surface}
-      className={`orbis-startup${current ? ' orbis-theme' : ''}${loggingOff ? ' orbis-logout-surface' : signingIn ? ' orbis-login-surface' : status ? ' orbis-update-surface' : ''}${overlay ? ' orbis-startup-overlay' : ''}`}
+      className={`orbis-startup${current ? ' orbis-theme' : ''}${setupSpace ? ' orbis-startup-setup-space' : ''}${loggingOff ? ' orbis-logout-surface' : signingIn ? ' orbis-login-surface' : status ? ' orbis-update-surface' : ''}${overlay ? ' orbis-startup-overlay' : ''}`}
       data-session-state={loggingOff || resumingLogout ? 'logging-out' : signingIn ? 'signing-in' : status ? 'updating' : 'loading'}
       data-revealing={revealing || undefined}
       data-completing={completing || undefined}
@@ -87,7 +91,11 @@ export function StartupSurface({
       data-desktop-preset={current?.preset}
       data-desktop-wallpaper={current ? resolveWallpaperKey(current) : undefined}
     >
-      {current ? <WallpaperLayer choice={current} /> : null}
+      {setupSpace ? (
+        <DepthTravel variant="onboarding" mode="ambient" className="orbis-startup-space-field" />
+      ) : current ? (
+        <WallpaperLayer choice={current} />
+      ) : null}
       <div className="orbis-startup-scene" aria-hidden="true">
         <span />
         <span />

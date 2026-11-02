@@ -1,19 +1,17 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router';
 import { IconTrash } from '@tabler/icons-react';
 import type { CapsuleJob } from '@runtipi/common/schemas/time-machine-capsule';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
-import { SelectionGroup } from '@/components/ui/SelectionGroup/SelectionGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select/Select';
 import { RecoveryProgress } from '@/components/recovery-progress/recovery-progress';
 import { useAppContext } from '@/context/app-context';
 import { downloadBackup } from '@/modules/system-backups/backup-api';
 import { formatBackupBytes } from '@/modules/system-backups/contracts';
-import { BackupEncryptionFields, backupEncryptionPassphrase, SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
+import { BackupEncryptionFields, backupEncryptionPassphrase } from '@/modules/system-backups/system-backups-settings';
 import { readTimeMachinePoints } from '@/modules/time-machine/time-machine-api';
 import { capsuleAction, capsuleRequest, readCapsules, uploadCapsule } from './capsule-api';
 import './capsules-panel.css';
@@ -90,7 +88,7 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
       if (action.kind === 'export') passphrase = backupEncryptionPassphrase(values, 'export', accountPassword);
       if (action.kind === 'review') {
         passphrase = String(values.get('passphrase') ?? '');
-        if (passphrase.trim().length < 12 || passphrase.length > 1024)
+        if (passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
           throw new Error('Enter the archive passphrase or the original account password used to encrypt it.');
       }
       if (action.kind === 'upload' && !file) throw new Error('Choose an encrypted capture file.');
@@ -124,10 +122,11 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
       abort.current = null;
     }
   };
+  if (!sealed.length && !jobs.data?.jobs.length && !jobs.isError && !points.isError) return null;
   return (
     <section className="capsules-panel" aria-labelledby={`${id}-title`}>
       <header>
-        <h2 id={`${id}-title`}>Time Machine captures</h2>
+        <h3 id={`${id}-title`}>Download captures</h3>
         <Button
           variant="outline"
           disabled={busy || jobs.isFetching}
@@ -139,19 +138,10 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
           Refresh
         </Button>
       </header>
-      <p>Save a sealed capture with its Docker images, database, settings and app data. Its saved contents are copied unchanged.</p>
-      <InlineFeedback variant="info">
-        Imported captures can be verified here. Restoring on another installation requires a separately enrolled destination and is not available yet.
-      </InlineFeedback>
+      <p>Save encrypted copies of your captures to your computer.</p>
       <div className="capsules-actions">
         <Button variant="outline" disabled={busy || !sealed.length || jobs.isError} onClick={() => open({ kind: 'export' })}>
           Save capture
-        </Button>
-        <Button variant="outline" disabled={busy || jobs.isError} onClick={() => open({ kind: 'upload' })}>
-          Upload
-        </Button>
-        <Button asChild variant="outline">
-          <Link to="/time-machine">Time Machine</Link>
         </Button>
       </div>
       {points.isError ? <InlineFeedback>Saved captures could not be loaded. Select Refresh to try again.</InlineFeedback> : null}
@@ -281,7 +271,7 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
                 name="passphrase"
                 type="password"
                 autoComplete="off"
-                minLength={12}
+                minLength={8}
                 maxLength={1024}
                 disabled={busy}
               />
@@ -314,36 +304,5 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
       </Dialog>
       {error && !action ? <InlineFeedback>{error}</InlineFeedback> : null}
     </section>
-  );
-}
-export function BackupRecoveryContents({ recoveryActions }: { recoveryActions?: ReactNode }) {
-  const [kind, setKind] = useState<'server' | 'capture'>('server');
-  const [visited, setVisited] = useState(false);
-  return (
-    <>
-      <SelectionGroup role="group" aria-label="Backup contents">
-        <Button variant="outline" aria-pressed={kind === 'server'} onClick={() => setKind('server')}>
-          Server backup
-        </Button>
-        <Button
-          variant="outline"
-          aria-pressed={kind === 'capture'}
-          onClick={() => {
-            setKind('capture');
-            setVisited(true);
-          }}
-        >
-          Time Machine capture
-        </Button>
-      </SelectionGroup>
-      <div hidden={kind !== 'server'}>
-        <SystemBackupsSettings recoveryActions={recoveryActions} />
-      </div>
-      {visited ? (
-        <div hidden={kind !== 'capture'}>
-          <TimeMachineCapsules visible={kind === 'capture'} />
-        </div>
-      ) : null}
-    </>
   );
 }

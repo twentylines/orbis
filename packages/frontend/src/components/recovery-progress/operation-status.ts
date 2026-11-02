@@ -5,6 +5,13 @@ export type OperationStatus = {
   progress?: number;
 };
 export type OperationSnapshot = OperationStatus & { supported: boolean; unavailable?: boolean };
+export function operationIsWaiting(snapshot: OperationSnapshot) {
+  return snapshot.state === 'checking' || snapshot.unavailable === true;
+}
+export function operationShowsContent(snapshot: OperationSnapshot | null, authRoute: boolean, matchingTerminal: boolean, departing: boolean) {
+  const locked = !snapshot || snapshot.state !== 'idle' || snapshot.unavailable === true;
+  return (!locked && !matchingTerminal && !departing) || (authRoute && snapshot?.state === 'recovery' && !snapshot.unavailable);
+}
 export function parseOperationStatus(value: unknown): OperationStatus {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Restore status is unavailable.');
   const record = value as Record<string, unknown>;

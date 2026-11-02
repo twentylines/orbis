@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { ConflictException, Inject, Injectable, NotFoundException, type OnModuleDestroy } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy } from '@nestjs/common';
 import type Dockerode from 'dockerode';
 import type { Request } from 'express';
 import { ConfigurationService } from '@/core/config/configuration.service';
@@ -9,6 +9,8 @@ import { LoggerService } from '@/core/logger/logger.service';
 import { acquireBackupMaintenance, backupMaintenanceActive, setRestoreRecoveryRequired } from '@/common/backup-maintenance';
 import { installationMode } from '@/common/installation-mode';
 import { AuthService } from '../auth/auth.service';
+import { AccountSecurityService } from '../auth/account-security.service';
+import { authorizeBackupRestoreSession } from './backup-session-authorization';
 import { AppsRepository } from '../apps/apps.repository';
 import { TasksService } from '../tasks/tasks.service';
 import { HostUpdatesService } from '../host-updates/host-updates.service';
@@ -66,6 +68,7 @@ export class BackupRestoresService implements OnModuleDestroy {
     private readonly imports: BackupImportsService,
     private readonly logger: LoggerService,
     @Inject(DOCKERODE) private readonly docker: Dockerode,
+    @Optional() private readonly security?: AccountSecurityService,
   ) {}
   private directories() {
     const value = this.config.get('directories');
@@ -365,6 +368,21 @@ export class BackupRestoresService implements OnModuleDestroy {
   async prepare(importId: string, ownerId: number, credentials: Credentials, manifestSha256: string) {
     if (!uuid.test(importId) || !/^[a-f0-9]{64}$/.test(manifestSha256)) throw new NotFoundException('Reviewed backup not found.');
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    return this.prepareAuthorized(importId, ownerId, manifestSha256, { kind: 'legacy', credentials });
+  }
+  async prepareForSession(importId: string, ownerId: number, request: Request, credentials: Credentials | undefined, manifestSha256: string) {
+    if (!uuid.test(importId) || !/^[a-f0-9]{64}$/.test(manifestSha256)) throw new NotFoundException('Reviewed backup not found.');
+    const actor = await authorizeBackupRestoreSession(this.auth, this.security, request, ownerId, credentials);
+    return this.prepareAuthorized(importId, ownerId, manifestSha256, { kind: 'session', request, credentials, actor });
+  }
+  private async prepareAuthorized(
+    importId: string,
+    ownerId: number,
+    manifestSha256: string,
+    authorization:
+      | { kind: 'legacy'; credentials: Credentials }
+      | { kind: 'session'; request: Request; credentials: Credentials | undefined; actor: Awaited<ReturnType<typeof authorizeBackupRestoreSession>> },
+  ) {
     await this.prepareStartup();
     if (this.preparing || this.pending || backupMaintenanceActive() || installationMode().phase !== 'normal')
       throw new ConflictException('Finish the current operation or restore recovery before starting another restore.');
@@ -407,7 +425,17 @@ export class BackupRestoresService implements OnModuleDestroy {
         directories: this.directories(),
         signal: abort.signal,
         claimReviewedSource: async (journal, accept) => {
-          await this.imports.claimReviewedSource(importId, ownerId, credentials, { journal, manifestSha256, signal: abort.signal, prepare: accept });
+          const options = { journal, manifestSha256, signal: abort.signal, prepare: accept };
+          if (authorization.kind === 'session')
+            await this.imports.claimReviewedSourceForSession(
+              importId,
+              ownerId,
+              authorization.request,
+              authorization.credentials,
+              authorization.actor,
+              options,
+            );
+          else await this.imports.claimReviewedSource(importId, ownerId, authorization.credentials, options);
         },
       });
       setRestoreRecoveryRequired(true);

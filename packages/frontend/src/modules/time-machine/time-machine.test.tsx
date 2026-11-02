@@ -19,12 +19,16 @@ import {
   pointMotionEnabled,
   pointMotionSeconds,
   pointPreviewAdmitted,
+  timelineIndexAt,
+  timelineOffsets,
   timelineTarget,
+  timelineWindow,
   verifiedRestoreReview,
 } from './timeline-state';
 import { historicalPoint, readyReview } from './time-machine.test-data';
 import { CapturedContents, capturedContents } from './captured-contents';
 import { timeMachineActivity } from './time-machine-activity';
+import { TimeMachineSetupView } from './time-machine-settings';
 
 test('historical projection uses sealed metadata without substituting a current wallpaper or live readings', () => {
   const point = historicalPoint();
@@ -42,6 +46,21 @@ test('historical projection uses sealed metadata without substituting a current 
   expect(html).not.toContain('/wallpapers/');
   expect(html).toContain('Readings were not captured');
   expect(historicalAssetPath(point)).toBeNull();
+});
+
+test('disabled Time Machine setup names the captured content and keeps enabling state honest', () => {
+  const ready = renderToStaticMarkup(<TimeMachineSetupView pending={false} onEnable={() => {}} />);
+  expect(ready).toContain('What a Time Machine point includes');
+  expect(ready).toContain('The server database');
+  expect(ready).toContain('Orbis configuration');
+  expect(ready).toContain('Managed app data');
+  expect(ready).toContain('Operating system snapshots are not included.');
+  expect(ready).toContain('>Enable Time Machine</button>');
+  expect(ready).not.toContain('Experimental Time Machine');
+
+  const pending = renderToStaticMarkup(<TimeMachineSetupView pending onEnable={() => {}} />);
+  expect(pending).toContain('disabled=""');
+  expect(pending).toContain('Enabling Time Machine…');
 });
 
 test('restore contents report sealed coverage without claiming omitted images or bulk storage', () => {
@@ -169,6 +188,61 @@ test('the date ruler ascends oldest to newest independently of the newest-first 
   expect(html.match(/tabindex="0"/g)).toHaveLength(1);
   expect(html.match(/tm-ruler-tick/g)).toHaveLength(2);
   expect(html).not.toContain('<a ');
+});
+
+// UI stress fixtures exceed the server's storage limit; they are never API or live data.
+function timelineStressPoints(count: number) {
+  const template = historicalPoint();
+  return Array.from({ length: count }, (_, index) => {
+    const id = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+    const createdAt = template.createdAt + index * 60_000;
+    return { ...template, id, createdAt, metadata: template.metadata ? { ...template.metadata, id, createdAt } : null };
+  });
+}
+
+test('large metadata-only UI histories mount nearby dates and retain a distant selected date with its full list position', () => {
+  for (const count of [100, 1000, 10_000]) {
+    const points = timelineStressPoints(count);
+    const selected = points.at(-1)?.id ?? null;
+    const html = renderToStaticMarkup(<HistoricalDateRuler points={points} selected={selected} onSelect={() => {}} />);
+    expect((html.match(/data-point-id=/g) ?? []).length).toBeLessThanOrEqual(14);
+    expect(html).toContain(`data-point-id="${selected}"`);
+    expect(html).toContain(`aria-posinset="${count}" aria-setsize="${count}"`);
+    expect(html.match(/aria-current="date"/g)).toHaveLength(1);
+    expect(html.match(/tabindex="0"/g)).toHaveLength(1);
+    const stack = renderToStaticMarkup(<HistoricalPointStack points={points} selected={selected} />);
+    expect(stack.match(/class="tm-home-layer"/g)).toHaveLength(10);
+    expect(stack.match(/class="tm-historical-home"/g)).toHaveLength(1);
+    expect(stack).toContain('Saved server');
+  }
+});
+
+test('virtual ruler range calculation bounds rows across scroll positions, endpoint jumps and larger measured sizes', () => {
+  const points = timelineStressPoints(10_000);
+  for (const size of [76, 160, 240]) {
+    const offsets = timelineOffsets(points, new Map(), size);
+    for (const index of [0, 1, 200, 5000, 9999, 5000, 199, 0, 9999]) {
+      const position = offsets[index] ?? 0;
+      const indices = timelineWindow(offsets, position, 640, [9999, 0]);
+      expect(indices.length).toBeLessThanOrEqual(18);
+      expect(indices).toContain(index);
+      expect(indices).toContain(9999);
+      expect(indices).toContain(0);
+      expect(new Set(indices).size).toBe(indices.length);
+      expect(timelineIndexAt(offsets, position)).toBe(index);
+    }
+    expect(timelineIndexAt(offsets, -20)).toBe(0);
+    expect(timelineIndexAt(offsets, Number.MAX_SAFE_INTEGER)).toBe(9999);
+  }
+  const sizes = new Map(points.slice(0, 100).map((point, index) => [point.id, index % 2 ? 240 : 76]));
+  const offsets = timelineOffsets(points, sizes);
+  expect(offsets[100]).toBe(15_800);
+  expect(timelineIndexAt(offsets, 15_799)).toBe(99);
+  expect(timelineIndexAt(offsets, 15_800)).toBe(100);
+  expect(timelineWindow([0], 0, 640)).toEqual([]);
+  const ordered = orderedPoints(points);
+  expect(timelineTarget(ordered, ordered[0]?.id ?? null, 'Home')).toBe(points[0]?.id ?? null);
+  expect(timelineTarget(ordered, points[0]?.id ?? null, 'End')).toBe(ordered[0]?.id ?? null);
 });
 test('ten cards unfold from a compact plane into a bounded perspective fan at desktop and phone sizes', () => {
   for (const compact of [false, true]) {

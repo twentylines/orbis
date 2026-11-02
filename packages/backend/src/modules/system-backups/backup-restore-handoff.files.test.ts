@@ -48,6 +48,8 @@ const connection = { host: 'database', port: 5432, user: 'fixture', password: 'f
 const queue = { host: 'queue', username: 'fixture', password: 'fixture-queue-password' };
 const targetEnvironment = () =>
   Object.entries({
+    ROOT_FOLDER_HOST: '/srv/orbis',
+    RUNTIPI_APP_DATA_PATH: '/srv/orbis',
     POSTGRES_HOST: connection.host,
     POSTGRES_PORT: String(connection.port),
     POSTGRES_USERNAME: connection.user,
@@ -95,6 +97,8 @@ beforeEach(async () => {
     Name: '/controller',
     Image: image,
     Config: {
+      Hostname: controller,
+      WorkingDir: '/app',
       User: '0',
       Env: ['NODE_ENV=production'],
       Labels: {
@@ -109,7 +113,7 @@ beforeEach(async () => {
     HostConfig: { NetworkMode: 'fixture', RestartPolicy: { Name: 'unless-stopped', MaximumRetryCount: 0 } },
     State: { Running: true, Paused: false, Restarting: false, StartedAt: '2026-01-01T00:00:00Z' },
     RestartCount: 0,
-    NetworkSettings: { Networks: { fixture: {} } },
+    NetworkSettings: { Networks: { fixture: { NetworkID: 'b'.repeat(64), EndpointID: 'fixture-endpoint', IPAddress: '172.30.0.2' } } },
     Mounts: [
       ...['state', 'apps', 'repos', 'media', 'user-config', 'traefik', 'backups', 'logs', '.env'].map((name) => ({
         Type: 'bind',
@@ -120,6 +124,7 @@ beforeEach(async () => {
       })),
       { Type: 'bind', Source: '/srv/orbis/app-data', Destination: '/app-data', RW: true },
       { Type: 'bind', Source: '/srv/orbis/cache', Destination: '/cache', RW: true },
+      { Type: 'bind', Source: '/srv/orbis/docker-compose.yml', Destination: '/data/docker-compose.yml', RW: false },
       { Type: 'bind', Source: '/var/run/docker.sock', Destination: '/var/run/docker.sock', RW: false },
     ],
   } as unknown as Dockerode.ContainerInspectInfo);
@@ -149,6 +154,19 @@ beforeEach(async () => {
     } as unknown as Dockerode.ContainerInspectInfo);
   });
   const docker = {
+    modem: {
+      dial: (request: { path: string }, callback: (error: Error | null, value?: unknown) => void) => {
+        if (request.path.startsWith('/images/'))
+          return callback(null, { Id: image, Config: { Labels: { 'io.orbis.installation-protocol': 'orbis.installation-state.v1' } } });
+        return callback(null, {
+          Id: 'b'.repeat(64),
+          Driver: 'bridge',
+          Scope: 'local',
+          Labels: { 'com.docker.compose.project': 'fixture', 'com.docker.compose.network': 'tipi_main_network' },
+          Containers: { [controller]: { EndpointID: 'fixture-endpoint', IPv4Address: '172.30.0.2/16' } },
+        });
+      },
+    },
     getContainer: (id: string) => {
       const resolved = snapshots.has(id) ? id : [...snapshots.values()].find((value) => value.Name === `/${id}`)?.Id;
       const handle = resolved ? handles.get(resolved) : undefined;
@@ -214,6 +232,52 @@ it('creates a durable reviewed-source handoff without starting or stopping conta
   for (const h of handles.values()) expect(h.start).not.toHaveBeenCalled();
   assertOriginalUntouched();
   expect(await fs.readFile(path.join(options.directories.data, '.env'))).toEqual(before);
+});
+it.each(['service', 'configuration', 'protocol', 'compose-mount', 'writable-compose', 'hostname', 'network', 'stopped', 'privileged'] as const)(
+  'rejects unsupported controller %s before creating auxiliaries or publishing a journal',
+  async (fault) => {
+    const claim = vi.spyOn(options, 'claimReviewedSource');
+    const original = snapshots.get(controller);
+    if (!original) throw new Error('Missing controller fixture');
+    if (fault === 'service') original.Config.Labels['com.docker.compose.service'] = 'orbis';
+    if (fault === 'configuration') original.Config.Labels['com.docker.compose.project.config_files'] = '/srv/orbis/preview.yml';
+    if (fault === 'protocol') original.Config.Labels['io.orbis.installation-protocol'] = 'unsupported';
+    if (fault === 'hostname') original.Config.Hostname = 'different';
+    if (fault === 'network') {
+      const network = original.NetworkSettings.Networks.fixture;
+      if (!network) throw new Error('Missing network fixture');
+      network.EndpointID = '';
+    }
+    if (fault === 'stopped') original.State.Running = false;
+    if (fault === 'privileged') original.HostConfig.Privileged = true;
+    if (fault === 'compose-mount') original.Mounts = original.Mounts.filter((mount) => mount.Destination !== '/data/docker-compose.yml');
+    if (fault === 'writable-compose') {
+      const mount = original.Mounts.find((entry) => entry.Destination === '/data/docker-compose.yml');
+      if (!mount) throw new Error('Missing compose mount fixture');
+      mount.RW = true;
+    }
+    await expect(prepareRestoreHandoff(options)).rejects.toThrow('managed Compose controller support could not be verified');
+    expect(create).not.toHaveBeenCalled();
+    expect(await currentJournal()).toBeUndefined();
+    expect(claim).not.toHaveBeenCalled();
+  },
+);
+it('cleans inert auxiliaries without a journal if the controller changes during allocation', async () => {
+  const allocate = create.getMockImplementation() as ((plan: Dockerode.ContainerCreateOptions) => Promise<unknown>) | undefined;
+  if (!allocate) throw new Error('Missing allocator fixture');
+  create.mockImplementation(async (plan: Dockerode.ContainerCreateOptions) => {
+    const result = await allocate(plan);
+    if (plan.Labels?.['io.orbis.restore.role'] === 'worker') {
+      const original = snapshots.get(controller);
+      if (!original) throw new Error('Missing controller fixture');
+      original.Config.Labels['com.docker.compose.service'] = 'orbis';
+    }
+    return result;
+  });
+  await expect(prepareRestoreHandoff(options)).rejects.toThrow();
+  expect(await currentJournal()).toBeUndefined();
+  expect(handles.get('2'.repeat(64))?.remove).toHaveBeenCalledOnce();
+  expect(handles.get('3'.repeat(64))?.remove).toHaveBeenCalledOnce();
 });
 it.each([0, -1, Number.NaN, 1.5])('rejects invalid owner identity before creating Docker resources (%s)', async (ownerId) => {
   options.ownerId = ownerId;

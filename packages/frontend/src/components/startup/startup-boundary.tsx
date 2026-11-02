@@ -5,12 +5,18 @@ import { StartupSurface } from './startup-surface';
 import { startupCycleRemaining } from './startup-timing';
 import { useThemeApplyStartup } from '@/modules/theme-packs/use-theme-apply-startup';
 import { ThemeApplyCover } from '@/modules/theme-packs/theme-apply-cover';
+import { showSetupSpace } from './sign-in-onboarding';
 
 const ReadyContext = createContext<(ready: boolean) => void>(() => undefined);
 type SessionTransition = 'signing-in' | 'logging-out' | 'preparing-orbis';
-const SessionContext = createContext<{ begin: (transition?: SessionTransition) => void; finish: () => Promise<void> }>({
+const SessionContext = createContext<{
+  begin: (transition?: SessionTransition, firstSetup?: boolean) => void;
+  finish: () => Promise<void>;
+  setFirstSetup: (value: boolean) => void;
+}>({
   begin: () => undefined,
   finish: async () => undefined,
+  setFirstSetup: () => undefined,
 });
 export const useStartupSession = () => useContext(SessionContext);
 
@@ -26,11 +32,16 @@ export function StartupBoundary({ children }: PropsWithChildren) {
   const [phase, setPhase] = useState<'loading' | 'finishing' | 'revealing' | 'complete'>('loading');
   const surface = useRef<HTMLDivElement>(null);
   const [sessionTransition, setSessionTransition] = useState<SessionTransition | null>(null);
+  const transitionRef = useRef<SessionTransition | null>(null);
+  transitionRef.current = sessionTransition;
   const [sessionPending, setSessionPending] = useState(false);
+  const [firstSetup, setFirstSetup] = useState(false);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const finished = useRef<Array<() => void>>([]);
-  const begin = useCallback((transition: SessionTransition = 'signing-in') => {
+  const begin = useCallback((transition: SessionTransition = 'signing-in', firstSetup?: boolean) => {
+    transitionRef.current = transition;
+    if (firstSetup !== undefined) setFirstSetup(firstSetup);
     setSessionTransition(transition);
     setSessionPending(true);
     setPhase('loading');
@@ -40,7 +51,10 @@ export function StartupBoundary({ children }: PropsWithChildren) {
     if (phaseRef.current === 'complete') return Promise.resolve();
     return new Promise<void>((resolve) => finished.current.push(resolve));
   }, []);
-  const session = useMemo(() => ({ begin, finish }), [begin, finish]);
+  const reportFirstSetup = useCallback((value: boolean) => {
+    if (transitionRef.current !== 'signing-in') setFirstSetup(value);
+  }, []);
+  const session = useMemo(() => ({ begin, finish, setFirstSetup: reportFirstSetup }), [begin, finish, reportFirstSetup]);
 
   useLayoutEffect(() => {
     if (!ready && phase === 'complete') setPhase('loading');
@@ -95,6 +109,7 @@ export function StartupBoundary({ children }: PropsWithChildren) {
             overlay
             initial
             freshAppearance={operationBoot.operation === 'restore'}
+            setupSpace={showSetupSpace(firstSetup, sessionTransition, operationBoot.operation, themeHandoff.active)}
             signingIn={sessionTransition === 'signing-in'}
             loggingOff={sessionTransition === 'logging-out'}
             label={sessionTransition === 'preparing-orbis' ? 'Preparing Orbis' : undefined}

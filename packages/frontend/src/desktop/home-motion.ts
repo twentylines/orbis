@@ -27,22 +27,24 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
     const animations = new Set<Animation>();
     const opening = Boolean(document.querySelector('[data-initial-startup]'));
     let openingStart: number | null = null;
+    let frame = 0;
     const animate = () => {
       if (document.querySelector('[data-initial-startup]:not([data-revealing])')) return;
       const view = root.querySelector<HTMLElement>('.desktop-view-home');
       if (!view) return;
       view.dataset.homeEntry = key;
       const tiles = [...view.querySelectorAll<HTMLElement>(openingSelector)].filter((tile) => !entered.has(tile));
+      if (!tiles.length) return;
       const distance = opening ? Math.min(72, innerWidth * 0.08) : Math.min(40, innerWidth * 0.055) * entryDirection;
       const now = document.timeline.currentTime;
       if (opening && openingStart === null && typeof now === 'number') openingStart = now;
       const start = opening ? openingStart : now;
-      const viewBounds = view.getBoundingClientRect();
+      const viewBounds = opening ? view.getBoundingClientRect() : null;
       const positions = tiles.map((tile) => {
-        const bounds = tile.getBoundingClientRect();
+        const bounds = viewBounds ? tile.getBoundingClientRect() : null;
         return {
           tile,
-          delay: opening ? Math.min(120, Math.max(0, (bounds.left - viewBounds.left) / Math.max(1, viewBounds.width)) * 120) : 0,
+          delay: bounds && viewBounds ? Math.min(120, Math.max(0, (bounds.left - viewBounds.left) / Math.max(1, viewBounds.width)) * 120) : 0,
         };
       });
       for (const { tile, delay } of positions) {
@@ -77,7 +79,11 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
         )
       )
         return;
-      animate();
+      if (!frame)
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          animate();
+        });
     });
     observer.observe(root, { childList: true, subtree: true });
     animate();
@@ -85,6 +91,7 @@ export function useHomeMotion(key: string, active: boolean, direction: number) {
     return () => {
       window.removeEventListener('orbis-startup-reveal', animate);
       observer.disconnect();
+      cancelAnimationFrame(frame);
       for (const animation of animations) animation.cancel();
       const view = root.querySelector<HTMLElement>('.desktop-view-home');
       if (view?.dataset.homeEntry === key) delete view.dataset.homeEntry;

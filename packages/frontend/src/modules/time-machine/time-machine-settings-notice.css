@@ -1,0 +1,24 @@
+.tm-first-open-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 14px;
+}
+
+.tm-first-open-notice > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.tm-first-open-notice .alert-heading,
+.tm-first-open-notice .alert-description {
+  margin: 0;
+}
+
+.tm-first-open-notice .alert-heading {
+  margin-bottom: 3px;
+}
+
+.tm-first-open-notice > button {
+  flex: none;
+}

@@ -50,6 +50,7 @@ const legacyStoredPointSchema = type({
   archiveSha256: timeMachineHashSchema.or('null'),
   metadataSha256: timeMachineHashSchema.or('null'),
   'assetBytes?': `0 <= number.integer <= ${timeMachineAssetLimit + historicalIconLimits.bundleBytes + 104}`,
+  'onboardingAttemptId?': timeMachineIdSchema,
 }).onUndeclaredKey('reject');
 const runtimeStoredPointSchema = legacyStoredPointSchema
   .omit('version')
@@ -216,15 +217,21 @@ export class TimeMachineStore {
   }
   async list(): Promise<StoredTimeMachinePoint[]> {
     const directory = path.join(this.root(), 'points');
+    let names: string[];
     try {
       await this.directory(directory);
-      const names = await fs.readdir(directory);
-      if (names.length > timeMachineLimits.points || names.some((name) => !timeMachineIdSchema.allows(name)))
-        throw timeMachineConflict('storage-unavailable');
+      names = await fs.readdir(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw error;
+    }
+    if (names.length > timeMachineLimits.points || names.some((name) => !timeMachineIdSchema.allows(name)))
+      throw timeMachineConflict('storage-unavailable');
+    try {
       const points = await Promise.all(names.map((name) => this.load(name)));
       return points.sort((first, second) => second.createdAt - first.createdAt);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw timeMachineConflict('storage-unavailable');
       throw error;
     }
   }
@@ -235,13 +242,63 @@ export class TimeMachineStore {
   }
   async update(point: StoredTimeMachinePoint) {
     const current = await this.load(point.id);
-    if (current.status === 'sealed' || current.id !== point.id || current.ownerId !== point.ownerId || !storedPointSchema.allows(point))
+    if (
+      current.status === 'sealed' ||
+      current.id !== point.id ||
+      current.ownerId !== point.ownerId ||
+      current.onboardingAttemptId !== point.onboardingAttemptId ||
+      !storedPointSchema.allows(point)
+    )
       throw timeMachineConflict('point-integrity-failed');
     await this.atomic(path.join(this.pointDirectory(point.id), 'point.json'), JSON.stringify(point), true);
   }
-  create(ownerId: number, version: 1 | 2 = 1) {
+  async onboardingAttempt(id: string, ownerId: number, create = false) {
+    if (!timeMachineIdSchema.allows(id) || !Number.isSafeInteger(ownerId) || ownerId < 1) throw timeMachineConflict('invalid-request');
+    const directory = path.join(this.root(), 'onboarding-attempts');
+    const file = path.join(directory, `${id}.json`);
+    const machineId = await this.machineIdentity(create);
+    let claimed = false;
+    if (create) {
+      await this.directory(directory, true);
+      const entries = await fs.readdir(directory);
+      if (entries.length >= 256 && !entries.includes(`${id}.json`)) throw timeMachineConflict('capacity-exceeded');
+      try {
+        await this.atomic(file, JSON.stringify({ version: 1, id, ownerId, machineId, state: 'reserved' }), false);
+        claimed = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+    }
+    const value: unknown = JSON.parse((await this.read(file, 4096)).toString());
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      Object.keys(value).sort().join(',') !== 'id,machineId,ownerId,state,version' ||
+      !('id' in value && 'ownerId' in value && 'machineId' in value && 'state' in value && 'version' in value) ||
+      value.version !== 1 ||
+      value.id !== id ||
+      value.ownerId !== ownerId ||
+      value.machineId !== machineId ||
+      (value.state !== 'reserved' && value.state !== 'ready')
+    )
+      throw timeMachineConflict('point-not-found');
+    return { claimed, state: value.state };
+  }
+
+  async readyOnboardingAttempt(id: string, ownerId: number) {
+    const current = await this.onboardingAttempt(id, ownerId);
+    if (current.state !== 'reserved') throw timeMachineConflict('capture-recovery-required');
+    const machineId = await this.machineIdentity();
+    const file = path.join(this.root(), 'onboarding-attempts', `${id}.json`);
+    await this.atomic(file, JSON.stringify({ version: 1, id, ownerId, machineId, state: 'ready' }), true);
+  }
+
+  create(ownerId: number, version: 1 | 2 = 1, onboardingAttemptId?: string) {
     return this.serialize(async () => {
       if (!Number.isSafeInteger(ownerId) || ownerId < 1) throw timeMachineConflict('invalid-request');
+      if (onboardingAttemptId !== undefined && (version !== 2 || !timeMachineIdSchema.allows(onboardingAttemptId)))
+        throw timeMachineConflict('invalid-request');
       const points = await this.list();
       if (points.length) {
         const key = await this.masterKey(false);
@@ -255,7 +312,7 @@ export class TimeMachineStore {
           timeMachineLimits.bytes
       )
         throw timeMachineConflict('capacity-exceeded');
-      const id = randomUUID();
+      const id = onboardingAttemptId ?? randomUUID();
       const passphrase = randomBytes(32).toString('base64url');
       const point = storedPointSchema.assert({
         version,
@@ -269,6 +326,7 @@ export class TimeMachineStore {
         archiveBytes: 0,
         archiveSha256: null,
         metadataSha256: null,
+        ...(onboardingAttemptId ? { onboardingAttemptId } : {}),
         ...(version === 2
           ? {
               runtimeBytes: 0,
@@ -280,8 +338,16 @@ export class TimeMachineStore {
             }
           : {}),
       });
-      await this.directory(this.pointDirectory(id), true);
-      await this.atomic(path.join(this.pointDirectory(id), 'point.json'), JSON.stringify(point), false);
+      if (onboardingAttemptId) {
+        const destination = this.pointDirectory(id);
+        await this.directory(path.dirname(destination), true);
+        await fs.mkdir(destination, { mode: 0o700 });
+        await this.atomic(path.join(destination, 'point.json'), JSON.stringify(point), false);
+        await this.sync(path.dirname(destination));
+      } else {
+        await this.directory(this.pointDirectory(id), true);
+        await this.atomic(path.join(this.pointDirectory(id), 'point.json'), JSON.stringify(point), false);
+      }
       return { point, passphrase };
     });
   }

@@ -164,8 +164,8 @@ export class CapsulesService {
     return job;
   }
   async startExport(ownerId: number, request: Request, credentials: Credentials, pointId: string, passphrase: string) {
-    if (!uuid.test(pointId) || typeof passphrase !== 'string' || passphrase.trim().length < 12 || passphrase.length > 1024)
-      throw new BadRequestException('Choose a capture and an archive passphrase of 12 to 1024 characters.');
+    if (!uuid.test(pointId) || typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
+      throw new BadRequestException('Choose a capture and an archive passphrase of 8 to 1024 characters.');
     await this.verifyAccount(request, ownerId, credentials);
     const job = await this.create(ownerId, 'export');
     job.pointId = pointId;
@@ -346,7 +346,8 @@ export class CapsulesService {
       this.active ||
       this.reserved ||
       typeof passphrase !== 'string' ||
-      passphrase.trim().length < 12 ||
+      passphrase.length < 8 ||
+      !passphrase.trim() ||
       passphrase.length > 1024
     )
       throw fail();

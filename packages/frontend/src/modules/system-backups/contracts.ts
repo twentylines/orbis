@@ -12,6 +12,7 @@ export const exportJobSchema = type({
   'expiresAt?': 'number > 0',
   needsRecovery: 'boolean',
   restartRequired: 'boolean',
+  'creationDownloadAvailable?': 'true',
 });
 export const reviewSchema = type({
   formatVersion: '1',

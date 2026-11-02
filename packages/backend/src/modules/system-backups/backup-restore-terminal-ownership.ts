@@ -67,11 +67,9 @@ export type TerminalRecordedIdentity = {
   connection: { host: string; port: number; user: string };
   database: string;
 };
-export function controllerOwnership(
-  journal: BackupRestoreJournal,
-  original: Dockerode.ContainerInspectInfo,
-  recorded: TerminalRecordedIdentity,
-): TerminalOwnership {
+const controllerIdentitySchema = terminalOwnershipSchema.omit('id', 'nonce', 'worker', 'verifier', 'apps', 'connection');
+
+export function preflightRestoreControllerOwnership(original: Dockerode.ContainerInspectInfo) {
   const physical = deriveRestoreStorageLayout(original.Mounts);
   const root = path.dirname(physical.environment);
   const labels = original.Config.Labels ?? {};
@@ -81,16 +79,10 @@ export function controllerOwnership(
   const mainNetwork = networks.includes(mode ?? '') ? mode : networks.find((name) => original.NetworkSettings.Networks[name]?.NetworkID === mode);
   const raw = {
     version: 1,
-    id: journal.state.id,
-    nonce: journal.state.nonce,
     original: original.Id,
     fingerprint: snapshotRestoreContainer(original).fingerprint,
     image: original.Image,
     name: original.Name,
-    worker: recorded.identity.worker ? { id: recorded.identity.worker.id, fingerprint: recorded.identity.worker.fingerprint } : undefined,
-    verifier: { id: recorded.identity.verifier.id, fingerprint: recorded.identity.verifier.fingerprint },
-    apps: recorded.identity.apps.map((app) => app.container.id),
-    connection: { host: recorded.connection.host, user: recorded.connection.user, port: recorded.connection.port, database: recorded.database },
     project: labels['com.docker.compose.project'],
     root,
     configFiles: files,
@@ -104,16 +96,32 @@ export function controllerOwnership(
     entrypoint: original.Config.Entrypoint ?? [],
     protocol: labels['io.orbis.installation-protocol'],
   };
-  const value = terminalOwnershipSchema(raw);
+  const value = controllerIdentitySchema(raw);
   if (
     value instanceof type.errors ||
-    original.Id !== journal.state.originalController ||
     labels['com.docker.compose.service'] !== 'runtipi' ||
     labels['com.docker.compose.oneoff']?.toLowerCase() !== 'false' ||
     labels['com.docker.compose.project.working_dir'] !== root ||
     !files.includes(path.join(root, 'docker-compose.yml'))
   )
     throw terminalFailure();
+  return value;
+}
+export function controllerOwnership(
+  journal: BackupRestoreJournal,
+  original: Dockerode.ContainerInspectInfo,
+  recorded: TerminalRecordedIdentity,
+): TerminalOwnership {
+  const value = terminalOwnershipSchema({
+    ...preflightRestoreControllerOwnership(original),
+    id: journal.state.id,
+    nonce: journal.state.nonce,
+    worker: recorded.identity.worker ? { id: recorded.identity.worker.id, fingerprint: recorded.identity.worker.fingerprint } : undefined,
+    verifier: { id: recorded.identity.verifier.id, fingerprint: recorded.identity.verifier.fingerprint },
+    apps: recorded.identity.apps.map((app) => app.container.id),
+    connection: { host: recorded.connection.host, user: recorded.connection.user, port: recorded.connection.port, database: recorded.database },
+  });
+  if (value instanceof type.errors || original.Id !== journal.state.originalController) throw terminalFailure();
   return value;
 }
 export async function retainRestoreControllerOwnership(
@@ -230,7 +238,7 @@ export async function inspectTerminalContainer(docker: Dockerode, id: string, si
 export async function proveManagedController(
   docker: Dockerode,
   current: Dockerode.ContainerInspectInfo,
-  ownership: TerminalOwnership,
+  ownership: ReturnType<typeof preflightRestoreControllerOwnership>,
   controller: string,
   data: string,
   connection: { host: string; port: number; user: string },

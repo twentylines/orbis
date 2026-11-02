@@ -9,9 +9,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
+import type { Request } from 'express';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -47,6 +49,10 @@ export type TransferArchiveGrant = Readonly<{
   open: () => Promise<{ stream: Readable; bytes: number }>;
   cancel: () => Promise<void>;
 }>;
+type DownloadActor = Awaited<ReturnType<AuthService['operatorActionContext']>>;
+type CreationDownload = { actor: DownloadActor; grant: TransferArchiveGrant; ready: boolean; expiresAt: number; timer?: NodeJS.Timeout };
+const sameDownloadActor = (one: DownloadActor, two: DownloadActor) =>
+  one.userId === two.userId && one.sessionBinding === two.sessionBinding && one.securityBinding === two.securityBinding;
 
 export type LocalBackupSnapshot = Readonly<{
   content: string;
@@ -113,6 +119,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   private startupHeld = false;
   private closing = false;
   private readonly transferGrants = new Set<() => Promise<void>>();
+  private readonly creationDownloads = new Map<string, CreationDownload>();
 
   constructor(
     private readonly config: ConfigurationService,
@@ -165,6 +172,8 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
   }
   async onModuleDestroy() {
     this.closing = true;
+    for (const value of this.creationDownloads.values()) clearTimeout(value.timer);
+    this.creationDownloads.clear();
     await Promise.allSettled([...this.transferGrants].map((cancel) => cancel()));
     this.transferGrants.clear();
     if (this.active) {
@@ -292,6 +301,36 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
     return this.begin(ownerId, passphrase);
   }
+  async startForSession(ownerId: number, credentials: { password: string; totpCode?: string }, passphrase: string, request: Request) {
+    await this.initialize();
+    const before = await this.auth.operatorActionContext(request);
+    if (before.userId !== ownerId) throw new ForbiddenException('Sign in again before creating this backup.');
+    await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    const actor = await this.auth.operatorActionContext(request);
+    if (!sameDownloadActor(before, actor)) throw new ForbiddenException('Your account or session changed. Confirm this backup again.');
+    const job = await this.begin(ownerId, passphrase);
+    const expiresAt = Date.now() + 60 * 60_000;
+    const grant = this.transferGrant(ownerId, job.id, randomUUID(), expiresAt, false);
+    const approval: CreationDownload = { actor, grant, ready: false, expiresAt };
+    const expire = () => this.revokeCreationDownload(job.id, approval);
+    approval.timer = setTimeout(expire, 60 * 60_000);
+    approval.timer.unref();
+    this.creationDownloads.set(job.id, approval);
+    void grant.ready.then(() => {
+      if (this.creationDownloads.get(job.id) !== approval) return;
+      approval.ready = true;
+      approval.expiresAt = Math.min(expiresAt, Date.now() + 5 * 60_000);
+      clearTimeout(approval.timer);
+      approval.timer = setTimeout(expire, Math.max(1, approval.expiresAt - Date.now()));
+      approval.timer.unref();
+    }, expire);
+    return { ...job, creationDownloadAvailable: true as const };
+  }
+  private revokeCreationDownload(id: string, approval: CreationDownload) {
+    if (this.creationDownloads.get(id) === approval) this.creationDownloads.delete(id);
+    clearTimeout(approval.timer);
+    void approval.grant.cancel().catch(() => undefined);
+  }
 
   // Server-only capture seam; its controller performs operator/session authorization.
   async startLocalCapture(ownerId: number, passphrase: string, snapshot: (value: LocalBackupSnapshot) => Promise<void>, hooks?: LocalCaptureHooks) {
@@ -310,7 +349,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
 
   private async begin(ownerId: number, passphrase: string, snapshot?: (value: LocalBackupSnapshot) => Promise<void>, hooks?: LocalCaptureHooks) {
     this.assertAvailable();
-    if (typeof passphrase !== 'string' || passphrase.trim().length < 12 || passphrase.length > 1024)
+    if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
       throw new BadRequestException(new BackupArchiveError('passphrase').message);
     if (this.active || [...this.jobs.values()].some((job) => job.resumePending.length || job.restartRequired))
       throw new ConflictException('Finish the current backup or recover its apps before starting another.');
@@ -639,6 +678,40 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     const opened = await this.openArchive(id, ownerId);
     return { stream: opened.file.createReadStream(), bytes: opened.stat.size };
   }
+  async downloadCreated(id: string, ownerId: number, request: Request) {
+    await this.initialize();
+    const job = this.owned(id, ownerId);
+    const actor = await this.auth.operatorActionContext(request);
+    const approval = this.creationDownloads.get(id);
+    const denied = () => new ForbiddenException('The creation download approval expired. Confirm the download with your account password.');
+    if (!approval || actor.userId !== ownerId || actor.sessionBinding !== approval.actor.sessionBinding) throw denied();
+    if (!sameDownloadActor(actor, approval.actor) || Date.now() >= approval.expiresAt) {
+      this.revokeCreationDownload(id, approval);
+      throw denied();
+    }
+    if (!approval.ready) {
+      if (job.status !== 'succeeded' || this.active?.id === id)
+        throw new ConflictException('This backup is still being prepared. Wait for it to finish before downloading.');
+      await approval.grant.ready;
+      if (Date.now() >= approval.expiresAt || this.creationDownloads.get(id) !== approval) throw denied();
+    }
+    this.creationDownloads.delete(id);
+    clearTimeout(approval.timer);
+    let opened: Awaited<ReturnType<TransferArchiveGrant['open']>>;
+    try {
+      opened = await approval.grant.open();
+    } catch (error) {
+      await approval.grant.cancel().catch(() => undefined);
+      throw error;
+    }
+    try {
+      if (!sameDownloadActor(actor, await this.auth.operatorActionContext(request))) throw denied();
+      return opened;
+    } catch (error) {
+      opened.stream.destroy();
+      throw error;
+    }
+  }
 
   async startTransferExport(
     ownerId: number,
@@ -653,7 +726,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
     return this.transferGrant(ownerId, job.id, requestId, expiresAt);
   }
 
-  private transferGrant(ownerId: number, backupId: string, requestId: string, expiresAt: number): TransferArchiveGrant {
+  private transferGrant(ownerId: number, backupId: string, requestId: string, expiresAt: number, cancelBackupOnRevoke = true): TransferArchiveGrant {
     const operation = this.active?.id === backupId ? this.active.done : Promise.resolve();
     let revoked = false;
     let used = false;
@@ -666,7 +739,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
       this.transferGrants.delete(cancel);
       clearTimeout(timer);
       output?.destroy();
-      await this.cancel(backupId, ownerId);
+      if (cancelBackupOnRevoke) await this.cancel(backupId, ownerId);
     };
     const timer = setTimeout(
       () => {
@@ -713,6 +786,7 @@ export class SystemBackupsService implements OnModuleInit, OnModuleDestroy {
         assertValid();
         if (used) throw new ConflictException('This encrypted backup has already been claimed.');
         used = true;
+        if (!cancelBackupOnRevoke) clearTimeout(timer);
         await ready;
         assertValid();
         const opened = await this.openArchive(backupId, ownerId);

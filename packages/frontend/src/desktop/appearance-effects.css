@@ -39,6 +39,9 @@
 
 :root[data-orbis-palette-motion]::view-transition-old(*),
 :root[data-orbis-palette-motion]::view-transition-new(*) {
-  animation-duration: 180ms;
+  animation-duration: 260ms;
   animation-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
+}
+:root[data-orbis-palette-motion]::view-transition {
+  pointer-events: none;
 }

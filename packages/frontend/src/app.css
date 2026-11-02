@@ -513,16 +513,11 @@ body:has(.orbis-theme) .desktop-auth :is(.btn, .form-control) {
   border-top: 1px solid var(--desktop-line);
   font-size: 0.8125rem;
 }
-.orbis-error-details summary {
-  cursor: pointer;
-  color: var(--desktop-muted);
-  width: fit-content;
-}
 .orbis-error-details dl {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 10px 14px;
-  margin: 16px 0 0;
+  margin: 0;
   padding: 14px;
   border: 1px solid var(--desktop-line);
   border-radius: 12px;

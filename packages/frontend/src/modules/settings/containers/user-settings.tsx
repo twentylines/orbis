@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { type SettingsFormValues, UserSettingsForm } from '../components/user-settings-form/user-settings-form';
 import { AutomaticUpdatesSettings } from './automatic-updates-settings';
 import { ReleaseChannelSettings } from './release-channel-settings';
-import { BackupRecoveryContents } from '@/modules/time-machine-capsules/capsules-panel';
+import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
 import { SystemResetPanel } from '@/modules/system-reset/system-reset';
 
@@ -50,7 +50,7 @@ export const UserSettingsContainer = ({ initialValues, section = 'general' }: Pr
   if (section === 'backups')
     return (
       <div id="setting-server-backups">
-        <BackupRecoveryContents
+        <SystemBackupsSettings
           recoveryActions={
             <div id="setting-server-transfer">
               <HostTransferPanel contained />

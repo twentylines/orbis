@@ -18,11 +18,11 @@ export function useSignInBoot() {
       if (shown.current) void session.finish();
     };
   }, [session]);
-  const begin = () => {
+  const begin = (firstSetup?: boolean) => {
     setSigningIn(true);
     shown.current = true;
     setVisible(true);
-    session.begin();
+    session.begin('signing-in', firstSetup);
     exit.current = animateAuthExit(prefersReducedMotion());
   };
   const finish = async (restoreForm = false) => {

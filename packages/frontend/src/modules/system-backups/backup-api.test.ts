@@ -81,6 +81,13 @@ test('recognized restore conflict messages are surfaced exactly', async () => {
   });
 });
 
+test('unsupported managed controller preflight provides the specific safe reason', async () => {
+  const message = 'This installation cannot restore backups because managed Compose controller support could not be verified.';
+  await withFetch(Response.json({ message }, { status: 409 }), async () => {
+    await expect(backupRequest('/restores', 'POST', {})).rejects.toThrow(message);
+  });
+});
+
 test('unknown, malformed and credential-bearing conflict bodies stay generic', async () => {
   const bodies = [
     Response.json({ message: 'private upstream detail' }, { status: 409 }),
@@ -303,6 +310,16 @@ test('native attachment POST clears credential fields and exposes no success cla
     expect(errors[0]).not.toContain('private-server-error');
     cleanup();
     expect(frameRemoved).toBe(true);
+    fields.length = 0;
+    const creationCleanup = downloadBackup(id, { creationSession: true }, (message) => errors.push(message));
+    expect(sent).toMatchObject({
+      method: 'POST',
+      action: `/api/system-backups/${id}/download`,
+      fields: [['creationSession', 'true']],
+    });
+    expect(form.action).not.toContain('creationSession');
+    expect(fields.every((field) => field.value === '')).toBe(true);
+    creationCleanup();
   } finally {
     if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
     else Reflect.deleteProperty(globalThis, 'document');

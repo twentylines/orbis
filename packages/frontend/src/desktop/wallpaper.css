@@ -58,10 +58,10 @@ html:not([data-desktop-mode="dark"]) .desktop > .desktop-wallpaper-layer .deskto
   background:
     linear-gradient(
       135deg,
-      color-mix(in srgb, var(--desktop-base-surface) 72%, transparent),
-      color-mix(in srgb, var(--desktop-base-surface) 62%, transparent) 48%,
-      color-mix(in srgb, var(--desktop-base-surface) 42%, transparent)
-    ), var(--desktop-wallpaper-tint);
+      color-mix(in srgb, var(--desktop-base-surface) 30%, transparent),
+      color-mix(in srgb, var(--desktop-base-surface) 16%, transparent) 36%,
+      transparent 70%
+    ), color-mix(in srgb, var(--desktop-preset-tint) 6%, transparent);
 }
 .orbis-startup > .desktop-wallpaper-layer .desktop-wallpaper-shade {
   background: var(--orbis-startup-shade);

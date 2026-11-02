@@ -32,6 +32,7 @@ function render(
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
   client.setQueryData(appContextQueryKey(), { user: { id: 7, operator: true, totpEnabled: true } });
+  client.setQueryData(['account-security', 7], { version: 1, revision: 0, requireCaptureAuthentication: false, requireRestoreAuthentication: false });
   const snapshot: BackupSnapshot = {
     exports: { available: true, retentionHours: 24, jobs: exports },
     imports: { available: true, retentionHours: 24, jobs: imports },
@@ -120,20 +121,20 @@ test('guided onboarding retains Refresh when backup status fails', () => {
   expect(markup).toContain('Status unavailable.');
 });
 
-test('embedded upload uses a real separate file button, aligned filename status and fresh authentication', () => {
+test('embedded restore uses a file button, neutral backup key and one restore action', () => {
   const markup = render();
   expect(markup).toContain('noValidate=""');
-  expect(markup).toContain('name="password"');
-  expect(markup).toContain('name="totpCode"');
+  expect(markup).not.toContain('name="password"');
+  expect(markup).not.toContain('name="totpCode"');
   expect(markup).toContain('required=""');
   expect(markup).toContain('>Choose file</button>');
   expect(markup).toContain('No file chosen');
   expect(markup).toContain('type="file"');
   expect(markup).toContain('class="visually-hidden"');
   expect(markup).toContain('accept=".orbis,application/octet-stream"');
-  expect(markup).toContain('name="password"');
-  expect(markup).toContain('name="totpCode"');
-  expect(markup).toContain('>Continue</button>');
+  expect(markup).toContain('name="passphrase"');
+  expect(markup).toContain('>Restore</button>');
+  expect(markup).toContain('Restore this backup');
   expect(markup).not.toContain('>Back</button>');
   expect(markup).not.toContain('>Cancel</button>');
   expect(markup).not.toContain('>Upload encrypted backup</button>');
@@ -151,7 +152,7 @@ test('restore remains in the embedded card with real preparation progress and re
     canRecover: false,
     preparation: { stage: 'files', completedBytes: 512, totalBytes: 1024, records: 0, totalRecords: null },
   });
-  expect(markup).toContain('recovery-flight');
+  expect(markup).toContain('recovery-progress');
   expect(markup).toContain('value="50"');
   expect(markup).toContain('>Cancel</button>');
   expect(markup).not.toContain('>Choose file</button>');
@@ -166,13 +167,15 @@ function encryptionValues(password: string, passphrase = '', repeatPassphrase = 
   values.set('repeatPassphrase', repeatPassphrase);
   return values;
 }
-test('account-password encryption uses the exact submitted fresh password and retains the existing strength policy', () => {
+test('account-password encryption uses the exact submitted password and accepts eight characters', () => {
   const password = '  example account password  ';
   expect(backupEncryptionPassphrase(encryptionValues(password, 'ignored separate phrase'), 'export', true)).toBe(password);
-  for (const value of ['short', ' '.repeat(20), 'x'.repeat(11), 'x'.repeat(1025)]) {
+  for (const value of ['short', ' '.repeat(20), 'x'.repeat(7), 'x'.repeat(1025)]) {
     expect(() => backupEncryptionPassphrase(encryptionValues(value), 'export', true)).toThrow('Choose a separate backup passphrase');
   }
   expect(backupEncryptionPassphrase(encryptionValues('x'.repeat(12)), 'export', true)).toBe('x'.repeat(12));
+  expect(backupEncryptionPassphrase(encryptionValues('x'.repeat(8)), 'export', true)).toBe('x'.repeat(8));
+  expect(backupEncryptionPassphrase(encryptionValues(' abcdefg'), 'export', true)).toBe(' abcdefg');
   expect(backupEncryptionPassphrase(encryptionValues('x'.repeat(1024)), 'export', true)).toHaveLength(1024);
 });
 test('separate encryption and legacy restore never silently substitute the local account password', () => {
@@ -186,7 +189,7 @@ test('separate encryption and legacy restore never silently substitute the local
       false,
     ),
   ).toThrow('did not match');
-  expect(() => backupEncryptionPassphrase(encryptionValues('different local password', ''), 'review', true)).toThrow('between 12 and 1024');
+  expect(() => backupEncryptionPassphrase(encryptionValues('different local password', ''), 'review', true)).toThrow('between 8 and 1024');
 });
 test('the default encryption choice explains immutable backup passwords and the explicit fallback retains confirmation', () => {
   const main = renderToStaticMarkup(<BackupEncryptionFields id="encryption" useAccountPassword disabled={false} onChange={() => {}} />);
@@ -197,7 +200,7 @@ test('the default encryption choice explains immutable backup passwords and the 
   const fallback = renderToStaticMarkup(<BackupEncryptionFields id="encryption" useAccountPassword={false} disabled onChange={() => {}} />);
   expect(fallback).toContain('name="passphrase"');
   expect(fallback).toContain('name="repeatPassphrase"');
-  expect(fallback).toContain('minLength="12"');
+  expect(fallback).toContain('minLength="8"');
   expect(fallback).toContain('maxLength="1024"');
   expect(fallback).toContain('disabled=""');
 });
@@ -223,7 +226,7 @@ test('new account-encrypted backups use the existing authenticated same-origin e
     { preconnect: original.preconnect },
   );
   try {
-    const password = 'example account password';
+    const password = '12345678';
     const values = encryptionValues(password);
     await startExport({ password, totpCode: '123456' }, backupEncryptionPassphrase(values, 'export', true));
     expect(calls).toHaveLength(1);
@@ -350,12 +353,11 @@ test('actual submit preparation rejects missing fresh auth before clearing any d
     expect(fixture.selectedFile).toEqual({ name: 'encrypted.orbis', size: 100 });
   }
 });
-test('local key mismatch, missing explicit legacy mode, file and restore confirmation leave all secrets intact', () => {
+test('local key mismatch, missing file and restore confirmation leave all secrets intact', () => {
   for (const [change, values, field] of [
     [{}, encryptionValues('local password', 'separate backup key', 'different backup key'), 'repeatPassphrase'],
     [{}, encryptionValues('local password', 'short'), 'passphrase'],
-    [{ kind: 'review' }, encryptionValues('local password', 'archive backup key'), 'keyMode'],
-    [{ kind: 'upload', fileValid: false }, encryptionValues('local password'), 'file'],
+    [{ kind: 'upload', fileValid: false }, encryptionValues('local password'), 'confirmation'],
     [{ kind: 'restore', restoreValid: false }, encryptionValues('local password'), 'confirmation'],
   ] as const) {
     const fixture = submitFixture(values);
@@ -383,12 +385,33 @@ test('dispatch preparation preserves exact local auth and separate key while cle
   expect(fixture.calls).toEqual(['input[type="password"], input[name="totpCode"]']);
   expect(fixture.selectedFile.name).toBe('encrypted.orbis');
   const legacy = encryptionValues('different local password', 'original source password');
+  legacy.set('confirmation', 'replace-server');
   for (const archiveKeyMode of ['account-password', 'passphrase'] as const) {
     const other = submitFixture(legacy);
     expect(prepareBackupSubmission(other.form, legacy, { ...other.options, kind: 'review', archiveKeyMode }).passphrase).toBe(
       'original source password',
     );
   }
+});
+test('restore uses only backup password by default and honors optional fresh proof', () => {
+  const values = new FormData();
+  const fixture = submitFixture(values);
+  values.set('passphrase', '12345678');
+  values.set('confirmation', 'replace-server');
+  expect(prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'upload', totpEnabled: true }).credentials.password).toBe('');
+  expect(prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'review', totpEnabled: true }).passphrase).toBe('12345678');
+  values.delete('confirmation');
+  expect(() => prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'restore' })).toThrow(
+    'Confirm that you want to restore this backup',
+  );
+  values.set('confirmation', 'replace-server');
+  expect(() =>
+    prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'restore', restoreValid: false, restoreProofRequired: true }),
+  ).toThrow('current account password');
+  values.set('password', 'current password');
+  expect(() => prepareBackupSubmission(fixture.form, values, { ...fixture.options, kind: 'restore', restoreValid: false })).toThrow(
+    'Verify this backup again',
+  );
 });
 test('legacy archive key choice is explicit and its labels never claim detected metadata', () => {
   const fields = (mode: Parameters<typeof BackupArchiveKeyFields>[0]['mode']) =>
@@ -506,9 +529,13 @@ test('backup dismissal preserves scroll and skips a removed or disabled opener',
   expect(restoreBackupRemovalFocus([null, element(false)])).toBe(false);
 });
 
-test('Time Machine has a compact full-recovery entry and stays outside guided restore', () => {
-  expect(render(null, false)).toContain('href="/time-machine"');
-  expect(render(null, true)).not.toContain('href="/time-machine"');
+test('backup and guided restore do not duplicate the separate Time Machine category', () => {
+  for (const restoreOnly of [false, true]) {
+    const markup = render(null, restoreOnly);
+    expect(markup).not.toContain('href="/time-machine"');
+    expect(markup).not.toContain('Enable Time Machine');
+    expect(markup).not.toContain('Time Machine capture');
+  }
 });
 
 test('restore offers the server source only for eligible saved encrypted backups while keeping upload and fresh auth', () => {
@@ -517,8 +544,8 @@ test('restore offers the server source only for eligible saved encrypted backups
   expect(available).toContain('Upload a file');
   expect(available).toMatch(/aria-pressed="false"[^>]*>Saved on server/);
   expect(available).not.toMatch(/disabled=""[^>]*>Saved on server/);
-  expect(available).toContain('Current account password');
-  expect(available).toContain('Authentication code');
+  expect(available).toContain('Backup password');
+  expect(available).not.toContain('Current account password');
   for (const changed of [
     { ...active, needsRecovery: true },
     { ...active, status: 'running' as const },

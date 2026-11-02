@@ -2,11 +2,16 @@ import { expect, test } from 'bun:test';
 import { PreferenceSaveQueue, PreferenceSession } from './preference-save-queue';
 
 const scenarios = [
+  'provider-composition',
   'batched-edit-commit',
   'newer-edit-during-save',
   'queued-account-switch',
   'autosave-account-switch',
   'onboarding-account-switch',
+  'onboarding-capture-completion',
+  'onboarding-capture-failure',
+  'onboarding-capture-unconfirmed',
+  'onboarding-capture-optional-failure',
   'dirty-name-remote-refresh',
   'name-acknowledgement',
   'load-failure-recovery',

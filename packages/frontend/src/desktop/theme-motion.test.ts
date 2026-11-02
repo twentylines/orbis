@@ -102,7 +102,7 @@ test('fallback only animates changed tokens and keeps its duration brief', () =>
   e.run(() => e.properties.set('--desktop-accent', '#abcdef'), true);
   expect(e.animations).toHaveLength(1);
   expect(Object.keys(e.animations[0]?.frames[0] ?? {})).toEqual(['--desktop-accent']);
-  expect(e.animations[0]?.options.duration).toBe(180);
+  expect(e.animations[0]?.options.duration).toBe(260);
 });
 
 test('unrelated rerenders do not restart a palette snapshot or block button interaction', () => {

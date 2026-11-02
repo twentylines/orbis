@@ -25,6 +25,8 @@ import { decodeRuntimePayloadManifest, decodeRuntimePublicationEntry, runtimePub
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { recordRetainedRestoreAdmission } from './time-machine-restore-admission';
 import { AuthGuard } from '../auth/auth.guard';
+import { DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
+import { AccountSecurityService } from '../auth/account-security.service';
 import { GUARDS_METADATA, HEADERS_METADATA } from '@nestjs/common/constants';
 
 let directory: string;
@@ -58,9 +60,18 @@ let config: { get: (key: string) => unknown };
 const store = () => new TimeMachineStore(data);
 const createMachine = () =>
   new TimeMachineService(
-    ...([config, backups, auth, logger, imports, authorization, pinnedDocker, restores, connected.runtime] as unknown as ConstructorParameters<
-      typeof TimeMachineService
-    >),
+    ...([
+      config,
+      backups,
+      auth,
+      logger,
+      imports,
+      authorization,
+      pinnedDocker,
+      restores,
+      connected.runtime,
+      new DesktopPreferencesService(config as never),
+    ] as unknown as ConstructorParameters<typeof TimeMachineService>),
   );
 const root = () => path.join(data, 'backups', 'time-machine');
 async function terminal(id: string) {
@@ -79,6 +90,166 @@ async function terminal(id: string) {
 async function capture() {
   return terminal((await machine.capture(1, credentials, { experimentalAcknowledged: true, label: 'Historic checkpoint' })).id);
 }
+
+it('onboarding capture requires v6 without fallback and does not request a password', async () => {
+  const id = randomUUID();
+  await expect(machine.beginOnboardingCapture(1, id, 'First')).rejects.toMatchObject({
+    response: { code: 'host-capture-support-required' },
+  });
+  expect(await store().list()).toHaveLength(0);
+  await expect(fs.stat(path.join(data, 'state', 'onboarding', '1.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('onboarding capture persists completion before launch and reuses one owner-bound attempt after reload', async () => {
+  const id = randomUUID();
+  const selection = {};
+  const support = vi.spyOn(connected.runtime, 'requireSupport').mockResolvedValue(selection);
+  const [one, two] = await Promise.all([machine.beginOnboardingCapture(1, id, 'First'), machine.beginOnboardingCapture(1, id, 'First')]);
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  expect([one.id, two.id]).toEqual([id, id]);
+  expect(one.status).toBe('capturing');
+  expect(JSON.parse(await fs.readFile(path.join(data, 'state', 'onboarding', '1.json'), 'utf8'))).toEqual({ version: 1 });
+  expect((await store().list()).map((point) => point.id)).toEqual([id]);
+  expect(await machine.onboardingCapture(id, 1)).toMatchObject({ id, status: 'capturing' });
+  await expect(machine.onboardingCapture(id, 2)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+  await expect(machine.beginOnboardingCapture(2, id, 'First')).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+  await expect(machine.beginOnboardingCapture(1, randomUUID(), 'Another')).rejects.toMatchObject({ response: { code: 'invalid-request' } });
+  const attempt = await fs.readFile(path.join(root(), 'onboarding-attempts', `${id}.json`), 'utf8');
+  expect(attempt).not.toContain(credentials.password);
+  expect(JSON.parse(attempt)).toMatchObject({ id, ownerId: 1, state: 'ready' });
+  expect(support).toHaveBeenCalledWith(undefined, true);
+  await machine.onModuleDestroy();
+  machine = createMachine();
+  expect(await machine.onboardingCapture(id, 1)).toMatchObject({ id, status: 'interrupted' });
+  expect(await machine.beginOnboardingCapture(1, id, 'First')).toMatchObject({ id, status: 'interrupted' });
+  expect(await store().list()).toHaveLength(1);
+});
+
+it('onboarding capture retains a failed point if completion cannot be persisted', async () => {
+  const id = randomUUID();
+  vi.spyOn(connected.runtime, 'requireSupport').mockResolvedValue({});
+  vi.spyOn(fs, 'rename').mockImplementationOnce(async () => {
+    throw new Error('write failure');
+  });
+  await expect(machine.beginOnboardingCapture(1, id, 'First')).rejects.toThrow();
+  expect(await machine.onboardingCapture(id, 1)).toMatchObject({ id, status: 'failed' });
+  expect(await machine.beginOnboardingCapture(1, id, 'First')).toMatchObject({ id, status: 'failed' });
+  expect(await store().list()).toHaveLength(1);
+  await machine.remove(id, 1, credentials);
+  await expect(machine.beginOnboardingCapture(1, id, 'First')).rejects.toMatchObject({
+    response: { code: 'capture-recovery-required' },
+  });
+  expect(await store().list()).toHaveLength(0);
+});
+
+it('onboarding capture refuses a reserved orphan and does not create another point', async () => {
+  const id = randomUUID();
+  await store().onboardingAttempt(id, 1, true);
+  await expect(machine.onboardingCapture(id, 1)).rejects.toMatchObject({ response: { code: 'capture-recovery-required' } });
+  await expect(machine.beginOnboardingCapture(1, id, 'First')).rejects.toMatchObject({
+    response: { code: 'capture-recovery-required' },
+  });
+  expect(await store().list()).toHaveLength(0);
+});
+
+it('onboarding capture starts once after the response and reports an actual background failure', async () => {
+  const id = randomUUID();
+  vi.spyOn(connected.runtime, 'requireSupport').mockResolvedValue({});
+  const operation = vi.spyOn(connected.runtime, 'operation');
+  const response = new EventEmitter() as Response;
+  const session = { authMethod: 'session', user: { id: 1, operator: true } } as Request;
+  const controller = new TimeMachineController(machine);
+  await expect(
+    controller.onboardingCapture({ authMethod: 'session', user: { id: 1, operator: false } } as Request, { attemptId: id, label: 'First' }, response),
+  ).rejects.toThrow();
+  const point = await controller.onboardingCapture(session, { attemptId: id, label: 'First' }, response);
+  expect(point).toMatchObject({ id, status: 'capturing' });
+  expect(JSON.parse(await fs.readFile(path.join(data, 'state', 'onboarding', '1.json'), 'utf8'))).toEqual({ version: 1 });
+  expect(operation).not.toHaveBeenCalled();
+  response.emit('finish');
+  response.emit('close');
+  await vi.waitFor(async () => expect(await machine.onboardingCapture(id, 1)).toMatchObject({ status: 'failed' }));
+  expect(operation).toHaveBeenCalledTimes(1);
+  expect(await store().list()).toHaveLength(1);
+});
+
+it('onboarding capture reconciles an ambiguous point publication as interrupted after restart', async () => {
+  const id = randomUUID();
+  vi.spyOn(connected.runtime, 'requireSupport').mockResolvedValue({});
+  const link = fs.link.bind(fs);
+  vi.spyOn(fs, 'link').mockImplementation(async (source, target) => {
+    await link(source, target);
+    if (String(target) === path.join(root(), 'points', id, 'point.json')) throw new Error('simulated lost acknowledgement after publication');
+  });
+  await expect(machine.beginOnboardingCapture(1, id, 'First')).rejects.toThrow();
+  await expect(machine.onboardingCapture(id, 1)).rejects.toMatchObject({ response: { code: 'storage-unavailable' } });
+  vi.restoreAllMocks();
+  await machine.onModuleDestroy();
+  machine = createMachine();
+  expect(await machine.onboardingCapture(id, 1)).toMatchObject({ id, status: 'interrupted' });
+  expect(await store().list()).toHaveLength(1);
+  await expect(fs.stat(path.join(data, 'state', 'onboarding', '1.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('onboarding capture refuses a marker copied to a different machine identity', async () => {
+  const id = randomUUID();
+  await store().onboardingAttempt(id, 1, true);
+  await fs.writeFile(path.join(root(), 'keys', 'machine-v1.id'), randomUUID(), { mode: 0o600 });
+  await expect(machine.onboardingCapture(id, 1)).rejects.toMatchObject({ response: { code: 'point-not-found' } });
+  expect(await store().list()).toHaveLength(0);
+});
+
+it('serializes ordinary onboarding completion with first-capture admission', async () => {
+  const preferences = new DesktopPreferencesService(config as never);
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const admission = preferences.withIncompleteOnboarding(1, async (complete) => {
+    await gate;
+    await complete();
+    return 'staged';
+  });
+  const completion = preferences.completeOnboarding(1);
+  release();
+  expect(await admission).toEqual({ value: 'staged' });
+  expect(await completion).toEqual({ complete: true });
+  const work = vi.fn();
+  expect(await preferences.withIncompleteOnboarding(1, work)).toBeNull();
+  expect(work).not.toHaveBeenCalled();
+});
+
+it('does not replace a concurrently created onboarding point directory', async () => {
+  const id = randomUUID();
+  const destination = path.join(root(), 'points', id);
+  const mkdir = fs.mkdir.bind(fs);
+  let inode = 0;
+  vi.spyOn(fs, 'mkdir').mockImplementation((async (...args: Parameters<typeof fs.mkdir>) => {
+    if (String(args[0]) === destination) {
+      await mkdir(destination, { mode: 0o700 });
+      inode = (await fs.stat(destination)).ino;
+    }
+    return mkdir(...args);
+  }) as typeof fs.mkdir);
+  await expect(store().create(1, 2, id)).rejects.toMatchObject({ code: 'EEXIST' });
+  expect(inode).not.toBe(0);
+  expect((await fs.stat(destination)).ino).toBe(inode);
+  expect(await fs.readdir(destination)).toEqual([]);
+  await expect(store().list()).rejects.toMatchObject({ response: { code: 'storage-unavailable' } });
+});
+
+it('fails closed if a crash leaves an onboarding point directory without its record', async () => {
+  const id = randomUUID();
+  const destination = path.join(root(), 'points', id);
+  const mkdir = fs.mkdir.bind(fs);
+  vi.spyOn(fs, 'mkdir').mockImplementation((async (...args: Parameters<typeof fs.mkdir>) => {
+    const result = await mkdir(...args);
+    if (String(args[0]) === destination) throw new Error('simulated crash after directory creation');
+    return result;
+  }) as typeof fs.mkdir);
+  await expect(store().create(1, 2, id)).rejects.toThrow('simulated crash');
+  await expect(store().list()).rejects.toMatchObject({ response: { code: 'storage-unavailable' } });
+});
 async function reviewed(id: string) {
   let result = await machine.readRestoreReview(id, 1);
   await vi.waitFor(
@@ -227,15 +398,19 @@ it('keeps wrapping keys and retained ciphertext outside every legacy capture and
   expect((await machine.inspect(first.id, 1)).metadata?.label).toBe('Historic checkpoint');
 });
 
-it('requires explicit experimental acknowledgement and fresh successful reauthentication before capture', async () => {
-  await expect(machine.capture(1, credentials, { experimentalAcknowledged: false, label: '' })).rejects.toMatchObject({
-    response: { code: 'experimental-acknowledgement-required' },
-  });
+it('manual capture uses its operator session by default and requires fresh proof only for the enabled account policy', async () => {
+  const point = await machine.capture(1, {}, { label: 'Session capture' });
+  expect(point.status).toBe('capturing');
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  await machine.onModuleDestroy();
+  machine = createMachine();
+  await fs.rm(root(), { recursive: true, force: true });
+  const policy = new AccountSecurityService(config as never);
+  await policy.update(1, { expectedRevision: 0, requireCaptureAuthentication: true }, async () => undefined);
+  await expect(machine.capture(1, {}, { label: '' })).rejects.toThrow('password');
   auth.verifySensitiveAction.mockRejectedValueOnce(new Error('Invalid fixture credentials'));
-  await expect(machine.capture(1, credentials, { experimentalAcknowledged: true, label: '' })).rejects.toThrow('Invalid fixture credentials');
-  expect(runtime.plan).not.toHaveBeenCalled();
+  await expect(machine.capture(1, credentials, { label: '' })).rejects.toThrow('Invalid fixture credentials');
   expect((await machine.list(1)).points).toEqual([]);
-  await expect(fs.stat(root())).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it('polls only the current owner capture without decrypting historical points', async () => {

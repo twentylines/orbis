@@ -1,14 +1,16 @@
 import { snapshotAppIcons } from './time-machine-app-icons';
+import { readTimeMachineStorage } from './time-machine-storage';
 import fs from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import { hashCaptureSnapshotFile } from './time-machine-capture-coherence';
 import { captureHasControllerVersion, versionMatchesControllerAuthority } from './time-machine-controller-version';
 import { verifyCaptureAgainstBackup } from './backup-image-capture';
-import { Injectable, NotFoundException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import {
   timeMachineCaptureSchema,
   timeMachinePreferencesUpdateSchema,
   timeMachineHashSchema,
+  timeMachineIdSchema,
   type TimeMachineList,
   type TimeMachinePoint,
   type TimeMachineMetadata,
@@ -16,6 +18,8 @@ import {
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { AuthService } from '../auth/auth.service';
+import { AccountSecurityService } from '../auth/account-security.service';
+import { backupCredentials } from './backup-access';
 import { SystemBackupsService } from './system-backups.service';
 import { TimeMachineStore, type StoredTimeMachinePoint, type TimeMachineDraftMetadata } from './time-machine-store';
 import { historicalHomePreview, captureBreakdown } from './time-machine-preview';
@@ -28,6 +32,7 @@ import type { Request } from 'express';
 import { backupMaintenanceActive } from '@/common/backup-maintenance';
 import { installationMode } from '@/common/installation-mode';
 import { DockerService } from '../docker/docker.service';
+import { DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
 import { BackupImportsService } from './backup-imports.service';
 import { TimeMachineRestoreAuthorization } from './time-machine-restore-authorization';
 import { BackupRestoresService } from './backup-restores.service';
@@ -56,6 +61,7 @@ type LocalReview = {
 };
 @Injectable()
 export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
+  private readonly dataDirectory: string;
   private store: TimeMachineStore;
   private readonly restoreDirectory: string;
   private ready?: Promise<void>;
@@ -66,6 +72,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
   private openingAssets = 0;
   private exporting?: { abort: AbortController; done: Promise<void> };
   private removing = false;
+  private readonly captureSecurity: AccountSecurityService;
   private active?: {
     id: string;
     ownerId: number;
@@ -76,6 +83,7 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     setupDone: () => void;
     settle: () => void;
     started: boolean;
+    onboarding?: boolean;
     start?: () => Promise<void>;
     progress?: { stage: string; completedBytes: number; totalBytes: number | null };
   };
@@ -89,7 +97,11 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     private readonly docker: DockerService,
     private readonly restores: BackupRestoresService,
     private readonly captureRuntime: TimeMachineCaptureRuntime,
+    @Optional() private readonly onboarding?: DesktopPreferencesService,
+    @Optional() security?: AccountSecurityService,
   ) {
+    this.dataDirectory = config.get('directories').dataDir;
+    this.captureSecurity = security ?? new AccountSecurityService(config);
     this.store = new TimeMachineStore(config.get('directories').dataDir);
     this.restoreDirectory = path.join(config.get('directories').dataDir, 'backups', 'restores');
   }
@@ -140,6 +152,9 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
   }
   capabilities() {
     return timeMachineCapabilities();
+  }
+  storage() {
+    return readTimeMachineStorage(this.dataDirectory, () => this.store.list());
   }
   async preferences() {
     await this.initialize();
@@ -220,20 +235,106 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       throw timeMachineConflict('point-integrity-failed');
     }
   }
-  async capture(ownerId: number, credentials: Credentials, request: unknown) {
+  async onboardingCapture(id: string, ownerId: number) {
+    await this.initialize();
+    this.available();
+    if (!timeMachineIdSchema.allows(id)) throw timeMachineConflict('invalid-request');
+    if (this.active?.onboarding && this.active.id === id && this.active.ownerId === ownerId) await this.active.setup;
+    let attempt: Awaited<ReturnType<TimeMachineStore['onboardingAttempt']>>;
+    try {
+      attempt = await this.store.onboardingAttempt(id, ownerId);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw timeMachineConflict('point-not-found');
+      throw error;
+    }
+    let point: StoredTimeMachinePoint;
+    try {
+      point = await this.store.load(id);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw timeMachineConflict('capture-recovery-required');
+      throw error;
+    }
+    if (point.ownerId !== ownerId || point.version !== 2 || point.onboardingAttemptId !== id) throw timeMachineConflict('point-not-found');
+    if (
+      point.status === 'capturing' &&
+      (attempt.state !== 'ready' || !this.active?.onboarding || this.active.id !== id || this.active.ownerId !== ownerId)
+    )
+      throw timeMachineConflict('capture-recovery-required');
+    return this.publicPoint(point);
+  }
+
+  async capture(ownerId: number, credentials: unknown, request: unknown) {
     await this.initialize();
     this.available();
     if (!timeMachineCaptureSchema.allows(request)) {
-      const acknowledged =
-        request && typeof request === 'object' && 'experimentalAcknowledged' in request && request.experimentalAcknowledged === true;
-      throw timeMachineConflict(acknowledged ? 'invalid-request' : 'experimental-acknowledgement-required');
+      throw timeMachineConflict('invalid-request');
     }
-    await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
-    const captureSelection = await this.captureRuntime.requireSupport();
+    if ((await this.captureSecurity.read(ownerId)).requireCaptureAuthentication) {
+      const proof = backupCredentials(credentials);
+      await this.auth.verifySensitiveAction(ownerId, proof.password, proof.totpCode);
+    }
+    return this.prepareCapture(ownerId, request);
+  }
+
+  async beginOnboardingCapture(ownerId: number, id: unknown, label: unknown) {
+    await this.initialize();
+    this.available();
+    const request = { label, experimentalAcknowledged: true };
+    if (!timeMachineIdSchema.allows(id) || !timeMachineCaptureSchema.allows(request) || !this.onboarding)
+      throw timeMachineConflict('invalid-request');
+    if (this.active?.onboarding && this.active.id === id && this.active.ownerId === ownerId) {
+      await this.active.setup;
+      return this.onboardingCapture(id, ownerId);
+    }
+    try {
+      await this.store.onboardingAttempt(id, ownerId);
+      return this.onboardingCapture(id, ownerId);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    const result = await this.onboarding.withIncompleteOnboarding(ownerId, (complete) => this.prepareCapture(ownerId, request, id, complete));
+    if (!result) {
+      try {
+        await this.store.onboardingAttempt(id, ownerId);
+        return this.onboardingCapture(id, ownerId);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw timeMachineConflict('invalid-request');
+        throw error;
+      }
+    }
+    return result.value;
+  }
+
+  private async prepareCapture(
+    ownerId: number,
+    request: typeof timeMachineCaptureSchema.infer,
+    onboardingAttemptId?: string,
+    completeOnboarding?: () => Promise<void>,
+  ) {
+    if (onboardingAttemptId !== undefined) {
+      if (!timeMachineIdSchema.allows(onboardingAttemptId) || !this.onboarding) throw timeMachineConflict('invalid-request');
+      if (this.active?.onboarding && this.active.id === onboardingAttemptId && this.active.ownerId === ownerId) {
+        await this.active.setup;
+        return this.onboardingCapture(onboardingAttemptId, ownerId);
+      }
+      try {
+        await this.store.onboardingAttempt(onboardingAttemptId, ownerId);
+        return this.onboardingCapture(onboardingAttemptId, ownerId);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+    const captureSelection = onboardingAttemptId
+      ? await this.captureRuntime.requireSupport(undefined, true)
+      : await this.captureRuntime.requireSupport();
     await this.docker.requireNoPendingAppImageUpdates().catch(() => {
       throw timeMachineConflict('capture-recovery-required');
     });
     this.available();
+    if (onboardingAttemptId && this.active?.onboarding && this.active.id === onboardingAttemptId && this.active.ownerId === ownerId) {
+      await this.active.setup;
+      return this.onboardingCapture(onboardingAttemptId, ownerId);
+    }
     if (this.active || this.reviewing || this.exporting || this.removing) throw timeMachineConflict('operation-busy');
     let settle: () => void = () => undefined;
     let setupDone: () => void = () => undefined;
@@ -244,8 +345,9 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
       setupDone = resolve;
     });
     const active: NonNullable<TimeMachineService['active']> = {
-      id: '',
+      id: onboardingAttemptId ?? '',
       ownerId,
+      ...(onboardingAttemptId ? { onboarding: true } : {}),
       abort: new AbortController(),
       done,
       setup,
@@ -256,20 +358,34 @@ export class TimeMachineService implements OnModuleInit, OnModuleDestroy {
     };
     this.active = active;
     let point: StoredTimeMachinePoint | undefined;
+    let attemptClaimed = false;
     try {
       const preferences = await this.store.preferences();
       if (!preferences.enabled) throw timeMachineConflict('invalid-request');
       if (preferences.excludedApps.length) throw timeMachineConflict('app-exclusions-unsupported');
       if ((await this.store.list()).some((item) => item.status === 'interrupted')) throw timeMachineConflict('capture-recovery-required');
-      const created = await this.store.create(ownerId, 2);
+      if (onboardingAttemptId) {
+        attemptClaimed = (await this.store.onboardingAttempt(onboardingAttemptId, ownerId, true)).claimed;
+        if (!attemptClaimed) {
+          if (this.active === active) this.active = undefined;
+          settle();
+          return await this.onboardingCapture(onboardingAttemptId, ownerId);
+        }
+      }
+      const created = await this.store.create(ownerId, 2, onboardingAttemptId);
       point = created.point;
       active.id = point.id;
       active.abort.signal.throwIfAborted();
       const captured = point;
       active.start = () => this.runCapture(active, captured, created.passphrase, request.label, captureSelection);
+      if (onboardingAttemptId) {
+        await completeOnboarding?.();
+        await this.store.readyOnboardingAttempt(onboardingAttemptId, ownerId);
+      }
       return await this.publicPoint(point);
     } catch (error) {
       active.abort.abort();
+      if (attemptClaimed && !point) this.unavailable = true;
       if (point)
         await this.store.fail(point, 'capture-failed').catch(() => {
           this.unavailable = true;

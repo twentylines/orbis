@@ -215,12 +215,24 @@ const DialogContent = ({
   );
 };
 
-const DialogHeader = ({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) => {
+const DialogHeader = ({ className, children, actions, ...props }: React.HTMLAttributes<HTMLDivElement> & { actions?: React.ReactNode }) => {
   const { inHeader } = useContext(DialogCloseContext);
   return (
-    <div data-testid="modal-header" className={clsx('modal-header', 'orbis-dialog-header', className)} {...props}>
+    <div
+      data-testid="modal-header"
+      data-header-actions={actions ? 'true' : undefined}
+      className={clsx('modal-header', 'orbis-dialog-header', className)}
+      {...props}
+    >
       <div className="orbis-dialog-heading">{children}</div>
-      {inHeader ? <DialogCloseButton /> : null}
+      {actions ? (
+        <div className="orbis-dialog-header-actions">
+          {actions}
+          {inHeader ? <DialogCloseButton /> : null}
+        </div>
+      ) : inHeader ? (
+        <DialogCloseButton />
+      ) : null}
     </div>
   );
 };

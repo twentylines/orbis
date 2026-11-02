@@ -10,6 +10,34 @@ export function timelineTarget(points: readonly TimeMachinePoint[], selected: st
   return points[Math.max(0, Math.min(points.length - 1, index + direction))]?.id ?? null;
 }
 
+export function timelineOffsets(points: readonly TimeMachinePoint[], sizes: ReadonlyMap<string, number>, estimate = 76): number[] {
+  const offsets = [0];
+  for (const point of points) offsets.push((offsets.at(-1) ?? 0) + (sizes.get(point.id) ?? estimate));
+  return offsets;
+}
+
+export function timelineIndexAt(offsets: readonly number[], position: number): number {
+  let low = 0;
+  let high = Math.max(0, offsets.length - 2);
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if ((offsets[middle] ?? 0) <= position) low = middle;
+    else high = middle - 1;
+  }
+  return low;
+}
+
+export function timelineWindow(offsets: readonly number[], position: number, extent: number, pinned: readonly number[] = []): number[] {
+  const count = offsets.length - 1;
+  if (count <= 0) return [];
+  const start = Math.max(0, timelineIndexAt(offsets, position) - 3);
+  const end = Math.min(count - 1, timelineIndexAt(offsets, position + extent) + 3);
+  const indices = new Set<number>();
+  for (let index = start; index <= end; index++) indices.add(index);
+  for (const index of pinned) if (index >= 0 && index < count) indices.add(index);
+  return [...indices].sort((a, b) => a - b);
+}
+
 export const pointMotionSeconds = { unfold: 0.76, travel: 0.52, fold: 0.54, sceneExit: 0.72 } as const;
 
 export function pointCardPose(depth: number, phase: 'spread' | 'folded', compact = false) {

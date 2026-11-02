@@ -67,6 +67,21 @@ body:has(.orbis-theme) .orbis-dialog-content .orbis-dialog-header {
 .orbis-dialog-heading {
   min-width: 0;
 }
+.orbis-dialog-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+@media (max-width: 480px) {
+  .orbis-dialog-content .orbis-dialog-header[data-header-actions="true"] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .orbis-dialog-header-actions {
+    justify-self: end;
+  }
+}
 .orbis-dialog-heading > .modal-body {
   padding: 0;
   margin-top: 10px;

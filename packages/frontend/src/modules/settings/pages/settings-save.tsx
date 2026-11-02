@@ -1,6 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
+import { AnimatePresence, motion } from 'framer-motion';
+import { IconCircle, IconLoader2 } from '@tabler/icons-react';
+import { SystemBarStatus } from '@/desktop/system-bar-status';
+import { WindowVisibilityContext } from '@/desktop/window-visibility';
+import { useReducedMotion } from '@/desktop/motion-preferences';
+import './settings-save-status.css';
 import { saveSettingsPlan, type SettingsSaveEntry } from '../helpers/settings-save-plan';
 import type { SettingsSection } from '../helpers/settings-catalogue';
 
@@ -140,19 +146,38 @@ export function SettingsSaveFeedback() {
   return context?.error ? <InlineFeedback className="settings-save-feedback">{context.error}</InlineFeedback> : null;
 }
 
-export function SettingsDirtyIndicator({ dirty }: { dirty: boolean }) {
+export function SettingsDirtyIndicator({ dirty, pending = false }: { dirty: boolean; pending?: boolean }) {
+  const reduced = useReducedMotion();
+  const message = pending ? 'Saving preferences…' : dirty ? 'Unsaved changes' : '';
   return (
-    <output className="settings-header-status" aria-live="polite" aria-atomic="true">
-      <span className="settings-header-status-label" data-dirty={dirty} aria-hidden="true">
-        <span className="settings-header-status-full">Unsaved changes</span>
-        <span className="settings-header-status-short">Unsaved</span>
-      </span>
-      <span className="visually-hidden">{dirty ? 'Unsaved changes' : ''}</span>
+    <output className="settings-system-status" aria-live="polite" aria-atomic="true">
+      <span className="visually-hidden">{message}</span>
+      <AnimatePresence initial={false}>
+        {message ? (
+          <motion.span
+            key="settings-status-bubble"
+            className="settings-system-status-bubble"
+            aria-hidden="true"
+            initial={reduced ? false : { opacity: 0, scale: 0.88, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: reduced ? 1 : 0.86, y: reduced ? 0 : -3 }}
+            transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 31, mass: 0.7 }}
+          >
+            {pending ? <IconLoader2 className="settings-status-spinner" size={18} /> : <IconCircle size={14} />}
+            <span>{message}</span>
+          </motion.span>
+        ) : null}
+      </AnimatePresence>
     </output>
   );
 }
 
 export function SettingsSaveStatus() {
   const context = useContext(SettingsSaveContext);
-  return context ? <SettingsDirtyIndicator dirty={context.dirty} /> : null;
+  const visible = useContext(WindowVisibilityContext);
+  return context ? (
+    <SystemBarStatus>
+      <SettingsDirtyIndicator dirty={visible && context.dirty} pending={visible && context.activity} />
+    </SystemBarStatus>
+  ) : null;
 }

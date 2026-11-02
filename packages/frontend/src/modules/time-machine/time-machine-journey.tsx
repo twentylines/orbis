@@ -1,4 +1,16 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { AnimatePresence, motion, useAnimationControls, usePresence } from 'framer-motion';
 import { IconChevronDown, IconChevronUp, IconHistory, IconTrash } from '@tabler/icons-react';
 import type { TimeMachinePoint } from '@runtipi/common/schemas/time-machine';
@@ -8,10 +20,19 @@ import { DialogOpenContext } from '@/components/ui/Dialog/Dialog';
 import { DepthTravel } from '@/components/recovery-progress/depth-travel';
 import { useReducedMotion, useReducedTransparency } from '@/desktop/motion-preferences';
 import { useWindowVisible } from '@/desktop/window-visibility';
-import { chronologicalPoints, orderedPoints, visiblePointCards } from './contracts';
+import { chronologicalPoints, orderedPoints } from './contracts';
 import { useHistoricalWallpaper } from './historical-home';
 import { HistoricalHomePreview as HistoricalHome } from './historical-home-preview';
-import { pointCardPose, pointMotionEnabled, pointMotionSeconds, pointPreviewAdmitted, timelineTarget } from './timeline-state';
+import {
+  pointCardPose,
+  pointMotionEnabled,
+  pointMotionSeconds,
+  pointPreviewAdmitted,
+  timelineIndexAt,
+  timelineOffsets,
+  timelineTarget,
+  timelineWindow,
+} from './timeline-state';
 import './time-machine.css';
 
 export const pointDate = (point: Pick<TimeMachinePoint, 'createdAt'>) =>
@@ -36,6 +57,7 @@ const subscribeCompact = (change: () => void) => {
 };
 const compactSnapshot = () => matchMedia(compactQuery).matches;
 const serverCompact = () => false;
+const unmeasuredTimelineSizes: ReadonlyMap<string, number> = new Map();
 
 function TimelineGalaxy({ distance }: { distance: number }) {
   const open = useContext(DialogOpenContext);
@@ -193,9 +215,10 @@ export function HistoricalPointStack({
   const visible = useWindowVisible();
   const moving = usePointMotion();
   const compact = useSyncExternalStore(subscribeCompact, compactSnapshot, serverCompact);
-  const ordered = orderedPoints(points);
-  const cards = visiblePointCards(ordered, selected);
-  const selectedIndex = ordered.findIndex((point) => point.id === selected);
+  const ordered = useMemo(() => orderedPoints(points), [points]);
+  const indices = useMemo(() => new Map(ordered.map((point, index) => [point.id, index])), [ordered]);
+  const selectedIndex = selected === null ? -1 : (indices.get(selected) ?? -1);
+  const cards = useMemo(() => (selectedIndex < 0 ? [] : ordered.slice(selectedIndex, selectedIndex + 10)), [ordered, selectedIndex]);
   const previous = useRef({
     selected,
     previousFront: null as string | null,
@@ -210,7 +233,7 @@ export function HistoricalPointStack({
     previousFront: changed ? previous.current.selected : previous.current.previousFront,
     selectedIndex,
     previousIndex: changed ? previous.current.index : selectedIndex,
-    indices: new Map(ordered.map((point, index) => [point.id, index])),
+    indices,
     exiting: changed ? previous.current.cards : previous.current.exiting,
     opening: !mounted.current,
     open,
@@ -250,7 +273,7 @@ export function HistoricalPointStack({
 function revealRulerDate(ruler: HTMLElement, active: HTMLElement) {
   const viewport = ruler.getBoundingClientRect();
   const target = active.getBoundingClientRect();
-  const inset = 8;
+  const inset = 18;
   if (target.top < viewport.top + inset) ruler.scrollTop += target.top - viewport.top - inset;
   else if (target.bottom > viewport.bottom - inset) ruler.scrollTop += target.bottom - viewport.bottom + inset;
   if (target.left < viewport.left + inset) ruler.scrollLeft += target.left - viewport.left - inset;
@@ -269,18 +292,141 @@ export function HistoricalDateRuler({
   dates?: React.RefObject<HTMLElement | null>;
 }) {
   const ruler = useRef<HTMLElement>(null);
+  const compact = useSyncExternalStore(subscribeCompact, compactSnapshot, serverCompact);
+  const ascending = useMemo(() => chronologicalPoints(points), [points]);
+  const selectedIndex = useMemo(() => ascending.findIndex((point) => point.id === selected), [ascending, selected]);
+  const virtual = ascending.length > 32;
+  const [sizes, setSizes] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const offsets = useMemo(
+    () => timelineOffsets(ascending, compact ? unmeasuredTimelineSizes : sizes, compact ? 160 : 76),
+    [ascending, compact, sizes],
+  );
+  const [viewport, setViewport] = useState({ position: 0, extent: 640 });
+  const [focused, setFocused] = useState<string | null>(null);
+  const focusedIndex = useMemo(() => ascending.findIndex((point) => point.id === focused), [ascending, focused]);
+  const rendered = virtual
+    ? timelineWindow(offsets, viewport.position, viewport.extent, [selectedIndex, focusedIndex])
+    : ascending.map((_, index) => index);
+  const pendingAnchor = useRef<{ id: string; inset: number } | null>(null);
+  const lastSelection = useRef<string | null | undefined>(undefined);
+  const lastCompact = useRef(compact);
+  const scrollFrame = useRef(0);
+  const readViewport = useCallback(() => {
+    const element = ruler.current;
+    if (!element) return;
+    const position = compact ? element.scrollLeft : element.scrollTop;
+    const extent = compact ? element.clientWidth : element.clientHeight;
+    const total = compact ? element.scrollWidth : element.scrollHeight;
+    element.dataset.fadeStart = String(position > 1);
+    element.dataset.fadeEnd = String(position + extent < total - 1);
+    setViewport((current) => (current.position === position && current.extent === extent ? current : { position, extent }));
+  }, [compact]);
+  const scheduleViewport = () => {
+    if (scrollFrame.current) return;
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = 0;
+      readViewport();
+    });
+  };
+  useEffect(() => () => cancelAnimationFrame(scrollFrame.current), []);
+  useLayoutEffect(() => {
+    const element = ruler.current;
+    if (!element) return;
+    const anchor = pendingAnchor.current;
+    if (anchor) {
+      const index = ascending.findIndex((point) => point.id === anchor.id);
+      if (index >= 0) element.scrollTop = (offsets[index] ?? 0) + anchor.inset;
+      pendingAnchor.current = null;
+    }
+    const active = element.querySelector<HTMLElement>('[aria-current="date"]');
+    if (lastSelection.current !== selected || lastCompact.current !== compact) {
+      if (active) revealRulerDate(element, active);
+      lastSelection.current = selected;
+      lastCompact.current = compact;
+    }
+    readViewport();
+  });
+  useLayoutEffect(() => {
+    const element = ruler.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const measure = () => {
+      if (compact || !virtual) return;
+      const position = element.scrollTop;
+      const anchorIndex = timelineIndexAt(offsets, position);
+      let nextSizes: Map<string, number> | undefined;
+      for (const row of element.querySelectorAll<HTMLElement>('li[data-timeline-point]')) {
+        const id = row.dataset.timelinePoint;
+        if (!id) continue;
+        const height = row.getBoundingClientRect().height;
+        if (height > 0 && Math.abs(height - (sizes.get(id) ?? 76)) > 0.5) {
+          nextSizes ??= new Map(sizes);
+          nextSizes.set(id, height);
+        }
+      }
+      if (nextSizes) {
+        const anchor = ascending[anchorIndex];
+        if (anchor) pendingAnchor.current = { id: anchor.id, inset: position - (offsets[anchorIndex] ?? 0) };
+        setSizes(nextSizes);
+      }
+      readViewport();
+    };
+    const observer = new ResizeObserver(measure);
+    for (const row of element.querySelectorAll('li[data-timeline-point]')) observer.observe(row);
+    measure();
+    return () => observer.disconnect();
+  });
   useEffect(() => {
     const element = ruler.current;
     if (!element || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(() => {
       const active = element.querySelector<HTMLElement>('[aria-current="date"]');
       if (active) revealRulerDate(element, active);
+      readViewport();
     });
     observer.observe(element);
-    const list = element.querySelector('ol');
-    if (list) observer.observe(list);
     return () => observer.disconnect();
-  }, []);
+  }, [readViewport]);
+  const rows: ReactNode[] = [];
+  let previousIndex = -1;
+  const spacer = (start: number, end: number) => {
+    if (start >= end) return;
+    const size = (offsets[end] ?? 0) - (offsets[start] ?? 0);
+    rows.push(
+      <li
+        key={`gap-${start}-${end}`}
+        className="tm-timeline-spacer"
+        role="presentation"
+        aria-hidden="true"
+        style={compact ? { flexBasis: size } : { height: size }}
+      />,
+    );
+  };
+  for (const index of rendered) {
+    const item = ascending[index];
+    if (!item) continue;
+    spacer(previousIndex + 1, index);
+    rows.push(
+      <li key={item.id} data-timeline-point={item.id} aria-posinset={index + 1} aria-setsize={ascending.length}>
+        <button
+          type="button"
+          data-point-id={item.id}
+          aria-current={item.id === selected ? 'date' : undefined}
+          tabIndex={item.id === selected ? 0 : -1}
+          onFocus={(event) => {
+            setFocused(item.id);
+            if (ruler.current) revealRulerDate(ruler.current, event.currentTarget);
+          }}
+          onClick={() => onSelect(item.id)}
+        >
+          <i className="tm-ruler-tick" aria-hidden="true" />
+          <time dateTime={new Date(item.createdAt).toISOString()}>{pointDate(item)}</time>
+          <span>{item.metadata?.label || item.status}</span>
+        </button>
+      </li>,
+    );
+    previousIndex = index;
+  }
+  spacer(previousIndex + 1, ascending.length);
   return (
     <nav
       ref={(element) => {
@@ -289,24 +435,12 @@ export function HistoricalDateRuler({
       }}
       className="tm-timeline"
       aria-label="Saved dates"
+      onScroll={scheduleViewport}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(null);
+      }}
     >
-      <ol>
-        {chronologicalPoints(points).map((item) => (
-          <li key={item.id}>
-            <button
-              type="button"
-              data-point-id={item.id}
-              aria-current={item.id === selected ? 'date' : undefined}
-              tabIndex={item.id === selected ? 0 : -1}
-              onClick={() => onSelect(item.id)}
-            >
-              <i className="tm-ruler-tick" aria-hidden="true" />
-              <time dateTime={new Date(item.createdAt).toISOString()}>{pointDate(item)}</time>
-              <span>{item.metadata?.label || item.status}</span>
-            </button>
-          </li>
-        ))}
-      </ol>
+      <ol>{rows}</ol>
     </nav>
   );
 }
@@ -344,19 +478,29 @@ export function TimeMachineJourney({
   const moving = usePointMotion();
   const solid = useReducedTransparency();
   const dates = useRef<HTMLElement>(null);
-  const ordered = orderedPoints(points);
+  const focusRequested = useRef<string | null>(null);
+  const ordered = useMemo(() => orderedPoints(points), [points]);
   const point = ordered.find((item) => item.id === selected);
   const index = ordered.findIndex((item) => item.id === selected);
   const wallpaper = useHistoricalWallpaper(point, open && visible, session);
   const choose = (id: string | null, focus = false) => {
     if (!id) return;
+    if (focus) focusRequested.current = id;
     if (id !== selected) onSelect(id);
-    if (focus) dates.current?.querySelector<HTMLButtonElement>(`[data-point-id="${id}"]`)?.focus({ preventScroll: true });
+    else if (focus) {
+      dates.current?.querySelector<HTMLButtonElement>(`[data-point-id="${id}"]`)?.focus({ preventScroll: true });
+      focusRequested.current = null;
+    }
   };
   const move = (older: boolean) => choose(timelineTarget(ordered, selected, older ? 'ArrowUp' : 'ArrowDown'));
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!open) focusRequested.current = null;
     if (!open || !visible) return;
     const active = dates.current?.querySelector<HTMLButtonElement>(`[data-point-id="${selected}"]`);
+    if (active && focusRequested.current === selected) {
+      active.focus({ preventScroll: true });
+      focusRequested.current = null;
+    }
     if (dates.current && active) revealRulerDate(dates.current, active);
   }, [open, selected, visible]);
   return (
@@ -399,7 +543,16 @@ export function TimeMachineJourney({
       >
         <TimelineGalaxy distance={Math.max(0, index) + 1} />
         <div className="tm-nebula" aria-hidden="true" />
-        <DialogHeader className="tm-journey-heading">
+        <DialogHeader
+          className="tm-journey-heading"
+          actions={
+            onCapture ? (
+              <Button variant="outline" onClick={onCapture} disabled={busy}>
+                Capture
+              </Button>
+            ) : undefined
+          }
+        >
           <DialogTitle>
             <span className="tm-heading-content">
               <IconHistory size="1em" aria-hidden="true" />
@@ -410,16 +563,7 @@ export function TimeMachineJourney({
         <DialogDescription className="visually-hidden" id="tm-journey-description">
           Saved Home projections. Browsing changes no server data. Use older and newer controls or the dated timeline to choose a point.
         </DialogDescription>
-        {toolbar || onCapture ? (
-          <div className="tm-journey-toolbar">
-            {toolbar}
-            {onCapture ? (
-              <Button variant="outline" onClick={onCapture} disabled={busy}>
-                Capture
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
+        {toolbar ? <div className="tm-journey-toolbar">{toolbar}</div> : null}
         <div className="tm-journey-layout">
           <HistoricalPointStack
             points={ordered}

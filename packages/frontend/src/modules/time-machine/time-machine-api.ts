@@ -52,9 +52,11 @@ export class TimeMachineApiError extends Error {
               ? 'Time Machine is unavailable on this server.'
               : status === 429
                 ? 'Too many attempts. Wait a minute before retrying.'
-                : code
-                  ? (issueMessages[code] ?? 'Time Machine could not safely continue. Refresh its status before retrying.')
-                  : 'Time Machine could not be reached. Check the connection and refresh.'),
+                : status === 409
+                  ? ((code ? issueMessages[code] : undefined) ?? 'Time Machine could not safely continue. Check its status before retrying.')
+                  : code
+                    ? (issueMessages[code] ?? 'Time Machine could not safely continue. Refresh its status before retrying.')
+                    : 'Time Machine could not be reached. Check the connection and refresh.'),
     );
   }
 }
@@ -81,6 +83,10 @@ const issueMessages: Record<string, string> = {
   'restore-preparation-failed': 'Restore preparation could not finish. Check its verified recovery status.',
   'restore-recovery-required': 'This server needs restore recovery before another operation.',
   'activation-not-integrated': 'Restoring a Time Machine point is not available on this server.',
+  'host-capture-support-required':
+    'Update and verify the Orbis host service with controller configuration capture support before creating this restore point.',
+  'proxy-layout-migration-required':
+    'The proxy storage layout needs migration before a capture can begin. Existing server data and HTTPS identity were preserved.',
 };
 export async function boundedBody(response: Response, limit: number): Promise<Uint8Array<ArrayBuffer>> {
   const declared = response.headers.get('Content-Length');
@@ -131,6 +137,14 @@ async function request(path: string, method: 'GET' | 'POST' | 'PUT', body: unkno
         safeMessage = safeBackupErrorMessage(response.status, text);
         const value: unknown = JSON.parse(text);
         if (timeMachineIssueSchema.allows(value) || timeMachineRestoreIssueSchema.allows(value)) code = value.code;
+        else if (value && typeof value === 'object' && 'message' in value) {
+          if (value.message === issueMessages['host-capture-support-required']) code = 'host-capture-support-required';
+          if (
+            value.message ===
+            'The proxy needs an explicit storage layout migration before coherent capture. Existing HTTPS identity and server data were preserved.'
+          )
+            code = 'proxy-layout-migration-required';
+        }
       } catch {
         /* Use the bounded generic rejection. */
       }
@@ -169,10 +183,22 @@ export async function readTimeMachine(signal: AbortSignal): Promise<TimeMachineS
     list,
   };
 }
-export async function captureTimeMachine(label: string, acknowledged: boolean, credentials: BackupCredentials, signal: AbortSignal) {
-  const body = { label, experimentalAcknowledged: acknowledged };
-  if (!timeMachineCaptureSchema.allows(body)) throw new Error('Read and acknowledge the experimental capture warning.');
+export async function captureTimeMachine(label: string, credentials: Partial<BackupCredentials>, signal: AbortSignal) {
+  const body = { label };
+  if (!timeMachineCaptureSchema.allows(body)) throw new Error('Review the capture name before continuing.');
   return parseTimeMachine(pointSchema, await request('/captures', 'POST', { ...body, ...credentials }, signal));
+}
+export async function readOnboardingCapture(attemptId: string, signal: AbortSignal) {
+  if (!timeMachineIdSchema.allows(attemptId)) throw new Error('The setup capture receipt could not be verified.');
+  const point = parseTimeMachine(pointSchema, await request(`/onboarding-captures/${attemptId}`, 'GET', undefined, signal));
+  if (point.id !== attemptId) throw new Error('The server returned a different setup capture. No new capture was started.');
+  return point;
+}
+export async function startOnboardingCapture(attemptId: string, signal: AbortSignal) {
+  if (!timeMachineIdSchema.allows(attemptId)) throw new Error('The setup capture receipt could not be verified.');
+  const point = parseTimeMachine(pointSchema, await request('/onboarding-captures', 'POST', { label: 'After setup', attemptId }, signal));
+  if (point.id !== attemptId) throw new Error('The server returned a different setup capture. Check its status before retrying.');
+  return point;
 }
 export async function saveTimeMachinePreferences(body: unknown, signal: AbortSignal) {
   if (!timeMachinePreferencesUpdateSchema.allows(body)) throw new Error('Review the Time Machine settings before saving.');

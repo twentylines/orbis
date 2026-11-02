@@ -41,23 +41,25 @@ export const AppStoresContainer = () => {
           </div>
         </section>
       ) : null}
-      <div id="setting-store-sources" className="app-stores-settings-heading">
-        <div className="app-stores-settings-title">
-          <IconBrandAppstore aria-hidden="true" />
-          <h2>{t('SETTINGS_APPSTORES_TITLE')}</h2>
+      <section className="settings-group" aria-labelledby="settings-store-sources-heading">
+        <div id="setting-store-sources" className="app-stores-settings-heading">
+          <div className="app-stores-settings-title">
+            <IconBrandAppstore aria-hidden="true" />
+            <h2 id="settings-store-sources-heading">{t('SETTINGS_APPSTORES_TITLE')}</h2>
+          </div>
+          <RefreshAppStoresButton />
         </div>
-        <RefreshAppStoresButton />
-      </div>
-      <Alert variant="warning" className="store-source-warning">
-        <AlertIcon>
-          <IconAlertCircle stroke={2} />
-        </AlertIcon>
-        <div>
-          <AlertHeading>{t('COMMON_WARNING')}</AlertHeading>
-          <AlertDescription>{t('SETTINGS_APPSTORES_WARNING')}</AlertDescription>
-        </div>
-      </Alert>
-      <AppStoresTable appStores={data.appStores} />
+        <Alert variant="warning" className="store-source-warning">
+          <AlertIcon>
+            <IconAlertCircle stroke={2} />
+          </AlertIcon>
+          <div>
+            <AlertHeading>{t('COMMON_WARNING')}</AlertHeading>
+            <AlertDescription>{t('SETTINGS_APPSTORES_WARNING')}</AlertDescription>
+          </div>
+        </Alert>
+        <AppStoresTable appStores={data.appStores} />
+      </section>
     </div>
   );
 };

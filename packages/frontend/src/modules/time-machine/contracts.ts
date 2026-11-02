@@ -42,7 +42,7 @@ export const capabilitiesSchema = type({
   version: '1',
   experimental: 'true',
   manualCapture: 'boolean',
-  experimentalAcknowledgementRequired: 'true',
+  experimentalAcknowledgementRequired: 'boolean',
   automaticCapture: { scheduled: 'boolean', preUpdate: 'boolean', preRestart: 'boolean' },
   osSnapshots: { supported: 'false', reason: timeMachineIssueSchema },
   dockerImages: { capture: 'boolean', restore: 'boolean' },

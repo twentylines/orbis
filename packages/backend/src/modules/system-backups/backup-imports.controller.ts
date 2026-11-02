@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Po
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
-import { backupCredentials, backupOperator } from './backup-access';
+import { backupOperator } from './backup-access';
 import { BackupImportsService } from './backup-imports.service';
 
 @Controller('system-backups/imports')
@@ -17,8 +17,8 @@ export class BackupImportsController {
   @Post()
   @HttpCode(201)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  create(@Req() request: Request, @Body() body: unknown) {
-    return this.imports.create(backupOperator(request), backupCredentials(body));
+  create(@Req() request: Request) {
+    return this.imports.createUpload(backupOperator(request));
   }
   @Put(':id/file')
   @HttpCode(200)
@@ -49,8 +49,11 @@ export class BackupImportsController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   review(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
     const owner = backupOperator(request);
-    const value = backupCredentials(body, true);
-    return this.imports.review(id, owner, value, value.passphrase);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BadRequestException('Enter the backup passphrase.');
+    const value = body as Record<string, unknown>;
+    if (Object.keys(value).some((key) => !['password', 'totpCode', 'passphrase'].includes(key)) || typeof value.passphrase !== 'string')
+      throw new BadRequestException('Enter the backup passphrase.');
+    return this.imports.reviewUpload(id, owner, value.passphrase);
   }
   @Post(':id/cancel')
   @HttpCode(200)

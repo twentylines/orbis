@@ -41,6 +41,26 @@ it('destroys the download source on disconnect and removes its listener after cl
   await new Promise<void>((resolve) => stream.once('close', resolve));
   expect(response.listenerCount('close')).toBe(0);
 });
+it('creation-session downloads use only the existing owner-bound session route and reject mixed authorization fields', async () => {
+  const downloadCreated = vi.fn().mockResolvedValue({ stream: new PassThrough(), bytes: 100 });
+  const download = vi.fn();
+  const controller = new SystemBackupsController({ downloadCreated, download } as unknown as SystemBackupsService, {} as BackupImportsService);
+  const response = Object.assign(new EventEmitter(), { setHeader: vi.fn() });
+  await controller.download(operator, 'fixture-id', { creationSession: 'true' }, response as unknown as Response);
+  expect(downloadCreated).toHaveBeenCalledWith('fixture-id', 7, operator);
+  expect(download).not.toHaveBeenCalled();
+  await expect(
+    controller.download(operator, 'fixture-id', { creationSession: true, password: 'mixed' }, response as unknown as Response),
+  ).rejects.toThrow('valid backup');
+  await expect(
+    controller.download(
+      { authMethod: 'session', user: { id: 2, operator: false } } as Request,
+      'fixture-id',
+      { creationSession: true },
+      response as unknown as Response,
+    ),
+  ).rejects.toThrow('operator session');
+});
 it('closes a file opened after the client already disconnected during reauthentication', async () => {
   const stream = new PassThrough();
   const controller = new SystemBackupsController(

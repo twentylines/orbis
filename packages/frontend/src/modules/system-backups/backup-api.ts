@@ -20,6 +20,7 @@ const restoreConflictMessages = new Set([
   'Another container is writing Orbis data. Stop it before creating a full backup.',
   'Full restore requires supported writable bind storage. No server data has been changed.',
   'This controller cannot prepare an isolated restore worker. No server data has been changed.',
+  'This installation cannot restore backups because managed Compose controller support could not be verified.',
   'Backup import storage needs review. No server data has been changed.',
   'Review this backup again before preparing its restore.',
   'Wait for the current backup upload or review to finish.',
@@ -30,6 +31,11 @@ const safeBadRequestMessages = new Map([
   ['AUTH_ERROR_INVALID_PASSWORD', 'The current account password is incorrect. Use the password for this server, not the backup key.'],
   ['AUTH_ERROR_TOTP_INVALID_CODE', 'The authentication code is incorrect or expired. Enter a new code for this account.'],
   ['Confirm this action with your account password.', 'Enter this server’s current account password to confirm the action.'],
+  [
+    'Provide your password, authentication code if enabled, and a backup passphrase of at least 8 characters.',
+    'Check the current account password and authentication code. The backup key must contain 8 to 1024 characters.',
+  ],
+  ['Use a backup passphrase between 8 and 1024 characters.', 'Use a backup key between 8 and 1024 characters.'],
   [
     'Provide your password, authentication code if enabled, and a backup passphrase of at least 12 characters.',
     'Check the current account password and authentication code. The backup key must contain 12 to 1024 characters.',
@@ -170,8 +176,8 @@ export async function readBackups(signal?: AbortSignal): Promise<BackupSnapshot>
 export async function startExport(credentials: BackupCredentials, passphrase: string, signal?: AbortSignal) {
   return parseBackupResponse(exportJobSchema, await backupRequest('/export', 'POST', { ...credentials, passphrase }, signal));
 }
-export async function createImport(credentials: BackupCredentials, signal?: AbortSignal) {
-  return parseBackupResponse(importJobSchema, await backupRequest('/imports', 'POST', credentials, signal));
+export async function createImport(signal?: AbortSignal) {
+  return parseBackupResponse(importJobSchema, await backupRequest('/imports', 'POST', {}, signal));
 }
 
 export function uploadBackup(
@@ -224,7 +230,7 @@ export function uploadBackup(
 let downloadSequence = 0;
 export function downloadBackup(
   id: string,
-  credentials: BackupCredentials,
+  credentials: BackupCredentials | { creationSession: true },
   onError: (message: string) => void,
   kind: 'backup' | 'capture' = 'backup',
 ): () => void {
@@ -243,7 +249,7 @@ export function downloadBackup(
     const field = document.createElement('input');
     field.type = 'hidden';
     field.name = name;
-    field.value = value;
+    field.value = String(value);
     form.append(field);
   }
   let submitted = false;

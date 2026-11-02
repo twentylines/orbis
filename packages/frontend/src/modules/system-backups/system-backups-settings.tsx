@@ -41,6 +41,9 @@ import {
   type RestoreJob,
 } from './contracts';
 import { isAcceptedRestoreReconnect, shouldStopBackupStatusPolling } from './backup-reconnection';
+import { restoreAfterReview } from './review-for-restore';
+import { acceptRestoreAttempt, beginRestoreAttempt, restoreForAttempt, type RestoreAttempt } from './restore-attempt';
+import { accountSecurityKey, readAccountSecurity } from '@/desktop/account-security-api';
 import { BackupRemoveTrigger, BackupRemovalConfirmation, type BackupRemovalTarget } from './backup-removal-confirmation';
 import type { BackupRemovalRect } from './backup-removal-position';
 import './system-backups-settings.css';
@@ -74,7 +77,7 @@ const actionLabels = {
   export: 'Create encrypted backup',
   upload: 'Upload encrypted backup',
   review: 'Verify backup',
-  restore: 'Replace this server',
+  restore: 'Restore backup',
   download: 'Download encrypted backup',
   'recover-export': 'Recover apps',
   'cancel-restore': 'Stop restore',
@@ -83,8 +86,8 @@ const actionLabels = {
 
 const submitLabels: Record<Action['kind'], string> = {
   export: 'Continue',
-  upload: 'Continue',
-  review: 'Continue',
+  upload: 'Restore',
+  review: 'Restore',
   restore: 'Restore',
   download: 'Download',
   'recover-export': 'Recover',
@@ -92,12 +95,20 @@ const submitLabels: Record<Action['kind'], string> = {
   'recover-restore': 'Recover',
 };
 
-export function BackupDownloadReady({ job, disabled, onDownload }: { job: ExportJob; disabled: boolean; onDownload: () => void }) {
+export function BackupDownloadReady({
+  job,
+  disabled,
+  onDownload,
+}: {
+  job: ExportJob;
+  disabled: boolean;
+  onDownload: (opener: HTMLButtonElement) => void;
+}) {
   if (job.status !== 'succeeded') return null;
   return (
     <div className="system-backups-download-ready">
       <p>Save the encrypted backup to your computer.</p>
-      <Button type="button" intent="primary" disabled={disabled} onClick={onDownload}>
+      <Button type="button" intent="primary" disabled={disabled} onClick={(event) => onDownload(event.currentTarget)}>
         Download
       </Button>
     </div>
@@ -107,11 +118,11 @@ export function BackupDownloadReady({ job, disabled, onDownload }: { job: Export
 export function backupEncryptionPassphrase(values: FormData, kind: 'export' | 'review', useAccountPassword: boolean): string {
   const account = kind === 'export' && useAccountPassword;
   const passphrase = String(values.get(account ? 'password' : 'passphrase') ?? '');
-  if (passphrase.trim().length < 12 || passphrase.length > 1024) {
+  if (passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024) {
     throw new Error(
       account
-        ? 'Your account password must be between 12 and 1024 characters to encrypt a backup. Choose a separate backup passphrase instead.'
-        : 'Use a backup password or passphrase between 12 and 1024 characters.',
+        ? 'Your account password must be between 8 and 1024 characters to encrypt a backup. Choose a separate backup passphrase instead.'
+        : 'Use a backup password or passphrase between 8 and 1024 characters.',
     );
   }
   if (kind === 'export' && !account && passphrase !== String(values.get('repeatPassphrase') ?? '')) {
@@ -140,31 +151,45 @@ export function prepareBackupSubmission(
     archiveKeyMode: ArchiveKeyMode | null;
     fileValid: boolean;
     restoreValid: boolean;
+    uploadFromServer?: boolean;
+    restoreProofRequired?: boolean;
   },
 ) {
   const password = values.get('password');
   const code = values.get('totpCode');
-  if (typeof password !== 'string' || !password.length || password.length > 1024)
+  const needsCredentials =
+    !['upload', 'review', 'restore'].includes(options.kind) || options.restoreProofRequired === true || options.uploadFromServer === true;
+  if (['upload', 'review', 'restore'].includes(options.kind) && values.get('confirmation') !== 'replace-server')
+    throw new BackupFormError('confirmation', 'Confirm that you want to restore this backup.');
+  if (needsCredentials && (typeof password !== 'string' || !password.length || password.length > 1024))
     throw new BackupFormError('password', 'Enter this server’s current account password.');
-  if ((options.totpEnabled || (code !== null && code !== '')) && (typeof code !== 'string' || !/^\d{6}$/.test(code)))
+  if (needsCredentials && (options.totpEnabled || (code !== null && code !== '')) && (typeof code !== 'string' || !/^\d{6}$/.test(code)))
     throw new BackupFormError('totpCode', 'Enter the six-digit authentication code for this account.');
   let passphrase = '';
-  if (options.kind === 'review' && !options.archiveKeyMode) throw new BackupFormError('keyMode', 'Choose how this backup was encrypted.');
-  if (options.kind === 'export' || options.kind === 'review') {
+  if (options.kind === 'export' || options.kind === 'review' || options.kind === 'upload') {
     const keyField = options.kind === 'export' && options.useAccountPassword ? 'password' : 'passphrase';
+    if ((options.kind === 'upload' || options.kind === 'review') && needsCredentials) {
+      const supplied = values.get('passphrase');
+      if (!supplied && typeof password === 'string') values.set('passphrase', password);
+    }
     if (typeof values.get(keyField) !== 'string') throw new BackupFormError(keyField, 'Enter the backup key.');
     try {
-      passphrase = backupEncryptionPassphrase(values, options.kind, options.useAccountPassword);
+      passphrase = backupEncryptionPassphrase(values, options.kind === 'export' ? 'export' : 'review', options.useAccountPassword);
     } catch (error) {
       const repeat = error instanceof Error && error.message === 'The backup passphrases did not match. Enter them again.';
       throw new BackupFormError(repeat ? 'repeatPassphrase' : keyField, error instanceof Error ? error.message : 'Check the backup key.');
     }
   }
   if (options.kind === 'upload' && !options.fileValid) throw new BackupFormError('file', 'Choose a complete encrypted Orbis backup file.');
-  if (options.kind === 'restore' && !options.restoreValid)
-    throw new BackupFormError('confirmation', 'Verify this backup again and confirm replacement before restoring.');
+  if (options.kind === 'restore' && !options.restoreValid) throw new BackupFormError('confirmation', 'Verify this backup again before restoring.');
   for (const field of form.querySelectorAll<HTMLInputElement>('input[type="password"], input[name="totpCode"]')) field.value = '';
-  return { credentials: { password, ...(typeof code === 'string' && code ? { totpCode: code } : {}) } satisfies BackupCredentials, passphrase };
+  return {
+    credentials: {
+      password: typeof password === 'string' ? password : '',
+      ...(typeof code === 'string' && code ? { totpCode: code } : {}),
+    } satisfies BackupCredentials,
+    passphrase,
+  };
 }
 
 export function BackupArchiveKeyFields({
@@ -203,7 +228,7 @@ export function BackupArchiveKeyFields({
           label={mode === 'account-password' ? 'Original account password' : 'Backup passphrase'}
           type="password"
           autoComplete="off"
-          minLength={12}
+          minLength={8}
           maxLength={1024}
           required
           disabled={disabled}
@@ -247,7 +272,7 @@ export function BackupEncryptionFields({
             label="New backup passphrase"
             type="password"
             autoComplete="off"
-            minLength={12}
+            minLength={8}
             maxLength={1024}
             required
             disabled={disabled}
@@ -258,7 +283,7 @@ export function BackupEncryptionFields({
             label="Repeat backup passphrase"
             type="password"
             autoComplete="off"
-            minLength={12}
+            minLength={8}
             maxLength={1024}
             required
             disabled={disabled}
@@ -350,6 +375,12 @@ export function SystemBackupsSettings({
   const id = useId();
   const reduced = useReducedMotion();
   const { user } = useAppContext();
+  const accountSecurity = useQuery({
+    queryKey: accountSecurityKey(user.id),
+    queryFn: ({ signal }) => readAccountSecurity(signal),
+    enabled: user.operator,
+    retry: false,
+  });
   const visible = useWindowVisible();
   const status = useQuery({
     queryKey: ['orbis-full-backups', user?.id],
@@ -369,6 +400,8 @@ export function SystemBackupsSettings({
   const [useAccountPassword, setUseAccountPassword] = useState(true);
   const [archiveKeyMode, setArchiveKeyMode] = useState<ArchiveKeyMode | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [restoreAttempt, setRestoreAttempt] = useState<RestoreAttempt | null>(null);
+  const [, setRestoreSettled] = useState(0);
   const [wizardJob, setWizardJob] = useState<{ kind: 'export' | 'import'; id: string } | null>(null);
   const [wizardPurpose, setWizardPurpose] = useState<Action['kind'] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -385,6 +418,7 @@ export function SystemBackupsSettings({
   const [upload, setUpload] = useState<{ completed: number; total: number; confirmed: boolean } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const downloadCleanup = useRef<(() => void) | null>(null);
+  const creationDownloads = useRef(new Set<string>());
   const credentialsForm = useRef<HTMLFormElement | null>(null);
   const filePicker = useRef<HTMLInputElement | null>(null);
   const mounted = useRef(true);
@@ -443,7 +477,7 @@ export function SystemBackupsSettings({
     setWizardPurpose('review');
     if (!embedded) setWizardOpen(true);
   }, [initialImportId, data, action, busy, embedded]);
-  const restore = data?.restore.job;
+  const restore = restoreForAttempt(restoreAttempt, data?.restore.job);
   const guidedImportId = restoreOnly && embedded ? initialImportId : undefined;
   const visibleImports = guidedImportId ? data?.imports.jobs.filter((job) => job.id === guidedImportId) : data?.imports.jobs;
   const selectedImport = visibleImports?.find((job) => job.id === guidedImportId);
@@ -452,7 +486,11 @@ export function SystemBackupsSettings({
   const continuity = useRestoreDeparture(restore, status.isError);
   useEffect(() => {
     if (restore && ['ready', 'running', 'recovery-required'].includes(restore.status)) awaitingRestore.current = true;
-  }, [restore]);
+    if (restore && ['succeeded', 'rolled-back'].includes(restore.status) && awaitingRestore.current && !continuity.departing) {
+      awaitingRestore.current = false;
+      setRestoreSettled((value) => value + 1);
+    }
+  }, [restore, continuity.departing]);
   useEffect(() => {
     onActivityChange?.(busy || restoreActive || awaitingRestore.current);
   }, [busy, restoreActive, onActivityChange]);
@@ -538,6 +576,8 @@ export function SystemBackupsSettings({
         useAccountPassword,
         archiveKeyMode,
         fileValid: restoreSource === 'server' ? Boolean(selectedSavedBackup) : Boolean(file && file.size >= 52),
+        uploadFromServer: action.kind === 'upload' && restoreSource === 'server',
+        restoreProofRequired: accountSecurity.data?.requireRestoreAuthentication === true,
         restoreValid:
           action.kind !== 'restore' || (confirmation === 'replace-server' && canRestore(action.job, Date.now()) && Boolean(action.job.review)),
       });
@@ -554,71 +594,111 @@ export function SystemBackupsSettings({
     }
     const { credentials, passphrase } = submission;
     const selected = action;
-    void run(async (signal) => {
-      if (selected.kind === 'export') {
-        const job = await startExport(credentials, passphrase, signal);
-        if (mounted.current) setWizardJob({ kind: 'export', id: job.id });
-      } else if (selected.kind === 'upload') {
-        let uploadedJob: ImportJob;
-        if (restoreSource === 'server') {
-          if (!selectedSavedBackup || !savedBackupEligible(selectedSavedBackup)) throw new Error('Choose an available server backup.');
-          uploadedJob = await importSavedBackup(selectedSavedBackup.id, credentials, signal);
-          if (uploadedJob.status !== 'uploaded') throw new Error('The saved archive could not be imported. Review its status before retrying.');
-          if (mounted.current) setWizardJob({ kind: 'import', id: uploadedJob.id });
-        } else {
-          if (!file || file.size < 52) throw new Error('Choose a complete encrypted Orbis backup file.');
-          const job = await createImport(credentials, signal);
-          if (mounted.current) setWizardJob({ kind: 'import', id: job.id });
-          setUpload({ completed: 0, total: file.size, confirmed: false });
-          uploadedJob = await uploadBackup(job.id, file, signal, (completed, total) => {
-            if (mounted.current) setUpload({ completed, total, confirmed: false });
-          });
-          if (mounted.current) setUpload({ completed: file.size, total: file.size, confirmed: true });
-        }
-        if (mounted.current) {
-          setFile(null);
-          setArchiveKeyMode(null);
-          setAction({ kind: 'review', job: uploadedJob });
-          setWizardPurpose('review');
-          setNotice('Encrypted backup selected. Enter the archive key to continue.');
-        }
-        return;
-      } else if (selected.kind === 'download') {
-        downloadCleanup.current?.();
-        downloadCleanup.current = downloadBackup(selected.job.id, credentials, (message) => {
-          if (mounted.current) setError(message);
-        });
-        setNotice('Download requested. Your browser shows its progress and confirms when the file has been saved.');
-      } else if (selected.kind === 'restore') {
-        if (confirmation !== 'replace-server' || !canRestore(selected.job, Date.now()) || !selected.job.review)
-          throw new Error('Verify this backup again and confirm replacement before restoring.');
-        const accepted = await backupRequest(
-          '/restores',
-          'POST',
-          { ...credentials, importId: selected.job.id, manifestSha256: selected.job.review.manifestSha256, confirmation },
-          signal,
-        );
-        const acceptedJob = restoreJobSchema.allows(accepted) ? accepted : restoreStatusSchema.allows(accepted) ? accepted.job : null;
-        if (acceptedJob) {
+    const newAttempt = ['upload', 'review', 'restore'].includes(selected.kind) ? beginRestoreAttempt(data?.restore.job) : null;
+    if (newAttempt) setRestoreAttempt(newAttempt);
+    void run(
+      async (signal) => {
+        const verifyAndRestore = async (job: ImportJob) => {
+          let accepted: unknown;
           try {
-            armAcceptedRestore(acceptedJob.id, sessionStorage);
-          } catch {
-            /* Status polling can still establish a started restore. */
+            accepted = await restoreAfterReview(job.id, passphrase, credentials, signal, backupRequest, () => {
+              awaitingRestore.current = true;
+            });
+          } catch (error) {
+            if (error instanceof BackupApiError && error.status >= 400 && error.status < 500) awaitingRestore.current = false;
+            throw error;
           }
-        }
-        awaitingRestore.current = true;
-        setNotice('Restore accepted. Keep this page open while Orbis reconnects and checks completion.');
-      } else {
-        const path =
-          selected.kind === 'review'
-            ? `/imports/${selected.job.id}/review`
-            : selected.kind === 'recover-export'
+          const acceptedJob = restoreJobSchema.allows(accepted) ? accepted : restoreStatusSchema.allows(accepted) ? accepted.job : null;
+          if (!acceptedJob) {
+            awaitingRestore.current = true;
+            throw new Error('Restore status could not be confirmed. Refresh status before trying again.');
+          }
+          if (newAttempt) setRestoreAttempt(acceptRestoreAttempt(newAttempt, acceptedJob));
+          if (acceptedJob) {
+            try {
+              armAcceptedRestore(acceptedJob.id, sessionStorage);
+            } catch {
+              /* Status polling can establish a started restore. */
+            }
+          }
+          awaitingRestore.current = true;
+          setNotice('Restore accepted. Keep this page open while Orbis reconnects and checks completion.');
+        };
+        if (selected.kind === 'export') {
+          const job = await startExport(credentials, passphrase, signal);
+          if (job.creationDownloadAvailable) creationDownloads.current.add(job.id);
+          if (mounted.current) setWizardJob({ kind: 'export', id: job.id });
+        } else if (selected.kind === 'upload') {
+          let uploadedJob: ImportJob;
+          if (restoreSource === 'server') {
+            if (!selectedSavedBackup || !savedBackupEligible(selectedSavedBackup)) throw new Error('Choose an available server backup.');
+            uploadedJob = await importSavedBackup(selectedSavedBackup.id, credentials, signal);
+            if (uploadedJob.status !== 'uploaded') throw new Error('The saved archive could not be imported. Review its status before retrying.');
+            if (mounted.current) setWizardJob({ kind: 'import', id: uploadedJob.id });
+          } else {
+            if (!file || file.size < 52) throw new Error('Choose a complete encrypted Orbis backup file.');
+            const job = await createImport(signal);
+            if (mounted.current) setWizardJob({ kind: 'import', id: job.id });
+            setUpload({ completed: 0, total: file.size, confirmed: false });
+            uploadedJob = await uploadBackup(job.id, file, signal, (completed, total) => {
+              if (mounted.current) setUpload({ completed, total, confirmed: false });
+            });
+            if (mounted.current) setUpload({ completed: file.size, total: file.size, confirmed: true });
+          }
+          await verifyAndRestore(uploadedJob);
+        } else if (selected.kind === 'review') {
+          await verifyAndRestore(selected.job);
+        } else if (selected.kind === 'download') {
+          downloadCleanup.current?.();
+          downloadCleanup.current = downloadBackup(selected.job.id, credentials, (message) => {
+            if (mounted.current) setError(message);
+          });
+          setNotice('Download requested. Your browser shows its progress and confirms when the file has been saved.');
+        } else if (selected.kind === 'restore') {
+          if (confirmation !== 'replace-server') throw new Error('Confirm that you want to restore this backup.');
+          if (!canRestore(selected.job, Date.now()) || !selected.job.review) throw new Error('Verify this backup again before restoring.');
+          const accepted = await backupRequest(
+            '/restores',
+            'POST',
+            {
+              ...(credentials.password ? credentials : {}),
+              importId: selected.job.id,
+              manifestSha256: selected.job.review.manifestSha256,
+              confirmation,
+            },
+            signal,
+          );
+          const acceptedJob = restoreJobSchema.allows(accepted) ? accepted : restoreStatusSchema.allows(accepted) ? accepted.job : null;
+          if (!acceptedJob) {
+            awaitingRestore.current = true;
+            throw new Error('Restore status could not be confirmed. Refresh status before trying again.');
+          }
+          if (newAttempt) setRestoreAttempt(acceptRestoreAttempt(newAttempt, acceptedJob));
+          if (acceptedJob) {
+            try {
+              armAcceptedRestore(acceptedJob.id, sessionStorage);
+            } catch {
+              /* Status polling can still establish a started restore. */
+            }
+          }
+          awaitingRestore.current = true;
+          setNotice('Restore accepted. Keep this page open while Orbis reconnects and checks completion.');
+        } else {
+          const path =
+            selected.kind === 'recover-export'
               ? `/${selected.job.id}/recover`
               : `/restores/${selected.job.id}/${selected.kind === 'cancel-restore' ? 'cancel' : 'recover'}`;
-        await backupRequest(path, 'POST', selected.kind === 'review' ? { ...credentials, passphrase } : credentials, signal);
-      }
-      if (mounted.current) setAction(null);
-    });
+          await backupRequest(path, 'POST', credentials, signal);
+        }
+        if (mounted.current) setAction(null);
+      },
+      {
+        onError: (message) => {
+          if (!awaitingRestore.current && newAttempt) setRestoreAttempt(null);
+          setError(message);
+        },
+      },
+    );
   };
   const simpleAction = (path: string, method = 'POST') =>
     void run(async (signal) => {
@@ -627,8 +707,33 @@ export function SystemBackupsSettings({
   const missing = status.error instanceof BackupApiError && status.error.status === 404;
   const reconnectingAcceptedRestore = status.isError && isAcceptedRestoreReconnect(status.error, restore?.status, awaitingRestore.current);
   const unavailable = !data || !data.exports.available || !data.imports.available || status.isError;
-  const phraseNeeded = action?.kind === 'review';
+  const phraseNeeded = action?.kind === 'review' || action?.kind === 'upload';
+  const needsCredentials = Boolean(
+    action &&
+      (!['upload', 'review', 'restore'].includes(action.kind) ||
+        accountSecurity.data?.requireRestoreAuthentication ||
+        (action.kind === 'upload' && restoreSource === 'server')),
+  );
   const destructive = action?.kind === 'restore';
+  const downloadCreated = (job: ExportJob, opener: HTMLButtonElement) => {
+    const keyboard = opener.matches(':focus-visible');
+    const confirmLaterDownload = () => {
+      chooseAction({ kind: 'download', job });
+      actionOpener.current = opener;
+      actionKeyboard.current = keyboard;
+    };
+    if (!creationDownloads.current.delete(job.id)) {
+      confirmLaterDownload();
+      return;
+    }
+    downloadCleanup.current?.();
+    downloadCleanup.current = downloadBackup(job.id, { creationSession: true }, (message) => {
+      if (!mounted.current) return;
+      confirmLaterDownload();
+      setError(message);
+    });
+    setNotice('Download requested. Your browser shows its progress and confirms when the file has been saved.');
+  };
   const renderExportJob = (job: ExportJob, inWizard = false) => (
     <article className="system-backups-job" data-ready={(job.status === 'succeeded' && !job.needsRecovery) || undefined} key={job.id}>
       <h4>{new Date(job.createdAt).toLocaleString()}</h4>
@@ -637,7 +742,7 @@ export function SystemBackupsSettings({
         <RecoveryProgress label={`Backup · ${stageLabels[job.stage] ?? 'Checking progress'}`} completed={job.completedBytes} total={job.totalBytes} />
       ) : null}
       {job.restartRequired ? <p role="alert">Apps have recovered. Restart Orbis to finish recovery before making further changes.</p> : null}
-      <BackupDownloadReady job={job} disabled={busy || status.isError} onDownload={() => chooseAction({ kind: 'download', job })} />
+      <BackupDownloadReady job={job} disabled={busy || status.isError} onDownload={(opener) => downloadCreated(job, opener)} />
       <div className="system-backups-actions">
         {job.status === 'running' ? (
           <Button variant="outline" disabled={busy || status.isError} onClick={() => simpleAction(`/${job.id}/cancel`)}>
@@ -673,17 +778,7 @@ export function SystemBackupsSettings({
       {job.reviewExpiresAt ? <p>Review expires {new Date(job.reviewExpiresAt).toLocaleTimeString()}. Verify again if it expires.</p> : null}
       <div className="system-backups-actions">
         {job.uploadedBytes > 0 && !['uploading', 'reviewing', 'preparing'].includes(job.status) ? (
-          <Button variant="outline" disabled={working || status.isError} onClick={() => chooseAction({ kind: 'review', job })}>
-            Verify
-          </Button>
-        ) : null}
-        {job.review ? (
-          <Button
-            intent="danger"
-            variant="outline"
-            disabled={working || status.isError || !canRestore(job, Date.now())}
-            onClick={() => chooseAction({ kind: 'restore', job })}
-          >
+          <Button intent="danger" variant="outline" disabled={working || status.isError} onClick={() => chooseAction({ kind: 'review', job })}>
             Restore
           </Button>
         ) : null}
@@ -822,58 +917,66 @@ export function SystemBackupsSettings({
               )}
             </>
           ) : null}
-          {destructive && action.job.review ? (
+          {destructive || action.kind === 'upload' || action.kind === 'review' ? (
             <>
-              <Review review={action.job.review} />
+              {destructive && action.job.review ? <Review review={action.job.review} /> : null}
               <p className="system-backups-warning">
                 This replaces the server’s configuration, accounts and managed app data. Apps will stop and Orbis will restart. Keep a current backup
                 before continuing.
               </p>
               <label className="system-backups-confirm">
                 <input type="checkbox" name="confirmation" value="replace-server" required disabled={busy} />
-                <span>I have reviewed this backup and want to replace this server.</span>
+                <span>Restore this backup</span>
               </label>
             </>
           ) : null}
-          {phraseNeeded ? <p>Confirm with this server’s current account password. The archive key is entered separately.</p> : null}
-          <div className="system-backups-fields">
-            <Input
-              name="password"
-              id={`${id}-password`}
-              label="Current account password"
-              type="password"
-              autoComplete="current-password"
-              maxLength={1024}
-              required
-              disabled={busy}
-            />
-            {user?.totpEnabled ? (
+          {needsCredentials ? (
+            <div className="system-backups-fields">
               <Input
-                name="totpCode"
-                id={`${id}-totpCode`}
-                label="Authentication code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]{6}"
-                minLength={6}
-                maxLength={6}
+                name="password"
+                id={`${id}-password`}
+                label="Current account password"
+                type="password"
+                autoComplete="current-password"
+                maxLength={1024}
                 required
                 disabled={busy}
               />
-            ) : null}
-          </div>
+              {user?.totpEnabled ? (
+                <Input
+                  name="totpCode"
+                  id={`${id}-totpCode`}
+                  label="Authentication code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  minLength={6}
+                  maxLength={6}
+                  required
+                  disabled={busy}
+                />
+              ) : null}
+            </div>
+          ) : null}
           {phraseNeeded ? (
-            <BackupArchiveKeyFields
-              id={id}
-              mode={archiveKeyMode}
+            <Input
+              name="passphrase"
+              id={`${id}-passphrase`}
+              label={needsCredentials ? 'Backup password (if different)' : 'Backup password'}
+              type="password"
+              autoComplete="off"
+              maxLength={1024}
+              required={!needsCredentials}
               disabled={busy}
-              onChange={(mode) => {
-                const field = credentialsForm.current?.querySelector<HTMLInputElement>('input[name="passphrase"]');
-                if (field) field.value = '';
-                setArchiveKeyMode(mode);
-                setError(null);
-              }}
             />
+          ) : null}
+          {['upload', 'review', 'restore'].includes(action.kind) && accountSecurity.isError ? (
+            <InlineFeedback>
+              Account security could not be checked.{' '}
+              <Button type="button" variant="outline" onClick={() => void accountSecurity.refetch()}>
+                Retry
+              </Button>
+            </InlineFeedback>
           ) : null}
           {action.kind === 'export' ? (
             <BackupEncryptionFields
@@ -909,8 +1012,9 @@ export function SystemBackupsSettings({
               disabled={
                 busy ||
                 unavailable ||
+                (['upload', 'review', 'restore'].includes(action.kind) && (accountSecurity.isPending || accountSecurity.isError)) ||
                 (['export', 'upload', 'review', 'restore'].includes(action.kind) && working) ||
-                (action.kind === 'upload' && !file) ||
+                (action.kind === 'upload' && restoreSource === 'upload' && !file) ||
                 (destructive && !canRestore(action.job, Date.now()))
               }
             >
@@ -1002,6 +1106,9 @@ export function SystemBackupsSettings({
         departing={continuity.departing}
         actions={
           <>
+            {showRestoreScene && !busy && restoreAttempt && !restoreAttempt.acceptedId ? (
+              <Button onClick={() => window.location.reload()}>Check status</Button>
+            ) : null}
             {showRestoreScene && status.isError ? <Button onClick={refresh}>Reconnect</Button> : null}
             {showRestoreScene && status.error instanceof BackupApiError && status.error.status === 401 ? (
               <Link className="btn" to="/login">
@@ -1055,13 +1162,6 @@ export function SystemBackupsSettings({
             : 'Orbis configuration, accounts and managed app data are backed up together in an encrypted file. Apps pause while their data is copied to keep it consistent.'}
         </p>
       )}
-      {!restoreOnly && !guidedImportId ? (
-        <p>
-          <Button asChild variant="outline">
-            <Link to="/time-machine">Open Time Machine</Link>
-          </Button>
-        </p>
-      ) : null}
       {status.isPending ? <output>Reading backup capabilities…</output> : null}
       {status.isError ? (
         <InlineFeedback>

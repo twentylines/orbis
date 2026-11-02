@@ -48,15 +48,14 @@ export const ErrorPage = ({ error, onReset }: ErrorPageProps) => {
             Open workspace
           </Link>
         </div>
-        <details className="orbis-error-details">
-          <summary>Details</summary>
+        <section className="orbis-error-details" aria-label="Error details">
           <dl>
             <dt>Page</dt>
             <dd>{typeof window === 'undefined' ? '/' : window.location.pathname}</dd>
             <dt>Error</dt>
             <dd>{message || 'No error details were returned.'}</dd>
           </dl>
-        </details>
+        </section>
       </section>
     </FallbackSurface>
   );

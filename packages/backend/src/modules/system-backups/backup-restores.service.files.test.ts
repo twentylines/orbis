@@ -6,6 +6,7 @@ import type Dockerode from 'dockerode';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupRestoresService } from './backup-restores.service';
 import { BackupRestoreJournal } from './backup-restore-journal';
+import { BackupRequirementError } from './backup-files';
 import {
   backupMaintenanceActive,
   enterBackupMutation,
@@ -591,6 +592,12 @@ it('releases a failed prepare response while preserving a durable recovery hold'
 it('releases maintenance after a pre-handoff failure without inventing recovery', async () => {
   boundary.handoff.mockRejectedValue(new Error('boundary failed'));
   await expect(service.prepare(randomUUID(), 7, credentials, 'a'.repeat(64))).rejects.toThrow('needs review');
+  expect(backupMaintenanceActive()).toBe(false);
+});
+it('returns a clear 409 for an unverified managed controller before starting restore', async () => {
+  const message = 'This installation cannot restore backups because managed Compose controller support could not be verified.';
+  boundary.handoff.mockRejectedValue(new BackupRequirementError(message));
+  await expect(service.prepare(randomUUID(), 7, credentials, 'a'.repeat(64))).rejects.toMatchObject({ status: 409, message });
   expect(backupMaintenanceActive()).toBe(false);
 });
 it('blocks simultaneous preparation and recovery during an unfinished handoff', async () => {

@@ -9,14 +9,24 @@
 .settings-search {
   position: relative;
   z-index: 5;
-  padding: 0 0 20px;
-  border-bottom: 1px solid var(--desktop-line);
+  flex: 1 1 16rem;
+  width: 100%;
+  min-width: 0;
+  max-width: 24rem;
+  padding: 0;
+}
+.desktop-route-page[data-route-section="settings"] .desktop-page-toolbar {
+  gap: 14px;
+  margin-inline-start: auto;
+  justify-content: flex-end;
+  flex: 0 1 24rem;
 }
 .settings-search-field {
   display: flex;
   align-items: center;
   gap: 10px;
   width: min(100%, 34rem);
+  min-width: 0;
   min-height: 46px;
   border: 1px solid var(--desktop-line);
   border-radius: 10px;
@@ -28,8 +38,8 @@
   background: color-mix(in srgb, var(--desktop-preset-tint) 5%, var(--desktop-surface));
 }
 .settings-search-field:has(input:focus-visible):not([data-pointer-focus="true"]) {
-  outline: 2px solid var(--desktop-focus);
-  outline-offset: 3px;
+  border-color: var(--desktop-focus);
+  background: color-mix(in srgb, var(--desktop-preset-tint) 8%, var(--desktop-surface));
 }
 .settings-search-field > svg {
   color: var(--desktop-muted);
@@ -45,9 +55,11 @@
   color: var(--desktop-ink);
   font: inherit;
   outline: none;
+  appearance: none;
+  -webkit-appearance: none;
   padding: 8px 0;
 }
-.desktop-settings .settings-search-field input:is(:focus, :focus-visible) {
+.settings-search-field input:is(:focus, :focus-visible) {
   background: transparent;
   outline: none;
   box-shadow: none;
@@ -65,7 +77,7 @@
 .settings-search-results {
   position: absolute;
   z-index: 10;
-  inset: calc(100% - 12px) auto auto 0;
+  inset: calc(100% + 8px) auto auto 0;
   width: min(100%, 34rem);
   max-height: min(26rem, 55dvh);
   overflow: auto;
@@ -75,7 +87,7 @@
   background: var(--desktop-surface);
   color: var(--desktop-ink);
   border: 1px solid var(--desktop-line);
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 12px 28px #0002;
 }
 .settings-search-results button {
@@ -113,18 +125,28 @@
   padding: 14px 12px;
   color: var(--desktop-muted);
 }
+@media (max-width: 760px) {
+  .desktop-route-page[data-route-section="settings"] .desktop-page-toolbar {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .desktop-route-page[data-route-section="settings"] .settings-header-search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+}
 .settings-layout {
   display: grid;
   grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
   gap: clamp(24px, 3cqi, 44px);
-  padding-top: 22px;
+  padding-top: 0;
   min-width: 0;
   min-height: min(38rem, 65dvh);
 }
 .settings-sidebar {
   min-width: 0;
-  padding-right: 20px;
-  border-right: 1px solid var(--desktop-line);
+  padding-right: 0;
 }
 .settings-category-list {
   display: flex;
@@ -174,8 +196,7 @@
   justify-content: space-between;
   gap: 16px;
   margin: 0 0 24px;
-  padding: 0 0 20px;
-  border-bottom: 1px solid var(--desktop-line);
+  padding: 0;
 }
 .settings-content-heading h2 {
   font-size: clamp(1.375rem, 1.8cqi, 1.75rem);
@@ -298,12 +319,6 @@
   .settings-mobile-navigation {
     display: block;
   }
-  .settings-search {
-    padding-bottom: 18px;
-  }
-  .settings-search-field {
-    width: 100%;
-  }
   .settings-content-heading {
     margin-bottom: 20px;
     padding-bottom: 18px;
@@ -375,29 +390,6 @@
   border-top: 0;
 }
 
-.settings-header-status {
-  color: var(--desktop-muted);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-}
-.settings-header-status-label {
-  display: block;
-}
-.settings-header-status-label[data-dirty="false"] {
-  visibility: hidden;
-}
-.settings-header-status-short {
-  display: none;
-}
-@media (max-width: 760px) {
-  .settings-header-status-full {
-    display: none;
-  }
-  .settings-header-status-short {
-    display: inline;
-  }
-}
-
 .settings-heading-container {
   min-width: 0;
   container: settings-save-header / inline-size;
@@ -419,17 +411,6 @@
 .settings-save-activity > [data-saving="false"] {
   visibility: hidden;
 }
-@container settings-save-header (max-width: 32rem) {
-  .settings-content-heading {
-    position: relative;
-    padding-bottom: calc(1.5em + 12px);
-  }
-  .settings-save-activity {
-    position: absolute;
-    inset-inline-end: 0;
-    bottom: 6px;
-  }
-}
 
 .settings-store-update-controls {
   display: flex;
@@ -439,4 +420,64 @@
 }
 .settings-store-update-controls .automatic-app-update-switch > .form-check {
   margin-block: 0;
+}
+
+.settings-category-panel :is(.settings-group, .appearance-section, .release-channel-settings, .automatic-updates-settings, .tm-settings),
+.settings-general-form > form {
+  min-width: 0;
+  padding: clamp(16px, 2.5cqi, 24px);
+  border: 1px solid color-mix(in srgb, var(--desktop-line) 75%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--desktop-ink) 4%, var(--desktop-surface));
+}
+.settings-category-panel .appearance > .appearance-section:first-child,
+.settings-category-panel .settings-store-groups > .appearance-section:first-child,
+.settings-category-panel .settings-security > .settings-group:first-child,
+.settings-category-panel > .tm-settings:first-child,
+.settings-category-panel .settings-update-groups > :first-child .release-channel-settings {
+  padding: clamp(16px, 2.5cqi, 24px);
+  border: 1px solid color-mix(in srgb, var(--desktop-line) 75%, transparent);
+}
+.settings-security,
+.settings-store-groups,
+.settings-update-groups,
+.settings-general-form {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.settings-group:empty {
+  display: none;
+}
+.settings-category-panel .settings-group > :last-child {
+  margin-bottom: 0;
+}
+.settings-category-panel .appearance-section {
+  margin-block: 0 16px;
+}
+.settings-store-groups > .appearance-section {
+  margin-block: 0;
+}
+.settings-category-panel .settings-passkeys {
+  padding: 0;
+}
+.settings-category-panel .release-channel-settings,
+.settings-category-panel .automatic-updates-settings {
+  margin: 0;
+}
+.settings-category-panel :is(.settings-group, .appearance-section, .tm-settings) :is(p, h2, h3) {
+  overflow-wrap: break-word;
+}
+@container settings (max-width: 38rem) {
+  .settings-category-panel :is(.settings-group, .appearance-section, .release-channel-settings, .automatic-updates-settings, .tm-settings),
+  .settings-general-form > form {
+    padding: 16px;
+  }
+  .settings-category-panel .appearance > .appearance-section:first-child,
+  .settings-category-panel .settings-store-groups > .appearance-section:first-child,
+  .settings-category-panel .settings-security > .settings-group:first-child,
+  .settings-category-panel > .tm-settings:first-child,
+  .settings-category-panel .settings-update-groups > :first-child .release-channel-settings {
+    padding: 16px;
+  }
 }

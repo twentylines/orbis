@@ -19,7 +19,8 @@ test('experimental manual capture is enabled while every automatic trigger is of
   expect(timeMachinePreferencesSchema.allows({ ...preferences, schedule: { enabled: true, intervalHours: 24 } })).toBe(false);
 });
 
-test('capture requires acknowledgement and bounded plain text without executable fields or extra keys', () => {
+test('capture accepts a bounded plain name without requiring an acknowledgement or executable fields', () => {
+  expect(timeMachineCaptureSchema.allows({ label: 'Before changing storage' })).toBe(true);
   expect(timeMachineCaptureSchema.allows({ experimentalAcknowledged: true, label: 'Before changing storage' })).toBe(true);
   expect(timeMachineCaptureSchema.allows({ experimentalAcknowledged: false, label: '' })).toBe(false);
   for (const label of ['<script>run()</script>', 'a'.repeat(241), 'line\nbreak'])

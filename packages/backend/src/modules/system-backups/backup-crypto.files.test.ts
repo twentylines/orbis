@@ -1,11 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { Readable } from 'node:stream';
-import { backupGcmPlaintextLimit, encryptBackupStream, BackupArchiveError, decryptBackup, encryptBackup } from './backup-crypto';
+import { backupGcmPlaintextLimit, encryptBackupStream, BackupArchiveError, decryptBackup, encryptBackup, backupMetadataBytes } from './backup-crypto';
 
 const passphrase = 'disposable-backup-passphrase';
 let directory: string;
@@ -113,9 +114,56 @@ it('cancels a streaming operation and removes its incomplete output', async () =
   expect((await fs.readdir(directory)).filter((name) => name.endsWith('.partial'))).toEqual([]);
 });
 
-it.each(['', 'too short', ' '.repeat(20), 'x'.repeat(1025)])('rejects an unusable passphrase without echoing it', async (value) => {
+it.each(['', 'x'.repeat(7), ' '.repeat(20), 'x'.repeat(1025)])('rejects an unusable passphrase without echoing it', async (value) => {
   await expect(encryptBackup({ source, destination: archive, passphrase: value })).rejects.toMatchObject({ code: 'passphrase' });
+  await expect(decryptBackup({ source: archive, destination: restored, passphrase: value })).rejects.toMatchObject({ code: 'passphrase' });
+  await expect(backupMetadataBytes(Buffer.alloc(0), value, true)).rejects.toMatchObject({ code: 'passphrase' });
+  await expect(
+    encryptBackupStream({
+      source: Readable.from([]),
+      plaintextBytes: 0,
+      destination: archive,
+      passphrase: value,
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toMatchObject({ code: 'passphrase' });
   expect((await fs.readdir(directory)).filter((name) => name.endsWith('.partial'))).toEqual([]);
+});
+
+it.each(['12345678', ' abcdefg', 'existing-long-archive-key'])('round-trips file and metadata with an accepted key', async (key) => {
+  const input = await fs.readFile(source);
+  await encryptBackup({ source, destination: archive, passphrase: key });
+  if (process.platform === 'darwin') {
+    // Initialize the fixture's macOS tracking flag before the production input seal is taken.
+    execFileSync('/usr/bin/python3', [
+      '-c',
+      'import os,sys; s=os.lstat(sys.argv[1]); os.chflags(sys.argv[1],s.st_flags|64,follow_symlinks=False)',
+      archive,
+    ]);
+  }
+  await decryptBackup({ source: archive, destination: restored, passphrase: key });
+  expect(await fs.readFile(restored)).toEqual(input);
+  const encrypted = await backupMetadataBytes(input, key, false);
+  expect(await backupMetadataBytes(encrypted, key, true)).toEqual(input);
+  if (key === '12345678') {
+    const streamArchive = path.join(directory, 'stream.orbis');
+    const streamOutput = path.join(directory, 'stream-restored');
+    await encryptBackupStream({
+      source: Readable.from([input]),
+      plaintextBytes: input.length,
+      destination: streamArchive,
+      passphrase: key,
+      signal: new AbortController().signal,
+    });
+    if (process.platform === 'darwin')
+      execFileSync('/usr/bin/python3', [
+        '-c',
+        'import os,sys; s=os.lstat(sys.argv[1]); os.chflags(sys.argv[1],s.st_flags|64,follow_symlinks=False)',
+        streamArchive,
+      ]);
+    await decryptBackup({ source: streamArchive, destination: streamOutput, passphrase: key });
+    expect(await fs.readFile(streamOutput)).toEqual(input);
+  }
 });
 
 it('does not include source paths or underlying errors in failure messages', async () => {

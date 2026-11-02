@@ -12,7 +12,8 @@ import {
 import { Children, createElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ColourModeChoice } from '@/desktop/colour-mode-choice';
-import { SetupCustomisation } from './welcome';
+import { SetupCustomisation, SetupTimeMachineStep } from './welcome';
+import { Switch } from '@/components/ui/Switch';
 import { defaultDesktopPreferences, type DesktopPreferences } from '@/desktop/preferences';
 
 test('entry requires an explicit fresh or restore choice', () => {
@@ -29,16 +30,16 @@ test('fresh setup combines colour and wallpaper in one customisation step and re
     visited.push(next);
     next = nextSetupStep(next, 'fresh');
   }
-  expect(visited).toEqual(['choose', 'server', 'customisation', 'performance', 'updates', 'ready']);
+  expect(visited).toEqual(['choose', 'server', 'customisation', 'performance', 'updates', 'time-machine', 'ready']);
   expect(visited).toEqual([...freshSetupSteps]);
   expect(visited.slice(1).map((step) => previousSetupStep(step))).toEqual(visited.slice(0, -1));
 });
 
 test('installer-detected Runtipi migration starts at customisation and never returns to fresh setup choices', () => {
-  expect(migrationSetupSteps).toEqual(['customisation', 'performance', 'updates', 'ready']);
+  expect(migrationSetupSteps).toEqual(['customisation', 'performance', 'updates', 'time-machine', 'ready']);
   expect(previousSetupStep('customisation', 'migration')).toBeNull();
   for (const [index, step] of migrationSetupSteps.entries()) {
-    expect(setupPosition(step, 'migration')).toEqual({ current: index + 1, total: 4 });
+    expect(setupPosition(step, 'migration')).toEqual({ current: index + 1, total: 5 });
     expect(nextSetupStep(step, 'migration')).toBe(migrationSetupSteps[index + 1] ?? null);
     expect(setupCanFinish(step, 'migration')).toBe(step === 'ready');
   }
@@ -52,7 +53,7 @@ test('back from restore returns to the choice and never skips into the fresh com
   expect(nextSetupStep('restore', 'restore')).toBeNull();
   expect(previousSetupStep('choose')).toBeNull();
   expect(previousSetupStep('server')).toBe('choose');
-  expect(previousSetupStep('ready')).toBe('updates');
+  expect(previousSetupStep('ready')).toBe('time-machine');
 });
 
 test('restore and failed or incomplete setup cannot acknowledge fresh onboarding', () => {
@@ -66,7 +67,7 @@ test('restore and failed or incomplete setup cannot acknowledge fresh onboarding
 
 test('every fresh step has copy and a stable bounded position for directional transitions', () => {
   for (const [index, step] of freshSetupSteps.entries()) {
-    expect(setupPosition(step)).toEqual({ current: index + 1, total: 6 });
+    expect(setupPosition(step)).toEqual({ current: index + 1, total: 7 });
     expect(setupStepCopy[step].title.length).toBeGreaterThan(0);
     if (step !== 'ready') expect(setupStepCopy[step].description.length).toBeGreaterThan(0);
   }
@@ -92,6 +93,35 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
     isValidElement<Record<string, unknown>>(child) ? [child, ...elements(child.props.children as ReactNode)] : [],
   );
 }
+
+test('the separate Time Machine step uses one shared switch, keeps its draft callback and offers no password or acknowledgement fields', () => {
+  let enabled = false;
+  const props = {
+    enabled,
+    canManage: true,
+    disabled: false,
+    unavailable: false,
+    onChange: (value: boolean) => {
+      enabled = value;
+    },
+    onRetry: () => undefined,
+  };
+  const control = elements(SetupTimeMachineStep(props)).find((element) => element.type === Switch);
+  expect(control?.props).toMatchObject({ label: 'Enable Time Machine', checked: false, disabled: false });
+  if (typeof control?.props.onCheckedChange !== 'function') throw new Error('Shared Time Machine switch missing');
+  control.props.onCheckedChange(true);
+  expect(enabled).toBe(true);
+  const html = renderToStaticMarkup(createElement(SetupTimeMachineStep, { ...props, enabled }));
+  expect(html.match(/role="switch"/g)).toHaveLength(1);
+  expect(html).toContain('aria-checked="true"');
+  expect(html).toContain('Experimental.');
+  expect(html).not.toContain('type="password"');
+  expect(html).not.toContain('Authentication code');
+  expect(html).not.toContain('acknowledge');
+  expect(nextSetupStep('updates', 'fresh')).toBe('time-machine');
+  expect(nextSetupStep('time-machine', 'fresh')).toBe('ready');
+  expect(previousSetupStep('ready', 'fresh')).toBe('time-machine');
+});
 
 test('actual customisation handlers preserve the saved draft and leave custom wallpaper controls in Settings', () => {
   const draft: DesktopPreferences = {
@@ -129,19 +159,23 @@ test('actual customisation handlers preserve the saved draft and leave custom wa
       },
     }),
   );
+  expect(
+    modeControls.filter((control) => control.props['data-setting-value'] !== undefined).map((control) => control.props['data-setting-value']),
+  ).toEqual(['light', 'dark', 'system']);
   const light = modeControls.find((control) => control.props['data-setting-value'] === 'light');
   if (typeof light?.props.onClick !== 'function') throw new Error('Display mode control missing');
   light.props.onClick();
-  expect(changed).toEqual({ ...draft, mode: 'light', appearance: { ...draft.appearance, oledDark: false } });
-  const oled = modeControls.find((control) => control.props['data-setting-value'] === 'oled');
-  if (typeof oled?.props.onClick !== 'function') throw new Error('OLED control missing');
-  oled.props.onClick();
-  expect(changed).toEqual({ ...draft, mode: 'dark', appearance: { ...draft.appearance, oledDark: true } });
+  expect(changed).toEqual({ ...draft, mode: 'light', appearance: { ...draft.appearance, oledDark: draft.appearance.oledDark } });
+  const oled = modeControls.find((control) => control.type === Switch && control.props.label === 'Use OLED blacks');
+  expect(oled?.props.checked).toBe(draft.appearance.oledDark);
+  if (typeof oled?.props.onCheckedChange !== 'function') throw new Error('OLED switch missing');
+  oled.props.onCheckedChange(!draft.appearance.oledDark);
+  expect(changed).toEqual({ ...draft, mode: 'dark', appearance: { ...draft.appearance, oledDark: !draft.appearance.oledDark } });
   expect(controls.some((control) => control.props['data-wallpaper'] !== undefined)).toBe(false);
 });
 
-test('System and Light retain the OLED preference while Dark explicitly disables it', () => {
-  for (const mode of ['system', 'light', 'dark', 'oled'] as const) {
+test('display modes preserve the OLED preference and the separate switch changes only that preference', () => {
+  for (const mode of ['system', 'light', 'dark'] as const) {
     let changed: { mode: string; oledDark: boolean } | undefined;
     const controls = elements(
       ColourModeChoice({
@@ -155,6 +189,20 @@ test('System and Light retain the OLED preference while Dark explicitly disables
     const control = controls.find((item) => item.props['data-setting-value'] === mode);
     if (typeof control?.props.onClick !== 'function') throw new Error('Display mode missing');
     control.props.onClick();
-    expect(changed).toEqual({ mode: mode === 'oled' ? 'dark' : mode, oledDark: mode !== 'dark' });
+    expect(changed).toEqual({ mode, oledDark: true });
   }
+  let changed: { mode: string; oledDark: boolean } | undefined;
+  const controls = elements(
+    ColourModeChoice({
+      mode: 'system',
+      oledDark: false,
+      onChange: (next) => {
+        changed = next;
+      },
+    }),
+  );
+  const oled = controls.find((item) => item.type === Switch && item.props.label === 'Use OLED blacks');
+  if (typeof oled?.props.onCheckedChange !== 'function') throw new Error('OLED switch missing');
+  oled.props.onCheckedChange(true);
+  expect(changed).toEqual({ mode: 'system', oledDark: true });
 });

@@ -1,6 +1,11 @@
 .settings-security {
   min-width: 0;
 }
+.settings-security-capture {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
 .settings-security-heading {
   display: flex;
   flex-wrap: wrap;

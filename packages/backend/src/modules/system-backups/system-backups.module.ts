@@ -22,9 +22,10 @@ import { TimeMachineCaptureRuntime, TIME_MACHINE_CAPTURE_IMAGES } from './time-m
 import { imageCaptureDocker } from './backup-image-capture';
 import { DOCKERODE } from '../docker/docker.module';
 import type Dockerode from 'dockerode';
+import { DesktopPreferencesModule } from '../desktop-preferences/desktop-preferences.module';
 
 @Module({
-  imports: [QueueModule, AuthModule, AppsModule, DockerModule, TasksModule, HostUpdatesModule, AppLifecycleModule],
+  imports: [QueueModule, AuthModule, AppsModule, DockerModule, TasksModule, HostUpdatesModule, AppLifecycleModule, DesktopPreferencesModule],
   controllers: [TimeMachineController, SystemBackupsController, BackupImportsController, BackupRestoresController],
   exports: [SystemBackupsService, BackupImportsService, TimeMachineService, BackupDatabaseService],
   providers: [

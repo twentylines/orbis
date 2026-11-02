@@ -198,18 +198,24 @@ it('a cancellation while fresh authentication is pending cancels the returned gr
   expect(grant.cancel).toHaveBeenCalledTimes(1);
   expect(source.peerStatus(peerBody(value), destinationAddress).status).toBe('cancelled');
 });
-it('does not weaken the archive-key policy and keeps explicit separate-passphrase encryption distinct', async () => {
+it('accepts eight-character archive keys and keeps explicit encryption choices distinct', async () => {
   const value = source.peerRequest(peerInput(), destinationAddress);
   await expect(source.approve(value.id, 1, { password: 'short' }, value.destinationFingerprint, 'source-account-password')).rejects.toThrow(
-    '12 and 1024',
+    '8 and 1024',
   );
   expect(backups.startTransferExport).not.toHaveBeenCalled();
   await expect(
     source.approve(value.id, 1, sourceCredentials, value.destinationFingerprint, 'source-account-password', 'unused phrase'),
   ).rejects.toThrow('one');
-  await source.approve(value.id, 1, sourceCredentials, value.destinationFingerprint, 'separate-passphrase', 'example separate backup phrase');
-  expect(backups.startTransferExport.mock.calls[0]?.[2]).toBe('example separate backup phrase');
+  await source.approve(value.id, 1, sourceCredentials, value.destinationFingerprint, 'separate-passphrase', '12345678');
+  expect(backups.startTransferExport.mock.calls[0]?.[2]).toBe('12345678');
   expect(source.list(1).incoming[0]?.encryption).toBe('separate-passphrase');
+});
+it('uses an eight-character source account password as the transfer archive key', async () => {
+  const value = source.peerRequest(peerInput(), destinationAddress);
+  const credentials = { password: '12345678' };
+  await source.approve(value.id, 1, credentials, value.destinationFingerprint, 'source-account-password');
+  expect(backups.startTransferExport).toHaveBeenCalledWith(1, credentials, credentials.password, value.id, expect.any(Number));
 });
 it('expired, failed and restarted requests cannot open stale grants or be approved again', async () => {
   const value = source.peerRequest(peerInput(), destinationAddress);

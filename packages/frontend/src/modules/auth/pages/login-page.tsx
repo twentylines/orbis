@@ -1,4 +1,5 @@
 import { useSignInBoot } from '@/components/startup/use-sign-in-boot';
+import { firstSetupAfterSignIn } from '@/components/startup/sign-in-onboarding';
 import { safeReturnTo } from '@/desktop/secure-access';
 import { userContext } from '@/api-client';
 import { loginMutation, verifyTotpMutation } from '@/api-client/@tanstack/react-query.gen';
@@ -127,7 +128,9 @@ export default () => {
   const completeSignIn = async (redirectUrl?: string) => {
     if (!boot.isActive()) return;
     signInHandoff.current = true;
-    boot.begin();
+    const firstSetup = await firstSetupAfterSignIn();
+    if (!boot.isActive()) return;
+    boot.begin(firstSetup);
     setUserContext({ isLoggedIn: true });
     void refreshUserContext();
     await boot.finish();

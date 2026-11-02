@@ -74,7 +74,8 @@
   width: 100%;
   height: 7px;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
+  clip-path: inset(-4px 0 round 8px);
   background: color-mix(in srgb, var(--desktop-ink) 10%, transparent);
 }
 .recovery-progress-bar progress {
@@ -103,25 +104,86 @@
 }
 .recovery-progress-bar > span {
   position: absolute;
-  inset: 0 auto 0 0;
-  width: 34%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, transparent, var(--desktop-accent), transparent);
-  animation: recovery-bar-sweep 1800ms ease-in-out infinite;
+  top: 50%;
+  left: 0;
+  box-sizing: border-box;
+  width: 18%;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--desktop-accent) 26%, transparent), transparent 74%);
+  animation: recovery-orb-sweep 1800ms linear infinite;
+  transform: translate3d(-125%, -50%, 0);
 }
-@keyframes recovery-bar-sweep {
+.recovery-progress-bar[data-motion="true"] > span {
+  will-change: transform;
+}
+.recovery-progress-bar > span::before {
+  position: absolute;
+  top: 50%;
+  left: -100%;
+  width: 300%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--desktop-accent) 38%, white 62%) 44%,
+    color-mix(in srgb, var(--desktop-accent) 62%, white 38%) 50%,
+    color-mix(in srgb, var(--desktop-accent) 38%, white 62%) 56%,
+    transparent
+  );
+  content: "";
+  transform: translateY(-50%);
+}
+.recovery-progress-bar > span::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 35%,
+    white 0 14%,
+    color-mix(in srgb, white 76%, var(--desktop-accent)) 34%,
+    color-mix(in srgb, var(--desktop-accent) 60%, transparent) 68%,
+    transparent 100%
+  );
+  content: "";
+  transform: translate3d(-50%, -50%, 0);
+}
+@keyframes recovery-orb-sweep {
   from {
-    transform: translateX(-100%);
+    opacity: 0;
+    transform: translate3d(0, -50%, 0) scaleX(0.82);
+  }
+  10% {
+    opacity: 0.88;
+    transform: translate3d(45%, -50%, 0) scaleX(0.86);
+  }
+  90% {
+    opacity: 0.88;
+    transform: translate3d(410%, -50%, 0) scaleX(0.9);
   }
   to {
-    transform: translateX(400%);
+    opacity: 0;
+    transform: translate3d(455%, -50%, 0) scaleX(0.9);
   }
 }
 .recovery-progress-bar[data-motion="false"] > span,
 :root[data-orbis-effects="low"] .recovery-progress-bar > span {
   animation: none;
   left: 33%;
-  opacity: 0.65;
+  opacity: 0.8;
+  transform: translate3d(0, -50%, 0);
+  will-change: auto;
+}
+.recovery-progress-bar[data-motion="false"] > span::after,
+:root[data-orbis-effects="low"] .recovery-progress-bar > span::after {
+  animation: none;
+  opacity: 0.78;
+  transform: translate3d(-50%, -50%, 0) scale(1);
 }
 .recovery-progress-bar[data-motion="false"] progress::-webkit-progress-value {
   transition: none;
@@ -130,6 +192,13 @@
   .recovery-progress-bar > span {
     animation: none;
     left: 33%;
-    opacity: 0.65;
+    opacity: 0.8;
+    transform: translate3d(0, -50%, 0);
+    will-change: auto;
+  }
+  .recovery-progress-bar > span::after {
+    animation: none;
+    opacity: 0.78;
+    transform: translate3d(-50%, -50%, 0) scale(1);
   }
 }

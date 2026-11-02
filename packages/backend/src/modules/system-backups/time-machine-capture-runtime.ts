@@ -158,7 +158,7 @@ export class TimeMachineCaptureRuntime {
     }
   }
 
-  async requireSupport(signal?: AbortSignal) {
+  async requireSupport(signal?: AbortSignal, requireV6 = false) {
     let format = this.format;
     let capability: Awaited<ReturnType<HostUpdatesService['requireV6CaptureCapability']>> | undefined;
     try {
@@ -170,9 +170,10 @@ export class TimeMachineCaptureRuntime {
           capability = await this.host.requireV6CaptureCapability(signal);
           format = 6;
         } catch (error) {
-          if (format === 6 || !(error instanceof HttpException) || error.getStatus() !== 404) throw error;
+          if (requireV6 || format === 6 || !(error instanceof HttpException) || error.getStatus() !== 404) throw error;
         }
       }
+      if (requireV6 && format !== 6) throw new Error('v6 capture capability is required');
       if (format !== 6) await this.host.requireControllerCaptureAuthoritySupport(signal, format === 4 ? 2 : 1);
     } catch {
       throw timeMachineConflict('host-capture-support-required');

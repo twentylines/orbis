@@ -78,7 +78,7 @@ export const timeMachinePreferencesUpdateSchema = type({
   excludedApps,
 }).onUndeclaredKey('reject');
 export type TimeMachinePreferencesUpdate = typeof timeMachinePreferencesUpdateSchema.infer;
-export const timeMachineCaptureSchema = type({ experimentalAcknowledged: 'true', label: text }).onUndeclaredKey('reject');
+export const timeMachineCaptureSchema = type({ 'experimentalAcknowledged?': 'true', label: text }).onUndeclaredKey('reject');
 const widgetList = type
   .enumerated('applications', 'activity', 'storage', 'attention')
   .array()
@@ -201,7 +201,7 @@ export type TimeMachineCapabilities = {
   version: 1;
   experimental: true;
   manualCapture: true;
-  experimentalAcknowledgementRequired: true;
+  experimentalAcknowledgementRequired: false;
   automaticCapture: { scheduled: false; preUpdate: false; preRestart: false };
   osSnapshots: { supported: false; reason: TimeMachineIssue };
   dockerImages: { capture: true; restore: false };

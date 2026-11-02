@@ -4,7 +4,12 @@ import { randomUUID } from 'node:crypto';
 import { BackupRequirementError } from './backup-files';
 import { BackupRestoreJournal } from './backup-restore-journal';
 import { withRestoreLease } from './backup-restore-lease';
-import { retainRestoreControllerOwnership } from './backup-restore-terminal-ownership';
+import {
+  preflightRestoreControllerOwnership,
+  proveManagedController,
+  retainRestoreControllerOwnership,
+  terminalHash,
+} from './backup-restore-terminal-ownership';
 import { restoreAuxiliaryContainerPlans } from './backup-restore-containers';
 import { writeRestoreBootstrap } from './backup-restore-bootstrap';
 import { BackupRestoreDockerRuntime, snapshotRestoreContainer, type RestoreRuntimeIdentity } from './backup-restore-runtime';
@@ -74,6 +79,23 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
   signal.throwIfAborted();
   if (!Number.isSafeInteger(options.ownerId) || options.ownerId <= 0 || options.apps.length > 1024) throw failed();
   const original = await docker.getContainer(options.controller).inspect();
+  let initialOwnership: ReturnType<typeof preflightRestoreControllerOwnership>;
+  try {
+    const ownership = preflightRestoreControllerOwnership(original);
+    initialOwnership = ownership;
+    await proveManagedController(
+      docker,
+      original,
+      ownership,
+      options.controller,
+      options.directories.data,
+      options.connection,
+      options.connection.database,
+      AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+    );
+  } catch {
+    throw new BackupRequirementError('This installation cannot restore backups because managed Compose controller support could not be verified.');
+  }
   if (
     new Set(options.apps.map((app) => app.id)).size !== options.apps.length ||
     options.apps.some((app) => !/^[a-f0-9]{64}$/.test(app.id) || app.id === original.Id)
@@ -105,6 +127,19 @@ export async function prepareRestoreHandoff(options: RestoreHandoffOptions) {
     signal.throwIfAborted();
     verifier = await docker.createContainer(plans.verifier);
     worker = await docker.createContainer(plans.worker);
+    const current = await docker.getContainer(options.controller).inspect();
+    const currentOwnership = preflightRestoreControllerOwnership(current);
+    if (terminalHash(currentOwnership) !== terminalHash(initialOwnership)) throw failed();
+    await proveManagedController(
+      docker,
+      current,
+      currentOwnership,
+      options.controller,
+      options.directories.data,
+      options.connection,
+      options.connection.database,
+      AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+    );
     const snapshot = snapshotRestoreContainer(original);
     const identity: RestoreRuntimeIdentity = {
       version: 1,

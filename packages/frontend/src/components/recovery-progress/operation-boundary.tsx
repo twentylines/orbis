@@ -13,7 +13,7 @@ import { RecoveryScene } from './recovery-scene';
 import { armStartedOperation, readOperationContinuity, operationContinuityStorage, type MaintenanceOperation } from './operation-continuity';
 import { useOperationDeparture } from './use-operation-departure';
 import { restorePresentation } from './restore-presentation';
-import { loadOperationStatus, type OperationSnapshot } from './operation-status';
+import { loadOperationStatus, operationIsWaiting, operationShowsContent, type OperationSnapshot } from './operation-status';
 import { openResetOnboarding, SystemResetWizard } from '@/modules/system-reset/system-reset';
 
 const stageCopy = {
@@ -199,9 +199,10 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       !operationJob.needsRecovery &&
       ['succeeded', 'rolled-back'].includes(operationJob.status),
   );
-  const locked = !snapshot || snapshot.state !== 'idle';
-  const showChildren = (!locked && !matchingTerminal && !continuity.departing) || (authRoute && locked);
+  const locked = !snapshot || snapshot.state !== 'idle' || snapshot.unavailable === true;
+  const showChildren = operationShowsContent(snapshot, authRoute, matchingTerminal, continuity.departing);
   const server = snapshot ?? { state: 'checking' as const, supported: true };
+  const waiting = operationIsWaiting(server);
   const kind = operation.current ?? 'restore';
   const restoration = kind === 'restore' && job && server.state === 'idle' && matchingTerminal ? restorePresentation(job, false) : undefined;
   const coreStage =
@@ -274,46 +275,54 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       )}
       <RecoveryScene
         open={!showChildren && snapshot !== null}
-        title={title}
-        status={status}
+        title={waiting ? 'Checking server' : title}
+        status={waiting ? undefined : status}
         variant={kind}
-        detail={server.unavailable ? 'Waiting for confirmed server status. This page will keep checking.' : undefined}
+        detail={waiting ? 'Waiting for the server to respond. Checking will continue automatically.' : undefined}
         progress={restoration?.progress ?? server.progress}
-        active={['restoring', 'updating', 'downgrading'].includes(server.state)}
+        active={waiting || ['restoring', 'updating', 'downgrading'].includes(server.state)}
         departing={continuity.departing}
         indicator={server.stage === 'restarting' || core?.phase === 'offline' || core?.phase === 'checking' ? 'restart' : 'progress'}
-        footer={kind !== 'restore' ? 'Applications keep running during this Orbis operation.' : undefined}
+        footer={!waiting && kind !== 'restore' ? 'Applications keep running during this Orbis operation.' : undefined}
         actions={
-          <>
-            {kind === 'restore' && job?.canRecover ? (
-              <Button
-                onClick={() => {
-                  setActionError(null);
-                  setAuthAction('recover');
-                }}
-              >
-                Recover
-              </Button>
-            ) : null}
-            {kind === 'restore' && job?.canCancel ? (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setActionError(null);
-                  setAuthAction('cancel');
-                }}
-              >
-                Stop restore
-              </Button>
-            ) : null}
-            {server.unavailable || server.state === 'recovery' ? <Button onClick={() => setAttempt((value) => value + 1)}>Check again</Button> : null}
-            {locked ? (
-              <a className="btn" href="/login">
-                Sign in
-              </a>
-            ) : null}
-            {matchingTerminal && !continuity.departing ? <Button onClick={() => window.location.assign('/')}>Open server</Button> : null}
-          </>
+          waiting ? (
+            <Button className="operation-wait-retry" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          ) : (
+            <>
+              {kind === 'restore' && job?.canRecover ? (
+                <Button
+                  onClick={() => {
+                    setActionError(null);
+                    setAuthAction('recover');
+                  }}
+                >
+                  Recover
+                </Button>
+              ) : null}
+              {kind === 'restore' && job?.canCancel ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setActionError(null);
+                    setAuthAction('cancel');
+                  }}
+                >
+                  Stop restore
+                </Button>
+              ) : null}
+              {server.unavailable || server.state === 'recovery' ? (
+                <Button onClick={() => setAttempt((value) => value + 1)}>Check again</Button>
+              ) : null}
+              {locked ? (
+                <a className="btn" href="/login">
+                  Sign in
+                </a>
+              ) : null}
+              {matchingTerminal && !continuity.departing ? <Button onClick={() => window.location.assign('/')}>Open server</Button> : null}
+            </>
+          )
         }
       />
       <Dialog

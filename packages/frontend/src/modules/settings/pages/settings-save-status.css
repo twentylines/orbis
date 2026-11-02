@@ -1,0 +1,50 @@
+.desktop-system-status-slot {
+  position: relative;
+  flex: 0 0 0;
+  width: 0;
+  height: 44px;
+}
+.settings-system-status {
+  position: absolute;
+  inset-block-start: calc(100% + 16px);
+  inset-inline-end: 0;
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 40px));
+  margin: 0;
+  pointer-events: none;
+}
+.settings-system-status-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--desktop-edge);
+  border-radius: var(--orbis-control-radius, 12px);
+  color: var(--desktop-chrome-ink);
+  background: var(--desktop-chrome);
+  backdrop-filter: var(--desktop-chrome-filter);
+  -webkit-backdrop-filter: var(--desktop-chrome-filter);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  transform-origin: top right;
+}
+.settings-system-status-bubble > svg {
+  flex: none;
+}
+.settings-status-spinner {
+  animation: settings-status-spin 1s linear infinite;
+}
+@keyframes settings-status-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-status-spinner {
+    animation: none;
+  }
+}
+html[data-orbis-motion="reduced"] .settings-status-spinner {
+  animation: none;
+}

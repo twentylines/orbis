@@ -13,6 +13,7 @@ import { TimeField, useTimeField } from '@/components/ui/TimeField/TimeField';
 import { validTime } from '@/components/ui/TimeField/time-field';
 import { automaticUpdateSettingsForSave } from '@/desktop/automatic-update-time';
 import { useAppContext } from '@/context/app-context';
+import { useUserContext } from '@/context/user-context';
 import {
   automaticUpdateSettingsOptions,
   readAppUpdateSchedule,
@@ -26,16 +27,18 @@ import { useResolvedColourMode } from '@/desktop/colour-mode';
 import { AppLaunchModeChoice } from '@/desktop/app-launch-mode-choice';
 import { useReducedMotion, useReducedTransparency } from '@/desktop/motion-preferences';
 import { themePresets, presetLabels } from '@/desktop/wallpaper-presets';
-import { IconArrowLeft, IconArrowRight, IconCheck, IconDeviceDesktop, IconLeaf, IconSparkles } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
+import { IconArrowLeft, IconArrowRight, IconCheck, IconDeviceDesktop, IconHistory, IconLeaf, IconSparkles } from '@tabler/icons-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
 import { useNavigate } from 'react-router';
 import { finishSetup, setupAppUpdateSteps, setupScheduleAllowsNext, type SetupAppChoices, type SetupSaveStep } from './setup-save';
 import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-settings';
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
-import { ProtectionChoice, readManualProtection, saveManualProtection } from '@/modules/time-machine-capsules/protection-choice';
+import { readManualProtection, saveManualProtection } from '@/modules/time-machine-capsules/protection-choice';
 import { nextSetupStep, previousSetupStep, setupCanFinish, setupPosition, setupStepCopy, type SetupEntry, type SetupStep } from './setup-navigation';
+import { readSetupCapture, reconcileSetupCapture, reserveSetupCapture } from './setup-capture';
+import { TimeMachineApiError } from '@/modules/time-machine/time-machine-api';
 import './welcome.css';
 
 const defaultAutomatic: AutomaticUpdateSettings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
@@ -76,10 +79,57 @@ export function SetupCustomisation({ draft, onChange }: { draft: DesktopPreferen
           onChange={({ mode, oledDark }) => onChange({ ...draft, mode, appearance: { ...draft.appearance, oledDark } })}
         />
         <p className="orbis-setup-help">
-          {draft.appearance.oledDark ? 'System uses OLED in dark mode.' : 'System follows this browser’s light or dark preference.'}
+          {draft.appearance.oledDark
+            ? 'OLED blacks are used whenever dark mode is active.'
+            : 'System follows this browser’s light or dark preference.'}
         </p>
       </fieldset>
       <p className="orbis-setup-help">You can add custom wallpapers later in Settings.</p>
+    </>
+  );
+}
+
+export function SetupTimeMachineStep({
+  enabled,
+  canManage,
+  disabled,
+  unavailable,
+  onChange,
+  onRetry,
+}: {
+  enabled: boolean;
+  canManage: boolean;
+  disabled: boolean;
+  unavailable: boolean;
+  onChange: (enabled: boolean) => void;
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      <div className="orbis-setup-time-machine-illustration" aria-hidden="true">
+        <span />
+        <span />
+        <div>
+          <IconDeviceDesktop size={36} stroke={1.5} />
+          <i />
+          <i />
+          <i />
+        </div>
+      </div>
+      {canManage ? (
+        <Switch label="Enable Time Machine" checked={enabled} onCheckedChange={onChange} disabled={disabled} />
+      ) : (
+        <p className="orbis-setup-help">Time Machine is managed by an operator.</p>
+      )}
+      <p className="orbis-setup-help">Experimental. Starts a capture after setup on supported hosts.</p>
+      {unavailable ? (
+        <InlineFeedback>
+          <p>Time Machine is unavailable. You can continue setup and try again in Settings.</p>
+          <Button type="button" variant="outline" onClick={onRetry}>
+            Retry
+          </Button>
+        </InlineFeedback>
+      ) : null}
     </>
   );
 }
@@ -139,11 +189,21 @@ function SetupStepPanel({
 export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolean }) => {
   const { preferences, completeOnboarding, syncState, onboardingOrigin } = useDesktopPreferences();
   const { user } = useAppContext();
+  const { sessionAbortSignal } = useUserContext();
+  const queryClient = useQueryClient();
+  const [captureState, setCaptureState] = useState(() => {
+    try {
+      return { receipt: readSetupCapture(user.id), error: '' };
+    } catch (reason) {
+      return { receipt: null, error: reason instanceof Error ? reason.message : 'The setup capture receipt needs recovery.' };
+    }
+  });
+  const resumingCapture = ['pending', 'submitted'].includes(captureState.receipt?.phase ?? '') || Boolean(captureState.error);
   const [draft, setDraft] = useState(preferences);
   const resolvedSetupMode = useResolvedColourMode(draft.mode);
   const [name, setName] = useState(preferences.serverName);
-  const [step, setStep] = useState<SetupStep>(onboardingOrigin === 'runtipi' ? 'customisation' : 'choose');
-  const [entry, setEntry] = useState<SetupEntry>(onboardingOrigin === 'runtipi' ? 'migration' : null);
+  const [step, setStep] = useState<SetupStep>(resumingCapture ? 'ready' : onboardingOrigin === 'runtipi' ? 'customisation' : 'choose');
+  const [entry, setEntry] = useState<SetupEntry>(resumingCapture ? 'fresh' : onboardingOrigin === 'runtipi' ? 'migration' : null);
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [direction, setDirection] = useState(1);
   const [errorMonitoring, setErrorMonitoring] = useState(allowErrorMonitoring);
@@ -153,7 +213,8 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const [appChoicesDraft, setAppChoices] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingStep, setSavingStep] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(captureState.error);
+  const resumedCapture = useRef(false);
   const savingLock = useRef(false);
   const receipts = useRef(new Map<string, string>());
   const touchedApps = useRef<SetupAppChoices>(new Map());
@@ -179,11 +240,12 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
   const protection = useQuery({
     queryKey: ['setup-time-machine-preferences', user.id],
     queryFn: ({ signal }) => readManualProtection(signal),
-    enabled: canManageUpdates && step === 'ready',
+    enabled: canManageUpdates && (step === 'time-machine' || step === 'ready'),
     staleTime: 30_000,
     retry: false,
     refetchOnWindowFocus: false,
   });
+  const captureRequested = canManageUpdates && (protectionDraft ?? protection.data?.enabled ?? resumingCapture);
   const updateSettings = useQuery({ ...automaticUpdateSettingsOptions(), enabled: canManageUpdates && (step === 'updates' || step === 'ready') });
   const installed = useQuery({
     ...getInstalledAppsOptions(),
@@ -275,6 +337,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       return;
     savingLock.current = true;
     setSaving(true);
+    setSavingStep('Saving preferences');
     setError('');
     const completedDraft = { ...draft, serverName: name.trim() };
     const automaticToSave = automaticUpdateSettingsForSave(automatic);
@@ -291,7 +354,16 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       tasks.push({
         id: 'Saving Time Machine preferences',
         value: protectionDraft,
-        save: () => saveManualProtection(protectionDraft, AbortSignal.timeout(20_000)),
+        save: async () => {
+          try {
+            await saveManualProtection(protectionDraft, AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(20_000)]));
+          } catch {
+            sessionAbortSignal.throwIfAborted();
+            queryClient.setQueryData(['setup-capture-notice', user.id], {
+              message: 'The Time Machine preference could not be saved. Review it in Settings.',
+            });
+          }
+        },
       });
     tasks.push(
       ...setupAppUpdateSteps(
@@ -306,7 +378,40 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
             },
       ),
     );
-    tasks.push({ id: 'Saving workspace preferences', value: completedDraft, save: () => completeOnboarding(name, completedDraft) });
+    tasks.push({
+      id: 'Saving workspace preferences',
+      value: { preferences: completedDraft, capture: captureRequested },
+      save: async () => {
+        await completeOnboarding(
+          name,
+          completedDraft,
+          captureRequested
+            ? async () => {
+                setSavingStep('Capturing Time Machine state');
+                try {
+                  const receipt = captureState.receipt ?? reserveSetupCapture(user.id);
+                  setCaptureState({ receipt, error: '' });
+                  await reconcileSetupCapture(user.id, receipt, true, AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(30_000)]));
+                  setCaptureState({ receipt: { ...receipt, phase: 'accepted' }, error: '' });
+                  return true;
+                } catch (reason) {
+                  // Capture is optional; its durable receipt remains available on Home.
+                  sessionAbortSignal.throwIfAborted();
+                  queryClient.setQueryData(['setup-capture-notice', user.id], {
+                    message:
+                      reason instanceof TimeMachineApiError
+                        ? reason.message
+                        : 'The initial capture could not be confirmed. Check its status in Time Machine.',
+                  });
+                  return false;
+                } finally {
+                  setSavingStep('Preparing Orbis');
+                }
+              }
+            : undefined,
+        );
+      },
+    });
     try {
       await finishSetup(
         tasks,
@@ -327,6 +432,11 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
       setSaving(false);
     }
   };
+  useEffect(() => {
+    if (resumedCapture.current || !resumingCapture || captureState.error || syncState === 'loading') return;
+    resumedCapture.current = true;
+    void save();
+  });
   const setAutomaticDraft = (value: AutomaticUpdateSettings) => {
     setAutomaticEdited(true);
     setAutomatic(value);
@@ -387,6 +497,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
               >
                 <div className="orbis-setup-intro">
                   <h2 ref={heading} id={headingId} tabIndex={-1}>
+                    {step === 'time-machine' ? <IconHistory size="1em" aria-hidden="true" /> : null}
                     {setupStepCopy[step].title}
                   </h2>
                   {setupStepCopy[step].description ? <p>{setupStepCopy[step].description}</p> : null}
@@ -634,6 +745,16 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                           <p>Automatic updates are managed by an operator. You can install available updates from the Updates page.</p>
                         )
                       ) : null}
+                      {step === 'time-machine' ? (
+                        <SetupTimeMachineStep
+                          enabled={protectionDraft ?? protection.data?.enabled ?? false}
+                          canManage={canManageUpdates}
+                          disabled={saving || protection.isPending || protection.isError}
+                          unavailable={protection.isError}
+                          onChange={setProtectionDraft}
+                          onRetry={() => void protection.refetch()}
+                        />
+                      ) : null}
                       {step === 'ready' ? (
                         <>
                           <dl className="orbis-setup-review">
@@ -692,19 +813,6 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                               </div>
                             ) : null}
                           </dl>
-                          {canManageUpdates && protection.data ? (
-                            <fieldset className="orbis-setup-choice-group">
-                              <legend>Time Machine</legend>
-                              <p className="orbis-setup-help">
-                                Experimental. Save restore points manually in Settings. No capture starts during setup.
-                              </p>
-                              <ProtectionChoice
-                                enabled={protectionDraft ?? protection.data.enabled}
-                                onChange={setProtectionDraft}
-                                disabled={saving}
-                              />
-                            </fieldset>
-                          ) : null}
                           <div className="orbis-setup-reporting">
                             <Switch checked={errorMonitoring} onCheckedChange={setErrorMonitoring} label="Send error reports" />
                             <p className="orbis-setup-help">Optional. Reports are sent to the upstream Sentry service.</p>

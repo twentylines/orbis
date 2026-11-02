@@ -115,7 +115,7 @@ export function transitionAppearance(apply: () => void, animate: boolean, identi
   root.dataset.orbisPaletteMotion = 'true';
   const changed = colours.filter((name) => before[name] !== after[name]);
   const frame = (values: Record<string, string>) => Object.fromEntries(changed.map((name) => [name, values[name]]));
-  const animation = root.animate([frame(before), frame(after)], { duration: 180, easing: 'cubic-bezier(.2, 0, .2, 1)' });
+  const animation = root.animate([frame(before), frame(after)], { duration: 260, easing: 'cubic-bezier(.2, 0, .2, 1)' });
   animation.id = 'orbis-palette';
   motion = animation;
   void animation.finished.then(

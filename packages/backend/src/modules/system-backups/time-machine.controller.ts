@@ -23,6 +23,12 @@ export class TimeMachineController {
     response.setHeader('Cache-Control', 'no-store');
     return this.timeMachine.capabilities();
   }
+  @Get('storage')
+  storage(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    backupOperator(request);
+    response.setHeader('Cache-Control', 'no-store');
+    return this.timeMachine.storage();
+  }
   @Get('preferences')
   preferences(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     backupOperator(request);
@@ -83,19 +89,44 @@ export class TimeMachineController {
   async capture(@Req() request: Request, @Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const owner = backupOperator(request);
     const { label, experimentalAcknowledged, ...credentials } = object(body);
-    const point = await this.timeMachine.capture(owner, backupCredentials(credentials), { label, experimentalAcknowledged });
+    if (Object.keys(credentials).some((key) => !['password', 'totpCode'].includes(key))) throw timeMachineConflict('invalid-request');
+    const point = await this.timeMachine.capture(owner, credentials, {
+      label,
+      ...(experimentalAcknowledged !== undefined ? { experimentalAcknowledged } : {}),
+    });
+    this.launchAfterResponse(point.id, owner, response);
+    return point;
+  }
+  private launchAfterResponse(id: string, owner: number, response: Response) {
     let launched = false;
     const launch = () => {
       if (launched) return;
       launched = true;
       response.removeListener('finish', launch);
       response.removeListener('close', launch);
-      void this.timeMachine.launchCapture(point.id, owner);
+      void this.timeMachine.launchCapture(id, owner);
     };
     response.once('finish', launch);
     response.once('close', launch);
     if (response.writableFinished || response.destroyed) launch();
+  }
+  @Post('onboarding-captures')
+  @HttpCode(202)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  async onboardingCapture(@Req() request: Request, @Body() body: unknown, @Res({ passthrough: true }) response: Response) {
+    const owner = backupOperator(request);
+    const input = object(body);
+    const { attemptId, label } = input;
+    if (Object.keys(input).some((key) => key !== 'attemptId' && key !== 'label')) throw timeMachineConflict('invalid-request');
+    if (!timeMachineIdSchema.allows(attemptId)) throw timeMachineConflict('invalid-request');
+    const point = await this.timeMachine.beginOnboardingCapture(owner, attemptId, label);
+    this.launchAfterResponse(point.id, owner, response);
     return point;
+  }
+  @Get('onboarding-captures/:attemptId')
+  @Header('Cache-Control', 'no-store')
+  onboardingCaptureStatus(@Req() request: Request, @Param('attemptId') attemptId: string) {
+    return this.timeMachine.onboardingCapture(attemptId, backupOperator(request));
   }
   @Post('points/:id/cancel')
   @HttpCode(202)

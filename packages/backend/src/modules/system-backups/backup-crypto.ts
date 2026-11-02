@@ -18,7 +18,7 @@ export class BackupArchiveError extends Error {
   constructor(public readonly code: 'passphrase' | 'invalid-archive' | 'cancelled' | 'operation-failed') {
     super(
       code === 'passphrase'
-        ? 'Use a backup passphrase between 12 and 1024 characters.'
+        ? 'Use a backup passphrase between 8 and 1024 characters.'
         : code === 'invalid-archive'
           ? 'The backup could not be opened. Check its passphrase and file.'
           : code === 'cancelled'
@@ -57,7 +57,8 @@ async function writeAll(file: FileHandle, data: Buffer) {
 
 async function transformBackup(options: BackupCryptoOptions, decrypt: boolean) {
   const { source, destination, passphrase, signal, onProgress } = options;
-  if (typeof passphrase !== 'string' || passphrase.trim().length < 12 || passphrase.length > 1024) throw new BackupArchiveError('passphrase');
+  if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
+    throw new BackupArchiveError('passphrase');
 
   let input: FileHandle | undefined;
   let output: FileHandle | undefined;
@@ -165,7 +166,7 @@ export async function encryptBackupStream(options: {
     source.destroy();
     throw new BackupArchiveError('operation-failed');
   }
-  if (typeof passphrase !== 'string' || passphrase.trim().length < 12 || passphrase.length > 1024) {
+  if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024) {
     source.destroy();
     throw new BackupArchiveError('passphrase');
   }
@@ -238,7 +239,8 @@ export async function encryptBackupStream(options: {
 
 // Bounded metadata uses the same authenticated archive format without plaintext staging files.
 export async function backupMetadataBytes(input: Buffer, passphrase: string, decrypt: boolean, maximumBytes = 1024 * 1024) {
-  if (typeof passphrase !== 'string' || passphrase.trim().length < 12 || passphrase.length > 1024) throw new BackupArchiveError('passphrase');
+  if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
+    throw new BackupArchiveError('passphrase');
   if (
     !Number.isSafeInteger(maximumBytes) ||
     maximumBytes < 1 ||

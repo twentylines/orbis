@@ -17,7 +17,7 @@ import {
   type SettingsSection,
 } from '../helpers/settings-catalogue';
 import './settings-page.css';
-import { SettingsSaveButton, SettingsSaveActivity, SettingsSaveFeedback, SettingsSaveStatus } from './settings-save';
+import { SettingsSaveButton, SettingsSaveFeedback, SettingsSaveStatus } from './settings-save';
 
 export function SettingsPanel({ active, children, id, label }: { active: boolean; children: ReactNode; id: string; label: string }) {
   const parentVisible = useContext(WindowVisibilityContext);
@@ -41,6 +41,120 @@ export function SettingsPanel({ active, children, id, label }: { active: boolean
   );
 }
 
+export function SettingsSearch({ access, onSetting }: { access: SettingsAccess; onSetting: (entry: SettingEntry) => void }) {
+  const id = useId();
+  const reduced = useReducedMotion();
+  const [query, setQuery] = useState('');
+  const [pointerFocus, setPointerFocus] = useState(false);
+  const search = useRef<HTMLInputElement>(null);
+  const resultsRoot = useRef<HTMLUListElement>(null);
+  const results = searchSettings(query, access);
+  const choose = (entry: SettingEntry) => {
+    setQuery('');
+    onSetting(entry);
+  };
+
+  return (
+    <search
+      className="settings-search settings-header-search"
+      onPointerDownCapture={() => setPointerFocus(true)}
+      onKeyDownCapture={(event) => {
+        if (['Tab', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) setPointerFocus(false);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setQuery('');
+          setPointerFocus(false);
+        }
+      }}
+    >
+      <label data-pointer-focus={pointerFocus} className="settings-search-field" htmlFor={`${id}-search`}>
+        <IconSearch size={20} aria-hidden="true" />
+        <input
+          ref={search}
+          id={`${id}-search`}
+          type="search"
+          data-focus-surface="parent"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Find a setting"
+          aria-label="Find a setting"
+          autoComplete="off"
+          aria-controls={query.trim() ? `${id}-results` : undefined}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setQuery('');
+            if (event.key === 'Enter' && results[0]) {
+              event.preventDefault();
+              choose(results[0]);
+            }
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              resultsRoot.current?.querySelector('button')?.focus();
+            }
+          }}
+        />
+        {query ? (
+          <button
+            type="button"
+            aria-label="Clear settings search"
+            onClick={() => {
+              setQuery('');
+              search.current?.focus();
+            }}
+          >
+            <IconX size={18} aria-hidden="true" />
+          </button>
+        ) : null}
+      </label>
+      <AnimatePresence initial={false}>
+        {query.trim() ? (
+          <motion.ul
+            key="settings-search-results"
+            initial={reduced ? false : { opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: reduced ? 0 : 3 }}
+            transition={{ duration: reduced ? 0 : 0.18, ease: [0.22, 0.68, 0.2, 1] }}
+            ref={resultsRoot}
+            id={`${id}-results`}
+            className="settings-search-results"
+            aria-label="Matching settings"
+          >
+            {results.map((entry) => (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  onClick={() => choose(entry)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      setQuery('');
+                      search.current?.focus();
+                    }
+                    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                      event.preventDefault();
+                      const buttons = [...(resultsRoot.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+                      const index = buttons.indexOf(event.currentTarget);
+                      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : index + (event.key === 'ArrowDown' ? 1 : -1);
+                      if (next < 0) search.current?.focus();
+                      else buttons[Math.min(next, buttons.length - 1)]?.focus();
+                    }
+                  }}
+                >
+                  <span>
+                    <strong>{entry.label}</strong>
+                    <small>{settingsSections.find((item) => item.id === entry.section)?.label}</small>
+                  </span>
+                  <IconArrowUpRight size={18} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+            {results.length ? null : <li className="settings-search-empty">No matching settings.</li>}
+          </motion.ul>
+        ) : null}
+      </AnimatePresence>
+    </search>
+  );
+}
+
 export function SettingsWorkspace({
   current,
   access,
@@ -54,21 +168,10 @@ export function SettingsWorkspace({
   onSetting: (entry: SettingEntry) => void;
   panels: Record<SettingsSection, ReactNode>;
 }) {
-  const id = useId();
-  const reduced = useReducedMotion();
-  const [query, setQuery] = useState('');
-  const [pointerFocus, setPointerFocus] = useState(false);
   const [visited, setVisited] = useState<ReadonlySet<SettingsSection>>(() => new Set([current]));
-  const search = useRef<HTMLInputElement>(null);
-  const resultsRoot = useRef<HTMLUListElement>(null);
-  const results = searchSettings(query, access);
   useEffect(() => {
     setVisited((previous) => retainSettingsSections(previous, current));
   }, [current]);
-  const choose = (entry: SettingEntry) => {
-    setQuery('');
-    onSetting(entry);
-  };
   const sections = settingsSections.filter(
     (entry) => (entry.id !== 'https' || access.http === true) && (entry.id !== 'time-machine' || access.operator),
   );
@@ -76,106 +179,10 @@ export function SettingsWorkspace({
   return (
     <div className="settings-workspace">
       <RouteHeaderToolbar>
+        <SettingsSearch access={access} onSetting={onSetting} />
         <SecureConnectionIndicator compact />
-        <SettingsSaveStatus />
       </RouteHeaderToolbar>
-      <search
-        className="settings-search"
-        onPointerDownCapture={() => setPointerFocus(true)}
-        onKeyDownCapture={(event) => {
-          if (['Tab', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) setPointerFocus(false);
-        }}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) {
-            setQuery('');
-            setPointerFocus(false);
-          }
-        }}
-      >
-        <label data-pointer-focus={pointerFocus} className="settings-search-field" htmlFor={`${id}-search`}>
-          <IconSearch size={20} aria-hidden="true" />
-          <input
-            ref={search}
-            id={`${id}-search`}
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Find a setting"
-            aria-label="Find a setting"
-            autoComplete="off"
-            aria-controls={query.trim() ? `${id}-results` : undefined}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') setQuery('');
-              if (event.key === 'Enter' && results[0]) {
-                event.preventDefault();
-                choose(results[0]);
-              }
-              if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                resultsRoot.current?.querySelector('button')?.focus();
-              }
-            }}
-          />
-          {query ? (
-            <button
-              type="button"
-              aria-label="Clear settings search"
-              onClick={() => {
-                setQuery('');
-                search.current?.focus();
-              }}
-            >
-              <IconX size={18} aria-hidden="true" />
-            </button>
-          ) : null}
-        </label>
-        <AnimatePresence initial={false}>
-          {query.trim() ? (
-            <motion.ul
-              key="settings-search-results"
-              initial={reduced ? false : { opacity: 0, y: 3 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: reduced ? 0 : 3 }}
-              transition={{ duration: reduced ? 0 : 0.18, ease: [0.22, 0.68, 0.2, 1] }}
-              ref={resultsRoot}
-              id={`${id}-results`}
-              className="settings-search-results"
-              aria-label="Matching settings"
-            >
-              {results.map((entry) => (
-                <li key={entry.id}>
-                  <button
-                    type="button"
-                    onClick={() => choose(entry)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Escape') {
-                        setQuery('');
-                        search.current?.focus();
-                      }
-                      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-                        event.preventDefault();
-                        const buttons = [...(resultsRoot.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
-                        const index = buttons.indexOf(event.currentTarget);
-                        const next =
-                          event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : index + (event.key === 'ArrowDown' ? 1 : -1);
-                        if (next < 0) search.current?.focus();
-                        else buttons[Math.min(next, buttons.length - 1)]?.focus();
-                      }
-                    }}
-                  >
-                    <span>
-                      <strong>{entry.label}</strong>
-                      <small>{settingsSections.find((item) => item.id === entry.section)?.label}</small>
-                    </span>
-                    <IconArrowUpRight size={18} aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-              {results.length ? null : <li className="settings-search-empty">No matching settings.</li>}
-            </motion.ul>
-          ) : null}
-        </AnimatePresence>
-      </search>
+      <SettingsSaveStatus />
       <div className="settings-layout">
         <nav className="settings-sidebar" aria-label="Settings categories">
           <SelectionGroup className="settings-category-list">
@@ -211,7 +218,6 @@ export function SettingsWorkspace({
             <header className="settings-content-heading">
               <h2>{section.label}</h2>
               <div className="settings-save-actions">
-                <SettingsSaveActivity />
                 <SettingsSaveButton />
               </div>
             </header>

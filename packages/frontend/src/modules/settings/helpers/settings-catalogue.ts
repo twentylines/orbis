@@ -73,7 +73,7 @@ export const settingsCatalogue: readonly SettingEntry[] = [
     section: 'customise',
     anchor: 'appearance-mode',
     aliases: 'oled amoled black display pure dark',
-    focus: '[data-setting-value="oled"]',
+    focus: '[data-setting-focus="oled"]',
   },
   {
     id: 'light-mode',

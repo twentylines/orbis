@@ -19,13 +19,19 @@ import type { Request } from 'express';
 let root: string;
 let service: BackupImportsService;
 const credentials = { password: 'disposable-operator-password', totpCode: '123456' };
-const auth = { verifySensitiveAction: vi.fn().mockResolvedValue({ id: 1 }) };
+const auth = {
+  verifySensitiveAction: vi.fn().mockResolvedValue({ id: 1 }),
+  operatorActionContext: vi.fn().mockResolvedValue({ userId: 1, sessionBinding: 'session', securityBinding: 'security' }),
+};
+const security = {
+  read: vi.fn().mockResolvedValue({ version: 1, revision: 0, requireCaptureAuthentication: false, requireRestoreAuthentication: false }),
+};
 const logger = { warn: vi.fn() };
 // Archive/service tests use a declared database boundary; real PostgreSQL review has separate runtime coverage.
 const database = { review: vi.fn() };
 let config: { get: (key: string) => unknown };
 const construct = () =>
-  new BackupImportsService(...([config, auth, logger, database] as unknown as ConstructorParameters<typeof BackupImportsService>));
+  new BackupImportsService(...([config, auth, logger, database, security] as unknown as ConstructorParameters<typeof BackupImportsService>));
 beforeEach(async () => {
   vi.clearAllMocks();
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orbis-import-service-')));
@@ -354,6 +360,16 @@ it('reauthenticates creation and review before processing private files', async 
   expect((await service.list(1)).jobs[0]?.status).toBe('uploaded');
 });
 
+it('reserves an operator upload without fresh credentials while retaining owner isolation', async () => {
+  auth.verifySensitiveAction.mockClear();
+  const job = await service.createUpload(1);
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
+  await expect(service.receive(job.id, 2, Readable.from([Buffer.alloc(52)]), '52')).rejects.toThrow('not found');
+  await expect(service.reviewUpload(job.id, 2, '12345678')).rejects.toThrow('not found');
+  expect((await service.list(1)).jobs[0]?.id).toBe(job.id);
+  expect((await service.list(2)).jobs).toEqual([]);
+});
+
 it('cancels a streaming upload without leaving its file descriptor or partial payload', async () => {
   const job = await service.create(1, credentials);
   const stream = new PassThrough();
@@ -474,6 +490,16 @@ async function reviewedSource() {
   if (!manifestSha256) throw new Error('Missing reviewed fixture manifest');
   return { id, store, journal, manifestSha256, signal: new AbortController().signal };
 }
+
+it('claims a reviewed owner-bound source using the same still-valid operator session', async () => {
+  const source = await reviewedSource();
+  const actor = { userId: 1, sessionBinding: 'session', securityBinding: 'security', revision: 0 };
+  const before = auth.verifySensitiveAction.mock.calls.length;
+  const result = await service.claimReviewedSourceForSession(source.id, 1, {} as never, undefined, actor, source);
+  expect(result.seal.manifest.sha256).toBe(source.manifestSha256);
+  expect(auth.verifySensitiveAction.mock.calls.length).toBe(before);
+  expect(await fs.readFile(path.join(root, 'live', 'preserve'), 'utf8')).toBe('live server fixture');
+});
 
 it('reverifies account access and moves an approved source out of import expiry into its active restore journal', async () => {
   const source = await reviewedSource();

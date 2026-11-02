@@ -1,0 +1,11 @@
+.orbis-startup.orbis-startup-setup-space {
+  background: #030508;
+  color: #f1f5f6;
+}
+
+.orbis-startup-space-field {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}

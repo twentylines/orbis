@@ -37,6 +37,7 @@ it('defaults to v4 host policy support and pins it inside the capture lease befo
     ...([config, host, apps, docker, fixture.engine, 6] as unknown as ConstructorParameters<typeof TimeMachineCaptureRuntime>),
   );
   await expect(gatedV6.requireSupport(signal)).rejects.toMatchObject({ response: { code: 'host-capture-support-required' } });
+  await expect(runtime.requireSupport(signal, true)).rejects.toMatchObject({ response: { code: 'host-capture-support-required' } });
   expect(host.requireControllerCaptureAuthoritySupport).not.toHaveBeenCalled();
   await runtime.requireSupport(signal);
   expect(host.requireControllerCaptureAuthoritySupport).toHaveBeenCalledWith(signal, 2);

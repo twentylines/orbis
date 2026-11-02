@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
@@ -43,7 +43,7 @@ export class SystemBackupsController {
   start(@Req() request: Request, @Body() body: unknown) {
     const owner = backupOperator(request);
     const value = credentials(body, true);
-    return this.backups.start(owner, value, value.passphrase);
+    return this.backups.startForSession(owner, value, value.passphrase, request);
   }
   @Post(':id/cancel')
   @HttpCode(200)
@@ -60,7 +60,13 @@ export class SystemBackupsController {
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async download(@Req() request: Request, @Param('id') id: string, @Body() body: unknown, @Res({ passthrough: true }) response: Response) {
-    const result = await this.backups.download(id, backupOperator(request), credentials(body));
+    const owner = backupOperator(request);
+    const creationSession = body && typeof body === 'object' && !Array.isArray(body) && 'creationSession' in body;
+    if (creationSession && (Object.keys(body).length !== 1 || (body.creationSession !== true && body.creationSession !== 'true')))
+      throw new BadRequestException('Choose a valid backup download authorization.');
+    const result = creationSession
+      ? await this.backups.downloadCreated(id, owner, request)
+      : await this.backups.download(id, owner, credentials(body));
     const disconnected = () => result.stream.destroy();
     response.once('close', disconnected);
     result.stream.once('close', () => response.removeListener('close', disconnected));

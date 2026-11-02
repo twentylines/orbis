@@ -1,10 +1,15 @@
+.orbis-colour-mode-setting {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
 .orbis-colour-mode-choice {
   min-width: 0;
   padding: 0;
   margin: 0;
   border: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 .orbis-colour-mode-choice > .btn {
@@ -32,14 +37,31 @@
   border-color: var(--desktop-accent);
   background: color-mix(in srgb, var(--desktop-accent) 10%, var(--desktop-surface));
 }
-.orbis-colour-mode-choice[data-compact="true"] > .btn {
+.orbis-colour-mode-setting[data-compact="true"] .orbis-colour-mode-choice > .btn {
   flex-direction: row;
   gap: 8px;
   min-height: 48px;
   padding: 12px;
 }
+.orbis-colour-mode-oled {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  min-width: 0;
+}
+.orbis-colour-mode-oled > .form-check {
+  margin: 0;
+}
+.orbis-colour-mode-oled > small {
+  color: var(--desktop-muted, var(--tblr-secondary));
+  line-height: 1.45;
+}
 @media (max-width: 700px) {
   .orbis-colour-mode-choice {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .orbis-colour-mode-choice > .btn {
+    padding: 12px 6px;
   }
 }

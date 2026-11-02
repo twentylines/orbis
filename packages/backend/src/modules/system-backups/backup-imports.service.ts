@@ -4,7 +4,18 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { BadRequestException, ConflictException, Injectable, NotFoundException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  Optional,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from '@nestjs/common';
+import type { Request } from 'express';
+import { AccountSecurityService } from '../auth/account-security.service';
+import { authorizeBackupRestoreSession } from './backup-session-authorization';
 import { type } from 'arktype';
 import { installationMode } from '@/common/installation-mode';
 import { acquireBackupDisk, BackupDiskBusyError } from '@/common/backup-disk';
@@ -66,6 +77,7 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
     private readonly auth: AuthService,
     private readonly logger: LoggerService,
     private readonly database: BackupDatabaseService,
+    @Optional() private readonly security?: AccountSecurityService,
   ) {
     trustedBackupImports.add(this);
   }
@@ -266,6 +278,10 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
     return this.createOwnedJob(ownerId);
   }
+  async createUpload(ownerId: number) {
+    await this.initialize();
+    return this.createOwnedJob(ownerId);
+  }
   private async createOwnedJob(ownerId: number, retainedPointId?: string) {
     this.available();
     await this.expire();
@@ -383,9 +399,13 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
   async review(id: string, ownerId: number, credentials: Credentials, passphrase: string) {
     await this.initialize();
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    return this.reviewUpload(id, ownerId, passphrase);
+  }
+  async reviewUpload(id: string, ownerId: number, passphrase: string) {
+    await this.initialize();
     const job = this.owned(id, ownerId);
     if (job.origin) throw new ConflictException('Review retained points through Time Machine.');
-    if (typeof passphrase !== 'string' || passphrase.trim().length < 12 || passphrase.length > 1024)
+    if (typeof passphrase !== 'string' || passphrase.length < 8 || !passphrase.trim() || passphrase.length > 1024)
       throw new BadRequestException(new BackupArchiveError('passphrase').message);
     if (!(await this.uploaded(job))) throw new ConflictException('Upload the encrypted backup before reviewing it.');
     this.begin(job, 'review', (signal) => this.inspect(job, passphrase, signal));
@@ -611,6 +631,26 @@ export class BackupImportsService implements OnModuleInit, OnModuleDestroy {
   ) {
     await this.initialize();
     await this.auth.verifySensitiveAction(ownerId, credentials.password, credentials.totpCode);
+    this.available();
+    const job = this.owned(id, ownerId);
+    if (job.origin) throw new ConflictException('Time Machine requires its point-bound authorization and restore preparation.');
+    return this.claimSource(job, options);
+  }
+  async claimReviewedSourceForSession<T = undefined>(
+    id: string,
+    ownerId: number,
+    request: Request,
+    credentials: Credentials | undefined,
+    authorization: Awaited<ReturnType<typeof authorizeBackupRestoreSession>>,
+    options: {
+      journal: BackupRestoreJournal;
+      manifestSha256: string;
+      signal: AbortSignal;
+      prepare?: (source: ClaimedBackupSource, signal: AbortSignal) => Promise<T>;
+    },
+  ) {
+    await authorizeBackupRestoreSession(this.auth, this.security, request, ownerId, credentials, authorization);
+    await this.initialize();
     this.available();
     const job = this.owned(id, ownerId);
     if (job.origin) throw new ConflictException('Time Machine requires its point-bound authorization and restore preparation.');

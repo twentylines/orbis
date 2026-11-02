@@ -12,6 +12,7 @@ const stars = Array.from({ length: 48 }, (_, index) => ({
   size: index % 13 === 0 ? 2.5 : index % 5 === 0 ? 1.5 : 1,
   bright: index % 13 === 0,
   opacity: 0.35 + ((index * 17) % 55) / 100,
+  temperature: index % 23 === 11 ? 'warm' : index % 9 === 4 ? 'cool' : 'neutral',
 }));
 
 export function DepthTravel({
@@ -145,6 +146,7 @@ export function DepthTravel({
             <i
               key={`${star.x}-${star.y}`}
               data-bright={star.bright || undefined}
+              data-temperature={star.temperature}
               style={
                 {
                   left: `${star.x}%`,

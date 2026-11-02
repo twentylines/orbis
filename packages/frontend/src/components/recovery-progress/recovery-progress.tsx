@@ -24,7 +24,7 @@ export function RecoveryProgressBar({ label, percentage }: { label: string; perc
   );
 }
 
-export function RecoveryProgress({ label, completed = 0, total = null, settled = false, unit = 'bytes', journey = true }: Props) {
+export function RecoveryProgress({ label, completed = 0, total = null, settled = false, unit = 'bytes', journey = false }: Props) {
   const percentage = progressPercent(completed, total, settled);
   const reduced = useReducedMotion();
   return (

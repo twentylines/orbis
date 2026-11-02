@@ -180,6 +180,11 @@
   width: 44px;
   padding: 0;
 }
+.tm-journey .orbis-dialog-header-actions > .btn {
+  height: 44px;
+  min-height: 44px;
+  padding-block: 0;
+}
 .orbis-dialog-content.tm-journey .btn {
   min-height: 44px;
   color: var(--desktop-ink);
@@ -417,6 +422,8 @@
   line-height: 1.6;
 }
 .tm-timeline {
+  --tm-fade-start: 0px;
+  --tm-fade-end: 0px;
   align-self: center;
   height: fit-content;
   min-height: 0;
@@ -426,6 +433,17 @@
   scrollbar-gutter: stable;
   scroll-padding: 12px;
   padding: 12px 8px;
+  overflow-anchor: none;
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--tm-fade-start), #000 calc(100% - var(--tm-fade-end)), transparent);
+}
+.tm-timeline[data-fade-start="true"] {
+  --tm-fade-start: 16px;
+}
+.tm-timeline[data-fade-end="true"] {
+  --tm-fade-end: 16px;
+}
+.tm-timeline .tm-timeline-spacer {
+  pointer-events: none;
 }
 .tm-timeline ol {
   position: relative;
@@ -613,6 +631,7 @@
     overflow-y: hidden;
     max-height: none;
     padding: 6px 7px;
+    mask-image: linear-gradient(to right, transparent, #000 var(--tm-fade-start), #000 calc(100% - var(--tm-fade-end)), transparent);
   }
   .tm-timeline ol {
     display: flex;
@@ -623,6 +642,10 @@
   }
   .tm-timeline li {
     flex: 0 0 160px;
+  }
+  .tm-timeline .tm-timeline-spacer {
+    align-self: flex-start;
+    height: 1px;
   }
   .tm-timeline ol::before {
     inset: 17px 80px auto;
@@ -694,6 +717,9 @@
   .tm-home-layer {
     box-shadow: none;
   }
+  .tm-timeline {
+    mask-image: none;
+  }
 }
 
 .orbis-dialog-content.tm-journey[data-state="open"] {
@@ -739,4 +765,42 @@
 
 .tm-journey[data-motion="false"] .tm-timeline :is(button, .tm-ruler-tick) {
   transition: none;
+}
+
+.tm-disabled-setup {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  width: min(100%, 46rem);
+  margin: clamp(24px, 6vh, 56px) auto;
+  text-align: center;
+}
+
+.tm-disabled-setup-copy {
+  display: grid;
+  gap: 14px;
+  max-width: 36rem;
+}
+
+.tm-disabled-setup-copy > p {
+  margin: 0;
+}
+
+.tm-disabled-setup-copy h4 {
+  margin: 0;
+  color: var(--desktop-ink);
+}
+
+.tm-disabled-capture-list {
+  display: grid;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding-inline-start: 1.4rem;
+  text-align: start;
+}
+
+.tm-activation-status {
+  min-height: 1.2em;
 }

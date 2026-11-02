@@ -1,10 +1,55 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { boundedBody, readHistoricalWallpaper, readTimeMachinePoints, reviewTimeMachinePoint } from './time-machine-api';
+import { defaultTimeMachinePreferences } from '@runtipi/common/schemas/time-machine';
+import {
+  boundedBody,
+  readHistoricalWallpaper,
+  readOnboardingCapture,
+  readTimeMachinePoints,
+  reviewTimeMachinePoint,
+  startOnboardingCapture,
+  captureTimeMachine,
+} from './time-machine-api';
+import { saveTimeMachineEnabled } from './time-machine-preferences-query';
+import { timeMachineRetentionSummary, timeMachineSettingsMode } from './time-machine-settings-state';
+import { hasSeenTimeMachineNotice, markTimeMachineNoticeSeen, timeMachineNoticeKey } from './time-machine-notice';
 import { historicalPoint, readyReview } from './time-machine.test-data';
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+
+test('manual capture sends no password or experimental confirmation by default and preserves optional policy proof', async () => {
+  const point = historicalPoint();
+  const fetcher = mock(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(point));
+  globalThis.fetch = fetcher as unknown as typeof fetch;
+  const signal = new AbortController().signal;
+  await captureTimeMachine('Before updating Jellyfin', {}, signal);
+  expect(fetcher.mock.calls[0]?.[0]).toBe('/api/system-backups/time-machine/captures');
+  expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ label: 'Before updating Jellyfin' });
+  expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
+  await captureTimeMachine('Protected capture', { password: 'unit-test-proof', totpCode: '123456' }, signal);
+  expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({
+    label: 'Protected capture',
+    password: 'unit-test-proof',
+    totpCode: '123456',
+  });
+});
+
+test('the actual preview conflict envelope surfaces the safe host-support requirement without trusting arbitrary server messages', async () => {
+  const message = 'Update and verify the Orbis host service with controller configuration capture support before creating this restore point.';
+  globalThis.fetch = mock(async () =>
+    Response.json({ statusCode: 409, message, path: '/api/system-backups/time-machine/captures' }, { status: 409 }),
+  ) as unknown as typeof fetch;
+  await expect(captureTimeMachine('', {}, new AbortController().signal)).rejects.toMatchObject({
+    status: 409,
+    code: 'host-capture-support-required',
+    message,
+  });
+  globalThis.fetch = mock(async () =>
+    Response.json({ statusCode: 409, message: 'private server internals should not be displayed' }, { status: 409 }),
+  ) as unknown as typeof fetch;
+  await expect(captureTimeMachine('', {}, new AbortController().signal)).rejects.toThrow('could not safely continue');
 });
 
 test('bounded transport cancels oversized streamed bodies before accepting private metadata or assets', async () => {
@@ -20,6 +65,50 @@ test('bounded transport cancels oversized streamed bodies before accepting priva
   await expect(boundedBody(new Response(stream), 10)).rejects.toThrow('exceeded');
   expect(cancelled).toBe(true);
   await expect(boundedBody(new Response('x', { headers: { 'Content-Length': '999' } }), 10)).rejects.toThrow('exceeded');
+});
+test('enabling Time Machine persists the saved fields with the current revision', async () => {
+  const current = defaultTimeMachinePreferences();
+  const updated = { ...current, revision: current.revision + 1, enabled: true };
+  const fetcher = mock(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(updated));
+  globalThis.fetch = fetcher as unknown as typeof fetch;
+
+  const result = await saveTimeMachineEnabled(current, true, new AbortController().signal);
+
+  const [, init] = fetcher.mock.calls[0] ?? [];
+  const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+  expect(result).toEqual(updated);
+  expect(fetcher.mock.calls[0]?.[0]).toBe('/api/system-backups/time-machine/preferences');
+  expect(init?.method).toBe('PUT');
+  expect(body.expectedRevision).toBe(current.revision);
+  expect(body.enabled).toBe(true);
+  expect(body.schedule).toEqual(current.schedule);
+  expect(body.excludedApps).toEqual(current.excludedApps);
+  expect(body).not.toHaveProperty('revision');
+  expect(body).not.toHaveProperty('version');
+});
+test('Time Machine settings presentation follows only the saved preference snapshot', () => {
+  expect(timeMachineSettingsMode(null)).toBe('loading');
+  expect(timeMachineSettingsMode({ enabled: false })).toBe('setup');
+  expect(timeMachineSettingsMode({ enabled: true })).toBe('active');
+});
+test('retained summary reports captured archive data without presenting a capacity limit as free disk space', () => {
+  expect(timeMachineRetentionSummary(0, 0, (value) => `${value} B`)).toBe('No captured points yet. Nothing is retained.');
+  expect(timeMachineRetentionSummary(1, 2048, (value) => `${value} B`)).toBe('1 captured point · 2048 B retained.');
+  expect(timeMachineRetentionSummary(3, 4096, (value) => `${value} B`)).toBe('3 captured points · 4096 B retained.');
+});
+test('the Experimental notice dismissal is scoped to both the account and server origin', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  };
+  const userId = `notice-test-${Date.now()}`;
+  expect(hasSeenTimeMachineNotice(userId, 'https://server-a.example', storage)).toBe(false);
+  markTimeMachineNoticeSeen(userId, 'https://server-a.example', storage);
+  expect(values.get(timeMachineNoticeKey(userId, 'https://server-a.example'))).toBe('seen');
+  expect(hasSeenTimeMachineNotice(userId, 'https://server-a.example', storage)).toBe(true);
+  expect(hasSeenTimeMachineNotice(userId, 'https://server-b.example', storage)).toBe(false);
+  expect(hasSeenTimeMachineNotice(`${userId}-other`, 'https://server-a.example', storage)).toBe(false);
 });
 test('historical assets use only point-bound identity URLs and enforce MIME, length and available content digest', async () => {
   const point = historicalPoint();
@@ -65,4 +154,36 @@ test('capture export lists use the bounded authenticated Time Machine endpoint a
   expect(fetcher.mock.calls[0]?.[1]?.redirect).toBe('error');
   globalThis.fetch = mock(async () => Response.json({ ...list, points: [{ ...historicalPoint(), metadata: null }] })) as unknown as typeof fetch;
   await expect(readTimeMachinePoints(new AbortController().signal)).rejects.toThrow('unsupported Time Machine response');
+});
+
+test('onboarding capture uses its session-only POST and reconciles the same authenticated owner-bound UUID by GET', async () => {
+  const point = historicalPoint();
+  const fetcher = mock(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(point));
+  globalThis.fetch = fetcher as unknown as typeof fetch;
+  const signal = new AbortController().signal;
+  await startOnboardingCapture(point.id, signal);
+  await readOnboardingCapture(point.id, signal);
+  expect(fetcher.mock.calls[0]?.[0]).toBe('/api/system-backups/time-machine/onboarding-captures');
+  expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
+  expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
+    attemptId: point.id,
+    label: 'After setup',
+  });
+  expect(fetcher.mock.calls[1]?.[0]).toBe(`/api/system-backups/time-machine/onboarding-captures/${point.id}`);
+  expect(fetcher.mock.calls[1]?.[1]).toMatchObject({ method: 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
+  expect(fetcher.mock.calls[1]?.[1]?.body).toBeUndefined();
+  await expect(startOnboardingCapture('invalid-id', signal)).rejects.toThrow('receipt');
+  expect(fetcher.mock.calls).toHaveLength(2);
+});
+
+test('onboarding responses cannot accept another attempt and owner/machine lookup conflicts stay explicit', async () => {
+  const point = historicalPoint();
+  globalThis.fetch = mock(async () => Response.json(point)) as unknown as typeof fetch;
+  await expect(readOnboardingCapture('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', new AbortController().signal)).rejects.toThrow(
+    'different setup capture',
+  );
+  globalThis.fetch = mock(async () =>
+    Response.json({ code: 'point-not-found', message: 'Not available' }, { status: 409 }),
+  ) as unknown as typeof fetch;
+  await expect(readOnboardingCapture(point.id, new AbortController().signal)).rejects.toMatchObject({ status: 409, code: 'point-not-found' });
 });

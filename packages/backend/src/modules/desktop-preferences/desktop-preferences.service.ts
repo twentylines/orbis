@@ -87,8 +87,18 @@ export class DesktopPreferencesService {
   }
 
   async completeOnboarding(userId: number) {
-    await this.writeState(this.onboardingFile(userId), { version: 1 });
-    return { complete: true };
+    return this.serialize(userId, async () => {
+      await this.writeState(this.onboardingFile(userId), { version: 1 });
+      return { complete: true };
+    });
+  }
+
+  withIncompleteOnboarding<T>(userId: number, work: (complete: () => Promise<void>) => Promise<T>) {
+    return this.serialize(userId, async () => {
+      if ((await this.onboarding(userId)).complete) return null;
+      const value = await work(() => this.writeState(this.onboardingFile(userId), { version: 1 }));
+      return { value };
+    });
   }
 
   private fileFor(userId: number) {

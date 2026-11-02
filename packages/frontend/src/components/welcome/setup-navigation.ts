@@ -1,5 +1,5 @@
-export const freshSetupSteps = ['choose', 'server', 'customisation', 'performance', 'updates', 'ready'] as const;
-export const migrationSetupSteps = ['customisation', 'performance', 'updates', 'ready'] as const;
+export const freshSetupSteps = ['choose', 'server', 'customisation', 'performance', 'updates', 'time-machine', 'ready'] as const;
+export const migrationSetupSteps = ['customisation', 'performance', 'updates', 'time-machine', 'ready'] as const;
 export type SetupStep = (typeof freshSetupSteps)[number] | 'restore' | 'transfer';
 export type SetupEntry = 'fresh' | 'restore' | 'transfer' | 'migration' | null;
 
@@ -9,6 +9,7 @@ export const setupStepCopy: Record<SetupStep, { title: string; description: stri
   customisation: { title: 'Customisation', description: 'Choose your colours and display mode.' },
   performance: { title: 'Performance', description: 'Choose the balance that suits your devices. Your apps keep all their features.' },
   updates: { title: 'Updates', description: 'Keep updates manual, or choose what Orbis may update automatically.' },
+  'time-machine': { title: 'Time Machine', description: 'Save Orbis settings, appearance and managed app data in a point you can return to.' },
   ready: { title: 'Ready', description: '' },
   restore: {
     title: 'Restore your server',

@@ -16,7 +16,7 @@ export function restoreRequest(body: unknown) {
     confirmation !== 'replace-server'
   )
     throw new BadRequestException('Confirm the exact reviewed backup before restoring.');
-  return { importId, manifestSha256, credentials: backupCredentials(credentials) };
+  return { importId, manifestSha256, credentials: Object.keys(credentials).length ? backupCredentials(credentials) : undefined };
 }
 @Controller('system-backups/restores')
 @UseGuards(AuthGuard)
@@ -47,7 +47,7 @@ export class BackupRestoresController {
   async prepare(@Req() request: Request, @Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const owner = backupOperator(request);
     const input = restoreRequest(body);
-    const result = await this.restores.prepare(input.importId, owner, input.credentials, input.manifestSha256);
+    const result = await this.restores.prepareForSession(input.importId, owner, request, input.credentials, input.manifestSha256);
     if (result.job) this.afterResponse(response, result.job.id);
     return result;
   }
