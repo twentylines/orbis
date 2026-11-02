@@ -2,6 +2,28 @@ import { type } from 'arktype';
 import type { AuthenticationResponseJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser';
 
 export type ResetAccounts = 'keep' | 'remove';
+export async function resetProofMethod(
+  usePassword: boolean,
+  browserReason: string | null,
+  list: () => Promise<{ available: boolean; credentials: unknown[] }>,
+  timeoutMs = 4000,
+): Promise<'password' | 'passkey'> {
+  if (usePassword || browserReason) return 'password';
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      list(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+    return result?.available && Array.isArray(result.credentials) && result.credentials.length ? 'passkey' : 'password';
+  } catch {
+    return 'password';
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const acceptedSchema = type({ '+': 'reject', id: 'string.uuid', state: "'resetting'" });
 export type AcceptedReset = typeof acceptedSchema.infer;
 type PasswordProof = { method: 'password'; password: string; totpCode?: string };

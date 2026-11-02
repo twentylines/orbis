@@ -192,6 +192,7 @@ export type PreferenceContext = {
   syncState: 'local' | 'loading' | 'saving' | 'saved' | 'error';
   requiresOnboarding: boolean;
   onboardingOrigin: 'fresh' | 'runtipi';
+  onboardingGeneration: string | null;
   completeOnboarding: (serverName: string, draft?: DesktopPreferences, capture?: () => Promise<boolean>) => Promise<void>;
   setPreview: (value: DesktopPreferences | null) => void;
   setWorkspaceLoading: (loading: boolean) => void;
@@ -242,6 +243,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
   }, [serverReady, isLoggedIn, requiresFreshRestore, preferences]);
   const [requiresOnboarding, setRequiresOnboarding] = useState(true);
   const [onboardingOrigin, setOnboardingOrigin] = useState<'fresh' | 'runtipi'>('fresh');
+  const [onboardingGeneration, setOnboardingGeneration] = useState<string | null>(null);
   const completingSetup = useRef(false);
   const [syncState, setSyncState] = useState<PreferenceContext['syncState']>('local');
   const appearancePainted = useRef(false);
@@ -332,6 +334,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
       setServerReady(false);
       setRequiresOnboarding(true);
       setOnboardingOrigin('fresh');
+      setOnboardingGeneration(null);
       setSyncState('local');
       setInitialLoadComplete(false);
       setLoadAttempt(0);
@@ -357,6 +360,8 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         if (!setup || typeof setup !== 'object' || !('complete' in setup) || typeof setup.complete !== 'boolean') {
           throw new Error('Invalid setup status');
         }
+        if ('generation' in setup && (typeof setup.generation !== 'string' || !/^[a-f0-9-]{36}$/.test(setup.generation)))
+          throw new Error('Invalid setup generation');
         if (disposed || controller.signal.aborted || !isCurrentSession()) return;
         if (revision.current === loadRevision && canReplace) {
           acknowledgedRevision.current = loadRevision;
@@ -365,6 +370,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         loadedSession.current = sessionEpoch;
         setServerReady(true);
         setRequiresOnboarding(!setup.complete);
+        setOnboardingGeneration('generation' in setup ? (setup.generation as string) : null);
         setOnboardingOrigin('entry' in setup && setup.entry === 'runtipi' ? 'runtipi' : 'fresh');
         setSyncState(acknowledgedRevision.current === revision.current ? 'saved' : 'saving');
       })
@@ -659,6 +665,7 @@ export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {
         syncState,
         requiresOnboarding,
         onboardingOrigin,
+        onboardingGeneration,
         completeOnboarding,
         setPreview,
         setWorkspaceLoading,

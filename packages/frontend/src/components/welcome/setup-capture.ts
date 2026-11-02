@@ -7,14 +7,42 @@ export class SetupCaptureNotStartedError extends Error {}
 export class SetupCaptureTerminalError extends Error {}
 const attemptPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const receiptKey = (ownerId: number) => `orbis-setup-capture-v1:${ownerId}`;
-export function setupCaptureStorage(): CaptureStorage | null {
+export function setupCaptureStorage(generation: string | null = null, suppliedStorage?: Storage | null): CaptureStorage | null {
   try {
-    const storage = typeof localStorage === 'undefined' ? null : localStorage;
+    const storage = suppliedStorage === undefined ? (typeof localStorage === 'undefined' ? null : localStorage) : suppliedStorage;
     storage?.getItem('orbis-setup-capture-v1:storage-check');
-    return storage;
+    if (!storage || !generation) return storage;
+    if (!/^[a-f0-9-]{36}$/.test(generation)) throw new Error('Invalid setup generation');
+    return {
+      getItem: (key) => storage.getItem(`${key}:${generation}`),
+      setItem: (key, value) => storage.setItem(`${key}:${generation}`, value),
+    };
   } catch {
     return null;
   }
+}
+export function priorUnconfirmedSetupCapture(ownerId: number, generation: string | null, suppliedStorage?: Storage | null) {
+  if (!generation) return null;
+  let storage: Storage | null;
+  try {
+    storage = suppliedStorage === undefined ? (typeof localStorage === 'undefined' ? null : localStorage) : suppliedStorage;
+  } catch {
+    throw new Error('Browser storage is unavailable. Review the previous setup capture before starting another.');
+  }
+  if (!storage) return null;
+  const base = receiptKey(ownerId);
+  const current = `${base}:${generation}`;
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (!key || key === current || (key !== base && !key.startsWith(`${base}:`))) continue;
+    const scoped: CaptureStorage = {
+      getItem: () => storage.getItem(key),
+      setItem: (_key, value) => storage.setItem(key, value),
+    };
+    const receipt = readSetupCapture(ownerId, scoped);
+    if (receipt && (receipt.phase === 'pending' || receipt.phase === 'submitted')) return { receipt, storage: scoped };
+  }
+  return null;
 }
 export function readSetupCapture(ownerId: number, storage = setupCaptureStorage()): SetupCaptureReceipt | null {
   if (!storage) return null;

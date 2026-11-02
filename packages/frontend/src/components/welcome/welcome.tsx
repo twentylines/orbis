@@ -37,8 +37,7 @@ import { SystemBackupsSettings } from '@/modules/system-backups/system-backups-s
 import { HostTransferPanel } from '@/modules/host-transfer/host-transfer-panel';
 import { readManualProtection, saveManualProtection } from '@/modules/time-machine-capsules/protection-choice';
 import { nextSetupStep, previousSetupStep, setupCanFinish, setupPosition, setupStepCopy, type SetupEntry, type SetupStep } from './setup-navigation';
-import { readSetupCapture, reconcileSetupCapture, reserveSetupCapture } from './setup-capture';
-import { TimeMachineApiError } from '@/modules/time-machine/time-machine-api';
+import { readSetupCapture, reconcileSetupCapture, reserveSetupCapture, setupCaptureStorage, priorUnconfirmedSetupCapture } from './setup-capture';
 import './welcome.css';
 
 const defaultAutomatic: AutomaticUpdateSettings = { orbis: { enabled: false, mode: 'idle' }, schedule: { time: '03:00', timezone: 'UTC' } };
@@ -187,13 +186,13 @@ function SetupStepPanel({
 }
 
 export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolean }) => {
-  const { preferences, completeOnboarding, syncState, onboardingOrigin } = useDesktopPreferences();
+  const { preferences, completeOnboarding, syncState, onboardingOrigin, onboardingGeneration } = useDesktopPreferences();
   const { user } = useAppContext();
   const { sessionAbortSignal } = useUserContext();
   const queryClient = useQueryClient();
   const [captureState, setCaptureState] = useState(() => {
     try {
-      return { receipt: readSetupCapture(user.id), error: '' };
+      return { receipt: readSetupCapture(user.id, setupCaptureStorage(onboardingGeneration)), error: '' };
     } catch (reason) {
       return { receipt: null, error: reason instanceof Error ? reason.message : 'The setup capture receipt needs recovery.' };
     }
@@ -389,9 +388,17 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
             ? async () => {
                 setSavingStep('Capturing Time Machine state');
                 try {
-                  const receipt = captureState.receipt ?? reserveSetupCapture(user.id);
+                  if (priorUnconfirmedSetupCapture(user.id, onboardingGeneration))
+                    throw new Error('A previous setup capture needs review in Time Machine before starting another.');
+                  const receipt = captureState.receipt ?? reserveSetupCapture(user.id, setupCaptureStorage(onboardingGeneration));
                   setCaptureState({ receipt, error: '' });
-                  await reconcileSetupCapture(user.id, receipt, true, AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(30_000)]));
+                  await reconcileSetupCapture(
+                    user.id,
+                    receipt,
+                    true,
+                    AbortSignal.any([sessionAbortSignal, AbortSignal.timeout(30_000)]),
+                    setupCaptureStorage(onboardingGeneration),
+                  );
                   setCaptureState({ receipt: { ...receipt, phase: 'accepted' }, error: '' });
                   return true;
                 } catch (reason) {
@@ -399,9 +406,7 @@ export const Welcome = ({ allowErrorMonitoring }: { allowErrorMonitoring: boolea
                   sessionAbortSignal.throwIfAborted();
                   queryClient.setQueryData(['setup-capture-notice', user.id], {
                     message:
-                      reason instanceof TimeMachineApiError
-                        ? reason.message
-                        : 'The initial capture could not be confirmed. Check its status in Time Machine.',
+                      reason instanceof Error ? reason.message : 'The initial capture could not be confirmed. Check its status in Time Machine.',
                   });
                   return false;
                 } finally {

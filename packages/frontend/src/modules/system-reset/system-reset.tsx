@@ -7,8 +7,8 @@ import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
 import { readOperationStatus } from '@/components/recovery-progress/operation-status';
 import { preferenceStorageKey } from '@/desktop/appearance-cache';
 import { themePackCacheKey } from '@/modules/theme-packs/theme-pack-cache';
-import { browserPasskeyReason, cancelPasskeyCeremony, passkeyErrorMessage } from '@/modules/auth/passkeys/passkey-api';
-import { resetPasskeyOptions, submitReset, type ResetAccounts } from './reset-api';
+import { browserPasskeyReason, cancelPasskeyCeremony, passkeyErrorMessage, passkeyListOptions } from '@/modules/auth/passkeys/passkey-api';
+import { resetPasskeyOptions, resetProofMethod, submitReset, type ResetAccounts } from './reset-api';
 import './system-reset.css';
 
 export function openResetOnboarding() {
@@ -46,6 +46,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
   const [accounts, setAccounts] = useState<ResetAccounts | null>(null);
   const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
+  const [proofMethod, setProofMethod] = useState<'checking' | 'password' | 'passkey'>('checking');
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
@@ -59,9 +60,21 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
       setAccounts(null);
       setConfirmation('');
       setError(null);
+      setProofMethod('checking');
     }
     wasOpen.current = open;
   }, [open]);
+  useEffect(() => {
+    if (!open || step !== 2) return;
+    let active = true;
+    setProofMethod('checking');
+    void resetProofMethod(false, browserPasskeyReason(), passkeyListOptions().queryFn).then((method) => {
+      if (active) setProofMethod(method);
+    });
+    return () => {
+      active = false;
+    };
+  }, [open, step]);
   useEffect(
     () => () => {
       pending.current?.abort();
@@ -93,8 +106,8 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
       clearTimeout(timer);
     };
   }, [accepted]);
-  const reset = async (method: 'password' | 'passkey') => {
-    if (busy || !accounts || confirmation !== 'RESET ORBIS') return;
+  const reset = async () => {
+    if (busy || proofMethod === 'checking' || !accounts || confirmation !== 'RESET ORBIS') return;
     const values = new FormData(form.current ?? undefined);
     const password = String(values.get('password') ?? '');
     const totpCode = String(values.get('totpCode') ?? '');
@@ -102,15 +115,18 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
     setError(null);
     const controller = new AbortController();
     pending.current = controller;
-    form.current?.reset();
     try {
+      const method = proofMethod;
       if (method === 'password')
         await submitReset(accounts, confirmation, { method, password, ...(totpCode ? { totpCode } : {}) }, controller.signal, recovery);
       else {
         const reason = browserPasskeyReason();
         if (reason) throw new Error(reason);
         const options = await resetPasskeyOptions(accounts, controller.signal);
-        if (options.requiresTotp && !totpCode) throw new Error('Enter the current authentication code before using your passkey.');
+        if (options.requiresTotp && !totpCode) {
+          setError('Enter the current authentication code before using your passkey.');
+          return;
+        }
         const client = await import('@simplewebauthn/browser');
         controller.signal.throwIfAborted();
         const response = await client.startAuthentication({ optionsJSON: options.options }).catch((failure) => {
@@ -127,12 +143,15 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
       }
       setAccepted(true);
     } catch (failure) {
-      if (!controller.signal.aborted)
-        setError(failure instanceof Error ? failure.message : 'Reset was not confirmed. Check server status before retrying.');
+      if (!controller.signal.aborted) {
+        setProofMethod('password');
+        const message = failure instanceof Error ? failure.message : 'Reset was not confirmed. Check server status before retrying.';
+        setError(proofMethod === 'passkey' ? `${message} You can use your password instead.` : message);
+      }
     } finally {
       setBusy(false);
       pending.current = null;
-      setConfirmation('');
+      form.current?.reset();
     }
   };
   if (accepted)
@@ -202,7 +221,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
                 ref={form}
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void reset('password');
+                  void reset();
                 }}
                 className="system-reset-form"
               >
@@ -214,14 +233,17 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
                   onChange={(event) => setConfirmation(event.target.value)}
                   disabled={busy}
                 />
-                <Input
-                  name="password"
-                  label="Current account password"
-                  type="password"
-                  autoComplete="current-password"
-                  maxLength={1024}
-                  disabled={busy}
-                />
+                {proofMethod === 'checking' ? <output>Checking sign-in options…</output> : null}
+                {proofMethod === 'password' ? (
+                  <Input
+                    name="password"
+                    label="Current account password"
+                    type="password"
+                    autoComplete="current-password"
+                    maxLength={1024}
+                    disabled={busy}
+                  />
+                ) : null}
                 <Input
                   name="totpCode"
                   label="Authentication code if enabled"
@@ -256,6 +278,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
               type="button"
               disabled={step === 1 && !accounts}
               onClick={() => {
+                if (step === 1) setProofMethod('checking');
                 setStep(step + 1);
                 setError(null);
               }}
@@ -263,20 +286,15 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
               Next
             </Button>
           ) : (
-            <>
-              <Button type="submit" form={formId} intent="danger" disabled={busy || confirmation !== 'RESET ORBIS'} aria-busy={busy}>
-                Reset
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                intent="danger"
-                disabled={busy || confirmation !== 'RESET ORBIS'}
-                onClick={() => void reset('passkey')}
-              >
-                Passkey
-              </Button>
-            </>
+            <Button
+              type="submit"
+              form={formId}
+              intent="danger"
+              disabled={busy || proofMethod === 'checking' || confirmation !== 'RESET ORBIS'}
+              aria-busy={busy}
+            >
+              Reset
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>

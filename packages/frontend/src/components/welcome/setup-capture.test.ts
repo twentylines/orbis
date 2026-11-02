@@ -4,6 +4,8 @@ import { TimeMachineApiError } from '@/modules/time-machine/time-machine-api';
 import {
   acknowledgeSetupCapture,
   readSetupCapture,
+  setupCaptureStorage,
+  priorUnconfirmedSetupCapture,
   reconcileSetupCapture,
   reserveSetupCapture,
   SetupCaptureNotStartedError,
@@ -161,4 +163,55 @@ test('a lost submitted request cannot be abandoned from a later missing lookup o
     }),
   ).rejects.toBeInstanceOf(TimeMachineApiError);
   expect(readSetupCapture(1, storage)?.phase).toBe('submitted');
+});
+
+test('reset generations start setup afresh while preserving and locating an unconfirmed earlier capture', () => {
+  const values = new Map<string, string>();
+  const raw: Storage = {
+    get length() {
+      return values.size;
+    },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => {
+      values.delete(key);
+    },
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+  };
+  const old = setupCaptureStorage(null, raw);
+  const receipt = reserveSetupCapture(1, old, () => attemptId);
+  raw.setItem('orbis-setup-capture-v1:1', JSON.stringify({ ...receipt, phase: 'submitted' }));
+  const generation = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const current = setupCaptureStorage(generation, raw);
+  expect(readSetupCapture(1, current)).toBeNull();
+  const prior = priorUnconfirmedSetupCapture(1, generation, raw);
+  expect(prior?.receipt).toEqual({ ...receipt, phase: 'submitted' });
+  if (!prior) throw new Error('Expected a previous capture');
+  expect(readSetupCapture(1, prior.storage)).toEqual(prior.receipt);
+  expect(raw.getItem('orbis-setup-capture-v1:1')).toContain(attemptId);
+  acknowledgeSetupCapture(1, prior.receipt, 'failed', prior.storage);
+  expect(priorUnconfirmedSetupCapture(1, generation, raw)).toBeNull();
+  expect(reserveSetupCapture(1, current, () => otherId).attemptId).toBe(otherId);
+  expect(readSetupCapture(1, old)?.attemptId).toBe(attemptId);
+});
+
+test('blocked browser storage is handled without losing the previous-capture safety check', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  try {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get: () => {
+        throw new DOMException('blocked', 'SecurityError');
+      },
+    });
+    expect(setupCaptureStorage()).toBeNull();
+    expect(setupCaptureStorage('cccccccc-cccc-4ccc-8ccc-cccccccccccc')).toBeNull();
+    expect(() => priorUnconfirmedSetupCapture(1, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')).toThrow('Browser storage is unavailable');
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+  }
 });

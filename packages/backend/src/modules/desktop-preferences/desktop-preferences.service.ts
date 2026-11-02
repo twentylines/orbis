@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { desktopPreferencesSchema } from './desktop-preferences.dto';
 import { defaultAppLaunch, defaultDesktopAppearance, normaliseDesktopAppearance } from '@runtipi/common/schemas';
+import { ResetState } from '../system-reset/reset-state';
 import { patchSelectedPreferences, selectedPreferences, UnsupportedDesktopPreferencesError } from './desktop-preferences-sync';
 
 export type DesktopPreferences = typeof desktopPreferencesSchema.infer;
@@ -76,12 +77,14 @@ export class DesktopPreferencesService {
   }
 
   async onboarding(userId: number) {
+    const reset = await new ResetState(this.config.get('directories').dataDir).read();
+    const generation = reset?.phase === 'complete' ? { generation: reset.id } : {};
     try {
       const value: unknown = JSON.parse(await fs.readFile(this.onboardingFile(userId), 'utf8'));
-      return { complete: typeof value === 'object' && value !== null && 'version' in value && value.version === 1 };
+      return { complete: typeof value === 'object' && value !== null && 'version' in value && value.version === 1, ...generation };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError)
-        return { complete: false, ...((await this.migratedFromRuntipi()) ? { entry: 'runtipi' as const } : {}) };
+        return { complete: false, ...generation, ...((await this.migratedFromRuntipi()) ? { entry: 'runtipi' as const } : {}) };
       throw error;
     }
   }

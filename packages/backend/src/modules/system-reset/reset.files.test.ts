@@ -13,6 +13,7 @@ import {
 } from '@/common/backup-maintenance';
 import { ResetState, type ResetJournal } from './reset-state';
 import { ResetService, resetBinding } from './reset.service';
+import { DesktopPreferencesService } from '../desktop-preferences/desktop-preferences.service';
 
 const status = vi.hoisted(() => vi.fn());
 vi.mock('@/common/restoration-status', () => ({ readOperationStatus: status }));
@@ -153,6 +154,9 @@ it('keeps account security, installed app data, app configs and host trust while
   expect(mutations).not.toContain(app);
   expect(mutations).not.toContain(appStore);
   await expect(fs.stat(path.join(root, 'state/desktop/7.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  const preferences = new DesktopPreferencesService({ get: () => ({ dataDir: root }) } as never);
+  expect(await preferences.onboarding(7)).toEqual({ complete: false, generation: accepted.job.id });
+  expect(await preferences.read(7)).toMatchObject({ serverName: 'Server', preset: 'frost', mode: 'light' });
   await expect(fs.stat(path.join(root, '.orbis-onboarding-origin.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   expect(backupMaintenanceActive()).toBe(false);
 });
