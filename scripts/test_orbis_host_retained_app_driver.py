@@ -184,7 +184,10 @@ class HistoricalAppDriverTests(unittest.TestCase):
     def test_incoming_source_replacement_is_rejected_before_daemon_create(self):
         driver = self.driver()
         file = self.apps / ('.orbis-restore-' + self.record['id'] + '.incoming/demo/whoami/actual.json')
-        file.unlink(); self.write(file, b'replaced')
+        replacement = file.with_name('replacement.json')
+        self.write(replacement, b'replaced')
+        self.assertNotEqual(file.stat().st_ino, replacement.stat().st_ino)
+        os.replace(replacement, file)
         with self.assertRaises(ValueError): driver.probe()
         self.assertFalse(any(event[0] == 'create' for event in self.base.engine.events))
 

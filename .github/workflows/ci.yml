@@ -44,7 +44,11 @@ jobs:
         run: node scripts/live-compact-ui-qa.cjs --self-check
 
       - name: Check migration and release planning
-        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+        run: |
+          TMPDIR="$(mktemp -d "$HOME/.orbis-python-ci.XXXXXX")"
+          export TMPDIR
+          trap 'rm -rf -- "$TMPDIR"' EXIT
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
   build:
     runs-on: ubuntu-latest
