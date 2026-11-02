@@ -17,7 +17,6 @@ let root: string;
 let app: INestApplication;
 let service: BackupImportsService;
 let origin: string;
-const credentials = { password: 'disposable-http-operator-password' };
 const auth = { verifySensitiveAction: vi.fn().mockResolvedValue({ id: 1 }) };
 const logger = { warn: vi.fn(), debug: vi.fn() };
 const database = { review: vi.fn().mockResolvedValue({ counts: { user: 1, app_store: 0, app: 0, link: 0 }, bytes: 1, sha256: '0'.repeat(64) }) };
@@ -53,14 +52,14 @@ const api = () => request(app.getHttpServer());
 const base = '/api/system-backups/imports';
 const directory = (id: string) => path.join(root, 'live', 'backups', 'imports', id);
 async function create() {
-  const result = await api().post(base).set('x-fixture-role', 'operator').set('Origin', origin).send(credentials).expect(201);
+  const result = await api().post(base).set('x-fixture-role', 'operator').set('Origin', origin).send({}).expect(201);
   return String(result.body.id);
 }
 
 it('protects creation and raw uploads with session, operator, origin and ownership checks', async () => {
   await api().get(base).expect(401);
-  await api().post(base).set('x-fixture-role', 'viewer').set('Origin', origin).send(credentials).expect(403);
-  await api().post(base).set('x-fixture-role', 'operator').send(credentials).expect(403);
+  await api().post(base).set('x-fixture-role', 'viewer').set('Origin', origin).send({}).expect(403);
+  await api().post(base).set('x-fixture-role', 'operator').send({}).expect(403);
   const id = await create();
   await api()
     .put(`${base}/${id}/file`)
@@ -70,7 +69,7 @@ it('protects creation and raw uploads with session, operator, origin and ownersh
     .send(Buffer.alloc(100))
     .expect(404);
   expect(await fs.readdir(directory(id))).toEqual(['job.json']);
-  expect(auth.verifySensitiveAction).toHaveBeenCalledTimes(1);
+  expect(auth.verifySensitiveAction).not.toHaveBeenCalled();
 });
 
 it('receives the raw file as a stream and completes asynchronous archive review over HTTP', async () => {
@@ -90,7 +89,7 @@ it('receives the raw file as a stream and completes asynchronous archive review 
     .post(`${base}/${id}/review`)
     .set('x-fixture-role', 'operator')
     .set('Origin', origin)
-    .send({ ...credentials, passphrase: fixturePassphrase })
+    .send({ passphrase: fixturePassphrase })
     .expect(202);
   await vi.waitFor(
     async () => {
@@ -142,12 +141,7 @@ it('aborts a disconnected raw upload and cleans its partial file while the serve
 });
 
 it('rejects arbitrary identifiers and extra credential fields without crashing its close listener', async () => {
-  await api()
-    .post(base)
-    .set('x-fixture-role', 'operator')
-    .set('Origin', origin)
-    .send({ ...credentials, directory: '/outside' })
-    .expect(400);
+  await api().post(base).set('x-fixture-role', 'operator').set('Origin', origin).send({ directory: '/outside' }).expect(400);
   await api()
     .put(`${base}/not-a-uuid/file`)
     .set('x-fixture-role', 'operator')

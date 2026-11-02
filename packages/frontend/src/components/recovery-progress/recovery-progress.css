@@ -72,8 +72,8 @@
 .recovery-progress-bar {
   position: relative;
   width: 100%;
-  height: 7px;
-  border-radius: 8px;
+  height: 10px;
+  border-radius: 10px;
   overflow: visible;
   clip-path: inset(-4px 0 round 8px);
   background: color-mix(in srgb, var(--desktop-ink) 10%, transparent);
@@ -82,9 +82,9 @@
   appearance: none;
   display: block;
   width: 100%;
-  height: 7px;
+  height: 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
 }
 .recovery-progress-bar progress::-webkit-progress-bar {
@@ -108,23 +108,23 @@
   left: 0;
   box-sizing: border-box;
   width: 18%;
-  min-width: 14px;
-  height: 14px;
+  min-width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--desktop-accent) 26%, transparent), transparent 74%);
+  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--desktop-accent) 38%, transparent), transparent 76%);
   animation: recovery-orb-sweep 1800ms linear infinite;
   transform: translate3d(-125%, -50%, 0);
 }
 .recovery-progress-bar[data-motion="true"] > span {
-  will-change: transform;
+  will-change: transform, opacity;
 }
 .recovery-progress-bar > span::before {
   position: absolute;
   top: 50%;
-  left: -100%;
-  width: 300%;
-  height: 2px;
-  border-radius: 2px;
+  left: -120%;
+  width: 340%;
+  height: 3px;
+  border-radius: 3px;
   background: linear-gradient(
     90deg,
     transparent,
@@ -140,15 +140,15 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: radial-gradient(
-    circle at 35% 35%,
-    white 0 14%,
-    color-mix(in srgb, white 76%, var(--desktop-accent)) 34%,
-    color-mix(in srgb, var(--desktop-accent) 60%, transparent) 68%,
-    transparent 100%
+    ellipse at center,
+    color-mix(in srgb, white 88%, var(--desktop-accent)) 0 7%,
+    color-mix(in srgb, white 74%, var(--desktop-accent)) 22%,
+    color-mix(in srgb, var(--desktop-accent) 58%, transparent) 48%,
+    transparent 76%
   );
   content: "";
   transform: translate3d(-50%, -50%, 0);
@@ -163,12 +163,16 @@
     transform: translate3d(45%, -50%, 0) scaleX(0.86);
   }
   90% {
-    opacity: 0.88;
-    transform: translate3d(410%, -50%, 0) scaleX(0.9);
+    opacity: 0.72;
+    transform: translate3d(410%, -50%, 0) scaleX(0.9) scaleY(0.58);
+  }
+  96% {
+    opacity: 0.3;
+    transform: translate3d(437%, -50%, 0) scaleX(0.9) scaleY(0.34);
   }
   to {
     opacity: 0;
-    transform: translate3d(455%, -50%, 0) scaleX(0.9);
+    transform: translate3d(455%, -50%, 0) scaleX(0.9) scaleY(0.2);
   }
 }
 .recovery-progress-bar[data-motion="false"] > span,

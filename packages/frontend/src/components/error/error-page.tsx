@@ -1,5 +1,4 @@
 import { IconAlertCircle, IconReload } from '@tabler/icons-react';
-import { Link } from 'react-router';
 import { Button } from '../ui/Button';
 import { readCachedDesktopPreferences } from '@/desktop/preferences';
 import { useResolvedColourMode } from '@/desktop/colour-mode';
@@ -10,6 +9,18 @@ type ErrorPageProps = {
   onReset: () => void;
   error: Error;
 };
+
+export function retryErrorPage(onReset: () => void, location: Pick<Location, 'reload'> = window.location) {
+  try {
+    onReset();
+  } finally {
+    location.reload();
+  }
+}
+
+export function openErrorWorkspace(location: Pick<Location, 'assign'> = window.location) {
+  location.assign('/dashboard');
+}
 
 export const FallbackSurface = ({ children }: PropsWithChildren) => {
   useStartupReady(true);
@@ -40,13 +51,20 @@ export const ErrorPage = ({ error, onReset }: ErrorPageProps) => {
           <p>Retry, or return to the workspace.</p>
         </div>
         <div className="orbis-error-actions">
-          <Button intent="primary" onClick={onReset}>
+          <Button intent="primary" onClick={() => retryErrorPage(onReset)}>
             <IconReload size={18} aria-hidden="true" />
             Retry
           </Button>
-          <Link to="/dashboard" className="btn btn-outline-primary">
+          <a
+            href="/dashboard"
+            className="btn btn-outline-primary"
+            onClick={(event) => {
+              event.preventDefault();
+              openErrorWorkspace();
+            }}
+          >
             Open workspace
-          </Link>
+          </a>
         </div>
         <section className="orbis-error-details" aria-label="Error details">
           <dl>

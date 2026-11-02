@@ -3,6 +3,7 @@ import { PreferenceSaveQueue, PreferenceSession } from './preference-save-queue'
 
 const scenarios = [
   'provider-composition',
+  'hmr-context-identity',
   'batched-edit-commit',
   'newer-edit-during-save',
   'queued-account-switch',

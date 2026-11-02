@@ -1,10 +1,11 @@
+import { DesktopPreferencesContext as Context } from './preferences-context';
 import { useThemePack } from '@/modules/theme-packs/use-theme-pack';
 import { applyThemePackRuntime, themePackAppearance } from '@/modules/theme-packs/theme-pack-runtime';
 import '@/modules/theme-packs/theme-pack-runtime.css';
 import { applyAppearanceRuntime } from './appearance-runtime';
 import { transitionAppearance } from './theme-motion';
 import { MotionPreferences } from './motion-preferences';
-import { useLayoutEffect, createContext, useContext, useEffect, useRef, useState, type PropsWithChildren, useMemo, useCallback } from 'react';
+import { useLayoutEffect, useContext, useEffect, useRef, useState, type PropsWithChildren, useMemo, useCallback } from 'react';
 import { useUserContext } from '@/context/user-context';
 import { PreferenceSaveQueue } from './preference-save-queue';
 import { OperationStartupContext } from '@/components/startup/operation-startup';
@@ -176,7 +177,7 @@ export function readCachedDesktopPreferences(): DesktopPreferences {
   return readPreferenceCache().preferences;
 }
 
-type PreferenceContext = {
+export type PreferenceContext = {
   preferences: DesktopPreferences;
   resolvedMode: ResolvedColourMode;
   activeThemePack: { id: string; version: string; name: string } | null;
@@ -195,7 +196,7 @@ type PreferenceContext = {
   setPreview: (value: DesktopPreferences | null) => void;
   setWorkspaceLoading: (loading: boolean) => void;
 };
-const Context = createContext<PreferenceContext | null>(null);
+
 const LOAD_NOTICE = 'desktop-preferences-load';
 
 export const DesktopPreferencesProvider = ({ children }: PropsWithChildren) => {

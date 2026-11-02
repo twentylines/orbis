@@ -5,6 +5,9 @@ export type OperationStatus = {
   progress?: number;
 };
 export type OperationSnapshot = OperationStatus & { supported: boolean; unavailable?: boolean };
+export function operationUsesSpace(snapshot: OperationSnapshot | null, acceptedOperation: boolean) {
+  return acceptedOperation || Boolean(snapshot && !['idle', 'checking'].includes(snapshot.state));
+}
 export function operationIsWaiting(snapshot: OperationSnapshot) {
   return snapshot.state === 'checking' || snapshot.unavailable === true;
 }

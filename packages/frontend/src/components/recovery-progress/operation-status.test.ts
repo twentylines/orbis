@@ -5,6 +5,7 @@ import {
   operationSnapshotAfter,
   operationAllowsDeparture,
   operationIsWaiting,
+  operationUsesSpace,
   operationShowsContent,
   type OperationStatusTransport,
 } from './operation-status';
@@ -79,4 +80,12 @@ test('reset is a server lock and accepts only its generic stage', () => {
   expect(parseOperationStatus({ state: 'resetting', stage: 'resetting' })).toEqual({ state: 'resetting', stage: 'resetting' });
   expect(operationAllowsDeparture({ state: 'resetting', supported: true })).toBe(false);
   expect(() => parseOperationStatus({ state: 'resetting', accounts: 'remove', users: [7] })).toThrow();
+});
+
+test('ordinary startup and unknown waits use wallpaper; accepted or active operations use space', () => {
+  expect(operationUsesSpace(null, false)).toBe(false);
+  expect(operationUsesSpace({ state: 'checking', supported: true, unavailable: true }, false)).toBe(false);
+  expect(operationUsesSpace({ state: 'checking', supported: true, unavailable: true }, true)).toBe(true);
+  for (const state of ['restoring', 'updating', 'downgrading', 'resetting', 'recovery'] as const)
+    expect(operationUsesSpace({ state, supported: true }, false)).toBe(true);
 });

@@ -17,8 +17,11 @@ export class BackupImportsController {
   @Post()
   @HttpCode(201)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  create(@Req() request: Request) {
-    return this.imports.createUpload(backupOperator(request));
+  create(@Req() request: Request, @Body() body?: unknown) {
+    const owner = backupOperator(request);
+    if (body !== undefined && (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 0))
+      throw new BadRequestException('Start the upload without extra settings or credentials.');
+    return this.imports.createUpload(owner);
   }
   @Put(':id/file')
   @HttpCode(200)

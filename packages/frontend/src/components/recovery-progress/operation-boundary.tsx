@@ -13,7 +13,7 @@ import { RecoveryScene } from './recovery-scene';
 import { armStartedOperation, readOperationContinuity, operationContinuityStorage, type MaintenanceOperation } from './operation-continuity';
 import { useOperationDeparture } from './use-operation-departure';
 import { restorePresentation } from './restore-presentation';
-import { loadOperationStatus, operationIsWaiting, operationShowsContent, type OperationSnapshot } from './operation-status';
+import { loadOperationStatus, operationIsWaiting, operationShowsContent, operationUsesSpace, type OperationSnapshot } from './operation-status';
 import { openResetOnboarding, SystemResetWizard } from '@/modules/system-reset/system-reset';
 
 const stageCopy = {
@@ -46,6 +46,12 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
   const [core, setCore] = useState<CoreUpdateWatch | null>(null);
   const coreRef = useRef<CoreUpdateWatch | null>(null);
   const operation = useRef<MaintenanceOperation | null>(null);
+  const initialMarker = useRef(
+    (() => {
+      const storage = operationContinuityStorage();
+      return storage ? readOperationContinuity(storage) : null;
+    })(),
+  );
   const [attempt, setAttempt] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
   const [authAction, setAuthAction] = useState<'recover' | 'cancel' | null>(null);
@@ -203,6 +209,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
   const showChildren = operationShowsContent(snapshot, authRoute, matchingTerminal, continuity.departing);
   const server = snapshot ?? { state: 'checking' as const, supported: true };
   const waiting = operationIsWaiting(server);
+  const useSpace = operationUsesSpace(snapshot, Boolean(operation.current ?? initialMarker.current?.operation));
   const kind = operation.current ?? 'restore';
   const restoration = kind === 'restore' && job && server.state === 'idle' && matchingTerminal ? restorePresentation(job, false) : undefined;
   const coreStage =
@@ -271,10 +278,20 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       {showChildren ? (
         <OperationStartupContext.Provider value={observed.current ? operation.current : null}>{children}</OperationStartupContext.Provider>
       ) : snapshot ? null : (
-        <StartupSurface initial freshAppearance />
+        <StartupSurface initial setupSpace={useSpace} />
       )}
+      {!showChildren && snapshot !== null && waiting && !useSpace ? (
+        <StartupSurface
+          initial
+          status={{ title: 'Checking server', message: 'Waiting for the server to respond. Checking will continue automatically.' }}
+        >
+          <Button className="operation-wait-retry" onClick={() => window.location.reload()}>
+            Retry
+          </Button>
+        </StartupSurface>
+      ) : null}
       <RecoveryScene
-        open={!showChildren && snapshot !== null}
+        open={!showChildren && snapshot !== null && (!waiting || useSpace)}
         title={waiting ? 'Checking server' : title}
         status={waiting ? undefined : status}
         variant={kind}

@@ -115,12 +115,14 @@ mock.module('@/components/debug-panel/debug-panel', () => ({ DebugPanel: () => n
 mock.module('@/components/error/error-page', () => ({ ErrorPage: () => null }));
 const { createRoot } = await import('react-dom/client');
 const { DesktopPreferencesProvider, useDesktopPreferences, defaultDesktopPreferences } = await import('./preferences');
+const refreshedModule = './preferences?generation=2';
+const refreshedPreferences: typeof import('./preferences') | null = process.argv[2] === 'hmr-context-identity' ? await import(refreshedModule) : null;
 const CompositionProvider =
   process.argv[2] === 'provider-composition' ? (await import('@/components/providers/providers')).Providers : DesktopPreferencesProvider;
 let controls: ReturnType<typeof useDesktopPreferences>;
 let nameDraft: ReturnType<typeof usePreferenceNameDraft>;
 function Probe() {
-  controls = useDesktopPreferences();
+  controls = (refreshedPreferences?.useDesktopPreferences ?? useDesktopPreferences)();
   nameDraft = usePreferenceNameDraft(controls.preferences.serverName);
   return null;
 }
@@ -186,6 +188,10 @@ const switchSession = async () => {
   });
 };
 const scenarios: Record<string, () => Promise<void>> = {
+  'hmr-context-identity': async () => {
+    if (refreshedPreferences?.useDesktopPreferences === useDesktopPreferences || !controls?.preferences)
+      throw new Error('Refreshed consumer lost its existing provider');
+  },
   'provider-composition': async () => {
     expect(controls.requiresOnboarding).toBe(true);
     await act(async () => {
