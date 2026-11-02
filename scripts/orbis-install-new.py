@@ -103,7 +103,7 @@ def require_empty(root, reader, http, https):
 
 def choose_ports(root, reader, http, https, ask=None):
     error = None
-    for attempt in range(17):
+    while True:
         if error is None:
             try:
                 require_empty(root, reader, http, https)
@@ -114,8 +114,6 @@ def choose_ports(root, reader, http, https, ask=None):
             if ask is None:
                 flag = "--http-port" if error.port == http else "--https-port"
                 raise ValueError(f"{error}. Choose another port with {flag}") from error
-            if attempt == 16:
-                break
             protocol = "HTTP" if error.port == http else "HTTPS"
             answer = ask(f"{error}.\nChoose a different {protocol} port (Enter to cancel): ").strip()
             if not answer:
@@ -128,7 +126,6 @@ def choose_ports(root, reader, http, https, ask=None):
             else:
                 https = int(answer)
             error = None
-    raise ValueError("Too many port attempts; choose free --http-port and --https-port values")
 
 
 def pointer(root, run, reader):
@@ -206,7 +203,7 @@ def finish(record, reader, journal):
     return {"result": "orbis-installed", "mode": "new", "releaseTag": manifest["tag"], "journal": str(journal)}
 
 
-def install(root, reader, manifest, state, args, confirm, display=None):
+def install(root, reader, manifest, state, args, confirm, display=None, ask=None):
     require_empty(root, reader, args.http_port, args.https_port)
     address = server_ip(args.server_ip)
     endpoint = REPLACE.Engine(reader).endpoint
@@ -214,14 +211,16 @@ def install(root, reader, manifest, state, args, confirm, display=None):
     print(f"\nNew installation: {root}\nServer: {address}\nDashboard ports: {args.http_port} / {args.https_port}\nRelease: {manifest['tag']}\n")
     confirm(root)
     for name, image in IMAGES.items():
-        pull_log = run / (name + "-pull.log")
-        with display.step(f"Downloading {name}", detail=UI.PullProgress(pull_log)) if display else contextlib.nullcontext():
-            if display is None:
-                print(f"Downloading {name}…", flush=True)
-            with pull_log.open("xb") as log:
-                result = subprocess.run(["docker", "--context", reader.context, "pull", image], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
-            if result.returncode:
-                raise RuntimeError(f"A required image could not be downloaded. Installation directory is unchanged; logs: {run}")
+        def pull_image():
+            pull_log = run / (name + "-pull-" + str(uuid.uuid4()) + ".log")
+            with display.step(f"Downloading {name}", detail=UI.PullProgress(pull_log)) if display else contextlib.nullcontext():
+                if display is None:
+                    print(f"Downloading {name}…", flush=True)
+                with pull_log.open("xb") as log:
+                    result = subprocess.run(["docker", "--context", reader.context, "pull", image], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
+                if result.returncode:
+                    raise RuntimeError(f"A required image could not be downloaded. Installation directory is unchanged; logs: {run}")
+        UI.retry_download(pull_image, ask)
     root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     for parent in [root.parent, *root.parent.parents]:
         details = parent.lstat()

@@ -38,26 +38,59 @@ PREREQUISITES = load("orbis-install-prerequisites.py", "orbis_guided_prerequisit
 DOCKER_INSTALL_HELP = "Install Docker Engine and the Docker Compose plugin first, then rerun this installer. For 64-bit Raspberry Pi OS or Debian: https://docs.docker.com/engine/install/debian/ ; for Ubuntu: https://docs.docker.com/engine/install/ubuntu/ . Automatic setup supports the local default Docker context on 64-bit Debian 12/13 and Ubuntu 22.04/24.04; other layouts need a separate review."
 
 
-def require_docker_prerequisites(reader, *, state_dir=None, accepted=False, inspect_only=False):
-    if state_dir is not None:
-        terminal = None
-        def ask(question):
-            nonlocal terminal
-            if terminal is None: terminal = Terminal()
-            return terminal.ask(question)
-        try:
+def require_docker_prerequisites(reader, *, state_dir=None, accepted=False, inspect_only=False, check_engine=False):
+    terminal = None
+    declined = False
+
+    def ask(question):
+        nonlocal terminal, declined
+        if terminal is None:
+            terminal = Terminal()
+        while True:
+            answer = terminal.ask(question).strip().lower()
+            if answer in {"y", "yes"}:
+                declined = False
+                return "y"
+            if answer in {"", "n", "no"}:
+                declined = True
+                return "n"
+            print("Enter y to continue or n to cancel.", file=sys.stderr)
+
+    def check():
+        if state_dir is not None:
             PREREQUISITES.prepare(reader.context, state_dir, accepted=accepted, ask=None if accepted else ask, inspect_only=inspect_only)
-        finally:
-            if terminal: terminal.close()
-    if shutil.which("docker") is None:
-        raise ValueError("Docker was not found. " + DOCKER_INSTALL_HELP)
+        if shutil.which("docker") is None:
+            raise ValueError("Docker was not found. " + DOCKER_INSTALL_HELP)
+        try:
+            version = reader._read(["compose", "version", "--short"])
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+            raise ValueError("The Docker Compose plugin could not be used. " + DOCKER_INSTALL_HELP) from error
+        match = re.fullmatch(r"v?(\d+)\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version) if isinstance(version, str) else None
+        if match is None or int(match[1]) < 2:
+            raise ValueError("A supported Docker Compose plugin was not found. " + DOCKER_INSTALL_HELP)
+        if check_engine:
+            REPLACE.Engine(reader)
+
     try:
-        version = reader._read(["compose", "version", "--short"])
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-        raise ValueError("The Docker Compose plugin could not be used. " + DOCKER_INSTALL_HELP) from error
-    match = re.fullmatch(r"v?(\d+)\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version) if isinstance(version, str) else None
-    if match is None or int(match[1]) < 2:
-        raise ValueError("A supported Docker Compose plugin was not found. " + DOCKER_INSTALL_HELP)
+        while True:
+            declined = False
+            try:
+                check()
+                return
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+                if state_dir is None or accepted or inspect_only or declined:
+                    raise
+                print(f"Required setup did not finish: {error}", file=sys.stderr)
+                while True:
+                    answer = ask("Retry required setup and any pending recovery? [y/N]: ").strip().lower()
+                    if answer in {"", "n", "no"}:
+                        raise ValueError("Installation cancelled; any recovery files were preserved") from error
+                    if answer in {"y", "yes"}:
+                        break
+                    print("Enter y to retry or n to cancel.", file=sys.stderr)
+    finally:
+        if terminal:
+            terminal.close()
 
 
 def acknowledge_release_channel(manifest, accepted=False, ask=None, *, channel=None):
@@ -418,8 +451,7 @@ def main():
     if channel == "nightly" and args.yes and not args.accept_nightly:
         raise ValueError("Nightly installation was not approved. Use --accept-nightly only after reviewing this warning")
     reader = APPS.Docker(args.docker_context)
-    require_docker_prerequisites(reader, state_dir=args.state_dir, accepted=args.yes, inspect_only=args.inspect)
-    REPLACE.Engine(reader)
+    require_docker_prerequisites(reader, state_dir=args.state_dir, accepted=args.yes, inspect_only=args.inspect, check_engine=True)
     if args.inspect:
         report = APPS.DETECT.discover(reader)
         print(json.dumps(report, indent=2))
@@ -498,12 +530,14 @@ def main():
             REPLACE.UPDATE.verify_release(manifest)
         private = load("install-orbis.py", "orbis_guided_private")
         state = private.private_directory(args.state_dir.expanduser())
-        pull_log = state / ("image-pull-" + str(uuid.uuid4()) + ".log")
-        with display.step("Downloading the verified Orbis image", detail=UI.PullProgress(pull_log)):
-            with pull_log.open("xb") as log:
-                pulled = subprocess.run(["docker", "--context", reader.context, "pull", REPLACE.target_image(manifest)], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
-            if pulled.returncode:
-                raise RuntimeError(f"Docker could not pull the verified image; inspect the private logs in {state}")
+        def pull_core():
+            pull_log = state / ("image-pull-" + str(uuid.uuid4()) + ".log")
+            with display.step("Downloading the verified Orbis image", detail=UI.PullProgress(pull_log)):
+                with pull_log.open("xb") as log:
+                    pulled = subprocess.run(["docker", "--context", reader.context, "pull", REPLACE.target_image(manifest)], stdout=log, stderr=subprocess.STDOUT, check=False, timeout=900)
+                if pulled.returncode:
+                    raise RuntimeError(f"Docker could not pull the verified image; inspect the private logs in {state}")
+        UI.retry_download(pull_core, None if args.yes else ask)
         enable.require_scoped_cleanup(root, reader.context, REPLACE.target_image(manifest))
 
         def confirm(chosen):
@@ -520,7 +554,7 @@ def main():
             prepare_backup_tools(display)
             result = replacement(root, reader, manifest, state, mode, confirm, display, backup_scope=args.backup_scope)
         else:
-            result = new.install(root, reader, manifest, state, args, confirm, display=display)
+            result = new.install(root, reader, manifest, state, args, confirm, display=display, ask=None if args.yes else ask)
         saved_channel = CHANNELS.read_channel(root)
         if saved_channel["channel"] != channel or saved_channel["revision"] == "initial":
             CHANNELS.save_channel(root, channel, str(uuid.uuid4()))

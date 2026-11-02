@@ -57,6 +57,59 @@ class DockerPrerequisiteTests(unittest.TestCase):
                 execute.assert_not_called()
             reader._read.assert_called_once_with(["compose", "version", "--short"])
 
+    def test_interactive_setup_error_can_retry_through_prepare_and_recheck(self):
+        reader = mock.Mock(context="default")
+        reader._read.return_value = "2.35.1"
+        terminal = mock.Mock()
+        terminal.ask.side_effect = ["typo", "yes"]
+        with mock.patch.object(GUIDE, "Terminal", return_value=terminal), mock.patch.object(GUIDE.PREREQUISITES, "prepare", side_effect=[GUIDE.PREREQUISITES.PrerequisiteError("recovery journal retained"), None]) as prepare, mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/docker"), contextlib.redirect_stderr(io.StringIO()):
+            GUIDE.require_docker_prerequisites(reader, state_dir=Path("/private"))
+        self.assertEqual(prepare.call_count, 2)
+        self.assertEqual(terminal.ask.call_count, 2)
+        reader._read.assert_called_once_with(["compose", "version", "--short"])
+        terminal.close.assert_called_once()
+
+    def test_engine_failure_is_rechecked_after_retry(self):
+        reader = mock.Mock(context="default")
+        reader._read.return_value = "2.35.1"
+        terminal = mock.Mock()
+        terminal.ask.return_value = "y"
+        with mock.patch.object(GUIDE, "Terminal", return_value=terminal), mock.patch.object(GUIDE.PREREQUISITES, "prepare") as prepare, mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/docker"), mock.patch.object(GUIDE.REPLACE, "Engine", side_effect=[GUIDE.REPLACE.ReplacementError("Engine unavailable"), mock.Mock()]) as engine, contextlib.redirect_stderr(io.StringIO()):
+            GUIDE.require_docker_prerequisites(reader, state_dir=Path("/private"), check_engine=True)
+        self.assertEqual(prepare.call_count, 2)
+        self.assertEqual(engine.call_count, 2)
+        terminal.close.assert_called_once()
+
+    def test_setup_consent_reprompts_typing_errors(self):
+        reader = mock.Mock(context="default")
+        reader._read.return_value = "2.35.1"
+        terminal = mock.Mock()
+        terminal.ask.side_effect = ["perhaps", "yes"]
+        def prepare(*args, ask, **kwargs):
+            self.assertEqual(ask("Continue? [y/N]: "), "y")
+        with mock.patch.object(GUIDE, "Terminal", return_value=terminal), mock.patch.object(GUIDE.PREREQUISITES, "prepare", side_effect=prepare), mock.patch.object(GUIDE.shutil, "which", return_value="/usr/bin/docker"), contextlib.redirect_stderr(io.StringIO()):
+            GUIDE.require_docker_prerequisites(reader, state_dir=Path("/private"))
+        self.assertEqual(terminal.ask.call_count, 2)
+        terminal.close.assert_called_once()
+
+    def test_retry_does_not_override_cancellation_or_unattended_modes(self):
+        for accepted, inspect_only in ((True, False), (False, True)):
+            with self.subTest(accepted=accepted, inspect_only=inspect_only), mock.patch.object(GUIDE, "Terminal") as terminal, mock.patch.object(GUIDE.PREREQUISITES, "prepare", side_effect=GUIDE.PREREQUISITES.PrerequisiteError("recovery required")) as prepare:
+                with self.assertRaisesRegex(ValueError, "recovery required"):
+                    GUIDE.require_docker_prerequisites(mock.Mock(context="default"), state_dir=Path("/private"), accepted=accepted, inspect_only=inspect_only)
+                prepare.assert_called_once()
+                terminal.assert_not_called()
+        terminal = mock.Mock()
+        terminal.ask.return_value = "n"
+        def cancelled(*args, ask, **kwargs):
+            ask("Continue? [y/N]: ")
+            raise GUIDE.PREREQUISITES.PrerequisiteError("Required setup was cancelled")
+        with mock.patch.object(GUIDE, "Terminal", return_value=terminal), mock.patch.object(GUIDE.PREREQUISITES, "prepare", side_effect=cancelled):
+            with self.assertRaisesRegex(ValueError, "cancelled"):
+                GUIDE.require_docker_prerequisites(mock.Mock(context="default"), state_dir=Path("/private"))
+        terminal.ask.assert_called_once()
+        terminal.close.assert_called_once()
+
     def test_existing_docker25_api_and_modern_compose_need_no_prerequisite_mutation(self):
         reader = mock.Mock()
         reader.socket.return_value = "/run/docker.sock"
@@ -437,21 +490,46 @@ class NewInstallationTests(unittest.TestCase):
                 self.assertEqual(ask.call_count, 6)
                 reader.change.assert_not_called()
 
-    def test_port_selection_cancellation_and_exhaustion_preserve_existing_services(self):
-        for answers, reason in [([""], "cancelled"), (["invalid"] * 16, "Too many port attempts")]:
-            reader = mock.Mock()
-            with self.subTest(reason=reason), mock.patch.object(NEW, "require_empty", side_effect=NEW.PortInUseError(80, "existing proxy")), contextlib.redirect_stderr(io.StringIO()):
-                with self.assertRaisesRegex(ValueError, reason):
-                    NEW.choose_ports(Path("/unused"), reader, 80, 443, mock.Mock(side_effect=answers))
-                reader.change.assert_not_called()
-
-    def test_last_allowed_port_answer_is_still_checked(self):
+    def test_port_selection_cancellation_preserves_existing_services(self):
         reader = mock.Mock()
-        ask = mock.Mock(side_effect=["invalid"] * 15 + ["18080"])
+        with mock.patch.object(NEW, "require_empty", side_effect=NEW.PortInUseError(80, "existing proxy")):
+            with self.assertRaisesRegex(ValueError, "cancelled"):
+                NEW.choose_ports(Path("/unused"), reader, 80, 443, mock.Mock(return_value=""))
+        reader.change.assert_not_called()
+
+    def test_port_selection_keeps_retrying_invalid_answers(self):
+        reader = mock.Mock()
+        ask = mock.Mock(side_effect=["invalid"] * 20 + ["18080"])
         with mock.patch.object(NEW, "require_empty", side_effect=[NEW.PortInUseError(80), None]), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(NEW.choose_ports(Path("/unused"), reader, 80, 443, ask), (18080, 443))
-        self.assertEqual(ask.call_count, 16)
+        self.assertEqual(ask.call_count, 21)
         reader.change.assert_not_called()
+
+    def test_dependency_pull_retry_reuses_pinned_image_and_preserves_logs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            parent = Path(folder); root = parent / "server"; root.mkdir()
+            state = parent / "private"; state.mkdir()
+            reader = mock.Mock(context="test")
+            args = SimpleNamespace(http_port=18080, https_port=18443, server_ip=None)
+            ask = mock.Mock(side_effect=["typo", "y", "n"])
+            outcomes = [subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0), subprocess.CompletedProcess([], 1)]
+            with mock.patch.object(NEW, "require_empty"), mock.patch.object(NEW, "server_ip", return_value="192.168.20.10"), mock.patch.object(NEW.REPLACE, "Engine", return_value=SimpleNamespace(endpoint="/run/docker.sock")), mock.patch.object(NEW.subprocess, "run", side_effect=outcomes) as execute, contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaisesRegex(ValueError, "cancelled"):
+                    NEW.install(root, reader, MANIFEST, state, args, mock.Mock(), ask=ask)
+            self.assertEqual(execute.call_count, 3)
+            self.assertEqual(execute.call_args_list[0].args[0], execute.call_args_list[1].args[0])
+            self.assertEqual(execute.call_args_list[0].args[0][-1], NEW.IMAGES["postgres"])
+            self.assertEqual(len(list(state.glob("new-*/*-pull-*.log"))), 3)
+            self.assertEqual(list(root.iterdir()), [])
+            reader.change.assert_not_called()
+
+    def test_download_timeout_can_retry_and_unattended_failure_propagates(self):
+        action = mock.Mock(side_effect=[subprocess.TimeoutExpired("docker pull", 900), "ok"])
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(GUIDE.UI.retry_download(action, mock.Mock(return_value="y")), "ok")
+        self.assertEqual(action.call_count, 2)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            GUIDE.UI.retry_download(mock.Mock(side_effect=subprocess.TimeoutExpired("docker pull", 900)))
 
     def test_cancel_and_failed_dependency_pulls_leave_the_installation_directory_untouched(self):
         for failure in ("cancel", "pull-error", "pull-timeout"):

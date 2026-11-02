@@ -8,9 +8,27 @@ import re
 import signal
 import shutil
 import sys
+import subprocess
 import threading
 import time
 import textwrap
+
+
+def retry_download(action, ask=None):
+    while True:
+        try:
+            return action()
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            if ask is None:
+                raise
+            print(f"Download did not finish: {error}", file=sys.stderr)
+            while True:
+                answer = ask("Retry this download? [y/N]: ").strip().lower()
+                if answer in {"y", "yes"}:
+                    break
+                if answer in {"", "n", "no"}:
+                    raise ValueError("Installation cancelled; private download logs were preserved") from error
+                print("Enter y to retry or n to cancel.", file=sys.stderr)
 
 
 def display_release(tag):
