@@ -81,6 +81,7 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
     'chrome-focus',
     'chrome-muted',
     'panel-dark',
+    'oled-panel',
     'glass-filter',
     'chrome-filter',
   ];
@@ -132,10 +133,11 @@ export function applyAppearanceRuntime(input: unknown, mode: string) {
   const chrome = base('chrome');
   const panel = base('panel-dark');
   if (oled) {
-    for (const value of [surface, chrome, panel]) {
-      value[0] = value[1] = value[2] = 0;
-      value[3] = 1;
-    }
+    surface[0] = surface[1] = surface[2] = 0;
+    surface[3] = 1;
+    panel[0] = panel[1] = panel[2] = 0;
+    panel[3] = 1;
+    set('oled-panel', css(black));
   }
   if (opacity !== null) surface[3] = opacity / 100;
   if (chromeOpacity !== null) chrome[3] = chromeOpacity / 100;

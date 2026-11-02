@@ -17,7 +17,7 @@ export function RecoveryProgressBar({ label, percentage }: { label: string; perc
   const reduced = useReducedMotion();
   const visible = useWindowVisible();
   return (
-    <div className="recovery-progress-bar" data-known={percentage !== undefined} data-motion={visible && !reduced}>
+    <div className="recovery-progress-bar" data-known={percentage !== undefined} data-motion={!reduced} data-visible={visible}>
       <progress aria-label={label} max={100} value={percentage} />
       {percentage === undefined ? <span aria-hidden="true" /> : null}
     </div>

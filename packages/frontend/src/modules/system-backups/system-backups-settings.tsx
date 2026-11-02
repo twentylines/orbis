@@ -778,7 +778,7 @@ export function SystemBackupsSettings({
       {job.reviewExpiresAt ? <p>Review expires {new Date(job.reviewExpiresAt).toLocaleTimeString()}. Verify again if it expires.</p> : null}
       <div className="system-backups-actions">
         {job.uploadedBytes > 0 && !['uploading', 'reviewing', 'preparing'].includes(job.status) ? (
-          <Button intent="danger" variant="outline" disabled={working || status.isError} onClick={() => chooseAction({ kind: 'review', job })}>
+          <Button intent="danger" disabled={working || status.isError} onClick={() => chooseAction({ kind: 'review', job })}>
             Restore
           </Button>
         ) : null}

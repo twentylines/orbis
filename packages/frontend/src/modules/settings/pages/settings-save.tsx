@@ -115,9 +115,9 @@ export function useSettingsSave(entry: SettingsSaveEntry) {
   return { shared: Boolean(context), pending: context?.pending ?? false, save: context?.save };
 }
 
-export function SettingsSaveButton() {
+export function SettingsSaveButton({ hideWhenClean = false }: { hideWhenClean?: boolean } = {}) {
   const context = useContext(SettingsSaveContext);
-  if (!context) return null;
+  if (!context || (hideWhenClean && !context.dirty && !context.pending)) return null;
   return (
     <Button type="button" intent="primary" disabled={!context.dirty || context.pending} loading={context.pending} onClick={() => void context.save()}>
       Save

@@ -1,7 +1,10 @@
 import { useAppContext } from '@/context/app-context';
 import { useUserContext } from '@/context/user-context';
 import { useDesktopPreferences } from '@/desktop/preferences';
-import { Suspense, lazy, useEffect, useRef } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
+import { automaticUpdateSettingsOptions, systemUpdateScheduleOptions } from '@/desktop/automatic-updates-api';
+import { orbisReleaseChannelsOptions } from '@/desktop/release-channels';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { AppStoresContainer } from '../containers/app-stores-container';
 import { Appearance } from '../containers/appearance';
@@ -27,7 +30,8 @@ import { revealSetting } from '../helpers/reveal-setting';
 const TimeMachineSettings = lazy(() =>
   import('@/modules/time-machine/time-machine-settings').then((module) => ({ default: module.TimeMachineSettings })),
 );
-const UserSettingsContainer = lazy(() => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer })));
+const loadUserSettings = () => import('../containers/user-settings').then((module) => ({ default: module.UserSettingsContainer }));
+const UserSettingsContainer = lazy(loadUserSettings);
 const SecurityContainer = lazy(() => import('../containers/security').then((module) => ({ default: module.SecurityContainer })));
 const LogsContainer = lazy(() => import('../containers/logs').then((module) => ({ default: module.LogsContainer })));
 const About = lazy(() => import('../containers/about').then((module) => ({ default: module.About })));
@@ -56,6 +60,36 @@ export default function SettingsPage() {
         : 'security'
       : (allowedTarget?.section ?? resolveSettingsSection(searchParams.get('tab')));
   const current = requested === 'https' && !access.http ? 'security' : requested;
+  const preparingUpdates = current === 'updates' && visible && user.operator === true;
+  const updatesQueries = useQueries({
+    queries: [automaticUpdateSettingsOptions(), systemUpdateScheduleOptions(), orbisReleaseChannelsOptions()].map((options) => ({
+      ...options,
+      enabled: preparingUpdates,
+    })),
+  });
+  const [updatesModuleReady, setUpdatesModuleReady] = useState(false);
+  const [updatesWaitExpired, setUpdatesWaitExpired] = useState(false);
+  useEffect(() => {
+    if (!preparingUpdates) {
+      setUpdatesWaitExpired(false);
+      return;
+    }
+    let active = true;
+    void loadUserSettings().then(
+      () => {
+        if (active) setUpdatesModuleReady(true);
+      },
+      () => {
+        if (active) setUpdatesModuleReady(true);
+      },
+    );
+    const timer = window.setTimeout(() => setUpdatesWaitExpired(true), 2000);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [preparingUpdates]);
+  const updatesPending = preparingUpdates && !updatesWaitExpired && (!updatesModuleReady || updatesQueries.some((query) => query.isPending));
   useEffect(() => {
     if (searchParams.get('secure_setup') !== '1') return;
     const params = new URLSearchParams(searchParams);
@@ -78,7 +112,7 @@ export default function SettingsPage() {
     const observer = new MutationObserver(() => {
       if (revealGeneration.current === location.key && revealSetting(element, allowedTarget, prefersReducedMotion())) observer.disconnect();
     });
-    observer.observe(element, { childList: true, subtree: true });
+    observer.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
     const timeout = window.setTimeout(() => observer.disconnect(), 5000);
     return () => {
       observer.disconnect();
@@ -104,6 +138,7 @@ export default function SettingsPage() {
         <AppUpdatePolicyProvider>
           <SettingsWorkspace
             current={current}
+            pending={updatesPending}
             access={access}
             onSection={(section) => updateLocation(section)}
             onSetting={(entry) => updateLocation(entry.section, entry)}

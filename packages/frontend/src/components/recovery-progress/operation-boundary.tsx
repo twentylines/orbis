@@ -13,8 +13,18 @@ import { RecoveryScene } from './recovery-scene';
 import { armStartedOperation, readOperationContinuity, operationContinuityStorage, type MaintenanceOperation } from './operation-continuity';
 import { useOperationDeparture } from './use-operation-departure';
 import { restorePresentation } from './restore-presentation';
-import { loadOperationStatus, operationIsWaiting, operationShowsContent, operationUsesSpace, type OperationSnapshot } from './operation-status';
-import { openResetOnboarding, SystemResetWizard } from '@/modules/system-reset/system-reset';
+import {
+  confirmResetSnapshot,
+  hasAcceptedReset,
+  loadOperationStatus,
+  operationIsWaiting,
+  operationShowsContent,
+  operationUsesSpace,
+  resetSceneVisible,
+  type OperationSnapshot,
+} from './operation-status';
+import { SystemResetWizard } from '@/modules/system-reset/system-reset';
+import { openResetOnboarding } from '@/modules/system-reset/reset-completion';
 
 const stageCopy = {
   preparing: 'Preparing',
@@ -57,7 +67,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
   const [authAction, setAuthAction] = useState<'recover' | 'cancel' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const observed = useRef(false);
-  const observedReset = useRef(false);
+  const observedReset = useRef(hasAcceptedReset());
   const [resetRecovery, setResetRecovery] = useState(false);
   const startedId = useRef<string | null>(null);
   const activeKind =
@@ -89,7 +99,10 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
     let current = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const check = async () => {
-      const next = await loadOperationStatus(attempt > 0);
+      const shared = await loadOperationStatus(attempt > 0);
+      if (!current) return;
+      if (shared.state === 'resetting' || hasAcceptedReset()) observedReset.current = true;
+      const next = await confirmResetSnapshot(shared, observedReset.current);
       if (!current) return;
       if (next.state === 'resetting') observedReset.current = true;
       if (observedReset.current && next.state === 'idle' && next.supported && !next.unavailable) {
@@ -246,17 +259,28 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
             : server.state === 'checking' && !operation.current
               ? 'Checking server'
               : 'Restoring');
-  if (server.state === 'resetting' && !authRoute)
+  if (resetSceneVisible(snapshot, observedReset.current))
     return (
       <>
+        <div className="reset-scene-backdrop" aria-hidden="true" />
         <RecoveryScene
           open={!resetRecovery}
-          title={server.stage === 'recovering' ? 'Reset needs attention' : 'Resetting Orbis'}
-          status={server.stage === 'recovering' ? 'Waiting for confirmation' : stageCopy[server.stage ?? 'resetting']}
-          active={server.stage !== 'recovering'}
+          title={waiting ? 'Checking reset status' : server.stage === 'recovering' ? 'Reset needs attention' : 'Resetting Orbis'}
+          status={
+            waiting
+              ? 'Waiting for the server to respond'
+              : server.stage === 'recovering'
+                ? 'Waiting for confirmation'
+                : stageCopy[server.stage ?? 'resetting']
+          }
+          active={waiting || server.stage !== 'recovering'}
           variant="onboarding"
           detail={
-            server.stage === 'recovering' ? 'Confirm the original reset again to continue. Server data stays locked until it finishes.' : undefined
+            waiting
+              ? 'Checking will continue automatically.'
+              : server.stage === 'recovering'
+                ? 'Confirm the original reset again to continue. Server data stays locked until it finishes.'
+                : undefined
           }
           footer="Installed applications and their data are kept."
           actions={

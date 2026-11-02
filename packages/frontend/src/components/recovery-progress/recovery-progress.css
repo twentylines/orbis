@@ -72,17 +72,16 @@
 .recovery-progress-bar {
   position: relative;
   width: 100%;
-  height: 10px;
+  height: 12px;
   border-radius: 10px;
-  overflow: visible;
-  clip-path: inset(-4px 0 round 8px);
+  overflow: hidden;
   background: color-mix(in srgb, var(--desktop-ink) 10%, transparent);
 }
 .recovery-progress-bar progress {
   appearance: none;
   display: block;
   width: 100%;
-  height: 10px;
+  height: 100%;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -104,90 +103,46 @@
 }
 .recovery-progress-bar > span {
   position: absolute;
-  top: 50%;
-  left: 0;
-  box-sizing: border-box;
-  width: 20%;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--desktop-accent) 38%, transparent), transparent 76%);
-  animation: recovery-orb-sweep 1800ms linear infinite;
-  transform: translate3d(-125%, -50%, 0);
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 24px 8px at 58% 50%, color-mix(in srgb, white 90%, var(--desktop-accent)), transparent 85%),
+    linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--desktop-accent) 55%, transparent) 26%,
+      color-mix(in srgb, var(--desktop-accent) 35%, white) 58%,
+      transparent
+    );
+  animation: recovery-glint-track 2200ms linear infinite;
+  pointer-events: none;
 }
-.recovery-progress-bar[data-motion="true"] > span {
-  will-change: transform, opacity;
-}
-.recovery-progress-bar > span::before {
-  position: absolute;
-  top: 50%;
-  left: -120%;
-  width: 340%;
-  height: 3px;
-  border-radius: 3px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--desktop-accent) 38%, white 62%) 44%,
-    color-mix(in srgb, var(--desktop-accent) 62%, white 38%) 50%,
-    color-mix(in srgb, var(--desktop-accent) 38%, white 62%) 56%,
-    transparent
-  );
-  content: "";
-  transform: translateY(-50%);
-}
-.recovery-progress-bar > span::after {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: radial-gradient(
-    ellipse at center,
-    color-mix(in srgb, white 88%, var(--desktop-accent)) 0 7%,
-    color-mix(in srgb, white 74%, var(--desktop-accent)) 22%,
-    color-mix(in srgb, var(--desktop-accent) 58%, transparent) 48%,
-    transparent 76%
-  );
-  content: "";
-  transform: translate3d(-50%, -50%, 0);
-}
-@keyframes recovery-orb-sweep {
-  from {
+@keyframes recovery-glint-track {
+  0% {
+    transform: translateX(-100%);
     opacity: 0;
-    transform: translate3d(-50%, -50%, 0) scaleX(0.82);
   }
-  10% {
-    opacity: 0.88;
-    transform: translate3d(0, -50%, 0) scaleX(0.86);
+  12% {
+    opacity: 0.9;
   }
-  90% {
-    opacity: 0.88;
-    transform: translate3d(400%, -50%, 0) scaleX(0.9);
+  88% {
+    opacity: 0.9;
   }
-  96% {
-    opacity: 0.58;
-    transform: translate3d(430%, -50%, 0) scaleX(0.9) scaleY(0.65);
-  }
-  to {
+  100% {
+    transform: translateX(285.72%);
     opacity: 0;
-    transform: translate3d(450%, -50%, 0) scaleX(0.9) scaleY(0.2);
   }
+}
+.recovery-progress-bar[data-visible="false"] > span {
+  animation-play-state: paused;
 }
 .recovery-progress-bar[data-motion="false"] > span,
 :root[data-orbis-effects="low"] .recovery-progress-bar > span {
   animation: none;
-  left: 33%;
+  left: 32.5%;
   opacity: 0.8;
-  transform: translate3d(0, -50%, 0);
-  will-change: auto;
-}
-.recovery-progress-bar[data-motion="false"] > span::after,
-:root[data-orbis-effects="low"] .recovery-progress-bar > span::after {
-  animation: none;
-  opacity: 0.78;
-  transform: translate3d(-50%, -50%, 0) scale(1);
+  transform: none;
 }
 .recovery-progress-bar[data-motion="false"] progress::-webkit-progress-value {
   transition: none;
@@ -195,14 +150,8 @@
 @media (prefers-reduced-motion: reduce) {
   .recovery-progress-bar > span {
     animation: none;
-    left: 33%;
+    left: 32.5%;
     opacity: 0.8;
-    transform: translate3d(0, -50%, 0);
-    will-change: auto;
-  }
-  .recovery-progress-bar > span::after {
-    animation: none;
-    opacity: 0.78;
-    transform: translate3d(-50%, -50%, 0) scale(1);
+    transform: none;
   }
 }

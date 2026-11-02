@@ -462,8 +462,8 @@ test('backup confirmation preserves the selected archive and nearby error throug
   expect(markup).toContain('backup-removal-error');
   expect(markup).toContain('Deletion failed. Try again.');
   expect(markup).toContain('>Cancel</button>');
-  expect(markup).toContain('backup-removal-trash');
-  expect(markup).toContain('btn-outline-danger');
+  expect(markup).toContain('tabler-icon-trash');
+  expect(markup).toContain('btn-danger');
 });
 
 test('backup confirmation locks both matching actions while deletion is pending', () => {

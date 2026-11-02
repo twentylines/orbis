@@ -60,9 +60,19 @@
   margin-bottom: 0;
 }
 .appearance-section p {
+  margin: 0;
   color: var(--desktop-muted);
   font-size: 0.8125rem;
   max-width: 34ch;
+}
+.settings-store-groups > .appearance-section {
+  align-items: center;
+}
+.settings-store-groups > .appearance-section h2 {
+  margin: 0;
+}
+.settings-store-groups > .appearance-section .appearance-material-controls {
+  align-content: center;
 }
 .appearance-name label {
   display: block;

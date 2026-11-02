@@ -57,7 +57,8 @@ Object.assign(globalThis, {
 
 const { createRoot } = await import('react-dom/client');
 const { RouteHeaderToolbar, RouteHeaderToolbarContext } = await import('@/desktop/route-header-toolbar');
-const { SettingsSearch } = await import('./settings-workspace');
+const { SettingsSearch, SettingsWorkspace, SettingsPanel } = await import('./settings-workspace');
+const { settingsSections } = await import('../helpers/settings-catalogue');
 const { SettingsSaveProvider, SettingsSaveButton, useSettingsSave } = await import('./settings-save');
 
 const target = { nodeType: 1, ownerDocument: doc } as unknown as HTMLElement;
@@ -85,6 +86,9 @@ type PortalSnapshot = { containerInfo: HTMLElement; children: ReactNode };
 let portal: PortalSnapshot | null = null;
 let selected: string | undefined;
 let saveButton: ReactElement<Record<string, unknown>> | null = null;
+let workspace: ReactElement | null = null;
+let category: 'store' | 'updates' = 'store';
+let pending = false;
 const eventsSeen: string[] = [];
 
 function flatten(node: ReactNode): ReactElement<Record<string, unknown>>[] {
@@ -94,6 +98,14 @@ function flatten(node: ReactNode): ReactElement<Record<string, unknown>>[] {
 }
 
 function Probe() {
+  workspace = SettingsWorkspace({
+    current: category,
+    pending,
+    access: { operator: true },
+    onSection: () => undefined,
+    onSetting: () => undefined,
+    panels: Object.fromEntries(settingsSections.map(({ id }) => [id, <input key={id} defaultValue={id} />])) as never,
+  });
   const search = SettingsSearch({
     access: { operator: true, advanced: true, http: true },
     onSetting: (entry) => {
@@ -135,6 +147,18 @@ const getPortal = () => portal as unknown as PortalSnapshot;
 try {
   await flush(render);
   expect(getPortal().containerInfo).toBe(target);
+  category = 'updates';
+  pending = true;
+  await flush(render);
+  let items = flatten(workspace);
+  expect(items.some((item) => item.type === 'output' && item.props.children === 'Loading Updates…')).toBe(true);
+  expect(items.some((item) => item.type === SettingsPanel && item.props.label === 'Store' && item.props.active === true)).toBe(true);
+  expect(items.some((item) => item.type === SettingsPanel && item.props.label === 'Updates')).toBe(false);
+  pending = false;
+  await flush(render);
+  items = flatten(workspace);
+  expect(items.some((item) => item.type === SettingsPanel && item.props.label === 'Store' && item.props.active === false)).toBe(true);
+  expect(items.some((item) => item.type === SettingsPanel && item.props.label === 'Updates' && item.props.active === true)).toBe(true);
   const searchRoot = () => flatten(getPortal().children).find((element) => element.type === 'search');
   const input = () => flatten(getPortal().children).find((element) => element.type === 'input' && element.props.type === 'search');
 

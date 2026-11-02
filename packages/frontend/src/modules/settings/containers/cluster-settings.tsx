@@ -475,7 +475,6 @@ export function ClusterSettings() {
             <Button
               disabled={busy}
               intent="danger"
-              variant="outline"
               onClick={() => {
                 setRemoveFailed(false);
                 setRemoveId('membership');
@@ -505,7 +504,6 @@ export function ClusterSettings() {
             {canManage && cluster.data?.servers.length === 1 ? (
               <Button
                 type="button"
-                variant="outline"
                 intent="danger"
                 disabled={busy}
                 onClick={() => {
@@ -758,7 +756,6 @@ export function ClusterSettings() {
               </div>
               {canManage && !server.local ? (
                 <Button
-                  variant="outline"
                   intent="danger"
                   disabled={busy}
                   onClick={() => {
@@ -850,7 +847,6 @@ export function ClusterSettings() {
                 settings to revoke access.
               </p>
               <Button
-                variant="outline"
                 intent="danger"
                 disabled={busy}
                 onClick={() =>

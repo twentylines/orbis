@@ -1,6 +1,8 @@
 .cluster-settings {
   min-width: 0;
-  padding: 8px 0 20px;
+  display: grid;
+  gap: 16px;
+  padding: 0;
 }
 .cluster-settings-state {
   padding: 16px 0;
@@ -23,13 +25,7 @@
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-  gap: 28px;
-  padding: 25px 0;
-  border-top: 1px solid var(--desktop-line);
-}
-.cluster-settings-section:first-child {
-  border-top: 0;
-  padding-top: 8px;
+  gap: 24px;
 }
 .cluster-settings-section > * {
   min-width: 0;
@@ -351,7 +347,6 @@
   .cluster-settings-section {
     grid-template-columns: minmax(0, 1fr);
     gap: 20px;
-    padding: 22px 0;
   }
   .cluster-settings-section p {
     max-width: 58ch;

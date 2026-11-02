@@ -241,17 +241,28 @@ describe('saved appearance applied before hydration and to live materials', () =
       expect(contrast(actual, [0, 0, 0])).toBeGreaterThan(4.5);
     }
   });
-  test('OLED uses black panels in dark mode without altering the light palette or disabling motion', () => {
+  test('OLED blackens cards and panels while preserving preset chrome and controls in dark mode', () => {
     const oled = apply({ oledDark: true, glassTint: 30, surfaceOpacity: 90 }, { dark: true });
-    for (const name of ['surface', 'chrome', 'panel-dark']) expect(rgb(oled.properties.get(`--orbis-${name}`) ?? '')).toEqual([0, 0, 0, 1]);
+    expect(rgb(oled.properties.get('--orbis-surface') ?? '')).toEqual([0, 0, 0, 1]);
+    expect(rgb(oled.properties.get('--orbis-chrome') ?? '')).toEqual([9, 23, 23, 1]);
+    expect(rgb(oled.properties.get('--orbis-panel-dark') ?? '')).toEqual([0, 0, 0, 1]);
+    expect(rgb(oled.properties.get('--orbis-oled-panel') ?? '')).toEqual([0, 0, 0, 1]);
+    expect(oled.properties.has('--orbis-action')).toBe(false);
     expect(oled.dataset.orbisEffects).toBe('full');
     expect(oled.dataset.orbisMotion).toBe('full');
     expect(oled.dataset.orbisOled).toBe('true');
+    expect(themeCss).toContain(':root[data-orbis-oled="true"] body:has(.orbis-theme) :is(.alert, .workspace-message)');
+    for (const preset of ['frost', 'graphite', 'forest', 'stone', 'ocean', 'blush']) {
+      const ink = actualPalette(preset, true)['--desktop-ink'] ?? '';
+      expect(contrast(rgb(ink), [0, 0, 0])).toBeGreaterThan(4.5);
+    }
     const light = apply({ oledDark: true });
     expect(light.properties.has('--orbis-surface')).toBe(false);
+    expect(light.properties.has('--orbis-oled-panel')).toBe(false);
     expect(light.dataset.orbisOled).toBe('false');
     const cached = apply({ oledDark: true }, { dark: true, firstPaint: true });
     expect(rgb(cached.properties.get('--orbis-surface') ?? '')).toEqual([0, 0, 0, 1]);
+    expect(rgb(cached.properties.get('--orbis-oled-panel') ?? '')).toEqual([0, 0, 0, 1]);
   });
   test('low effects forces opaque materials and disables the blur filter', () => {
     const result = apply({ lowEffects: true, glassBlur: 40, surfaceOpacity: 90, chromeOpacity: 80 });

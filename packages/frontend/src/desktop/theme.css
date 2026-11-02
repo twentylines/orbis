@@ -752,6 +752,10 @@ html:not([data-orbis-theme-pack]) body:has(.orbis-theme) a[href]:focus-visible {
   vertical-align: middle;
 }
 
+:root[data-orbis-oled="true"] body:has(.orbis-theme) :is(.alert, .workspace-message) {
+  background: var(--orbis-oled-panel, #000);
+}
+
 /* Palette changes share one paint, while geometry and interaction motion remain available. */
 :root[data-orbis-colour-switch] *,
 :root[data-orbis-colour-switch] *::before,

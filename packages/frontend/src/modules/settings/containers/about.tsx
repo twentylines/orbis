@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { HostSensors, HostTelemetry } from '@runtipi/common/schemas';
 import { IconBrandGithub } from '@tabler/icons-react';
+import { Button } from '@/components/ui/Button';
 import { InstalledVersions } from '@/components/installed-versions/installed-versions';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
 import { useAppContext } from '@/context/app-context';
@@ -69,15 +70,12 @@ export function About() {
 
   return (
     <div className="settings-about">
-      <header>
-        <h2>About Orbis</h2>
-      </header>
       <div className="settings-about-sections">
-        <section aria-labelledby="about-software-title">
+        <section className="settings-group" aria-labelledby="about-software-title">
           <h3 id="about-software-title">Installed software</h3>
           <InstalledVersions orbis={build.isPending ? loading : build.data?.version} runtipi={build.data?.runtipiCompatibility || version.current} />
         </section>
-        <section aria-labelledby="about-hardware-title">
+        <section className="settings-group" aria-labelledby="about-hardware-title">
           <h3 id="about-hardware-title">Server</h3>
           <dl className="settings-about-facts">
             {facts.map(([label, value]) => (
@@ -90,24 +88,30 @@ export function About() {
         </section>
       </div>
       <footer className="settings-about-links">
-        <a href="https://github.com/twentylines" target="_blank" rel="noreferrer">
-          <span className="settings-about-link-icon" aria-hidden="true">
-            <IconBrandGithub size={21} stroke={1.8} />
-          </span>
-          <span>twentylines</span>
-        </a>
-        <a href="https://github.com/twentylines/orbis" target="_blank" rel="noreferrer">
-          <span className="settings-about-link-icon" aria-hidden="true">
-            <OrbisLogo size={24} plain />
-          </span>
-          <span>Orbis repository</span>
-        </a>
-        <a href="https://github.com/runtipi/runtipi" target="_blank" rel="noreferrer">
-          <span className="settings-about-link-icon" aria-hidden="true">
-            <img src="/tipi.png" alt="" />
-          </span>
-          <span>Runtipi repository</span>
-        </a>
+        <Button asChild variant="outline">
+          <a href="https://github.com/twentylines" target="_blank" rel="noreferrer">
+            <span className="settings-about-link-icon" aria-hidden="true">
+              <IconBrandGithub size={21} stroke={1.8} />
+            </span>
+            <span>twentylines</span>
+          </a>
+        </Button>
+        <Button asChild variant="outline">
+          <a href="https://github.com/twentylines/orbis" target="_blank" rel="noreferrer">
+            <span className="settings-about-link-icon" aria-hidden="true">
+              <OrbisLogo size={24} plain />
+            </span>
+            <span>Orbis repository</span>
+          </a>
+        </Button>
+        <Button asChild variant="outline">
+          <a href="https://github.com/runtipi/runtipi" target="_blank" rel="noreferrer">
+            <span className="settings-about-link-icon" aria-hidden="true">
+              <img src="/tipi.png" alt="" />
+            </span>
+            <span>Runtipi repository</span>
+          </a>
+        </Button>
       </footer>
       {user?.operator === true ? <SystemResetPanel /> : null}
     </div>

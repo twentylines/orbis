@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { IconCopy, IconDownload, IconExternalLink, IconLock } from '@tabler/icons-react';
+import { IconCopy, IconDownload, IconExternalLink } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
 import { useAppContext } from '@/context/app-context';
 import { copyText } from '@/lib/clipboard';
@@ -68,10 +68,9 @@ export function SecureAccessSetup({
   if (secure) return <SecureConnectionIndicator protocol={protocol} secureContext={secureContext} />;
   return (
     <section className="secure-access-setup" aria-labelledby="https-setup-heading">
-      <div className="settings-security-heading">
-        <IconLock aria-hidden="true" />
-        <h2 id="https-setup-heading">HTTPS</h2>
-      </div>
+      <h2 id="https-setup-heading" className="visually-hidden">
+        HTTPS setup instructions
+      </h2>
       <p>Use HTTPS on your private LAN or VPN. You do not need to open router ports or make Orbis public.</p>
       <ul className="secure-access-benefits">
         <li>Encrypt sign-in details, session cookies and traffic between this device and Orbis.</li>

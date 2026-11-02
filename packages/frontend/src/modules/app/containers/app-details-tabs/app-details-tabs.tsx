@@ -157,7 +157,6 @@ export const AppDetailsTabs = ({ info, app, metadata }: IProps) => {
                 <div>
                   <Button
                     variant="outline"
-                    intent="danger"
                     onClick={() => {
                       setIsEditing(false);
                       setMeta(info.description);

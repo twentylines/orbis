@@ -337,9 +337,6 @@
 .settings-update-groups > .automatic-updates-settings {
   margin-top: 28px;
 }
-.settings-store-groups > #setting-app-updates {
-  margin-bottom: 28px;
-}
 
 .settings-search-field input::-webkit-search-cancel-button {
   display: none;
@@ -416,7 +413,16 @@
   margin-block: 0;
 }
 
-.settings-category-panel :is(.settings-group, .appearance-section, .release-channel-settings, .automatic-updates-settings, .tm-settings),
+.settings-category-panel
+  :is(
+    .settings-group,
+    .appearance-section,
+    .release-channel-settings,
+    .automatic-updates-settings,
+    .tm-settings,
+    .settings-https,
+    .cluster-settings-section
+  ),
 .settings-general-form > form {
   min-width: 0;
   padding: clamp(16px, 2.5cqi, 24px);
@@ -435,6 +441,7 @@
 .settings-security,
 .settings-store-groups,
 .settings-update-groups,
+.settings-category-panel .appearance,
 .settings-general-form {
   display: grid;
   gap: 16px;
@@ -447,10 +454,10 @@
   margin-bottom: 0;
 }
 .settings-category-panel .appearance-section {
-  margin-block: 0 16px;
-}
-.settings-store-groups > .appearance-section {
   margin-block: 0;
+}
+.settings-category-panel .appearance {
+  padding: 0;
 }
 .settings-category-panel .settings-passkeys {
   padding: 0;
@@ -463,7 +470,16 @@
   overflow-wrap: break-word;
 }
 @container settings (max-width: 38rem) {
-  .settings-category-panel :is(.settings-group, .appearance-section, .release-channel-settings, .automatic-updates-settings, .tm-settings),
+  .settings-category-panel
+    :is(
+      .settings-group,
+      .appearance-section,
+      .release-channel-settings,
+      .automatic-updates-settings,
+      .tm-settings,
+      .settings-https,
+      .cluster-settings-section
+    ),
   .settings-general-form > form {
     padding: 16px;
   }

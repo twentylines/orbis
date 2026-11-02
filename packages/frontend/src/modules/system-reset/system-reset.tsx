@@ -4,22 +4,11 @@ import { Input } from '@/components/ui/Input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
-import { readOperationStatus } from '@/components/recovery-progress/operation-status';
-import { preferenceStorageKey } from '@/desktop/appearance-cache';
-import { themePackCacheKey } from '@/modules/theme-packs/theme-pack-cache';
+import { markResetAccepted, readOperationStatus } from '@/components/recovery-progress/operation-status';
 import { browserPasskeyReason, cancelPasskeyCeremony, passkeyErrorMessage, passkeyListOptions } from '@/modules/auth/passkeys/passkey-api';
 import { resetPasskeyOptions, resetProofMethod, submitReset, type ResetAccounts } from './reset-api';
+import { openResetOnboarding } from './reset-completion';
 import './system-reset.css';
-
-export function openResetOnboarding() {
-  try {
-    localStorage.removeItem(preferenceStorageKey);
-    localStorage.removeItem(themePackCacheKey);
-  } catch {
-    /* Server preferences remain authoritative. */
-  }
-  window.location.assign('/');
-}
 export function ResetAccountChoices({ value, onChange }: { value: ResetAccounts | null; onChange: (value: ResetAccounts) => void }) {
   return (
     <fieldset className="system-reset-choices">
@@ -141,6 +130,7 @@ export function SystemResetWizard({ open, onClose, recovery = false }: { open: b
           recovery,
         );
       }
+      markResetAccepted();
       setAccepted(true);
     } catch (failure) {
       if (!controller.signal.aborted) {
@@ -309,7 +299,7 @@ export function SystemResetPanel() {
         <h3>Reset Orbis</h3>
         <p>Return to setup while keeping installed applications and their data.</p>
       </div>
-      <Button type="button" variant="outline" intent="danger" onClick={() => setOpen(true)}>
+      <Button type="button" intent="danger" onClick={() => setOpen(true)}>
         Reset
       </Button>
       <SystemResetWizard open={open} onClose={() => setOpen(false)} />

@@ -171,8 +171,8 @@ export function TimeMachineCapsules({ visible = true }: { visible?: boolean }) {
                   Verify
                 </Button>
               ) : null}
-              <Button variant="outline" intent="danger" disabled={busy} onClick={() => open({ kind: 'remove', job })}>
-                {['running', 'verifying'].includes(job.status) ? null : <IconTrash size={18} aria-hidden="true" />}
+              <Button variant="outline" disabled={busy} onClick={() => open({ kind: 'remove', job })}>
+                {['running', 'verifying'].includes(job.status) ? null : <IconTrash className="orbis-remove-icon" size={18} aria-hidden="true" />}
                 {['running', 'verifying'].includes(job.status) ? 'Cancel' : 'Remove'}
               </Button>
             </div>

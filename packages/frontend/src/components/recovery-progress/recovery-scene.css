@@ -305,3 +305,11 @@
     animation-duration: 0.01ms;
   }
 }
+
+.reset-scene-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: #030508;
+  pointer-events: none;
+}

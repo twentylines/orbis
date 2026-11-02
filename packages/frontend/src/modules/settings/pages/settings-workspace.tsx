@@ -157,25 +157,30 @@ export function SettingsSearch({ access, onSetting }: { access: SettingsAccess; 
 
 export function SettingsWorkspace({
   current,
+  pending = false,
   access,
   onSection,
   onSetting,
   panels,
 }: {
   current: SettingsSection;
+  pending?: boolean;
   access: SettingsAccess;
   onSection: (section: SettingsSection) => void;
   onSetting: (entry: SettingEntry) => void;
   panels: Record<SettingsSection, ReactNode>;
 }) {
-  const [visited, setVisited] = useState<ReadonlySet<SettingsSection>>(() => new Set([current]));
+  const displayed = useRef(current);
+  if (!pending) displayed.current = current;
+  const active = displayed.current;
+  const [visited, setVisited] = useState<ReadonlySet<SettingsSection>>(() => new Set([active]));
   useEffect(() => {
-    setVisited((previous) => retainSettingsSections(previous, current));
-  }, [current]);
+    setVisited((previous) => retainSettingsSections(previous, active));
+  }, [active]);
   const sections = settingsSections.filter(
     (entry) => (entry.id !== 'https' || access.http === true) && (entry.id !== 'time-machine' || access.operator),
   );
-  const section = settingsSections.find((entry) => entry.id === current) ?? settingsSections[0];
+  const section = settingsSections.find((entry) => entry.id === active) ?? settingsSections[0];
   return (
     <div className="settings-workspace">
       <RouteHeaderToolbar>
@@ -187,7 +192,7 @@ export function SettingsWorkspace({
         <nav className="settings-sidebar" aria-label="Settings categories">
           <SelectionGroup className="settings-category-list">
             {sections.map((entry) => (
-              <button key={entry.id} type="button" aria-pressed={current === entry.id} onClick={() => onSection(entry.id)}>
+              <button key={entry.id} type="button" aria-pressed={active === entry.id} onClick={() => onSection(entry.id)}>
                 <strong>{entry.label}</strong>
               </button>
             ))}
@@ -195,7 +200,7 @@ export function SettingsWorkspace({
         </nav>
         <div className="settings-mobile-navigation">
           <Select
-            value={current}
+            value={active}
             onValueChange={(value) => {
               const next = settingsSections.find((entry) => entry.id === value);
               if (next) onSection(next.id);
@@ -216,17 +221,17 @@ export function SettingsWorkspace({
         <div className="settings-content">
           <div className="settings-heading-container">
             <header className="settings-content-heading">
-              <h2>{section.label}</h2>
+              <h2>{pending ? <output>Loading Updates…</output> : section.label}</h2>
               <div className="settings-save-actions">
-                <SettingsSaveButton />
+                <SettingsSaveButton hideWhenClean={active === 'about'} />
               </div>
             </header>
           </div>
           <SettingsSaveFeedback />
           {settingsSections
-            .filter((entry) => visited.has(entry.id) || entry.id === current)
+            .filter((entry) => visited.has(entry.id) || entry.id === active)
             .map((entry) => (
-              <SettingsPanel key={entry.id} id={`settings-panel-${entry.id}`} label={entry.label} active={current === entry.id}>
+              <SettingsPanel key={entry.id} id={`settings-panel-${entry.id}`} label={entry.label} active={active === entry.id}>
                 {panels[entry.id]}
               </SettingsPanel>
             ))}

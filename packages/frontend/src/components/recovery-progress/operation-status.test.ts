@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
 import {
+  confirmResetSnapshot,
+  markResetAccepted,
+  hasAcceptedReset,
+  clearAcceptedReset,
+  resetSceneVisible,
   parseOperationStatus,
   readOperationStatus,
   operationSnapshotAfter,
@@ -93,4 +98,74 @@ test('ordinary startup uses wallpaper while confirmed waits and maintenance use 
   expect(operationUsesSpace(null, true)).toBe(true);
   for (const state of ['restoring', 'updating', 'downgrading', 'resetting', 'recovery'] as const)
     expect(operationUsesSpace({ state, supported: true }, false)).toBe(true);
+});
+
+test('accepted reset marker survives a gate remount and clears only when asked', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+    getItem: (key: string) => values.get(key) ?? null,
+    removeItem: (key: string) => {
+      values.delete(key);
+    },
+  };
+  expect(hasAcceptedReset(storage)).toBe(false);
+  markResetAccepted(storage);
+  expect(hasAcceptedReset(storage)).toBe(true);
+  expect(operationAllowsDeparture({ state: 'checking', supported: true, unavailable: true })).toBe(false);
+  expect(hasAcceptedReset(storage)).toBe(true);
+  clearAcceptedReset(storage);
+  expect(hasAcceptedReset(storage)).toBe(false);
+  const unavailable = {
+    setItem: () => {
+      throw Error();
+    },
+    getItem: () => {
+      throw Error();
+    },
+    removeItem: () => {
+      throw Error();
+    },
+  };
+  expect(() => markResetAccepted(unavailable)).not.toThrow();
+  expect(hasAcceptedReset(unavailable)).toBe(false);
+  expect(() => clearAcceptedReset(unavailable)).not.toThrow();
+});
+
+test('an accepted reset keeps its scene through startup, active reset and reconnect without claiming idle completion', () => {
+  expect(resetSceneVisible(null, true)).toBe(true);
+  expect(resetSceneVisible({ state: 'resetting', supported: true }, true)).toBe(true);
+  expect(resetSceneVisible({ state: 'checking', supported: true, unavailable: true }, true)).toBe(true);
+  expect(resetSceneVisible({ state: 'idle', supported: true }, true)).toBe(false);
+  expect(resetSceneVisible(null, false)).toBe(false);
+  expect(resetSceneVisible({ state: 'checking', supported: true }, false)).toBe(false);
+});
+
+test('a cached idle cannot complete an accepted reset without a fresh supported idle', async () => {
+  const shared = { state: 'idle' as const, supported: true };
+  for (const fresh of [
+    { state: 'resetting' as const, supported: true },
+    { state: 'checking' as const, supported: true, unavailable: true },
+    { state: 'idle' as const, supported: false },
+  ]) {
+    const result = await confirmResetSnapshot(shared, true, async () => fresh);
+    expect(operationAllowsDeparture(result)).toBe(false);
+    expect(resetSceneVisible(result, true)).toBe(true);
+  }
+  const failed = await confirmResetSnapshot(shared, true, async () => {
+    throw Error('offline');
+  });
+  expect(operationAllowsDeparture(failed)).toBe(false);
+  expect(resetSceneVisible(failed, true)).toBe(true);
+  expect(await confirmResetSnapshot(shared, true, async () => shared)).toEqual(shared);
+  let called = false;
+  expect(
+    await confirmResetSnapshot(shared, false, async () => {
+      called = true;
+      return shared;
+    }),
+  ).toEqual(shared);
+  expect(called).toBe(false);
 });

@@ -24,7 +24,7 @@ test('unknown restore totals do not invent a percentage or imply completion', ()
   expect(markup).not.toContain('50%<');
   expect(markup).not.toContain('100%');
 });
-test('indeterminate orb is omitted from measured progress and receives a pause state when hidden', () => {
+test('indeterminate glint is omitted from measured progress and receives a pause state when hidden', () => {
   const indeterminate = renderToStaticMarkup(<RecoveryProgressBar label="Checking restore" />);
   expect(indeterminate).toContain('data-known="false"');
   expect(indeterminate).toContain('data-motion="true"');
@@ -40,22 +40,16 @@ test('indeterminate orb is omitted from measured progress and receives a pause s
       <RecoveryProgressBar label="Checking restore" />
     </WindowVisibilityContext.Provider>,
   );
-  expect(hidden).toContain('data-motion="false"');
+  expect(hidden).toContain('data-visible="false"');
 });
-test('indeterminate orb is one clipped, fading sweep with a static inner glint', async () => {
+test('indeterminate glint stays within the track and pauses while hidden', async () => {
   const styles = await Bun.file(new URL('./recovery-progress.css', import.meta.url)).text();
-  expect(styles).toMatch(/\.recovery-progress-bar\s*\{[^}]*clip-path:\s*inset\(-4px 0 round 8px\)/s);
-  expect(styles).toMatch(/\.recovery-progress-bar > span\s*\{[^}]*animation:\s*recovery-orb-sweep 1800ms linear infinite/s);
-  expect(styles).toMatch(
-    /@keyframes recovery-orb-sweep\s*\{[\s\S]*?from\s*\{[^}]*opacity:\s*0;[\s\S]*?to\s*\{[^}]*opacity:\s*0;[^}]*translate3d\(450%, -50%, 0\)/,
-  );
-  const lightWidth = Number(styles.match(/\.recovery-progress-bar > span\s*\{[^}]*width:\s*([\d.]+)%;/s)?.[1]);
-  const endOffset = Number(styles.match(/@keyframes recovery-orb-sweep[\s\S]*?to\s*\{[^}]*translate3d\(([\d.]+)%/s)?.[1]);
-  expect((lightWidth / 100) * (endOffset / 100 + 0.5)).toBeCloseTo(1, 6);
-  const innerGlint = styles.match(/\.recovery-progress-bar > span::after\s*\{([^}]*)\}/s)?.[1] ?? '';
-  expect(innerGlint).not.toMatch(/\banimation\s*:/);
-  expect(styles).not.toContain('@keyframes recovery-orb-glint');
-  expect(styles).toContain('.recovery-progress-bar[data-motion="false"] > span');
+  expect(styles).toMatch(/\.recovery-progress-bar\s*\{[^}]*overflow:\s*hidden/s);
+  expect(styles).toMatch(/\.recovery-progress-bar > span\s*\{[^}]*inset:\s*0 auto 0 0;[^}]*width:\s*35%;[^}]*animation:\s*recovery-glint-track/s);
+  expect(styles).toContain('translateX(-100%)');
+  expect(styles).toContain('translateX(285.72%)');
+  expect(styles).toMatch(/\[data-visible="false"\] > span\s*\{[^}]*animation-play-state:\s*paused/s);
+  expect(styles).not.toContain('.recovery-progress-bar > span::after');
   expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
 });
 test('record preparation and reduced-motion preference retain honest accessible progress', () => {

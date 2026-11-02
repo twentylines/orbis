@@ -45,8 +45,8 @@ export function backupRemovalContents({
         <Button ref={cancelRef} type="button" variant="outline" disabled={busy} onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="button" variant="outline" intent="danger" disabled={busy || disabled} aria-busy={busy} onClick={onRemove}>
-          <IconTrash size={18} className="backup-removal-trash" aria-hidden="true" />
+        <Button type="button" intent="danger" disabled={busy || disabled} aria-busy={busy} onClick={onRemove}>
+          <IconTrash size={18} aria-hidden="true" />
           Remove
         </Button>
       </DialogFooter>

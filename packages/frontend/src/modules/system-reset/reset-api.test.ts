@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { resetPayload, submitReset } from './reset-api';
+import { resetCompletion } from './reset-completion';
 const proof = { method: 'password' as const, password: 'test-only' };
 test('requires an explicit account choice and exact final confirmation', () => {
   expect(() => resetPayload('keep', 'reset orbis', proof)).toThrow();
@@ -40,4 +41,32 @@ test('reset uses registered passkeys when available and falls back to password',
       throw new Error('unavailable');
     }),
   ).toBe('password');
+});
+
+test('duplicate reset completion polls cause only one final navigation', () => {
+  let clears = 0;
+  let navigations = 0;
+  const finish = resetCompletion(
+    () => clears++,
+    () => navigations++,
+  );
+  finish();
+  finish();
+  expect([clears, navigations]).toEqual([1, 1]);
+});
+
+test('reset completion navigates when browser storage is blocked and permits a failed navigation to retry', () => {
+  let navigations = 0;
+  const finish = resetCompletion(
+    () => {
+      throw new Error('Storage is unavailable');
+    },
+    () => {
+      if (++navigations === 1) throw new Error('Navigation interrupted');
+    },
+  );
+  expect(finish).toThrow('Navigation interrupted');
+  finish();
+  finish();
+  expect(navigations).toBe(2);
 });
