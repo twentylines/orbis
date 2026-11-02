@@ -1,4 +1,5 @@
 ARG NODE_IMAGE="node:22.23.4-alpine3.23@sha256:206878a60dc7014193f418ab9259b6110c15fbd514b3044a267be706509944e4"
+ARG ALPINE_IMAGE="alpine:3.23.6@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0"
 ARG BUN_VERSION="1.3.0"
 
 FROM oven/bun:${BUN_VERSION}-alpine AS bun_base
@@ -31,9 +32,12 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
 RUN chmod +x docker-binary
 
 # ---- RUNNER BASE ----
-FROM node_base AS runner_base
+FROM ${ALPINE_IMAGE} AS runner_base
 
-RUN apk add --no-cache curl openssl git file tar coreutils
+COPY --from=node_base /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_base /usr/local/lib/orbis/verify-node-security.cjs /usr/local/lib/orbis/verify-node-security.cjs
+RUN apk add --no-cache curl openssl git file tar coreutils libstdc++ && \
+    node /usr/local/lib/orbis/verify-node-security.cjs
 
 # ---- BUILDER ----
 FROM builder_base AS builder

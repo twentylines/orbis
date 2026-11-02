@@ -180,12 +180,99 @@ class ArtifactTests(unittest.TestCase):
             self.image([layer([(name, body)])])
             self.scan_image()
             self.image([layer([(name, body + b'changed')])])
-            with self.assertRaisesRegex(SCAN.Rejected, 'personal-path'):
+            with self.assertRaisesRegex(SCAN.Rejected, 'upstream-file-identity-mismatch'):
                 self.scan_image()
             token = ('gh' + 'p_' + 'ABCdef012345' * 4).encode()
             with mock.patch.object(SCAN, 'PUBLIC_BUILD_PATHS', {name: {SCAN.sha(body + token)}}):
                 self.image([layer([(name, body + token)])])
                 with self.assertRaisesRegex(SCAN.Rejected, 'github-token'):
+                    self.scan_image()
+
+    def test_runtime_inherits_pinned_alpine_and_copies_only_node_and_its_security_probe(self):
+        dockerfile = Path(__file__).resolve().parent.parent.joinpath('Dockerfile').read_text()
+        self.assertRegex(dockerfile, r'ARG ALPINE_IMAGE="alpine:3\.23\.[0-9]+@sha256:[a-f0-9]{64}"')
+        runner = dockerfile.split('# ---- RUNNER BASE ----', 1)[1].split('# ---- BUILDER ----', 1)[0]
+        self.assertIn('FROM ${ALPINE_IMAGE} AS runner_base', runner)
+        self.assertNotIn('FROM node_base', runner)
+        copies = [line for line in runner.splitlines() if line.startswith('COPY --from=node_base ')]
+        self.assertEqual(copies, [
+            'COPY --from=node_base /usr/local/bin/node /usr/local/bin/node',
+            'COPY --from=node_base /usr/local/lib/orbis/verify-node-security.cjs /usr/local/lib/orbis/verify-node-security.cjs',
+        ])
+        self.assertIn('libstdc++', runner)
+        self.assertIn('node /usr/local/lib/orbis/verify-node-security.cjs', runner)
+
+    def test_node_public_paths_require_exact_node_bytes_and_never_exempt_keys_or_adjacent_tokens(self):
+        name = 'usr/local/bin/node'
+        body = ('public upstream build path: /' + 'home/public-builder/source').encode()
+        with mock.patch.object(SCAN, 'PUBLIC_BUILD_PATHS', {name: {SCAN.sha(body)}}):
+            self.image([layer([(name, body)])])
+            self.scan_image()
+            for changed_name, changed_body in [(name, body + b'tampered'), ('app/node', body)]:
+                self.image([layer([(changed_name, changed_body)])])
+                with self.assertRaises(SCAN.Rejected):
+                    self.scan_image()
+        for secret in [private_key(), ('s' + 'k-proj-' + 'AbCd01234567' * 4).encode()]:
+            with mock.patch.object(SCAN, 'PUBLIC_BUILD_PATHS', {name: {SCAN.sha(body + secret)}}):
+                self.image([layer([(name, body + secret)])])
+                with self.assertRaises(SCAN.Rejected):
+                    self.scan_image()
+            with mock.patch.object(SCAN, 'PUBLIC_BUILD_PATHS', {name: {SCAN.sha(body)}}):
+                self.image([layer([(name, body), ('app/adjacent.bin', secret)])])
+                with self.assertRaises(SCAN.Rejected):
+                    self.scan_image()
+
+    def test_only_exact_public_ca_symlinks_pass_and_absolute_targets_are_root_relative(self):
+        cert = b'-----BEGIN CERTIFICATE-----\n' + base64.b64encode(b'\x30public certificate fixture') + b'\n-----END CERTIFICATE-----\n'
+        for alias, target in SCAN.PUBLIC_CERTIFICATE_LINKS.items():
+            self.image([layer([(alias, (tarfile.SYMTYPE, target)), ('etc/ssl/cert.pem', cert)])])
+            with mock.patch.object(SCAN, 'private_path', wraps=SCAN.private_path) as checked:
+                self.scan_image()
+            self.assertIn(mock.call('etc/ssl/cert.pem'), checked.call_args_list)
+            for content in [cert, (tarfile.LNKTYPE, target), (tarfile.SYMTYPE, '/etc/ssl/other.pem'),
+                            (tarfile.SYMTYPE, '../../etc/ssl/cert.pem')]:
+                self.image([layer([(alias, content)])])
+                with self.assertRaisesRegex(SCAN.Rejected, 'private-file'):
+                    self.scan_image()
+            self.image([layer([(alias + '.other.pem', (tarfile.SYMTYPE, target))])])
+            with self.assertRaisesRegex(SCAN.Rejected, 'private-file'):
+                self.scan_image()
+            self.image([layer([(alias, (tarfile.SYMTYPE, target)), ('etc/ssl/cert.pem', private_key())])])
+            with self.assertRaises(SCAN.Rejected):
+                self.scan_image()
+        self.image([layer([('app/link', (tarfile.SYMTYPE, '/../etc/ssl/cert.pem'))])])
+        with self.assertRaisesRegex(SCAN.Rejected, 'unsafe-archive-path'):
+            self.scan_image()
+
+    def test_apk_protocol_markers_require_exact_apk_bytes_and_cannot_exempt_credentials(self):
+        value = ('AbCd01234567' * 4).encode()
+        body = b'\x00APK_PREUPGRADE_TOKEN=' + value + b'\x00APK_SELFUPGRADE_TOKEN=' + value + b'\x00'
+        name = 'sbin/apk'
+        with mock.patch.object(SCAN, 'PUBLIC_APK_FILES', {name: {SCAN.sha(body)}}):
+            self.image([layer([(name, body)])])
+            self.scan_image()
+            for entries in [[(name, body + b'tampered')], [('app/apk', body)],
+                            [(name, body), ('app/adjacent', body)]]:
+                self.image([layer(entries)])
+                with self.assertRaises(SCAN.Rejected):
+                    self.scan_image()
+            self.image([layer([(name, body)]) + body])
+            with self.assertRaisesRegex(SCAN.Rejected, 'credential-assignment'):
+                self.scan_image()
+        for secret in [b'\x00JWT_SECRET=' + value, private_key(),
+                       b'\x00OTHER_APK_PREUPGRADE_TOKEN=' + value]:
+            changed = body + secret
+            with mock.patch.object(SCAN, 'PUBLIC_APK_FILES', {name: {SCAN.sha(changed)}}):
+                self.image([layer([(name, changed)])])
+                with self.assertRaises(SCAN.Rejected):
+                    self.scan_image()
+
+    def test_every_pinned_executable_requires_its_exact_identity_even_without_visible_signals(self):
+        token = ('gh' + 'p_' + 'AbCd01234567' * 4).encode()
+        for name in ['usr/local/bin/node', 'usr/local/bin/docker-compose', 'sbin/apk']:
+            for body in [b'ordinary signal-free replacement', gzip.compress(token, mtime=0)]:
+                self.image([layer([(name, body)])])
+                with self.assertRaisesRegex(SCAN.Rejected, 'upstream-file-identity-mismatch'):
                     self.scan_image()
 
     def test_public_trusted_ca_certificate_is_kept_but_private_key_is_rejected(self):
@@ -261,6 +348,55 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(message, {'passed': False, 'error': 'invalid-or-unreadable-artifact', 'stage': 'image-content', 'exception': 'OSError'})
         self.assertNotIn(private, json.dumps(message))
         self.assertFalse(self.report.exists())
+
+    def test_early_personal_path_rejection_reports_only_complete_member_and_layer_identity(self):
+        private = '/'.join(['', 'home', 'synthetic-person', 'private-file']).encode()
+        body = private + b'\n' + os.urandom(SCAN.CHUNK * 3)
+        value = layer([('app/public-file.bin', body)])
+        expected_layer = 'sha256:' + SCAN.sha(gzip.compress(value, mtime=0))
+        self.installer(self.image([value]))
+        result, message = self.cli('scan')
+        self.assertEqual(result, 1)
+        self.assertIn('personal-path at ', message['error'])
+        self.assertEqual(message['artifact']['memberSha256'], SCAN.sha(body))
+        self.assertEqual(message['artifact']['memberBytes'], len(body))
+        self.assertEqual(message['artifact']['layerDigest'], expected_layer)
+        self.assertRegex(message['artifact']['memberCounter'], r'^oci\.blob[0-9]+\.layer\.entry0$')
+        self.assertNotIn(private.decode(), json.dumps(message))
+        self.assertNotIn('public-file.bin', json.dumps(message))
+        self.assertFalse(self.report.exists())
+
+    def test_nested_gzip_rejection_hashes_original_compressed_member_after_read_ahead(self):
+        private = '/'.join(['', 'home', 'synthetic-person', 'private-file']).encode()
+        body = gzip.compress(private + b'\n' + os.urandom(SCAN.CHUNK * 3), mtime=0)
+        self.image([layer([('app/public-file.gz', body)])])
+        with self.assertRaisesRegex(SCAN.Rejected, 'personal-path') as raised:
+            self.scan_image()
+        identity = raised.exception.artifact
+        self.assertEqual(identity['memberSha256'], SCAN.sha(body))
+        self.assertEqual(identity['memberBytes'], len(body))
+        self.assertNotIn(private.decode(), json.dumps(identity))
+        self.assertNotIn('public-file.gz', json.dumps(identity))
+
+    def test_secret_rejections_still_fail_without_exposing_body_or_filename(self):
+        token = ('gh' + 'p_' + 'AbCd01234567' * 4).encode()
+        self.installer(self.image([layer([('app/public-file.bin', token + b'\n' + os.urandom(SCAN.CHUNK * 2))])]))
+        result, message = self.cli('scan')
+        self.assertEqual(result, 1)
+        self.assertIn('github-token at ', message['error'])
+        self.assertNotIn('artifact', message)
+        self.assertNotIn(token.decode(), json.dumps(message))
+        self.assertNotIn('public-file.bin', json.dumps(message))
+        self.assertFalse(self.report.exists())
+
+    def test_failed_underlying_read_never_claims_a_member_identity_or_drains_again(self):
+        source = mock.Mock()
+        source.read.side_effect = [SCAN.Rejected('personal-path at raw-layer'), b'other bytes']
+        reader = SCAN.MemberReader(source)
+        with self.assertRaisesRegex(SCAN.Rejected, 'personal-path at raw-layer'):
+            reader.read(512)
+        self.assertIsNone(reader.rejection_identity(11, 'entry0', SCAN.Budget()))
+        self.assertEqual(source.read.call_count, 1)
 
     def test_credentials_split_across_read_boundaries_and_trailing_tar_bytes_fail(self):
         token = ('gh' + 'p_' + 'ABCdef012345' * 4).encode()

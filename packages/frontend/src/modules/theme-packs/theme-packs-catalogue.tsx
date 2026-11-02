@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ThemePackSnapshot } from '@runtipi/common/schemas/theme-pack';
+import type { ThemeFrameworkCatalogue } from '@runtipi/common/schemas/theme-framework-catalogue';
 import { IconChevronDown, IconTrash } from '@tabler/icons-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { themePacksChanged, themePacksRequest } from './theme-packs-api';
@@ -9,7 +10,11 @@ import './theme-packs-catalogue.css';
 import './theme-packs-store.css';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/Button';
+import { InlineFeedback } from '@/components/ui/Alert/Alert';
 import { useThemeApply } from './use-theme-apply';
+import { useFrameworkCatalogue } from './use-framework-catalogue';
+import { frameworkCatalogueNotice } from './framework-catalogue';
+import { compareThemeVersions } from './theme-catalogue';
 
 export function ThemePacksEmpty({ snapshot, search = '' }: { snapshot: ThemePackSnapshot | null; search?: string }) {
   const message = themeStoreEmptyMessage(snapshot, search);
@@ -18,6 +23,7 @@ export function ThemePacksEmpty({ snapshot, search = '' }: { snapshot: ThemePack
 
 export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { surface?: 'appearance' | 'store'; search?: string }) {
   const visible = useWindowVisible();
+  const framework = useFrameworkCatalogue(surface === 'store' && visible);
   const [snapshot, setSnapshot] = useState<ThemePackSnapshot | null>(null);
   const [changing, setBusy] = useState(false);
   const id = useId();
@@ -87,6 +93,20 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
   };
   const packs = themeStoreCatalogue(snapshot, search);
   const selected = snapshot?.state.selected;
+  const frameworkNotice = frameworkCatalogueNotice(framework.data, framework.error);
+  const legacyIds = new Set([
+    ...(snapshot?.catalogue.map((pack) => pack.id) ?? []),
+    ...(snapshot?.state.installed.map((record) => record.manifest.id) ?? []),
+  ]);
+  const latestFramework = new Map<string, ThemeFrameworkCatalogue['themes'][number]>();
+  for (const item of framework.data?.catalogue?.themes ?? []) {
+    if (legacyIds.has(item.id)) continue;
+    const previous = latestFramework.get(item.id);
+    if (!previous || compareThemeVersions(item.version, previous.version) > 0) latestFramework.set(item.id, item);
+  }
+  const frameworkThemes = [...latestFramework.values()].filter((item) =>
+    `${item.name} ${item.description} ${item.author}`.toLowerCase().includes(search.trim().toLowerCase()),
+  );
   if (surface === 'appearance') {
     const installed = snapshot?.state.installed ?? [];
     return (
@@ -181,6 +201,7 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
               disabled={busy}
               onClick={() => {
                 void refresh();
+                framework.refresh();
               }}
             >
               Refresh
@@ -378,7 +399,42 @@ export function ThemePacksCatalogue({ surface = 'appearance', search = '' }: { s
               );
             })}
           </div>
-          <ThemePacksEmpty snapshot={snapshot} search={search} />
+          {frameworkThemes.length ? (
+            <div className="theme-packs-grid">
+              {frameworkThemes.map((item) => (
+                <article className="theme-pack-card" key={item.id}>
+                  <div className="theme-pack-body">
+                    <div className="theme-pack-heading">
+                      <h3>{item.name}</h3>
+                      <span>Unavailable</span>
+                    </div>
+                    <p>{item.description}</p>
+                    <p>By {item.author}</p>
+                    <p>Version {item.version}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+          {frameworkNotice && (framework.data || framework.error || snapshot) ? (
+            framework.error || framework.data?.status === 'unavailable' || framework.data?.status === 'stale' ? (
+              <InlineFeedback variant={framework.error ? 'danger' : 'warning'} role="status">
+                {frameworkNotice}
+              </InlineFeedback>
+            ) : (
+              <p>
+                <output>{frameworkNotice}</output>
+              </p>
+            )
+          ) : null}
+          {framework.data?.status === 'ready' && !framework.error && !frameworkThemes.length ? (
+            <ThemePacksEmpty snapshot={snapshot} search={search} />
+          ) : null}
+          <Button asChild>
+            <a href="https://github.com/twentylines/orbis-themes/blob/main/docs/README.md" target="_blank" rel="noopener noreferrer">
+              Create your own
+            </a>
+          </Button>
         </div>
       </section>
     </>

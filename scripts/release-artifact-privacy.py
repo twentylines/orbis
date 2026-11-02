@@ -36,10 +36,31 @@ KEY_SUFFIXES = {'.key', '.p12', '.pfx', '.jks', '.keystore'}
 TRUST_ROOTS = ('etc/ssl/', 'etc/pki/', 'usr/share/ca-certificates/', 'usr/local/share/ca-certificates/')
 # Official v2.40.0 checksums bind upstream build paths to public Compose bytes.
 # https://github.com/docker/compose/releases/download/v2.40.0/checksums.txt
-PUBLIC_BUILD_PATHS = {'usr/local/bin/docker-compose': {
-    'fa99ca94c96c8cae4024493581a20049764ce723558991d0d1526c1c7b791a79',
-    'bd5835ccbbf06a42dcb5294c65e34a4634b34447afb9ed6fc7adf18a000e0f99',
+PUBLIC_BUILD_PATHS = {
+    'usr/local/bin/docker-compose': {
+        'fa99ca94c96c8cae4024493581a20049764ce723558991d0d1526c1c7b791a79',
+        'bd5835ccbbf06a42dcb5294c65e34a4634b34447afb9ed6fc7adf18a000e0f99',
+    },
+    # Exact executables from the immutable official Node index used by Dockerfile.
+    # registry-1.docker.io/v2/library/node/manifests/sha256:206878a60dc7014193f418ab9259b6110c15fbd514b3044a267be706509944e4
+    'usr/local/bin/node': {
+        '5a92a46a1d8279fec6776e3123ca22e26a6fddbb7cf1b55e019dbb38eea8ff26',
+        'c3be880da6ef2075b119ab02968a822ef96fe23c92c94a1e406b77d6d9c6e59e',
+    },
+}
+# Alpine's compatibility certificate aliases refer to the public CA bundle.
+# github.com/alpinelinux/aports/tree/master/main/ca-certificates
+PUBLIC_CERTIFICATE_LINKS = {'etc/ssl1.1/cert.pem': '/etc/ssl/cert.pem'}
+
+# Public APK version/cache markers, not authentication secrets.
+# github.com/alpinelinux/apk-tools/blob/v3.0.8/src/app_upgrade.c
+# Exact executables from the pinned Alpine platform layers used by Dockerfile.
+PUBLIC_APK_FILES = {'sbin/apk': {
+    '7a7bdf9b9021b676b2842657257bb99d77b3047dbb08100600e6616e72e035b6',
+    'd77b885bef835f8cade6fe3feba2fe504896e16ecfe599fa54352fef68a11d4d',
 }}
+PUBLIC_APK_MARKERS = {b'APK_PREUPGRADE_TOKEN', b'APK_SELFUPGRADE_TOKEN'}
+
 # Public Alpine build roots and literal examples in upstream Node/npm docs.
 # These prefixes classify only the path signal; other credential rules still run.
 # Public sources: gitlab.alpinelinux.org/alpine/aports,
@@ -156,7 +177,13 @@ class Content:
                 token = match[1]
                 entropy = -sum((token.count(c) / len(token)) * math.log2(token.count(c) / len(token)) for c in set(token))
                 if entropy >= 3.5:
-                    reject('credential-assignment', self.location)
+                    name = match[0].split(b'=', 1)[0].lstrip(b'\x00\r\n" ')
+                    if pattern is ENVIRONMENT and name in PUBLIC_APK_MARKERS and 'apk-upgrade-marker' in self.deferred:
+                        self.deferred['apk-upgrade-marker'].add((self.offset - len(self.tail) + match.start(), self.offset - len(self.tail) + match.end()))
+                        if len(self.deferred['apk-upgrade-marker']) > 10000:
+                            reject('content-signal-limit', self.location)
+                    else:
+                        reject('credential-assignment', self.location)
         self.personal_paths(value, self.offset - len(self.tail), final=False)
         self.tail = value[-WINDOW:]
         self.offset += len(chunk)
@@ -288,13 +315,46 @@ def scan_body(stream, location, budget, depth):
         scan_stream(body, location, budget)
 
 
+class MemberReader:
+    def __init__(self, source):
+        self.source = source
+        self.bytes = 0
+        self.digest = hashlib.sha256()
+        self.failed = False
+
+    def read(self, size):
+        if size < 0:
+            reject('unbounded-read')
+        try:
+            chunk = self.source.read(size)
+        except Exception:
+            self.failed = True
+            raise
+        self.bytes += len(chunk)
+        self.digest.update(chunk)
+        return chunk
+
+    def rejection_identity(self, size, location, budget):
+        if self.failed:
+            return None
+        while self.bytes < size:
+            chunk = self.read(min(CHUNK, size - self.bytes))
+            budget.add(len(chunk))
+            if not chunk:
+                return None
+        if self.bytes != size:
+            return None
+        return {'memberSha256': self.digest.hexdigest(), 'memberBytes': size, 'memberCounter': location}
+
+
 def scan_tar(source, location, budget, compressed=False, depth=0):
     if depth > 3:
         reject('nested-archive-limit', location)
     decoded = gzip.GzipFile(fileobj=source) if compressed else source
-    raw = Content(location, defer={'personal-path'})
+    raw = Content(location, defer={'personal-path', 'apk-upgrade-marker'})
     checked = CheckedReader(decoded, raw, budget)
     public_ranges = []
+    public_marker_ranges = []
     with tarfile.open(fileobj=checked, mode='r|', bufsize=CHUNK) as archive:
         for number, member in enumerate(archive):
             budget.entries += 1
@@ -302,7 +362,8 @@ def scan_tar(source, location, budget, compressed=False, depth=0):
                 reject('archive-limit', location)
             entry = f'{location}.entry{number}'
             name = normalized(member.name)
-            if private_path(name, member.isdir()):
+            public_certificate_link = member.issym() and PUBLIC_CERTIFICATE_LINKS.get(name) == member.linkname
+            if private_path(name, member.isdir()) and not public_certificate_link:
                 reject('private-file', entry)
             metadata = Content(entry)
             metadata.feed(json.dumps({'name': member.name, 'link': member.linkname, 'pax': member.pax_headers}).encode())
@@ -310,34 +371,56 @@ def scan_tar(source, location, budget, compressed=False, depth=0):
             if member.issym() or member.islnk():
                 target = member.linkname
                 if target.startswith('/'):
-                    target = target[1:]
-                target = posixpath.normpath(posixpath.join(posixpath.dirname(name), target)) if member.issym() else target
+                    target = normalized(target[1:])
+                elif member.issym():
+                    target = normalized(posixpath.normpath(posixpath.join(posixpath.dirname(name), target)))
+                else:
+                    target = normalized(target)
                 if private_path(target):
                     reject('private-link', entry)
             elif member.isfile():
-                stream = archive.extractfile(member)
-                if stream is None:
+                source = archive.extractfile(member)
+                if source is None:
                     reject('missing-archive-body', entry)
-                if name in PUBLIC_EMPTY_FILES:
-                    if member.size != 0:
-                        reject('private-file', entry)
-                elif name.endswith('.pem'):
-                    if member.size > MAX_JSON or not public_certificates(stream.read(MAX_JSON + 1)):
-                        reject('non-public-certificate', entry)
-                elif name in PUBLIC_BUILD_PATHS:
-                    digest = hashlib.sha256()
-                    content = Content(entry, defer={'personal-path'})
-                    while chunk := stream.read(CHUNK):
-                        digest.update(chunk)
-                        content.feed(chunk)
-                    content.finish()
-                    if content.deferred['personal-path']:
+                stream = MemberReader(source)
+                try:
+                    if name in PUBLIC_EMPTY_FILES:
+                        if member.size != 0:
+                            reject('private-file', entry)
+                    elif name.endswith('.pem'):
+                        if member.size > MAX_JSON or not public_certificates(stream.read(MAX_JSON + 1)):
+                            reject('non-public-certificate', entry)
+                    elif name in PUBLIC_BUILD_PATHS:
+                        digest = hashlib.sha256()
+                        content = Content(entry, defer={'personal-path'})
+                        while chunk := stream.read(CHUNK):
+                            digest.update(chunk)
+                            content.feed(chunk)
+                        content.finish()
                         if digest.hexdigest() not in PUBLIC_BUILD_PATHS[name]:
-                            reject('personal-path', entry)
+                            reject('upstream-file-identity-mismatch', entry)
                         public_ranges.append((member.offset_data, member.offset_data + member.size))
-                else:
-                    # Every historical member is read, including nested compressed content.
-                    scan_body(stream, entry, budget, depth)
+                    elif name in PUBLIC_APK_FILES:
+                        digest = hashlib.sha256()
+                        content = Content(entry, defer={'apk-upgrade-marker'})
+                        while chunk := stream.read(CHUNK):
+                            digest.update(chunk)
+                            content.feed(chunk)
+                        content.finish()
+                        if digest.hexdigest() not in PUBLIC_APK_FILES[name]:
+                            reject('upstream-file-identity-mismatch', entry)
+                        public_marker_ranges.append((member.offset_data, member.offset_data + member.size))
+                    else:
+                        # Every historical member is read, including nested compressed content.
+                        scan_body(stream, entry, budget, depth)
+                except Rejected as error:
+                    try:
+                        identity = stream.rejection_identity(member.size, entry, budget)
+                    except (OSError, ValueError, tarfile.TarError, EOFError):
+                        identity = None
+                    if identity is not None and not hasattr(error, 'artifact'):
+                        error.artifact = identity
+                    raise
             elif not member.isdir():
                 reject('unsupported-archive-entry', entry)
     # Tar readers stop at the end marker; scan any remaining decoded bytes too.
@@ -345,6 +428,8 @@ def scan_tar(source, location, budget, compressed=False, depth=0):
         pass
     if any(not any(start <= left and right <= end for start, end in public_ranges) for left, right in raw.deferred['personal-path']):
         reject('personal-path', location)
+    if any(not any(start <= left and right <= end for start, end in public_marker_ranges) for left, right in raw.deferred['apk-upgrade-marker']):
+        reject('credential-assignment', location)
 
 
 class Image:
@@ -478,7 +563,12 @@ class Image:
             media = self.layers.get(name)
             if media in LAYERS:
                 source = self.archive.extractfile(member)
-                scan_tar(source, location + '.layer', budget, LAYERS[media])
+                try:
+                    scan_tar(source, location + '.layer', budget, LAYERS[media])
+                except Rejected as error:
+                    if hasattr(error, 'artifact'):
+                        error.artifact['layerDigest'] = 'sha256:' + name.rsplit('/', 1)[1]
+                    raise
 
 
 def load(name):
@@ -662,7 +752,10 @@ def main(argv=None):
         print(json.dumps({'mode': args.mode, **result}, sort_keys=True))
         return 0
     except Rejected as error:
-        print(json.dumps({'passed': False, 'error': str(error)}))
+        result = {'passed': False, 'error': str(error)}
+        if hasattr(error, 'artifact'):
+            result['artifact'] = error.artifact
+        print(json.dumps(result))
         return 1
     except (OSError, ValueError, TypeError, KeyError, AttributeError, tarfile.TarError, zipfile.BadZipFile, EOFError) as error:
         print(json.dumps({'passed': False, 'error': 'invalid-or-unreadable-artifact', 'stage': stage, 'exception': type(error).__name__}))

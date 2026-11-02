@@ -28,6 +28,8 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    env:
+      INSTALLER_WORK: ${{ github.workspace }}/.orbis-installer-endpoint
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -36,21 +38,28 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+      - name: Prepare installer working files
+        run: |
+          umask 077
+          mkdir -p "$INSTALLER_WORK/tmp"
       - name: Check endpoint selection and verification
+        env:
+          TMPDIR: ${{ github.workspace }}/.orbis-installer-endpoint/tmp
         run: python3 -m unittest discover -s scripts -p 'test_orbis_installer_site.py' -v
       - name: Verify the newest published installer
         id: installer
         env:
           GH_TOKEN: ${{ github.token }}
+          TMPDIR: ${{ github.workspace }}/.orbis-installer-endpoint/tmp
         run: |
-          gh api 'repos/twentylines/orbis/releases?per_page=100' > "$RUNNER_TEMP/orbis-releases.json"
-          python3 scripts/publish-installer-site.py "$RUNNER_TEMP/orbis-releases.json" "$RUNNER_TEMP/orbis-installer-site" --channels --if-available --github-output "$GITHUB_OUTPUT"
+          gh api 'repos/twentylines/orbis/releases?per_page=100' > "$INSTALLER_WORK/releases.json"
+          python3 scripts/publish-installer-site.py "$INSTALLER_WORK/releases.json" "$INSTALLER_WORK/public" --channels --if-available --github-output "$GITHUB_OUTPUT"
       - uses: actions/configure-pages@v6
         if: steps.installer.outputs.available == 'true'
       - uses: actions/upload-pages-artifact@v5
         if: steps.installer.outputs.available == 'true'
         with:
-          path: ${{ runner.temp }}/orbis-installer-site
+          path: ${{ github.workspace }}/.orbis-installer-endpoint/public
       - name: Publish installer endpoint
         if: steps.installer.outputs.available == 'true'
         id: deployment
