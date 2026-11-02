@@ -29,11 +29,7 @@
                 "const": "audio"
               },
               "mime": {
-                "enum": [
-                  "audio/mpeg",
-                  "audio/ogg",
-                  "audio/wav"
-                ]
+                "enum": ["audio/mpeg", "audio/ogg", "audio/wav"]
               },
               "path": {
                 "type": "string",
@@ -45,15 +41,7 @@
                 "pattern": "^[a-f0-9]{64}$"
               }
             },
-            "required": [
-              "bytes",
-              "durationMs",
-              "id",
-              "kind",
-              "mime",
-              "path",
-              "sha256"
-            ],
+            "required": ["bytes", "durationMs", "id", "kind", "mime", "path", "sha256"],
             "additionalProperties": false
           },
           {
@@ -75,17 +63,10 @@
                 "maxLength": 64
               },
               "kind": {
-                "enum": [
-                  "icon",
-                  "image"
-                ]
+                "enum": ["icon", "image"]
               },
               "mime": {
-                "enum": [
-                  "image/jpeg",
-                  "image/png",
-                  "image/webp"
-                ]
+                "enum": ["image/jpeg", "image/png", "image/webp"]
               },
               "path": {
                 "type": "string",
@@ -102,16 +83,7 @@
                 "minimum": 1
               }
             },
-            "required": [
-              "bytes",
-              "height",
-              "id",
-              "kind",
-              "mime",
-              "path",
-              "sha256",
-              "width"
-            ],
+            "required": ["bytes", "height", "id", "kind", "mime", "path", "sha256", "width"],
             "additionalProperties": false
           },
           {
@@ -143,14 +115,7 @@
                 "pattern": "^[a-f0-9]{64}$"
               }
             },
-            "required": [
-              "bytes",
-              "id",
-              "kind",
-              "mime",
-              "path",
-              "sha256"
-            ],
+            "required": ["bytes", "id", "kind", "mime", "path", "sha256"],
             "additionalProperties": false
           }
         ]
@@ -187,10 +152,7 @@
             "maxLength": 64
           }
         },
-        "required": [
-          "id",
-          "variant"
-        ],
+        "required": ["id", "variant"],
         "additionalProperties": false
       }
     },
@@ -233,10 +195,7 @@
                   "maxLength": 64
                 }
               },
-              "required": [
-                "equals",
-                "setting"
-              ],
+              "required": ["equals", "setting"],
               "additionalProperties": false
             }
           },
@@ -246,10 +205,7 @@
             "maxLength": 64
           }
         },
-        "required": [
-          "all",
-          "id"
-        ],
+        "required": ["all", "id"],
         "additionalProperties": false
       }
     },
@@ -308,19 +264,12 @@
                       ]
                     }
                   },
-                  "required": [
-                    "key",
-                    "value"
-                  ],
+                  "required": ["key", "value"],
                   "additionalProperties": false
                 }
               }
             },
-            "required": [
-              "id",
-              "label",
-              "values"
-            ],
+            "required": ["id", "label", "values"],
             "additionalProperties": false
           }
         },
@@ -356,20 +305,12 @@
                 "maxLength": 64
               }
             },
-            "required": [
-              "id",
-              "label",
-              "settings"
-            ],
+            "required": ["id", "label", "settings"],
             "additionalProperties": false
           }
         }
       },
-      "required": [
-        "hostControls",
-        "presets",
-        "sections"
-      ],
+      "required": ["hostControls", "presets", "sections"],
       "additionalProperties": false
     },
     "icons": {
@@ -391,12 +332,7 @@
             ]
           },
           "mode": {
-            "enum": [
-              "all",
-              "dark",
-              "light",
-              "oled"
-            ]
+            "enum": ["all", "dark", "light", "oled"]
           },
           "role": {
             "enum": [
@@ -431,11 +367,7 @@
             "maxLength": 64
           }
         },
-        "required": [
-          "asset",
-          "mode",
-          "role"
-        ],
+        "required": ["asset", "mode", "role"],
         "additionalProperties": false
       }
     },
@@ -483,10 +415,7 @@
                       ]
                     },
                     "anchor": {
-                      "enum": [
-                        "parent.content",
-                        "viewport.safe"
-                      ]
+                      "enum": ["parent.content", "viewport.safe"]
                     },
                     "id": {
                       "type": "string",
@@ -525,12 +454,7 @@
                           "type": "object",
                           "properties": {
                             "edge": {
-                              "enum": [
-                                "bottom",
-                                "left",
-                                "right",
-                                "top"
-                              ]
+                              "enum": ["bottom", "left", "right", "top"]
                             },
                             "fallback": {
                               "const": "flow"
@@ -539,11 +463,7 @@
                               "const": "dock"
                             }
                           },
-                          "required": [
-                            "edge",
-                            "fallback",
-                            "kind"
-                          ],
+                          "required": ["edge", "fallback", "kind"],
                           "additionalProperties": false
                         },
                         {
@@ -576,14 +496,7 @@
                               "minimum": 0
                             }
                           },
-                          "required": [
-                            "fallback",
-                            "height",
-                            "kind",
-                            "width",
-                            "x",
-                            "y"
-                          ],
+                          "required": ["fallback", "height", "kind", "width", "x", "y"],
                           "additionalProperties": false
                         },
                         {
@@ -598,10 +511,7 @@
                               "minimum": 1
                             }
                           },
-                          "required": [
-                            "kind",
-                            "span"
-                          ],
+                          "required": ["kind", "span"],
                           "additionalProperties": false
                         },
                         {
@@ -611,9 +521,7 @@
                               "const": "host"
                             }
                           },
-                          "required": [
-                            "kind"
-                          ],
+                          "required": ["kind"],
                           "additionalProperties": false
                         }
                       ]
@@ -655,19 +563,10 @@
                           "minimum": 0
                         },
                         "scroll": {
-                          "enum": [
-                            "content",
-                            "none"
-                          ]
+                          "enum": ["content", "none"]
                         }
                       },
-                      "required": [
-                        "maxHeight",
-                        "maxWidth",
-                        "minHeight",
-                        "minWidth",
-                        "scroll"
-                      ],
+                      "required": ["maxHeight", "maxWidth", "minHeight", "minWidth", "scroll"],
                       "additionalProperties": false
                     },
                     "visibleWhen": {
@@ -676,17 +575,7 @@
                       "maxLength": 64
                     }
                   },
-                  "required": [
-                    "action",
-                    "anchor",
-                    "id",
-                    "kind",
-                    "label",
-                    "order",
-                    "parent",
-                    "placement",
-                    "slot"
-                  ],
+                  "required": ["action", "anchor", "id", "kind", "label", "order", "parent", "placement", "slot"],
                   "additionalProperties": false
                 },
                 {
@@ -699,10 +588,7 @@
                       "minLength": 1
                     },
                     "anchor": {
-                      "enum": [
-                        "parent.content",
-                        "viewport.safe"
-                      ]
+                      "enum": ["parent.content", "viewport.safe"]
                     },
                     "asset": {
                       "type": "string",
@@ -740,12 +626,7 @@
                           "type": "object",
                           "properties": {
                             "edge": {
-                              "enum": [
-                                "bottom",
-                                "left",
-                                "right",
-                                "top"
-                              ]
+                              "enum": ["bottom", "left", "right", "top"]
                             },
                             "fallback": {
                               "const": "flow"
@@ -754,11 +635,7 @@
                               "const": "dock"
                             }
                           },
-                          "required": [
-                            "edge",
-                            "fallback",
-                            "kind"
-                          ],
+                          "required": ["edge", "fallback", "kind"],
                           "additionalProperties": false
                         },
                         {
@@ -791,14 +668,7 @@
                               "minimum": 0
                             }
                           },
-                          "required": [
-                            "fallback",
-                            "height",
-                            "kind",
-                            "width",
-                            "x",
-                            "y"
-                          ],
+                          "required": ["fallback", "height", "kind", "width", "x", "y"],
                           "additionalProperties": false
                         },
                         {
@@ -813,10 +683,7 @@
                               "minimum": 1
                             }
                           },
-                          "required": [
-                            "kind",
-                            "span"
-                          ],
+                          "required": ["kind", "span"],
                           "additionalProperties": false
                         },
                         {
@@ -826,9 +693,7 @@
                               "const": "host"
                             }
                           },
-                          "required": [
-                            "kind"
-                          ],
+                          "required": ["kind"],
                           "additionalProperties": false
                         }
                       ]
@@ -870,19 +735,10 @@
                           "minimum": 0
                         },
                         "scroll": {
-                          "enum": [
-                            "content",
-                            "none"
-                          ]
+                          "enum": ["content", "none"]
                         }
                       },
-                      "required": [
-                        "maxHeight",
-                        "maxWidth",
-                        "minHeight",
-                        "minWidth",
-                        "scroll"
-                      ],
+                      "required": ["maxHeight", "maxWidth", "minHeight", "minWidth", "scroll"],
                       "additionalProperties": false
                     },
                     "visibleWhen": {
@@ -891,33 +747,17 @@
                       "maxLength": 64
                     }
                   },
-                  "required": [
-                    "alt",
-                    "anchor",
-                    "asset",
-                    "id",
-                    "kind",
-                    "order",
-                    "parent",
-                    "placement",
-                    "slot"
-                  ],
+                  "required": ["alt", "anchor", "asset", "id", "kind", "order", "parent", "placement", "slot"],
                   "additionalProperties": false
                 },
                 {
                   "type": "object",
                   "properties": {
                     "anchor": {
-                      "enum": [
-                        "parent.content",
-                        "viewport.safe"
-                      ]
+                      "enum": ["parent.content", "viewport.safe"]
                     },
                     "axis": {
-                      "enum": [
-                        "column",
-                        "row"
-                      ]
+                      "enum": ["column", "row"]
                     },
                     "id": {
                       "type": "string",
@@ -956,12 +796,7 @@
                           "type": "object",
                           "properties": {
                             "edge": {
-                              "enum": [
-                                "bottom",
-                                "left",
-                                "right",
-                                "top"
-                              ]
+                              "enum": ["bottom", "left", "right", "top"]
                             },
                             "fallback": {
                               "const": "flow"
@@ -970,11 +805,7 @@
                               "const": "dock"
                             }
                           },
-                          "required": [
-                            "edge",
-                            "fallback",
-                            "kind"
-                          ],
+                          "required": ["edge", "fallback", "kind"],
                           "additionalProperties": false
                         },
                         {
@@ -1007,14 +838,7 @@
                               "minimum": 0
                             }
                           },
-                          "required": [
-                            "fallback",
-                            "height",
-                            "kind",
-                            "width",
-                            "x",
-                            "y"
-                          ],
+                          "required": ["fallback", "height", "kind", "width", "x", "y"],
                           "additionalProperties": false
                         },
                         {
@@ -1029,10 +853,7 @@
                               "minimum": 1
                             }
                           },
-                          "required": [
-                            "kind",
-                            "span"
-                          ],
+                          "required": ["kind", "span"],
                           "additionalProperties": false
                         },
                         {
@@ -1042,9 +863,7 @@
                               "const": "host"
                             }
                           },
-                          "required": [
-                            "kind"
-                          ],
+                          "required": ["kind"],
                           "additionalProperties": false
                         }
                       ]
@@ -1086,19 +905,10 @@
                           "minimum": 0
                         },
                         "scroll": {
-                          "enum": [
-                            "content",
-                            "none"
-                          ]
+                          "enum": ["content", "none"]
                         }
                       },
-                      "required": [
-                        "maxHeight",
-                        "maxWidth",
-                        "minHeight",
-                        "minWidth",
-                        "scroll"
-                      ],
+                      "required": ["maxHeight", "maxWidth", "minHeight", "minWidth", "scroll"],
                       "additionalProperties": false
                     },
                     "visibleWhen": {
@@ -1107,27 +917,14 @@
                       "maxLength": 64
                     }
                   },
-                  "required": [
-                    "anchor",
-                    "axis",
-                    "id",
-                    "kind",
-                    "label",
-                    "order",
-                    "parent",
-                    "placement",
-                    "slot"
-                  ],
+                  "required": ["anchor", "axis", "id", "kind", "label", "order", "parent", "placement", "slot"],
                   "additionalProperties": false
                 },
                 {
                   "type": "object",
                   "properties": {
                     "anchor": {
-                      "enum": [
-                        "parent.content",
-                        "viewport.safe"
-                      ]
+                      "enum": ["parent.content", "viewport.safe"]
                     },
                     "component": {
                       "enum": [
@@ -1179,12 +976,7 @@
                           "type": "object",
                           "properties": {
                             "edge": {
-                              "enum": [
-                                "bottom",
-                                "left",
-                                "right",
-                                "top"
-                              ]
+                              "enum": ["bottom", "left", "right", "top"]
                             },
                             "fallback": {
                               "const": "flow"
@@ -1193,11 +985,7 @@
                               "const": "dock"
                             }
                           },
-                          "required": [
-                            "edge",
-                            "fallback",
-                            "kind"
-                          ],
+                          "required": ["edge", "fallback", "kind"],
                           "additionalProperties": false
                         },
                         {
@@ -1230,14 +1018,7 @@
                               "minimum": 0
                             }
                           },
-                          "required": [
-                            "fallback",
-                            "height",
-                            "kind",
-                            "width",
-                            "x",
-                            "y"
-                          ],
+                          "required": ["fallback", "height", "kind", "width", "x", "y"],
                           "additionalProperties": false
                         },
                         {
@@ -1252,10 +1033,7 @@
                               "minimum": 1
                             }
                           },
-                          "required": [
-                            "kind",
-                            "span"
-                          ],
+                          "required": ["kind", "span"],
                           "additionalProperties": false
                         },
                         {
@@ -1265,9 +1043,7 @@
                               "const": "host"
                             }
                           },
-                          "required": [
-                            "kind"
-                          ],
+                          "required": ["kind"],
                           "additionalProperties": false
                         }
                       ]
@@ -1309,19 +1085,10 @@
                           "minimum": 0
                         },
                         "scroll": {
-                          "enum": [
-                            "content",
-                            "none"
-                          ]
+                          "enum": ["content", "none"]
                         }
                       },
-                      "required": [
-                        "maxHeight",
-                        "maxWidth",
-                        "minHeight",
-                        "minWidth",
-                        "scroll"
-                      ],
+                      "required": ["maxHeight", "maxWidth", "minHeight", "minWidth", "scroll"],
                       "additionalProperties": false
                     },
                     "visibleWhen": {
@@ -1330,26 +1097,14 @@
                       "maxLength": 64
                     }
                   },
-                  "required": [
-                    "anchor",
-                    "component",
-                    "id",
-                    "kind",
-                    "order",
-                    "parent",
-                    "placement",
-                    "slot"
-                  ],
+                  "required": ["anchor", "component", "id", "kind", "order", "parent", "placement", "slot"],
                   "additionalProperties": false
                 },
                 {
                   "type": "object",
                   "properties": {
                     "anchor": {
-                      "enum": [
-                        "parent.content",
-                        "viewport.safe"
-                      ]
+                      "enum": ["parent.content", "viewport.safe"]
                     },
                     "id": {
                       "type": "string",
@@ -1382,12 +1137,7 @@
                           "type": "object",
                           "properties": {
                             "edge": {
-                              "enum": [
-                                "bottom",
-                                "left",
-                                "right",
-                                "top"
-                              ]
+                              "enum": ["bottom", "left", "right", "top"]
                             },
                             "fallback": {
                               "const": "flow"
@@ -1396,11 +1146,7 @@
                               "const": "dock"
                             }
                           },
-                          "required": [
-                            "edge",
-                            "fallback",
-                            "kind"
-                          ],
+                          "required": ["edge", "fallback", "kind"],
                           "additionalProperties": false
                         },
                         {
@@ -1433,14 +1179,7 @@
                               "minimum": 0
                             }
                           },
-                          "required": [
-                            "fallback",
-                            "height",
-                            "kind",
-                            "width",
-                            "x",
-                            "y"
-                          ],
+                          "required": ["fallback", "height", "kind", "width", "x", "y"],
                           "additionalProperties": false
                         },
                         {
@@ -1455,10 +1194,7 @@
                               "minimum": 1
                             }
                           },
-                          "required": [
-                            "kind",
-                            "span"
-                          ],
+                          "required": ["kind", "span"],
                           "additionalProperties": false
                         },
                         {
@@ -1468,9 +1204,7 @@
                               "const": "host"
                             }
                           },
-                          "required": [
-                            "kind"
-                          ],
+                          "required": ["kind"],
                           "additionalProperties": false
                         }
                       ]
@@ -1517,19 +1251,10 @@
                           "minimum": 0
                         },
                         "scroll": {
-                          "enum": [
-                            "content",
-                            "none"
-                          ]
+                          "enum": ["content", "none"]
                         }
                       },
-                      "required": [
-                        "maxHeight",
-                        "maxWidth",
-                        "minHeight",
-                        "minWidth",
-                        "scroll"
-                      ],
+                      "required": ["maxHeight", "maxWidth", "minHeight", "minWidth", "scroll"],
                       "additionalProperties": false
                     },
                     "visibleWhen": {
@@ -1538,26 +1263,14 @@
                       "maxLength": 64
                     }
                   },
-                  "required": [
-                    "anchor",
-                    "id",
-                    "kind",
-                    "order",
-                    "parent",
-                    "placement",
-                    "setting",
-                    "slot"
-                  ],
+                  "required": ["anchor", "id", "kind", "order", "parent", "placement", "setting", "slot"],
                   "additionalProperties": false
                 },
                 {
                   "type": "object",
                   "properties": {
                     "anchor": {
-                      "enum": [
-                        "parent.content",
-                        "viewport.safe"
-                      ]
+                      "enum": ["parent.content", "viewport.safe"]
                     },
                     "id": {
                       "type": "string",
@@ -1590,12 +1303,7 @@
                           "type": "object",
                           "properties": {
                             "edge": {
-                              "enum": [
-                                "bottom",
-                                "left",
-                                "right",
-                                "top"
-                              ]
+                              "enum": ["bottom", "left", "right", "top"]
                             },
                             "fallback": {
                               "const": "flow"
@@ -1604,11 +1312,7 @@
                               "const": "dock"
                             }
                           },
-                          "required": [
-                            "edge",
-                            "fallback",
-                            "kind"
-                          ],
+                          "required": ["edge", "fallback", "kind"],
                           "additionalProperties": false
                         },
                         {
@@ -1641,14 +1345,7 @@
                               "minimum": 0
                             }
                           },
-                          "required": [
-                            "fallback",
-                            "height",
-                            "kind",
-                            "width",
-                            "x",
-                            "y"
-                          ],
+                          "required": ["fallback", "height", "kind", "width", "x", "y"],
                           "additionalProperties": false
                         },
                         {
@@ -1663,10 +1360,7 @@
                               "minimum": 1
                             }
                           },
-                          "required": [
-                            "kind",
-                            "span"
-                          ],
+                          "required": ["kind", "span"],
                           "additionalProperties": false
                         },
                         {
@@ -1676,9 +1370,7 @@
                               "const": "host"
                             }
                           },
-                          "required": [
-                            "kind"
-                          ],
+                          "required": ["kind"],
                           "additionalProperties": false
                         }
                       ]
@@ -1726,19 +1418,10 @@
                           "minimum": 0
                         },
                         "scroll": {
-                          "enum": [
-                            "content",
-                            "none"
-                          ]
+                          "enum": ["content", "none"]
                         }
                       },
-                      "required": [
-                        "maxHeight",
-                        "maxWidth",
-                        "minHeight",
-                        "minWidth",
-                        "scroll"
-                      ],
+                      "required": ["maxHeight", "maxWidth", "minHeight", "minWidth", "scroll"],
                       "additionalProperties": false
                     },
                     "visibleWhen": {
@@ -1747,34 +1430,17 @@
                       "maxLength": 64
                     }
                   },
-                  "required": [
-                    "anchor",
-                    "id",
-                    "kind",
-                    "order",
-                    "parent",
-                    "placement",
-                    "slot",
-                    "text"
-                  ],
+                  "required": ["anchor", "id", "kind", "order", "parent", "placement", "slot", "text"],
                   "additionalProperties": false
                 }
               ]
             }
           },
           "viewport": {
-            "enum": [
-              "desktop",
-              "phone",
-              "tablet"
-            ]
+            "enum": ["desktop", "phone", "tablet"]
           }
         },
-        "required": [
-          "columns",
-          "nodes",
-          "viewport"
-        ],
+        "required": ["columns", "nodes", "viewport"],
         "additionalProperties": false
       }
     },
@@ -1785,11 +1451,7 @@
         "type": "object",
         "properties": {
           "mode": {
-            "enum": [
-              "dark",
-              "light",
-              "oled"
-            ]
+            "enum": ["dark", "light", "oled"]
           },
           "values": {
             "type": "array",
@@ -1833,18 +1495,12 @@
                   ]
                 }
               },
-              "required": [
-                "token",
-                "value"
-              ],
+              "required": ["token", "value"],
               "additionalProperties": false
             }
           }
         },
-        "required": [
-          "mode",
-          "values"
-        ],
+        "required": ["mode", "values"],
         "additionalProperties": false
       }
     },
@@ -1871,10 +1527,7 @@
           }
         }
       },
-      "required": [
-        "api",
-        "releases"
-      ],
+      "required": ["api", "releases"],
       "additionalProperties": false
     },
     "schema": {
@@ -1889,12 +1542,7 @@
             "type": "object",
             "properties": {
               "assetKind": {
-                "enum": [
-                  "audio",
-                  "font",
-                  "icon",
-                  "image"
-                ]
+                "enum": ["audio", "font", "icon", "image"]
               },
               "default": {
                 "anyOf": [
@@ -1933,14 +1581,7 @@
                 "maxLength": 64
               }
             },
-            "required": [
-              "assetKind",
-              "default",
-              "group",
-              "key",
-              "kind",
-              "label"
-            ],
+            "required": ["assetKind", "default", "group", "key", "kind", "label"],
             "additionalProperties": false
           },
           {
@@ -1998,16 +1639,7 @@
                 "maxLength": 64
               }
             },
-            "required": [
-              "default",
-              "group",
-              "key",
-              "kind",
-              "label",
-              "max",
-              "min",
-              "step"
-            ],
+            "required": ["default", "group", "key", "kind", "label", "max", "min", "step"],
             "additionalProperties": false
           },
           {
@@ -2049,13 +1681,7 @@
                 "maxLength": 64
               }
             },
-            "required": [
-              "default",
-              "group",
-              "key",
-              "kind",
-              "label"
-            ],
+            "required": ["default", "group", "key", "kind", "label"],
             "additionalProperties": false
           },
           {
@@ -2089,13 +1715,7 @@
                 "maxLength": 64
               }
             },
-            "required": [
-              "default",
-              "group",
-              "key",
-              "kind",
-              "label"
-            ],
+            "required": ["default", "group", "key", "kind", "label"],
             "additionalProperties": false
           },
           {
@@ -2144,10 +1764,7 @@
                       "maxLength": 64
                     }
                   },
-                  "required": [
-                    "label",
-                    "value"
-                  ],
+                  "required": ["label", "value"],
                   "additionalProperties": false
                 }
               },
@@ -2157,14 +1774,7 @@
                 "maxLength": 64
               }
             },
-            "required": [
-              "default",
-              "group",
-              "key",
-              "kind",
-              "label",
-              "options"
-            ],
+            "required": ["default", "group", "key", "kind", "label", "options"],
             "additionalProperties": false
           }
         ]
@@ -2217,11 +1827,7 @@
             "minimum": 0
           }
         },
-        "required": [
-          "asset",
-          "event",
-          "gain"
-        ],
+        "required": ["asset", "event", "gain"],
         "additionalProperties": false
       }
     },
@@ -2267,10 +1873,7 @@
             ]
           },
           "transform": {
-            "enum": [
-              "identity",
-              "percent"
-            ]
+            "enum": ["identity", "percent"]
           },
           "when": {
             "type": "string",
@@ -2278,11 +1881,7 @@
             "maxLength": 64
           }
         },
-        "required": [
-          "setting",
-          "token",
-          "transform"
-        ],
+        "required": ["setting", "token", "transform"],
         "additionalProperties": false
       }
     },
@@ -2293,12 +1892,7 @@
         "type": "object",
         "properties": {
           "mode": {
-            "enum": [
-              "all",
-              "dark",
-              "light",
-              "oled"
-            ]
+            "enum": ["all", "dark", "light", "oled"]
           },
           "values": {
             "type": "array",
@@ -2342,10 +1936,7 @@
                   ]
                 }
               },
-              "required": [
-                "token",
-                "value"
-              ],
+              "required": ["token", "value"],
               "additionalProperties": false
             }
           },
@@ -2355,11 +1946,7 @@
             "maxLength": 64
           }
         },
-        "required": [
-          "mode",
-          "values",
-          "when"
-        ],
+        "required": ["mode", "values", "when"],
         "additionalProperties": false
       }
     },
@@ -2398,26 +1985,14 @@
               "pattern": "^#[a-fA-F0-9]{6}$"
             }
           },
-          "required": [
-            "accent",
-            "background",
-            "danger",
-            "focus",
-            "ink",
-            "muted",
-            "surface"
-          ],
+          "required": ["accent", "background", "danger", "focus", "ink", "muted", "surface"],
           "additionalProperties": false
         },
         "motion": {
           "type": "object",
           "properties": {
             "curve": {
-              "enum": [
-                "decelerate",
-                "linear",
-                "standard"
-              ]
+              "enum": ["decelerate", "linear", "standard"]
             },
             "duration": {
               "type": "number",
@@ -2425,10 +2000,7 @@
               "minimum": 0
             }
           },
-          "required": [
-            "curve",
-            "duration"
-          ],
+          "required": ["curve", "duration"],
           "additionalProperties": false
         },
         "shape": {
@@ -2445,10 +2017,7 @@
               "minimum": 0
             }
           },
-          "required": [
-            "borderWidth",
-            "radius"
-          ],
+          "required": ["borderWidth", "radius"],
           "additionalProperties": false
         },
         "spacing": {
@@ -2470,11 +2039,7 @@
               "minimum": 2
             }
           },
-          "required": [
-            "gap",
-            "inset",
-            "unit"
-          ],
+          "required": ["gap", "inset", "unit"],
           "additionalProperties": false
         },
         "typography": {
@@ -2496,21 +2061,11 @@
               "minimum": 0.85
             }
           },
-          "required": [
-            "baseSize",
-            "family",
-            "scale"
-          ],
+          "required": ["baseSize", "family", "scale"],
           "additionalProperties": false
         }
       },
-      "required": [
-        "colours",
-        "motion",
-        "shape",
-        "spacing",
-        "typography"
-      ],
+      "required": ["colours", "motion", "shape", "spacing", "typography"],
       "additionalProperties": false
     },
     "version": {
