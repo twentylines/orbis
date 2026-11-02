@@ -10,7 +10,12 @@ import { AutoThemeProvider } from './theme/auto-theme-provider';
 import { ThemeProvider } from './theme/theme-provider';
 import { DebugPanel } from '../debug-panel/debug-panel';
 import { DesktopPreferencesProvider, useDesktopPreferences } from '@/desktop/preferences';
-import { useStartupSession } from '@/components/startup/startup-boundary';
+import { useStartupReady, useStartupSession } from '@/components/startup/startup-boundary';
+
+export const ProviderLoadingBridge = () => {
+  useStartupReady(false);
+  return null;
+};
 
 const StartupOnboardingBridge = () => {
   const { requiresOnboarding, syncState } = useDesktopPreferences();
@@ -40,7 +45,7 @@ export const Providers = ({ children }: PropsWithChildren) => {
       <QueryErrorResetBoundary>
         {({ reset }) => (
           <ErrorBoundary fallbackRender={({ error, resetErrorBoundary }) => <ErrorPage error={error} onReset={resetErrorBoundary} />} onReset={reset}>
-            <Suspense fallback={null}>
+            <Suspense fallback={<ProviderLoadingBridge />}>
               <UserContextProvider>
                 <SentryProvider>
                   <DesktopPreferencesProvider>
