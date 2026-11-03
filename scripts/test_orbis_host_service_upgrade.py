@@ -17,6 +17,18 @@ class OrbisHostServiceUpgradeTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
 
+    def test_candidate_scripts_distinguish_python_and_maintenance_javascript(self):
+        python = self.base / "helper.py"
+        javascript = self.base / "orbis-host-maintenance-responder.mjs"
+        python.write_text("value = 1\n")
+        javascript.write_text("export const value = 1;\n")
+        UPGRADE.validate_candidate_scripts([python, javascript])
+        python.write_text("def invalid(\n")
+        with self.assertRaisesRegex(ValueError, "invalid Python syntax"):
+            UPGRADE.validate_candidate_scripts([python, javascript])
+        with self.assertRaisesRegex(ValueError, "unsupported candidate"):
+            UPGRADE.validate_candidate_scripts([self.base / "other.mjs"])
+
     def test_running_or_interrupted_core_job_blocks_helper_upgrade(self):
         with mock.patch.object(UPGRADE, "STATE_DIR", self.base):
             job = self.base / "job.json"

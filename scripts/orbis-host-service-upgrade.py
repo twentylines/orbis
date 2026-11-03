@@ -149,11 +149,7 @@ def preflight(root: Path, context: str, source: Path) -> dict[str, str]:
             require_root_owned(SETUP.INSTALL_DIR / name, directory=False, private=True)
     job_identity()
     source_files, source_unit = SETUP.source_files(source)
-    for file in source_files:
-        try:
-            compile(file.read_text(encoding="utf-8"), str(file), "exec")
-        except SyntaxError as error:
-            raise ValueError(f"candidate helper script has invalid Python syntax: {file.name}") from error
+    validate_candidate_scripts(source_files)
     validate_unit(source_unit.read_text(encoding="utf-8"))
     return {
         **ready,
@@ -162,6 +158,18 @@ def preflight(root: Path, context: str, source: Path) -> dict[str, str]:
         "installedUnitSha256": hashlib.sha256(SETUP.UNIT_FILE.read_bytes()).hexdigest(),
         "candidateUnitSha256": hashlib.sha256(source_unit.read_bytes()).hexdigest(),
     }
+
+
+def validate_candidate_scripts(source_files):
+    for file in source_files:
+        if file.name == "orbis-host-maintenance-responder.mjs":
+            continue
+        if file.suffix != ".py":
+            raise ValueError(f"unsupported candidate helper script: {file.name}")
+        try:
+            compile(file.read_text(encoding="utf-8"), str(file), "exec")
+        except SyntaxError as error:
+            raise ValueError(f"candidate helper script has invalid Python syntax: {file.name}") from error
 
 
 def sync_directory(directory: Path) -> None:
