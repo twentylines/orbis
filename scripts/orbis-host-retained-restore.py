@@ -795,6 +795,14 @@ class RestoreManager:
     def maintenance(self):
         path = marker_path(self.root)
         try:
+            # An older installation may place its root beneath a user-owned home.
+            # Only accept absence when no protected transaction store exists either.
+            with self.authority.protected_directory(self.state):
+                if not path.exists() and not path.is_symlink():
+                    try:
+                        os.lstat(self.state / 'retained-restores')
+                    except FileNotFoundError:
+                        return {'state': 'idle'}
             with self.authority.protected_directory(path.parent, private=False) as directory:
                 with self.authority.protected_file(directory, path.name, 4096) as body:
                     marker = P.metadata(body)

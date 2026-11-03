@@ -574,7 +574,10 @@ class HostService:
             expected = target if state == "complete" else current
             # Persisted terminal jobs are only unlocked when the exact enrolled
             # publication is healthy. Reviews and app/package jobs never enter here.
-            if self.current_manifest() != expected:
+            installed = self.current_manifest()
+            if {k: v for k, v in installed.items() if k != 'installationProtocol'} != {
+                k: v for k, v in expected.items() if k != 'installationProtocol'
+            }:
                 return {"state": "checking"}
             core = HOST.current_core(self.root, self.context)
             if core.get("state") != "running" or core.get("health") != "healthy":

@@ -189,6 +189,17 @@ class RetainedRestoreTests(unittest.TestCase):
         request = {**self.request, 'currentRevision': review['currentRevision'], 'stageRevision': review['stageRevision'], 'clientKey': self.key}
         return self.manager.begin(request), request
 
+    def test_absent_restore_store_does_not_require_owned_installation_parent(self):
+        original = self.manager.authority.protected_directory
+        def protected(path, **kwargs):
+            if Path(path) == self.root.parent:
+                raise ValueError('untrusted installation parent')
+            return original(path, **kwargs)
+        with mock.patch.object(self.manager.authority, 'protected_directory', side_effect=protected):
+            self.assertEqual(self.manager.maintenance(), {'state': 'idle'})
+            (self.state / 'retained-restores').mkdir(mode=0o700)
+            self.assertEqual(self.manager.maintenance(), {'state': 'checking'})
+
     def settle(self):
         identifier = self.request['restoreId']
         proof = self.manager.terminal_proof(identifier, self.key)
@@ -458,6 +469,11 @@ class RetainedRestoreTests(unittest.TestCase):
             self.assertEqual(service.core_operation_maintenance(), {'state': 'recovery'})
             job.update(current=current, target=target, state='complete')
             self.assertEqual(service.core_operation_maintenance(), {'state': 'idle'})
+            job['target'] = {**target, 'installationProtocol': 'fixture-protocol'}
+            self.assertEqual(service.core_operation_maintenance(), {'state': 'idle'})
+            service.current_manifest.return_value = {**target, 'digest': 'sha256:' + 'c' * 64}
+            self.assertEqual(service.core_operation_maintenance(), {'state': 'checking'})
+            service.current_manifest.return_value = target
             core.return_value['health'] = 'unhealthy'
             self.assertEqual(service.core_operation_maintenance(), {'state': 'checking'})
             job['schema'] = 'orbis.package-job.v1'
