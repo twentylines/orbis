@@ -72,6 +72,9 @@ export class ResetState {
   }
   async read(): Promise<ResetJournal | null> {
     try {
+      // Existing Runtipi state directories may be writable by other services.
+      // With no reset directory there is no reset journal to validate.
+      await fs.lstat(this.root());
       await this.directory(this.root());
       const file = await fs.open(path.join(this.root(), 'active.json'), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
       try {

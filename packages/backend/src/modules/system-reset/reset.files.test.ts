@@ -200,6 +200,13 @@ it('rejects a session/security change during fresh confirmation', async () => {
   await expect(service.accept(request, body())).rejects.toThrow('sign-in changed');
   expect(await new ResetState(root).read()).toBeNull();
 });
+it('treats an absent reset directory as idle while rejecting an existing reset under a writable state directory', async () => {
+  await fs.mkdir(path.join(root, 'state'), { mode: 0o777, recursive: true });
+  await fs.chmod(path.join(root, 'state'), 0o777);
+  expect(await new ResetState(root).read()).toBeNull();
+  await fs.mkdir(path.join(root, 'state/orbis-reset'), { mode: 0o700 });
+  await expect(new ResetState(root).read()).rejects.toThrow('Reset storage needs local review');
+});
 it('refuses capture, restore and update locks without creating reset intent', async () => {
   for (const state of ['restoring', 'updating', 'checking']) {
     status.mockResolvedValue({ state });
