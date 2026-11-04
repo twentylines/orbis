@@ -447,6 +447,7 @@ class HostService:
         self.capture_fence_session = str(uuid.uuid4())
         self.prepared_capture = None
         self.lock = threading.Lock()
+        self.restore_manager_lock = threading.Lock()
         self.busy = False
         self.job_file = self.state_dir / "job.json"
         self.package_job_file = self.state_dir / "package-job.json"
@@ -461,7 +462,8 @@ class HostService:
 
     def retained_restores(self):
         if self.retained_restore_manager is None:
-            with self.lock:
+            # The responder asks for restore status while apply holds self.lock.
+            with self.restore_manager_lock:
                 if self.retained_restore_manager is None:
                     module = load_script("orbis-host-retained-restore.py", "orbis_retained_restore_for_service")
                     module.HOST = HOST

@@ -232,6 +232,37 @@ class HostServiceTests(unittest.TestCase):
         self.healthy.start()
         self.addCleanup(self.healthy.stop)
 
+    def test_cold_restore_status_initializes_while_update_admission_holds_its_lock(self):
+        manager = mock.Mock()
+        manager.maintenance.return_value = {"state": "idle"}
+        module = mock.Mock()
+        module.RestoreManager.return_value = manager
+        done = threading.Event()
+        observed, failures = [], []
+
+        def status():
+            try:
+                observed.append(self.service.retained_restores().maintenance())
+            except Exception as error:
+                failures.append(type(error).__name__)
+            finally:
+                done.set()
+
+        with mock.patch.object(SERVICE, "load_script", return_value=module):
+            self.service.lock.acquire()
+            worker = threading.Thread(target=status, daemon=True)
+            try:
+                worker.start()
+                self.assertTrue(done.wait(1), "Maintenance readiness must not wait for update admission to release its lock")
+            finally:
+                self.service.lock.release()
+                worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(failures, [])
+        self.assertEqual(observed, [{"state": "idle"}])
+        module.RestoreManager.assert_called_once_with(self.service)
+
+
     def wait_for_job(self):
         for _ in range(100):
             record = SERVICE.read_private(self.service.job_file)
