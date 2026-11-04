@@ -153,6 +153,46 @@ class OrbisHostUpdateTests(unittest.TestCase):
         self.assertEqual(saved['failureCode'], 'controller-preservation-unsupported')
         self.assertEqual(UPDATE.failure_message(saved), 'This Orbis version cannot be installed with the current updater. Choose a newer version.')
 
+    def test_probe_retirement_runs_after_durable_abort_and_never_masks_capability_error(self):
+        fake = FakeDocker(self.root)
+        runtime = mock.Mock()
+        original = UPDATE.CONTROLLER.CapabilityError('target unsupported')
+        runtime.prepare.side_effect = original
+        runtime.read.return_value = {'phase': 'preparing'}
+        observed = []
+        def cleanup():
+            journal = json.loads(UPDATE.journal_path(self.snapshot).read_text())
+            observed.append((journal['stage'], journal['failureCode']))
+            raise ValueError('probe cleanup needs review')
+        runtime.retire_rejected_probe.side_effect = cleanup
+        checkpoint = {'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}
+        with mock.patch.object(UPDATE, 'update_plan', return_value={'checkpoint': checkpoint}), \
+                mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime), \
+                mock.patch.object(UPDATE.HOST, 'docker', side_effect=fake):
+            with self.assertRaisesRegex(RuntimeError, 'before service downtime') as raised:
+                UPDATE.apply_update(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot)
+        self.assertIs(raised.exception.__cause__, original)
+        self.assertEqual(observed, [('aborted', 'controller-preservation-unsupported')])
+        runtime.retire_rejected_probe.assert_called_once()
+        self.assertFalse(any(call[0] in {'compose', 'stop'} for call in fake.calls))
+
+    def test_terminal_capability_abort_retries_probe_retirement_without_changing_recovery_decision(self):
+        record = {'schema': UPDATE.JOURNAL_SCHEMA, 'root': str(self.root), 'snapshot': str(self.snapshot),
+                  'dockerContext': 'test-daemon', 'previousDigest': CURRENT['digest'], 'targetDigest': TARGET['digest'],
+                  'stage': 'aborted', 'backupScope': UPDATE.CONTROLLER.SCOPE,
+                  'failureStage': 'pulled', 'failureCode': UPDATE.CONTROLLER.CapabilityError.code}
+        UPDATE.write_journal(self.snapshot, record)
+        original = UPDATE.journal_path(self.snapshot).read_bytes()
+        for failure in (None, ValueError('probe requires review')):
+            runtime = mock.Mock()
+            runtime.read.return_value = {'phase': 'preparing'}
+            runtime.retire_rejected_probe.side_effect = failure
+            with mock.patch.object(UPDATE.CONTROLLER, 'ControllerUpdate', return_value=runtime):
+                with self.assertRaisesRegex(ValueError, 'already complete or recovered'):
+                    UPDATE.recover(self.root, CURRENT, TARGET, 'test-daemon', self.snapshot)
+            runtime.retire_rejected_probe.assert_called_once()
+            self.assertEqual(UPDATE.journal_path(self.snapshot).read_bytes(), original)
+
     def test_dedicated_reconstruction_rollback_dispatch_does_not_replay_old_controller_id_journal(self):
         runtime = mock.Mock()
         runtime.read.return_value = {'checkpoint': {'storage': {'backupScope': UPDATE.CONTROLLER.SCOPE}}}

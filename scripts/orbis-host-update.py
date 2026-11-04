@@ -820,6 +820,14 @@ def apply_update(root: Path, current: dict[str, str], target: dict[str, str], co
             if record["stage"] in {"preparing", "downloading", "pulled"}:
                 record["stage"] = "aborted"
                 write_journal(snapshot, record)
+                if (record.get('backupScope') == CONTROLLER.SCOPE and 'scoped_runtime' in locals()
+                        and isinstance(error, CONTROLLER.CapabilityError)):
+                    try:
+                        scoped_runtime.retire_rejected_probe()
+                    except Exception:
+                        # The original rejection remains authoritative; an unknown
+                        # probe or interrupted cleanup needs its protected review.
+                        pass
                 raise RuntimeError("update stopped before service downtime") from error
             try:
                 rollback(root, current, context, snapshot, record, controller_state_dir=controller_state_dir)
@@ -844,6 +852,11 @@ def recover(root: Path, current: dict[str, str], target: dict[str, str], context
                 write_journal(snapshot, record)
                 return {'result': 'healthy', 'releaseTag': target['tag'], 'snapshot': str(snapshot),
                         'controllerCleanupRequired': record['controllerCleanupRequired']}
+            if (record.get('stage') == 'aborted' and record.get('failureCode') == CONTROLLER.CapabilityError.code):
+                try:
+                    runtime.retire_rejected_probe()
+                except Exception:
+                    pass
         if record.get("stage") in TERMINAL_STAGES:
             raise ValueError("update transaction is already complete or recovered")
         if record.get("stage") in {"preparing", "downloading", "pulled"}:

@@ -688,5 +688,133 @@ class DedicatedSourceReconstructionTests(unittest.TestCase):
         self.assertEqual(self.record['bootstrapProbeObservation'], 'fresh')
 
 
+class RejectedProbeRetirementTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        base = Path(temporary.name).resolve()
+        self.updater = C.ControllerUpdate.__new__(C.ControllerUpdate)
+        host = C.D.load('orbis-host.py', 'probe_retirement_host')
+        self.updater.host, self.updater.P = host, host.IDENTITY.PUBLICATION
+        self.updater.root, self.updater.context = base / 'install', 'fixture'
+        self.updater.path, self.updater.snapshot = base / 'authority', base / 'snapshot'
+        self.updater.key = 'a' * 64
+        self.updater.current = {'digest': 'sha256:' + 'b' * 64}
+        self.updater.target = {'image': 'ghcr.io/twentylines/orbis', 'digest': 'sha256:' + 'c' * 64}
+        identifier, nonce = 'd' * 64, 'e' * 64
+        image = self.updater.target['image'] + '@' + self.updater.target['digest']
+        self.record = {'phase': 'preparing', 'daemonId': 'fixture-daemon', 'nonce': nonce,
+                       'probeId': identifier, 'targetImageId': 'sha256:' + 'f' * 64,
+                       'probeBody': {'Image': image, 'Labels': {'io.orbis.controller-probe': nonce},
+                                     'HostConfig': {'NetworkMode': 'none', 'RestartPolicy': {'Name': 'no', 'MaximumRetryCount': 0}}},
+                       'checkpoint': {'journal': str(base / 'checkpoint.json')}}
+        self.journal = {'schema': 'orbis.update.v1', 'stage': 'aborted', 'failureStage': 'pulled',
+                        'failureCode': C.CapabilityError.code, 'root': str(self.updater.root), 'dockerContext': 'fixture',
+                        'snapshot': str(self.updater.snapshot), 'previousDigest': self.updater.current['digest'],
+                        'targetDigest': self.updater.target['digest']}
+        self.files, self.events = {}, []
+        self.runtime_path = self.updater.path / 'runtime.json'
+        self.journal_path = self.updater.snapshot.with_name(self.updater.snapshot.name + '.orbis-update.json')
+        self.receipt_path = self.updater.path / 'capability-probe-retirement.json'
+        self.files[self.runtime_path] = self.updater.P.canonical(self.record)
+        self.files[self.journal_path] = self.updater.P.canonical(self.journal)
+        @contextmanager
+        def directory(path): yield path
+        @contextmanager
+        def file(directory, name, *args, **kwargs):
+            path = directory / name
+            if path not in self.files: raise FileNotFoundError(path)
+            yield self.files[path]
+        def atomic(path, body):
+            self.files[path] = body
+            self.events.append(json.loads(body)['phase'])
+        self.updater.a = SimpleNamespace(protected_directory=directory, protected_file=file, atomic=atomic)
+        self.updater.read = lambda: copy.deepcopy(self.record)
+        runtime = C.D.DockerRestoreRuntime(SimpleNamespace(host=host, authority=self.updater.a, root=self.updater.root, context='fixture'))
+        runtime.reader = mock.Mock()
+        runtime.reader._object.return_value = {'ID': 'fixture-daemon'}
+        self.updater.runtime = runtime
+        self.objects = {identifier: {'Id': identifier, 'Image': self.record['targetImageId'],
+            'Name': '/orbis-controller-probe-' + self.updater.key,
+            'Config': {'Image': image, 'Labels': {'io.orbis.controller-probe': nonce}, 'Env': []},
+            'HostConfig': copy.deepcopy(self.record['probeBody']['HostConfig']), 'Mounts': [],
+            'State': {'Status': 'created', 'Running': False, 'StartedAt': '0001-01-01T00:00:00Z'},
+            'NetworkSettings': {'Networks': {'none': {}}}}}
+        runtime.engine = lambda method, route, **kwargs: None if identifier not in self.objects else self.updater.P.canonical(self.objects[identifier])
+        def change(arguments):
+            self.assertEqual(arguments, ['rm', identifier])
+            self.events.append('rm')
+            del self.objects[identifier]
+        runtime.change = change
+
+    def test_durable_abort_retires_only_probe_and_preserves_original_records(self):
+        before = {path: value for path, value in self.files.items()}
+        self.assertTrue(self.updater.retire_rejected_probe())
+        self.assertFalse(self.objects)
+        self.assertEqual(self.events, ['approved', 'rm', 'complete'])
+        self.assertEqual({path: self.files[path] for path in before}, before)
+        receipt = json.loads(self.files[self.receipt_path])
+        self.assertEqual(receipt['schema'], C.PROBE_RETIREMENT)
+        self.assertEqual(receipt['phase'], 'complete')
+
+    def test_nonterminal_abort_never_deletes_or_writes_receipt(self):
+        self.journal['stage'] = 'pulled'
+        self.files[self.journal_path] = self.updater.P.canonical(self.journal)
+        with self.assertRaisesRegex(ValueError, 'durable abort'):
+            self.updater.retire_rejected_probe()
+        self.assertFalse(self.events)
+
+    def test_running_or_foreign_probe_is_preserved(self):
+        identifier = self.record['probeId']
+        original = copy.deepcopy(self.objects[identifier])
+        for mutate in (lambda probe: probe['State'].update(Status='running', Running=True),
+                       lambda probe: probe.update(Name='/runtipi'),
+                       lambda probe: probe['Config']['Labels'].update({'io.orbis.controller-probe': 'foreign'}),
+                       lambda probe: probe['Mounts'].append({'Source': '/data', 'Destination': '/data'}),
+                       lambda probe: probe['HostConfig'].update(Binds=['/data:/data']),
+                       lambda probe: probe['HostConfig'].update(Mounts=[{'Type': 'bind', 'Source': '/data', 'Target': '/data'}]),
+                       lambda probe: probe['HostConfig'].update(VolumesFrom=['runtipi']),
+                       lambda probe: probe['Config'].update(Volumes={'/data': {}}),
+                       lambda probe: probe['HostConfig']['RestartPolicy'].update(Name='always')):
+            self.objects[identifier] = copy.deepcopy(original)
+            mutate(self.objects[identifier])
+            with self.assertRaises(ValueError): self.updater.retire_rejected_probe()
+            self.assertFalse(self.events)
+            self.assertIn(identifier, self.objects)
+
+    def test_lost_remove_reply_is_reconciled(self):
+        change = self.updater.runtime.change
+        def lost(arguments):
+            change(arguments)
+            raise RuntimeError('reply lost')
+        self.updater.runtime.change = lost
+        self.assertTrue(self.updater.retire_rejected_probe())
+        self.assertEqual(self.events, ['approved', 'rm', 'complete'])
+
+    def test_process_crash_after_remove_reconciles_approved_receipt_without_second_remove(self):
+        class Crash(BaseException): pass
+        change = self.updater.runtime.change
+        def crash(arguments):
+            change(arguments)
+            raise Crash()
+        self.updater.runtime.change = crash
+        with self.assertRaises(Crash): self.updater.retire_rejected_probe()
+        self.assertEqual(json.loads(self.files[self.receipt_path])['phase'], 'approved')
+        self.updater.runtime.change = mock.Mock()
+        self.assertTrue(self.updater.retire_rejected_probe())
+        self.updater.runtime.change.assert_not_called()
+        self.assertEqual(json.loads(self.files[self.receipt_path])['phase'], 'complete')
+
+    def test_foreign_definition_after_approval_is_preserved(self):
+        class Crash(BaseException): pass
+        self.updater.runtime.change = mock.Mock(side_effect=Crash)
+        with self.assertRaises(Crash): self.updater.retire_rejected_probe()
+        self.objects[self.record['probeId']]['Config']['Env'].append('OTHER=changed')
+        self.updater.runtime.change = mock.Mock()
+        with self.assertRaisesRegex(ValueError, 'changed after retirement approval'):
+            self.updater.retire_rejected_probe()
+        self.updater.runtime.change.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

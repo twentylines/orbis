@@ -28,6 +28,7 @@ D = load('orbis-host-retained-restore-runtime.py', 'orbis_controller_update_runt
 BOOTSTRAP = load('orbis-controller-bootstrap-profile.py', 'orbis_controller_bootstrap_profile')
 POLICY = 'orbis.controller-update-preserve-live-proxy.v1'
 SCOPE = 'controller-live-proxy.v1'
+PROBE_RETIREMENT = 'orbis.controller-probe-retirement.v2'
 RESET = D.RESET
 RESET_POLICY = 'orbis.controller-update-reset-mount.v1'
 RESET_POLICY_V2 = 'orbis.controller-update-reset-mount.v2'
@@ -443,6 +444,95 @@ class ControllerUpdate:
             self.runtime.verify_networks({'source': {'container': prior}}, raw)
             if raw['Name'] != '/' + name or self.runtime.definition(raw) != record['peerDefinitions'][name]:
                 raise ValueError('A controller database or queue definition changed')
+
+    def retire_rejected_probe(self):
+        record = self.read()
+        with self.a.protected_directory(self.path) as directory:
+            with self.a.protected_file(directory, 'runtime.json', 16 * 1024 * 1024) as body:
+                if self.P.metadata(body, byte_limit=16 * 1024 * 1024, string_limit=2 * 1024 * 1024) != record:
+                    raise ValueError('Probe authority changed during abort settlement')
+                runtime_sha = hashlib.sha256(body).hexdigest()
+        journal_path = self.snapshot.with_name(self.snapshot.name + '.orbis-update.json')
+        with self.a.protected_directory(journal_path.parent) as directory:
+            with self.a.protected_file(directory, journal_path.name, 16 * 1024 * 1024) as body:
+                journal = self.P.metadata(body, byte_limit=16 * 1024 * 1024, string_limit=2 * 1024 * 1024)
+                journal_sha = hashlib.sha256(body).hexdigest()
+        retirement = record.get('sourceRetirement') or {}
+        checkpoint_path = Path(record.get('checkpoint', {}).get('journal', str(self.snapshot) + '.checkpoint.json'))
+        if (journal.get('schema') != 'orbis.update.v1' or journal.get('stage') != 'aborted'
+                or journal.get('failureStage') != 'pulled' or journal.get('failureCode') != CapabilityError.code
+                or journal.get('root') != str(self.root) or journal.get('dockerContext') != self.context
+                or journal.get('snapshot') != str(self.snapshot) or journal.get('previousDigest') != self.current['digest']
+                or journal.get('targetDigest') != self.target['digest'] or record.get('phase') != 'preparing'
+                or record.get('candidateId') or record.get('bootstrapProbes')
+                or retirement and (retirement.get('phase') != 'held' or retirement.get('anchorId')
+                    or retirement.get('reconstructionId') or retirement.get('checkpointManifestSha256'))
+                or checkpoint_path.exists() or checkpoint_path.is_symlink() or self.snapshot.exists() or self.snapshot.is_symlink()):
+            raise ValueError('Probe retirement requires its durable abort before downtime')
+        identifier = record.get('probeId')
+        if not isinstance(identifier, str) or not self.host.IDENTITY.HEX.fullmatch(identifier):
+            raise ValueError('The aborted operation has no exact probe identity')
+        expected = record.get('probeBody') or {}
+        if (set(expected) != {'Image', 'Labels', 'HostConfig'}
+                or expected.get('Image') != self.target['image'] + '@' + self.target['digest']
+                or expected.get('Labels') != {'io.orbis.controller-probe': record.get('nonce')}
+                or expected.get('HostConfig') != {'NetworkMode': 'none', 'RestartPolicy': {'Name': 'no', 'MaximumRetryCount': 0}}):
+            raise ValueError('The aborted probe creation intent changed')
+        name = 'orbis-controller-probe-' + self.key
+        binding = {'schema': PROBE_RETIREMENT, 'id': identifier, 'name': name,
+                   'runtimeSha256': runtime_sha, 'updateJournalSha256': journal_sha,
+                   'imageId': record.get('targetImageId'), 'reason': 'controller-preservation-unsupported'}
+        receipt_path = self.path / 'capability-probe-retirement.json'
+        receipt = None
+        try:
+            with self.a.protected_directory(self.path) as directory:
+                with self.a.protected_file(directory, receipt_path.name, 16384) as body:
+                    receipt = self.P.metadata(body, byte_limit=16384)
+        except FileNotFoundError:
+            pass
+        if receipt is not None and (set(receipt) != {*binding, 'phase', 'definitionSha256'}
+                or any(receipt.get(key) != value for key, value in binding.items())
+                or receipt.get('phase') not in {'approved', 'complete'}
+                or not isinstance(receipt.get('definitionSha256'), str)
+                or not self.host.IDENTITY.HEX.fullmatch(receipt['definitionSha256'])):
+            raise ValueError('The protected probe retirement receipt changed')
+        if self.runtime.reader._object(['info', '--format', '{{json .}}']).get('ID') != record['daemonId']:
+            raise ValueError('The probe Docker daemon changed')
+        probe = self.optional_container(identifier)
+        if probe is None:
+            if receipt is None:
+                raise ValueError('The probe disappeared before protected retirement intent')
+        else:
+            labels = probe.get('Config', {}).get('Labels') or {}
+            if (probe['Id'] != identifier or probe.get('Name') != '/' + name
+                    or probe.get('Image') != binding['imageId'] or probe['Config'].get('Image') != expected.get('Image')
+                    or not isinstance(expected.get('Labels'), dict) or not expected['Labels']
+                    or any(labels.get(key) != value for key, value in expected['Labels'].items())
+                    or probe.get('State', {}).get('Status') != 'created' or probe['State'].get('Running') is not False
+                    or probe['State'].get('StartedAt') != '0001-01-01T00:00:00Z' or probe.get('Mounts') != []
+                    or probe['Config'].get('Volumes') or probe['HostConfig'].get('Binds')
+                    or probe['HostConfig'].get('Mounts') or probe['HostConfig'].get('VolumesFrom')
+                    or probe['HostConfig'].get('NetworkMode') != 'none' or probe['HostConfig'].get('Privileged')
+                    or probe['HostConfig'].get('AutoRemove')
+                    or set(probe.get('NetworkSettings', {}).get('Networks', {})) - {'none'}
+                    or probe['HostConfig'].get('RestartPolicy') != {'Name': 'no', 'MaximumRetryCount': 0}):
+                raise ValueError('The rejected probe no longer matches its exact never-started intent')
+            definition = self.runtime.definition(probe)
+            if receipt is not None and (receipt['phase'] == 'complete' or receipt['definitionSha256'] != definition):
+                raise ValueError('The rejected probe changed after retirement approval')
+            receipt = {**binding, 'phase': 'approved', 'definitionSha256': definition}
+            self.a.atomic(receipt_path, self.P.canonical(receipt))
+            try:
+                self.runtime.change(['rm', identifier])
+            except RuntimeError:
+                if self.optional_container(identifier) is not None:
+                    raise
+            if self.optional_container(identifier) is not None:
+                raise ValueError('Rejected probe retirement remains incomplete')
+        receipt['phase'] = 'complete'
+        self.a.atomic(receipt_path, self.P.canonical(receipt))
+        return True
+
 
     def prepare(self, checkpoint):
         if checkpoint['storage'].get('backupScope') != SCOPE:
