@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { controllerCaptureSocketIdentity } from '@/modules/host-updates/host-controller-config';
+import { parseCoreUpdateProgress, type CoreUpdateProgress } from './core-update-progress';
 
 export type RootRestorationState = 'idle' | 'restoring' | 'recovery' | 'checking';
 
@@ -57,4 +58,35 @@ export async function readRootCoreState(socket = process.env.ORBIS_HOST_SOCKET):
     'recovery',
     'checking',
   ]) as Promise<RootCoreState | null>;
+}
+
+export async function readRootCoreProgress(socket = process.env.ORBIS_HOST_SOCKET): Promise<CoreUpdateProgress | null> {
+  if (!socket) return null;
+  try {
+    const identity = await controllerCaptureSocketIdentity(socket);
+    const bytes = await new Promise<Buffer>((resolve, reject) => {
+      const request = http.get({ socketPath: socket, path: '/v1/core-operation/progress', signal: AbortSignal.timeout(2000) }, (response) => {
+        if (response.statusCode !== 200) {
+          response.resume();
+          reject(new Error('unavailable'));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        response.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > 16384) response.destroy(new Error('invalid'));
+          else chunks.push(Buffer.from(chunk));
+        });
+        response.on('error', reject);
+        response.on('aborted', () => reject(new Error('aborted')));
+        response.on('end', () => resolve(Buffer.concat(chunks)));
+      });
+      request.on('error', reject);
+    });
+    if ((await controllerCaptureSocketIdentity(socket)) !== identity) return null;
+    return parseCoreUpdateProgress(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+  } catch {
+    return null;
+  }
 }

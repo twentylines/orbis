@@ -2,11 +2,19 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { useLocation, useRevalidator } from 'react-router';
+import { useLocation, useNavigate, useRevalidator } from 'react-router';
 import { useWindowVisible } from '@/desktop/window-visibility';
+import { observeCoreOperationProgress, readCoreOperationProgress } from '@/desktop/core-operation-progress';
 import { backupRequest } from '@/modules/system-backups/backup-api';
 import { restoreStatusSchema, type RestoreJob } from '@/modules/system-backups/contracts';
-import { advanceCoreUpdate, coreJobIsActive, validCoreUpdate, type CoreUpdateStatus, type CoreUpdateWatch } from '@/desktop/core-update-state';
+import {
+  advanceCoreUpdate,
+  coreJobIsActive,
+  resumeCoreUpdate,
+  validCoreUpdate,
+  type CoreUpdateStatus,
+  type CoreUpdateWatch,
+} from '@/desktop/core-update-state';
 import { OperationStartupContext } from '@/components/startup/operation-startup';
 import { StartupSurface } from '@/components/startup/startup-surface';
 import { RecoveryScene } from './recovery-scene';
@@ -15,6 +23,8 @@ import {
   armStartedOperation,
   clearMatchingRestoreContinuity,
   readOperationContinuity,
+  operationBootMarker,
+  rememberCoreOperation,
   operationContinuityStorage,
   type MaintenanceOperation,
 } from './operation-continuity';
@@ -25,6 +35,7 @@ import {
   hasAcceptedReset,
   loadOperationStatus,
   operationAllowsDeparture,
+  operationBootIsReady,
   operationIsWaiting,
   readOperationStatus,
   operationShowsContent,
@@ -46,9 +57,11 @@ const stageCopy = {
   recovering: 'Recovering the previous state',
   resetting: 'Resetting preferences',
 } as const;
+class OperationSignInRequired extends Error {}
 async function readCoreStatus() {
   const options: RequestInit = { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(8000) };
   const [statusResponse, buildResponse] = await Promise.all([fetch('/api/host-updates/status', options), fetch('/api/system/build', options)]);
+  if (statusResponse.status === 401 || buildResponse.status === 401) throw new OperationSignInRequired();
   if (!statusResponse.ok || !buildResponse.ok) throw new Error('Operation status is unavailable.');
   const status: CoreUpdateStatus = await statusResponse.json();
   const build: { version?: string } = await buildResponse.json();
@@ -58,6 +71,7 @@ async function readCoreStatus() {
 }
 export function OperationBoundary({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const revalidator = useRevalidator();
   const released = useRef(false);
   const visible = useWindowVisible();
@@ -69,10 +83,13 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
   const initialMarker = useRef(
     (() => {
       const storage = operationContinuityStorage();
-      return storage ? readOperationContinuity(storage) : null;
+      return storage
+        ? operationBootMarker(readOperationContinuity(storage), document.documentElement.getAttribute('data-orbis-operation-boot'))
+        : null;
     })(),
   );
   const [attempt, setAttempt] = useState(0);
+  const [signInRequired, setSignInRequired] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [authAction, setAuthAction] = useState<'recover' | 'cancel' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -97,15 +114,23 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
           ? {
               id: core.id,
               operation: core.operation ?? 'update',
-              status: core.phase === 'ready' ? 'succeeded' : core.phase === 'failed' ? 'recovery-required' : 'running',
+              status:
+                core.phase === 'ready'
+                  ? 'succeeded'
+                  : core.phase === 'returned'
+                    ? 'returned'
+                    : core.phase === 'failed'
+                      ? 'recovery-required'
+                      : 'running',
               needsRecovery: core.phase === 'failed',
             }
           : null,
     [job, core, activeKind],
   );
+  const bootReady = operationBootIsReady(initialMarker.current, operationJob, snapshot);
   const continuity = useOperationDeparture(
     operationJob?.status === 'rolled-back' ? null : operationJob,
-    !snapshot || snapshot.state !== 'idle' || Boolean(snapshot.unavailable),
+    bootReady || !snapshot || snapshot.state !== 'idle' || Boolean(snapshot.unavailable),
   );
   useEffect(() => {
     if (!visible) return;
@@ -171,7 +196,9 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
         try {
           const { status, buildTag } = await readCoreStatus();
           if (!current) return;
-          let watch = coreRef.current;
+          setSignInRequired(false);
+          let watch = coreRef.current ?? resumeCoreUpdate(marker);
+          if (watch && marker?.jobId === watch.id && marker.operation === kind) startedId.current = watch.id;
           if (status.job && coreJobIsActive(status.job) && watch?.id !== status.job.id) watch = null;
           if (!watch && marker?.operation === kind && marker.jobId === status.job?.id && validCoreUpdate(status.job.id, status.job.targetTag)) {
             watch = advanceCoreUpdate(null, { type: 'accepted', id: status.job.id, targetTag: status.job.targetTag, operation: kind });
@@ -179,12 +206,48 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
           }
           watch = advanceCoreUpdate(watch, { type: 'status', status, buildTag });
           if (watch) watch = { ...watch, operation: kind };
-          if (status.job && coreJobIsActive(status.job) && storage && armStartedOperation(status.job.id, kind, storage))
+          if (status.job && coreJobIsActive(status.job) && watch) {
             startedId.current = status.job.id;
+            if (storage && (!marker || marker.jobId !== watch.id)) armStartedOperation(watch.id, kind, storage, Date.now(), watch.targetTag);
+          }
+          if (watch && storage) rememberCoreOperation(watch, storage);
+          if (next.state === 'idle' && watch && ['ready', 'returned'].includes(watch.phase)) {
+            next = await loadOperationStatus(true);
+            if (!current) return;
+          }
+          if (
+            next.state === 'idle' &&
+            (!operationAllowsDeparture(next) || !watch || watch.id !== startedId.current || !['ready', 'returned'].includes(watch.phase))
+          )
+            next = watch?.phase === 'failed' ? { state: 'recovery', supported: true } : { state: 'checking', supported: true, unavailable: true };
           coreRef.current = watch;
           setCore(watch);
-        } catch {
-          if (current && next.state === 'idle') setCore(null);
+        } catch (error) {
+          if (current) {
+            let watch = coreRef.current ?? resumeCoreUpdate(marker);
+            if (!(error instanceof OperationSignInRequired)) {
+              try {
+                watch = observeCoreOperationProgress(watch, await readCoreOperationProgress());
+                if (!current) return;
+                if (watch) {
+                  watch = { ...watch, operation: kind };
+                  if (storage) {
+                    if (!marker || marker.jobId !== watch.id) armStartedOperation(watch.id, kind, storage, Date.now(), watch.targetTag);
+                    rememberCoreOperation(watch, storage);
+                  }
+                  startedId.current = watch.id;
+                }
+              } catch {
+                // Keep the last confirmed phase when the independent helper is unreachable.
+              }
+            }
+            if (!current) return;
+            coreRef.current = watch;
+            setCore(watch);
+            const needsSignIn = error instanceof OperationSignInRequired && operationAllowsDeparture(next);
+            setSignInRequired(needsSignIn);
+            if (next.state === 'idle' && !needsSignIn) next = { state: 'checking', supported: true, unavailable: true };
+          }
         }
       }
       if (!current) return;
@@ -197,6 +260,10 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       clearTimeout(timer);
     };
   }, [visible, attempt]);
+  const authRoute = pathname === '/login' || pathname === '/reset-password';
+  useEffect(() => {
+    if (signInRequired && snapshot && operationAllowsDeparture(snapshot) && !authRoute) void navigate('/', { replace: true });
+  }, [signInRequired, snapshot, authRoute, navigate]);
   useEffect(() => {
     if (snapshot?.state !== 'idle') {
       released.current = false;
@@ -261,14 +328,15 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
       setActionBusy(false);
     }
   };
-  const authRoute = pathname === '/login' || pathname === '/reset-password';
   const matchingTerminal = Boolean(
     operationJob &&
       operationJob.id === startedId.current &&
       !operationJob.needsRecovery &&
-      ['succeeded', 'rolled-back'].includes(operationJob.status),
+      ['succeeded', 'rolled-back', 'returned'].includes(operationJob.status),
   );
-  const showChildren = operationShowsContent(snapshot, authRoute, matchingTerminal, continuity.departing);
+  const showChildren =
+    (signInRequired && authRoute && snapshot && operationAllowsDeparture(snapshot)) ||
+    (!signInRequired && operationShowsContent(snapshot, authRoute, matchingTerminal && !bootReady, continuity.departing));
   const server = snapshot ?? { state: 'checking' as const, supported: true };
   const waiting = operationIsWaiting(server);
   const useSpace = operationUsesSpace(snapshot, Boolean(operation.current ?? initialMarker.current?.operation));
@@ -278,11 +346,11 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
     core?.phase === 'downloading'
       ? 'Downloading files'
       : core?.phase === 'offline'
-        ? 'Restarting'
+        ? 'Restarting Orbis'
         : core?.phase === 'checking'
-          ? 'Verifying release'
-          : core?.phase === 'ready'
-            ? 'Opening your server'
+          ? 'Starting Orbis'
+          : core?.phase === 'ready' || core?.phase === 'returned'
+            ? 'Starting Orbis'
             : 'Installing release';
   const status =
     restoration?.status ??
@@ -298,7 +366,7 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
   const title =
     restoration?.title ??
     (kind !== 'restore' && core
-      ? `Orbis ${core.targetTag}`
+      ? `Orbis ${core.phase === 'returned' ? core.returnedTag : core.targetTag}`
       : server.state === 'recovery'
         ? 'Recovery needed'
         : kind === 'update'
@@ -355,9 +423,14 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
         detail={
           waiting
             ? 'Orbis will reload automatically.'
-            : (actionError ?? (job?.status === 'rolled-back' ? 'The restore did not complete. Your previous state was restored.' : undefined))
+            : (actionError ??
+              (core?.phase === 'returned'
+                ? core.message
+                : job?.status === 'rolled-back'
+                  ? 'The restore did not complete. Your previous state was restored.'
+                  : undefined))
         }
-        progress={restoration?.progress ?? server.progress}
+        progress={core?.phase === 'ready' || core?.phase === 'returned' ? undefined : (restoration?.progress ?? server.progress)}
         progressContent={
           !waiting && kind !== 'restore' && core?.phase === 'downloading' && core.download ? (
             <UpdateDownloadProgress value={core.download} />
@@ -365,7 +438,9 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
         }
         active={waiting || ['restoring', 'updating', 'downgrading'].includes(server.state)}
         departing={continuity.departing}
-        indicator={server.stage === 'restarting' || core?.phase === 'offline' || core?.phase === 'checking' ? 'restart' : 'progress'}
+        indicator={
+          server.stage === 'restarting' || (core && ['offline', 'checking', 'ready', 'returned'].includes(core.phase)) ? 'restart' : 'progress'
+        }
         footer={!waiting && kind !== 'restore' ? 'Applications keep running during this Orbis operation.' : undefined}
         actions={
           waiting ? undefined : (
@@ -394,14 +469,10 @@ export function OperationBoundary({ children }: { children: ReactNode }) {
               {server.unavailable || server.state === 'recovery' ? (
                 <Button onClick={() => setAttempt((value) => value + 1)}>Check again</Button>
               ) : null}
-              {matchingTerminal && !continuity.departing ? (
-                job?.status === 'rolled-back' ? (
-                  <Button disabled={actionBusy} onClick={() => void continueRollback()}>
-                    Continue
-                  </Button>
-                ) : (
-                  <Button onClick={() => window.location.assign('/')}>Open server</Button>
-                )
+              {matchingTerminal && !continuity.departing && job?.status === 'rolled-back' ? (
+                <Button disabled={actionBusy} onClick={() => void continueRollback()}>
+                  Continue
+                </Button>
               ) : null}
             </>
           )

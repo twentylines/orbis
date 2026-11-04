@@ -1,4 +1,5 @@
 import { RecoveryScene } from '@/components/recovery-progress/recovery-scene';
+import { UpdateDownloadProgress } from '@/components/recovery-progress/update-download-progress';
 import { StartupSurface } from '@/components/startup/startup-surface';
 import { useStartupSession } from '@/components/startup/startup-boundary';
 import { OrbisLogo } from '@/components/orbis-logo/orbis-logo';
@@ -343,20 +344,21 @@ function RestartUpdateCover() {
       watch.phase === 'downloading'
         ? 'Downloading files'
         : watch.phase === 'offline'
-          ? 'Restarting'
+          ? 'Restarting Orbis'
           : watch.phase === 'checking'
-            ? 'Verifying release'
-            : watch.phase === 'ready'
-              ? 'Opening your server'
+            ? 'Starting Orbis'
+            : watch.phase === 'ready' || watch.phase === 'returned'
+              ? 'Starting Orbis'
               : 'Installing release';
     return (
       <RecoveryScene
-        title={`Orbis ${watch.targetTag}`}
-        status={stage}
-        active={watch.phase !== 'ready'}
+        title={`Orbis ${watch.phase === 'returned' ? watch.returnedTag : watch.targetTag}`}
+        status={watch.phase === 'downloading' && watch.download ? undefined : stage}
+        progressContent={watch.phase === 'downloading' && watch.download ? <UpdateDownloadProgress value={watch.download} /> : undefined}
+        active={watch.phase !== 'ready' && watch.phase !== 'returned'}
         departing={departing}
         variant={watch.operation ?? 'update'}
-        indicator={watch.phase === 'offline' || watch.phase === 'checking' ? 'restart' : 'progress'}
+        indicator={['offline', 'checking', 'ready', 'returned'].includes(watch.phase) ? 'restart' : 'progress'}
         footer="Applications keep running during this Orbis operation."
       />
     );

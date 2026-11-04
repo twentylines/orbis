@@ -2,7 +2,12 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyn
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '@/context/app-context';
 import { useWindowVisible } from './window-visibility';
-import { armStartedOperation, operationContinuityStorage } from '@/components/recovery-progress/operation-continuity';
+import {
+  armStartedOperation,
+  readOperationContinuity,
+  rememberCoreOperation,
+  operationContinuityStorage,
+} from '@/components/recovery-progress/operation-continuity';
 import { useOperationDeparture } from '@/components/recovery-progress/use-operation-departure';
 import { installedOrbisBuildOptions } from './orbis-release';
 import {
@@ -66,7 +71,7 @@ const emptyAccepted = () => null;
 export function rememberAcceptedCoreUpdate(id: string, targetTag: string, operation: CoreUpdateOperation = 'update') {
   if (!validCoreUpdate(id, targetTag)) return;
   const storage = operationContinuityStorage();
-  if (storage) armStartedOperation(id, operation, storage);
+  if (storage) armStartedOperation(id, operation, storage, Date.now(), targetTag);
   acceptedUpdate = { id, targetTag, operation };
   updatePending = true;
   for (const listener of acceptedListeners) listener();
@@ -80,6 +85,8 @@ function forgetAccepted(id: string) {
 async function readHost<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(`/api/host-updates/${path}`, {
     credentials: 'same-origin',
+    cache: 'no-store',
+    redirect: 'error',
     signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
   });
   if (!response.ok) throw new Error('Host update status is unavailable');
@@ -142,7 +149,14 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
         ? {
             id: watch.id,
             operation: watch.operation ?? 'update',
-            status: watch.phase === 'ready' ? 'succeeded' : watch.phase === 'failed' ? 'recovery-required' : 'running',
+            status:
+              watch.phase === 'ready'
+                ? 'succeeded'
+                : watch.phase === 'returned'
+                  ? 'returned'
+                  : watch.phase === 'failed'
+                    ? 'recovery-required'
+                    : 'running',
             needsRecovery: watch.phase === 'failed',
           }
         : null,
@@ -161,6 +175,9 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
     refetchInterval: (query) => (active || coreJobIsActive(query.state.data?.job) ? 3000 : 30_000),
     refetchIntervalInBackground: false,
   });
+  const checkingReturn = Boolean(
+    watch && (core.data?.job?.state === 'rolled-back' || (core.data?.job?.state === 'failed' && core.data.job.phase === 'aborted')),
+  );
   const packages = useQuery({
     queryKey: ['orbis-host-package-job'],
     queryFn: ({ signal }) => readHost<PackageUpdateStatus>('packages/job', signal),
@@ -185,10 +202,10 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
   });
   const build = useQuery({
     ...installedOrbisBuildOptions(),
-    enabled: enabled && active,
+    enabled: enabled && (active || checkingReturn),
     staleTime: 0,
     retry: false,
-    refetchInterval: active ? 3000 : false,
+    refetchInterval: active || checkingReturn ? 3000 : false,
     refetchIntervalInBackground: false,
   });
   useEffect(() => {
@@ -196,12 +213,25 @@ export function HostUpdateProvider({ children, suspended = false }: PropsWithChi
     let next = watchRef.current;
     if (accepted) next = advanceCoreUpdate(next, { type: 'accepted', ...accepted });
     if (core.isError) next = advanceCoreUpdate(next, { type: 'unavailable' });
-    else if (core.data) next = advanceCoreUpdate(next, { type: 'status', status: core.data, buildTag: build.data?.version });
+    else if (core.data)
+      next = advanceCoreUpdate(next, {
+        type: 'status',
+        status: core.data,
+        buildTag: !build.isFetching && build.dataUpdatedAt >= core.dataUpdatedAt ? build.data?.version : undefined,
+      });
     updatePending = coreWatchIsActive(next);
     watchRef.current = next;
     setWatch(next);
+    if (next) {
+      const storage = operationContinuityStorage();
+      if (storage) {
+        const marker = readOperationContinuity(storage);
+        if (!marker && coreJobIsActive(core.data?.job)) armStartedOperation(next.id, next.operation ?? 'update', storage, Date.now(), next.targetTag);
+        rememberCoreOperation(next, storage);
+      }
+    }
     if (next?.phase === 'failed') forgetAccepted(next.id);
-  }, [accepted, core.data, core.isError, build.data?.version, suspended, user.operator]);
+  }, [accepted, core.data, core.dataUpdatedAt, core.isError, build.data?.version, build.dataUpdatedAt, build.isFetching, suspended, user.operator]);
   return (
     <HostUpdateContext.Provider
       value={{

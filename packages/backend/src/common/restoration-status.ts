@@ -2,9 +2,10 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import type { NextFunction, Request, Response } from 'express';
 import { DATA_DIR } from './constants';
-import { readRootCoreState, readRootRestorationState, type RootRestorationState } from './restoration-root-status';
+import { readRootCoreState, readRootCoreProgress, readRootRestorationState, type RootRestorationState } from './restoration-root-status';
 import { BackupRestoreJournal } from '@/modules/system-backups/backup-restore-journal';
 import { ResetState } from '@/modules/system-reset/reset-state';
+import { parseCoreUpdateProgress } from './core-update-progress';
 
 export type RestorationStatus =
   | { state: 'idle' | 'checking' }
@@ -78,9 +79,20 @@ export async function readOperationStatus(
   return { state: 'idle' };
 }
 
-export function createRestorationMiddleware(readStatus = readOperationStatus) {
+export function createRestorationMiddleware(readStatus = readOperationStatus, readProgress = readRootCoreProgress) {
   return async (request: Request, response: Response, next: NextFunction) => {
     const pathname = request.originalUrl.split('?')[0] ?? '';
+    if (/^\/api\/system\/core-update-progress\/?$/.test(pathname)) {
+      response.setHeader('Cache-Control', 'no-store');
+      if (request.method !== 'GET') return response.status(405).json({ code: 'CORE_UPDATE_PROGRESS_UNAVAILABLE' });
+      try {
+        const progress = await readProgress();
+        if (progress) return response.json(parseCoreUpdateProgress(progress));
+      } catch {
+        /* Unavailable authority must never look idle. */
+      }
+      return response.status(503).json({ code: 'CORE_UPDATE_PROGRESS_UNAVAILABLE' });
+    }
     const statusRoute = /^\/api\/system\/(?:restoration-status|operation-status)\/?$/.test(pathname);
     if (statusRoute && ['GET', 'HEAD'].includes(request.method)) {
       response.setHeader('Cache-Control', 'no-store');

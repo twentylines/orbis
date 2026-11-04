@@ -83,6 +83,24 @@ export function rollbackCanContinue(
 export function operationAllowsDeparture(snapshot: OperationSnapshot) {
   return snapshot.state === 'idle' && snapshot.supported && !snapshot.unavailable;
 }
+export function operationIsSafeTerminal(job: { operation: string; status: string; needsRecovery: boolean }) {
+  return !job.needsRecovery && (job.status === 'succeeded' || (job.status === 'returned' && ['update', 'downgrade'].includes(job.operation)));
+}
+export function operationBootIsReady(
+  marker: { phase: string; jobId: string; operation: string } | null,
+  job: { id: string; operation: string; status: string; needsRecovery: boolean } | null,
+  snapshot: OperationSnapshot | null,
+) {
+  return Boolean(
+    marker?.phase === 'booting' &&
+      job &&
+      marker.jobId === job.id &&
+      marker.operation === job.operation &&
+      operationIsSafeTerminal(job) &&
+      snapshot &&
+      operationAllowsDeparture(snapshot),
+  );
+}
 export function operationSnapshotAfter(previousLock: boolean, next: OperationSnapshot): OperationSnapshot {
   return previousLock && !next.supported ? { state: 'checking', supported: true, unavailable: true } : next;
 }

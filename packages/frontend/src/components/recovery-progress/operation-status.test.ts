@@ -13,8 +13,32 @@ import {
   operationIsWaiting,
   operationUsesSpace,
   operationShowsContent,
+  operationBootIsReady,
   type OperationStatusTransport,
 } from './operation-status';
+
+test('a reloaded operation releases its boot after a fresh matching success and idle authority', () => {
+  const marker = { phase: 'booting', jobId: 'accepted', operation: 'update' };
+  const job = { id: 'accepted', operation: 'update', status: 'succeeded', needsRecovery: false };
+  const authority = { state: 'idle' as const, supported: true };
+  expect(operationBootIsReady(marker, job, authority)).toBe(true);
+  expect(operationShowsContent(authority, false, !operationBootIsReady(marker, job, authority), false)).toBe(true);
+  for (const altered of [
+    { ...job, id: 'historical' },
+    { ...job, operation: 'restore' },
+    { ...job, status: 'running' },
+    { ...job, needsRecovery: true },
+  ])
+    expect(operationBootIsReady(marker, altered, authority)).toBe(false);
+  for (const altered of [
+    { ...authority, supported: false },
+    { ...authority, unavailable: true },
+    { ...authority, state: 'checking' as const },
+  ])
+    expect(operationBootIsReady(marker, job, altered)).toBe(false);
+  expect(operationBootIsReady({ ...marker, phase: 'running' }, job, authority)).toBe(false);
+  expect(operationBootIsReady(null, job, authority)).toBe(false);
+});
 
 test('public restore status accepts only generic sanitized state and measured progress', () => {
   for (const state of ['idle', 'restoring', 'updating', 'downgrading', 'recovery', 'checking'] as const)
@@ -180,4 +204,36 @@ test('rollback Continue requires the matching failed restore and fresh supported
   expect(rollbackCanContinue({ ...job, status: 'succeeded' }, 'job', idle)).toBe(false);
   expect(rollbackCanContinue(job, 'job', { state: 'checking', supported: true, unavailable: true })).toBe(false);
   expect(rollbackCanContinue(job, 'job', { state: 'idle', supported: false })).toBe(false);
+});
+
+test('returned core boot requires matching identity and supported idle, while recovery and restore returns stay locked', () => {
+  const authority = { state: 'idle' as const, supported: true };
+  for (const operation of ['update', 'downgrade']) {
+    const marker = { phase: 'booting', jobId: 'accepted', operation };
+    const job = { id: 'accepted', operation, status: 'returned', needsRecovery: false };
+    expect(operationBootIsReady(marker, job, authority)).toBe(true);
+    for (const altered of [
+      { ...job, id: 'other' },
+      { ...job, needsRecovery: true },
+      { ...job, status: 'failed' },
+      { ...job, status: 'interrupted' },
+      { ...job, status: 'rolled-back' },
+    ])
+      expect(operationBootIsReady(marker, altered, authority)).toBe(false);
+    for (const snapshot of [
+      null,
+      { ...authority, supported: false },
+      { ...authority, unavailable: true },
+      { ...authority, state: 'recovery' as const },
+      { ...authority, state: 'checking' as const },
+    ])
+      expect(operationBootIsReady(marker, job, snapshot)).toBe(false);
+  }
+  expect(
+    operationBootIsReady(
+      { phase: 'booting', jobId: 'accepted', operation: 'restore' },
+      { id: 'accepted', operation: 'restore', status: 'returned', needsRecovery: false },
+      authority,
+    ),
+  ).toBe(false);
 });

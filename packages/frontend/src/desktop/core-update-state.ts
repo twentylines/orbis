@@ -25,7 +25,9 @@ export type CoreUpdateStatus = {
 export type CoreUpdateWatch = {
   id: string;
   targetTag: string;
-  phase: 'downloading' | 'updating' | 'offline' | 'checking' | 'failed' | 'ready';
+  phase: 'downloading' | 'updating' | 'offline' | 'checking' | 'failed' | 'ready' | 'returned';
+  returnedTag?: string;
+  outcome?: 'rolled-back' | 'aborted';
   message: string;
   refreshIssued: boolean;
   download?: DownloadProgress;
@@ -46,8 +48,8 @@ export const coreUpdateTitle = (phase: CoreUpdateWatch['phase'], operation: Core
     ? 'Downloading Orbis'
     : phase === 'offline'
       ? 'Restarting Orbis'
-      : phase === 'checking' || phase === 'ready'
-        ? 'Checking Orbis'
+      : phase === 'checking' || phase === 'ready' || phase === 'returned'
+        ? 'Starting Orbis'
         : operation === 'downgrade'
           ? 'Downgrading Orbis'
           : 'Updating Orbis';
@@ -84,13 +86,43 @@ export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpda
           status.currentTag && valid(status.currentTag) && valid(job.targetTag) && lt(job.targetTag, status.currentTag) ? 'downgrade' : 'update',
       });
   }
-  if (!next || next.refreshIssued || next.phase === 'failed') return next;
+  if (!next || next.refreshIssued) return next;
   if (!status.available) return { ...next, phase: 'offline', message: restartingMessage };
-  if (job?.id !== next.id) return next;
-  next = { ...next, download: readDownloadProgress(job.download) };
+  if (job?.id !== next.id)
+    return next.phase === 'ready' || next.phase === 'returned'
+      ? { ...next, phase: 'checking', message: 'Checking the requested Orbis update.' }
+      : next;
+  if (job.targetTag !== next.targetTag) return { ...next, phase: 'checking', message: 'Checking the requested Orbis release.' };
+  next = { ...next, returnedTag: undefined, outcome: undefined, download: readDownloadProgress(job.download) };
   if (['failed', 'interrupted', 'rolled-back'].includes(job.state)) {
+    const outcome = job.state === 'rolled-back' ? 'rolled-back' : job.state === 'failed' && job.phase === 'aborted' ? 'aborted' : undefined;
+    const currentTag = typeof status.currentTag === 'string' ? status.currentTag : '';
+    const healthyCurrent =
+      status.enrolled === true &&
+      status.imageMatches === true &&
+      status.coreState === 'running' &&
+      status.coreHealth === 'healthy' &&
+      releaseTag.test(currentTag) &&
+      Boolean(valid(currentTag)) &&
+      currentTag === buildTag;
+    if (outcome && healthyCurrent) {
+      const action = next.operation === 'downgrade' ? 'downgrade' : 'update';
+      return {
+        ...next,
+        phase: 'returned',
+        returnedTag: currentTag,
+        outcome,
+        message:
+          outcome === 'rolled-back'
+            ? `The ${action} did not complete. Orbis ${currentTag} was restored. Returning to your dashboard.`
+            : `The ${action} stopped before restart. Orbis ${currentTag} is still running. Returning to your dashboard.`,
+      };
+    }
     return { ...next, phase: 'failed', message: job.message || 'The update needs review in Updates.' };
   }
+  if (job.state !== 'complete' && job.phase === 'restarting') return { ...next, phase: 'offline', message: restartingMessage };
+  if (job.state !== 'complete' && job.phase === 'verifying')
+    return { ...next, phase: 'checking', message: 'Starting Orbis and checking server health.' };
   if (!status.available || status.coreState !== 'running' || status.coreHealth !== 'healthy') {
     return { ...next, phase: 'offline', message: restartingMessage };
   }
@@ -116,7 +148,27 @@ export function advanceCoreUpdate(watch: CoreUpdateWatch | null, event: CoreUpda
   };
 }
 
+export function resumeCoreUpdate(
+  marker: {
+    jobId: string;
+    operation: string;
+    targetTag?: string;
+    corePhase?: CoreUpdateWatch['phase'];
+  } | null,
+): CoreUpdateWatch | null {
+  if (!marker?.targetTag || !['update', 'downgrade'].includes(marker.operation)) return null;
+  const watch = advanceCoreUpdate(null, {
+    type: 'accepted',
+    id: marker.jobId,
+    targetTag: marker.targetTag,
+    operation: marker.operation as CoreUpdateOperation,
+  });
+  return watch
+    ? { ...watch, phase: ['ready', 'returned', 'failed'].includes(marker.corePhase ?? '') ? 'checking' : (marker.corePhase ?? watch.phase) }
+    : null;
+}
+
 export function claimCoreRefresh(watch: CoreUpdateWatch | null, alreadyRefreshed: ReadonlySet<string>) {
-  if (!watch || watch.phase !== 'ready' || watch.refreshIssued) return { watch, refresh: false };
+  if (!watch || !['ready', 'returned'].includes(watch.phase) || watch.refreshIssued) return { watch, refresh: false };
   return { watch: { ...watch, refreshIssued: true }, refresh: !alreadyRefreshed.has(watch.id) };
 }

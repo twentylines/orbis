@@ -10,10 +10,14 @@ import {
   clearMatchingRestoreContinuity,
   decodeOperationContinuity,
   readOperationContinuity,
+  rememberCoreOperation,
   operationContinuityStorageName,
   operationPrepaintBootstrap,
+  operationBootFragment,
+  operationBootMarker,
   writeOperationContinuity,
 } from './operation-continuity';
+import { resumeCoreUpdate } from '@/desktop/core-update-state';
 const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const other = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const now = 100000;
@@ -144,4 +148,103 @@ test('rollback acknowledgement removes only its own restore marker', () => {
   storage.setItem(operationContinuityStorageName, '{invalid');
   expect(clearMatchingRestoreContinuity(id, storage)).toBe(false);
   expect(storage.getItem(operationContinuityStorageName)).toBe('{invalid');
+});
+
+test('an accepted target and its real latest phase survive refresh without arming completion', () => {
+  const storage = memory();
+  const targetTag = 'v0.2.0-beta.3';
+  expect(armStartedOperation(id, 'update', storage, now, targetTag)).toBe(true);
+  const watch = { id, targetTag, phase: 'offline' as const, refreshIssued: false, message: 'Starting Orbis' };
+  expect(rememberCoreOperation(watch, storage, now + 1)).toBe(true);
+  const marker = readOperationContinuity(storage, now + 2);
+  expect(marker?.targetTag).toBe(targetTag);
+  expect(marker?.corePhase).toBe('offline');
+  expect(resumeCoreUpdate(marker)?.phase).toBe('offline');
+  expect(rememberCoreOperation({ ...watch, targetTag: 'v0.2.0-beta.4' }, storage, now + 2)).toBe(false);
+  expect(rememberCoreOperation({ ...watch, id: other }, storage, now + 2)).toBe(false);
+  expect(rememberCoreOperation({ ...watch, operation: 'downgrade' }, storage, now + 2)).toBe(false);
+  expect(armStartedOperation(id, 'update', storage, now, 'https://untrusted.invalid')).toBe(false);
+  for (const extra of [{ targetTag: 'private' }, { corePhase: 'private' }, { targetTag, corePhase: 'complete' }])
+    expect(decodeOperationContinuity(JSON.stringify({ ...marker, ...extra }), now + 2)).toBeNull();
+});
+
+test('automatic completion remains available when browser storage is blocked', async () => {
+  const child = Bun.spawn([process.execPath, new URL('./operation-departure.fixture.tsx', import.meta.url).pathname], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  expect({ code, stderr, stdout }).toEqual({ code: 0, stderr: '', stdout: 'automatic handoff verified' });
+});
+
+test('a read-only marker consumes the fallback boot once instead of repeating the reload', () => {
+  const storage = memory();
+  armStartedOperation(id, 'update', storage, Date.now(), 'v0.2.0-beta.3');
+  const readOnly = {
+    ...storage,
+    setItem() {
+      throw new Error('Storage blocked');
+    },
+  };
+  const attributes = new Map<string, string>();
+  const location = { hash: operationBootFragment, pathname: '/', search: '' };
+  const history = {
+    state: null,
+    replaceState: (_state: unknown, _title: string, path: string) => {
+      expect(path).toBe('/');
+      location.hash = '';
+    },
+  };
+  const document = { documentElement: { setAttribute: (key: string, value: string) => attributes.set(key, value) } };
+  new Function('sessionStorage', 'document', 'location', 'history', operationPrepaintBootstrap)(readOnly, document, location, history);
+  expect(location.hash).toBe('');
+  expect(attributes.get('data-orbis-operation-boot')).toBe('update');
+  const boot = operationBootMarker(readOperationContinuity(readOnly), attributes.get('data-orbis-operation-boot') ?? null);
+  expect(boot?.phase).toBe('booting');
+  expect(boot?.jobId).toBe(id);
+  expect(operationBootMarker(readOperationContinuity(readOnly), 'restore')?.phase).toBe('running');
+});
+
+test('verified returned terminals retain requested identity through departure and refresh without authorizing restore rollback', () => {
+  for (const operation of ['update', 'downgrade'] as const) {
+    const storage = memory();
+    const targetTag = 'v0.2.0-beta.3';
+    armStartedOperation(id, operation, storage, now, targetTag);
+    expect(
+      rememberCoreOperation(
+        {
+          id,
+          operation,
+          targetTag,
+          phase: 'returned',
+          returnedTag: 'v0.2.0-beta.2',
+          outcome: 'rolled-back',
+          refreshIssued: false,
+          message: 'The update did not complete.',
+        },
+        storage,
+        now,
+      ),
+    ).toBe(true);
+    const running = readOperationContinuity(storage, now);
+    expect(running?.targetTag).toBe(targetTag);
+    expect(running?.corePhase).toBe('returned');
+    expect(resumeCoreUpdate(running)?.phase).toBe('checking');
+    const terminal = { id, operation, status: 'returned', needsRecovery: false };
+    expect(advanceOperationContinuity(null, terminal, false, now)).toBeNull();
+    expect(advanceOperationContinuity(running, { ...terminal, id: other }, false, now)).toBe(running);
+    expect(advanceOperationContinuity(running, { ...terminal, needsRecovery: true }, false, now)).toBe(running);
+    expect(advanceOperationContinuity(running, terminal, true, now)).toBe(running);
+    const departing = advanceOperationContinuity(running, terminal, false, now);
+    expect(departing?.phase).toBe('departing');
+    expect(departing?.targetTag).toBe(targetTag);
+    if (!departing) throw new Error('Expected verified returned departure');
+    writeOperationContinuity(departing, storage, now);
+    expect(claimOperationReload(id, storage, now)).toBe(true);
+    const boot = claimOperationBoot(storage, now);
+    expect(boot?.corePhase).toBe('returned');
+    expect(resumeCoreUpdate(boot)?.phase).toBe('checking');
+  }
+  const restore = advanceOperationContinuity(null, job('running'), false, now);
+  expect(advanceOperationContinuity(restore, { ...job('running'), status: 'returned' }, false, now)).toBe(restore);
 });

@@ -44,7 +44,7 @@ html:has(.desktop) {
   box-shadow: 0 16px 42px rgba(6, 27, 26, 0.22);
   backdrop-filter: var(--desktop-chrome-filter);
   -webkit-backdrop-filter: var(--desktop-chrome-filter);
-  animation: orbis-chrome-enter 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: orbis-chrome-enter 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .desktop-brand {
   display: inline-flex;
@@ -223,7 +223,7 @@ html[data-orbis-motion="reduced"] .desktop-task-badge {
   line-height: 1.25;
   text-decoration: none;
   white-space: nowrap;
-  animation: orbis-update-notice-enter 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: orbis-update-notice-enter 320ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
 }
 .orbis-update-spinning {
   transform-origin: center;
@@ -433,7 +433,7 @@ html[data-orbis-motion="reduced"] .orbis-update-spinning {
     inset 0 1px var(--desktop-highlight);
   backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
   -webkit-backdrop-filter: var(--orbis-glass-filter, blur(24px) saturate(1.2));
-  animation: orbis-window-enter 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: orbis-window-enter 0.44s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   container-type: inline-size;
 }
 .desktop-window-bar {

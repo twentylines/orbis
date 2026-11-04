@@ -1,6 +1,13 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
-import { advanceCoreUpdate, claimCoreRefresh, coreWatchIsActive, coreUpdateTitle, type CoreUpdateStatus } from './core-update-state';
+import {
+  advanceCoreUpdate,
+  claimCoreRefresh,
+  coreWatchIsActive,
+  coreUpdateTitle,
+  resumeCoreUpdate,
+  type CoreUpdateStatus,
+} from './core-update-state';
 const id = 'd8b4a1ec-f912-4e14-8e20-58d2754a0130';
 const other = '28a2fc8f-a725-42f2-a143-b26fce7b7ad7';
 const targetTag = 'v0.1.0-beta.79';
@@ -66,7 +73,7 @@ describe('observing a single accepted Orbis update', () => {
     watch = advanceCoreUpdate(watch, { type: 'status', status: status('complete'), buildTag: targetTag });
     expect(claimCoreRefresh(watch, new Set()).refresh).toBe(true);
   });
-  test.each(['failed', 'interrupted', 'rolled-back'])('terminal %s stops observation without refreshing', (state) => {
+  test.each(['failed', 'interrupted'])('terminal %s stops observation without refreshing', (state) => {
     const watch = advanceCoreUpdate(accepted(), { type: 'status', status: status(state), buildTag: targetTag });
     expect(watch?.phase).toBe('failed');
     expect(coreWatchIsActive(watch)).toBe(false);
@@ -129,4 +136,135 @@ test('the actual image-pull stage appears as a download and preserves the target
   expect(coreUpdateTitle(watch?.phase ?? 'failed')).toBe('Downloading Orbis');
   expect(watch?.message).toContain(targetTag);
   expect(coreWatchIsActive(watch)).toBe(true);
+});
+
+test('durable restart and healthcheck phases replace installation copy without claiming completion', () => {
+  for (const [phase, expected] of [
+    ['restarting', 'offline'],
+    ['verifying', 'checking'],
+  ] as const) {
+    const watch = advanceCoreUpdate(accepted(), { type: 'status', status: status('running', { job: { id, targetTag, state: 'running', phase } }) });
+    expect(watch?.phase).toBe(expected);
+    expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
+  }
+  expect(coreUpdateTitle('checking')).toBe('Starting Orbis');
+  expect(coreUpdateTitle('ready')).toBe('Starting Orbis');
+  expect(
+    advanceCoreUpdate(accepted(), {
+      type: 'status',
+      status: status('running', {
+        coreHealth: 'starting',
+        job: { id, targetTag, state: 'running', phase: 'verifying' },
+      }),
+    })?.phase,
+  ).toBe('checking');
+});
+
+test('refresh restores the recorded target and stage but requires fresh readiness verification', () => {
+  const marker = { jobId: id, operation: 'update', targetTag, corePhase: 'offline' as const };
+  expect(resumeCoreUpdate(marker)?.phase).toBe('offline');
+  const watch = resumeCoreUpdate({ ...marker, corePhase: 'ready' });
+  expect(watch?.phase).toBe('checking');
+  expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
+  expect(resumeCoreUpdate({ ...marker, targetTag: 'https://untrusted.invalid' })).toBeNull();
+  expect(resumeCoreUpdate({ ...marker, operation: 'restore' })).toBeNull();
+  const changedTarget = advanceCoreUpdate(watch, {
+    type: 'status',
+    status: status('complete', { job: { id, state: 'complete', targetTag: 'v0.1.0-beta.80' } }),
+    buildTag: targetTag,
+  });
+  expect(changedTarget?.phase).toBe('checking');
+  expect(claimCoreRefresh(changedTarget, new Set()).refresh).toBe(false);
+  const ready = advanceCoreUpdate(watch, { type: 'status', status: status('complete'), buildTag: targetTag });
+  expect(ready?.phase).toBe('ready');
+  const unrelated = advanceCoreUpdate(ready, {
+    type: 'status',
+    status: status('complete', {
+      job: { id: other, state: 'complete', targetTag },
+    }),
+    buildTag: targetTag,
+  });
+  expect(unrelated?.phase).toBe('checking');
+  expect(claimCoreRefresh(unrelated, new Set()).refresh).toBe(false);
+});
+
+const restoredTag = 'v0.1.0-beta.78';
+const returnedStatus = (state = 'rolled-back', phase?: string | null) =>
+  status(state, { currentTag: restoredTag, job: { id, state, targetTag, phase, message: 'The requested update failed.' } });
+
+test.each(['rolled-back', 'aborted'] as const)(
+  'a verified %s returns to the current build without relabeling the requested release as installed',
+  (outcome) => {
+    const observed = returnedStatus(outcome === 'aborted' ? 'failed' : 'rolled-back', outcome === 'aborted' ? 'aborted' : null);
+    const watch = advanceCoreUpdate(accepted(), { type: 'status', status: observed, buildTag: restoredTag });
+    expect(watch?.phase).toBe('returned');
+    expect(watch?.outcome).toBe(outcome);
+    expect(watch?.targetTag).toBe(targetTag);
+    expect(watch?.returnedTag).toBe(restoredTag);
+    expect(watch?.message).toContain(outcome === 'rolled-back' ? 'was restored' : 'stopped before restart');
+    expect(watch?.message).not.toContain('update is ready');
+    expect(coreUpdateTitle('returned')).toBe('Starting Orbis');
+    expect(observed.job?.state).toBe(outcome === 'aborted' ? 'failed' : 'rolled-back');
+    expect(observed.job?.message).toBe('The requested update failed.');
+    expect(claimCoreRefresh(watch, new Set()).refresh).toBe(true);
+    expect(advanceCoreUpdate(null, { type: 'status', status: observed, buildTag: restoredTag })).toBeNull();
+  },
+);
+
+test('rollback proof must be fresh, enrolled, healthy and bound to the exact job and requested target', () => {
+  for (const overrides of [
+    { available: false },
+    { enrolled: false },
+    { enrolled: undefined },
+    { imageMatches: false },
+    { coreState: 'exited' },
+    { coreHealth: 'starting' },
+    { currentTag: null },
+    { currentTag: 'v999999999999999999999999.0.0' },
+    { currentTag: 'private' },
+    { job: { id: other, state: 'rolled-back', targetTag } },
+    { job: { id, state: 'rolled-back', targetTag: restoredTag } },
+  ]) {
+    const watch = advanceCoreUpdate(accepted(), { type: 'status', status: { ...returnedStatus(), ...overrides }, buildTag: restoredTag });
+    expect(watch?.phase).not.toBe('returned');
+    expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
+  }
+  for (const buildTag of [undefined, targetTag, 'private']) {
+    const watch = advanceCoreUpdate(accepted(), { type: 'status', status: returnedStatus(), buildTag });
+    expect(watch?.phase).toBe('failed');
+    expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
+  }
+});
+
+test('only positively aborted failures can return; interrupted or missing stages remain recovery outcomes', () => {
+  for (const [state, phase] of [
+    ['failed', undefined],
+    ['failed', null],
+    ['failed', 'staged'],
+    ['interrupted', 'aborted'],
+  ] as const) {
+    const watch = advanceCoreUpdate(accepted(), { type: 'status', status: returnedStatus(state, phase), buildTag: restoredTag });
+    expect(watch?.phase).toBe('failed');
+    expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
+  }
+});
+
+test('a provisional failed observation can return only after new matching proof, and refresh never trusts a cached returned phase', () => {
+  const failed = advanceCoreUpdate(accepted(), { type: 'status', status: returnedStatus() });
+  expect(failed?.phase).toBe('failed');
+  const returned = advanceCoreUpdate(failed, { type: 'status', status: returnedStatus(), buildTag: restoredTag });
+  expect(returned?.phase).toBe('returned');
+  const resumed = resumeCoreUpdate({ jobId: id, operation: 'update', targetTag, corePhase: 'returned' });
+  expect(resumed?.phase).toBe('checking');
+  expect(resumed?.returnedTag).toBeUndefined();
+  expect(claimCoreRefresh(resumed, new Set()).refresh).toBe(false);
+  for (const observed of [
+    returnedStatus('interrupted'),
+    returnedStatus('failed'),
+    status('complete', { job: { id: other, state: 'complete', targetTag } }),
+  ]) {
+    const watch = advanceCoreUpdate(returned, { type: 'status', status: observed, buildTag: restoredTag });
+    expect(watch?.phase).not.toBe('returned');
+    expect(claimCoreRefresh(watch, new Set()).refresh).toBe(false);
+  }
 });
